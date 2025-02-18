@@ -1,0 +1,16 @@
+FROM jupyter/scipy-notebook:python-3.10.11
+
+WORKDIR /home/jovyan/work/model
+
+RUN pip install --upgrade pip
+
+COPY ./requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+COPY . .
+
+EXPOSE 8888
+

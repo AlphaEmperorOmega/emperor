@@ -1,0 +1,23 @@
+services:
+  torch_sut_image:
+    build: 
+      context: .
+      dockerfile: Dockerfile.torch
+    container_name: torch_sut_image
+    volumes:
+      - .:/usr/src/model
+    ports:
+      - 4001:4001
+
+#  jupyter_notebook:
+#    build: 
+#      context: . 
+#      dockerfile: Dockerfile.jupyter
+#    container_name: jupyter_notebook
+#    environment:
+#      - JUPYTER_TOKEN=p
+#    volumes:
+#      - .:/home/jovyan/work
+#    ports:
+#      - 8888:8888
+
