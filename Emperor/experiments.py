@@ -1,13 +1,11 @@
 from typing import List
-import torch
 import torch.nn as nn
 
-
-from Emperor.components.attention import Attention, PatchEmbedding
+from Emperor.base.preprocess import PatchEmbeddingConv
+from Emperor.components.attention import Attention
 from Emperor.components.moe import MixtureOfExperts
 from .base.decorators import timer
 from dataclasses import replace
-from .library.choice import Library as L
 from .components.layer import ParameterGeneratorLayer
 from .components.parameter_generators.utils.losses import AuxiliaryLosses
 from .config import ModelConfig, ParameterGeneratorMultiLayerConfig
@@ -29,7 +27,7 @@ class SingleLayerWeightGeneratorModel(ClassifierExperiment):
             auxiliaryLosses=AuxiliaryLosses(cfg),
         )
 
-        self.model = L.Sequential(L.Flatten(), ParameterGeneratorLayer(cfg))
+        self.model = nn.Sequential(nn.Flatten(), ParameterGeneratorLayer(cfg))
 
     def forward(self, inputBatch):
         self.model[1].loss = 0.0
@@ -76,7 +74,7 @@ class AttentionSingleLayerModel(ClassifierExperiment):
         imageSize = 28
         patchSize = 4
         numPatches = (imageSize // patchSize) ** 2
-        self.patcherModel = PatchEmbedding(
+        self.patcherModel = PatchEmbeddingConv(
             inputChannels=1,
             embeddingDim=16,
             patchSize=patchSize,
@@ -163,7 +161,7 @@ class MultiLayerWeightGeneratorModel(Classifier):
     def __generateModelLayers(
         self, cfg: ParameterGeneratorMultiLayerConfig, layerInputOutput: List
     ):
-        layers = [L.Flatten()]
+        layers = [nn.Flatten()]
         first = True
         for inputOutput in layerInputOutput:
             cfg.weightGeneratorLayerConfig.weightAndBiasGeneratorType = (
@@ -200,7 +198,7 @@ class SingleLayerSharedWeightGeneratorModel(Classifier):
         self.layerConfig = cfg.weightGeneratorLayerConfig
         self.plotProgress = self.layerConfig.plotProgress
         self.activationFunction = cfg.activatonFunction()
-        self.flatten = L.Flatten()
+        self.flatten = nn.Flatten()
         firstLayerType = cfg.firstWeightAndBiasGeneratorType
         layerType = cfg.weightGeneratorLayerConfig.weightAndBiasGeneratorType
         inputDim = cfg.weightGeneratorLayerConfig.inputDim
