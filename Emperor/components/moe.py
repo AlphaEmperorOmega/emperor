@@ -192,7 +192,7 @@ class MixtureOfAttentionHeads(MixtureOfExperts):
     def __init__(self, cfg: "ModelConfig") -> None:
         super().__init__(cfg)
 
-    def expandProjection(self, inputBatch, skipMask=None):
+    def computeHiddenProjection(self, inputBatch, skipMask=None):
         self.inputBatchShape = inputBatch.size()
         batchSize, sequenceLength, _ = self.inputBatchShape
 
@@ -229,7 +229,7 @@ class MixtureOfAttentionHeads(MixtureOfExperts):
 
         return expandProjectionOutput
 
-    def reduceProjection(self, attentionOutput):
+    def conputeOutputProjection(self, attentionOutput):
         """
         The self variables are computed in MixtureOfExperts.expandProjection
         (or the method above in case you don't see)
