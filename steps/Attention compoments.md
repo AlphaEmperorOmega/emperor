@@ -11,6 +11,7 @@
 - `_computeSoftmaxAttentionWeights`: this methods converts `attentionWeights` into `attentionProbabilities` by performing a `softmax` converting it to a `probability distribution` on the `attentionWeights`. The resulting `attentionProbabilities` are also passed through a `dropoutLayer` that randomly drops elements of the distribution
 - `_computeWeightedValueProjections`: this method uses `attentionProbabilities` and performs a weighted sum of `valueProjection` resulting in `weightedValueProjections`. This means each `token` in the `valueProjection` is added up with all other `tokens` according to their `probability distribution` that stands for how relevant the current token is with respect to every other token in the sequence
 - `_computeAttentionOutputProjection`: This method takes the `weightedValueProjections` and through the output projection model of the attention mechanism to compute `attentionOutputProjection`
+- `_forward`: method that is contains all steps above that computes the full forward pass of the `Attention` mechanism
 
 ## 1. Requirements
 
@@ -947,8 +948,6 @@ attentionOutputProjection = test_computeAttentionOutputProjection(
 ```
 
 ### 3.10 `_forward` method
-
-- [[MOAH - forward method]]
 
 ```{python}
 
