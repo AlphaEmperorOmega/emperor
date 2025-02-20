@@ -1,8 +1,11 @@
 import torch
+
 import torch.nn as nn
 from enum import Enum
 from typing import Optional
 from dataclasses import dataclass, field
+
+from traitlets import default
 
 from Emperor.library.choice import Library as L
 from Emperor.components.parameter_generators.utils.routers import RouterModel
@@ -10,6 +13,64 @@ from Emperor.components.parameter_generators.utils.losses import AuxiliaryLosses
 import Emperor.components.parameter_generators.vector_choice as v
 import Emperor.components.parameter_generators.matrix_choice as m
 import Emperor.components.parameter_generators.generator_choice as g
+
+
+NUM_EXPERTS: int = 12
+HIDDEN_DIM: int = 12
+ACTIVATION_FUNCTION: nn.Module = nn.SELU()
+
+# Auxiliary Losses
+GENERATOR_AUXILIARY_LOSSES: Optional[AuxiliaryLosses] = None
+MOE_AUXILIARY_LOSSES: Optional[AuxiliaryLosses] = None
+CLUSTER_AUXILIARY_LOSSES: Optional[AuxiliaryLosses] = None
+
+# Flags
+MULTIPLY_BY_GATES: bool = True
+ATTENTION_PROJECTION_BIAS_FLAG: bool = True
+ADD_ZERO_ATTENTION_FLAG: bool = True
+SELF_ATTENTION_FLAG: bool = True
+ENCODER_DECODER_ATTENTION_FLAG: bool = False
+
+# Transformer Attention Inputs
+EMBEDDING_DIM: int = 784
+QUERY_INPUT_DIM: Optional[int] = None
+KEY_INPUT_DIM: Optional[int] = None
+VALUE_INPUT_DIM: Optional[int] = None
+QKV_HIDDEN_DIM: Optional[int] = 128
+HEAD_DIM: int = 64  # Dimension an `attention head` has after the attention projection `QKV_HIDDEN_DIM` is split into multiple heads
+ATTENTION_OUTPUT_DIM: Optional[int] = 10
+
+# Transformer Config
+QKV_INPUT_DIM: Optional[int] = None
+QKV_OUTPUT_DIM: Optional[int] = None
+FFN_INPUT_DIM: Optional[int] = None
+FFN_HIDDEN_DIM: Optional[int] = None
+FFN_OUTPUT_DIM: Optional[int] = None
+
+# Additional Flags
+RETURN_RAW_FFN_OUTPUT_FLAG: bool = False
+NORMALIZE_BEFORE_FLAG: bool = False
+ADD_MEMORY_BIAS_KEY_VALUES_FLAG: bool = False
+
+# Dropout Probabilities
+ATTN_DROPOUT_PROBABILITY: float = 0.0
+FFN_DROPOUT_PROBABILITY: float = 0.0
+DROPOUT_PROBABILITY: float = 0.0
+QUANT_NOISE: float = 0.0
+QUANT_BLOCK_SIZE: int = 0
+
+# Gating
+GATING_DROPOUT: int = 0  # Example: NUM_EXPERTS: int = 12
+
+
+@dataclass
+class TransformerEncoderLayerConfig:
+    embeddingDim: Optional[int] = field(default=EMBEDDING_DIM)
+    returnRawFFNOutputFlag: Optional[bool] = field(default=RETURN_RAW_FFN_OUTPUT_FLAG)
+    normalizeBeforeFlag: Optional[bool] = field(default=NORMALIZE_BEFORE_FLAG)
+    activationFunction: Optional[nn.Module] = field(default=ACTIVATION_FUNCTION)
+    attnDropoutProbability: Optional[float] = field(default=ATTN_DROPOUT_PROBABILITY)
+    ffnDropoutProbability: Optional[float] = field(default=FFN_DROPOUT_PROBABILITY)
 
 
 class ParameterGeneratorOptions(Enum):
@@ -115,6 +176,16 @@ class ModelConfig(ParameterGeneratorConfig):
     ffnInputDim: Optional[int] = field(default=None)
     ffnHiddenDim: Optional[int] = field(default=None)
     ffnOutputDim: Optional[int] = field(default=None)
+
+    returnRawFFNOutputFlag: bool = field(default=False)
+    normalizeBeforeFlag: bool = field(default=False)
+    addMemoryBiasKeyValuesFlag: bool = field(default=False)
+    attnDropoutProbability: float = field(default=0.0)
+    ffnDropoutProbability: float = field(default=0.0)
+    dropoutProbability: float = 0.0
+    quantNoise: float = 0.0
+    quantBlockSize: int = 0
+    gatingDropout: int = 0
 
     def isNone(self, option):
         return option is None
