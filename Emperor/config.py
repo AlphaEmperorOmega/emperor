@@ -17,7 +17,9 @@ import Emperor.components.parameter_generators.generator_choice as g
 
 NUM_EXPERTS: int = 12
 HIDDEN_DIM: int = 12
+TOPK: int = 12
 ACTIVATION_FUNCTION: nn.Module = nn.SELU()
+RANDOM_SAMPLE_TOPK: int = 3
 
 # Auxiliary Losses
 GENERATOR_AUXILIARY_LOSSES: Optional[AuxiliaryLosses] = None
@@ -62,6 +64,66 @@ QUANT_BLOCK_SIZE: int = 0
 # Gating
 GATING_DROPOUT: int = 0  # Example: NUM_EXPERTS: int = 12
 
+# AUXILIARY LOSSES
+COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.0
+SWITCH_LOSS_WEIGHT: float = 0.0
+ZERO_CENTERED_LOSS_WEIGHT: float = 0.0
+MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
+
+
+@dataclass
+class ParallelExpertsConfig:
+    inputDim: int = field(default=EMBEDDING_DIM)
+    hiddenDim: int = field(default=EMBEDDING_DIM)
+    outputDim: int = field(default=EMBEDDING_DIM)
+    multiplyByGatesFlag: bool = field(default=False)
+    activationFunction: nn.Module = field(default=ACTIVATION_FUNCTION)
+
+
+@dataclass
+class MixtureOfExpertsConfig:
+    inputDim: int = field(default=EMBEDDING_DIM)
+    hiddenDim: int = field(default=EMBEDDING_DIM)
+    outputDim: int = field(default=EMBEDDING_DIM)
+    multiplyByGatesFlag: bool = field(default=False)
+    activationFunction: nn.Module = field(default=ACTIVATION_FUNCTION)
+    parallelExpertsConfig: ParallelExpertsConfig = ParameterGeneratorConfig()
+
+
+@dataclass
+class AttentionConfig:
+    embeddingDim: Optional[int] = field(default=EMBEDDING_DIM)
+    queryInputDim: Optional[int] = field(default=QUERY_INPUT_DIM)
+    keyInputDim: Optional[int] = field(default=KEY_INPUT_DIM)
+    valueInputDim: Optional[int] = field(default=VALUE_INPUT_DIM)
+    qkvHiddenDim: Optional[int] = field(default=QKV_HIDDEN_DIM)
+    attentionOutputDim: Optional[int] = field(default=ATTENTION_OUTPUT_DIM)
+    dropoutProbability: Optional[float] = field(default=DROPOUT_PROBABILITY)
+    biasFlag: Optional[bool] = field(default=ATTENTION_PROJECTION_BIAS_FLAG)
+    addZeroAttentionFlag: Optional[bool] = field(default=ADD_ZERO_ATTENTION_FLAG)
+    selfAttentionFlag: Optional[bool] = field(default=SELF_ATTENTION_FLAG)
+    encoderDecoderAttentionFlag: Optional[bool] = field(
+        default=ENCODER_DECODER_ATTENTION_FLAG
+    )
+    quantNoise: Optional[float] = field(default=QUANT_NOISE)
+    quantBlockSize: Optional[int] = field(default=QUANT_BLOCK_SIZE)
+    numExperts: Optional[int] = field(default=NUM_EXPERTS)
+    topK: Optional[int] = field(default=TOPK)
+    headDim: Optional[int] = field(default=HEAD_DIM)
+    coefficientOfVariationLossWeight: Optional[float] = field(
+        default=COEFFICIENT_OF_VARIATION_LOSS_WEIGHT
+    )
+    switchLossWeight: Optional[float] = field(default=SWITCH_LOSS_WEIGHT)
+    zeroCenteredLossWeight: Optional[float] = field(default=ZERO_CENTERED_LOSS_WEIGHT)
+    mutualInformationLossWeight: Optional[float] = field(
+        default=MUTUAL_INFORMATION_LOSS_WEIGHT
+    )
+    randomSampleTopK: Optional[int] = field(default=RANDOM_SAMPLE_TOPK)
+    gatingDropout: Optional[int] = field(default=GATING_DROPOUT)
+    addMemoryBiasKeyValuesFlag: Optional[bool] = field(
+        default=ADD_MEMORY_BIAS_KEY_VALUES_FLAG
+    )
+
 
 @dataclass
 class TransformerEncoderLayerConfig:
@@ -71,6 +133,8 @@ class TransformerEncoderLayerConfig:
     activationFunction: Optional[nn.Module] = field(default=ACTIVATION_FUNCTION)
     attnDropoutProbability: Optional[float] = field(default=ATTN_DROPOUT_PROBABILITY)
     ffnDropoutProbability: Optional[float] = field(default=FFN_DROPOUT_PROBABILITY)
+    attentionConfig: AttentionConfig = AttentionConfig()
+    # mixtureOfExpertsConfig: AttentionConfig = AttentionConfig()
 
 
 class ParameterGeneratorOptions(Enum):
@@ -207,7 +271,7 @@ class ParallelExpertsConfig(ModelConfig):
 
 
 @dataclass
-class MixtureOfExpertsConfig(ModelConfig):
+class MixtureOfExpertsConfigOld(ModelConfig):
     inputDim_: Optional[int] = field(default=None)
     hiddenDim_: Optional[int] = field(default=None)
     outputDim_: Optional[int] = field(default=None)
