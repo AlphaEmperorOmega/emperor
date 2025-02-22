@@ -87,7 +87,9 @@ class MixtureOfExpertsConfig:
     outputDim: int = field(default=EMBEDDING_DIM)
     multiplyByGatesFlag: bool = field(default=False)
     activationFunction: nn.Module = field(default=ACTIVATION_FUNCTION)
-    parallelExpertsConfig: ParallelExpertsConfig = ParameterGeneratorConfig()
+    parallelExpertsConfig: ParallelExpertsConfig = field(
+        default_factory=ParallelExpertsConfig
+    )
 
 
 @dataclass
@@ -123,6 +125,7 @@ class AttentionConfig:
     addMemoryBiasKeyValuesFlag: Optional[bool] = field(
         default=ADD_MEMORY_BIAS_KEY_VALUES_FLAG
     )
+    encoderDecoderAttentionFlag: Optional[bool] = field(default=False)
 
 
 @dataclass
@@ -133,7 +136,7 @@ class TransformerEncoderLayerConfig:
     activationFunction: Optional[nn.Module] = field(default=ACTIVATION_FUNCTION)
     attnDropoutProbability: Optional[float] = field(default=ATTN_DROPOUT_PROBABILITY)
     ffnDropoutProbability: Optional[float] = field(default=FFN_DROPOUT_PROBABILITY)
-    attentionConfig: AttentionConfig = AttentionConfig()
+    attentionConfig: AttentionConfig = field(default_factory=AttentionConfig)
     # mixtureOfExpertsConfig: AttentionConfig = AttentionConfig()
 
 
@@ -250,6 +253,9 @@ class ModelConfig(ParameterGeneratorConfig):
     quantNoise: float = 0.0
     quantBlockSize: int = 0
     gatingDropout: int = 0
+    encoderDecoderAttentionFlag: bool = field(default=False)
+    multiplyByGatesFlag: bool = field(default=False)
+    zeroCenteredLossWeight: float = field(default=0.0)
 
     def isNone(self, option):
         return option is None
