@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch import Tensor, Size
 from dataclasses import replace
 from Emperor.base.utils import Module
@@ -14,23 +15,26 @@ if TYPE_CHECKING:
 
 
 class MixtureOfExperts(Module):
-    def __init__(self, cfg: "ModelConfig") -> None:
+    def __init__(
+        self,
+        cfg: "ModelConfig",
+        inputDim: Optional[int] = None,
+        hiddenDim: Optional[int] = None,
+        outputDim: Optional[int] = None,
+        multiplyByGatesFlag: Optional[bool] = None,
+        activationFunction: Optional[nn.Module] = None,
+    ) -> None:
         super().__init__()
-
-        """
-        OPTIONS:
-        - Add input variables to the `__init__` init method
-        - Have all options in a `ModelConfig` dataclass and use `replace` before it's use
-        - Create a class that takes defaults from `ModelConfig` model config but then you need
-          to create a class for each `piece of the model`
-        """
-
         self.cfg = cfg
-        self.inputDim = cfg.inputDim
-        self.hiddenDim = cfg.hiddenDim
-        self.outputDim = cfg.outputDim
-        self.multiplyByGates = cfg.multiplyByGates
-        self.activation = cfg.activationFunction()
+        self.inputDim: int = self._getValue(inputDim, cfg.inputDim)
+        self.hiddenDim: int = self._getValue(hiddenDim, cfg.hiddenDim)
+        self.outputDim: int = self._getValue(outputDim, cfg.outputDim)
+        self.multiplyByGatesFlag: int = self._getValue(
+            multiplyByGatesFlag, cfg.multiplyByGatesFlag
+        )
+        self.attentionOutputDim: int = self._getValue(
+            activationFunction, cfg.attentionOutputDim
+        )
 
         self.inputBatchShape: Optional[Size] = None
         # TODO: figure out later if you need to dynamically return indices
@@ -145,7 +149,6 @@ class MixtureOfExperts(Module):
             expertSortedNonzeroProbabilityIndexes,
         )
 
-    def _computeProjections(self, expertSortedBatchInputs, batchExpertFrequency):
         expandedProjection = self.inputExperts(
             expertSortedBatchInputs, batchExpertFrequency
         )
