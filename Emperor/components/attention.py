@@ -19,60 +19,87 @@ class Attention(Module):
     def __init__(
         self,
         cfg: Optional["ModelConfig"] = None,
-        embeddingDim: int = 0,
+        embeddingDim: Optional[int] = None,
         queryInputDim: Optional[int] = None,
         keyInputDim: Optional[int] = None,
         valueInputDim: Optional[int] = None,
         qkvHiddenDim: Optional[int] = None,
         attentionOutputDim: Optional[int] = None,
-        dropoutProbability: float = 0.0,
-        biasFlag: bool = False,
-        addZeroAttentionFlag: bool = False,
-        selfAttentionFlag: bool = False,
-        encoderDecorderAttentionFlag: bool = False,
-        quantNoise: float = 0.0,
-        quantBlockSize: int = 8,
-        numExperts: int = 12,
-        topK: int = 4,
-        expertDim: Optional[int] = None,
-        headDim: int = 64,
-        coefficientOfVariationLossWeight: float = 0.0,
-        switchLossWeight: float = 0.0,
-        zeroCentredLossWeight: float = 0.0,
-        mutualInformationLossWeight: float = 0.0,
-        randomSampleTopK: int = 0,
-        gatingDropout: int = 0,
+        dropoutProbability: Optional[float] = None,
+        biasFlag: Optional[bool] = None,
+        addZeroAttentionFlag: Optional[bool] = None,
+        selfAttentionFlag: Optional[bool] = None,
+        encoderDecoderAttentionFlag: Optional[bool] = None,
+        quantNoise: Optional[float] = None,
+        quantBlockSize: Optional[int] = None,
+        numExperts: Optional[int] = None,
+        topK: Optional[int] = None,
+        headDim: Optional[int] = None,
+        coefficientOfVariationLossWeight: Optional[float] = None,
+        switchLossWeight: Optional[float] = None,
+        zeroCenteredLossWeight: Optional[float] = None,
+        mutualInformationLossWeight: Optional[float] = None,
+        randomSampleTopK: Optional[int] = None,
+        gatingDropout: Optional[int] = None,
+        addMemoryBiasKeyValuesFlag: Optional[bool] = None,
     ) -> None:
         super().__init__()
 
         self.cfg = cfg
-        self.embeddingDim: int = embeddingDim
+        self.embeddingDim: int = self._getValue(embeddingDim, cfg.embeddingDim)
+        queryInputDim = self._getValue(queryInputDim, cfg.queryInputDim)
         self.queryInputDim: int = self._getDim(queryInputDim)
+        keyInputDim = self._getValue(keyInputDim, cfg.keyInputDim)
         self.keyInputDim: int = self._getDim(keyInputDim)
+        valueInputDim = self._getValue(valueInputDim, cfg.valueInputDim)
         self.valueInputDim: int = self._getDim(valueInputDim)
-        self.qkvHiddenDim: int = self._getDim(qkvHiddenDim, expertDim)
+        qkvHiddenDim = self._getValue(qkvHiddenDim, cfg.qkvHiddenDim)
+        self.qkvHiddenDim: int = self._getDim(qkvHiddenDim)
+        attentionOutputDim = self._getValue(attentionOutputDim, cfg.attentionOutputDim)
         self.attentionOutputDim: int = self._getDim(attentionOutputDim)
-        self.dropoutProbability: float = dropoutProbability
-        self.biasFlag: bool = biasFlag
-        self.addZeroAttentionFlag: bool = addZeroAttentionFlag
-        self.selfAttentionFlag: bool = selfAttentionFlag
-        self.encoderDecorderAttentionFlag: bool = encoderDecorderAttentionFlag
-        self.quantNoise: float = quantNoise
-        self.quantBlockSize: int = quantBlockSize
-        self.numExperts: int = numExperts
-        self.topK: int = topK
-        self.expertDim: Optional[int] = expertDim
-        self.headDim: int = headDim
-        self.coefficientOfVariationLossWeight: float = coefficientOfVariationLossWeight
-        self.switchLossWeight: float = switchLossWeight
-        self.zeroCentredLossWeight: float = zeroCentredLossWeight
-        self.mutualInformationLossWeight: float = mutualInformationLossWeight
-        self.randomSampleTopK: int = randomSampleTopK
-        self.gatingDropout: int = gatingDropout
+        self.dropoutProbability: float = self._getValue(
+            dropoutProbability, cfg.dropoutProbability
+        )
+        self.biasFlag: bool = self._getValue(biasFlag, cfg.biasFlag)
+        self.addZeroAttentionFlag: bool = self._getValue(
+            addZeroAttentionFlag, cfg.addZeroAttentionFlag
+        )
+        self.selfAttentionFlag: bool = self._getValue(
+            selfAttentionFlag, cfg.selfAttentionFlag
+        )
+        self.encoderDecorderAttentionFlag: bool = self._getValue(
+            encoderDecoderAttentionFlag, cfg.encoderDecoderAttentionFlag
+        )
 
+        self.quantNoise: float = self._getValue(quantNoise, cfg.quantNoise)
+        self.quantBlockSize: int = self._getValue(quantBlockSize, cfg.quantBlockSize)
+
+        self.numExperts: int = self._getValue(numExperts, cfg.numExperts)
+        self.topK: int = self._getValue(topK, cfg.topK)
+        self.headDim: int = self._getValue(headDim, cfg.headDim)
+        self.coefficientOfVariationLossWeight: float = self._getValue(
+            coefficientOfVariationLossWeight, cfg.coefficientOfVariationLossWeight
+        )
+        self.switchLossWeight: float = self._getValue(
+            switchLossWeight, cfg.switchLossWeight
+        )
+        self.zeroCentredLossWeight: float = self._getValue(
+            zeroCenteredLossWeight, cfg.zeroCenteredLossWeight
+        )
+        self.mutualInformationLossWeight: float = self._getValue(
+            mutualInformationLossWeight, cfg.mutualInformationLossWeight
+        )
+        self.randomSampleTopK: int = self._getValue(
+            randomSampleTopK, cfg.randomSampleTopK
+        )
+        self.gatingDropout: int = self._getValue(gatingDropout, cfg.gatingDropout)
+        self.addMemoryBiasKeyValuesFlag = self._getValue(
+            addMemoryBiasKeyValuesFlag, cfg.addMemoryBiasKeyValuesFlag
+        )
         assert self.qkvHiddenDim % self.headDim == 0, (
             f"Ensure that `qkvHiddenDim` is perfeclty divisible by `headDim` perfect number of heads, `qkvHiddenDim`:{qkvHiddenDim} and `headDim`: {headDim}"
         )
+
         self.numHeads = self.qkvHiddenDim // self.headDim
         self.scaling = self.headDim**-0.5
         self.maxPositions = 64
@@ -82,7 +109,6 @@ class Attention(Module):
         # TODO: make sure these flags are necessary
         self.attentionProjectionBiasFlag = False
         self.attentionWeightsBeforeSoftmaxFlag = False
-        self.addMemoryBiasKeyValuesFlag = False
         self.staticKeyValueFlag = False
         self.createEmptyFlag = False
 
@@ -92,17 +118,13 @@ class Attention(Module):
         self._prepareRelativePosintionalParameters()
         self._resetParameters()
 
-    def _prepareModules(self):
-        self.dropoutModule = L.Dropout(self.dropoutProbability)
-        self.incrementalState = IncrementalState()
-
     def _prepareQKVModels(self):
-        self.keyProjectionModel = L.Linear(
+        self.keyProjectionModel = nn.Linear(
             self.keyInputDim,
             self.qkvHiddenDim,
             bias=self.biasFlag,
         )
-        self.valueProjectionModel = L.Linear(
+        self.valueProjectionModel = nn.Linear(
             self.valueInputDim,
             self.qkvHiddenDim,
             bias=self.biasFlag,
@@ -115,6 +137,10 @@ class Attention(Module):
             biasFlag=self.biasFlag,
         )
         self.queryProjectionModel = MixtureOfAttentionHeads(cfg)
+
+    def _prepareModules(self):
+        self.dropoutModule = L.Dropout(self.dropoutProbability)
+        self.incrementalStateModule = IncrementalState()
 
     def _prepareMemoryBiases(self):
         self.keyMemoryBiases = self.valueMemoryBiases = None
@@ -185,7 +211,7 @@ class Attention(Module):
         targetLength, batchSize, embeddingDim = query.size()
         sourceLength = targetLength
 
-        key, value, savedState = self._retrieveSavedState(
+        key, value, savedState = self._getLayerSavedStateFromIncrementalState(
             key, value, layerIdx, incrementalState
         )
 
@@ -204,7 +230,7 @@ class Attention(Module):
         sourceLength = keyProjection.size(0)
 
         (queryProjection, keyProjection, valueProjection) = (
-            self._reshapeQueryKeyValueProjections(
+            self._splitQueryKeyValueProjectionsIntoMultipleHeads(
                 queryProjection,
                 keyProjection,
                 valueProjection,
@@ -293,31 +319,29 @@ class Attention(Module):
 
         return attentionProjection, attentionWeights
 
-    def _retrieveSavedState(
+    def _getLayerSavedStateFromIncrementalState(
         self,
         key: Optional[Tensor],
         value: Optional[Tensor],
-        layerIdx: int,
+        layerIdx: Optional[int] = None,
         incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
     ):
-        """
-        Documentation: [[MOAH - retrieveSavedState method]]
-        """
         savedState = None
         if incrementalState is not None:
-            savedState = self._getInputBuffer(incrementalState, layerIdx)
+            savedState = self._getSavedState(incrementalState, layerIdx)
             if self.staticKeyValueFlag:
                 key = value = None
 
         return key, value, savedState
 
-    def _getInputBuffer(
+    def _getSavedState(
         self,
         incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]],
-        layerIdx: Union[str, int],
+        layerIdx: Optional[int],
     ) -> Optional[Dict[str, Optional[Tensor]]]:
-        result = self.incrementalState.getIncrementalState(
-            incrementalState, "attn_state_%d" % layerIdx
+        layerIdPrefix = "attn_state_%d" % layerIdx if layerIdx else ""
+        result = self.incrementalStateModule.getIncrementalState(
+            incrementalState, layerIdPrefix
         )
 
         if result is not None:
@@ -336,27 +360,30 @@ class Attention(Module):
         value: Optional[Tensor],
         skipMask: Optional[Tensor] = None,
     ):
-        """
-        Documentation: [[MOAH - computeQueryKeyValueProjections method]]
-        """
+        assert query is not None, (
+            f"To compute `queryProjection` the `query` input must be a `Tensor`, received {type(query)}"
+        )
         if self.encoderDecorderAttentionFlag:
-            queryProjection = self.queryProjectionModel.expandProjection(
+            queryProjection = self.queryProjectionModel.computeHiddenProjection(
                 query, skipMask=skipMask
             )
-            if key is not None and value is not None:
+            if key is not None:
+                assert value is not None, (
+                    f"When computing `encoderDecoderAttention` the `key` and `value` inputs must be a `Tensor`, received `key` {type(key)} and `value` {type(value)}"
+                )
                 keyProjection = self.keyProjectionModel(key)
                 valueProjection = self.valueProjectionModel(value)
             else:
                 keyProjection = valueProjection = None
         else:
             assert key is not None, (
-                f"To compute `keyProjection` the input must be a `tensor`, received {type(key)}"
+                f"To compute `keyProjection` the `key` input must be a `Tensor`, received {type(key)}"
             )
             assert value is not None, (
-                f"To compute `valueProjection` the input must be a `tensor`, received {type(value)}"
+                f"To compute `valueProjection` the `value` input must be a `Tensor`, received {type(value)}"
             )
 
-            queryProjection = self.queryProjectionModel.expandProjection(
+            queryProjection = self.queryProjectionModel.computeHiddenProjection(
                 query, skipMask=skipMask
             )
             keyProjection = self.keyProjectionModel(key)
@@ -371,11 +398,8 @@ class Attention(Module):
         attentionMask: Optional[Tensor] = None,
         keyPaddingMask: Optional[Tensor] = None,
     ):
-        """
-        Documentation: [[MOAH - attachMemoryBiasesToKeyValueProjections method]]
-        """
-        _, batchSize, _ = keyProjection.size()
         if self.addMemoryBiasKeyValuesFlag:
+            _, batchSize, _ = keyProjection.size()
             assert self.keyMemoryBiases is not None, (
                 f"Ensure `self.keyMemoryBiases` is a tensor, received {type(self.keyMemoryBiases)}"
             )
@@ -412,32 +436,44 @@ class Attention(Module):
 
         return keyProjection, valueProjection, attentionMask, keyPaddingMask
 
-    def _reshapeQueryKeyValueProjections(
+    def _splitQueryKeyValueProjectionsIntoMultipleHeads(
         self,
         queryProjection: Tensor,
         keyProjection: Optional[Tensor] = None,
         valueProjection: Optional[Tensor] = None,
     ):
         """
-        Documentation: [[MOAH - reshapeQueryKeyValueProjections method]]
-        """
-        targetLength, batchSize, _ = self.inputShape
+        Splits the `queryProjection`, `keyProjection`, `valueProjection` into along the
+        feature dimension into `numHeads` where each head has a dimension of `headDim`
 
-        # (batchSize, topK, numHeads, sequenceLength, headDim)
+        Args:
+            Query projection: [sequenceLength, batchSize, topk, qkvHiddenDim]
+            Key projection: [sequenceLength, batchSize, qkvHiddenDim]
+            Value projection: [sequenceLength, batchSize, qkvHiddenDim]
+
+        Returns:
+            Reshaped query projection: [batchSize, topK, numHeads, sequenceLength, headDim]
+            Reshaped key projection: [batchSize, numHeads, sequenceLength, headDim]
+            Reshaped value projection: [batchSize, numHeads, sequenceLength, headDim]
+        """
+
+        assert queryProjection is not None, (
+            f"Ensure the `queryProjection` is a `Tensor`, received {type(self.queryProjection)}"
+        )
+
+        sequenceLength, batchSize, _, _ = queryProjection.size()
         queryProjection = queryProjection.reshape(
-            targetLength, batchSize, self.topK, self.numHeads, self.headDim
+            sequenceLength, batchSize, self.topK, self.numHeads, self.headDim
         )
         queryProjection = queryProjection.permute(1, 2, 3, 0, 4)
 
         if keyProjection is not None:
-            # (batchSize, numHeads, sequenceLength, headDim)
             keyProjection = keyProjection.reshape(
                 -1, batchSize, self.numHeads, self.headDim
             )
             keyProjection = keyProjection.permute(1, 2, 0, 3)
 
         if valueProjection is not None:
-            # (batchSize, numHeads, sequenceLength, headDim)
             valueProjection = valueProjection.reshape(
                 -1, batchSize, self.numHeads, self.headDim
             )
@@ -505,7 +541,7 @@ class Attention(Module):
         buffer: Dict[str, Optional[Tensor]],
         layerIdx: Union[str, int],
     ):
-        return self.incrementalState.setIncrementalState(
+        return self.incrementalStateModule.setIncrementalState(
             incrementalState, "attn_state_%d" % layerIdx, buffer
         )
 
@@ -687,7 +723,7 @@ class Attention(Module):
             # can be applised to tensors that are not square
             maskPaddingDim0 = attentionWeights.size(1)
             maskPaddingDim1 = attentionWeights.size(2) - attentionMask.size(1)
-            maskPadding = torch.ones(maskPaddingDim0, maskPaddingDim1)
+            maskPadding = torch.zeros(maskPaddingDim0, maskPaddingDim1)
 
             attentionMask = torch.cat([maskPadding, attentionMask], dim=1)
 
@@ -873,7 +909,7 @@ class Attention(Module):
                 attentionReshaped.shape,
             )
 
-        attentionOutputProjection = self.queryProjectionModel.reduceProjection(
+        attentionOutputProjection = self.queryProjectionModel.conputeOutputProjection(
             attentionReshaped
         )
 
@@ -884,44 +920,6 @@ class Attention(Module):
             )
 
         return attentionOutputProjection
-
-
-class PatchEmbedding(Module):
-    def __init__(
-        self,
-        inputChannels: int,
-        embeddingDim: int,
-        patchSize: int,
-        numPatches: int,
-        dropout: float = 0.0,
-    ):
-        super().__init__()
-        self.patchModel = nn.Sequential(
-            nn.Conv2d(
-                in_channels=inputChannels,
-                out_channels=embeddingDim,
-                # if kernel_size = stride -> no overlap
-                kernel_size=patchSize,
-                stride=patchSize,
-            ),
-            nn.Flatten(2),
-        )
-        classTokenInit = torch.randn((1, 1, embeddingDim))
-        self.classToken = nn.Parameter(classTokenInit, requires_grad=True)
-        positionEmbeddingsInit = torch.randn((1, numPatches + 1, embeddingDim))
-        self.positionEmbeddings = nn.Parameter(
-            positionEmbeddingsInit, requires_grad=True
-        )
-        self.dropoutModule = nn.Dropout(dropout)
-
-    def forward(self, inputBatch: Tensor):
-        inputBatch = self.patchModel(inputBatch)
-        inputBatch = inputBatch.permute(0, 2, 1)
-        classToken = self.classToken.expand(inputBatch.size(0), -1, -1)
-        inputBatch = torch.cat([classToken, inputBatch], dim=1)
-        inputBatch = self.positionEmbeddings + inputBatch
-        inputBatch = self.dropoutModule(inputBatch)
-        return inputBatch
 
 
 class IncrementalState(object):
