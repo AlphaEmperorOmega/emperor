@@ -4,7 +4,7 @@
 - `_computeQueryKeyValueProjections`: computes `queryProjection`, `keyProjection` and `valueProjection` that will be used to compute `key` and `query` attention weights that will be used to store a calculate a weights sum of `valueProjection`.
 - `_attachMemoryBiasesToKeyValueProjections`: This method concatenates `keyMemoryBiases` vector to `keyProjection` and `valueMemoryBiases` vector to `valueProjection` generated in `computeQueryKeyValueProjections`. It also adds `zero` padding to the `attentionMask` and `keyPaddingMask` to compensate with the added biases to `projections`
 - `_reshapeQueryKeyValueProjections`: Method splits the `queryProjection`, `keyProjection` and `valueProjection` into multiple heads to perform `multiheadAttention`, the shape of `keyProjection` and `valueProjection` will be `[numHeads,  batchSize, sequenceLength, embeddingDim]` and the shape of `queryProjection` will be `[numHeads,  batchSize, sequenceLength, embeddingDim]`
-- `_retrieveAndUpdateProjectionsFromSavedState`: Method retrieved the `previousKeyProjection`, `previousValueProjection`, `previousKeyPaddingMask` from the `savedState` retrieved in `retrieveSavedState` and concatenates it to `keyProjection`, `valueProjection` and `keyPaddingMask` respectively
+- `_updateKeyValueProjectionsUsingLayerSavedState`: Method retrieves the `keyMultiHeadProjection`, `valueMultiHeadProjection`, `previousKeyPaddingMask` from the `savedState` and concatenates it to `keyMultiHeadProjection`, `valueMultiHeadProjection` and `keyPaddingMask` along the `sequenceLength` dimension
 - `_addZeroAttention`: adds `zeroAttention` to `keyProjection` and `valueProjection`, by adding a token of zeros at the end of the sequence two projections. `attentionMask` and `keyPaddingMask` are also padded with `zeros` to compensate with the change of projections
 - `_computeAttentionWeights`: `attentionWeights` are computed by multiplying the multihead `queryProjection` and `keyProjection`. To the resulting `attentionWeights` optionally `relativePositionEmbedding` can be added and `attentionMask` also known as the `causal mask` used to force the `transfomer` to learn to make predictions without allowing it to have access to future tokens
 - `_maskAttentionWeightsUsingKeyPaddingMask`: This method adds `keyPaddingMask` to the `attentionWeights` generated in `computeAttentionWeights` setting them to `-inf` to make sure that padding tokens are not do not have an influence when making predictions.
@@ -115,26 +115,29 @@ sl = cfg.sequenceLength
 
 numElements = bs * nh * hd * sl
 savedStateLayer1 = {
-  "previousKeyProjection": torch.arange(numElements).reshape(bs, nh, hd, sl).float(),
-  "previousValueProjection": torch.arange(numElements).reshape(bs, nh, hd, sl).float(),
+  "previousKeyMultiHeadProjection": torch.randn(bs, nh, sl, hd),
+  "previousValueMultiHeadProjection": torch.randn(bs, nh, sl, hd),
   "previousKeyPaddingMask": keyPaddingMask
 }
 savedStateLayer2 = {
-  "previousKeyProjection": torch.arange(numElements).reshape(bs, nh, hd, sl).float(),
-  "previousValueProjection": torch.arange(numElements).reshape(bs, nh, hd, sl).float(),
+  "previousKeyMultiHeadProjection": torch.randn(bs, nh, sl, hd),
+  "previousValueMultiHeadProjection": torch.randn(bs, nh, sl, hd),
   "previousKeyPaddingMask": keyPaddingMask
 }
 
 incrementalState = {}
-model._updateIncrementalState(
+layerId = "attn_state_%d" % layerIdx1
+model.incrementalStateModule.setIncrementalState (
   incrementalState,
+  layerId,
   savedStateLayer1,
-  layerIdx1,
 )
-model._updateIncrementalState(
+
+layerId = "attn_state_%d" % layerIdx2
+model.incrementalStateModule.setIncrementalState (
   incrementalState,
+  layerId,
   savedStateLayer2,
-  layerIdx2,
 )
 
 layerCount = 1
@@ -415,7 +418,7 @@ keyProjection, valueProjection, attentionMask, keyPaddingMask = test_attachMemor
 #### 3.4.1. Option tests
 
 ```{python}
-def test_reshapeQueryKeyValueProjections(
+def test_splitQueryKeyValueProjectionsIntoMultipleHeads(
   queryProjection: Tensor,
   keyProjection: Optional[Tensor] = None,
   valueProjection: Optional[Tensor] = None,
@@ -426,7 +429,7 @@ def test_reshapeQueryKeyValueProjections(
   printData('Input `valueProjection` shape', valueProjection)
   print()
 
-  queryProjection, keyProjection, valueProjection = model._reshapeQueryKeyValueProjections(
+  queryProjection, keyProjection, valueProjection = model._splitQueryKeyValueProjectionsIntoMultipleHeads(
     queryProjection,
     keyProjection,
     valueProjection
@@ -440,18 +443,18 @@ def test_reshapeQueryKeyValueProjections(
   if returnResult:
     return queryProjection, keyProjection, valueProjection
 
-test_reshapeQueryKeyValueProjections(
+test_splitQueryKeyValueProjectionsIntoMultipleHeads(
   queryProjection,
   keyProjection,
   valueProjection,
 )
 
-test_reshapeQueryKeyValueProjections(
+test_splitQueryKeyValueProjectionsIntoMultipleHeads(
   queryProjection,
   keyProjection,
 )
 
-test_reshapeQueryKeyValueProjections(
+test_splitQueryKeyValueProjectionsIntoMultipleHeads(
   queryProjection
 )
 ```
@@ -459,7 +462,7 @@ test_reshapeQueryKeyValueProjections(
 #### 3.4.2. Outputs required for next step
 
 ```{python}
-queryProjection, keyProjection, valueProjection = test_reshapeQueryKeyValueProjections(
+queryProjection, keyProjection, valueProjection = test_splitQueryKeyValueProjectionsIntoMultipleHeads(
   queryProjection,
   keyProjection,
   valueProjection,
@@ -467,7 +470,7 @@ queryProjection, keyProjection, valueProjection = test_reshapeQueryKeyValueProje
 )
 ```
 
-### 3.5. `_retrieveAndUpdateProjectionsFromSavedState` method
+### 3.5. `_updateKeyValueProjectionsUsingLayerSavedState` method
 
 #### 3.5.1. Option tests
 
@@ -491,9 +494,9 @@ def test_retrieveAndUpdateProjectionsFromSavedState(
   printData('Input `layerIdx` shape', layerIdx)
   if savedState is not None:
     if deletePreviousKeyProjection :
-      del savedState["previousKeyProjection"]
+      del savedState["previousKeyMultiHeadProjection"]
     if deletePreviousValueProjection:
-      del savedState["previousValueProjection"]
+      del savedState["previousValueMultiHeadProjection"]
     if deletePreviousKeyPaddingMask:
       del savedState["previousKeyPaddingMask"]
 
@@ -512,7 +515,7 @@ def test_retrieveAndUpdateProjectionsFromSavedState(
   print('*'*10)
   print()
 
-  keyProjection, valueProjection, keyPaddingMask, incrementalState = model._retrieveAndUpdateProjectionsFromSavedState(
+  keyProjection, valueProjection, keyPaddingMask, incrementalState = model._updateKeyValueProjectionsUsingLayerSavedState(
     keyProjection,
     valueProjection,
     keyPaddingMask,
@@ -973,26 +976,29 @@ keyPaddingMask = torch.tensor(
 
 numElements = bs * nh * hd * sl
 savedStateLayer1 = {
-  "previousKeyProjection": torch.arange(numElements).reshape(bs, nh, hd, sl).float(),
-  "previousValueProjection": torch.arange(numElements).reshape(bs, nh, hd, sl).float(),
+  "previousKeyMultiHeadProjection": torch.randn(bs, nh, sl, hd),
+  "previousValueMultiHeadProjection": torch.randn(bs, nh, sl, hd),
   "previousKeyPaddingMask": keyPaddingMask
 }
 savedStateLayer2 = {
-  "previousKeyProjection": torch.arange(numElements).reshape(bs, nh, hd, sl).float(),
-  "previousValueProjection": torch.arange(numElements).reshape(bs, nh, hd, sl).float(),
+  "previousKeyMultiHeadProjection": torch.randn(bs, nh, sl, hd),
+  "previousValueMultiHeadProjection": torch.randn(bs, nh, sl, hd),
   "previousKeyPaddingMask": keyPaddingMask
 }
 
 incrementalState = {}
-model._updateIncrementalState(
+layerId = "attn_state_%d" % layerIdx1
+model.incrementalStateModule.setIncrementalState (
   incrementalState,
+  layerId,
   savedStateLayer1,
-  layerIdx1,
 )
-model._updateIncrementalState(
+
+layerId = "attn_state_%d" % layerIdx2
+model.incrementalStateModule.setIncrementalState (
   incrementalState,
+  layerId,
   savedStateLayer2,
-  layerIdx2,
 )
 
 bs = cfg.batchSize
