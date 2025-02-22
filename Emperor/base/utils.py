@@ -254,6 +254,9 @@ class Module(nn.Module, HyperParameters):
         if init is not None:
             self.net.apply(init)
 
+    def _getValue(self, defaultValue, configValue):
+        return defaultValue if defaultValue is not None else configValue
+
 
 class DataModule(HyperParameters):
     """The base class of data."""
