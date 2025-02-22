@@ -1,47 +1,68 @@
-from torch import export, initial_seed, save
 import torch
 import torch.nn as nn
-from torch.serialization import skip_data
 from torch.types import Tensor
 from Emperor.base.utils import Module
 from Emperor.components.attention import Attention
 from Emperor.components.moe import MixtureOfExperts
 
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union, List
+from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple, Union, List
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
 class TransformerEncoderLayerBase(Module):
-    def __init__(self, cfg: "ModelConfig"):
+    def __init__(
+        self,
+        cfg: "ModelConfig",
+        embeddingDim: Optional[int] = None,
+        returnRawFFNOutputFlag: Optional[bool] = None,
+        normalizeBeforeFlag: Optional[bool] = None,
+        activationFunction: Optional[nn.Module] = None,
+        attnDropoutProbability: Optional[float] = None,
+        ffnDropoutProbability: Optional[float] = None,
+    ):
         super().__init__()
 
         self.cfg = cfg
-        self.embedDim = cfg.embeddingDim
-        self.returnFc = cfg.returnFc
-        self.normalizeBeforeFlag = cfg.normalizeBeforeFlag
-
-        self.activationFunction = cfg.activationFunction
+        self.embeddingDim = self._getValue(embeddingDim, cfg.embeddingDim)
+        self.returnRawFFNOutputFlag = self._getValue(
+            returnRawFFNOutputFlag, cfg.returnRawFFNOutputFlag
+        )
+        self.normalizeBeforeFlag = self._getValue(
+            normalizeBeforeFlag, cfg.normalizeBeforeFlag
+        )
+        self.normalizeBeforeFlag = self._getValue(
+            activationFunction, cfg.activationFunction
+        )
+        self.attnDropoutProbability = self._getValue(
+            attnDropoutProbability, cfg.attnDropoutProbability
+        )
+        self.ffnDropoutProbability = self._getValue(
+            ffnDropoutProbability, cfg.ffnDropoutProbability
+        )
 
         # self.quant_noise = cfg.quant_noise.pq
         # self.quant_noise_block_size = cfg.quant_noise.pq_block_size
 
-        self.initializeSelfAttentionModules()
-        self.initializeFeedForwardModules()
+        self._initializeSelfAttentionModules()
+        self._initializeFeedForwardModules()
 
-    def initializeSelfAttentionModules(self):
-        self.attentionLayerNormModule = nn.LayerNorm(self.cfg.embedDim)
-        self.attentionDropoutModule = nn.Dropout(self.cfg.dropout)
-        self.selfAttentionModel = Attention(self.cfg)
+    def _initializeSelfAttentionModules(self):
+        self.attnLayerNormModule = nn.LayerNorm(self.embeddingDim)
+        self.attnDropoutModule = nn.Dropout(self.attnDropoutProbability)
+        self.attentionModel = self._createAttentionModel()
 
-    def initializeFeedForwardModules(self):
-        self.feedForwardLayerNormModule = nn.LayerNorm(self.embedDim)
-        self.feedForwardDroputModule = nn.Dropout(self.cfg.dropout)
-        self.mixtureOfExpertsModel = MixtureOfExperts(self.cfg)
+    def _initializeFeedForwardModules(self):
+        self.ffnLayerNormModule = nn.LayerNorm(self.embeddingDim)
+        self.ffnDroputModule = nn.Dropout(self.ffnDropoutProbability)
+        self.ffnModel = self._createFeedForwadModelModel()
 
-    def residualConnection(self, x, residual):
-        return x + residual
+    def _createAttentionModel(self):
+        return Attention(self.cfg)
+
+    def _createFeedForwadModelModel(self):
+        return MixtureOfExperts(self.cfg)
 
     def forward(
         self,
@@ -52,7 +73,7 @@ class TransformerEncoderLayerBase(Module):
         encoderPaddingMask,
         attentionMask,
     ):
-        inputBatch = self._computeAttention(
+        attentionOutput = self._computeAttentionRepresentation(
             inputBatch,
             attentionMask,
             selfAttentionInput,
@@ -61,15 +82,13 @@ class TransformerEncoderLayerBase(Module):
             haltMask,
         )
 
-        inputBatch, feedForwardOutput = self._computeFeedForward(inputBatch, haltMask)
+        ffnOutput, ffnRawOutput = self._computeFeedForwardRepresentation(
+            attentionOutput, haltMask
+        )
 
-        # THE AUXILIARY LOSS IS HELD IN THE `AuxiliaryLosses` instances
-        if self.returnFc:  # , selfAuxiliaryLoss and torch.jit.is_scripting():
-            return inputBatch, feedForwardOutput
+        return ffnOutput, ffnRawOutput
 
-        return inputBatch, None  # , selfAuxiliaryLoss + mlpexp_aux_loss
-
-    def _computeAttention(
+    def _computeAttentionRepresentation(
         self,
         inputBatch,
         attentionMask,
@@ -108,28 +127,35 @@ class TransformerEncoderLayerBase(Module):
         )
 
         inputBatch = self.attentionDropoutModule(inputBatch)
-        inputBatch = self.residualConnection(inputBatch, residual)
+        inputBatch = self._computeResidualConnection(inputBatch, residual)
 
         if not self.normalizeBeforeFlag:
             inputBatch = self.attentionLayerNormModule(inputBatch)
 
         return inputBatch
 
-    def _computeFeedForward(self, inputBatch, haltMask):
-        residual = inputBatch
+    def _computeFeedForwardRepresentation(self, attentionOutput, haltMask):
+        residual = attentionOutput
+        normalizedFFNInput = attentionOutput
         if self.normalizeBeforeFlag:
-            inputBatch = self.feedForwardLayerNormModule(inputBatch)
+            normalizedFFNInput = self.feedForwardLayerNormModule(attentionOutput)
 
-        inputBatch = self.mixtureOfExpertsModel(inputBatch, haltMask)
+        ffnRawOutput = self.mixtureOfExpertsModel(normalizedFFNInput, haltMask)
+        sparseFFNdOutput = self.feedForwardDroputModule(ffnRawOutput)
+        residualConnection = self._computeResidualConnection(sparseFFNdOutput, residual)
 
-        mixtureOfExpertsOutput = inputBatch
-        inputBatch = self.feedForwardDroputModule(inputBatch)
-        inputBatch = self.residualConnection(inputBatch, residual)
-
+        normalizedOutput = residualConnection
         if not self.normalizeBeforeFlag:
-            inputBatch = self.feedForwardLayerNormModule(inputBatch)
+            normalizedOutput = self.feedForwardLayerNormModule(residualConnection)
 
-        return inputBatch, mixtureOfExpertsOutput
+        ffnOutput = normalizedOutput
+        if self.returnRawFFNOutputFlag:
+            return ffnOutput, ffnRawOutput
+
+        return ffnOutput, None
+
+    def _computeResidualConnection(self, updatedRepresentation, residual):
+        return updatedRepresentation + residual
 
 
 class ModuleWrapper(Module):
