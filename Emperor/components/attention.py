@@ -1,5 +1,5 @@
 from dataclasses import replace
-from torch import Tensor
+from torch import Tensor, save
 import math
 import uuid
 import torch
@@ -238,7 +238,7 @@ class Attention(Module):
         )
 
         (keyProjection, valueProjection, keyPaddingMask, incrementalState) = (
-            self._retrieveAndUpdateProjectionsFromSavedState(
+            self._updateKeyValueProjectionsUsingLayerSavedState(
                 keyProjection,
                 valueProjection,
                 keyPaddingMask,
@@ -481,10 +481,10 @@ class Attention(Module):
 
         return queryProjection, keyProjection, valueProjection
 
-    def _retrieveAndUpdateProjectionsFromSavedState(
+    def _updateKeyValueProjectionsUsingLayerSavedState(
         self,
-        keyProjection: Optional[Tensor],
-        valueProjection: Optional[Tensor],
+        keyMultiHeadProjection: Optional[Tensor],
+        valueMultiHeadProjection: Optional[Tensor],
         keyPaddingMask: Optional[Tensor],
         layerIdx: int,
         incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
@@ -493,56 +493,76 @@ class Attention(Module):
         """
         Important to understnad that is computed in `transformer_encoder` and `transformer_decoder`
         """
-        _, batchSize, _ = self.inputShape
+        """
+        Method retrieves the `keyMultiHeadProjection`, `valueMultiHeadProjection`, `previousKeyPaddingMask` 
+        from the `savedState` and concatenates it to `keyMultiHeadProjection`, 
+        `valueMultiHeadProjection` and `keyPaddingMask` along the `sequenceLength` dimension
+
+        Args:
+            `keyMultiHeadProjection`: [batchSize, numHeads, sequenceLength, headDim]
+            `valueMultiHeadProjection`: [batchSize, numHeads, sequenceLength, headDim]
+            `keyPaddingMask`: [batchSize, sequenceLength]
+            `layerIdx`: Integer represention the `id` of the current layer
+            `incrementalState`: Dictionary containing the `buffers` or `savedState` for all layers
+            `savedState`: Dcitionary containing accumulated `keyMultiHeadProjection`, 
+                `valueMultiHeadProjection` and `keyPaddingMask` from previous input batches
+
+        Returns:
+            If the `savedState` exists:
+                - Key multi-head projection with `savedState`:
+                    [batchSize, numHeads, sequenceLength + keyMultiHeadProjectionSequenceLength, headDim]
+                - Value multi-head projection with `savedState` buffer:
+                    [batchSize, numHeads, sequenceLength + keyMultiHeadProjectionSequenceLength, headDim]
+                - Key padding mask:
+                    [batchSize, sequenceLength + keyMultiHeadProjectionSequenceLength]
+            else the inputs are returned
+        """
         if savedState is not None:
-            assert keyProjection is not None and valueProjection is not None, (
-                "Ensure `keyProjection` or `valueProjection` are not None"
+            assert (
+                keyMultiHeadProjection is not None
+                and valueMultiHeadProjection is not None
+            ), (
+                "Ensure `keyMultiHeadProjection` or `valueMultiHeadProjection` are not `None`"
             )
 
-            if "previousKeyProjection" in savedState:
-                keyProjection = self._retrieveProjectionFromSavedSate(
-                    keyProjection, "previousKeyProjection", savedState
+            if "previousKeyMultiHeadProjection" in savedState:
+                keyMultiHeadProjection = self._retrieveProjectionFromSavedSate(
+                    keyMultiHeadProjection, "previousKeyMultiHeadProjection", savedState
                 )
-            if "previousValueProjection" in savedState:
-                valueProjection = self._retrieveProjectionFromSavedSate(
-                    valueProjection, "previousValueProjection", savedState
+            if "previousValueMultiHeadProjection" in savedState:
+                valueMultiHeadProjection = self._retrieveProjectionFromSavedSate(
+                    valueMultiHeadProjection,
+                    "previousValueMultiHeadProjection",
+                    savedState,
                 )
 
             previousKeyPaddingMask: Optional[Tensor] = None
             if "previousKeyPaddingMask" in savedState:
                 previousKeyPaddingMask = savedState["previousKeyPaddingMask"]
 
-            keySequenceLength = keyProjection.size(2)
+            keySequenceLength = keyMultiHeadProjection.size(2)
             keyPaddingMask = self._appendPreviousKeyPaddingMask(
                 keyPaddingMask=keyPaddingMask,
                 previousKeyPaddingMask=previousKeyPaddingMask,
-                batchSize=batchSize,
+                batchSize=self.cfg.batchSize,
                 sourceLength=keySequenceLength,
                 staticKeyValueFlag=self.staticKeyValueFlag,
             )
 
-            kvProjectionShape = [batchSize, self.numHeads, -1, self.headDim]
-            savedState["previousKeyProjection"] = keyProjection.view(kvProjectionShape)
-            savedState["previousValueProjection"] = valueProjection.view(
-                kvProjectionShape
-            )
-            savedState["previousKeyPaddingMask"] = keyPaddingMask
-
-            assert incrementalState is not None
             incrementalState = self._updateIncrementalState(
-                incrementalState, savedState, layerIdx
+                keyMultiHeadProjection,
+                valueMultiHeadProjection,
+                keyPaddingMask,
+                incrementalState,
+                savedState,
+                layerIdx,
             )
 
-        return keyProjection, valueProjection, keyPaddingMask, incrementalState
-
-    def _updateIncrementalState(
-        self,
-        incrementalState: Dict[str, Dict[str, Optional[Tensor]]],
-        buffer: Dict[str, Optional[Tensor]],
-        layerIdx: Union[str, int],
-    ):
-        return self.incrementalStateModule.setIncrementalState(
-            incrementalState, "attn_state_%d" % layerIdx, buffer
+        return (
+            keyMultiHeadProjection,
+            valueMultiHeadProjection,
+            keyPaddingMask,
+            incrementalState,
         )
 
     def _retrieveProjectionFromSavedSate(
@@ -569,6 +589,32 @@ class Attention(Module):
             projection = L.cat([previousProjection, projection], dim=2)
 
         return projection
+
+    def _updateIncrementalState(
+        self,
+        keyMultHeadProjection: Tensor,
+        valueMultiHeadProjection: Tensor,
+        keyPaddingMask,
+        incrementalState: Dict[str, Dict[str, Optional[Tensor]]],
+        savedState: Dict[str, Optional[Tensor]],
+        layerIdx: Union[str, int],
+    ):
+        batchSize, _, _, _ = keyMultHeadProjection.size()
+        kvProjectionShape = [batchSize, self.numHeads, -1, self.headDim]
+        savedState["previousKeyMultiHeadProjection"] = keyMultHeadProjection.view(
+            kvProjectionShape
+        )
+        savedState["previousValueMultiHeadProjection"] = valueMultiHeadProjection.view(
+            kvProjectionShape
+        )
+        savedState["previousKeyPaddingMask"] = keyPaddingMask
+
+        assert incrementalState is not None
+
+        layerId = "attn_state_%d" % layerIdx
+        return self.incrementalStateModule.setIncrementalState(
+            incrementalState, layerId, savedState
+        )
 
     # @staticmethod
     def _appendPreviousKeyPaddingMask(
