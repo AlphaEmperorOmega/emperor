@@ -1,8 +1,10 @@
-from typing import Dict, Optional, Tuple
 import unittest
+from typing import Dict, Optional, Tuple
+
 import torch
 import torch.nn as nn
 from torch import Tensor
+
 from Emperor.components.attention import Attention
 from Emperor.components.parameter_generators.utils.losses import AuxiliaryLosses
 from Emperor.config import ModelConfig
@@ -647,3 +649,128 @@ class TestAttachMemoryBiasesToKeyValueProjections(GeneralAttentionTestMethods):
         self.assertEqual(attentionMaskOutputShape, expectedAttentionMaskShape)
         self.assertIsInstance(keyPaddingMask, Tensor)
         self.assertEqual(expectedKeyPaddingMaskShape, keyPaddingMaskOutputShape)
+
+
+class TestSplitQueryKeyValueProjectionsIntoMultipleHeads(GeneralAttentionTestMethods):
+    def setUp(self) -> None:
+        self._setUp()
+
+    def _queryProjectionInput(self):
+        return torch.randn(
+            self.cfg.sequenceLength,
+            self.cfg.batchSize,
+            self.cfg.topK,
+            self.cfg.qkvHiddenDim,
+        )
+
+    def _keyProjectionInput(self):
+        return torch.randn(
+            self.cfg.sequenceLength,
+            self.cfg.batchSize,
+            self.cfg.qkvHiddenDim,
+        )
+
+    def _valueProjectionInput(self):
+        return torch.randn(
+            self.cfg.sequenceLength,
+            self.cfg.batchSize,
+            self.cfg.qkvHiddenDim,
+        )
+
+    def testInputs_queryProjection(self):
+        queryProjection = self._queryProjectionInput()
+        keyProjection = None
+        valueProjection = None
+
+        queryProjection, keyProjection, valueProjection = (
+            self.model._splitQueryKeyValueProjectionsIntoMultipleHeads(
+                queryProjection, keyProjection, valueProjection
+            )
+        )
+
+        expectedQueryShape = [
+            self.cfg.batchSize,
+            self.cfg.topK,
+            self.model.numHeads,
+            self.cfg.sequenceLength,
+            self.cfg.headDim,
+        ]
+
+        queryProjectionOutputShape = list(queryProjection.size())
+
+        self.assertIsInstance(queryProjection, Tensor)
+        self.assertEqual(queryProjectionOutputShape, expectedQueryShape)
+        self.assertIsNone(keyProjection)
+        self.assertIsNone(valueProjection)
+
+    def testInputs_queryProjection_keyProjection(self):
+        queryProjection = self._queryProjectionInput()
+        keyProjection = self._keyProjectionInput()
+        valueProjection = None
+
+        queryProjection, keyProjection, valueProjection = (
+            self.model._splitQueryKeyValueProjectionsIntoMultipleHeads(
+                queryProjection, keyProjection, valueProjection
+            )
+        )
+
+        expectedQueryShape = [
+            self.cfg.batchSize,
+            self.cfg.topK,
+            self.model.numHeads,
+            self.cfg.sequenceLength,
+            self.cfg.headDim,
+        ]
+
+        expectedValueKeyShape = [
+            self.cfg.batchSize,
+            self.model.numHeads,
+            self.cfg.sequenceLength,
+            self.cfg.headDim,
+        ]
+
+        queryProjectionOutputShape = list(queryProjection.size())
+        keyProjectionOutputShape = list(keyProjection.size())
+
+        self.assertIsInstance(queryProjection, Tensor)
+        self.assertEqual(queryProjectionOutputShape, expectedQueryShape)
+        self.assertIsInstance(keyProjection, Tensor)
+        self.assertEqual(keyProjectionOutputShape, expectedValueKeyShape)
+        self.assertIsNone(valueProjection)
+
+    def testInputs_queryProjection_keyProjection_valueProjections(self):
+        queryProjection = self._queryProjectionInput()
+        keyProjection = self._keyProjectionInput()
+        valueProjection = self._valueProjectionInput()
+
+        queryProjection, keyProjection, valueProjection = (
+            self.model._splitQueryKeyValueProjectionsIntoMultipleHeads(
+                queryProjection, keyProjection, valueProjection
+            )
+        )
+
+        expectedQueryShape = [
+            self.cfg.batchSize,
+            self.cfg.topK,
+            self.model.numHeads,
+            self.cfg.sequenceLength,
+            self.cfg.headDim,
+        ]
+
+        expectedValueKeyShape = [
+            self.cfg.batchSize,
+            self.model.numHeads,
+            self.cfg.sequenceLength,
+            self.cfg.headDim,
+        ]
+
+        queryProjectionOutputShape = list(queryProjection.size())
+        keyProjectionOutputShape = list(keyProjection.size())
+        valueProjectionOutputShape = list(valueProjection.size())
+
+        self.assertIsInstance(queryProjection, Tensor)
+        self.assertEqual(queryProjectionOutputShape, expectedQueryShape)
+        self.assertIsInstance(keyProjection, Tensor)
+        self.assertEqual(keyProjectionOutputShape, expectedValueKeyShape)
+        self.assertIsInstance(valueProjection, Tensor)
+        self.assertEqual(valueProjectionOutputShape, expectedValueKeyShape)
