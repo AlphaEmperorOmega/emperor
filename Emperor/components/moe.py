@@ -173,7 +173,7 @@ class MixtureOfExperts(Module):
             batchSize, _ = self.inputBatchShape
             outputShape = [batchSize, self.outputDim]
 
-        if self.multiplyByGates:
+        if self.multiplyByGatesFlag:
             feedForwardOutput = (
                 feedForwardOutput * expertSortedTopKBatchProbabilities.view(-1, 1)
             )
@@ -245,7 +245,7 @@ class MixtureOfAttentionHeads(MixtureOfExperts):
 
         expertsOutput = self.outputExperts(expertInputs, self.batchExpertFrequency)
 
-        if self.multiplyByGates:
+        if self.multiplyByGatesFlag:
             expertsOutput = (
                 expertsOutput * self.expertSortedTopKBatchProbabilities.view(-1, 1)
             )
