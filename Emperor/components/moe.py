@@ -23,6 +23,8 @@ class MixtureOfExperts(Module):
         outputDim: Optional[int] = None,
         multiplyByGatesFlag: Optional[bool] = None,
         activationFunction: Optional[nn.Module] = None,
+        hiddenDropoutProbability: Optional[float] = None,
+        hiddenLayerNormFlag: Optional[bool] = None,
     ) -> None:
         super().__init__()
         self.cfg = cfg
@@ -32,34 +34,51 @@ class MixtureOfExperts(Module):
         self.multiplyByGatesFlag: int = self._getValue(
             multiplyByGatesFlag, cfg.multiplyByGatesFlag
         )
-        self.attentionOutputDim: int = self._getValue(
-            activationFunction, cfg.attentionOutputDim
+        self.activationFunction: nn.Module = self._getValue(
+            activationFunction, cfg.activationFunction
+        )
+        self.hiddenDropoutProbability: float = self._getValue(
+            hiddenDropoutProbability, cfg.hiddenDropoutProbability
+        )
+        self.hiddenLayerNormFlag: float = self._getValue(
+            hiddenLayerNormFlag, cfg.hiddenLayerNormFlag
         )
 
         self.inputBatchShape: Optional[Size] = None
         # TODO: figure out later if you need to dynamically return indices
         # returnIndices = False
 
-        self._prepareExpertLayers()
-        self._prepareExpertSampler()
+        self._initExpertLayers()
+        self._initExpertSampler()
+        self._initHiddenModules()
 
-    def _prepareExpertLayers(self):
+    def _initExpertLayers(self):
         inputExpertsConfig = replace(
-            self.cfg, inputDim=self.cfg.inputDim, outputDim=self.cfg.hiddenDim
+            self.cfg, inputDim=self.inputDim, outputDim=self.hiddenDim
         )
         self.inputExperts = ParallelExperts(inputExpertsConfig)
         outputExpertsConfig = replace(
-            self.cfg, inputDim=self.cfg.hiddenDim, outputDim=self.cfg.outputDim
+            self.cfg, inputDim=self.hiddenDim, outputDim=self.outputDim
         )
         self.outputExperts = ParallelExperts(outputExpertsConfig)
 
-    def _prepareExpertSampler(self):
+    def _initExpertSampler(self):
         cfg = replace(
             self.cfg,
             depthDim=self.cfg.numExperts,
             auxiliaryLosses=self.cfg.moeAuxiliaryLosses,
         )
         self.sampler = ProbabilitySamplerTopk(cfg)
+
+    def _initHiddenModules(self):
+        self.dropoutModule = self.hiddenLayerNormModule = None
+        if (
+            self.hiddenDropoutProbability is not None
+            and self.hiddenDropoutProbability > 0
+        ):
+            self.dropoutModule = nn.Dropout(self.hiddenDropoutProbability)
+        if self.hiddenLayerNormFlag:
+            self.hiddenLayerNormModule = nn.LayerNorm(self.hiddenDim)
 
     def forward(self, inputBatch: Tensor, skipMask: Optional[Tensor] = None):
         self.inputBatchShape = inputBatch.size()
@@ -149,12 +168,21 @@ class MixtureOfExperts(Module):
             expertSortedNonzeroProbabilityIndexes,
         )
 
+    def _computeProjections(
+        self,
+        expertSortedBatchInputs: Tensor,
+        batchExpertFrequency: Tensor,
+    ):
         expandedProjection = self.inputExperts(
             expertSortedBatchInputs, batchExpertFrequency
         )
-        appliedActivation = self.activation(expandedProjection)
+        hiddenRepresentation = self.activationFunction(expandedProjection)
+        if self.dropoutModule:
+            hiddenRepresentation = self.dropoutModule(hiddenRepresentation)
+        if self.hiddenLayerNormModule:
+            hiddenRepresentation = self.hiddenLayerNormModule(hiddenRepresentation)
         reductionProjection = self.outputExperts(
-            appliedActivation, batchExpertFrequency
+            hiddenRepresentation, batchExpertFrequency
         )
 
         return reductionProjection
