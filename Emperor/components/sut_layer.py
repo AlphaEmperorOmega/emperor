@@ -16,23 +16,21 @@ class TransformerEncoderLayerBase(Module):
         self,
         cfg: "ModelConfig",
         embeddingDim: Optional[int] = None,
-        returnRawFFNOutputFlag: Optional[bool] = None,
-        normalizeBeforeFlag: Optional[bool] = None,
+        qkvHiddenDim: Optional[int] = None,
+        ffnHiddenDim: Optional[int] = None,
         activationFunction: Optional[nn.Module] = None,
         attnDropoutProbability: Optional[float] = None,
         ffnDropoutProbability: Optional[float] = None,
+        returnRawFFNOutputFlag: Optional[bool] = None,
+        normalizeBeforeFlag: Optional[bool] = None,
     ):
         super().__init__()
 
         self.cfg = cfg
         self.embeddingDim = self._getValue(embeddingDim, cfg.embeddingDim)
-        self.returnRawFFNOutputFlag = self._getValue(
-            returnRawFFNOutputFlag, cfg.returnRawFFNOutputFlag
-        )
-        self.normalizeBeforeFlag = self._getValue(
-            normalizeBeforeFlag, cfg.normalizeBeforeFlag
-        )
-        self.normalizeBeforeFlag = self._getValue(
+        self.qkvHiddenDim = self._getValue(qkvHiddenDim, cfg.qkvHiddenDim)
+        self.ffnHiddenDim = self._getValue(ffnHiddenDim, cfg.ffnHiddenDim)
+        self.activationFunction = self._getValue(
             activationFunction, cfg.activationFunction
         )
         self.attnDropoutProbability = self._getValue(
@@ -40,6 +38,12 @@ class TransformerEncoderLayerBase(Module):
         )
         self.ffnDropoutProbability = self._getValue(
             ffnDropoutProbability, cfg.ffnDropoutProbability
+        )
+        self.returnRawFFNOutputFlag = self._getValue(
+            returnRawFFNOutputFlag, cfg.returnRawFFNOutputFlag
+        )
+        self.normalizeBeforeFlag = self._getValue(
+            normalizeBeforeFlag, cfg.normalizeBeforeFlag
         )
 
         # self.quant_noise = cfg.quant_noise.pq
@@ -51,54 +55,62 @@ class TransformerEncoderLayerBase(Module):
     def _initializeSelfAttentionModules(self):
         self.attnLayerNormModule = nn.LayerNorm(self.embeddingDim)
         self.attnDropoutModule = nn.Dropout(self.attnDropoutProbability)
-        self.attentionModel = self._createAttentionModel()
+        self.attentionModel = self._createAttentionModelHook()
+
+    def _createAttentionModelHook(self):
+        return Attention(
+            self.cfg,
+            embeddingDim=self.embeddingDim,
+            qkvHiddenDim=self.qkvHiddenDim,
+        )
 
     def _initializeFeedForwardModules(self):
         self.ffnLayerNormModule = nn.LayerNorm(self.embeddingDim)
         self.ffnDroputModule = nn.Dropout(self.ffnDropoutProbability)
-        self.ffnModel = self._createFeedForwadModelModel()
+        self.ffnModel = self._createFeedForwadModelModelHook()
 
-    def _createAttentionModel(self):
-        return Attention(self.cfg)
-
-    def _createFeedForwadModelModel(self):
-        return MixtureOfExperts(self.cfg)
+    def _createFeedForwadModelModelHook(self):
+        return MixtureOfExperts(
+            self.cfg,
+            inputDim=self.embeddingDim,
+            hiddenDim=self.ffnHiddenDim,
+            outputDim=self.embeddingDim,
+        )
 
     def forward(
         self,
-        inputBatch,
-        selfAttentionInput,
-        haltMask,
-        layerIdx,
-        encoderPaddingMask,
-        attentionMask,
-    ):
-        attentionOutput = self._computeAttentionRepresentation(
-            inputBatch,
-            attentionMask,
-            selfAttentionInput,
-            layerIdx,
-            encoderPaddingMask,
-            haltMask,
-        )
-
-        ffnOutput, ffnRawOutput = self._computeFeedForwardRepresentation(
-            attentionOutput, haltMask
-        )
-
-        return ffnOutput, ffnRawOutput
-
-    def _computeAttentionRepresentation(
-        self,
-        inputBatch,
-        attentionMask,
-        selfAttentionInput,
-        layerIdx,
-        encoderPaddingMask,
-        haltMask,
+        inputBatch: Tensor,
+        selfAttentionInput: Optional[Tensor] = None,
+        haltMask: Optional[Tensor] = None,
+        encoderPaddingMask: Optional[Tensor] = None,
+        attentionMask: Optional[Tensor] = None,
     ):
         if selfAttentionInput is None:
             selfAttentionInput = inputBatch
+
+        attentionOutput = self._computeAttention(
+            inputBatch,
+            selfAttentionInput,
+            haltMask,
+            encoderPaddingMask,
+            attentionMask,
+        )
+
+        ffnOutput, ffnRawOutput = self._computeFeedForward(attentionOutput, haltMask)
+
+        return ffnOutput, ffnRawOutput
+
+    def _computeAttention(
+        self,
+        inputBatch: Tensor,
+        selfAttentionInput: Optional[Tensor],
+        haltMask: Optional[Tensor],
+        encoderPaddingMask: Optional[Tensor],
+        attentionMask: Optional[Tensor],
+    ):
+        assert inputBatch is not None, (
+            f"Ensure the `inputBatch` is a `Tensor`, received {type(inputBatch)}"
+        )
 
         if attentionMask is not None:
             fillElement = -1e8 if inputBatch.dtype == torch.float32 else -1e4
@@ -108,45 +120,48 @@ class TransformerEncoderLayerBase(Module):
 
         residual = inputBatch
         if self.normalizeBeforeFlag:
-            inputBatchTemp = self.attentionLayerNormModule(inputBatch)
+            inputBatchTemp = self.attnLayerNormModule(inputBatch)
             if inputBatch is selfAttentionInput:
                 selfAttentionInput = inputBatchTemp
             else:
-                selfAttentionInput = self.attentionLayerNormModule(selfAttentionInput)
+                selfAttentionInput = self.attnLayerNormModule(selfAttentionInput)
             inputBatch = inputBatchTemp
 
-        inputBatch, _, selfAuxiliaryLoss = self.selfAttentionModel(
+        attnOutput, _ = self.attentionModel(
             query=inputBatch,
             key=selfAttentionInput,
             value=selfAttentionInput,
-            layerIdx=layerIdx,
             queryPaddingMask=encoderPaddingMask,
             keyPaddingMask=encoderPaddingMask,
             attentionMask=attentionMask,
             skipMask=haltMask,
         )
 
-        inputBatch = self.attentionDropoutModule(inputBatch)
-        inputBatch = self._computeResidualConnection(inputBatch, residual)
+        attnOutput = self.attnDropoutModule(attnOutput)
+        attnOutput = self._computeResidualConnection(attnOutput, residual)
 
         if not self.normalizeBeforeFlag:
-            inputBatch = self.attentionLayerNormModule(inputBatch)
+            attnOutput = self.attnLayerNormModule(inputBatch)
 
-        return inputBatch
+        return attnOutput
 
-    def _computeFeedForwardRepresentation(self, attentionOutput, haltMask):
+    def _computeFeedForward(
+        self,
+        attentionOutput: Tensor,
+        haltMask: Optional[Tensor],
+    ):
         residual = attentionOutput
         normalizedFFNInput = attentionOutput
         if self.normalizeBeforeFlag:
-            normalizedFFNInput = self.feedForwardLayerNormModule(attentionOutput)
+            normalizedFFNInput = self.ffnLayerNormModule(attentionOutput)
 
-        ffnRawOutput = self.mixtureOfExpertsModel(normalizedFFNInput, haltMask)
-        sparseFFNdOutput = self.feedForwardDroputModule(ffnRawOutput)
+        ffnRawOutput = self.ffnModel(normalizedFFNInput, haltMask)
+        sparseFFNdOutput = self.ffnDroputModule(ffnRawOutput)
         residualConnection = self._computeResidualConnection(sparseFFNdOutput, residual)
 
         normalizedOutput = residualConnection
         if not self.normalizeBeforeFlag:
-            normalizedOutput = self.feedForwardLayerNormModule(residualConnection)
+            normalizedOutput = self.ffnLayerNormModule(residualConnection)
 
         ffnOutput = normalizedOutput
         if self.returnRawFFNOutputFlag:
@@ -168,59 +183,130 @@ class ModuleWrapper(Module):
 
 
 class TransformerDecorderLayerBase(Module):
-    def __init__(self, cfg: "ModelConfig"):
+    def __init__(
+        self,
+        cfg: "ModelConfig",
+        embeddingDim: Optional[int] = None,
+        qkvHiddenDim: Optional[int] = None,
+        ffnHiddenDim: Optional[int] = None,
+        activationFunction: Optional[nn.Module] = None,
+        attnDropoutProbability: Optional[float] = None,
+        ffnDropoutProbability: Optional[float] = None,
+        returnRawFFNOutputFlag: Optional[bool] = None,
+        normalizeBeforeFlag: Optional[bool] = None,
+    ):
         super().__init__()
-        self.embedDim = cfg.embeddingDim
+        self.cfg = cfg
+        self.embeddingDim = self._getValue(embeddingDim, cfg.embeddingDim)
+        self.qkvHiddenDim = self._getValue(qkvHiddenDim, cfg.qkvHiddenDim)
+        self.ffnHiddenDim = self._getValue(ffnHiddenDim, cfg.ffnHiddenDim)
+        self.activationFunction = self._getValue(
+            activationFunction, cfg.activationFunction
+        )
+        self.attnDropoutProbability = self._getValue(
+            attnDropoutProbability, cfg.attnDropoutProbability
+        )
+        self.ffnDropoutProbability = self._getValue(
+            ffnDropoutProbability, cfg.ffnDropoutProbability
+        )
+        self.returnRawFFNOutputFlag = self._getValue(
+            returnRawFFNOutputFlag, cfg.returnRawFFNOutputFlag
+        )
+        self.normalizeBeforeFlag = self._getValue(
+            normalizeBeforeFlag, cfg.normalizeBeforeFlag
+        )
 
-        self.dropoutModule = nn.Dropout(cfg.dropout)
+        # -----------------------------------------
+
+        self.crossSelfAttentionFlag = cfg.crossSelfAttentionFlag
+        self.activationFunction = cfg.activationFunction
+        self.numHeads = self.selfAttentionModel.numHeads
+        self.headDim = self.selfAttentionModel.headDim
+        self.scaleHeads = cfg.scaleHeads
+        self.encoderAttentionFlag = cfg.encoderAttentionFlag
 
         # self.quantNoise = cfg.qantNoise
         # self.quantNosieBlockNoise = cfg.quantNoise.pqBlockSize
 
-        self.crossSelfAttentionFlag = cfg.crossSelfAttentionFlag
-        self.activationFunction = cfg.activationFunction
+        # -----------------------------------------
 
-        self.activationFunctionDropoutModule = nn.Dropout(cfg.dropout)
+        # self.dropoutModule = nn.Dropout(cfg.dropout)
+        # self.activationFunctionDropoutModule = nn.Dropout(cfg.dropout)
 
-        act_list = [
-            ModuleWrapper(self.activationFunction),
-            self.activationFunctionDropoutModule,
-        ]
+        self.scaleSelfAttentionHeadsFlag = cfg.scaleSelfAttentionHeadsFlag
 
-        self.selfAttentionModel = Attention(cfg)
-        self.selfAttentionLayerNorm = nn.LayerNorm(self.embedDim)
-
-        self.numHeads = self.selfAttentionModel.numHeads
-        self.headDim = self.selfAttentionModel.headDim
-        self.scaleHeads = cfg.scaleHeads
-
-        cAttnDefaultParameters = torch.ones((self.numHeads))
-        self.c_attn = nn.Parameter(cAttnDefaultParameters, requires_grad=True)
+        self.selfAttnHeadScalers = None
+        if self.scaleSelfAttentionHeadsFlag:
+            self.selfAttnHeadScalers = nn.Parameter(
+                torch.ones((self.numHeads)), requires_grad=True
+            )
 
         self.normalizeBeforeFlag = cfg.normalizeBeforeFlag
-
-        if noEncoderAttention:
-            self.encoderAttention = None
-            self.encoderAttentionLayerNorm = None
-        else:
-            self.encoderAttention = Attention(cfg)
-            self.staticKeyValueFlag = True
-            self.encoderAttentionLayerNorm = nn.LayerNorm(self.embeddingDim)
-
-        self.feedForwardLayerNormModule = nn.LayerNorm(cfg.decoder.ffn_embed_dim)
 
         wResidDefaultParameters = torch.ones(self.embedDim)
         self.wResid = nn.Parameter(wResidDefaultParameters, requires_grad=True)
 
-        if self.feedForwardLayerNormModule is not None:
-            act_list = act_list + [self.feedForwardLayerNormModule]
+        # act_list = [
+        #     ModuleWrapper(self.activationFunction),
+        #     self.activationFunctionDropoutModule,
+        # ]
+        #
+        # if self.feedForwardLayerNormModule is not None:
+        #     act_list = act_list + [self.feedForwardLayerNormModule]
 
-        self.mixtureOfExpertsModel = MixtureOfExperts(cfg)
-
-        self.feedForwardDroputModule = nn.LayerNorm(self.embedDim)
+        # self.mixtureOfExpertsModel = MixtureOfExperts(cfg)
+        # self.feedForwardLayerNormModule = nn.LayerNorm(cfg.decoder.ffn_embed_dim)
+        #
+        # self.feedForwardDroputModule = nn.LayerNorm(self.embedDim)
 
         self.needAttention = True
         self.onnxTrace = False
+
+        self._initSelfAttentionModules()
+        self._initEncoderDecoderAttentionModules()
+        self._initFeedForwardModules()
+
+    def _initSelfAttentionModules(self):
+        self.selfAttnLayerNorm = nn.LayerNorm(self.embeddingDim)
+        self.selfAttnModule = nn.Dropout(self.selfAttnDropoutProbability)
+        self.selfAttnModel = self._createSelfAttentionModelHook()
+
+    def _createSelfAttentionModelHook(self):
+        return Attention(
+            self.cfg,
+            embeddingDim=self.embeddingDim,
+            qkvHiddenDim=self.qkvHiddenDim,
+        )
+
+    def _initEncoderDecoderAttentionModules(self):
+        self.encoderDecoderAttn = None
+        self.encoderAttnLayerNorm = None
+        self.encoderAttnDropout = None
+        if self.encoderAttentionFlag:
+            self.encoderAttnLayerNorm = nn.LayerNorm(self.embeddingDim)
+            self.encoderAttnDropout = nn.Dropout(self.encoderDecoderAttnProbability)
+            self.encoderDecoderAttn = self._createEncoderDecoderAttnModelHook()
+
+    def _createEncoderDecoderAttnModelHook(self):
+        return Attention(
+            self.cfg,
+            embeddingDim=self.embeddingDim,
+            qkvHiddenDim=self.qkvHiddenDim,
+            staticKeyValueFlag=True,
+        )
+
+    def _initFeedForwardModules(self):
+        self.ffnLayerNormModule = nn.LayerNorm(self.embeddingDim)
+        self.ffnDroputModule = nn.Dropout(self.ffnDropoutProbability)
+        self.ffnModel = self._createFeedForwadModelModelHook()
+
+    def _createFeedForwadModelModelHook(self):
+        return MixtureOfExperts(
+            self.cfg,
+            inputDim=self.embeddingDim,
+            hiddenDim=self.ffnHiddenDim,
+            outputDim=self.embeddingDim,
+        )
 
     def residualConnection(self, inputBatch, residualConnection):
         return residualConnection + inputBatch
@@ -228,13 +314,13 @@ class TransformerDecorderLayerBase(Module):
     def forward(
         self,
         inputBatch,
-        haltMask,
-        layerIdx,
+        haltMask: Tensor,
+        layerIdx: int,
         selfAttentionInput: Optional[Tensor],
         encoderOutput: Optional[Tensor] = None,
         encoderPaddingMask: Optional[Tensor] = None,
         previousSelfAttentionState: Optional[List[Tensor]] = None,
-        previousEncoderAttentionState: Optional[List[Tensor]] = None,
+        previousEncoderDecoderAttentionState: Optional[List[Tensor]] = None,
         incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         selfAttentionMask: Optional[Tensor] = None,
         selfAttentionPaddingMask: Optional[Tensor] = None,
@@ -246,101 +332,39 @@ class TransformerDecorderLayerBase(Module):
         if needHeadWeights:
             needAttentionWeights = True
 
-        if previousSelfAttentionState is not None:
-            previousKeyProjection, previousValueProjection = previousSelfAttentionState[
-                :2
-            ]
-            savedState: Dict[str, Optional[Tensor]] = {
-                "previousKeyProjection": previousKeyProjection,
-                "previousValueProjection": previousValueProjection,
-            }
-            if len(previousSelfAttentionState) >= 3:
-                savedState["previousKeyPaddingMask"] = previousSelfAttentionState[2]
-            assert incrementalState is not None
-            self.selfAttentionModel._updateIncrementalState(
-                incrementalState, savedState, layerIdx
-            )
-        _currentSelfAttentionInputBuffer = self.selfAttentionModel._getInputBuffer(
-            incrementalState, layerIdx
+        _currentSelfAttentionInputBuffer = self._getSelfAttentionSavedState(
+            layerIdx, previousSelfAttentionState, incrementalState
         )
 
-        # ------------------------------
-
-        residual = inputBatch
-        if self.normalizeBeforeFlag:
-            inputBatchTemp = self.selfAttentionLayerNorm(inputBatch)
-            if selfAttentionInput is inputBatch:
-                selfAttentionInput = inputBatchTemp
-            else:
-                selfAttentionInput = self.selfAttentionLayerNorm(selfAttentionInput)
-            inputBatch = inputBatchTemp
-
-        checkIfIncrementalStateDoesNotExist = not (
+        checkIfIncrementalStateDoesExistFlag = (
             incrementalState is not None
             and _currentSelfAttentionInputBuffer is not None
             and "previousKeyProjection" in _currentSelfAttentionInputBuffer
         )
 
-        if self.crossSelfAttentionFlag and checkIfIncrementalStateDoesNotExist:
-            if selfAttentionMask is not None:
-                assert encoderOutput is not None
-                decoderSequenceLength = inputBatch.size(0)
-                encoderSequenceLength = encoderOutput.size(0)
-                selfAttentionPadding = inputBatch.new_zeros(
-                    decoderSequenceLength, encoderSequenceLength
-                )
-                selfAttentionMask = torch.cat(
-                    (selfAttentionPadding, selfAttentionMask), dim=1
-                )
-            if selfAttentionPaddingMask is not None:
-                if encoderPaddingMask is not None:
-                    assert encoderOutput is not None
-                    enconderSequenceLength = encoderOutput.size(0)
-                    encoderBatchSize = encoderOutput.size(1)
-                    encoderPaddingMask = selfAttentionPaddingMask.new_zeros(
-                        encoderBatchSize, enconderSequenceLength
-                    )
-                selfAttentionPaddingMask = torch.cat(
-                    (encoderPaddingMask, selfAttentionPaddingMask), dim=1
-                )
-            assert encoderOutput is not None
-            y = torch.cat((encoderOutput, selfAttentionInput), dim=0)
-        else:
-            y = selfAttentionInput
-
-        inputBatch, attentionWeights, auxiliaryLoss = self.selfAttentionModel(
-            query=inputBatch,
-            key=y,
-            value=y,
-            layerIdx=layerIdx,
-            queryPaddingMask=queryPaddingMask,
-            keyPaddingMask=keyPaddingMask,
-            incrementalState=incrementalState,
-            needHeadWeights=False,
-            selfAttentionMask=selfAttentionMask,
-            skipMask=haltMask,
+        selfAttentionMask, selfAttentionPaddingMask = (
+            self._updateSelfAttentionPaddingMasks(
+                inputBatch=inputBatch,
+                encoderOutput=encoderOutput,
+                encoderPaddingMask=encoderPaddingMask,
+                selfAttentionMask=selfAttentionMask,
+                selfAttentionPaddingMask=selfAttentionPaddingMask,
+                checkIfIncrementalStateDoesExistFlag=checkIfIncrementalStateDoesExistFlag,
+            )
         )
 
-        # TODO: find out what is the point of this
-        if self.c_attn is not None:
-            targetLength, batchSize = inputBatch.size(0), inputBatch.size(1)
-            inputBatch = inputBatch.view(
-                targetLength, batchSize, self.numHeads, self.headDim
-            )
-            inputBatch = torch.einsum("tbhd,h->tbhd", inputBatch, self.c_attn)
-            inputBatch = inputBatch.reshape(targetLength, batchSize, self.embedDim)
+        inputBatch = self._computeSelfAttention(
+            inputBatch,
+            encoderOutput,
+            previousEncoderAttentionState,
+            selfAttentionMask,
+            encoderPaddingMask,
+            layerIdx,
+            incrementalState,
+            haltMask,
+        )
 
-        # TODO: find out why this layer not is even here ? becaise 6 lines
-        # below another layernorm is perfomred
-        # if self.attentionLayerNorm is not None:
-        #     inputBatch = self.selfAttentionLayerNorm(inputBatch)
-
-        inputBatch = self.dropoutModule(inputBatch)
-        inputBatch = self.residualConnection(inputBatch, residual)
-        if not self.normalizeBeforeFlag:
-            inputBatch = self.selfAttentionLayerNorm(inputBatch)
-
-        inputBatch = self._computeCrossAttention(
+        inputBatch = self._computeEncoderDecoderAttention(
             inputBatch,
             encoderOutput,
             previousEncoderAttentionState,
@@ -360,19 +384,155 @@ class TransformerDecorderLayerBase(Module):
             assert savedState is not None
             if selfAttentionPaddingMask is not None:
                 selfAttentionState = [
-                    savedState["previousKeyProjection"],
-                    savedState["previousValueProjection"],
+                    savedState["previousKeyMultiHeadProjection"],
+                    savedState["previousValueMultiHeadProjection"],
                     savedState["previousKeyPaddingMask"],
                 ]
             else:
                 selfAttentionState = [
-                    savedState["previousKeyProjection"],
-                    savedState["previousValueProjection"],
+                    savedState["previousKeyMultiHeadProjection"],
+                    savedState["previousValueMultiHeadProjection"],
                 ]
             return inputBatch, attention, attentionWeights, None
         return inputBatch, attention, None, None
 
-    def _computeCrossAttention(
+    def _getSelfAttentionSavedState(
+        self,
+        layerIdx: int,
+        previousSelfAttentionState: Optional[List[Tensor]] = None,
+        incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
+    ):
+        if previousSelfAttentionState is not None:
+            previousKeyProjection, previousValueProjection = previousSelfAttentionState[
+                :2
+            ]
+            savedState: Dict[str, Optional[Tensor]] = {
+                "previousKeyMultiHeadProjection": previousKeyProjection,
+                "previousValueMultiHeadProjection": previousValueProjection,
+            }
+            if len(previousSelfAttentionState) >= 3:
+                savedState["previousKeyPaddingMask"] = previousSelfAttentionState[2]
+            assert incrementalState is not None
+            self.selfAttentionModel._updateIncrementalState(
+                incrementalState, savedState, layerIdx
+            )
+        return self.selfAttentionModel._getInputBuffer(incrementalState, layerIdx)
+
+    def _computeSelfAttention(
+        self,
+        inputBatch: Tensor,
+        haltMask: Tensor,
+        layerIdx: int,
+        selfAttentionInput: Optional[Tensor],
+        encoderOutput: Optional[Tensor],
+        incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]],
+        selfAttentionMask: Optional[Tensor],
+        selfAttentionPaddingMask: Optional[Tensor],
+        checkIfIncrementalStateDoesExistFlag: bool = False,
+    ):
+        residual = inputBatch
+        if self.normalizeBeforeFlag:
+            inputBatchTemp = self.selfAttnLayerNorm(inputBatch)
+            if selfAttentionInput is inputBatch:
+                selfAttentionInput = inputBatchTemp
+            else:
+                selfAttentionInput = self.selfAttnLayerNorm(selfAttentionInput)
+            inputBatch = inputBatchTemp
+
+        if self.crossSelfAttentionFlag and not checkIfIncrementalStateDoesExistFlag:
+            assert encoderOutput is not None
+            assert selfAttentionInput is not None
+            selfAttention = torch.cat((encoderOutput, selfAttentionInput), dim=0)
+        else:
+            selfAttention = selfAttentionInput
+
+        attnOutput, _ = self.selfAttnModel(
+            query=inputBatch,
+            key=selfAttention,
+            value=selfAttention,
+            layerIdx=layerIdx,
+            queryPaddingMask=selfAttentionPaddingMask,
+            keyPaddingMask=selfAttentionPaddingMask,
+            incrementalState=incrementalState,
+            needHeadWeights=False,
+            selfAttentionMask=selfAttentionMask,
+            skipMask=haltMask,
+        )
+
+        attnOutput = self._scaleSelfAttentionHeads(attnOutput)
+        attnOutput = self.dropoutModule(attnOutput)
+        attnOutput = self.residualConnection(attnOutput, residual)
+
+        if not self.normalizeBeforeFlag:
+            attnOutput = self.selfAttentionLayerNorm(inputBatch)
+
+        return attnOutput
+
+    def _scaleSelfAttentionHeads(
+        self,
+        attnOutput: Tensor,
+    ):
+        if self.selfAttnHeadScalers is not None:
+            """
+                TO BE INVESTIGATED LATER:
+                I don't get why you scale the atteniton heads after the output projection,
+                because those have allready been projected by the output layer of the
+                attention mechanism
+
+                One wierd thing here is that this implies that `embeddingDim` == `qkvHiddenDim`
+                this is the only way this works.
+                Einstein summation notation (einsum) is used here:
+                    - "tbhd,h->tbhd" means:
+                        - Multiply each attention head (h) with a learnable weight vector self.self.selfAttnHeadScalers.
+                        - Keep the original shape (T, B, H, D) after the operation.
+                - This acts like a per-head scaling factor applied across all batches and tokens.
+            """
+            assert self.embeddingDim == self.qkvHiddenDim, (
+                f"In order to scale the `heads` of the attention mechanism the `embeddingDim` {self.embeddingDim} must be equal to `qkvHiddenDim` {self.qkvHiddenDim}"
+            )
+            targetLength, batchSize, _ = attnOutput.size()
+            attnOutputHeads = attnOutput.view(
+                targetLength, batchSize, self.numHeads, self.headDim
+            )
+            attnOutputScaledHeads = torch.einsum(
+                "tbhd,h->tbhd", attnOutputHeads, self.selfAttnHeadScalers
+            )
+            return attnOutputScaledHeads.reshape(targetLength, batchSize, self.embedDim)
+
+    def _updateSelfAttentionPaddingMasks(
+        self,
+        inputBatch: Tensor,
+        encoderOutput: Optional[Tensor],
+        encoderPaddingMask: Optional[Tensor] = None,
+        selfAttentionMask: Optional[Tensor] = None,
+        selfAttentionPaddingMask: Optional[Tensor] = None,
+        checkIfIncrementalStateDoesExistFlag: bool = False,
+    ):
+        if self.crossSelfAttentionFlag and not checkIfIncrementalStateDoesExistFlag:
+            if selfAttentionMask is not None:
+                assert encoderOutput is not None
+                decoderSequenceLength = inputBatch.size(0)
+                encoderSequenceLength = encoderOutput.size(0)
+                selfAttentionPadding = inputBatch.new_zeros(
+                    decoderSequenceLength, encoderSequenceLength
+                )
+                selfAttentionMask = torch.cat(
+                    (selfAttentionPadding, selfAttentionMask), dim=1
+                )
+            if selfAttentionPaddingMask is not None and encoderPaddingMask is not None:
+                if encoderPaddingMask is not None:
+                    assert encoderOutput is not None
+                    enconderSequenceLength = encoderOutput.size(0)
+                    encoderBatchSize = encoderOutput.size(1)
+                    encoderPaddingMask = selfAttentionPaddingMask.new_zeros(
+                        encoderBatchSize, enconderSequenceLength
+                    )
+                selfAttentionPaddingMask = torch.cat(
+                    (encoderPaddingMask, selfAttentionPaddingMask), dim=1
+                )
+        return selfAttentionMask, selfAttentionPaddingMask
+
+    def _computeEncoderDecoderAttention(
         self,
         inputBatch,
         encoderOutput,
