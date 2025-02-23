@@ -1,8 +1,10 @@
 from typing import List
+import torch
 import torch.nn as nn
 
 from Emperor.base.preprocess import PatchEmbeddingConv
 from Emperor.components.attention import Attention
+from Emperor.components.sut_layer import TransformerEncoderLayerBase
 from Emperor.components.moe import MixtureOfExperts
 from .base.decorators import timer
 from dataclasses import replace
@@ -87,30 +89,72 @@ class AttentionSingleLayerModel(ClassifierExperiment):
             moeAuxiliaryLosses=self.moeAuxiliaryLosses,
         )
 
-        self.attention = Attention(
-            cfg=cfg,
-            embeddingDim=cfg.embeddingDim,
-            qkvHiddenDim=cfg.qkvHiddenDim,
-            attentionOutputDim=cfg.attentionOutputDim,
-            numExperts=cfg.numExperts,
-            topK=cfg.topK,
-            headDim=cfg.headDim,
-        )
-
-        self.model = nn.Sequential(nn.Flatten())
+        self.attention = Attention(cfg=cfg)
 
     def forward(self, inputBatch):
         imagePatches = self.patcherModel(inputBatch)
         imagePatches = imagePatches.permute(1, 0, 2)
-        attentionOutput, _ = self.attention(
+        _, rawEncoderOutput = self.attention(
             imagePatches,
             imagePatches,
             imagePatches,
         )
-        attentionOutput = attentionOutput.permute(1, 0, 2)
+        # rawEncoderOutput = rawEncoderOutput.permute(1, 0, 2)
 
+        output = rawEncoderOutput[:, 0, :]
+        # output = attentionOutput.mean(dim=1)
+
+        expertsAuxiliaryLosses = self.auxiliaryLosses.getAuxiliaryLossAndClear()
+        moeAuxiliaryLosses = self.moeAuxiliaryLosses.getAuxiliaryLossAndClear()
+        auxiliaryLosses = expertsAuxiliaryLosses + moeAuxiliaryLosses
+
+        return (output, auxiliaryLosses)
+
+
+class TransformerEncoderLayerBaseSingleLayerModel(ClassifierExperiment):
+    def __init__(self, learningRate, cfg: "ModelConfig"):
+        super().__init__(learningRate, cfg)
+
+        self.auxiliaryLosses = AuxiliaryLosses(cfg)
+        self.moeAuxiliaryLosses = AuxiliaryLosses(cfg)
+        self.plotProgress = False
+
+        imageSize = 28
+        patchSize = 4
+        numPatches = (imageSize // patchSize) ** 2
+        self.patcherModel = PatchEmbeddingConv(
+            inputChannels=1,
+            embeddingDim=16,
+            patchSize=patchSize,
+            numPatches=numPatches,
+        )
+
+        cfg = replace(
+            cfg,
+            auxiliaryLosses=self.auxiliaryLosses,
+            moeAuxiliaryLosses=self.moeAuxiliaryLosses,
+        )
+
+        self.encoderModel = TransformerEncoderLayerBase(
+            cfg=cfg,
+            returnRawFFNOutputFlag=True,
+        )
+        self.classificationModel = nn.Linear(cfg.embeddingDim, 10)
+
+        self.useRawOutputFlag = False
+
+    def forward(self, inputBatch):
+        imagePatches = self.patcherModel(inputBatch)
+        imagePatches = imagePatches.permute(1, 0, 2)
+        _, rawEncoderOutput = self.encoderModel(
+            imagePatches,
+        )
+
+        encoderOutput = rawEncoderOutput.permute(1, 0, 2)
         # output = attentionOutput[:, 0, :]
-        output = attentionOutput.mean(dim=1)
+        output = encoderOutput.sum(dim=1)
+
+        output = self.classificationModel(output)
 
         expertsAuxiliaryLosses = self.auxiliaryLosses.getAuxiliaryLossAndClear()
         moeAuxiliaryLosses = self.moeAuxiliaryLosses.getAuxiliaryLossAndClear()
