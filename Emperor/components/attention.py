@@ -1,5 +1,5 @@
 from dataclasses import replace
-from torch import Tensor, save
+from torch import Tensor
 import math
 import uuid
 import torch
@@ -24,7 +24,6 @@ class Attention(Module):
         keyInputDim: Optional[int] = None,
         valueInputDim: Optional[int] = None,
         qkvHiddenDim: Optional[int] = None,
-        attentionOutputDim: Optional[int] = None,
         dropoutProbability: Optional[float] = None,
         biasFlag: Optional[bool] = None,
         addZeroAttentionFlag: Optional[bool] = None,
@@ -55,8 +54,6 @@ class Attention(Module):
         self.valueInputDim: int = self._getDim(valueInputDim)
         qkvHiddenDim = self._getValue(qkvHiddenDim, cfg.qkvHiddenDim)
         self.qkvHiddenDim: int = self._getDim(qkvHiddenDim)
-        attentionOutputDim = self._getValue(attentionOutputDim, cfg.attentionOutputDim)
-        self.attentionOutputDim: int = self._getDim(attentionOutputDim)
         self.dropoutProbability: float = self._getValue(
             dropoutProbability, cfg.dropoutProbability
         )
@@ -133,7 +130,7 @@ class Attention(Module):
             self.cfg,
             inputDim=self.queryInputDim,
             hiddenDim=self.qkvHiddenDim,
-            outputDim=self.attentionOutputDim,
+            outputDim=self.queryInputDim,
             biasFlag=self.biasFlag,
         )
         self.queryProjectionModel = MixtureOfAttentionHeads(cfg)
@@ -339,10 +336,12 @@ class Attention(Module):
         incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]],
         layerIdx: Optional[int],
     ) -> Optional[Dict[str, Optional[Tensor]]]:
-        layerIdPrefix = "attn_state_%d" % layerIdx if layerIdx else ""
-        result = self.incrementalStateModule.getIncrementalState(
-            incrementalState, layerIdPrefix
-        )
+        layerIdPrefix = "attn_state_%d" % layerIdx if layerIdx else None
+        result = None
+        if layerIdPrefix is not None:
+            result = self.incrementalStateModule.getIncrementalState(
+                incrementalState, layerIdPrefix
+            )
 
         if result is not None:
             return result
@@ -798,27 +797,26 @@ class Attention(Module):
         # relative positonal encoding does not work when you add past keyProjection
         # to the input a better understanding of `relativePositionEmbedding` is needed
         # to see what exaclty is it it does
-        #
 
-        print("query shape", query.shape)
-        print("idx", idx.shape)
-        print("difference", (idx[None, :] - idx[:, None]).shape)
-        print("indexGrid", indexGrid)
-        print("indexGrid shape", indexGrid.shape)
-        print("relative postional embedding", self.relativePositionEmbedding.shape)
-        print("length", length)
+        # print("query shape", query.shape)
+        # print("idx", idx.shape)
+        # print("difference", (idx[None, :] - idx[:, None]).shape)
+        # print("indexGrid shape", indexGrid.shape)
+        # print("relative postional embedding", self.relativePositionEmbedding.shape)
+        # print("length", length)
 
         logits = L.einsum("bkhid,hdj->bkhij", [query, self.relativePositionEmbedding])
-        print("length", logits.shape)
-        print("-" * 10)
+        # print("length", logits.shape)
+        # print("-" * 10)
 
         batchSize, topk, headDim, _, _ = logits.size()
         indexGridReshaped = indexGrid[None, None, None, :, :]
-        print("indexGridReshaped ", indexGridReshaped.shape)
+        # print("indexGridReshaped ", indexGridReshaped.shape)
         indexGridReshaped = indexGridReshaped.expand(batchSize, topk, headDim, -1, -1)
-        print("indexGridReshaped", indexGridReshaped.shape)
+        # print("logits", logits.shape)
+        # print("indexGridReshaped", indexGridReshaped.shape)
         output = logits.gather(-1, indexGridReshaped)
-        print("output", output.shape)
+        # print("output", output.shape)
 
         return output
 
