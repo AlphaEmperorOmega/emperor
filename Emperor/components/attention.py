@@ -41,6 +41,7 @@ class Attention(Module):
         randomSampleTopK: Optional[int] = None,
         gatingDropout: Optional[int] = None,
         addMemoryBiasKeyValuesFlag: Optional[bool] = None,
+        staticKeyValueFlag: Optional[bool] = None,
     ) -> None:
         super().__init__()
 
@@ -93,6 +94,10 @@ class Attention(Module):
         self.addMemoryBiasKeyValuesFlag = self._getValue(
             addMemoryBiasKeyValuesFlag, cfg.addMemoryBiasKeyValuesFlag
         )
+        self.staticKeyValueFlag = self._getValue(
+            staticKeyValueFlag, cfg.staticKeyValueFlag
+        )
+
         assert self.qkvHiddenDim % self.headDim == 0, (
             f"Ensure that `qkvHiddenDim` is perfeclty divisible by `headDim` perfect number of heads, `qkvHiddenDim`:{qkvHiddenDim} and `headDim`: {headDim}"
         )
@@ -106,7 +111,6 @@ class Attention(Module):
         # TODO: make sure these flags are necessary
         self.attentionProjectionBiasFlag = False
         self.attentionWeightsBeforeSoftmaxFlag = False
-        self.staticKeyValueFlag = False
         self.createEmptyFlag = False
 
         self._prepareQKVModels()
