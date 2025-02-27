@@ -235,7 +235,7 @@ class TransformerDecorderLayerBase(Module):
 
         # -----------------------------------------
 
-        self.crossSelfAttentionFlag = cfg.crossSelfAttentionFlag
+        # self.crossSelfAttentionFlag = cfg.crossSelfAttentionFlag
         # self.activationFunction = cfg.activationFunction
         # self.scaleHeads = cfg.scaleHeads
         # self.encoderAttentionFlag = cfg.encoderAttentionFlag
@@ -258,7 +258,7 @@ class TransformerDecorderLayerBase(Module):
 
     def __initSelfAttentionModules(self):
         self.selfAttnLayerNorm = nn.LayerNorm(self.embeddingDim)
-        self.selfAttnModule = nn.Dropout(self.selfAttnDropoutProbability)
+        self.selfAttnDropout = nn.Dropout(self.selfAttnDropoutProbability)
         self.selfAttnModel = self._createSelfAttentionModelHook()
 
         self.numHeads = self.selfAttnModel.numHeads
@@ -273,7 +273,7 @@ class TransformerDecorderLayerBase(Module):
 
     def __initCrossAttentionModules(self):
         self.crossAttnLayerNorm = self.crossAttnDropout = self.crossAttnModel = None
-        if self.crossAttentionFlag:
+        if self.crossSelfAttentionFlag:
             self.crossAttnLayerNorm = nn.LayerNorm(self.embeddingDim)
             self.crossAttnDropout = nn.Dropout(self.crossAttnProbability)
             self.crossAttnModel = self._createCrossAttnModelHook()
@@ -283,6 +283,7 @@ class TransformerDecorderLayerBase(Module):
             self.cfg,
             embeddingDim=self.embeddingDim,
             qkvHiddenDim=self.qkvHiddenDim,
+            encoderDecoderAttentionFlag=True,
             staticKeyValueFlag=True,
         )
 
@@ -360,6 +361,7 @@ class TransformerDecorderLayerBase(Module):
 
         inputBatch, attention = self._computeSelfAttention(
             inputBatch,
+            selfAttentionInput,
             encoderOutput,
             previousEncoderAttentionState,
             selfAttentionMask,
@@ -459,13 +461,13 @@ class TransformerDecorderLayerBase(Module):
     def _computeSelfAttention(
         self,
         inputBatch: Tensor,
+        selfAttentionInput: Optional[Tensor],
         haltMask: Tensor,
         layerIdx: int,
-        selfAttentionInput: Optional[Tensor],
-        encoderOutput: Optional[Tensor],
         incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]],
         selfAttentionMask: Optional[Tensor],
         selfAttentionPaddingMask: Optional[Tensor],
+        encoderOutput: Optional[Tensor],
         checkIfIncrementalStateDoesExistFlag: bool = False,
     ):
         residual = inputBatch
@@ -492,17 +494,17 @@ class TransformerDecorderLayerBase(Module):
             queryPaddingMask=selfAttentionPaddingMask,
             keyPaddingMask=selfAttentionPaddingMask,
             incrementalState=incrementalState,
-            needHeadWeights=False,
-            selfAttentionMask=selfAttentionMask,
+            # needHeadWeights=False,
+            attentionMask=selfAttentionMask,
             skipMask=haltMask,
         )
 
         attnOutput = self._scaleSelfAttentionHeads(attnOutput)
-        attnOutput = self.dropoutModule(attnOutput)
+        attnOutput = self.selfAttnDropout(attnOutput)
         attnOutput = self._computeResidualConnection(attnOutput, residual)
 
         if not self.normalizeBeforeFlag:
-            attnOutput = self.selfAttentionLayerNorm(inputBatch)
+            attnOutput = self.selfAttnLayerNorm(inputBatch)
 
         return attnOutput
 
@@ -542,29 +544,29 @@ class TransformerDecorderLayerBase(Module):
 
     def _computeCrossAttention(
         self,
-        inputBatch,
-        encoderOutput,
-        previousCrossAttnState,
-        selfAttentionPaddingMask,
-        encoderPaddingMask,
-        layerIdx,
-        incrementalState,
-        haltMask,
+        selfAttnOutput: Tensor,
+        encoderOutput: Optional[Tensor],
+        encoderPaddingMask: Optional[Tensor],
+        haltMask: Tensor,
+        layerIdx: int,
+        incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]],
+        previousCrossAttnState: Optional[List[Tensor]],
+        selfAttentionPaddingMask: Optional[Tensor],
     ):
         attentionWeights = None
         if self.crossSelfAttentionFlag and encoderOutput is not None:
-            residual = inputBatch
+            residual = selfAttnOutput
             if self.normalizeBeforeFlag:
-                inputBatch = self.crossAttnLayerNorm(inputBatch)
+                selfAttnOutput = self.crossAttnLayerNorm(selfAttnOutput)
 
-            _ = self._getSavedState(
+            self._updateCurrentLayerIncrementalState(
                 layerIdx=layerIdx,
                 previousSavedState=previousCrossAttnState,
                 incrementalState=incrementalState,
             )
 
             attnOutput, attentionWeights = self.crossAttnModel(
-                query=inputBatch,
+                query=selfAttnOutput,
                 key=encoderOutput,
                 value=encoderOutput,
                 layerIdx=layerIdx,
@@ -575,18 +577,19 @@ class TransformerDecorderLayerBase(Module):
                 # needHeadWeights = needHeadWeights,
                 skipMask=haltMask,
             )
-            attnOutput = self.dropoutModule(attnOutput)
+
+            attnOutput = self.crossAttnDropout(attnOutput)
             attnOutput = self._computeResidualConnection(attnOutput, residual)
 
             if not self.normalizeBeforeFlag:
-                inputBatch = self.crossAttnLayerNorm(inputBatch)
+                attnOutput = self.crossAttnLayerNorm(attnOutput)
 
-        return inputBatch, attentionWeights
+        return attnOutput, attentionWeights
 
     def _computeResidualConnection(self, inputBatch, residualConnection):
         return residualConnection + inputBatch
 
-    def _computeFeedForward(self, inputBatch, haltMask):
+    def _computeFeedForward(self, inputBatch: Tensor, haltMask: Optional[Tensor]):
         residual = inputBatch
         if self.residualConnectionScalers is not None:
             residual = torch.mul(self.residualConnectionScalers, residual)
@@ -594,9 +597,9 @@ class TransformerDecorderLayerBase(Module):
         if self.normalizeBeforeFlag:
             inputBatch = self.ffnLayerNormModule(inputBatch)
 
-        inputBatch = self.ffnModel(inputBatch, haltMask)
-        inputBatch = self.ffnDroputModule(inputBatch)
-        inputBatch = self._computeResidualConnection(inputBatch, residual)
+        ffnOutput = self.ffnModel(inputBatch, haltMask)
+        ffnOutput = self.ffnDroputModule(ffnOutput)
+        ffnOutput = self._computeResidualConnection(ffnOutput, residual)
 
         if not self.normalizeBeforeFlag:
             inputBatch = self.ffnLayerNormModule(inputBatch)
