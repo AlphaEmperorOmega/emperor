@@ -79,10 +79,10 @@ selfAttentionInput = torch.randn(cfg.sequenceLength, cfg.batchSize, model.attent
 print(inputBatch.size())
 ```
 
-### 2.2 Skip mask
+### 2.2 Halt mask
 
 ```{python}
-haltMask = L.randint(0, 2, (cfg.batchSize, cfg.sequenceLength))
+haltMask = torch.randint(0, 2, (cfg.batchSize, cfg.sequenceLength))
 
 print(haltMask.shape)
 print(haltMask)
@@ -110,7 +110,7 @@ print(encoderPaddingMask.shape)
 print(encoderPaddingMask)
 ```
 
-### 2.4 attentionMask
+### 2.4 Attention mask
 
 ```{python}
 bs = cfg.batchSize
