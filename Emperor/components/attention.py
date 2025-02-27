@@ -108,6 +108,9 @@ class Attention(Module):
 
         self.inputShape: Optional[Tuple] = None
 
+        # TODO: remove me later after you fix the realative ponstional encoding
+        self.selfAttentionFlag = False
+
         # TODO: make sure these flags are necessary
         self.attentionProjectionBiasFlag = False
         self.attentionWeightsBeforeSoftmaxFlag = False
@@ -228,7 +231,7 @@ class Attention(Module):
             )
         )
 
-        sourceLength = keyProjection.size(0)
+        # sourceLength = keyProjection.size(0)
 
         (queryProjection, keyProjection, valueProjection) = (
             self._splitQueryKeyValueProjectionsIntoMultipleHeads(
@@ -521,13 +524,6 @@ class Attention(Module):
             else the inputs are returned
         """
         if savedState is not None:
-            assert (
-                keyMultiHeadProjection is not None
-                and valueMultiHeadProjection is not None
-            ), (
-                "Ensure `keyMultiHeadProjection` or `valueMultiHeadProjection` are not `None`"
-            )
-
             if "previousKeyMultiHeadProjection" in savedState:
                 keyMultiHeadProjection = self._retrieveProjectionFromSavedSate(
                     keyMultiHeadProjection, "previousKeyMultiHeadProjection", savedState
@@ -752,7 +748,8 @@ class Attention(Module):
             relativePositionLogits = self._relativePositionLogits(
                 queryProjection, sourceLength, last=isIncrementalState
             )
-
+            # This only works when the attentionWeights is square not when the inceremtal
+            # state is concatenated with the input
             relativePositionLogits = relativePositionLogits.view(
                 totalBatchSize, targetLength, sourceLength
             )
