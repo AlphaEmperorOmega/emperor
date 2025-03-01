@@ -4,7 +4,10 @@ import torch.nn as nn
 
 from Emperor.base.preprocess import PatchEmbeddingConv
 from Emperor.components.attention import Attention
-from Emperor.components.sut_layer import TransformerEncoderLayerBase
+from Emperor.components.sut_layer import (
+    TransformerEncoderLayerBase,
+    TransformerDecorderLayerBase,
+)
 from Emperor.components.moe import MixtureOfExperts
 from .base.decorators import timer
 from dataclasses import replace
@@ -155,6 +158,61 @@ class TransformerEncoderLayerBaseSingleLayerModel(ClassifierExperiment):
         output = encoderOutput.sum(dim=1)
 
         output = self.classificationModel(output)
+
+        expertsAuxiliaryLosses = self.auxiliaryLosses.getAuxiliaryLossAndClear()
+        moeAuxiliaryLosses = self.moeAuxiliaryLosses.getAuxiliaryLossAndClear()
+        auxiliaryLosses = expertsAuxiliaryLosses + moeAuxiliaryLosses
+
+        return (output, auxiliaryLosses)
+
+
+class TransformerDecoderLayerBaseSingleLayerModel(ClassifierExperiment):
+    def __init__(self, learningRate, cfg: "ModelConfig"):
+        super().__init__(learningRate, cfg)
+
+        self.auxiliaryLosses = AuxiliaryLosses(cfg)
+        self.moeAuxiliaryLosses = AuxiliaryLosses(cfg)
+        self.plotProgress = False
+
+        imageSize = 28
+        patchSize = 4
+        numPatches = (imageSize // patchSize) ** 2
+        self.patcherModel = PatchEmbeddingConv(
+            inputChannels=1,
+            embeddingDim=16,
+            patchSize=patchSize,
+            numPatches=numPatches,
+        )
+
+        cfg = replace(
+            cfg,
+            auxiliaryLosses=self.auxiliaryLosses,
+            moeAuxiliaryLosses=self.moeAuxiliaryLosses,
+        )
+
+        self.decoderModel = TransformerDecorderLayerBase(
+            cfg=cfg, returnRawFFNOutputFlag=True, crossSelfAttentionFlag=False
+        )
+
+        self.classificationModel = nn.Linear(cfg.embeddingDim, 10)
+
+        self.useRawOutputFlag = False
+
+    def forward(self, inputBatch):
+        imagePatches = self.patcherModel(inputBatch)
+        imagePatches = imagePatches.permute(1, 0, 2)
+        decoderOutput, attentionWeights, selfAttentionState, rawDecoderOutput = (
+            self.decoderModel(
+                imagePatches,
+            )
+        )
+
+        decoderOutput = rawDecoderOutput.permute(1, 0, 2)
+        # decoderOutput = decoderOutput[:, 0, :]
+        decoderOutput = decoderOutput.sum(dim=1)
+
+        output = self.classificationModel(decoderOutput)
+        # output = output.sum(dim=1)
 
         expertsAuxiliaryLosses = self.auxiliaryLosses.getAuxiliaryLossAndClear()
         moeAuxiliaryLosses = self.moeAuxiliaryLosses.getAuxiliaryLossAndClear()
