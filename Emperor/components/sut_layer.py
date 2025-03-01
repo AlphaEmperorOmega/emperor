@@ -315,14 +315,14 @@ class TransformerDecorderLayerBase(Module):
 
     def forward(
         self,
-        inputBatch,
-        haltMask: Tensor,
-        layerIdx: int,
-        selfAttentionInput: Optional[Tensor],
+        inputBatch: Tensor,
+        haltMask: Optional[Tensor] = None,
+        layerIdx: Optional[int] = None,
+        selfAttentionInput: Optional[Tensor] = None,
         encoderOutput: Optional[Tensor] = None,
         encoderPaddingMask: Optional[Tensor] = None,
         previousSelfAttentionState: Optional[List[Tensor]] = None,
-        previousEncoderDecoderAttentionState: Optional[List[Tensor]] = None,
+        previousCrossAttnState: Optional[List[Tensor]] = None,
         incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         selfAttentionMask: Optional[Tensor] = None,
         selfAttentionPaddingMask: Optional[Tensor] = None,
@@ -359,31 +359,35 @@ class TransformerDecorderLayerBase(Module):
             )
         )
 
-        inputBatch, attention = self._computeSelfAttention(
-            inputBatch,
-            selfAttentionInput,
-            encoderOutput,
-            previousEncoderAttentionState,
-            selfAttentionMask,
-            encoderPaddingMask,
-            layerIdx,
-            incrementalState,
-            haltMask,
+        selfAttentionOutput, attentionWeights = self._computeSelfAttention(
+            inputBatch=inputBatch,
+            selfAttentionInput=selfAttentionInput,
+            haltMask=haltMask,
+            layerIdx=layerIdx,
+            incrementalState=incrementalState,
+            selfAttentionMask=selfAttentionMask,
+            selfAttentionPaddingMask=selfAttentionPaddingMask,
+            encoderOutput=encoderOutput,
+            checkIfIncrementalStateDoesExistFlag=checkIfIncrementalStateDoesExistFlag,
         )
 
-        inputBatch, attention = self._computeCrossAttention(
-            inputBatch,
-            encoderOutput,
-            previousEncoderAttentionState,
-            selfAttentionMask,
-            encoderPaddingMask,
-            layerIdx,
-            incrementalState,
-            haltMask,
+        coressAttentionOutput, attentionWeights = self._computeCrossAttention(
+            selfAttnOutput=selfAttentionOutput,
+            encoderOutput=encoderOutput,
+            encoderPaddingMask=encoderPaddingMask,
+            haltMask=haltMask,
+            layerIdx=layerIdx,
+            incrementalState=incrementalState,
+            previousCrossAttnState=previousCrossAttnState,
+            selfAttentionPaddingMask=selfAttentionPaddingMask,
         )
 
-        inputBatch = self._computeFeedForward(inputBatch, haltMask)
+        decoderOutput, ffnRawOutput = self._computeFeedForward(
+            coressAttentionOutput, haltMask
+        )
 
+        # TODO: for later understand what this `self.onnxTrace` flag is
+        # and  what it represents
         if self.onnxTrace and incrementalState is not None:
             savedState = self.selfAttnModel._getSavedState(incrementalState, layerIdx)
             assert savedState is not None
@@ -398,8 +402,8 @@ class TransformerDecorderLayerBase(Module):
                     savedState["previousKeyMultiHeadProjection"],
                     savedState["previousValueMultiHeadProjection"],
                 ]
-            return inputBatch, attention, selfAttentionState, None
-        return inputBatch, attention, None, None
+            return decoderOutput, attentionWeights, selfAttentionState, ffnRawOutput
+        return decoderOutput, attentionWeights, None, ffnRawOutput
 
     def _updateCurrentLayerIncrementalState(
         self,
@@ -486,7 +490,7 @@ class TransformerDecorderLayerBase(Module):
         else:
             selfAttention = selfAttentionInput
 
-        attnOutput, _ = self.selfAttnModel(
+        attnOutput, attnWeights = self.selfAttnModel(
             query=inputBatch,
             key=selfAttention,
             value=selfAttention,
@@ -506,7 +510,7 @@ class TransformerDecorderLayerBase(Module):
         if not self.normalizeBeforeFlag:
             attnOutput = self.selfAttnLayerNorm(inputBatch)
 
-        return attnOutput
+        return attnOutput, attnWeights
 
     def _scaleSelfAttentionHeads(
         self,
@@ -583,25 +587,38 @@ class TransformerDecorderLayerBase(Module):
 
             if not self.normalizeBeforeFlag:
                 attnOutput = self.crossAttnLayerNorm(attnOutput)
+            selfAttnOutput = attnOutput
 
-        return attnOutput, attentionWeights
+        return selfAttnOutput, attentionWeights
 
     def _computeResidualConnection(self, inputBatch, residualConnection):
         return residualConnection + inputBatch
 
-    def _computeFeedForward(self, inputBatch: Tensor, haltMask: Optional[Tensor]):
-        residual = inputBatch
-        if self.residualConnectionScalers is not None:
-            residual = torch.mul(self.residualConnectionScalers, residual)
+    def _computeFeedForward(self, attnOutput: Tensor, haltMask: Optional[Tensor]):
+        x = attnOutput
+        residual = x
+        residual = self._scalreResidualConnectionScalers(residual)
 
         if self.normalizeBeforeFlag:
-            inputBatch = self.ffnLayerNormModule(inputBatch)
+            x = self.ffnLayerNormModule(x)
 
-        ffnOutput = self.ffnModel(inputBatch, haltMask)
-        ffnOutput = self.ffnDroputModule(ffnOutput)
-        ffnOutput = self._computeResidualConnection(ffnOutput, residual)
+        ffnRawOutput = self.ffnModel(x, haltMask)
+        x = self.ffnDroputModule(ffnRawOutput)
+        x = self._computeResidualConnection(x, residual)
 
         if not self.normalizeBeforeFlag:
-            inputBatch = self.ffnLayerNormModule(inputBatch)
+            x = self.ffnLayerNormModule(x)
 
-        return inputBatch
+        if self.returnRawFFNOutputFlag:
+            return x, ffnRawOutput
+
+        return x, None
+
+    def _scalreResidualConnectionScalers(self, residualConnection):
+        # TODO: when going in more detail into this make sure you understand
+        # what the point of scaling the residual connection is
+        if self.residualConnectionScalers is not None:
+            residualConnection = torch.mul(
+                self.residualConnectionScalers, residualConnection
+            )
+        return residualConnection
