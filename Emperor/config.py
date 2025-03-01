@@ -90,6 +90,8 @@ class MixtureOfExpertsConfig:
     parallelExpertsConfig: ParallelExpertsConfig = field(
         default_factory=ParallelExpertsConfig
     )
+    hiddenDropoutProbability: float = field(default=0.0)
+    hiddenLayerNormFlag: bool = field(default=False)
 
 
 @dataclass
@@ -210,7 +212,7 @@ class ModelConfig(ParameterGeneratorConfig):
             "help": "Used as `input` and `output` dimension of a `intermediate` transformer layer"
         },
     )
-    activationFunction: torch.nn = field(default=nn.SELU)
+    activationFunction: torch.nn = field(default_factory=nn.SELU)
     generatorAuxiliaryLosses: Optional[AuxiliaryLosses] = field(default=None)
     moeAuxiliaryLosses: Optional[AuxiliaryLosses] = field(default=None)
     clusterAuxiliaryLosses: Optional[AuxiliaryLosses] = field(default=None)
@@ -218,7 +220,7 @@ class ModelConfig(ParameterGeneratorConfig):
     multiplyByGates: bool = field(default=True)
     attentionProjectionBiasFlag: bool = field(default=True)
 
-    addZeroAttentionFlag: bool = field(default=True)
+    addZeroAttentionFlag: bool = field(default=False)
     selfAttentionFlag: bool = field(default=True)
     encoderDecorderAttentionFlag: bool = field(default=False)
 
@@ -256,6 +258,16 @@ class ModelConfig(ParameterGeneratorConfig):
     encoderDecoderAttentionFlag: bool = field(default=False)
     multiplyByGatesFlag: bool = field(default=False)
     zeroCenteredLossWeight: float = field(default=0.0)
+    hiddenDropoutProbability: float = field(default=0.0)
+    hiddenLayerNormFlag: bool = field(default=False)
+    staticKeyValueFlag: bool = field(default=False)
+    crossSelfAttentionFlag: bool = field(default=True)
+    selfAttentionModel: bool = field(default=False)
+    selfAttnDropoutProbability: float = field(default=0.0)
+    crossAttnProbability: float = field(default=0.0)
+    scaleSelfAttentionHeadsFlag: bool = field(default=False)
+    scaleResidualsConnectionFlag: bool = field(default=False)
+    crossAttentionFlag: bool = field(default=False)
 
     def isNone(self, option):
         return option is None
