@@ -339,15 +339,15 @@ def test_computeSelfAttention_corssAttnTrue(
       checkIfIncrementalStateDoesExistFlag
     )
 
-  printData('Input `inputBatch`', inputBatch if inputBatch is not None else None)
-  printData('Input `selfAttentionInput`', selfAttentionInput if selfAttentionInput is not None else None)
-  printData('Input `haltMask`', haltMask if haltMask is not None else None)
-  printData('Input `layerIdx`', layerIdx if layerIdx is not None else None)
+  printData('Input `inputBatch`', inputBatch)
+  printData('Input `selfAttentionInput`', selfAttentionInput)
+  printData('Input `haltMask`', haltMask)
+  printData('Input `layerIdx`', layerIdx)
   printData('Input `incrementalState`', incrementalState.keys() if incrementalState is not None else None)
-  printData('Input `selfAttentionMask`', selfAttentionMask if selfAttentionMask is not None else None)
-  printData('Input `selfAttentionPaddingMask`', selfAttentionPaddingMask if selfAttentionPaddingMask is not None else None)
-  printData('Input `encoderOutput`', encoderOutput if encoderOutput is not None else None)
-  printData('Input `checkIfIncrementalStateDoesExistFlag`', checkIfIncrementalStateDoesExistFlag if checkIfIncrementalStateDoesExistFlag is not None else None)
+  printData('Input `selfAttentionMask`', selfAttentionMask)
+  printData('Input `selfAttentionPaddingMask`', selfAttentionPaddingMask)
+  printData('Input `encoderOutput`', encoderOutput)
+  printData('Input `checkIfIncrementalStateDoesExistFlag`', checkIfIncrementalStateDoesExistFlag)
 
   print()
 
@@ -479,19 +479,19 @@ def test_computeSelfAttention_corssAttnTrue(
       checkIfIncrementalStateDoesExistFlag
     )
 
-  printData('Input `inputBatch`', inputBatch if inputBatch is not None else None)
-  printData('Input `selfAttentionInput`', selfAttentionInput if selfAttentionInput is not None else None)
-  printData('Input `haltMask`', haltMask if haltMask is not None else None)
-  printData('Input `layerIdx`', layerIdx if layerIdx is not None else None)
+  printData('Input `inputBatch`', inputBatch)
+  printData('Input `selfAttentionInput`', selfAttentionInput)
+  printData('Input `haltMask`', haltMask)
+  printData('Input `layerIdx`', layerIdx)
   printData('Input `incrementalState`', incrementalState.keys() if incrementalState is not None else None)
-  printData('Input `selfAttentionMask`', selfAttentionMask if selfAttentionMask is not None else None)
-  printData('Input `selfAttentionPaddingMask`', selfAttentionPaddingMask if selfAttentionPaddingMask is not None else None)
-  printData('Input `encoderOutput`', encoderOutput if encoderOutput is not None else None)
-  printData('Input `checkIfIncrementalStateDoesExistFlag`', checkIfIncrementalStateDoesExistFlag if checkIfIncrementalStateDoesExistFlag is not None else None)
+  printData('Input `selfAttentionMask`', selfAttentionMask)
+  printData('Input `selfAttentionPaddingMask`', selfAttentionPaddingMask)
+  printData('Input `encoderOutput`', encoderOutput)
+  printData('Input `checkIfIncrementalStateDoesExistFlag`', checkIfIncrementalStateDoesExistFlag)
 
   print()
 
-  attnOutput = model._computeSelfAttention(
+  attnOutput, attnWeights = model._computeSelfAttention(
     inputBatch,
     selfAttentionInput,
     haltMask,
@@ -508,7 +508,7 @@ def test_computeSelfAttention_corssAttnTrue(
   print('-'*20)
 
   if returnResult:
-    return attnOutput
+    return attnOutput, attnWeights
 
 
 test_computeSelfAttention_corssAttnTrue(
@@ -575,7 +575,7 @@ test_computeSelfAttention_corssAttnTrue(
 #### 3.2.3 Outputs required for next step
 
 ```{python}
-attnOutput = test_computeSelfAttention_corssAttnTrue(
+attnOutput, attnWeights = test_computeSelfAttention_corssAttnTrue(
   inputBatch=inputBatch,
   selfAttentionInput=inputBatch,
   haltMask=haltMask,
@@ -606,14 +606,14 @@ def test_computeCrossAttention(
 
   returnResult=False,
 ):
-  printData('Input `selfAttnOutput`', selfAttnOutput if selfAttnOutput is not None else None)
-  printData('Input `encoderOutput`', encoderOutput if encoderOutput is not None else None)
-  printData('Input `encoderPaddingMask`', encoderPaddingMask if encoderPaddingMask is not None else None)
-  printData('Input `haltMask`', haltMask if haltMask is not None else None)
-  printData('Input `layerIdx`', layerIdx if layerIdx is not None else None)
+  printData('Input `selfAttnOutput`', selfAttnOutput)
+  printData('Input `encoderOutput`', encoderOutput)
+  printData('Input `encoderPaddingMask`', encoderPaddingMask)
+  printData('Input `haltMask`', haltMask)
+  printData('Input `layerIdx`', layerIdx)
   printData('Input `incrementalState`', incrementalState.keys() if incrementalState is not None else None)
   printData('Input `previousCrossAttnState`', len(previousCrossAttnState) if previousCrossAttnState is not None else None)
-  printData('Input `selfAttentionPaddingMask`', selfAttentionPaddingMask if selfAttentionPaddingMask is not None else None)
+  printData('Input `selfAttentionPaddingMask`', selfAttentionPaddingMask)
   print()
 
   attnOutput, attentionWeights = model._computeCrossAttention(
@@ -712,8 +712,8 @@ def test_computeFeedForward(
 
   returnResult=False,
 ):
-  printData('Input `attnOutput`', attnOutput if attnOutput is not None else None)
-  printData('Input `haltMask`', haltMask if haltMask is not None else None)
+  printData('Input `attnOutput`', attnOutput)
+  printData('Input `haltMask`', haltMask)
   print()
 
   ffnOutput = model._computeFeedForward(
@@ -747,4 +747,103 @@ ffnOutput = test_computeFeedForward(
 
   returnResult=True,
 )
+```
+
+### 3.4. `_forward` method
+
+```{python}
+def test_forward(
+  inputBatch: Optional[Tensor] = None,
+  haltMask: Optional[Tensor] = None,
+  layerIdx: Optional[int] = None,
+  selfAttentionInput: Optional[Tensor] = None,
+  encoderOutput: Optional[Tensor] = None,
+  encoderPaddingMask: Optional[Tensor] = None,
+  previousSelfAttentionState: Optional[List[Tensor]] = None,
+  previousEncoderDecoderAttentionState: Optional[List[Tensor]] = None,
+  incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
+  selfAttentionMask: Optional[Tensor] = None,
+  selfAttentionPaddingMask: Optional[Tensor] = None,
+  needHeadWeights: Optional[bool] = False,
+
+  returnResult: bool = False,
+):
+
+  printData('Input `inputBatch`', inputBatch)
+  printData('Input `haltMask`', haltMask)
+  printData('Input `layerIdx`', layerIdx)
+  printData('Input `selfAttentionInput`', selfAttentionInput)
+  printData('Input `encoderOutput`', encoderOutput)
+  printData('Input `encoderPaddingMask`', encoderPaddingMask)
+  printData('Input `previousSelfAttentionState`', previousSelfAttentionState)
+  printData('Input `previousEncoderDecoderAttentionState`', previousEncoderDecoderAttentionState)
+  printData('Input `incrementalState`', incrementalState)
+  printData('Input `selfAttentionMask`', selfAttentionMask)
+  printData('Input `selfAttentionPaddingMask`', selfAttentionPaddingMask)
+  printData('Input `needHeadWeights`', needHeadWeights)
+  print()
+
+  decoderOutput, attentionWeights, selfAttentionState = model.forward(
+    inputBatch,
+    haltMask,
+    layerIdx,
+    selfAttentionInput,
+    encoderOutput,
+    encoderPaddingMask,
+    previousSelfAttentionState,
+    previousEncoderDecoderAttentionState,
+    incrementalState,
+    selfAttentionMask,
+    selfAttentionPaddingMask,
+  )
+  printData('Output `decoderOutput`', decoderOutput)
+  printData('Output `attentionWeights`', attentionWeights)
+  printData('Output `selfAttentionState`', selfAttentionState)
+
+  print('-'*20)
+
+  if returnResult:
+    return returnResult
+
+
+test_forward(
+  inputBatch=inputBatch,
+  encoderOutput=encoderOutput
+)
+```
+
+## 4. TEST MODELS
+
+### 4.1. Single layer of `TransformerDecoderLayerBase` on `FashionMNIST`
+
+```{python}
+def testTransformerDecoderLayerBaseSingleLayerModel():
+  from Emperor.base.utils import Trainer
+  from Emperor.base.datasets import FashionMNIST
+  from Emperor.experiments import TransformerDecoderLayerBaseSingleLayerModel
+  from Emperor.config import ModelConfig, ParameterGeneratorOptions
+
+  cfg = ModelConfig(
+    batchSize=16,
+    inputDim=16,
+    depthDim=64,
+    embeddingDim=16,
+    qkvHiddenDim=64,
+    numExperts=16,
+    headDim=32,
+    topK=2,
+    parameterGeneartorType=ParameterGeneratorOptions.matrix_choice_sparse
+  )
+
+  data = FashionMNIST(
+    batch_size=cfg.batchSize,
+    testDatasetFalg=True,
+    testDatasetNumSamples=16
+  )
+
+  model = TransformerDecoderLayerBaseSingleLayerModel(learningRate=0.5, cfg=cfg)
+  trainer = Trainer(max_epochs=100)
+  trainer.fit(model, data, printLossFlag=True)
+
+testTransformerDecoderLayerBaseSingleLayerModel()
 ```
