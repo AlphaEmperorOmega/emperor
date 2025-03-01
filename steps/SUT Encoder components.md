@@ -251,7 +251,7 @@ ffnOutput, ffnRawOutput = test_computeFeedForwardRepresentation(
 )
 ```
 
-### 3.1. `_forward` method
+### 3.3. `_forward` method
 
 ```{python}
 def test_forward(
