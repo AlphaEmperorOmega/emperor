@@ -45,15 +45,30 @@ class GeneralAttentionTestMethods(unittest.TestCase):
         )
 
     def _keyPaddingMask(self) -> Tensor:
-        return torch.tensor(
-            [
-                [1, 1, 1, 0, 0, 0, 0],
-                [1, 1, 1, 1, 1, 0, 0],
-                [1, 1, 1, 1, 1, 1, 1],
-                [1, 1, 1, 1, 0, 0, 0],
-                [1, 1, 0, 0, 0, 0, 0],
-            ]
+        """
+        Example of key padding maks
+            [1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+        """
+        mask = torch.zeros(
+            (self.cfg.batchSize, self.cfg.sequenceLength), dtype=torch.bool
         )
+
+        # Generate random sequence lengths for each batch
+        paddingStart = self.cfg.sequenceLength // 2
+        paddingEnd = self.cfg.sequenceLength
+        randomSeqenceLengths = torch.randint(
+            paddingStart, paddingEnd, (self.cfg.batchSize,)
+        )
+
+        for batchIdx, sequenceLength in enumerate(randomSeqenceLengths):
+            # Set valid tokens to True
+            mask[batchIdx, :sequenceLength] = 1
+
+        return mask
 
     def _layerIdx(self) -> int:
         return 1
@@ -63,35 +78,37 @@ class GeneralAttentionTestMethods(unittest.TestCase):
 
     def _incrementalState(self) -> Dict[str, Dict[str, Optional[Tensor]]]:
         bs = self.cfg.batchSize
+        nh = self.model.numHeads
         sl = self.cfg.sequenceLength
         hd = self.cfg.headDim
-        nh = self.model.numHeads
         layerIdx1 = 1
         layerIdx2 = 2
 
-        kvProjection = torch.randn(bs, nh, hd, sl)
-
+        kvProjection = torch.randn(bs, nh, sl, hd)
         savedStateLayer1 = {
-            "previousKeyProjection": kvProjection,
-            "previousValueProjection": kvProjection,
+            "previousKeyMultiHeadProjection": kvProjection,
+            "previousValueMultiHeadProjection": kvProjection,
             "previousKeyPaddingMask": self._keyPaddingMask(),
         }
         savedStateLayer2 = {
-            "previousKeyProjection": kvProjection,
-            "previousValueProjection": kvProjection,
+            "previousKeyMultiHeadProjection": kvProjection,
+            "previousValueMultiHeadProjection": kvProjection,
             "previousKeyPaddingMask": self._keyPaddingMask(),
         }
 
         incrementalState = {}
-        self.model._updateIncrementalState(
+        layerId = "attn_state_%d" % layerIdx1
+        self.model.incrementalStateModule.setIncrementalState(
             incrementalState,
+            layerId,
             savedStateLayer1,
-            layerIdx1,
         )
-        self.model._updateIncrementalState(
+
+        layerId = "attn_state_%d" % layerIdx2
+        self.model.incrementalStateModule.setIncrementalState(
             incrementalState,
+            layerId,
             savedStateLayer2,
-            layerIdx2,
         )
         return incrementalState
 
@@ -167,7 +184,9 @@ class TestGetLayerSavedStateFromIncrementalState(GeneralAttentionTestMethods):
         self.assertIs(keyInput, key)
         self.assertIs(valueInput, value)
         self.assertIsInstance(savedState, Dict)
-        self.assertIsInstance(savedState["previousKeyProjection"], torch.Tensor)
+        self.assertIsInstance(
+            savedState["previousKeyMultiHeadProjection"], torch.Tensor
+        )
 
     def testInputs_key_value_layerIdx_incrementalState_statickv(
         self,
@@ -188,7 +207,9 @@ class TestGetLayerSavedStateFromIncrementalState(GeneralAttentionTestMethods):
         self.assertIsNone(keyInput)
         self.assertIsNone(valueInput)
         self.assertIsInstance(savedState, Dict)
-        self.assertIsInstance(savedState["previousKeyProjection"], torch.Tensor)
+        self.assertIsInstance(
+            savedState["previousKeyMultiHeadProjection"], torch.Tensor
+        )
 
 
 class TestGetSavedState(GeneralAttentionTestMethods):
@@ -229,8 +250,8 @@ class TestGetSavedState(GeneralAttentionTestMethods):
         incrementalState = self._incrementalState()
         savedState = self.model._getSavedState(incrementalState, layerIdx)
         self.assertIsInstance(savedState, Dict)
-        self.assertTrue("previousKeyProjection" in savedState.keys())
-        self.assertTrue("previousValueProjection" in savedState.keys())
+        self.assertTrue("previousKeyMultiHeadProjection" in savedState.keys())
+        self.assertTrue("previousValueMultiHeadProjection" in savedState.keys())
         self.assertTrue("previousKeyPaddingMask" in savedState.keys())
 
     def testInputs_createEmptyFlag(self):
@@ -774,3 +795,61 @@ class TestSplitQueryKeyValueProjectionsIntoMultipleHeads(GeneralAttentionTestMet
         self.assertEqual(keyProjectionOutputShape, expectedValueKeyShape)
         self.assertIsInstance(valueProjection, Tensor)
         self.assertEqual(valueProjectionOutputShape, expectedValueKeyShape)
+
+
+class TestUpdateKeyValueProjectionsUsingLayerSavedState(GeneralAttentionTestMethods):
+    def setUp(self) -> None:
+        self._setUp()
+
+    def _keyMultiHeadProjectionInput(self):
+        return torch.randn(
+            self.cfg.batchSize,
+            self.model.numHeads,
+            self.cfg.sequenceLength,
+            self.cfg.headDim,
+        )
+
+    def _valueMultiHeadProjectionInput(self):
+        return torch.randn(
+            self.cfg.batchSize,
+            self.model.numHeads,
+            self.cfg.sequenceLength,
+            self.cfg.headDim,
+        )
+
+    def testInputs_none(self):
+        keyMultiHeadProjection = None
+        valueMultiHeadProjection = None
+        keyPaddingMask = None
+        layerIdx = None
+        incrementalState = None
+        savedState = None
+
+        (
+            keyMultiHeadProjection,
+            valueMultiHeadProjection,
+            keyPaddingMask,
+            incrementalState,
+        ) = self.model._updateKeyValueProjectionsUsingLayerSavedState(
+            keyMultiHeadProjection,
+            valueMultiHeadProjection,
+            keyPaddingMask,
+            layerIdx,
+            incrementalState,
+            savedState,
+        )
+
+        # expectedQueryShape = [
+        #     self.cfg.batchSize,
+        #     self.cfg.topK,
+        #     self.model.numHeads,
+        #     self.cfg.sequenceLength,
+        #     self.cfg.headDim,
+        # ]
+        #
+        # queryProjectionOutputShape = list(queryProjection.size())
+        #
+        # self.assertIsInstance(queryProjection, Tensor)
+        # self.assertEqual(queryProjectionOutputShape, expectedQueryShape)
+        # self.assertIsNone(keyProjection)
+        # self.assertIsNone(valueProjection)
