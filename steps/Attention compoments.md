@@ -62,7 +62,6 @@ model = Attention(
   cfg=cfg,
   embeddingDim=cfg.embeddingDim,
   qkvHiddenDim=cfg.qkvHiddenDim,
-  attentionOutputDim=cfg.attentionOutputDim,
   numExperts=cfg.numExperts,
   topK=cfg.topK,
   headDim=cfg.headDim,
@@ -886,6 +885,7 @@ def test_computeAttentionOnValueProjections(
   )
 
   printData('Output `weightedValueProjections` shape: ', weightedValueProjections)
+  printData('Output `targetLength` shape: ', targetLength)
   print('-'*20)
 
   if returnResult:
@@ -929,7 +929,7 @@ def test_computeAttentionOutputProjection(
     printStepShapes
   )
 
-  printData('Output `weightedValueProjections` shape: ', weightedValueProjections)
+  printData('Output `attentionOutputProjection` shape: ', attentionOutputProjection)
   print('-'*20)
 
   if returnResult:
