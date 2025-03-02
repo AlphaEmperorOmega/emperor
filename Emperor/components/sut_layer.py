@@ -52,24 +52,24 @@ class TransformerEncoderLayerBase(Module):
         self._initializeSelfAttentionModules()
         self._initializeFeedForwardModules()
 
-    def _initializeSelfAttentionModules(self):
+    def _initializeSelfAttentionModules(self) -> None:
         self.attnLayerNormModule = nn.LayerNorm(self.embeddingDim)
         self.attnDropoutModule = nn.Dropout(self.attnDropoutProbability)
         self.attentionModel = self._createAttentionModelHook()
 
-    def _createAttentionModelHook(self):
+    def _createAttentionModelHook(self) -> Attention:
         return Attention(
             self.cfg,
             embeddingDim=self.embeddingDim,
             qkvHiddenDim=self.qkvHiddenDim,
         )
 
-    def _initializeFeedForwardModules(self):
+    def _initializeFeedForwardModules(self) -> None:
         self.ffnLayerNormModule = nn.LayerNorm(self.embeddingDim)
         self.ffnDroputModule = nn.Dropout(self.ffnDropoutProbability)
         self.ffnModel = self._createFeedForwadModelModelHook()
 
-    def _createFeedForwadModelModelHook(self):
+    def _createFeedForwadModelModelHook(self) -> MixtureOfExperts:
         return MixtureOfExperts(
             self.cfg,
             inputDim=self.embeddingDim,
