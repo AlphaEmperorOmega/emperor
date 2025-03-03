@@ -61,13 +61,13 @@ class TransformerEncoderBase(Module):
         #     self.layers = nn.ModuleList([])
 
     def _initTransformerLayer(self):
-        self.transformerModel = self._createTransformerModelHook()
+        self.encoderModel = self._createTransformerModelHook()
 
         self.halting = False
         if self.cfg.encoder.halting:
             self.halting = True
-            self.transformerModel = ACTWrapper(
-                self.transformerModel, halting_dropout=cfg.halting_dropout
+            self.encoderModel = ACTWrapper(
+                self.encoderModel, halting_dropout=cfg.halting_dropout
             )
 
     def _createTransformerModelHook(self):
@@ -110,26 +110,6 @@ class TransformerEncoderBase(Module):
         #         cfg.quantNoise.pq_block_size,
         #     )
 
-    def _updateDataGathering(
-        self,
-        inputEmbeddings: Tensor,
-        ffnRawOutput: Optional[Tensor],
-        act_state: Optional[Tuple] = None,
-        returnAllHiddens: bool = False,
-    ):
-        if returnAllHiddens and not torch.jit.is_scripting():
-            self.encoderStatesList.append(inputEmbeddings)
-            self.ffnRawOutputList.append(ffnRawOutput)
-
-        if self.halting and self.gatherVusalisationDataFlag:
-            (i, log_never_halt, acc_h, acc_expect_depth) = act_state
-            p_never_halt = torch.exp(log_never_halt)
-            self.acc_psList.append((1 - torch.exp(log_never_halt))[:, 0])
-            self.haltedMasksList.append(
-                p_never_halt < (1 - self.halting_universal_layer.threshold)
-            )
-            self.routeIndexesList.append(self.universal_layer.moe.top_k_indices)
-
     def forward(
         self,
         sourceTokens: Tensor,
@@ -145,33 +125,28 @@ class TransformerEncoderBase(Module):
         if returnAllHiddens:
             self.encoderStatesList.append(x)
 
-        inputEmbeddings, ffnRawOutput, act_state, act_loss = self._computeModelOutput(
-            inputEmbeddings=x,
-            paddingMask=paddingMask,
+        inputEmbeddings, ffnRawOutput, act_state, act_loss = (
+            self._computeEncoderLayersOutput(
+                inputEmbeddings=x,
+                paddingMask=paddingMask,
+            )
         )
 
-        totalEncoderLoss = 0
-        if self.halting:
-            x = softHaltingInput
-            totalEncoderLoss += self.dynamicHaltingLossWeight * act_loss
-            self._updateVusalisationData()
-
-        if self.normalizeBeforeFlag is not None:
-            x = self.transformerLayerNorm(x)
-
-        src_lengths = (
-            sourceTokens.ne(self.padding_idx)
-            .sum(dim=1, dtype=torch.int32)
-            .reshape(-1, 1)
-            .contiguous()
+        self._computeModelOutput(
+            x=x,
+            sourceTokens=sourceTokens,
+            softHaltingInput=soft_halt_x,
+            act_loss=act_loss,
         )
+
+        self._updateVusalisationData()
 
         return {
             "encoder_out": [x],  # T x B x C
-            "encoder_padding_mask": [encoder_padding_mask],  # B x T
+            "encoder_padding_mask": [encoderPaddingMask],  # B x T
             "encoder_embedding": [rawEncoderEmbedding],  # B x T x C
-            "encoder_states": encoder_states,  # List[T x B x C]
-            "fc_results": fc_results,  # List[T x B x C]
+            "encoder_states": self.encoderStatesList,  # List[T x B x C]
+            "fc_results": ffnRawOutput,  # List[T x B x C]
             "src_tokens": [],
             "src_lengths": [src_lengths],
             "encoder_loss": [totalEncoderLoss],
@@ -179,6 +154,72 @@ class TransformerEncoderBase(Module):
         }
 
     def _computeModelOutput(
+        self,
+        x,
+        sourceTokens,
+        softHaltingInput,
+        act_loss,
+    ):
+        totalEncoderLoss = 0
+        if self.halting:
+            x = softHaltingInput
+            totalEncoderLoss += self.dynamicHaltingLossWeight * act_loss
+
+        if self.normalizeBeforeFlag is not None:
+            x = self.transformerLayerNorm(x)
+
+        sourceLengths = (
+            sourceTokens.ne(self.padding_idx)
+            .sum(dim=1, dtype=torch.int32)
+            .reshape(-1, 1)
+            .contiguous()
+        )
+
+        return x, totalEncoderLoss, sourceLengths
+
+    def _computeInputTokens(
+        self,
+        sourceTokens: Tensor,
+        tokenEmbeddings: Optional[torch.Tensor] = None,
+    ):
+        encoderPaddingMask = sourceTokens.eq(self.paddingIndex)
+        hasPaddingMask = sourceTokens.device.type == "xla" or encoderPaddingMask.any()
+
+        x, rawEncoderEmbedding, _ = self._computeTokenEmbedding(
+            sourceTokens, tokenEmbeddings
+        )
+
+        if hasPaddingMask:
+            x = x * (1 - encoderPaddingMask.unsqueeze(-1).type_as(x))
+
+        # B x T x C -> T x B x C
+        x = x.transpose(0, 1)
+
+        return x, encoderPaddingMask, rawEncoderEmbedding, hasPaddingMask
+
+    def _computeTokenEmbedding(
+        self, sourceTokens, tokenEmbeddings: Optional[torch.Tensor] = None
+    ):
+        if tokenEmbeddings is None:
+            tokenEmbeddings = self.tokenEmbeddingModule(sourceTokens)
+        x = rawInputTokens = self.embeddingTokensWeight * tokenEmbeddings
+
+        positionalEmbedding = None
+        if self.positionalEmbeddingFlag:
+            positionalEmbedding = self.positionalEmbedding(sourceTokens)
+            x += positionalEmbedding
+
+        if self.embeddingLayerNormFlag:
+            x = self.embeddingLayerNorm(x)
+
+        x = self.embedingDropoutModule(x)
+
+        if self.quantNoise is not None:
+            x = self.quantNoise(x)
+
+        return x, rawInputTokens, positionalEmbedding
+
+    def _computeEncoderLayersOutput(
         self,
         inputEmbeddings,
         paddingMask,
@@ -203,55 +244,6 @@ class TransformerEncoderBase(Module):
 
         return inputEmbeddings, ffnRawOutput, act_state, act_loss
 
-    def _updateVusalisationData(self) -> None:
-        if self.gatherVusalisationDataFlag:
-            self.visualiseHaltedVisualisationTensor = torch.stack(self.acc_psList)
-            self.haltingMaskVisualizationTensor = torch.stack(self.haltedMasksList)
-            self.topKTensorVisualizationTensor = torch.stack(self.routeIndexesList)
-
-    def _computeInputTokens(
-        self,
-        sourceTokens: Tensor,
-        tokenEmbeddings: Optional[torch.Tensor] = None,
-    ):
-        encoderPaddingMask = sourceTokens.eq(self.paddingIndex)
-        hasPaddingMask = sourceTokens.device.type == "xla" or encoderPaddingMask.any()
-
-        x, rawEncoderEmbedding, _ = self._computeTokenEmbedding(
-            sourceTokens, tokenEmbeddings
-        )
-
-        # account for padding while computing the representation
-        if hasPaddingMask:
-            x = x * (1 - encoderPaddingMask.unsqueeze(-1).type_as(x))
-
-        # B x T x C -> T x B x C
-        inputTokens = x.transpose(0, 1)
-
-        return inputTokens, encoderPaddingMask, rawEncoderEmbedding, hasPaddingMask
-
-    def _computeTokenEmbedding(
-        self, sourceTokens, tokenEmbeddings: Optional[torch.Tensor] = None
-    ):
-        if tokenEmbeddings is None:
-            tokenEmbeddings = self.tokenEmbeddingModule(sourceTokens)
-        x = rawInputTokens = self.embeddingTokensWeight * tokenEmbeddings
-
-        positionalEmbedding = None
-        if self.positionalEmbeddingFlag:
-            positionalEmbedding = self.positionalEmbedding(sourceTokens)
-            x += positionalEmbedding
-
-        if self.embeddingLayerNormFlag:
-            x = self.embeddingLayerNorm(x)
-
-        x = self.embedingDropoutModule(x)
-
-        if self.quant_noise is not None:
-            x = self.quant_noise(x)
-
-        return x, rawInputTokens, positionalEmbedding
-
     def _computeTransformerLayerOutput(
         self,
         inputEmbeddings: Tensor,
@@ -262,23 +254,22 @@ class TransformerEncoderBase(Module):
         hasPaddingMask: bool,
         act_state: Optional[Tensor] = None,
     ):
+        act_loss = 0.0
         act_loss = None
         encoderPaddingMask = encoderPaddingMask if hasPaddingMask else None
         if self.halting:
             # TODO: Inprove the following after you work on "ACTWrapper"
-            act_state, layerOutput, soft_halt_x, act_loss = (
-                self.transformerModel.forward(
-                    act_state,
-                    inputTokens,
-                    self_attn_input=soft_halt_x,
-                    pad_mask=haltMask,
-                    layer_idx=layerIdx,
-                    encoder_padding_mask=encoderPaddingMask,
-                )
+            act_state, layerOutput, soft_halt_x, act_loss = self.encoderModel.forward(
+                act_state,
+                inputTokens,
+                self_attn_input=soft_halt_x,
+                pad_mask=haltMask,
+                layer_idx=layerIdx,
+                encoder_padding_mask=encoderPaddingMask,
             )
         else:
             # TODO: find out of the layerIdx is needed for the encoder
-            layerOutput = self.transformerModel.forward(
+            layerOutput = self.encoderModel.forward(
                 inputBatch=inputEmbeddings,
                 selfAttentionInput=softHaltingInput,
                 haltMask=haltMask,
@@ -291,6 +282,32 @@ class TransformerEncoderBase(Module):
             layerOutput, ffnRawOutput = layerOutput
 
         return layerOutput, ffnRawOutput, act_state, act_loss
+
+    def _updateDataGathering(
+        self,
+        inputEmbeddings: Tensor,
+        ffnRawOutput: Optional[Tensor],
+        act_state: Optional[Tuple] = None,
+        returnAllHiddens: bool = False,
+    ):
+        if returnAllHiddens and not torch.jit.is_scripting():
+            self.encoderStatesList.append(inputEmbeddings)
+            self.ffnRawOutputList.append(ffnRawOutput)
+
+        if self.halting and self.gatherVusalisationDataFlag:
+            (i, log_never_halt, acc_h, acc_expect_depth) = act_state
+            p_never_halt = torch.exp(log_never_halt)
+            self.acc_psList.append((1 - torch.exp(log_never_halt))[:, 0])
+            self.haltedMasksList.append(
+                p_never_halt < (1 - self.halting_universal_layer.threshold)
+            )
+            self.routeIndexesList.append(self.universal_layer.moe.top_k_indices)
+
+    def _updateVusalisationData(self) -> None:
+        if self.halting and self.gatherVusalisationDataFlag:
+            self.visualiseHaltedVisualisationTensor = torch.stack(self.acc_psList)
+            self.haltingMaskVisualizationTensor = torch.stack(self.haltedMasksList)
+            self.topKTensorVisualizationTensor = torch.stack(self.routeIndexesList)
 
 
 class LearnedPositionalEmbedding(nn.Embedding):
