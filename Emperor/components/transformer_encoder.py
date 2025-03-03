@@ -62,12 +62,12 @@ class TransformerEncoderBase(Module):
 
     def _initTransformerLayer(self):
         self.transformerModel = self._createTransformerModelHook()
-        self.halting = False
 
+        self.halting = False
         if self.cfg.encoder.halting:
             self.halting = True
             self.transformerModel = ACTWrapper(
-                self.universal_layer, halting_dropout=cfg.halting_dropout
+                self.transformerModel, halting_dropout=cfg.halting_dropout
             )
 
     def _createTransformerModelHook(self):
@@ -145,33 +145,16 @@ class TransformerEncoderBase(Module):
         if returnAllHiddens:
             self.encoderStatesList.append(x)
 
+        inputEmbeddings, ffnRawOutput, act_state, act_loss = self._computeModelOutput(
+            inputEmbeddings=x,
+            paddingMask=paddingMask,
+        )
+
         totalEncoderLoss = 0
-
-        # encoder layers
-        steps = self.numLayers
-        softHaltingInput = act_state = None
-        haltMask = (1.0 - paddingMask.t().float()).contiguous()
-
-        for layerIdx in range(steps):
-            x, ffnRawOutput, act_state, act_loss = self._computeTransformerLayerOutput(
-                inputEmbeddings=x,
-                softHaltingInput=softHaltingInput,
-                haltMask=haltMask,
-                layerIdx=layerIdx,
-                encoderPaddingMask=paddingMask,
-                hasPaddingMask=hasPaddingMask,
-            )
-
-            self._updateDataGathering(x, ffnRawOutput, act_state)
-
         if self.halting:
             x = softHaltingInput
             totalEncoderLoss += self.dynamicHaltingLossWeight * act_loss
-
-            if self.gatherVusalisationDataFlag:
-                self.visualiseHaltedVisualisationTensor = torch.stack(self.acc_psList)
-                self.haltingMaskVisualizationTensor = torch.stack(self.haltedMasksList)
-                self.topKTensorVisualizationTensor = torch.stack(self.routeIndexesList)
+            self._updateVusalisationData()
 
         if self.normalizeBeforeFlag is not None:
             x = self.transformerLayerNorm(x)
@@ -191,9 +174,40 @@ class TransformerEncoderBase(Module):
             "fc_results": fc_results,  # List[T x B x C]
             "src_tokens": [],
             "src_lengths": [src_lengths],
-            "encoder_loss": [total_encoder_loss],
+            "encoder_loss": [totalEncoderLoss],
             "encoder_expected_halt": act_loss,
         }
+
+    def _computeModelOutput(
+        self,
+        inputEmbeddings,
+        paddingMask,
+        hasPaddingMask: bool = False,
+    ):
+        softHaltingInput = act_state = None
+        haltMask = (1.0 - paddingMask.t().float()).contiguous()
+
+        for layerIdx in range(self.numLayers):
+            inputEmbeddings, ffnRawOutput, act_state, act_loss = (
+                self._computeTransformerLayerOutput(
+                    inputEmbeddings=inputEmbeddings,
+                    softHaltingInput=softHaltingInput,
+                    haltMask=haltMask,
+                    layerIdx=layerIdx,
+                    encoderPaddingMask=paddingMask,
+                    hasPaddingMask=hasPaddingMask,
+                )
+            )
+
+            self._updateDataGathering(inputEmbeddings, ffnRawOutput, act_state)
+
+        return inputEmbeddings, ffnRawOutput, act_state, act_loss
+
+    def _updateVusalisationData(self) -> None:
+        if self.gatherVusalisationDataFlag:
+            self.visualiseHaltedVisualisationTensor = torch.stack(self.acc_psList)
+            self.haltingMaskVisualizationTensor = torch.stack(self.haltedMasksList)
+            self.topKTensorVisualizationTensor = torch.stack(self.routeIndexesList)
 
     def _computeInputTokens(
         self,
