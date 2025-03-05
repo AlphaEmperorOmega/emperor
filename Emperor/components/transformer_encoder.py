@@ -25,7 +25,7 @@ class TransformerEncoderBase(Module):
         self.dynamicHaltingLossWeight = cfg.dynamicHaltingLossWeight
         self.embeddingDropoutProbability = 0.0
         self.gatherVusalisationDataFlag = False
-        self.embeddingLayerNormFlag = False
+        self.layerNormEmbeddingFlag = False
         self.positionalEmbeddingFlag = True
         self.normalizeBeforeFlag = True
         self.quantNoiseFlag = False
@@ -88,10 +88,10 @@ class TransformerEncoderBase(Module):
         return transformerLayer
 
     def _initEmbeddingModules(self):
-        self.embedingDropoutModule = nn.Dropout(self.embeddingDropoutProbability)
+        self.dropoutModuleEmbeding = nn.Dropout(self.embeddingDropoutProbability)
 
-        if self.embeddingLayerNormFlag:
-            self.embeddingLayerNorm = nn.LayerNorm(self.ebme)
+        if self.layerNormEmbeddingFlag:
+            self.layerNormEmbedding = nn.LayerNorm(self.embeddingDim)
 
         if self.positionalEmbeddingFlag:
             self.positionalEmbedding = PositionalEmbedding(
@@ -101,6 +101,7 @@ class TransformerEncoderBase(Module):
                 learned=cfg.encoder.learned_pos,
             )
 
+        self.quantNoiseFlag = False
         self.quantNoise = None
         # TODO: figure out later how this works
         # if not cfg.adaptive_input and cfg.quantNoise.pq > 0:
@@ -118,10 +119,10 @@ class TransformerEncoderBase(Module):
         tokenEmbeddings: Optional[torch.Tensor] = None,
     ):
         self._resetDataGathering()
-        x, paddingMask, rawEncoderEmbedding, hasPaddingMask = self._computeInputTokens(
-            sourceTokens=sourceTokens,
-            tokenEmbeddings=tokenEmbeddings,
-            returnAllHiddens=returnAllHiddens,
+        tokenEmbeddings, paddingMask, rawTokenEmbedding, hasPaddingMask = (
+            self._computeTokenEmbeddings(
+                sourceTokens, tokenEmbeddings, returnAllHiddens
+            )
         )
 
         x, act_state, act_loss = self._computeAllEncoderLayersOutput(
@@ -142,7 +143,7 @@ class TransformerEncoderBase(Module):
         return {
             "encoderOutput": [x],  # T x B x C
             "encoderPaddingMask": [paddingMask],  # B x T
-            "encoderRawEmbeddings": [rawEncoderEmbedding],  # B x T x C
+            "encoderRawEmbeddings": [rawTokenEmbedding],  # B x T x C
             "encoderStates": self.encoderStatesList,  # List[T x B x C]
             "fc_results": self.ffnRawOutputList,  # List[T x B x C]
             "src_tokens": [],
@@ -151,33 +152,40 @@ class TransformerEncoderBase(Module):
             "encoder_expected_halt": act_loss,
         }
 
-    def _computeInputTokens(
+    def _computeTokenEmbeddings(
         self,
         sourceTokens: Tensor,
         tokenEmbeddings: Optional[torch.Tensor] = None,
         returnAllHiddens: bool = False,
     ):
-        sequenceLengthPaddingMask = sourceTokens.eq(self.paddingIndex)
-        hasPaddingMask = (
-            sourceTokens.device.type == "xla" or sequenceLengthPaddingMask.any()
-        )
+        paddingMask = sourceTokens.eq(self.paddingIndex)
+        hasPaddingMask = sourceTokens.device.type == "xla" or paddingMask.any()
 
-        x, rawEncoderEmbedding, _ = self._computeTokenEmbedding(
+        tokenEmbeddings, rawTokenEmbedding, _ = self._retrieveTokenEmbedding(
             sourceTokens, tokenEmbeddings
         )
 
-        if hasPaddingMask:
-            x = x * (1 - sequenceLengthPaddingMask.unsqueeze(-1).type_as(x))
+        tokenEmbeddings = self._applyPaddingMask(
+            tokenEmbeddings, paddingMask, hasPaddingMask
+        )
 
         # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        tokenEmbeddings = tokenEmbeddings.transpose(0, 1)
 
         if returnAllHiddens:
-            self.encoderStatesList.append(x)
+            self.encoderStatesList.append(tokenEmbeddings)
 
-        return x, sequenceLengthPaddingMask, rawEncoderEmbedding, hasPaddingMask
+        return tokenEmbeddings, paddingMask, rawTokenEmbedding, hasPaddingMask
 
-    def _computeTokenEmbedding(
+    def _applyPaddingMask(
+        self, tokenEmbeddings: Tensor, paddingMask: Tensor, hasPaddingMask: bool
+    ):
+        if hasPaddingMask:
+            binaryPaddingMask = paddingMask.unsqueeze(-1).type_as(tokenEmbeddings)
+            tokenEmbeddings = tokenEmbeddings * (1 - binaryPaddingMask)
+        return tokenEmbeddings
+
+    def _retrieveTokenEmbedding(
         self,
         sourceTokens: Tensor,
         tokenEmbeddings: Optional[torch.Tensor] = None,
@@ -185,35 +193,38 @@ class TransformerEncoderBase(Module):
         if tokenEmbeddings is None:
             tokenEmbeddings = self.tokenEmbeddingModule(sourceTokens)
 
-        x = rawInputTokens = self.embeddingTokensWeight * tokenEmbeddings
+        tokenEmbeddings = rawTokenEmbedding = (
+            self.embeddingTokensWeight * tokenEmbeddings
+        )
 
         positionalEmbedding = None
         if self.positionalEmbeddingFlag:
             positionalEmbedding = self.positionalEmbedding(sourceTokens)
-            x += positionalEmbedding
+            tokenEmbeddings += positionalEmbedding
 
-        if self.embeddingLayerNormFlag:
-            x = self.embeddingLayerNorm(x)
+        if self.layerNormEmbeddingFlag:
+            tokenEmbeddings = self.layerNormEmbedding(tokenEmbeddings)
 
-        x = self.embedingDropoutModule(x)
+        tokenEmbeddings = self.dropoutModuleEmbeding(tokenEmbeddings)
 
-        if self.quantNoise is not None:
-            x = self.quantNoise(x)
+        if self.quantNoiseFlag:
+            tokenEmbeddings = self.quantNoise(tokenEmbeddings)
 
-        return x, rawInputTokens, positionalEmbedding
+        return tokenEmbeddings, rawTokenEmbedding, positionalEmbedding
 
     def _computeAllEncoderLayersOutput(
         self,
-        x,
+        tokenEmbeddings,
         paddingMask,
         hasPaddingMask: bool = False,
     ):
         softHaltingInput = act_state = None
         haltMask = (1.0 - paddingMask.t().float()).contiguous()
 
+        layerOutput = tokenEmbeddings
         for layerIdx in range(self.numLayers):
-            x, act_state, act_loss = self._computeLayerOutput(
-                x=x,
+            layerOutput, act_state, act_loss = self._computeLayerOutput(
+                x=layerOutput,
                 selfAttentionInput=softHaltingInput,
                 haltMask=haltMask,
                 layerIdx=layerIdx,
@@ -222,7 +233,7 @@ class TransformerEncoderBase(Module):
                 act_state=act_state,
             )
 
-        return x, act_state, act_loss
+        return layerOutput, act_state, act_loss
 
     def _computeLayerOutput(
         self,
