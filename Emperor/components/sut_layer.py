@@ -84,6 +84,7 @@ class TransformerEncoderLayerBase(Module):
         haltMask: Optional[Tensor] = None,
         encoderPaddingMask: Optional[Tensor] = None,
         attentionMask: Optional[Tensor] = None,
+        layerIdx: Optional[int] = None,
     ):
         if selfAttentionInput is None:
             selfAttentionInput = inputBatch
