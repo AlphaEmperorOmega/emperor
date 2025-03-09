@@ -269,6 +269,10 @@ class ModelConfig(ParameterGeneratorConfig):
     scaleResidualsConnectionFlag: bool = field(default=False)
     crossAttentionFlag: bool = field(default=False)
 
+    # TODO: instead of having a loss class that accumulates the loss
+    # and needs to be stored in the configuration create a wrapper
+    # for the models that need it and return that as an extra tuple output
+    # to be used at the end of the model
     maxSourceEmbeddingPositions: int = field(default=64)
     numLayers: int = field(default=5)
     dynamicHaltingLossWeight: float = field(default=0.1)
