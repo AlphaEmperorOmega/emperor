@@ -8,6 +8,7 @@ from Emperor.components.sut_layer import (
     TransformerEncoderLayerBase,
     TransformerDecorderLayerBase,
 )
+from Emperor.components.transformer_encoder import TransformerEncoderBase
 from Emperor.components.moe import MixtureOfExperts
 from .base.decorators import timer
 from dataclasses import replace
@@ -218,6 +219,69 @@ class TransformerDecoderLayerBaseSingleLayerModel(ClassifierExperiment):
         moeAuxiliaryLosses = self.moeAuxiliaryLosses.getAuxiliaryLossAndClear()
         auxiliaryLosses = expertsAuxiliaryLosses + moeAuxiliaryLosses
 
+        return (output, auxiliaryLosses)
+
+
+class TransformerEncoderBaseSingleLayerModel(ClassifierExperiment):
+    def __init__(self, learningRate, cfg: "ModelConfig"):
+        super().__init__(learningRate, cfg)
+
+        self.auxiliaryLosses = AuxiliaryLosses(cfg)
+        self.moeAuxiliaryLosses = AuxiliaryLosses(cfg)
+        self.plotProgress = False
+
+        imageSize = 28
+        patchSize = 4
+        numPatches = (imageSize // patchSize) ** 2
+        self.patcherModel = PatchEmbeddingConv(
+            inputChannels=1,
+            embeddingDim=16,
+            patchSize=patchSize,
+            numPatches=numPatches,
+        )
+
+        cfg = replace(
+            cfg,
+            auxiliaryLosses=self.auxiliaryLosses,
+            moeAuxiliaryLosses=self.moeAuxiliaryLosses,
+        )
+
+        self.model = TransformerEncoderBase(
+            cfg=cfg,
+            tokenEmbeddingModule=nn.Embedding(
+                num_embeddings=20,
+                embedding_dim=cfg.embeddingDim,
+                padding_idx=1,
+            ),
+        )
+        self.classificationModel = nn.Linear(cfg.embeddingDim, 10)
+
+        self.useRawOutputFlag = False
+
+    def forward(self, inputBatch):
+        imagePatches = self.patcherModel(inputBatch)
+        modelOutput = self.model.forward(
+            tokenEmbeddings=imagePatches,
+        )
+
+        encoderOutput = modelOutput["encoderOutput"][0]
+
+        encoderOutput = encoderOutput.permute(1, 0, 2)
+        # output = encoderOutput[:, 0, :]
+        output = encoderOutput.sum(dim=1)
+
+        output = self.classificationModel(output)
+
+        expertsAuxiliaryLosses = self.auxiliaryLosses.getAuxiliaryLossAndClear()
+        moeAuxiliaryLosses = self.moeAuxiliaryLosses.getAuxiliaryLossAndClear()
+        auxiliaryLosses = expertsAuxiliaryLosses + moeAuxiliaryLosses
+
+        # if auxiliaryLosses > 0:
+        #     auxiliaryLosses *= 50
+        # else:
+        #     auxiliaryLosses *= -50
+
+        print(auxiliaryLosses)
         return (output, auxiliaryLosses)
 
 
