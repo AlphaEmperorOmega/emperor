@@ -269,6 +269,19 @@ class ModelConfig(ParameterGeneratorConfig):
     scaleResidualsConnectionFlag: bool = field(default=False)
     crossAttentionFlag: bool = field(default=False)
 
+    maxSourceEmbeddingPositions: int = field(default=64)
+    numLayers: int = field(default=5)
+    dynamicHaltingLossWeight: float = field(default=0.1)
+    tokenEmbeddingDopoutProbability: float = field(default=0.0)
+    tokenEmbeddingLayerNormFlag: float = field(default=True)
+    quantNoiseFlag: bool = field(default=False)
+    gatherVusalizationDataFlag: bool = field(default=True)
+    returnAllHiddensFlag: bool = field(default=True)
+    addPositionalEmbeddingFlag: bool = field(default=True)
+    tokenEmbeddingWeightFlag: bool = field(default=True)
+    encoderHaltingFlag: bool = field(default=False)
+    learnedPositionalEmbeddingFlag: bool = field(default=True)
+
     def isNone(self, option):
         return option is None
 
