@@ -15,6 +15,11 @@ if TYPE_CHECKING:
 
 
 class AdaptiveComputationTimeWrapper(Module):
+    """
+    Just in case you don't get the memo in the future
+    `act` = `Adaptive Computation Time`
+    """
+
     def __init__(
         self,
         cfg: "ModelConfig",
@@ -27,8 +32,9 @@ class AdaptiveComputationTimeWrapper(Module):
         self.model = model
         self.embeddingDim = cfg.embeddingDim
         self.haltingDropout = haltingDropout
-        self.gatingModel = self._createGatingModel()
         self.threshold = threshold
+
+        self.gatingModel = self._createGatingModel()
 
     def _createGatingModel(self):
         gatingModel = nn.Sequential(
@@ -41,79 +47,204 @@ class AdaptiveComputationTimeWrapper(Module):
         nn.init.zeros_(gatingModel[-1].weight)
         return gatingModel
 
-    def _computeGatingLogits(self, h):
-        logits = self.gatingModel(h)
-        return F.log_softmax(logits, dim=-1)
-
-    def _updateHalting(self, gatingLogits, log_never_halt):
-        log_halt = log_never_halt[..., None] + gatingLogits
-        log_never_halt = log_halt[..., 0]
-        p = torch.exp(log_halt[..., 1])
-        return p, log_never_halt
-
     def forward(
         self,
         previousAdaptiveComputationState: Optional[Tuple],
-        layerInput: Tensor,
-        selfAttentionInput: Optional[Tensor] = None,
-        paddingMask: Optional[Tthresholdensor] = None,
+        previousHiddenState: Tensor,
+        selfAttentionInput: Optional[Tensor],
+        paddingMask: Tensor,
         layerIdx: Optional[int] = None,
         *args,
         **kwargs,
     ):
-        if previousAdaptiveComputationState is None:
-            log_never_halt = acc_expect_depth = torch.zeros_like(layerInput[..., 0])
-            acc_h = torch.zeros_like(layerInput)
-            index = 0
-            hatlingMask = paddingMask
-        else:
-            (index, log_never_halt, acc_h, acc_expect_depth) = (
-                previousAdaptiveComputationState
-            )
-            gatingLogits = self._computeGatingLogits(layerInput)
-            p, log_never_halt = self._updateHalting(gatingLogits, log_never_halt)
-            acc_h = acc_h + p[..., None] * layerInput
-            acc_expect_depth = acc_expect_depth + index * p
-            p_never_halt = log_never_halt.exp()
-            p_never_halt = (
-                p_never_halt.masked_fill((p_never_halt < (1 - self.threshold)), 0)
-                * paddingMask
-            )
-            p_never_halt = p_never_halt.contiguous()
-            index = index + 1
-
-        currentAdaptiveComputationState = (
-            index,
-            log_never_halt,
-            acc_h,
-            acc_expect_depth,
+        currentAdaptiveComputationState, haltingMask = self._prepareStateAndHaltingMask(
+            previousAdaptiveComputationState, previousHiddenState, paddingMask
         )
 
-        layerOutputs = self.model.forward(
-            inputBatch=layerInput,
+        modelOutput = self.model.forward(
+            inputBatch=previousHiddenState,
             selfAttentionInput=selfAttentionInput,
-            haltMask=hatlingMask,
+            haltMask=haltingMask,
             layerIdx=layerIdx,
             *args,
             **kwargs,
         )
 
-        layerOutput = layerOutputs[0]
-        if previousAdaptiveComputationState is not None:
-            selfAttentionInput = torch.where(
-                hatlingMask[..., None] < (1 - self.threshold),
-                selfAttentionInput,
-                (acc_h + p_never_halt[..., None] * curr_h).type_as(selfAttentionInput),
-            )
-            act_loss = (acc_expect_depth + p_never_halt * i) * pad_mask
-            act_loss = act_loss.sum() / pad_mask.sum()
-        else:
-            selfAttentionInput = layerOutput
-            act_loss = 0
+        selfAttentionInput, actLoss = self._computeSelfAttentionAndACTLoss(
+            modelOutput,
+            selfAttentionInput,
+            previousAdaptiveComputationState,
+            currentAdaptiveComputationState,
+            haltingMask,
+            paddingMask,
+        )
 
         return (
             currentAdaptiveComputationState,
-            layerOutputs,
+            modelOutput,
             selfAttentionInput,
-            act_loss,
+            actLoss,
         )
+
+    def _prepareStateAndHaltingMask(
+        self,
+        previousAdaptiveComputationState: Optional[Tuple],
+        previousHiddenState: Tensor,
+        paddingMask: Tensor,
+    ):
+        if previousAdaptiveComputationState is None:
+            sequenceLength, batchSize, _ = previousHiddenState.size()
+            haltingMaskLogits = torch.zeros(sequenceLength, batchSize)
+            accumulatedExpectedDepth = torch.zeros(sequenceLength, batchSize)
+            accumulatedHiddenState = torch.zeros_like(previousHiddenState)
+            stateIndex = 0
+            haltingMask = paddingMask
+        else:
+            (
+                stateIndex,
+                haltingMaskLogits,
+                accumulatedHiddenState,
+                accumulatedExpectedDepth,
+            ) = previousAdaptiveComputationState
+
+            gatingLogits = self._computeGatingLogits(previousHiddenState)
+            pribabilityLogits, haltingMaskLogits = self._splitGatingLogits(
+                gatingLogits, haltingMaskLogits
+            )
+            accumulatedHiddenState = self._updateAccumulatedHiddenState(
+                previousHiddenState,
+                accumulatedHiddenState,
+                pribabilityLogits,
+            )
+            accumulatedExpectedDepth = self._updateAccumulatedExpectedDepth(
+                accumulatedExpectedDepth,
+                stateIndex,
+                pribabilityLogits,
+            )
+
+            haltingMask = self._updateHaltingMask(
+                haltingMaskLogits,
+                paddingMask,
+            )
+
+            stateIndex = stateIndex + 1
+
+        updatedAdaptiveComputationState = (
+            stateIndex,
+            haltingMaskLogits,
+            accumulatedHiddenState,
+            accumulatedExpectedDepth,
+        )
+        return updatedAdaptiveComputationState, haltingMask
+
+    def _computeGatingLogits(self, h):
+        logits = self.gatingModel(h)
+        return F.log_softmax(logits, dim=-1)
+
+    def _splitGatingLogits(self, gatingLogits, haltingMaskLogits):
+        logHaltMask = haltingMaskLogits.unsqueeze(-1) + gatingLogits
+        # the logHaltMask[..., 0] retrieves the first column
+        # of every matrix in a 3d tensor, for example given a
+        # tensor of shape (4, 3, 2) will be reshaped to (4, 3)
+        # meaning the rows of the result consits of the first
+        # column of logHaltMask
+        haltingMaskLogits = logHaltMask[..., 0]
+        pribabilityLogits = torch.exp(logHaltMask[..., 1])
+        return pribabilityLogits, haltingMaskLogits
+
+    def _updateAccumulatedHiddenState(
+        self,
+        previousHiddenState: Tensor,
+        accumulatedHiddenState: Tensor,
+        pribabilityLogits: Tensor,
+    ):
+        return (
+            accumulatedHiddenState
+            + pribabilityLogits.unsqueeze(-1) * previousHiddenState
+        )
+
+    def _updateAccumulatedExpectedDepth(
+        self,
+        accumulatedExpectedDepth: Tensor,
+        stateIndex: int,
+        pribabilityLogits: Tensor,
+    ):
+        return accumulatedExpectedDepth + stateIndex * pribabilityLogits
+
+    def _updateHaltingMask(
+        self,
+        haltingMaskLogits: Tensor,
+        paddingMask: Tensor,
+    ):
+        haltingMask = haltingMaskLogits.exp()
+        conditionToHaltTokens = haltingMask < (1 - self.threshold)
+        updatedHatlingMask = haltingMask.masked_fill(conditionToHaltTokens, 0)
+        appliedPaddingMask = updatedHatlingMask * paddingMask
+        return appliedPaddingMask.contiguous()
+
+    def _computeSelfAttentionAndACTLoss(
+        self,
+        layerOutputTuple: Tuple,
+        selfAttentionInput: Tensor,
+        previousAdaptiveComputationState: Optional[Tuple],
+        currentAdaptiveComputationState: Tuple,
+        haltingMask: Tensor,
+        paddingMask: Tensor,
+    ):
+        layerOutput: Tensor = layerOutputTuple[0]
+        if previousAdaptiveComputationState is not None:
+            (
+                stateIndex,
+                haltingMaskLogits,
+                accumulatedHiddenState,
+                accumulatedExpectedDepth,
+            ) = currentAdaptiveComputationState
+
+            selfAttentionInput = self._updateSelfAttention(
+                haltingMask,
+                layerOutput,
+                accumulatedHiddenState,
+                selfAttentionInput,
+            )
+
+            actLoss = self._computeACTLoss(
+                accumulatedExpectedDepth,
+                haltingMask,
+                stateIndex,
+                paddingMask,
+            )
+
+        else:
+            selfAttentionInput = layerOutput
+            actLoss = 0
+
+        return selfAttentionInput, actLoss
+
+    def _updateSelfAttention(
+        self,
+        haltingMask: Tensor,
+        layerOutput: Tensor,
+        accumulatedHiddenState: Tensor,
+        selfAttentionInput: Tensor,
+    ):
+        replacementCondition = haltingMask.unsqueeze(-1) < (1 - self.threshold)
+        layerOutputScaledAndMasked = haltingMask.unsqueeze(-1) * layerOutput
+        replacementTensor = accumulatedHiddenState + layerOutputScaledAndMasked
+        replacementTensor = replacementTensor.type_as(selfAttentionInput)
+
+        selfAttentionInput = torch.where(
+            replacementCondition, selfAttentionInput, replacementTensor
+        )
+        return selfAttentionInput
+
+    def _computeACTLoss(
+        self,
+        accumulatedExpectedDepth: Tensor,
+        haltingMask: Tensor,
+        stateIndex: int,
+        paddingMask: Tensor,
+    ):
+        adaptiveComputationTimeLoss = (
+            accumulatedExpectedDepth + haltingMask * stateIndex
+        ) * paddingMask
+        return adaptiveComputationTimeLoss.sum() / paddingMask.sum()
