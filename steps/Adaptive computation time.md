@@ -27,6 +27,7 @@ def printData(name, elm):
 ```{python}
 attentionInputOutput = 5
 cfg = ModelConfig(
+  batchSize=3,
   inputDim=attentionInputOutput,
   outputDim=attentionInputOutput,
   embeddingDim=attentionInputOutput,
@@ -115,18 +116,30 @@ layerIdx = 1
 
 ## 3. First pass step by step
 
-- create placeholders that will be used in the next iteration for
-  `log_never_halt` and `acc_expect_depth`, i need to come back when i understand
-  what those are used for
+- the `layerInput` is of shape `(sequenceLength, batchSize, embeddingDim)`
+  and `layerInput[..., 0]` retrieves the first feature of every single
+  sequence in the batch, and stores them in different columns for each
+  batch `(sequenceLength, batchSize)`
 
 ```{python}
-log_never_halt = acc_expect_depth = torch.zeros_like(layerInput[..., 0])
+print(layerInput.shape)
+print(layerInput[..., 0].shape)
+print(layerInput[..., 0])
+print(layerInput)
+```
+
+- create `zero tensors` of shape `(sequenceLength, batchSize)` as placeholders
+  in the as the next iteration
+
+```{python}
+log_never_halt = torch.zeros_like(layerInput[..., 0])
+acc_expect_depth = torch.zeros_like(layerInput[..., 0])
 print(log_never_halt.shape)
 print(log_never_halt)
 ```
 
-- this seems to be some kind of mask across every single
-  feature in the `layerInput`
+- create zeros tensor of shape `(batchSize, sequenceLength, embeddingDim)` as
+  placeholder to be used in the next iteration.
 
 ```{python}
 acc_h = torch.zeros_like(layerInput)
@@ -134,17 +147,23 @@ print(acc_h.shape)
 print(acc_h)
 ```
 
+- default index of the first iteration
+
 ```{python}
 index = 0
 print(index)
 ```
+
+- The default halting mask starts as the sequence `paddingMask` it will be used
+  in next iterations to mask out tokens
 
 ```{python}
 hatlingMask = paddingMask
 print(hatlingMask)
 ```
 
-- store the defaults created above to be changed in the next iteration
+- Store default values in `currentAdaptiveComputationState` that will be
+  used in the next iteration
 
 ```{python}
 currentAdaptiveComputationState = (
@@ -155,6 +174,8 @@ currentAdaptiveComputationState = (
 )
 print(hatlingMask)
 ```
+
+- forward pass
 
 ```{python}
 layerOutputs = model.forward(
@@ -188,8 +209,7 @@ firstPassOutput =(
 previousAdaptiveComputationState = currentAdaptiveComputationState
 ```
 
-- unpack the `previousAdaptiveComputationState` in order to update them during
-  the current iteration.
+- unpack the `previousAdaptiveComputationState`
 
 ```{python}
 index, log_never_halt, acc_h, acc_expect_depth = (
@@ -204,10 +224,12 @@ print(acc_h)
 print(acc_expect_depth)
 ```
 
-### `_computeGatingLogits`
+### `_computeGatingLogits` - method begin
 
 - generate scores based on the output of the previous iteration
-  `layerOutput`, of shape `(sequenceLength, batchSize, 2)`
+  `layerOutput`, of shape `(sequenceLength, batchSize, 2)`, each
+  in the matrices of shape `(batchSize, 2)` will be later split
+  to return two types of score
 
 ```{python}
 gatingModel = nn.Sequential(
@@ -252,8 +274,12 @@ print(gatingLogSoftmaxScores)
 
 ### `_updateHalting`
 
+- this converts the `(sequenceLength, batchSize)` tensor to a shape
+  `(sequenceLength, batchSize, 1)` that will be added to `gatingLogSoftmaxScores`
+
 ```{python}
 print(log_never_halt.shape)
+print(log_never_halt.unsqueeze(-1).shape)
 print(log_never_halt[..., None].shape)
 print(log_never_halt[..., None])
 ```
@@ -263,18 +289,20 @@ print(gatingLogSoftmaxScores.shape)
 print(gatingLogSoftmaxScores)
 ```
 
-- the first column of each matrix from `log_never_halt` is added to
-  the elementwise to each matrix in `gatingLogSoftmaxScores`
+- the values of the previous layer held in `log_never_halt` are
+  added elementwise addition. The question is why ? What purpose
+  does this have ?
 
 ```{python}
 log_halt = log_never_halt[..., None] + gatingLogSoftmaxScores
 print(log_halt)
 ```
 
-- the columns of `log_halt` into two `sequenceLength, batchSize, 1` tensors
+- the columns of `log_halt` into two `(sequenceLength, batchSize, 1)` tensors
   `log_never_halt` and `p`
 
 ```{python}
+print(log_halt.shape)
 log_never_halt = log_halt[..., 0]
 print(log_never_halt.shape)
 print(log_never_halt)
@@ -288,7 +316,17 @@ print(p)
 
 ### continued
 
-- accumulated probabilities ? i think
+```{python}
+print(layerInput.shape)
+print(p[..., None].shape)
+print(p[..., None])
+```
+
+- i think `acc_h` stands for accumulated halting scores
+- the output of the `layerInput` that is the output of the
+  previous iteration is multiplied by `p` where
+  each `token` in the input is multiplied by a different score
+  and accumulated into `acc_h`
 
 ```{python}
 acc_h = acc_h + p[..., None] * layerInput
@@ -297,11 +335,21 @@ print(p[..., None].shape)
 print(layerInput.shape)
 ```
 
+- the current `index` that is at the moment 0 is multiplied by `p`
+  and the scores are accumulated `acc_expect_depth`, probably accumulated
+  until those scores reach a threshold. For the second layer
+  the scores will still be 0 and this will kick in on the third iteration
+  meaning all tokens are processed for at least 2 layers and the
+  dropping will start at the third
+
 ```{python}
 acc_expect_depth = acc_expect_depth + index * p
 print(acc_expect_depth.shape)
 print(acc_expect_depth)
 ```
+
+- to make sure the tensor is positive `exp` is used
+  on `log_never_halt`
 
 ```{python}
 p_never_halt = log_never_halt.exp()
@@ -310,8 +358,13 @@ print(p_never_halt)
 ```
 
 ```{python}
-print(paddingMask)
-print(p_never_halt.shape)
+test = torch.tensor([-5]).exp()
+print(test )
+```
+
+- any tokens with a score smaller than `0.01`
+
+```{python}
 print(p_never_halt < (1 - 0.99))
 p_never_halt = (
     p_never_halt.masked_fill((p_never_halt < (1 - 0.99)), 0) * paddingMask
@@ -322,12 +375,52 @@ print(p_never_halt)
 
 ```{python}
 p_never_halt = p_never_halt.contiguous()
-print(p.shape)
-print(p)
+print(p_never_halt.shape)
+print(p_never_halt)
 ```
 
 ```{python}
 index = index + 1
-print(p.shape)
-print(p)
+print(index)
+```
+
+- forward pass
+
+```{python}
+layerOutputs = model.forward(
+  inputBatch=layerInput,
+  selfAttentionInput=None,
+  haltMask=hatlingMask,
+  layerIdx=layerIdx,
+)
+
+curr_h = layerOutputs[0]
+print(layerOutput.shape)
+```
+
+-
+
+```{python}
+thresholdCheck = p_never_halt[..., None] < (1 - 0.99)
+print(thresholdCheck.shape)
+multiplyLayerOuputByHaltMask = p_never_halt[..., None] * curr_h
+print(multiplyLayerOuputByHaltMask.shape )
+act = acc_h + multiplyLayerOuputByHaltMask
+print(act.shape)
+self_attn_input = torch.where(
+    thresholdCheck,
+    layerOutputs,
+    (act)
+)
+print(layerOutput.shape)
+```
+
+```{python}
+act_loss = (acc_expect_depth + p_never_halt * i) * pad_mask
+print(layerOutput.shape)
+```
+
+```{python}
+act_loss = act_loss.sum() / pad_mask.sum()
+print(layerOutput.shape)
 ```
