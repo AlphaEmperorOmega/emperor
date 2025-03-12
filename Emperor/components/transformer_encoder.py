@@ -303,7 +303,7 @@ class TransformerEncoderBase(Module):
         selfAttentionInput: Optional[Tensor],
         haltMask: Tensor,
         layerIdx: int,
-        paddingMask: Optional[Tensor],
+        paddingMask: Tensor,
         hasPaddingMask: bool,
         act_state: Optional[Tuple] = None,
     ):
