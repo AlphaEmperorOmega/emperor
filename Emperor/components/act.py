@@ -24,19 +24,21 @@ class AdaptiveComputationTimeWrapper(Module):
         self,
         cfg: "ModelConfig",
         model: TransformerEncoderLayerBase,
-        threshold=ACT_THRESHOLD,
-        haltingDropout=0.0,
+        embeddingDim: Optional[int] = None,
+        haltingThreshold: Optional[float] = None,
+        haltingDropout: Optional[float] = None,
     ):
         super(AdaptiveComputationTimeWrapper, self).__init__()
         self.cfg = cfg
         self.model = model
-        self.embeddingDim = cfg.embeddingDim
-        self.haltingDropout = haltingDropout
-        self.threshold = threshold
+        self.embeddingDim = self._getValue(embeddingDim, cfg.embeddingDim)
+        self.haltingDropout = self._getValue(haltingDropout, cfg.haltingDropout)
+        self.haltingThreshold = self._getValue(haltingThreshold, cfg.haltingThreshold)
 
         self.gatingModel = self._createGatingModel()
 
     def _createGatingModel(self):
+        assert self.haltingDropout is not None
         gatingModel = nn.Sequential(
             nn.Linear(self.embeddingDim, self.embeddingDim),
             nn.GELU(),
@@ -70,6 +72,7 @@ class AdaptiveComputationTimeWrapper(Module):
             **kwargs,
         )
 
+        modelOutput: Tensor = modelOutput[0]
         selfAttentionInput, actLoss = self._computeSelfAttentionAndACTLoss(
             modelOutput,
             selfAttentionInput,
@@ -177,21 +180,20 @@ class AdaptiveComputationTimeWrapper(Module):
         paddingMask: Tensor,
     ):
         haltingMask = haltingMaskLogits.exp()
-        conditionToHaltTokens = haltingMask < (1 - self.threshold)
+        conditionToHaltTokens = haltingMask < (1 - self.haltingThreshold)
         updatedHatlingMask = haltingMask.masked_fill(conditionToHaltTokens, 0)
         appliedPaddingMask = updatedHatlingMask * paddingMask
         return appliedPaddingMask.contiguous()
 
     def _computeSelfAttentionAndACTLoss(
         self,
-        layerOutputTuple: Tuple,
+        layerOutput: Tensor,
         selfAttentionInput: Tensor,
         previousAdaptiveComputationState: Optional[Tuple],
         currentAdaptiveComputationState: Tuple,
         haltingMask: Tensor,
         paddingMask: Tensor,
     ):
-        layerOutput: Tensor = layerOutputTuple[0]
         if previousAdaptiveComputationState is not None:
             (
                 stateIndex,
@@ -227,7 +229,7 @@ class AdaptiveComputationTimeWrapper(Module):
         accumulatedHiddenState: Tensor,
         selfAttentionInput: Tensor,
     ):
-        replacementCondition = haltingMask.unsqueeze(-1) < (1 - self.threshold)
+        replacementCondition = haltingMask.unsqueeze(-1) < (1 - self.haltingThreshold)
         layerOutputScaledAndMasked = haltingMask.unsqueeze(-1) * layerOutput
         replacementTensor = accumulatedHiddenState + layerOutputScaledAndMasked
         replacementTensor = replacementTensor.type_as(selfAttentionInput)
