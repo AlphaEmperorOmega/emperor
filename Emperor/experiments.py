@@ -223,7 +223,12 @@ class TransformerDecoderLayerBaseSingleLayerModel(ClassifierExperiment):
 
 
 class TransformerEncoderBaseSingleLayerModel(ClassifierExperiment):
-    def __init__(self, learningRate, cfg: "ModelConfig"):
+    def __init__(
+        self,
+        learningRate,
+        cfg: "ModelConfig",
+        encoderHaltingFlag: bool = False,
+    ):
         super().__init__(learningRate, cfg)
 
         self.auxiliaryLosses = AuxiliaryLosses(cfg)
@@ -246,16 +251,19 @@ class TransformerEncoderBaseSingleLayerModel(ClassifierExperiment):
             moeAuxiliaryLosses=self.moeAuxiliaryLosses,
         )
 
+        tokenEmbeddingModule = nn.Embedding(
+            num_embeddings=20,
+            embedding_dim=cfg.embeddingDim,
+            padding_idx=1,
+        )
+
         self.model = TransformerEncoderBase(
             cfg=cfg,
-            tokenEmbeddingModule=nn.Embedding(
-                num_embeddings=20,
-                embedding_dim=cfg.embeddingDim,
-                padding_idx=1,
-            ),
+            tokenEmbeddingModule=tokenEmbeddingModule,
+            encoderHaltingFlag=encoderHaltingFlag,
         )
-        self.classificationModel = nn.Linear(cfg.embeddingDim, 10)
 
+        self.classificationModel = nn.Linear(cfg.embeddingDim, 10)
         self.useRawOutputFlag = False
 
     def forward(self, inputBatch):
