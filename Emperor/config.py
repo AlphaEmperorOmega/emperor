@@ -285,6 +285,8 @@ class ModelConfig(ParameterGeneratorConfig):
     tokenEmbeddingWeightFlag: bool = field(default=True)
     encoderHaltingFlag: bool = field(default=False)
     learnedPositionalEmbeddingFlag: bool = field(default=True)
+    haltingDropout: float = field(default=0.0)
+    haltingThreshold: float = field(default=0.0)
 
     def isNone(self, option):
         return option is None
