@@ -6,6 +6,7 @@ from torch import Tensor, dtype, export
 from torch.nn.modules import transformer
 from Emperor.base.utils import Module
 from Emperor.components.sut_layer import TransformerEncoderLayerBase
+from Emperor.components.act import AdaptiveComputationTimeWrapper
 from Emperor.config import ModelConfig
 
 from typing import TYPE_CHECKING, Dict, Optional, List, Tuple, Any
@@ -112,8 +113,9 @@ class TransformerEncoderBase(Module):
         self.haltingFlag = False
         if self.encoderHaltingFlag:
             self.haltingFlag = True
-            self.encoderModel = ACTWrapper(
-                self.encoderModel, halting_dropout=cfg.halting_dropout
+            self.encoderModel = AdaptiveComputationTimeWrapper(
+                self.cfg,
+                self.encoderModel,
             )
 
     def _createTransformerModelHook(self):
@@ -278,24 +280,33 @@ class TransformerEncoderBase(Module):
         assert paddingMask is not None, (
             f"Ensure that `paddingMask` is a `Tensor`, received {type(paddingMask)}"
         )
-        softHaltingInput = act_state = None
+        softHaltingInput = adaptiveComputationState = None
         haltMask = (1.0 - paddingMask.t().float()).contiguous()
+        adaptiveComputationLoss = 0.0
 
         layerOutput = tokenEmbeddings
         for layerIdx in range(self.numLayers):
-            layerOutput, softHaltingInput, act_state, act_loss = (
-                self._computeLayerOutput(
-                    inputTokenEmbeddings=layerOutput,
-                    selfAttentionInput=softHaltingInput,
-                    haltMask=haltMask,
-                    layerIdx=layerIdx,
-                    paddingMask=paddingMask,
-                    hasPaddingMask=hasPaddingMask,
-                    act_state=act_state,
-                )
+            (
+                layerOutput,
+                softHaltingInput,
+                adaptiveComputationState,
+                adaptiveComputationLoss,
+            ) = self._computeLayerOutput(
+                inputTokenEmbeddings=layerOutput,
+                selfAttentionInput=softHaltingInput,
+                haltMask=haltMask,
+                layerIdx=layerIdx,
+                paddingMask=paddingMask,
+                hasPaddingMask=hasPaddingMask,
+                adaptiveComputationState=adaptiveComputationState,
             )
 
-        return layerOutput, softHaltingInput, act_state, act_loss
+        return (
+            layerOutput,
+            softHaltingInput,
+            adaptiveComputationState,
+            adaptiveComputationLoss,
+        )
 
     def _computeLayerOutput(
         self,
@@ -305,21 +316,22 @@ class TransformerEncoderBase(Module):
         layerIdx: int,
         paddingMask: Tensor,
         hasPaddingMask: bool,
-        act_state: Optional[Tuple] = None,
+        adaptiveComputationState: Optional[Tuple] = None,
     ):
-        act_loss = 0.0
-        paddingMask = paddingMask if hasPaddingMask else None
+        encoderPaddingMask = paddingMask if hasPaddingMask else None
         if self.haltingFlag:
-            # TODO: Inprove the following after you work on "ACTWrapper"
-            act_state, layerOutput, selfAttentionInput, act_loss = (
-                self.encoderModel.forward(
-                    act_state,
-                    inputTokenEmbeddings,
-                    selfAttentionInput=selfAttentionInput,
-                    haltMask=haltMask,
-                    # layerIdx=layerIdx,
-                    encoderPaddingMask=paddingMask,
-                )
+            (
+                adaptiveComputationState,
+                layerOutput,
+                selfAttentionInput,
+                adaptiveComputationLoss,
+            ) = self.encoderModel.forward(
+                previousAdaptiveComputationState=adaptiveComputationState,
+                previousHiddenState=inputTokenEmbeddings,
+                selfAttentionInput=selfAttentionInput,
+                haltMask=haltMask,
+                layerIdx=layerIdx,
+                encoderPaddingMask=encoderPaddingMask,
             )
         else:
             # TODO: find out of the layerIdx is needed for the encoder
@@ -328,7 +340,7 @@ class TransformerEncoderBase(Module):
                 selfAttentionInput=selfAttentionInput,
                 haltMask=haltMask,
                 layerIdx=layerIdx,
-                encoderPaddingMask=paddingMask,
+                encoderPaddingMask=encoderPaddingMask,
             )
 
         ffnRawOutput = None
@@ -338,16 +350,21 @@ class TransformerEncoderBase(Module):
         self._updateDataGatheringLists(
             layerOutput=layerOutput,
             ffnRawOutput=ffnRawOutput,
-            act_state=act_state,
+            adaptiveComputationState=adaptiveComputationState,
         )
 
-        return layerOutput, selfAttentionInput, act_state, act_loss
+        return (
+            layerOutput,
+            selfAttentionInput,
+            adaptiveComputationState,
+            adaptiveComputationLoss,
+        )
 
     def _updateDataGatheringLists(
         self,
         layerOutput: Tensor,
         ffnRawOutput: Optional[Tensor],
-        act_state: Optional[Tuple] = None,
+        adaptiveComputationState: Optional[Tuple] = None,
     ):
         # Not sure what `jit` stands for:  and not torch.jit.is_scripting():
         if self.returnAllHiddensFlag:
@@ -357,7 +374,7 @@ class TransformerEncoderBase(Module):
         # TODO: Update this later when you figure out how
         # the halding mechanism works
         if self.haltingFlag and self.gatherVusalizationDataFlag:
-            (i, log_never_halt, acc_h, acc_expect_depth) = act_state
+            (i, log_never_halt, acc_h, acc_expect_depth) = adaptiveComputationState
             p_never_halt = torch.exp(log_never_halt)
             self.acc_psList.append((1 - torch.exp(log_never_halt))[:, 0])
             self.haltedMasksList.append(
