@@ -379,7 +379,7 @@ encoderOutputDictionary = test_forward(
 
 ## 4. TEST MODELS
 
-### 4.1. Single layer of `TransformerEncoderBase` on `FashionMNIST`
+### 4.1. `TransformerEncoderBase` on `FashionMNIST`
 
 ```{python}
 def testTransformerEncoderBaseSingleLayerModel():
