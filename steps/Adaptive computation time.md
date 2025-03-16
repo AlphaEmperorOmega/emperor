@@ -1,4 +1,4 @@
-# Transformer Encoder Base Components
+# Adaptive Computation Time Components
 
 ## 1. Requirements
 
@@ -8,11 +8,11 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
-from typing import Optional
+from typing import Optional, Tuple
 import torch.nn.functional as F
 
 from Emperor.components.sut_layer import TransformerEncoderLayerBase
-# from Emperor.components.act import AdaptiveComputationTimeWrapper
+from Emperor.components.act import AdaptiveComputationTimeWrapper
 from Emperor.components.parameter_generators.utils.losses import AuxiliaryLosses
 from Emperor.config import ModelConfig
 
@@ -44,27 +44,30 @@ cfg.moeAuxiliaryLosses = AuxiliaryLosses(cfg)
 print('# Current Parameter Generator: \n', cfg.parameterGeneartorType.name)
 ```
 
-### 1.3. Initialize Transformer Model
+### 1.3. Initialize `TransformerEncoderLayerBase` model
 
 ```{python}
-print('# embeddingDim: ', cfg.embeddingDim)
-print('# qkvHiddenDim: ', cfg.qkvHiddenDim)
-print('# numExperts: ', cfg.numExperts)
-print('# topK: ', cfg.topK)
-print('# headDim: ', cfg.headDim)
-```
-
-```{python}
-model = TransformerEncoderLayerBase(
+encoderLayer = TransformerEncoderLayerBase(
   cfg=cfg,
   returnRawFFNOutputFlag = True,
 )
 
-print('# Transformer Encoder Attention Model: \n', model.attentionModel)
-print('# Transformer Encoder Feed Forward Model: ', model.ffnModel)
+print('# Transformer Encoder Attention Model: \n', encoderLayer.attentionModel)
+print('# Transformer Encoder Feed Forward Model: ', encoderLayer.ffnModel)
 ```
 
-## 2. Expected Inputs First Pass
+### 1.4. Initialize `AdaptiveComputationTimeWrapper` model
+
+```{python}
+model = AdaptiveComputationTimeWrapper(
+  cfg=cfg,
+  model=encoderLayer,
+)
+
+print('# Adaptive Computation Time Wrapper: \n', model)
+```
+
+## 2. Expected Inputs
 
 ### 2.1 Previous Adaptive Computation State
 
@@ -82,13 +85,15 @@ print(layerInput.size())
 ### 2.3 Self Attention Input
 
 ```{python}
-selfAttentionInput = layerInput
-print(selfAttentionInput.size())
+selfAttentionInput = None
 ```
 
 ### 2.4 Padding Mask
 
 ```{python}
+# REMINDER: this is correct this the shape needs to be
+# (cfg.sequenceLength, cfg.batchSize) because this is
+# the padding mask transposed
 mask = torch.zeros(
     (cfg.sequenceLength, cfg.batchSize), dtype=torch.bool
 )
@@ -108,102 +113,237 @@ print(paddingMask.shape)
 print(paddingMask)
 ```
 
+```{python}
+# REMINDER: this is correct this the shape needs to be
+# (cfg.sequenceLength, cfg.batchSize) because this is
+# the padding mask transposed
+mask = torch.zeros(
+    (cfg.batchSize, cfg.sequenceLength), dtype=torch.bool
+)
+
+paddingStart = cfg.sequenceLength // 2
+paddingEnd = cfg.sequenceLength
+randomSeqenceLengths = torch.randint(
+    paddingStart, paddingEnd, (cfg.batchSize,)
+)
+
+for batchIdx, sequenceLength in enumerate(randomSeqenceLengths):
+    mask[batchIdx, :sequenceLength] = 1
+
+encoderPaddingMask = mask
+
+print(paddingMask.shape)
+print(paddingMask)
+```
+
 ### 2.4 Layer index
 
 ```{python}
 layerIdx = 1
 ```
 
-## 3. First pass step by step
+## 3. Test methods first pass that initializes tensors
 
-- the `layerInput` is of shape `(sequenceLength, batchSize, embeddingDim)`
-  and `layerInput[..., 0]` retrieves the first feature of every single
-  sequence in the batch, and stores them in different columns for each
-  batch `(sequenceLength, batchSize)`
+### 3.1. `_prepareStateAndHaltingMask` method
 
-```{python}
-print(layerInput.shape)
-print(layerInput[..., 0].shape)
-print(layerInput[..., 0])
-print(layerInput)
-```
-
-- create `zero tensors` of shape `(sequenceLength, batchSize)` as placeholders
-  in the as the next iteration
+#### 3.1.1 Option tests
 
 ```{python}
-log_never_halt = torch.zeros_like(layerInput[..., 0])
-acc_expect_depth = torch.zeros_like(layerInput[..., 0])
-print(log_never_halt.shape)
-print(log_never_halt)
-```
+def test_prepareStateAndHaltingMask(
+    previousAdaptiveComputationState: Optional[Tuple] = None,
+    previousHiddenState: Optional[Tensor] = None,
+    paddingMask: Optional[Tensor] = None,
+    returnResult: bool = False
+):
 
-- create zeros tensor of shape `(batchSize, sequenceLength, embeddingDim)` as
-  placeholder to be used in the next iteration.
+  previousACT = len(previousAdaptiveComputationState) if previousAdaptiveComputationState is not None else None
+  printData('Input: previousAdaptiveComputationState', previousACT)
+  printData('Input: previousHiddenState', previousHiddenState)
+  printData('Input: paddingMask', paddingMask)
+  print()
 
-```{python}
-acc_h = torch.zeros_like(layerInput)
-print(acc_h.shape)
-print(acc_h)
-```
+  updatedAdaptiveComputationState, haltingMask = model._prepareStateAndHaltingMask(
+    previousAdaptiveComputationState,
+    previousHiddenState,
+    paddingMask,
+  )
 
-- default index of the first iteration
+  updatedACT = len(updatedAdaptiveComputationState) if updatedAdaptiveComputationState is not None else None
+  printData('Output: updatedACT', updatedACT )
+  printData('Output: haltingMask', haltingMask)
+  print('-'*20)
 
-```{python}
-index = 0
-print(index)
-```
+  if returnResult:
+    return (
+      updatedAdaptiveComputationState,
+      haltingMask
+    )
 
-- The default halting mask starts as the sequence `paddingMask` it will be used
-  in next iterations to mask out tokens
-
-```{python}
-hatlingMask = paddingMask
-print(hatlingMask)
-```
-
-- Store default values in `currentAdaptiveComputationState` that will be
-  used in the next iteration
-
-```{python}
-currentAdaptiveComputationState = (
-  index,
-  log_never_halt,
-  acc_h,
-  acc_expect_depth,
-)
-print(hatlingMask)
-```
-
-- forward pass
-
-```{python}
-layerOutputs = model.forward(
-  inputBatch=layerInput,
-  selfAttentionInput=None,
-  haltMask=hatlingMask,
-  layerIdx=layerIdx,
+test_prepareStateAndHaltingMask(
+  previousAdaptiveComputationState=previousAdaptiveComputationState,
+  previousHiddenState=layerInput,
+  paddingMask=paddingMask
 )
 
-layerOutput = layerOutputs[0]
-print(layerOutput.shape)
+test_prepareStateAndHaltingMask(
+  previousAdaptiveComputationState=previousAdaptiveComputationState,
+  previousHiddenState=layerInput,
+)
 ```
 
-```{python}
-selfAttentionInput = layerOutput
-act_loss = 0
-```
+#### 3.1.2 Outputs required for next step
 
 ```{python}
-firstPassOutput =(
+(
   currentAdaptiveComputationState,
-  layerOutputs,
-  selfAttentionInput,
-  act_loss,
+  haltingMask
+) = test_prepareStateAndHaltingMask(
+  previousAdaptiveComputationState=previousAdaptiveComputationState,
+  previousHiddenState=layerInput,
+  paddingMask=paddingMask,
+  returnResult=True
 )
 ```
 
-## 4. Second pass pass step by step
+### 3.2. Generating encoder layer output
+
+```{python}
+encoderModelOutput = model.model.forward(
+    inputBatch=layerInput,
+    selfAttentionInput=selfAttentionInput,
+    haltMask=haltingMask,
+    layerIdx=layerIdx,
+    encoderPaddingMask=encoderPaddingMask
+)
+```
+
+### 3.3. `_computeSelfAttentionAndACTLoss` method
+
+#### 3.3.1 Option tests
+
+```{python}
+def test_computeSelfAttentionAndACTLoss(
+    layerOutput: Optional[Tensor] = None,
+    selfAttentionInput: Optional[Tensor] = None,
+    previousAdaptiveComputationState: Optional[Tuple] = None,
+    currentAdaptiveComputationState: Optional[Tuple] = None,
+    haltingMask: Optional[Tensor] = None,
+    paddingMask: Optional[Tensor] = None,
+    returnResult: bool = False
+):
+
+  previousACT = len(previousAdaptiveComputationState) if previousAdaptiveComputationState is not None else None
+  currentACT = len(currentAdaptiveComputationState) if currentAdaptiveComputationState is not None else None
+  printData('Input: layerOutput', layerOutput[0])
+  printData('Input: selfAttentionInput', selfAttentionInput)
+  printData('Input: previousAdaptiveComputationState', previousACT)
+  printData('Input: currentAdaptiveComputationState', currentACT)
+  printData('Input: haltingMask', haltingMask)
+  printData('Input: paddingMask', paddingMask)
+  print()
+
+  selfAttentionInput, actLoss = model._computeSelfAttentionAndACTLoss(
+        layerOutput[0],
+        selfAttentionInput,
+        previousAdaptiveComputationState,
+        currentAdaptiveComputationState,
+        haltingMask,
+        paddingMask,
+  )
+
+  printData('Output: selfAttentionInput', selfAttentionInput)
+  printData('Output: actLoss', actLoss)
+  print('-'*20)
+
+  if returnResult:
+    return (
+      selfAttentionInput,
+      actLoss
+    )
+
+test_computeSelfAttentionAndACTLoss(
+  encoderModelOutput,
+  selfAttentionInput,
+  previousAdaptiveComputationState,
+  currentAdaptiveComputationState,
+  paddingMask,
+  haltingMask
+)
+
+test_computeSelfAttentionAndACTLoss(
+  encoderModelOutput,
+  selfAttentionInput,
+  previousAdaptiveComputationState,
+  currentAdaptiveComputationState,
+  haltingMask,
+)
+
+test_computeSelfAttentionAndACTLoss(
+  encoderModelOutput,
+  selfAttentionInput,
+  previousAdaptiveComputationState,
+  currentAdaptiveComputationState
+)
+
+test_computeSelfAttentionAndACTLoss(
+  encoderModelOutput,
+  selfAttentionInput,
+  previousAdaptiveComputationState
+)
+
+test_computeSelfAttentionAndACTLoss(
+  encoderModelOutput,
+  selfAttentionInput,
+)
+
+test_computeSelfAttentionAndACTLoss(
+  encoderModelOutput
+)
+```
+
+#### 3.3.2 Outputs required for next step
+
+```{python}
+(
+  selfAttentionInput,
+  actLoss
+) = test_computeSelfAttentionAndACTLoss(
+  encoderModelOutput,
+  selfAttentionInput,
+  previousAdaptiveComputationState,
+  currentAdaptiveComputationState,
+  paddingMask,
+  haltingMask,
+  returnResult= True
+)
+```
+
+### 4.1. `forward` method
+
+#### 4.1.1 Option tests
+
+```{python}
+(
+  currentAdaptiveComputationState,
+  modelOutput,
+  selfAttentionInput,
+  actLoss,
+) = model.forward(
+  previousAdaptiveComputationState=currentAdaptiveComputationState,
+  previousHiddenState=encoderModelOutput[0],
+  selfAttentionInput=selfAttentionInput,
+  paddingMask=paddingMask,
+  layerIdx=layerIdx,
+  encoderPaddingMask=encoderPaddingMask,
+)
+
+print(modelOutput.shape)
+print(selfAttentionInput.shape)
+print(actLoss)
+print(currentAdaptiveComputationState)
+```
+
+## 4. Step by step implementation
 
 ```{python}
 previousAdaptiveComputationState = currentAdaptiveComputationState
