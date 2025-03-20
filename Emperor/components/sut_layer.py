@@ -327,12 +327,13 @@ class TransformerDecorderLayerBase(Module):
         incrementalState: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         selfAttentionMask: Optional[Tensor] = None,
         selfAttentionPaddingMask: Optional[Tensor] = None,
-        needHeadWeights: bool = False,
+        needHeadWeightsFlag: bool = False,
     ):
         if selfAttentionInput is None:
             selfAttentionInput = inputBatch
 
-        if needHeadWeights:
+        # TODO: this is not used anywhere, what'S the point of having it here ?
+        if needHeadWeightsFlag:
             needAttentionWeights = True
 
         self._updateCurrentLayerIncrementalState(
