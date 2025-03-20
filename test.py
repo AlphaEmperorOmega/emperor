@@ -111,9 +111,41 @@ def testTransformerEncoderBaseSingleLayerModel():
     trainer.fit(model, data, printLossFlag=True)
 
 
+def testTransformerEncoderBaseSingleLayerModelWithACT():
+    from Emperor.base.utils import Trainer
+    from Emperor.base.datasets import FashionMNIST
+    from Emperor.experiments import TransformerEncoderBaseSingleLayerModel
+    from Emperor.config import ModelConfig, ParameterGeneratorOptions
+
+    cfg = ModelConfig(
+        batchSize=16,
+        inputDim=16,
+        depthDim=64,
+        embeddingDim=16,
+        qkvHiddenDim=64,
+        numExperts=16,
+        headDim=16,
+        numLayers=3,
+        topK=2,
+        parameterGeneartorType=ParameterGeneratorOptions.matrix_choice_sparse,
+    )
+
+    data = FashionMNIST(
+        batch_size=cfg.batchSize, testDatasetFalg=True, testDatasetNumSamples=16
+    )
+
+    model = TransformerEncoderBaseSingleLayerModel(
+        learningRate=0.01, cfg=cfg, encoderHaltingFlag=True
+    )
+
+    trainer = Trainer(max_epochs=500)
+    trainer.fit(model, data, printLossFlag=True)
+
+
 if __name__ == "__main__":
     # testAttentionSingleLayer()
     # testTransformerEncoderLayerBaseSingleLayerModel()
     # testTransformerDecoderLayerBaseSingleLayerModel()
+    # testTransformerEncoderBaseSingleLayerModel()
 
-    testTransformerEncoderBaseSingleLayerModel()
+    testTransformerEncoderBaseSingleLayerModelWithACT()
