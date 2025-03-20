@@ -279,7 +279,7 @@ class ModelConfig(ParameterGeneratorConfig):
     tokenEmbeddingDopoutProbability: float = field(default=0.0)
     tokenEmbeddingLayerNormFlag: float = field(default=True)
     quantNoiseFlag: bool = field(default=False)
-    gatherVusalizationDataFlag: bool = field(default=True)
+    gatherVusalizationDataFlag: bool = field(default=False)
     returnAllHiddensFlag: bool = field(default=True)
     addPositionalEmbeddingFlag: bool = field(default=True)
     tokenEmbeddingWeightFlag: bool = field(default=True)
