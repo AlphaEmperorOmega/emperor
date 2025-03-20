@@ -343,9 +343,9 @@ print(actLoss)
 print(currentAdaptiveComputationState)
 ```
 
-## 4. TEST MODELS
+## 5. TEST MODELS
 
-### 4.1. `TransformerEncoderBase` using `AdaptiveComputationTimeWrapper` on `FashionMNIST`
+### 5.1. `TransformerEncoderBase` using `AdaptiveComputationTimeWrapper` on `FashionMNIST`
 
 ```{python}
 def testTransformerEncoderBaseSingleLayerModel():
