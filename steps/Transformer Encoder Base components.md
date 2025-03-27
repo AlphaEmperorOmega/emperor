@@ -164,7 +164,6 @@ def test_retrieveTokenEmbedding(
   (
     tokenEmbeddings,
     rawTokenEmbedding,
-    positionalEmbedding
   ) = model._retrieveTokenEmbedding(
     sourceTokens = sourceTokens,
     tokenEmbeddings = tokenEmbeddings,
@@ -172,7 +171,6 @@ def test_retrieveTokenEmbedding(
 
   printData('tokenEmbeddings', tokenEmbeddings)
   printData('rawTokenEmbedding', rawTokenEmbedding)
-  printData('positionalEmbedding', positionalEmbedding)
 
   print('-'*20)
 
@@ -180,7 +178,6 @@ def test_retrieveTokenEmbedding(
     return (
       tokenEmbeddings,
       rawTokenEmbedding,
-      positionalEmbedding
     )
 
 test_retrieveTokenEmbedding(
@@ -193,7 +190,7 @@ test_retrieveTokenEmbedding(
 )
 ```
 
-### 3.3. `_computeAllEncoderLayersOutput` method
+### 3.3. `_computeAllLayersOutput` method
 
 #### 3.3.1 Option tests
 
@@ -212,9 +209,8 @@ def test_computeAllEncoderLayersOutput(
   (
     layerOutput,
     softHaltingInput,
-    act_state,
     act_loss
-  ) = model._computeAllEncoderLayersOutput(
+  ) = model._computeAllLayersOutput(
     tokenEmbeddings=tokenEmbeddings,
     paddingMask=paddingMask,
     hasPaddingMask=hasPaddingMask,
@@ -222,7 +218,6 @@ def test_computeAllEncoderLayersOutput(
 
   printData('layerOutput', layerOutput)
   printData('softHaltingInput', softHaltingInput)
-  printData('act_state', act_state)
   printData('act_loss', act_loss)
 
   print('-'*20)
