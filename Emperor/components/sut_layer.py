@@ -404,8 +404,8 @@ class TransformerDecorderLayerBase(Module):
                     savedState["previousKeyMultiHeadProjection"],
                     savedState["previousValueMultiHeadProjection"],
                 ]
-            return decoderOutput, attentionWeights, selfAttentionState, ffnRawOutput
-        return decoderOutput, attentionWeights, None, ffnRawOutput
+            return decoderOutput, attentionWeights, selfAttentionState
+        return decoderOutput, attentionWeights, None
 
     def _updateCurrentLayerIncrementalState(
         self,
