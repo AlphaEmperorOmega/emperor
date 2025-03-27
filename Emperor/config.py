@@ -261,7 +261,7 @@ class ModelConfig(ParameterGeneratorConfig):
     hiddenDropoutProbability: float = field(default=0.0)
     hiddenLayerNormFlag: bool = field(default=False)
     staticKeyValueFlag: bool = field(default=False)
-    crossSelfAttentionFlag: bool = field(default=True)
+    crossSelfAttentionFlag: bool = field(default=False)
     selfAttentionModel: bool = field(default=False)
     selfAttnDropoutProbability: float = field(default=0.0)
     crossAttnProbability: float = field(default=0.0)
@@ -283,10 +283,16 @@ class ModelConfig(ParameterGeneratorConfig):
     returnAllHiddensFlag: bool = field(default=True)
     addPositionalEmbeddingFlag: bool = field(default=True)
     tokenEmbeddingWeightFlag: bool = field(default=True)
-    encoderHaltingFlag: bool = field(default=False)
+    encoderHaltingFlag: bool = field(default=True)
     learnedPositionalEmbeddingFlag: bool = field(default=True)
     haltingDropout: float = field(default=0.0)
     haltingThreshold: float = field(default=0.0)
+
+    shareInputOutputEmbeddingFlag: bool = field(default=True)
+    inputEmbeddingDim: int = field(default=EMBEDDING_DIM)
+    outputEmbeddingDim: int = field(default=EMBEDDING_DIM)
+    tieAdaptiveWeightsFlag: bool = field(default=True)
+    decoderHaltingFlag: bool = field(default=True)
 
     def isNone(self, option):
         return option is None
