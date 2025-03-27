@@ -72,9 +72,9 @@ class AdaptiveComputationTimeWrapper(Module):
             **kwargs,
         )
 
-        modelOutput: Tensor = modelOutput[0]
+        currentModelOutput: Tensor = modelOutput[0]
         selfAttentionInput, actLoss = self._computeSelfAttentionAndACTLoss(
-            modelOutput,
+            currentModelOutput,
             selfAttentionInput,
             previousAdaptiveComputationState,
             currentAdaptiveComputationState,
