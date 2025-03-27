@@ -19,7 +19,8 @@ class TransformerEncoderBase(Module):
     def __init__(
         self,
         cfg: "ModelConfig",
-        tokenEmbeddingModule,  # Not sure what kind of instance this is
+        # dictionary,
+        tokenEmbeddingModule,
         numLayers: Optional[int] = None,
         maxSourceEmbeddingPositions: Optional[int] = None,
         dynamicHaltingLossWeight: Optional[float] = None,
@@ -172,21 +173,19 @@ class TransformerEncoderBase(Module):
             self._computeTokenEmbeddings(sourceTokens, tokenEmbeddings)
         )
 
-        layersOutput, softHaltingInput, act_state, act_loss = (
-            self._computeAllEncoderLayersOutput(
+        layersOutput, softHaltingInput, adaptiveComputationTimeLoss = (
+            self._computeAllLayersOutput(
                 tokenEmbeddings=tokenEmbeddings,
                 paddingMask=paddingMask,
                 hasPaddingMask=hasPaddingMask,
             )
         )
 
-        layersOutput, totalEncoderLoss, sourceSequenceLengths = (
-            self._prepareEncoderOutput(
-                layersOutput=layersOutput,
-                sourceTokens=sourceTokens,
-                softHaltingInput=softHaltingInput,
-                act_loss=act_loss,
-            )
+        layersOutput, totalEncoderLoss, sourceSequenceLengths = self._prepareOutput(
+            layersOutput=layersOutput,
+            sourceTokens=sourceTokens,
+            softHaltingInput=softHaltingInput,
+            adaptiveComputationTimeLoss=adaptiveComputationTimeLoss,
         )
 
         self._storeVusalisationData()
@@ -200,7 +199,7 @@ class TransformerEncoderBase(Module):
             "sourceTokens": [],
             "sourceSequenceLengths": [sourceSequenceLengths],
             "encoderLoss": [totalEncoderLoss],
-            "encoderHaltLoss": act_loss,
+            "encoderHaltLoss": adaptiveComputationTimeLoss,
         }
 
     def _computeTokenEmbeddings(
@@ -249,26 +248,25 @@ class TransformerEncoderBase(Module):
         if tokenEmbeddings is None:
             tokenEmbeddings = self.tokenEmbeddingModule(sourceTokens)
 
-        tokenEmbeddings = rawTokenEmbedding = (
-            self.tokenEmbeddingWeight * tokenEmbeddings
-        )
+        x = rawTokenEmbedding = self.tokenEmbeddingWeight * tokenEmbeddings
 
         positionalEmbedding = None
         if self.addPositionalEmbeddingFlag and sourceTokens is not None:
             positionalEmbedding = self.positionalEmbedding(sourceTokens)
-            tokenEmbeddings += positionalEmbedding
+            x += positionalEmbedding
 
         if self.tokenEmbeddingLayerNormFlag:
-            tokenEmbeddings = self.layerNormEmbeddingModule(tokenEmbeddings)
+            x = self.layerNormEmbeddingModule(x)
 
-        tokenEmbeddings = self.tokenEmbeddingDropoutModule(tokenEmbeddings)
+        x = self.tokenEmbeddingDropoutModule(x)
 
-        if self.quantNoiseFlag:
-            tokenEmbeddings = self.quantNoiseModule(tokenEmbeddings)
+        # TODO: Implement the quant nosie in `TransformerEncoderBase`
+        # if self.quantNoiseFlag:
+        #     x = self.quantNoiseModule(x)
 
-        return tokenEmbeddings, rawTokenEmbedding
+        return x, rawTokenEmbedding
 
-    def _computeAllEncoderLayersOutput(
+    def _computeAllLayersOutput(
         self,
         tokenEmbeddings: Tensor,
         paddingMask: Tensor,
@@ -308,7 +306,6 @@ class TransformerEncoderBase(Module):
         return (
             layerOutput,
             softHaltingInput,
-            adaptiveComputationState,
             adaptiveComputationLoss,
         )
 
@@ -348,7 +345,7 @@ class TransformerEncoderBase(Module):
             )
 
         ffnRawOutput = None
-        if isinstance(layerOutput, tuple):
+        if isinstance(layerOutput, Tuple):
             layerOutput, ffnRawOutput = layerOutput
 
         self._updateDataGatheringLists(
@@ -392,17 +389,19 @@ class TransformerEncoderBase(Module):
                 self.encoderModel.model.ffnModel.inputExperts.numExperts
             )
 
-    def _prepareEncoderOutput(
+    def _prepareOutput(
         self,
         layersOutput: Tensor,
         sourceTokens: Tensor,
         softHaltingInput: Optional[Tensor],
-        act_loss: Optional[Tensor],
+        adaptiveComputationTimeLoss: Optional[Tensor],
     ):
-        totalEncoderLoss = 0
+        totalEncoderLoss = 0.0
         if self.haltingFlag:
             layersOutput = softHaltingInput
-            totalEncoderLoss += self.dynamicHaltingLossWeight * act_loss
+            totalEncoderLoss += (
+                self.dynamicHaltingLossWeight * adaptiveComputationTimeLoss
+            )
 
         if self.normalizeBeforeFlag:
             layersOutput = self.transformerLayerNorm(layersOutput)
