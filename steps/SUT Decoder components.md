@@ -805,6 +805,35 @@ def test_forward(
   if returnResult:
     return returnResult
 
+test_forward(
+  inputBatch=inputBatch,
+  encoderOutput=encoderOutput,
+  layerIdx=layerIdx1,
+  selfAttentionInput=inputBatch,
+  encoderPaddingMask=encoderPaddingMask,
+  previousSelfAttentionState=previousSavedState
+)
+
+test_forward(
+  inputBatch=inputBatch,
+  encoderOutput=encoderOutput,
+  layerIdx=layerIdx1,
+  selfAttentionInput=inputBatch,
+  encoderPaddingMask=encoderPaddingMask
+)
+
+test_forward(
+  inputBatch=inputBatch,
+  encoderOutput=encoderOutput,
+  layerIdx=layerIdx1,
+  selfAttentionInput=inputBatch,
+)
+
+test_forward(
+  inputBatch=inputBatch,
+  encoderOutput=encoderOutput,
+  layerIdx=layerIdx1,
+)
 
 test_forward(
   inputBatch=inputBatch,
