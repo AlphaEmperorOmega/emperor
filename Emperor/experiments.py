@@ -8,6 +8,7 @@ from Emperor.components.sut_layer import (
     TransformerEncoderLayerBase,
     TransformerDecorderLayerBase,
 )
+from Emperor.components.transformer_decoder import TransformerDecoderBase
 from Emperor.components.transformer_encoder import TransformerEncoderBase
 from Emperor.components.moe import MixtureOfExperts
 from .base.decorators import timer
@@ -202,13 +203,11 @@ class TransformerDecoderLayerBaseSingleLayerModel(ClassifierExperiment):
     def forward(self, inputBatch):
         imagePatches = self.patcherModel(inputBatch)
         imagePatches = imagePatches.permute(1, 0, 2)
-        decoderOutput, attentionWeights, selfAttentionState, rawDecoderOutput = (
-            self.decoderModel(
-                imagePatches,
-            )
+        decoderOutput, attentionWeights, selfAttentionState = self.decoderModel(
+            imagePatches,
         )
 
-        decoderOutput = rawDecoderOutput.permute(1, 0, 2)
+        decoderOutput = decoderOutput.permute(1, 0, 2)
         # decoderOutput = decoderOutput[:, 0, :]
         decoderOutput = decoderOutput.sum(dim=1)
 
@@ -289,7 +288,77 @@ class TransformerEncoderBaseSingleLayerModel(ClassifierExperiment):
         # else:
         #     auxiliaryLosses *= -50
 
-        print(auxiliaryLosses)
+        return (output, auxiliaryLosses)
+
+
+class TransformerDecoderBaseSingleLayerModel(ClassifierExperiment):
+    def __init__(
+        self,
+        learningRate,
+        cfg: "ModelConfig",
+        encoderHaltingFlag: bool = False,
+    ):
+        super().__init__(learningRate, cfg)
+
+        self.auxiliaryLosses = AuxiliaryLosses(cfg)
+        self.moeAuxiliaryLosses = AuxiliaryLosses(cfg)
+        self.plotProgress = False
+
+        imageSize = 28
+        patchSize = 4
+        numPatches = (imageSize // patchSize) ** 2
+        self.patcherModel = PatchEmbeddingConv(
+            inputChannels=1,
+            embeddingDim=16,
+            patchSize=patchSize,
+            numPatches=numPatches,
+        )
+
+        cfg = replace(
+            cfg,
+            auxiliaryLosses=self.auxiliaryLosses,
+            moeAuxiliaryLosses=self.moeAuxiliaryLosses,
+        )
+
+        tokenEmbeddingModule = nn.Embedding(
+            num_embeddings=16,
+            embedding_dim=cfg.embeddingDim,
+            padding_idx=1,
+        )
+
+        self.model = TransformerDecoderBase(
+            cfg=cfg,
+            dictionary=[i for i in range(16)],
+            tokenEmbeddingModule=tokenEmbeddingModule,
+            crossSelfAttentionFlag=False,
+        )
+
+        self.classificationModel = nn.Linear(cfg.embeddingDim, 10)
+        self.useRawOutputFlag = False
+
+    def forward(self, inputBatch):
+        imagePatches = self.patcherModel(inputBatch)
+        modelOutput, _ = self.model.forward(
+            tokenEmbeddings=imagePatches,
+        )
+
+        # encoderOutput = modelOutput["encoderOutput"][0]
+
+        # encoderOutput = modelOutput.permute(1, 0, 2)
+        # output = encoderOutput[:, 0, :]
+        output = modelOutput.sum(dim=1)
+
+        output = self.classificationModel(output)
+
+        expertsAuxiliaryLosses = self.auxiliaryLosses.getAuxiliaryLossAndClear()
+        moeAuxiliaryLosses = self.moeAuxiliaryLosses.getAuxiliaryLossAndClear()
+        auxiliaryLosses = expertsAuxiliaryLosses + moeAuxiliaryLosses
+
+        # if auxiliaryLosses > 0:
+        #     auxiliaryLosses *= 50
+        # else:
+        #     auxiliaryLosses *= -50
+
         return (output, auxiliaryLosses)
 
 
