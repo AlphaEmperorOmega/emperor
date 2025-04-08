@@ -93,26 +93,32 @@ class SamplerModel(Module):
     def __mask_scores(
         self,
         probabilities: Tensor,
-        logitsScores: Tensor,
-        skipMask: Optional[Tensor] = None,
+        logits_scores: Tensor,
+        skip_mask: Optional[Tensor] = None,
     ) -> tuple[Tensor, Tensor]:
-        if skipMask is not None:
-            mask = skipMask == 0
+        if skip_mask is not None:
+            mask = skip_mask == 0
             probabilities = masked_fill(probabilities, mask, 0)
-            logitsScores = masked_fill(logitsScores, mask, 0)
-        return probabilities, logitsScores
+            logits_scores = masked_fill(logits_scores, mask, 0)
+        return probabilities, logits_scores
 
-    def _sampleProbabilities(self, probabilities):
-        return self.probabilitySamplerHook(probabilities)
+    def __sample_probabilities(self, probabilities: Tensor) -> Tensor:
+        return self.probability_sampler_hook(probabilities)
 
-    def computeLossHook(self, logits, fullProbabilities, probabilities, indices):
+    def compute_loss_hook(
+        self,
+        logits: Tensor,
+        full_probabilities: Tensor,
+        probabilities: Tensor,
+        indices: Tensor,
+    ) -> float:
         return 0.0
 
-    def probabilitySamplerHook(self, probabilities):
+    def probability_sampler_hook(self, probabilities: Tensor) -> Tensor:
         pass
 
-    def calcSoftmaxCustom(self, probabilities):
-        return probabilities / (L.sum(probabilities, dim=-1, keepdim=True) + 1e-6)
+    def calc_softmax_Custom(self, probabilities: Tensor) -> Tensor:
+        return probabilities / (torch.sum(probabilities, dim=-1, keepdim=True) + 1e-6)
 
 
 class ProbabilitySamplerSparse(SamplerModel):
