@@ -1,78 +1,105 @@
 import torch
-from .routers import RouterModel, VectorChoiceRouterModel
+from torch import Tensor
+from .routers import RouterModel
+from Emperor.base.utils import sigmoid, randn_like, masked_fill
 from Emperor.library.choice import Library as L
+from Emperor.base.utils import Module
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from Emperor.config import ParameterGeneratorConfig
+    from Emperor.config import ModelConfig, SamplerConfig
 
 
-class ProbabilitySamplerBehaviour:
-    def __init__(self, cfg: "ParameterGeneratorConfig"):
-        self.cfg = cfg
-        self.isTrainingFlag = None
-        self.noisyTopkFlag = cfg.noisyTopkFlag
-        self.numProbabilitiesToRandomlySample = cfg.randomSampleTopK
-        self.topK = cfg.topK
-        self.topKTresholdFlag = True
-        self.noiseEpsilon = 1e-2
-        self.topKTreshold = L.toTensor(1 / cfg.depthDim) - 1e-6
-        assert self.numProbabilitiesToRandomlySample <= self.topK
-
-        self.routerModel = cfg.router if cfg.router is not None else RouterModel(cfg)
-
-        self.auxiliaryLosses = cfg.auxiliaryLosses
-        self.calcSoftmaxCustomFlag = True
-        self.computeWeightsFlag = True
-
-    def sampleProbabilitiesAndIndexes(
-        self, inputBatch, skipMask=None, isTrainingFlag=False, computeWeightsFlag=True
-    ):
-        self.isTrainingFlag = isTrainingFlag
-
-        fullProbabilities, logitScores = self._calcProbabilities(
-            inputBatch, skipMask, computeWeightsFlag
+class SamplerModel(Module):
+    def __init__(
+        self,
+        cfg: "SamplerConfig | ModelConfig | None" = None,
+        top_k: int | None = None,
+        top_k_treshold: float | None = None,
+        num_top_k_samples: int | None = None,
+        noisy_topk_flag: bool | None = None,
+    ) -> None:
+        self.cfg: "SamplerConfig | None" = self._resolve_config(
+            cfg, "sampler_model_config"
         )
-        sampledProbabilities, indexes = self._sampleProbabilities(fullProbabilities)
-        self.computeLossHook(
-            logitScores, fullProbabilities, sampledProbabilities, indexes
+        self.top_k = self._resolve(top_k, "top_k")
+        self.top_k_treshold = self._resolve(top_k_treshold, "top_k_treshold")
+        self.noisy_topk_flag = self._resolve(noisy_topk_flag, "noisy_topk_flag", cfg)
+        self.num_top_k_samples = self._resolve(num_top_k_samples, "num_top_k_samples")
+
+        assert self.num_top_k_random_samples <= self.top_k
+        self.router_model: "RouterModel" = self._init_router_model()
+
+        self.noise_epsilon = 1e-2
+        self.is_training_flag = False
+
+    def _router_model_hook(self) -> RouterModel:
+        return RouterModel(self.cfg)
+
+    def sample_probs_and_indices(
+        self,
+        input_batch: Tensor,
+        skip_mask: Tensor | None = None,
+        is_training_flag: bool = False,
+        custom_softmax_flag: bool = False,
+        compute_weight_flag: bool = True,
+    ) -> tuple[Tensor, Tensor]:
+        self.is_training_flag = is_training_flag
+        all_probabilities, logits = self.__calc_probabilities(
+            input_batch, skip_mask, compute_weight_flag
         )
-        if self.calcSoftmaxCustomFlag:
-            sampledProbabilities = self.calcSoftmaxCustom(sampledProbabilities)
+        selected_probabilities, selected_indexes = self.__sample_probabilities(
+            all_probabilities
+        )
+        self.compute_loss_hook(
+            logits, all_probabilities, selected_probabilities, selected_indexes
+        )
+        if custom_softmax_flag:
+            selected_probabilities = self.calc_softmax_custom(selected_probabilities)
 
-        return sampledProbabilities, indexes
+        return selected_probabilities, selected_indexes
 
-    def _calcProbabilities(self, inputBatch, skipMask=None, computeWeightsFlag=True):
-        logitScores = self.routerModel.calcLogitScores(inputBatch, computeWeightsFlag)
-        noisyLogits = self._addNoiseToLogits(logitScores)
-        probabilities = L.softmax(noisyLogits)
-        return self._maskScores(probabilities, noisyLogits, skipMask)
+    def __calc_probabilities(
+        self,
+        input_batch: Tensor,
+        skip_mask: Optional[Tensor] = None,
+        compute_weight_flag: bool = True,
+    ) -> tuple[Tensor, Tensor]:
+        logits = self.router_model.compute_logit_scores(
+            input_batch, compute_weight_flag
+        )
+        logits = self.__add_noise(logits)
+        probabilities = torch.softmax(logits, dim=-1)
+        return self.__mask_scores(probabilities, logits, skip_mask)
 
-    def _addNoiseToLogits(self, logitScores):
-        if self.noisyTopkFlag:
+    def __add_noise(self, logit_scores: Tensor) -> Tensor:
+        if self.noisy_topk_flag:
             # Because the router now generates `self.depthDim * 2` scores
             # one half of those will be used as standard deviation scores
-            logitScores, rawNoiseStandardDeviation = L.chunk(logitScores, 2)
-            if self.isTrainingFlag:
-                noiseStandardDeviation = (
-                    L.sigmoid(rawNoiseStandardDeviation) + self.noiseEpsilon
-                )
+            logit_scores_chunk, raw_noise_std = logit_scores.chunk(2, dim=-1)
+            logit_scores = logit_scores_chunk
 
-                noise = L.randn_like(logitScores)
-                noisyLogitScores = logitScores + noise * noiseStandardDeviation
-                logits = noisyLogitScores
-            else:
-                logits = logitScores
-        else:
-            logits = logitScores
+            if self.is_training_flag:
+                noise_std = sigmoid(raw_noise_std) + self.noise_epsilon
+                noise = randn_like(logit_scores)
+                # TODO: In the future maybe scale the noise by `raw_noise_std`
+                # or scale `noise` by some `decaying_noise_amplifier` scalar
+                noisy_logit_scores = logit_scores + noise * noise_std
+                logit_scores = noisy_logit_scores
 
-        return logits
+        return logit_scores
 
-    def _maskScores(self, probabilities, logitsScores, skipMask=None):
+    def __mask_scores(
+        self,
+        probabilities: Tensor,
+        logitsScores: Tensor,
+        skipMask: Optional[Tensor] = None,
+    ) -> tuple[Tensor, Tensor]:
         if skipMask is not None:
-            probabilities = torch.masked_fill(probabilities, (skipMask == 0), 0)
-            logitsScores = torch.masked_fill(logitsScores, (skipMask == 0), 0)
+            mask = skipMask == 0
+            probabilities = masked_fill(probabilities, mask, 0)
+            logitsScores = masked_fill(logitsScores, mask, 0)
         return probabilities, logitsScores
 
     def _sampleProbabilities(self, probabilities):
@@ -88,7 +115,7 @@ class ProbabilitySamplerBehaviour:
         return probabilities / (L.sum(probabilities, dim=-1, keepdim=True) + 1e-6)
 
 
-class ProbabilitySamplerSparse(ProbabilitySamplerBehaviour):
+class ProbabilitySamplerSparse(SamplerModel):
     def __init__(self, cfg: "ParameterGeneratorConfig") -> None:
         super().__init__(cfg)
         self.calcSoftmaxCustomFlag = False
@@ -114,7 +141,7 @@ class ProbabilitySamplerSparse(ProbabilitySamplerBehaviour):
         )
 
 
-class ProbabilitySamplerTopk(ProbabilitySamplerBehaviour):
+class ProbabilitySamplerTopk(SamplerModel):
     def __init__(self, cfg: "ParameterGeneratorConfig") -> None:
         super().__init__(cfg)
 
@@ -172,7 +199,7 @@ class ProbabilitySamplerTopk(ProbabilitySamplerBehaviour):
         )
 
 
-class ProbabilitySamplerFull(ProbabilitySamplerBehaviour):
+class ProbabilitySamplerFull(SamplerModel):
     def __init__(self, cfg: "ParameterGeneratorConfig") -> None:
         super().__init__(cfg)
 
@@ -181,7 +208,7 @@ class ProbabilitySamplerFull(ProbabilitySamplerBehaviour):
         return probabilities, indices
 
     def _sampleFullProbabilities(self, probabilities):
-        if self.topKTresholdFlag:
+        if self.top_k_treshold > 0.0:
             return self._maskProbsTopKTreshold(probabilities)
         return probabilities, None
 
