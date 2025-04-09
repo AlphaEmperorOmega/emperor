@@ -1,11 +1,22 @@
 import torch
 from torch import Tensor
+
+from Emperor.components.parameter_generators.utils.losses import AuxiliaryLosses
 from .routers import RouterModel
-from Emperor.base.utils import sigmoid, randn_like, masked_fill
+from Emperor.base.utils import (
+    sigmoid,
+    randn_like,
+    masked_fill,
+    tensor,
+    zeros,
+    arange,
+    expand_dims,
+    concat,
+)
 from Emperor.library.choice import Library as L
 from Emperor.base.utils import Module
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig, SamplerConfig
@@ -16,35 +27,38 @@ class SamplerModel(Module):
         self,
         cfg: "SamplerConfig | ModelConfig | None" = None,
         top_k: int | None = None,
-        top_k_treshold: float | None = None,
-        num_top_k_samples: int | None = None,
+        top_k_threshold: float | None = None,
+        num_topk_samples: int | None = None,
         noisy_topk_flag: bool | None = None,
     ) -> None:
+        super().__init__()
+        self.cfg_main = cfg
         self.cfg: "SamplerConfig | None" = self._resolve_config(
             cfg, "sampler_model_config"
         )
         self.top_k = self._resolve(top_k, "top_k")
-        self.top_k_treshold = self._resolve(top_k_treshold, "top_k_treshold")
+        self.top_k_threshold = self._resolve(top_k_threshold, "top_k_threshold")
         self.noisy_topk_flag = self._resolve(noisy_topk_flag, "noisy_topk_flag", cfg)
-        self.num_top_k_samples = self._resolve(num_top_k_samples, "num_top_k_samples")
+        self.num_topk_samples = self._resolve(num_topk_samples, "num_topk_samples")
 
-        assert self.num_top_k_random_samples <= self.top_k
-        self.router_model: "RouterModel" = self._init_router_model()
+        assert self.num_topk_samples <= self.top_k
+        self.router_model: "RouterModel" = self._router_model_hook()
 
         self.noise_epsilon = 1e-2
         self.is_training_flag = False
+        self.auxiliaryLosses = AuxiliaryLosses(self.cfg_main)
 
     def _router_model_hook(self) -> RouterModel:
-        return RouterModel(self.cfg)
+        return RouterModel(self.cfg_main)
 
-    def sample_probs_and_indices(
+    def forward(
         self,
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
         is_training_flag: bool = False,
         custom_softmax_flag: bool = False,
         compute_weight_flag: bool = True,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor | None]:
         self.is_training_flag = is_training_flag
         all_probabilities, logits = self.__calc_probabilities(
             input_batch, skip_mask, compute_weight_flag
@@ -52,18 +66,18 @@ class SamplerModel(Module):
         selected_probabilities, selected_indexes = self.__sample_probabilities(
             all_probabilities
         )
-        self.compute_loss_hook(
+        self._compute_loss_hook(
             logits, all_probabilities, selected_probabilities, selected_indexes
         )
         if custom_softmax_flag:
-            selected_probabilities = self.calc_softmax_custom(selected_probabilities)
+            selected_probabilities = self._calc_softmax_custom(selected_probabilities)
 
         return selected_probabilities, selected_indexes
 
     def __calc_probabilities(
         self,
         input_batch: Tensor,
-        skip_mask: Optional[Tensor] = None,
+        skip_mask: Tensor | None = None,
         compute_weight_flag: bool = True,
     ) -> tuple[Tensor, Tensor]:
         logits = self.router_model.compute_logit_scores(
@@ -94,7 +108,7 @@ class SamplerModel(Module):
         self,
         probabilities: Tensor,
         logits_scores: Tensor,
-        skip_mask: Optional[Tensor] = None,
+        skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
         if skip_mask is not None:
             mask = skip_mask == 0
@@ -102,40 +116,68 @@ class SamplerModel(Module):
             logits_scores = masked_fill(logits_scores, mask, 0)
         return probabilities, logits_scores
 
-    def __sample_probabilities(self, probabilities: Tensor) -> Tensor:
-        return self.probability_sampler_hook(probabilities)
+    def __sample_probabilities(
+        self, probabilities: Tensor
+    ) -> Tensor | tuple[Tensor, Tensor]:
+        selected_probs, selected_indices = self._probability_sampler_hook(probabilities)
+        return selected_probs, selected_indices
 
-    def compute_loss_hook(
+    def _compute_loss_hook(
         self,
         logits: Tensor,
         full_probabilities: Tensor,
         probabilities: Tensor,
-        indices: Tensor,
+        indexes: Tensor,
     ) -> float:
         return 0.0
 
-    def probability_sampler_hook(self, probabilities: Tensor) -> Tensor:
-        pass
+    def _probability_sampler_hook(
+        self, probabilities: Tensor
+    ) -> Tensor | tuple[Tensor, Tensor]:
+        raise NotImplementedError(
+            "Derived classes must implement _probability_sampler_hook"
+        )
 
-    def calc_softmax_Custom(self, probabilities: Tensor) -> Tensor:
+    def _calc_softmax_custom(self, probabilities: Tensor) -> Tensor:
         return probabilities / (torch.sum(probabilities, dim=-1, keepdim=True) + 1e-6)
 
 
 class ProbabilitySamplerSparse(SamplerModel):
-    def __init__(self, cfg: "ParameterGeneratorConfig") -> None:
-        super().__init__(cfg)
-        self.calcSoftmaxCustomFlag = False
+    def __init__(
+        self,
+        cfg: "SamplerConfig | ModelConfig | None" = None,
+        top_k: int | None = None,
+        top_k_threshold: float | None = None,
+        num_topk_samples: int | None = None,
+        noisy_topk_flag: bool | None = None,
+    ) -> None:
+        super().__init__(
+            cfg,
+            top_k,
+            top_k_threshold,
+            num_topk_samples,
+            noisy_topk_flag,
+        )
+        self.calc_softmax_custom_flag = False
 
-    def probabilitySamplerHook(self, probabilities):
-        return L.getTopProbabilityAndIndex(probabilities)
+    def _probability_sampler_hook(
+        self, probabilities: Tensor
+    ) -> Tensor | tuple[Tensor, Tensor]:
+        return torch.max(probabilities, dim=-1)
 
-    def computeLossHook(self, logits, fullProbabilities, probabilities, indices):
-        dim0 = torch.prod(torch.tensor(probabilities.shape))
-        gatesBuffer = torch.zeros(dim0, self.cfg.depthDim).to(L.Device)
+    def _compute_loss_hook(
+        self,
+        logits: Tensor,
+        full_probabilities: Tensor,
+        probabilities: Tensor,
+        indexes: Tensor,
+    ):
+        first_dim = torch.prod(tensor(probabilities.shape))
+        gatesBuffer = zeros(first_dim, self.cfg.depthDim).to(L.Device)
 
         gates = gatesBuffer.scatter(
             1,
-            indices.view(-1, 1),
+            indexes.view(-1, 1),
             probabilities.view(-1, 1),
         ).to(L.Device)
 
@@ -148,52 +190,77 @@ class ProbabilitySamplerSparse(SamplerModel):
 
 
 class ProbabilitySamplerTopk(SamplerModel):
-    def __init__(self, cfg: "ParameterGeneratorConfig") -> None:
-        super().__init__(cfg)
+    def __init__(
+        self,
+        cfg: "SamplerConfig | ModelConfig | None" = None,
+        top_k: int | None = None,
+        top_k_threshold: float | None = None,
+        num_topk_samples: int | None = None,
+        noisy_topk_flag: bool | None = None,
+    ) -> None:
+        super().__init__(
+            cfg,
+            top_k,
+            top_k_threshold,
+            num_topk_samples,
+            noisy_topk_flag,
+        )
 
-    def probabilitySamplerHook(self, probabilities):
-        probabilities, indices = self._sampleTopKProbabilities(probabilities)
+    def _probability_sampler_hook(
+        self, probabilities: Tensor
+    ) -> Tensor | tuple[Tensor, Tensor]:
+        probabilities, indexes = self.__sample_topk_probabilities(probabilities)
 
-        return probabilities, indices
+        return probabilities, indexes
 
-    def _sampleTopKProbabilities(self, probabilities):
-        if self.isTrainingFlag and (self.numProbabilitiesToRandomlySample > 0):
-            topKProbabilities, topKIndices = self._sampleRandomTopKProbabilities(
+    def __sample_topk_probabilities(
+        self, probabilities: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        if self.is_training_flag and (self.num_topk_samples > 0):
+            top_k_Probabilities, top_k_indexes = self._sample_num_topk_samples(
                 probabilities
             )
         else:
-            topKProbabilities, topKIndices = L.topk(probabilities, self.topK)
+            top_k_Probabilities, top_k_indexes = L.topk(probabilities, self.top_k)
 
-        return topKProbabilities, topKIndices
+        return top_k_Probabilities, top_k_indexes
 
-    def _sampleRandomTopKProbabilities(self, probabilities):
-        # Select the `(topk - numProbabilitiesToRandomlySample)` top probabilities
-        numTrueProbabilities = self.topK - self.numProbabilitiesToRandomlySample
-        _, trueTopKIndices = L.topk(probabilities, numTrueProbabilities)
+    def _sample_num_topk_samples(self, probabilities: Tensor) -> tuple[Tensor, Tensor]:
+        # Determine how many top-k items to keep deterministically
+        num_deterministic = self.top_k - self.num_topk_samples
+        _, topk_deterministic_indexes = probabilities.topk(num_deterministic, dim=-1)
 
-        # Hide probabilitie that have allready been selected
-        maskedProbabilities = probabilities + 1e-6
-        rangeIndexes = L.unsqueeze(L.arange(probabilities.size(0)), 1)
-        maskedProbabilities[rangeIndexes, trueTopKIndices] = 0
+        # Mask out already selected indexes
+        masked_probs = probabilities + 1e-6
+        batch_indexes = expand_dims(arange(probabilities.size(0)), 1)
+        masked_probs[batch_indexes, topk_deterministic_indexes] = 0
 
-        sampledProbabilityIndices = L.multinomial(
-            maskedProbabilities, self.numProbabilitiesToRandomlySample
+        # Sample the remaining top-k entries randomly
+        topk_random_indexes = torch.multinomial(masked_probs, self.num_topk_samples)
+
+        # Combine deterministic and random top-k indexes
+        final_topk_indexes = concat(
+            [topk_deterministic_indexes, topk_random_indexes], dim=-1
         )
 
-        topKIndices = L.cat([trueTopKIndices, sampledProbabilityIndices])
+        # Gather the corresponding probabilities
+        final_topk_probs = L.gather(probabilities, 1, final_topk_indexes)
 
-        # Retrieve the probabilities of the incides in the above step
-        topKProbabilities = L.gather(probabilities, 1, topKIndices)
+        return final_topk_probs, final_topk_indexes
 
-        return topKProbabilities, topKIndices
-
-    def computeLossHook(self, logits, fullProbabilities, probabilities, indices):
+    def _computeLossHook(
+        self,
+        logits,
+        fullProbabilities,
+        probabilities,
+        indexes,
+    ):
         gatesBuffer = torch.zeros(
             torch.prod(torch.tensor(probabilities.shape)), self.cfg.depthDim
         ).to(L.Device)
         gates = gatesBuffer.scatter(
             1,
-            indices.view(-1, self.cfg.topK),
+            indexes.view(-1, self.cfg.topK),
             probabilities.view(-1, self.cfg.topK),
         ).to(L.Device)
 
@@ -206,22 +273,34 @@ class ProbabilitySamplerTopk(SamplerModel):
 
 
 class ProbabilitySamplerFull(SamplerModel):
-    def __init__(self, cfg: "ParameterGeneratorConfig") -> None:
-        super().__init__(cfg)
+    def __init__(
+        self,
+        cfg: "SamplerConfig | ModelConfig | None" = None,
+        top_k: int | None = None,
+        top_k_threshold: float | None = None,
+        num_topk_samples: int | None = None,
+        noisy_topk_flag: bool | None = None,
+    ) -> None:
+        super().__init__(
+            cfg,
+            top_k,
+            top_k_threshold,
+            num_topk_samples,
+            noisy_topk_flag,
+        )
 
-    def probabilitySamplerHook(self, probabilities):
-        probabilities, indices = self._sampleFullProbabilities(probabilities)
-        return probabilities, indices
+    def _probability_sampler_hook(
+        self, probabilities: Tensor
+    ) -> tuple[Tensor, Tensor | None]:
+        probabilities, _ = self.__sample_full_probabilities(probabilities)
+        return probabilities, _
 
-    def _sampleFullProbabilities(self, probabilities):
-        if self.top_k_treshold > 0.0:
-            return self._maskProbsTopKTreshold(probabilities)
+    def __sample_full_probabilities(self, probabilities: Tensor) -> tuple[Tensor, None]:
+        if self.top_k_threshold > 0.0:
+            return self.__mask_probs_by_threshold(probabilities)
         return probabilities, None
 
-    def _maskProbsTopKTreshold(self, probabilities):
-        tresholdTopKMask = probabilities < self.topKTreshold
-        maskedProbabilities = L.where(tresholdTopKMask, 0.0, probabilities)
-        maskedProbabilities = maskedProbabilities / (
-            L.sum(maskedProbabilities, dim=-1, keepdim=True) + 1e-6
-        )
-        return maskedProbabilities, None
+    def __mask_probs_by_threshold(self, probabilities: Tensor) -> tuple[Tensor, None]:
+        threshold_mask = probabilities < self.top_k_threshold
+        masked_probabilities = torch.where(threshold_mask, 0.0, probabilities)
+        return masked_probabilities, None
