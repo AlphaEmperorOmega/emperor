@@ -324,6 +324,7 @@ class ModelConfig(DataClassBase):
             num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
             normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
             noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
+            router_output_dim=ROUTER_OUTPUT_DIM,
             router_model=lambda cfg: SAMPLER_ROTUER_MODEL(cfg),
         ),
         metadata={"help": "`SamplerConfig` configuration"},
