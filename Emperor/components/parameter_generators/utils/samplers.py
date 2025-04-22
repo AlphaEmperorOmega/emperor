@@ -5,7 +5,7 @@ from torch import Tensor
 
 from Emperor.components.parameter_generators.utils.losses import AuxiliaryLosses
 from Emperor.base.utils import Module, DataClassBase
-from .routers import RouterModel
+from .routers import RouterConfig, RouterModel
 from Emperor.base.utils import (
     sigmoid,
     randn_like,
@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+    from .routers import RouterConfig
 
 
 @dataclass
@@ -121,17 +122,15 @@ class SamplerBase(Module):
 
     def set_router_model(
         self,
-        router_model: "RouterModel | None",
-        cfg: "RouterConfig | ModelConfig | None" = None,
+        router_model: "RouterModel",
+        cfg: "RouterConfig | ModelConfig",
         return_flag: bool = False,
     ) -> "RouterModel | None":
+        model = router_model(cfg)
         if return_flag:
-            if isinstance(cfg, SamplerConfig):
-                return None
+            return model
 
-            return router_model(cfg)
-
-        self.router_model = router_model(cfg)
+        self.router_model = model
 
     def set_is_training_flag(self, is_training_flag=False) -> None:
         self.is_training_flag = is_training_flag
@@ -407,6 +406,14 @@ class SamplerModel(Module):
             return SamplerFull(self.cfg, self.overrides)
         else:
             return SamplerTopk(self.cfg, self.overrides)
+
+    def set_router_model(
+        self,
+        router_model: "RouterModel",
+        cfg: "RouterConfig | ModelConfig",
+        return_flag: bool = False,
+    ) -> "RouterModel | None":
+        self.router_model.set_router_model(router_model, cfg, return_flag)
 
     def forward(
         self,
