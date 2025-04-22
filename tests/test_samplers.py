@@ -1,6 +1,7 @@
 import unittest
 import torch
 import torch.nn as nn
+from torch.return_types import topk
 from Emperor.components.parameter_generators.utils.samplers import (
     SamplerBase,
     SamplerConfig,
@@ -37,6 +38,7 @@ class TestProbabilitySampler(unittest.TestCase):
             dynamic_topk_threshold=0.2,
             num_topk_samples=2,
             normalize_probabilities_flag=True,
+            router_output_dim=self.cfg.router_model_config.output_dim,
             noisy_topk_flag=True,
         )
 
@@ -520,7 +522,6 @@ class TestProbabilitySamplerFull(unittest.TestCase):
 class TestSamplerModel(unittest.TestCase):
     def setUp(self):
         self.cfg = ModelConfig()
-        self.cfg.router_model_config.output_dim = 8
 
     def test_init_no_config(self):
         config = SamplerConfig(
@@ -537,35 +538,154 @@ class TestSamplerModel(unittest.TestCase):
 
         self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
 
-    # def test_init_sparse(self):
-    #     router_model = SamplerConfig
-    #     model = SamplerModel(self.cfg, top_k=1, num_topk_samples=0)
-    #     self.assertTrue(isinstance(model.sampler_model, ProbabilitySamplerSparse))
+    def test_init_sparse(self):
+        overrides = SamplerConfig(top_k=1, num_topk_samples=0)
+        model = SamplerModel(self.cfg, overrides)
+        self.assertTrue(isinstance(model.sampler_model, SamplerSparse))
 
+    def test_init_full(self):
+        top_k = self.cfg.sampler_model_config.router_output_dim
+        overrides = SamplerConfig(top_k=top_k)
+        model = SamplerModel(self.cfg, overrides)
+        self.assertTrue(isinstance(model.sampler_model, SamplerFull))
 
-#     def test_init_full(self):
-#         # Test with top_k=num_expserts -> should create ProbabilitySamplerFull
-#         model = SamplerModel(self.cfg, top_k=8, num_topk_samples=0)
-#         self.assertTrue(isinstance(model.sampler_model, ProbabilitySamplerFull))
-#
-#     def test_init_topk(self):
-#         # Test with 1 < top_k < num_expserts -> should create ProbabilitySamplerTopk
-#         model = SamplerModel(self.cfg, top_k=4, num_topk_samples=0)
-#         self.assertTrue(isinstance(model.sampler_model, ProbabilitySamplerTopk))
-#
-#     def test_sample_probs_and_indexes_sparse(self):
-#         sampler_model = SamplerModel(self.cfg, top_k=1, num_topk_samples=0)
-#
-#         sampler_model(self.input_batch, self.skip_mask)
-#
-#     def test_sample_probs_and_indexes_top_k(self):
-#         sampler_model = SamplerModel(self.cfg, top_k=3, num_topk_samples=1)
-#
-#         sampler_model(self.input_batch, self.skip_mask)
-#
-#     def test_sample_probs_and_indexes_full(self):
-#         sampler_model = SamplerModel(
-#             self.cfg, top_k=self.cfg.router_model_config.output_dim
-#         )
-#
-#         sampler_model(self.input_batch, self.skip_mask)
+    def test_init_topk(self):
+        overrides = SamplerConfig(top_k=4)
+        model = SamplerModel(self.cfg, overrides)
+        self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
+
+    def test_sample_probs_and_indexes_sparse(self):
+        overrides = SamplerConfig(top_k=1, num_topk_samples=0)
+        sampler_model = SamplerModel(self.cfg, overrides)
+
+        batch_size = self.cfg.batch_size
+        features = self.cfg.router_model_config.input_dim
+        test_input = torch.randn(batch_size, features)
+        probabilities, indices, skip_mask = sampler_model(test_input)
+
+        expected_probabilities_shape = [
+            self.cfg.batch_size,
+        ]
+
+        self.assertEqual(
+            torch.tensor(probabilities.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertEqual(
+            torch.tensor(indices.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertIsNone(skip_mask)
+
+    def test_sample_probs_and_indexes_sparse_with_skip_mask(self):
+        overrides = SamplerConfig(top_k=1, num_topk_samples=0)
+        sampler_model = SamplerModel(self.cfg, overrides)
+
+        batch_size = self.cfg.batch_size
+        features = self.cfg.router_model_config.input_dim
+        test_input = torch.randn(batch_size, features)
+        skip_mask = torch.randint(0, 2, (batch_size, 1))
+
+        probabilities, indices, skip_mask = sampler_model(test_input, skip_mask)
+
+        expected_probabilities_shape = [self.cfg.batch_size]
+        expected_mask_shape = [self.cfg.batch_size, 1]
+
+        self.assertEqual(
+            torch.tensor(probabilities.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertTrue(
+            torch.tensor(indices.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertEqual(torch.tensor(skip_mask.shape).tolist(), expected_mask_shape)
+
+    def test_sample_probs_and_indexes_topk(self):
+        topk = 4
+        overrides = SamplerConfig(top_k=topk, num_topk_samples=2)
+        sampler_model = SamplerModel(self.cfg, overrides)
+
+        batch_size = self.cfg.batch_size
+        features = self.cfg.router_model_config.input_dim
+        test_input = torch.randn(batch_size, features)
+
+        probabilities, indices, skip_mask = sampler_model(test_input)
+
+        expected_probabilities_shape = [self.cfg.batch_size, topk]
+
+        self.assertEqual(
+            torch.tensor(probabilities.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertEqual(
+            torch.tensor(indices.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertIsNone(skip_mask)
+
+    def test_sample_probs_and_indexes_topk_with_skip_mask(self):
+        overrides = SamplerConfig(top_k=4, num_topk_samples=2)
+        sampler_model = SamplerModel(self.cfg, overrides)
+
+        batch_size = self.cfg.batch_size
+        features = self.cfg.router_model_config.input_dim
+        test_input = torch.randn(batch_size, features)
+        skip_mask = torch.randint(0, 2, (batch_size, 1))
+
+        probabilities, indices, skip_mask = sampler_model(test_input, skip_mask)
+
+        expected_probabilities_shape = [
+            self.cfg.batch_size,
+            self.cfg.sampler_model_config.top_k,
+        ]
+        expected_mask_shape = [self.cfg.batch_size, 1]
+
+        self.assertEqual(
+            torch.tensor(probabilities.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertTrue(
+            torch.tensor(indices.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertEqual(torch.tensor(skip_mask.shape).tolist(), expected_mask_shape)
+
+    def test_sample_probs_and_indexes_full(self):
+        top_k = self.cfg.sampler_model_config.router_output_dim
+        overrides = SamplerConfig(top_k=top_k, num_topk_samples=0)
+        sampler_model = SamplerModel(self.cfg, overrides)
+
+        batch_size = self.cfg.batch_size
+        features = self.cfg.router_model_config.input_dim
+        test_input = torch.randn(batch_size, features)
+
+        probabilities, indices, skip_mask = sampler_model(test_input)
+
+        expected_probabilities_shape = [
+            self.cfg.batch_size,
+            self.cfg.sampler_model_config.router_output_dim,
+        ]
+
+        self.assertEqual(
+            torch.tensor(probabilities.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertIsNone(indices)
+        self.assertIsNone(skip_mask)
+
+    def test_sample_probs_and_indexes_full_with_skip_mask(self):
+        top_k = self.cfg.sampler_model_config.router_output_dim
+        overrides = SamplerConfig(top_k=top_k, num_topk_samples=0)
+        sampler_model = SamplerModel(self.cfg, overrides)
+
+        batch_size = self.cfg.batch_size
+        features = self.cfg.router_model_config.input_dim
+        test_input = torch.randn(batch_size, features)
+        skip_mask = torch.randint(0, 2, (batch_size, 1))
+
+        probabilities, indices, skip_mask = sampler_model(test_input, skip_mask)
+
+        expected_probabilities_shape = [
+            self.cfg.batch_size,
+            self.cfg.sampler_model_config.router_output_dim,
+        ]
+        expected_mask_shape = [self.cfg.batch_size, 1]
+
+        self.assertEqual(
+            torch.tensor(probabilities.shape).tolist(), expected_probabilities_shape
+        )
+        self.assertIsNone(indices)
+
+        self.assertEqual(torch.tensor(skip_mask.shape).tolist(), expected_mask_shape)
