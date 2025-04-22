@@ -1,5 +1,7 @@
 import unittest
 import torch
+import torch.nn as nn
+from torch.return_types import topk
 from Emperor.components.parameter_generators.utils.samplers import (
     SamplerBase,
     SamplerConfig,
@@ -509,7 +511,6 @@ class TestProbabilitySamplerFull(unittest.TestCase):
 class TestSamplerModel(unittest.TestCase):
     def setUp(self):
         self.cfg = ModelConfig()
-        self.router_model = RouterModel(self.cfg)
 
     def test_init_no_config(self):
         config = SamplerConfig(
@@ -614,8 +615,7 @@ class TestSamplerModel(unittest.TestCase):
         test_input = torch.randn(batch_size, features)
         skip_mask = torch.randint(0, 2, (batch_size, 1))
 
-        router_output = self.router_model.compute_logit_scores(test_input)
-        probabilities, indices, skip_mask = sampler_model(router_output, skip_mask)
+        probabilities, indices, skip_mask = sampler_model(test_input, skip_mask)
 
         expected_probabilities_shape = [
             self.cfg.batch_size,
