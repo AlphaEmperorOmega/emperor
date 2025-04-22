@@ -5,6 +5,7 @@ from torch import Tensor
 
 from Emperor.components.parameter_generators.utils.losses import AuxiliaryLosses
 from Emperor.base.utils import Module, DataClassBase
+from .routers import RouterConfig, RouterModel
 from Emperor.base.utils import (
     sigmoid,
     randn_like,
@@ -105,6 +106,21 @@ class SamplerBase(Module):
         assert 0.0 <= self.dynamic_topk_threshold <= 1.0, (
             f"dynamic_topk_threshold must be between 0.0 and 1.0 (inclusive), got {self.dynamic_topk_threshold}"
         )
+
+    def set_router_model(
+        self,
+        router_model: "RouterModel",
+        cfg: "RouterConfig | ModelConfig",
+        return_flag: bool = False,
+    ) -> "RouterModel | None":
+        model = router_model(cfg)
+        if return_flag:
+            return model
+
+        self.router_model = model
+
+    def set_is_training_flag(self, is_training_flag=False) -> None:
+        self.is_training_flag = is_training_flag
 
     def sample_probabilities_and_indices(
         self,
