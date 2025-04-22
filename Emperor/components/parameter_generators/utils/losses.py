@@ -2,49 +2,50 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from Emperor.library.choice import Library as L
-
 
 class AuxiliaryLosses:
     def __init__(self, cfg):
         super().__init__()
-        self.coefficientOfVariationLoss = cfg.coefficientOfVariationLossWeight
-        self.switchLoss = cfg.switchLossWeight
-        self.zeroCentredLoss = cfg.zeroCentredLossWeight
-        self.mutualInformationLoss = cfg.mutualInformationLossWeight
+        # Temporarly remove the config requirements until refactored
+        self.coefficientOfVariationLoss = 0.0  # cfg.coefficientOfVariationLossWeight
+        self.switchLoss = 0.0  # cfg.switchLossWeight
+        self.zeroCentredLoss = 0.0  # cfg.zeroCentredLossWeight
+        self.mutualInformationLoss = 0.0  # cfg.mutualInformationLossWeight
         # TEMPORARY
-        self.topK = cfg.topK
+        self.topK = 0.0  # cfg.topK
 
         self.initializeAccumulatedStatistics()
 
     def initializeAccumulatedStatistics(self):
-        self.probabilityAccumulation = 0.0
-        self.gateAccumulation = 0.0
-        self.frequencyAccumulation = 0.0
-        self.squaredLogSumExpAccumulation = 0.0
-        self.countAccumulation = 0
+        self.probability_accumulation = 0.0
+        self.gate_accumulation = 0.0
+        self.frequency_accumulation = 0.0
+        self.squared_log_sum_exp_accumulation = 0.0
+        self.count_accumulation = 0
 
         self.probabilities = []
-        self.logProbabilities = []
-        self.skipMasks = []
+        self.log_probabilities = []
+        self.skip_masks = []
 
-    def updateAccumulatedStatistics(self, logits, probabilities, gates, skipMasks=None):
+    def update_accumulated_statistics(
+        self, logits, probabilities, gates, skipMasks=None
+    ):
         squaredLogSumExp = torch.exp(logits)
         squaredLogSumExp = squaredLogSumExp.sum(dim=-1)
         squaredLogSumExp = torch.log(squaredLogSumExp)
         squaredLogSumExp = squaredLogSumExp**2
         logProbabilities = torch.log_softmax(logits, dim=-1)
 
-        self.probabilityAccumulation += L.sum(probabilities, dim=0)
-        self.gateAccumulation += L.sum(gates, dim=0)
-        self.frequencyAccumulation += L.sum((gates > 0).float(), dim=0)
-        self.squaredLogSumExpAccumulation += L.sum(squaredLogSumExp, dim=None)
-        self.countAccumulation += logits.size(0)
+        self.probability_accumulation += torch.sum(probabilities, dim=0)
+        self.gate_accumulation += torch.sum(gates, dim=0)
+        self.frequency_accumulation += torch.sum((gates > 0).float(), dim=0)
+        self.squared_log_sum_exp_accumulation += torch.sum(squaredLogSumExp)
+        self.count_accumulation += logits.size(0)
 
         self.probabilities.append(probabilities)
-        self.logProbabilities.append(logProbabilities)
+        self.log_probabilities.append(logProbabilities)
         if skipMasks is not None:
-            self.skipMasks.append(skipMasks)
+            self.skip_masks.append(skipMasks)
 
     def getAuxiliaryLossAndClear(self):
         if (
