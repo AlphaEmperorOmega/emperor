@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field, fields
 import torch
 import torch.nn as nn
 import inspect
@@ -5,7 +6,15 @@ import collections
 import IPython.display as display
 import matplotlib.pyplot as plt
 import random
+import inspect
+from torch.nn import Parameter, Linear, Sequential
 
+from typing import TYPE_CHECKING, Any, Optional, Union
+
+
+if TYPE_CHECKING:
+    from Emperor.config import ModelConfig
+    from Emperor.config import Configuration
 
 ones_like = torch.ones_like
 ones = torch.ones
@@ -25,6 +34,7 @@ log = torch.log
 normal = torch.normal
 rand = torch.rand
 randn = torch.randn
+randn_like = torch.randn_like
 matmul = torch.matmul
 int32 = torch.int32
 int64 = torch.int64
@@ -33,9 +43,11 @@ concat = torch.cat
 stack = torch.stack
 abs = torch.abs
 eye = torch.eye
+prod = torch.prod
+masked_fill = torch.masked_fill
 sigmoid = torch.sigmoid
 batch_matmul = torch.bmm
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 numpy = lambda x, *args, **kwargs: x.detach().numpy(*args, **kwargs)
 size = lambda x, *args, **kwargs: x.numel(*args, **kwargs)
@@ -257,6 +269,77 @@ class Module(nn.Module, HyperParameters):
     def _getValue(self, defaultValue, configValue):
         return defaultValue if defaultValue is not None else configValue
 
+    def _resolve_config(self, cfg=None, cfg_key: str = ""):
+        return getattr(cfg, cfg_key, cfg) if cfg_key and cfg else cfg
+
+    def _resolveOld(
+        self,
+        defaultValue: Any,
+        configKey: Any,
+        cfg: Any = None,
+    ) -> Any:
+        if cfg is None and self.cfg is None:
+            return defaultValue
+        config = cfg if cfg is not None else self.cfg
+        configValue = getattr(config, configKey, None)
+        return defaultValue if defaultValue is not None else configValue
+
+    def _resolve(
+        self,
+        configKey: Any,
+        cfg: Any,
+    ) -> Any:
+        config = cfg if cfg is not None else self.cfg
+        configValue = getattr(config, configKey, None)
+        defaultValue = self.inputs.get(configKey)
+        return defaultValue if defaultValue is not None else configValue
+
+    def _get_config(self, cfg: Optional["Configuration"], configName: str) -> Any:
+        return getattr(cfg, configName) if cfg is not None else None
+
+    def _initialize_parameters(
+        self, *parameters: Union[Linear, Parameter, Sequential]
+    ) -> None:
+        for parameter in parameters:
+            if isinstance(parameter, Parameter):
+                nn.init.xavier_uniform_(parameter)
+
+            if isinstance(parameter, Linear):
+                nn.init.xavier_uniform_(parameter.weight)
+                if parameter.bias is not None:
+                    nn.init.zeros_(parameter.bias)
+
+            if isinstance(parameter, Sequential):
+                for layer in parameter:
+                    self._initialize_parameters(layer)
+
+    def _overwrite_config(
+        self,
+        cfg: "DataClassBase | ModelConfig",
+        overwrrides: "DataClassBase | None" = None,
+    ) -> "DataClassBase":
+        if overwrrides is None:
+            return cfg
+        for field in cfg.__dataclass_fields__:
+            if hasattr(overwrrides, field) and getattr(overwrrides, field) is not None:
+                setattr(cfg, field, getattr(overwrrides, field))
+        return cfg
+
+    def _valudate_fields(
+        self, config: "DataClassBase", config_type: "DataClassBase"
+    ) -> None:
+        for config_field in fields(config_type):
+            field_value = getattr(config, config_field.name)
+            is_field_value_none = field_value is None
+            if is_field_value_none:
+                if "required" in config_field.metadata:
+                    if config_field.metadata["required"]:
+                        raise ValueError(
+                            f"{config_field.name} is required but it was not set."
+                        )
+                    return
+                raise ValueError(f"{config_field.name} is required but it was not set.")
+
 
 class DataModule(HyperParameters):
     """The base class of data."""
@@ -282,7 +365,6 @@ class DataModule(HyperParameters):
     def get_tensorloader(self, tensors, train, indices=slice(0, None)):
         tensors = tuple(a[indices] for a in tensors)
         dataset = torch.utils.data.TensorDataset(*tensors)
-        print(self.batch_size)
         return torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=train)
 
     def getDataset(self, dataset):
@@ -364,3 +446,12 @@ class Trainer(HyperParameters):
         if norm > grad_clip_val:
             for param in params:
                 param.grad[:] *= grad_clip_val / norm
+
+
+@dataclass
+class DataClassBase:
+    def get(self, key: str, default=None) -> Any:
+        if not hasattr(self, key):
+            return None
+
+        return getattr(self, key, default)
