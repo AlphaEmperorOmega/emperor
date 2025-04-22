@@ -1,51 +1,63 @@
+from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.base.decorators import timer
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Tuple
 
 if TYPE_CHECKING:
-    from Emperor.config import ParameterGeneratorConfig
+    from Emperor.config import ModelConfig
 
 
 class ParameterGenerator(Module):
-    def __init__(self, cfg: "ParameterGeneratorConfig"):
+    def __init__(
+        self,
+        cfg: "ModelConfig",
+        batch_size: Optional[int] = None,
+        input_dim: Optional[int] = None,
+        output_dim: Optional[int] = None,
+        depth_dim: Optional[int] = None,
+        num_router_layers: Optional[int] = None,
+        bias_flag: Optional[bool] = None,
+        gather_frequency_flag: Optional[bool] = None,
+        noisy_topk_flag: Optional[bool] = None,
+        top_k: Optional[bool] = None,
+        **kwargs,
+    ):
         super().__init__()
         self.cfg = cfg
-        self.batchSize = cfg.batchSize
-        self.inputDim = cfg.inputDim
-        self.outputDim = cfg.outputDim
-        self.depthDim = cfg.depthDim
-        self.mlpRouterFlag = cfg.mlpRouterFlag
-        self.biasFlag = cfg.biasFlag
-        self.gatherFrequencyFlag = cfg.gatherFrequencyFlag
-        self.noisyTopkFlag = cfg.noisyTopkFlag
-        self.topK = cfg.topK
+        self.batch_size = self._resolve(batch_size, self.cfg.batch_size)
+        self.input_dim = self._resolve(input_dim, self.cfg.input_dim)
+        self.output_dim = self._resolve(output_dim, self.cfg.output_dim)
+        self.depth_dim = self._resolve(depth_dim, self.cfg.depth_dim)
+        self.num_router_layers = self._resolve(
+            num_router_layers, self.cfg.num_router_layers
+        )
+        self.bias_flag = self._resolve(bias_flag, self.cfg.bias_flag)
+        self.gather_frequency_flag = self._resolve(
+            gather_frequency_flag, self.cfg.gather_frequency_flag
+        )
+        self.noisy_topk_flag = self._resolve(noisy_topk_flag, self.cfg.noisy_topk_flag)
+        self.top_k = self._resolve(top_k, self.cfg.top_k)
 
+        self.router_output_dim = (
+            2 * self.depth_dim if self.noisy_topk_flag else self.depth_dim
+        )
+
+    def _init_frequency_model(self):
         # TODO: later implement the frequency gathering methanism
-        #
         # frequencyClass = cfg.weightAndBiasGeneratorType.value + "Frequency"
         # self.gatherFrequencyCheck = (
         #     self.gatherFrequencyFlag and frequencyClass in globals()
         # )
         # if self.gatherFrequencyCheck:
         #     self.frequency = globals()[frequencyClass](cfg)
+        pass
 
-        self.routerOutputDim = (
-            2 * self.depthDim if self.noisyTopkFlag else self.depthDim
-        )
+    def gather_frequency(self, sparse_indexes) -> None:
+        if self.gather_frequency_flag:
+            self.frequency.update(sparse_indexes)
 
-        self.calcWeightsFlag = False
-
-    @timer
-    def forwardProcessTime(self, inputBatch):
-        return self(inputBatch)
-
-    def gatherFrequency(self, sparseIndexes):
-        if self.gatherFrequencyCheck:
-            self.frequency.update(sparseIndexes)
-
-    def handleProbabilitiesShapeHook(self, probabilities):
+    def _handle_probabilities_shape_hook(self, probabilities: Tensor) -> Tensor:
         return probabilities
 
-    def selectParameters(self, weightIndexes, biasIndexes):
+    def _select_parameters(self, weight_indexes, bias_indexes) -> Tuple:
         pass
