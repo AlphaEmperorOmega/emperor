@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+    from .routers import RouterConfig
 
 
 @dataclass
@@ -374,6 +375,14 @@ class SamplerModel(Module):
             return SamplerFull(self.cfg, self.overrides)
         else:
             return SamplerTopk(self.cfg, self.overrides)
+
+    def set_router_model(
+        self,
+        router_model: "RouterModel",
+        cfg: "RouterConfig | ModelConfig",
+        return_flag: bool = False,
+    ) -> "RouterModel | None":
+        self.router_model.set_router_model(router_model, cfg, return_flag)
 
     def forward(
         self,
