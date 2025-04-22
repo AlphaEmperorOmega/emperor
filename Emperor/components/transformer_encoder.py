@@ -367,7 +367,7 @@ class TransformerEncoderBase(Module):
         ffnRawOutput: Optional[Tensor],
         adaptiveComputationState: Optional[Tuple] = None,
     ):
-        # Not sure what `jit` stands for:  and not torch.jit.is_scripting():
+        # This is true by default in `transformer_base`
         if self.returnAllHiddensFlag:
             self.encoderStatesList.append(layerOutput)
             self.ffnRawOutputList.append(ffnRawOutput)
