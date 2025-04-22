@@ -1,8 +1,6 @@
-from .probabilitySamplers import (
-    ProbabilitySamplerSparse,
-    ProbabilitySamplerTopk,
-    ProbabilitySamplerFull,
-)
+from Emperor.config import ModelConfig
+from .probabilitySamplers import SamplerModel
+from Emperor.base.utils import Module
 
 from typing import TYPE_CHECKING
 
@@ -11,51 +9,92 @@ if TYPE_CHECKING:
     from Emperor.config import ParameterGeneratorConfig
 
 
-class SparseMixtureBehaviour:
+class MixtureModel(Module):
     def __init__(
         self,
-        cfg: "ParameterGeneratorConfig",
         model: "ParameterGenerator",
+        cfg: "MixtureConfig | ModelConfig | None" = None,
+        bias_flag: bool | None = None,
     ):
+        super().__init__()
         self.model = model
-        self.probabilitySampler = ProbabilitySamplerSparse(cfg)
 
-    def calculateMixture(self, inputBatch):  # [batch_size, d_input]
-        weightSparseIndexes, biasSparseIndexes, probabilities = (
-            self._sampleSparseProbabilitiesAndIndexes(inputBatch)
+        self.cfg_main = cfg
+        self.cfg: "MixtureModel | None" = self._resolve_config(
+            cfg, "sampler_model_config"
+        )
+        self.bias_flag = self._resolve(bias_flag, "bias_flag", cfg)
+        self.probability_sampler_model = SamplerModel(cfg)
+
+    def _sample_weight_bias_probabilities_and_indexes(self, inputBatch, skip_mask):
+        weight_probabilities, weight_indexes = (
+            self._sample_probabilities_and_indexes(inputBatch, skip_mask)
         )
 
-        selectedWeights, selectedBiases = self.model.selectParameters(
-            weightSparseIndexes, biasSparseIndexes
-        )  # [batchSize, inputDim, outputDim]
-
-        # self.gatherFrequency(weightIndexes)
-
-        # [batchSize, inputDim, outputDim], [batchSize, 1]
-        return selectedWeights, selectedBiases, probabilities
-
-    def _sampleSparseProbabilitiesAndIndexes(self, inputBatch):
-        weightSparseProbabilities, weightSparseIndexes = (
-            self._sampleProbabilitiesAndIndexes(inputBatch)
-        )
-        probabilities = weightSparseProbabilities
-
-        biasSparseIndexes = None
-        if self.model.biasFlag:
-            biasSparseProbabilities, biasSparseIndexes = (
-                self._sampleProbabilitiesAndIndexes(
-                    inputBatch, computeWeightsFlag=False
+        bias_indexes = bias_probabilities = None
+        if self.bias_flag:
+            self.set_router_weight_flag(False)
+            bias_probabilities, bias_indexes = (
+                self.__sample_probabilities_and_indexes(
+                    inputBatch, skip_mask
                 )
             )
-            probabilities += biasSparseProbabilities
+            self.set_router_weight_flag(False)
 
-        return weightSparseIndexes, biasSparseIndexes, probabilities
+        return weight_indexes, bias_indexes, weight_probabilities, bias_probabilities
 
-    def _sampleProbabilitiesAndIndexes(self, inputBatch, computeWeightsFlag=True):
+    def set_router_weight_flag(self, compute_weight_logit_scores_flag: bool=True):
+        self.probability_sampler_model.sampler_model.set_compute_weight_flag(
+            compute_weight_logit_scores_flag
+        )
+
+    def _sampleProbabilities(self, inputBatch, skip_mask):
+        return self.probability_sampler_model(
+            input_matrix=inputBatch,
+            skip_mask=skip_mask,
+            is_training_flag=self.model.training,
+            custom_softmax_flag=False,
+        )
+
+
+class SparseMixtureBehaviour(MixtureModel):
+    def __init__(
+        self,
+        cfg: "MixtureModel | ModelConfig | None" = None,
+        model: "ParameterGenerator",
+    ):
+        super().__init__(cfg, model)
+
+    def compute_mixture(self, inputBatch):
+        weight_indexes, bias_indexes, weight_probabilities, bias_probabilities = (
+            self._sample_probabilities_and_indexes(inputBatch)
+        )
+
+        selected_weights, selected_biases = self.model.select_parameters(
+            weight_indexes, bias_indexes
+        )
+
+        return selected_weights, selected_biases
+
+    # def _sample_sparse_probabilities_and_indexes(self, inputBatch):
+    #     weight_probabilities, weight_indexes = (
+    #         self._sample_probabilities_and_indexes(inputBatch)
+    #     )
+    #
+    #     bias_indexes = bias_probabilities = None
+    #     if self.bias_flag:
+    #         bias_probabilities, bias_indexes = (
+    #             self.__sample_probabilities_and_indexes(
+    #                 inputBatch 
+    #             )
+    #         )
+    #
+    #     return weight_indexes, bias_indexes, weight_probabilities, bias_probabilities 
+
+    def _sample_probabilities_and_indexe(self, inputBatch):
         probabilities, indexes = self.probabilitySampler.sampleProbabilitiesAndIndexes(
             inputBatch,
             isTrainingFlag=self.model.training,
-            computeWeightsFlag=computeWeightsFlag,
         )
         probabilitiesReshaped = self.model.handleProbabilitiesShapeHook(probabilities)
         return probabilitiesReshaped, indexes
@@ -67,8 +106,7 @@ class TopkMixtureBehaviour:
         cfg: "ParameterGeneratorConfig",
         model: "ParameterGenerator",
     ):
-        self.model = model
-        self.probabilitySampler = ProbabilitySamplerTopk(cfg)
+        super().__init__(cfg, model)
 
     def calculateMixture(self, inputBatch):
         (
@@ -91,8 +129,6 @@ class TopkMixtureBehaviour:
             biasTopKProbabilities,
         )
 
-        # self.gatherFrequency(topKIndices)
-
         # [batchSize, inputDim, outputDim]
         return weightMixture, biasMixture, None
 
@@ -103,10 +139,10 @@ class TopkMixtureBehaviour:
         )
 
         biasTopKProbabilities, biasTopKIndexes = (None, None)
-        if self.model.biasFlag:
+        if self.biasFlag:
             biasTopKProbabilities, biasTopKIndexes = (
                 self._sampleProbabilitiesAndIndexes(
-                    inputBatch, computeWeightsFlag=False
+                    inputBatch
                 )
             )
 
@@ -117,11 +153,10 @@ class TopkMixtureBehaviour:
             biasTopKIndexes,
         )
 
-    def _sampleProbabilitiesAndIndexes(self, inputBatch, computeWeightsFlag=True):
+    def _sampleProbabilitiesAndIndexes(self, inputBatch):
         return self.probabilitySampler.sampleProbabilitiesAndIndexes(
             inputBatch,
             isTrainingFlag=self.model.training,
-            computeWeightsFlag=computeWeightsFlag,
         )
 
 
@@ -131,13 +166,12 @@ class FullMixtureBehaviour:
         cfg: "ParameterGeneratorConfig",
         model: "ParameterGenerator",
     ):
-        self.model = model
-        self.probabilitySampler = ProbabilitySamplerFull(cfg)
+        super().__init__(cfg, model)
 
     def calculateMixture(self, inputBatch):  # [batchSize, inputDim]
         weightFullProbabilities, biasFullProbabilities = self._sampleFullProbabilities(
             inputBatch
-        )  # [inputDim, batchSize, depthDim]
+        )
 
         weightMixture, biasMixture = self.model.calculateParameterMixture(
             self.model.weightBank,
@@ -155,14 +189,13 @@ class FullMixtureBehaviour:
         biasFullProbabilities = None
         if self.model.biasFlag:
             biasFullProbabilities, _ = self._sampleProbabilities(
-                inputBatch, computeWeightsFlag=False
+                inputBatch, 
             )
 
         return weightFullProbabilities, biasFullProbabilities
 
-    def _sampleProbabilities(self, inputBatch, computeWeightsFlag=True):
+    def _sampleProbabilities(self, inputBatch):
         return self.probabilitySampler.sampleProbabilitiesAndIndexes(
             inputBatch,
             isTrainingFlag=self.model.training,
-            computeWeightsFlag=computeWeightsFlag,
         )
