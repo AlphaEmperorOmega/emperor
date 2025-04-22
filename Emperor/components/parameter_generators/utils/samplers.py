@@ -152,9 +152,7 @@ class SamplerBase(Module):
 
         probabilities = self._normalize_probabilities(probabilities)
 
-        skip_mask = self.__update_mask_given_threshold(
-            full_probabilities, skip_mask_matrix
-        )
+        skip_mask = self.__update_mask_given_threshold(full_probabilities, skip_mask)
 
         return probabilities, indices, skip_mask
 
@@ -206,7 +204,7 @@ class SamplerBase(Module):
         probabilities: Tensor,
         skip_mask: Tensor | None = None,
     ) -> Tensor | None:
-        if skip_mask is not None and self.threshold == 0.0:
+        if skip_mask is None or self.threshold == 0.0:
             return skip_mask
         threshold_mask = probabilities < self.threshold
         mask_update = threshold_mask.all(dim=-1).unsqueeze(-1)
@@ -215,7 +213,7 @@ class SamplerBase(Module):
     def __sample_probabilities_and_indices(
         self, probabilities_matrix: Tensor
     ) -> Tensor | tuple[Tensor, Tensor]:
-        selected_probs, selected_indices = self._probability_sampling_strategy_hook(
+        selected_probs, selected_indices = self._probability_sampling_strategy(
             probabilities_matrix
         )
         return selected_probs, selected_indices
@@ -365,6 +363,7 @@ class SamplerFull(SamplerBase):
         overrides: "SamplerConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
+        self.auxiliary_losses = None
 
     def _probability_sampling_strategy(
         self, probability_matrix: Tensor
@@ -383,33 +382,6 @@ class SamplerFull(SamplerBase):
         normalized_probabilities = self._normalize_probabilities(masked_probabilities)
         return normalized_probabilities
 
-    def _compute_loss(
-        self,
-        logits: Tensor,
-        full_probabilities: Tensor,
-        probabilities: Tensor,
-        indices: Tensor,
-        skip_mask: Optional[Tensor] = None,
-    ) -> None:
-        input_dim = prod(tensor(probabilities.shape))
-        output_dim = self.router_model.output_dim
-        gates_buffer = zeros(input_dim, output_dim).to(device)
-
-        gates = gates_buffer.scatter(
-            1,
-            indices.view(-1, 1),
-            probabilities.view(-1, 1),
-        ).to(device)
-
-        logits = logits.reshape(-1, output_dim)
-        full_probabilities = full_probabilities.reshape(-1, output_dim)
-        if skip_mask is not None:
-            skip_mask = skip_mask.reshape(-1, output_dim)
-
-        self.auxiliary_losses.update_accumulated_statistics(
-            logits, full_probabilities, gates, skip_mask
-        )
-
 
 class SamplerModel(Module):
     def __init__(
@@ -419,17 +391,19 @@ class SamplerModel(Module):
     ) -> None:
         super().__init__()
         self.cfg = cfg
-        self.sampler_inputs = getattr(cfg, "sampler_model_config", cfg)
         self.overrides = overrides
 
-        self.router_output_dim = self.sampler_inputs.router_output_dim
+        config = getattr(cfg, "sampler_model_config", cfg)
+        self.sampler_config: "SamplerConfig" = self._overwrite_config(config, overrides)
+
+        self.router_output_dim = self.sampler_config.router_output_dim
         self.sampler_model = self._init_sampler_model()
         self.router_model = self.cfg.get("router_model")
 
     def _init_sampler_model(self) -> SamplerBase:
-        if self.sampler_inputs.top_k == 1:
+        if self.sampler_config.top_k == 1:
             return SamplerSparse(self.cfg, self.overrides)
-        elif self.sampler_inputs.top_k == self.router_output_dim:
+        elif self.sampler_config.top_k == self.router_output_dim:
             return SamplerFull(self.cfg, self.overrides)
         else:
             return SamplerTopk(self.cfg, self.overrides)
@@ -438,5 +412,7 @@ class SamplerModel(Module):
         self,
         input_matrix: Tensor,
         skip_mask: Tensor | None = None,
-    ) -> Tensor:
-        return self.sampler_model(input_matrix, skip_mask)
+    ) -> tuple[Tensor, Tensor | None, Tensor | None]:
+        return self.sampler_model.sample_probabilities_and_indices(
+            input_matrix, skip_mask
+        )
