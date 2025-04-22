@@ -468,53 +468,81 @@ class TestProbabilitySamplerFull(unittest.TestCase):
 
         torch.testing.assert_close(result_probs, probs)
 
+    def test_mask_probs_by_threshold(self):
+        overrides = SamplerConfig(
+            dynamic_topk_threshold=0.3,
+            normalize_probabilities_flag=False,
+        )
+        sampler = SamplerFull(self.cfg, overrides)
 
-#
-#     def test_mask_probs_by_threshold(self):
-#         sampler = ProbabilitySamplerFull(self.cfg, threshold=0.3)
-#
-#         probs = torch.tensor([[0.1, 0.2, 0.7], [0.2, 0.3, 0.5]])
-#
-#         result_probs = sampler._ProbabilitySamplerFull__mask_probs_by_threshold(probs)
-#
-#         expected = torch.tensor([[0.0, 0.0, 0.7], [0.0, 0.3, 0.5]])
-#
-#         torch.testing.assert_close(result_probs, expected)
-#
-#
-# class TestSamplerModel(unittest.TestCase):
-#     def setUp(self):
-#         self.cfg = ModelConfig()
-#         self.cfg.router_model_config.output_dim = 8
-#
-#         self.input_batch = torch.randn(
-#             self.cfg.batch_size,
-#             self.cfg.router_model_config.input_dim,
-#         )
-#
-#         self.skip_mask = torch.ones(
-#             self.cfg.batch_size,
-#             self.cfg.router_model_config.output_dim,
-#         )
-#
-#     def test_init_no_config(self):
-#         router_model = RouterModel(self.cfg)
-#         model = SamplerModel(
-#             top_k=3,
-#             threshold=0.0,
-#             num_topk_samples=1,
-#             noisy_topk_flag=True,
-#             custom_softmax_flag=True,
-#             router_model=router_model,
-#         )
-#
-#         self.assertTrue(isinstance(model.sampler_model, ProbabilitySamplerTopk))
-#
-#     def test_init_sparse(self):
-#         # Test with top_k=1 -> should create ProbabilitySamplerSparse
-#         model = SamplerModel(self.cfg, top_k=1, num_topk_samples=0)
-#         self.assertTrue(isinstance(model.sampler_model, ProbabilitySamplerSparse))
-#
+        probs = torch.tensor(
+            [
+                [0.1, 0.2, 0.7],
+                [0.2, 0.3, 0.5],
+            ]
+        )
+        result_probs = sampler._SamplerFull__apply_dynamic_topk_threshold_mask(probs)
+        expected = torch.tensor(
+            [
+                [0.0, 0.0, 0.7],
+                [0.0, 0.3, 0.5],
+            ]
+        )
+
+        torch.testing.assert_close(result_probs, expected)
+
+    def test_mask_probs_by_threshold_with_normalized_probabilities(self):
+        overrides = SamplerConfig(
+            dynamic_topk_threshold=0.3,
+            normalize_probabilities_flag=True,
+        )
+        sampler = SamplerFull(self.cfg, overrides)
+
+        probs = torch.tensor(
+            [
+                [0.1, 0.2, 0.7],
+                [0.2, 0.3, 0.5],
+            ]
+        )
+
+        result_probs = sampler._SamplerFull__apply_dynamic_topk_threshold_mask(probs)
+
+        expected = torch.tensor(
+            [
+                [0.0000, 0.0000, 1.0000],
+                [0.0000, 0.3750, 0.6250],
+            ]
+        )
+
+        torch.testing.assert_close(result_probs, expected)
+
+
+class TestSamplerModel(unittest.TestCase):
+    def setUp(self):
+        self.cfg = ModelConfig()
+        self.cfg.router_model_config.output_dim = 8
+
+    def test_init_no_config(self):
+        config = SamplerConfig(
+            top_k=3,
+            threshold=0.0,
+            dynamic_topk_threshold=0.0,
+            num_topk_samples=1,
+            normalize_probabilities_flag=True,
+            noisy_topk_flag=True,
+            router_output_dim=self.cfg.router_model_config.output_dim,
+            router_model=lambda cfg: RouterModel(cfg),
+        )
+        model = SamplerModel(config)
+
+        self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
+
+    # def test_init_sparse(self):
+    #     router_model = SamplerConfig
+    #     model = SamplerModel(self.cfg, top_k=1, num_topk_samples=0)
+    #     self.assertTrue(isinstance(model.sampler_model, ProbabilitySamplerSparse))
+
+
 #     def test_init_full(self):
 #         # Test with top_k=num_expserts -> should create ProbabilitySamplerFull
 #         model = SamplerModel(self.cfg, top_k=8, num_topk_samples=0)
