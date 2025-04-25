@@ -68,7 +68,7 @@ class SamplerConfig(DataClassBase):
         default=None,
         metadata={"help": "Router output dimension"},
     )
-    router_model: Callable[["SamplerConfig | ModelConfig"], "RouterModel"] | None = (
+    router_model: Callable[["RouterConfig | ModelConfig"], "RouterModel"] | None = (
         field(
             default=None,
             metadata={
@@ -103,7 +103,6 @@ class SamplerBase(Module):
         self.__validate_input_parameters()
 
         self.noise_epsilon = 1e-2
-        self.is_training_flag = False
         self.auxiliary_losses = AuxiliaryLosses(self.cfg)
 
     def __validate_input_parameters(self):
@@ -133,9 +132,6 @@ class SamplerBase(Module):
             return model
 
         self.router_model = model
-
-    def set_is_training_flag(self, is_training_flag=False) -> None:
-        self.is_training_flag = is_training_flag
 
     def sample_probabilities_and_indices(
         self,
@@ -177,7 +173,7 @@ class SamplerBase(Module):
         )
         logit_scores_matrix = logit_scores_matrix_chunk
 
-        if self.is_training_flag:
+        if self.training:
             noise_std = sigmoid(raw_noise_std_matrix) + self.noise_epsilon
             noise = randn_like(logit_scores_matrix)
             # TODO: In the future maybe scale the noise by `raw_noise_std`
@@ -299,7 +295,7 @@ class SamplerTopk(SamplerBase):
     def __sample_topk_probabilities(
         self, probabilities_matrix: Tensor
     ) -> tuple[Tensor, Tensor]:
-        if self.is_training_flag and (self.num_topk_samples > 0):
+        if self.training and (self.num_topk_samples > 0):
             probabilities, indices = self.__sample_deterministic_and_random_topk(
                 probabilities_matrix
             )
