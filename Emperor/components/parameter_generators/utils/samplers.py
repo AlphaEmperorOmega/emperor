@@ -126,6 +126,8 @@ class SamplerBase(Module):
         cfg: "RouterConfig | ModelConfig",
         return_flag: bool = False,
     ) -> "RouterModel | None":
+        if isinstance(cfg, SamplerConfig):
+            return None
         model = router_model(cfg)
         if return_flag:
             return model
