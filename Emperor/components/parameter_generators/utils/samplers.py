@@ -107,11 +107,11 @@ class SamplerBase(Module):
 
     def sample_probabilities_and_indices(
         self,
-        logit_scores: Tensor,
+        router_logit_scores: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None]:
         full_probabilities, logits = self.__compute_masked_probabilities(
-            logit_scores, skip_mask
+            router_logit_scores, skip_mask
         )
         probabilities, indices = self.__sample_probabilities_and_indices(
             full_probabilities
@@ -127,10 +127,10 @@ class SamplerBase(Module):
 
     def __compute_masked_probabilities(
         self,
-        logit_scores: Tensor,
+        router_logit_scores: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        logits = self.__add_noise_to_logits(logit_scores)
+        logits = self.__add_noise_to_logits(router_logit_scores)
         probabilities = torch.softmax(logits, dim=-1)
         return self.__apply_skip_mask(probabilities, logits, skip_mask)
 
@@ -157,15 +157,15 @@ class SamplerBase(Module):
     def __apply_skip_mask(
         self,
         probabilities: Tensor,
-        logits_scores: Tensor,
+        router_logit_scores: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
         if skip_mask is not None:
             mask = skip_mask == 0
             probabilities = masked_fill(probabilities, mask, 0)
-            logits_scores = masked_fill(logits_scores, mask, 0)
+            router_logit_scores = masked_fill(router_logit_scores, mask, 0)
 
-        return probabilities, logits_scores
+        return probabilities, router_logit_scores
 
     def __update_mask_given_threshold(
         self,
