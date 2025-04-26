@@ -5,7 +5,6 @@ from torch import Tensor
 
 from Emperor.components.parameter_generators.utils.losses import AuxiliaryLosses
 from Emperor.base.utils import Module, DataClassBase
-from .routers import RouterConfig, RouterModel
 from Emperor.base.utils import (
     sigmoid,
     randn_like,
@@ -19,11 +18,10 @@ from Emperor.base.utils import (
     device,
 )
 
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from .routers import RouterConfig
 
 
 @dataclass
@@ -68,15 +66,6 @@ class SamplerConfig(DataClassBase):
         default=None,
         metadata={"help": "Router output dimension"},
     )
-    router_model: Callable[["RouterConfig | ModelConfig"], "RouterModel"] | None = (
-        field(
-            default=None,
-            metadata={
-                "help": "Reference to the `RouterModel` class that will be used to compute logit scores",
-                "required": False,
-            },
-        )
-    )
 
 
 class SamplerBase(Module):
@@ -97,9 +86,6 @@ class SamplerBase(Module):
         self.dynamic_topk_threshold = self.cfg.dynamic_topk_threshold
         self.normalize_probabilities_flag = self.cfg.normalize_probabilities_flag
         self.router_output_dim = self.cfg.router_output_dim
-        self.router_model = self.set_router_model(
-            self.cfg.router_model, cfg, return_flag=True
-        )
         self.__validate_input_parameters()
 
         self.noise_epsilon = 1e-2
@@ -119,27 +105,13 @@ class SamplerBase(Module):
             f"dynamic_topk_threshold must be between 0.0 and 1.0 (inclusive), got {self.dynamic_topk_threshold}"
         )
 
-    def set_router_model(
-        self,
-        router_model: "RouterModel",
-        cfg: "RouterConfig | ModelConfig",
-        return_flag: bool = False,
-    ) -> "RouterModel | None":
-        if isinstance(cfg, SamplerConfig):
-            return None
-        model = router_model(cfg)
-        if return_flag:
-            return model
-
-        self.router_model = model
-
     def sample_probabilities_and_indices(
         self,
-        input_batch: Tensor,
+        logit_scores: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None]:
         full_probabilities, logits = self.__compute_masked_probabilities(
-            input_batch, skip_mask
+            logit_scores, skip_mask
         )
         probabilities, indices = self.__sample_probabilities_and_indices(
             full_probabilities
@@ -155,11 +127,10 @@ class SamplerBase(Module):
 
     def __compute_masked_probabilities(
         self,
-        input_batch_matrix: Tensor,
+        logit_scores: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        logits = self.router_model.compute_logit_scores(input_batch_matrix)
-        logits = self.__add_noise_to_logits(logits)
+        logits = self.__add_noise_to_logits(logit_scores)
         probabilities = torch.softmax(logits, dim=-1)
         return self.__apply_skip_mask(probabilities, logits, skip_mask)
 
@@ -258,7 +229,7 @@ class SamplerSparse(SamplerBase):
         skip_mask: Optional[Tensor] = None,
     ) -> None:
         input_dim = prod(tensor(probabilities.shape))
-        output_dim = self.router_model.output_dim
+        output_dim = self.router_output_dim
         gates_buffer = zeros(input_dim, output_dim).to(device)
 
         gates = gates_buffer.scatter(
@@ -334,7 +305,7 @@ class SamplerTopk(SamplerBase):
         skip_mask: Optional[Tensor] = None,
     ) -> None:
         input_dim = prod(tensor(probabilities.shape))
-        output_dim = self.router_model.output_dim
+        output_dim = self.router_output_dim
 
         gates_buffer = zeros(input_dim, output_dim).to(device)
         gates = gates_buffer.scatter(
@@ -395,7 +366,6 @@ class SamplerModel(Module):
 
         self.router_output_dim = self.sampler_config.router_output_dim
         self.sampler_model = self._init_sampler_model()
-        self.router_model = self.cfg.get("router_model")
 
     def _init_sampler_model(self) -> SamplerBase:
         if self.sampler_config.top_k == 1:
@@ -404,14 +374,6 @@ class SamplerModel(Module):
             return SamplerFull(self.cfg, self.overrides)
         else:
             return SamplerTopk(self.cfg, self.overrides)
-
-    def set_router_model(
-        self,
-        router_model: "RouterModel",
-        cfg: "RouterConfig | ModelConfig",
-        return_flag: bool = False,
-    ) -> "RouterModel | None":
-        self.router_model.set_router_model(router_model, cfg, return_flag)
 
     def forward(
         self,
