@@ -1,7 +1,5 @@
 import unittest
 import torch
-import torch.nn as nn
-from torch.return_types import topk
 from Emperor.components.parameter_generators.utils.samplers import (
     SamplerBase,
     SamplerConfig,
@@ -12,7 +10,6 @@ from Emperor.components.parameter_generators.utils.samplers import (
 )
 from Emperor.components.parameter_generators.utils.routers import (
     RouterModel,
-    VectorChoiceRouterModel,
 )
 from Emperor.config import ModelConfig
 
@@ -22,6 +19,7 @@ class TestProbabilitySampler(unittest.TestCase):
         self.cfg = ModelConfig()
         self.router_cfg = self.cfg.router_model_config
         self.sampler_cfg = self.cfg.sampler_model_config
+        self.router_model = RouterModel(self.cfg)
 
     def test__init_with_cfg(self):
         sampler = SamplerBase(cfg=self.cfg)
@@ -43,7 +41,6 @@ class TestProbabilitySampler(unittest.TestCase):
         )
 
         sampler = SamplerBase(config)
-        sampler.set_router_model(VectorChoiceRouterModel, self.cfg)
 
         self.assertEqual(sampler.top_k, config.top_k)
         self.assertEqual(sampler.threshold, config.threshold)
@@ -53,22 +50,6 @@ class TestProbabilitySampler(unittest.TestCase):
             sampler.normalize_probabilities_flag, config.normalize_probabilities_flag
         )
         self.assertEqual(sampler.noisy_topk_flag, config.noisy_topk_flag)
-        self.assertTrue(isinstance(sampler.router_model, VectorChoiceRouterModel))
-
-    def test__init_with_custom_router_model(self):
-        overrides = SamplerConfig(
-            router_model=lambda cfg: VectorChoiceRouterModel(cfg),
-        )
-
-        sampler = SamplerBase(self.cfg, overrides)
-
-        self.assertTrue(isinstance(sampler.router_model, VectorChoiceRouterModel))
-
-    def test__router_setter_and_main_config(self):
-        sampler = SamplerBase(self.cfg)
-        sampler.set_router_model(VectorChoiceRouterModel, self.cfg)
-
-        self.assertTrue(isinstance(sampler.router_model, VectorChoiceRouterModel))
 
     def test__if_missing_config_values_raise_errors(self):
         default_config = {
@@ -111,7 +92,7 @@ class TestProbabilitySampler(unittest.TestCase):
         sampler = SamplerBase(cfg=self.cfg)
 
         sampler.noisy_topk_flag = True
-        sampler.set_is_training_flag(True)
+        sampler.training = True
         logits = torch.ones(2, 3, 16)
         result = sampler._SamplerBase__add_noise_to_logits(logits)
 
@@ -152,8 +133,9 @@ class TestProbabilitySampler(unittest.TestCase):
         ]
         test_input = torch.randn(*input_shape)
 
+        router_output = self.router_model.compute_logit_scores(test_input)
         full_probabilities, _ = sampler._SamplerBase__compute_masked_probabilities(
-            test_input
+            router_output
         )
 
         expectedShape = [
@@ -183,8 +165,9 @@ class TestProbabilitySampler(unittest.TestCase):
         skip_mask[0, 1] = 0
         skip_mask_reshaped = skip_mask.unsqueeze(-1)
 
+        router_output = self.router_model.compute_logit_scores(test_input)
         full_probabilities, _ = sampler._SamplerBase__compute_masked_probabilities(
-            test_input, skip_mask_reshaped
+            router_output, skip_mask_reshaped
         )
 
         expectedShape = [
@@ -210,8 +193,9 @@ class TestProbabilitySampler(unittest.TestCase):
         skip_mask[1:] = 0
         skip_mask_reshaped = skip_mask.unsqueeze(-1)
 
+        router_output = self.router_model.compute_logit_scores(test_input)
         full_probabilities, _ = sampler._SamplerBase__compute_masked_probabilities(
-            test_input, skip_mask_reshaped
+            router_output, skip_mask_reshaped
         )
 
         expectedShape = [
@@ -241,6 +225,7 @@ class TestProbabilitySampler(unittest.TestCase):
 class TestProbabilitySamplerSparse(unittest.TestCase):
     def setUp(self):
         self.cfg = ModelConfig()
+        self.router_model = RouterModel(self.cfg)
 
     def test_probability_sampling_strategy(self):
         sampler = SamplerSparse(self.cfg)
@@ -282,6 +267,7 @@ class TestProbabilitySamplerSparse(unittest.TestCase):
 class TestProbabilitySamplerTopk(unittest.TestCase):
     def setUp(self):
         self.cfg = ModelConfig()
+        self.router_model = RouterModel(self.cfg)
 
     def test_probability_sampling_strategy_only_topk(self):
         overrides = SamplerConfig(top_k=2, num_topk_samples=0, threshold=0.0)
@@ -332,7 +318,7 @@ class TestProbabilitySamplerTopk(unittest.TestCase):
         )
 
         sampler = SamplerTopk(self.cfg, overrides)
-        sampler.set_is_training_flag(True)
+        sampler.training = True
         probs = torch.tensor(
             [
                 [0.05, 0.11, 0.08, 0.29, 0.34, 0.09],
@@ -362,7 +348,7 @@ class TestProbabilitySamplerTopk(unittest.TestCase):
         )
 
         sampler = SamplerTopk(self.cfg, overrides)
-        sampler.set_is_training_flag(False)
+        sampler.training = False
 
         probs = torch.tensor(
             [
@@ -387,6 +373,7 @@ class TestProbabilitySamplerTopk(unittest.TestCase):
 class TestProbabilitySamplerFull(unittest.TestCase):
     def setUp(self):
         self.cfg = ModelConfig()
+        self.router_model = RouterModel(self.cfg)
 
     def test_probability_sampling_strategy(self):
         overrides = SamplerConfig(threshold=0.0)
@@ -522,6 +509,7 @@ class TestProbabilitySamplerFull(unittest.TestCase):
 class TestSamplerModel(unittest.TestCase):
     def setUp(self):
         self.cfg = ModelConfig()
+        self.router_model = RouterModel(self.cfg)
 
     def test_init_no_config(self):
         config = SamplerConfig(
@@ -532,7 +520,6 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=True,
             noisy_topk_flag=True,
             router_output_dim=self.cfg.router_model_config.output_dim,
-            router_model=lambda cfg: RouterModel(cfg),
         )
         model = SamplerModel(config)
 
@@ -627,7 +614,8 @@ class TestSamplerModel(unittest.TestCase):
         test_input = torch.randn(batch_size, features)
         skip_mask = torch.randint(0, 2, (batch_size, 1))
 
-        probabilities, indices, skip_mask = sampler_model(test_input, skip_mask)
+        router_output = self.router_model.compute_logit_scores(test_input)
+        probabilities, indices, skip_mask = sampler_model(router_output, skip_mask)
 
         expected_probabilities_shape = [
             self.cfg.batch_size,
@@ -652,7 +640,8 @@ class TestSamplerModel(unittest.TestCase):
         features = self.cfg.router_model_config.input_dim
         test_input = torch.randn(batch_size, features)
 
-        probabilities, indices, skip_mask = sampler_model(test_input)
+        router_output = self.router_model.compute_logit_scores(test_input)
+        probabilities, indices, skip_mask = sampler_model(router_output)
 
         expected_probabilities_shape = [
             self.cfg.batch_size,
@@ -675,7 +664,8 @@ class TestSamplerModel(unittest.TestCase):
         test_input = torch.randn(batch_size, features)
         skip_mask = torch.randint(0, 2, (batch_size, 1))
 
-        probabilities, indices, skip_mask = sampler_model(test_input, skip_mask)
+        router_output = self.router_model.compute_logit_scores(test_input)
+        probabilities, indices, skip_mask = sampler_model(router_output, skip_mask)
 
         expected_probabilities_shape = [
             self.cfg.batch_size,
