@@ -1910,6 +1910,36 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
+    def test__apply_parameter_weighting(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=2,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        generated_parameters_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
+        generated_parameters = torch.arange(prod(generated_parameters_shape)).reshape(
+            generated_parameters_shape
+        )
+
+        output = m._GeneratorChoiceMixture__apply_parameter_weighting(
+            generated_parameters,
+        )
+
+        self.assertEqual(
+            output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
+        )
+        for batch in range(batch_size):
+            for k in range(c.top_k):
+                expected_output = generated_parameters[batch][k]
+                actual_output = output[batch][k]
+                # print()
+                # print("Expected result: \n", expected_output)
+                # print("Actual result: \n", actual_output)
+                # print()
+                self.assertTrue(torch.equal(actual_output, expected_output))
+
     # def test__generate_weight_parameters(self):
     #     c = MixtureConfig(
     #         input_dim=4,
