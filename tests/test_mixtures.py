@@ -1865,6 +1865,51 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
+    def test__assemble_parameters_matrix__cross_diagonal_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=2,
+            cross_diagonal_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+        diagonal_dim = min(c.input_dim, c.output_dim) + abs(c.input_dim - c.output_dim)
+
+        outer_product_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
+        outer_product = torch.arange(prod(outer_product_shape)).reshape(
+            outer_product_shape
+        )
+
+        diagonal_matrix_shape = (batch_size, c.top_k, c.input_dim, diagonal_dim)
+        diagonal_matrix = torch.arange(prod(diagonal_matrix_shape)).reshape(
+            diagonal_matrix_shape
+        )
+
+        anti_diagonal_matrix_shape = (batch_size, c.top_k, c.input_dim, diagonal_dim)
+        anti_diagonal_matrix = torch.arange(prod(anti_diagonal_matrix_shape)).reshape(
+            anti_diagonal_matrix_shape
+        )
+
+        output = m._GeneratorChoiceMixture__assemble_parameters_matrix(
+            outer_product,
+            diagonal_matrix,
+            anti_diagonal_matrix,
+        )
+
+        self.assertEqual(
+            output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
+        )
+        for batch in range(batch_size):
+            for k in range(c.top_k):
+                expected_output = outer_product[batch][k] + diagonal_matrix[batch][k]
+                expected_output = expected_output + anti_diagonal_matrix[batch][k]
+                actual_output = output[batch][k]
+                # print()
+                # print("Expected result: \n", expected_output)
+                # print("Actual result: \n", actual_output)
+                # print()
+                self.assertTrue(torch.equal(actual_output, expected_output))
+
     # def test__generate_weight_parameters(self):
     #     c = MixtureConfig(
     #         input_dim=4,
