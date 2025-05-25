@@ -2019,6 +2019,50 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
 
+    def test__generate_weight_parameters__top_k__k(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+            cross_diagonal_flag=True,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        input_vectors_shape = (batch_size, c.top_k, c.input_dim)
+        input_vectors = torch.arange(prod(input_vectors_shape)).reshape(
+            input_vectors_shape
+        )
+
+        output_vectors_shape = (batch_size, c.top_k, c.output_dim)
+        output_vectors = torch.arange(prod(output_vectors_shape)).reshape(
+            output_vectors_shape
+        )
+
+        diagonal_vectors_shape = (batch_size, c.top_k, m.diagonal_dim)
+        diagonal_vectors = torch.arange(prod(diagonal_vectors_shape)).reshape(
+            diagonal_vectors_shape
+        )
+
+        anti_diagonal_vectors_shape = (batch_size, c.top_k, m.diagonal_dim)
+        anti_diagonal_vectors = torch.arange(prod(anti_diagonal_vectors_shape)).reshape(
+            anti_diagonal_vectors_shape
+        )
+
+        weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
+
+        output = m._GeneratorChoiceMixture__generate_weight_parameters(
+            input_vectors,
+            output_vectors,
+            diagonal_vectors,
+            anti_diagonal_vectors,
+            weight_probs,
+        )
+
+        self.assertEqual(
+            output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+
     # def test__compute_parameter_mixture_top_1(self):
     #     input = self.mixture_cfg.input_dim
     #     depth = self.mixture_cfg.depth_dim
