@@ -1924,7 +1924,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         )
 
         output = m._GeneratorChoiceMixture__apply_parameter_weighting(
-            generated_parameters,
+            generated_parameters, m.weight_probs_shape
         )
 
         self.assertEqual(
@@ -1951,13 +1951,14 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         generated_parameters_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
         generated_parameters = torch.arange(prod(generated_parameters_shape)).reshape(
-            generated_parameters_shape
+            generated_parameters_shape,
         )
 
         weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
         output = m._GeneratorChoiceMixture__apply_parameter_weighting(
             generated_parameters,
+            m.weight_probs_shape,
             weight_probs,
         )
 
