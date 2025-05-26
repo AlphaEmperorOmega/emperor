@@ -2116,9 +2116,9 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         m = GeneratorChoiceMixture(c, overrides)
         batch_size = 2
 
-        input_vectors_shape = (batch_size, c.top_k, c.input_dim)
-        generated_biases = torch.arange(prod(input_vectors_shape)).reshape(
-            input_vectors_shape
+        generated_biases_shape = (batch_size, c.top_k, c.input_dim)
+        generated_biases = torch.arange(prod(generated_biases_shape)).reshape(
+            generated_biases_shape
         )
         bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
