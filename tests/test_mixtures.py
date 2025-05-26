@@ -2107,3 +2107,24 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         self.assertEqual(
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
+
+    def test__generate_bias_parameters(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=2,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        input_vectors_shape = (batch_size, c.top_k, c.input_dim)
+        generated_biases = torch.arange(prod(input_vectors_shape)).reshape(
+            input_vectors_shape
+        )
+        bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
+
+        output = m._GeneratorChoiceMixture__generate_bias_parameters(
+            generated_biases,
+            bias_probs,
+        )
+
+        self.assertIsNone(output)
