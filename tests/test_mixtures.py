@@ -2070,10 +2070,82 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
-    def test__apply_parameter_weighting__weighted_parameters_flag__True(self):
+    def test__apply_parameter_weighting__top_k__1(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        generated_parameters_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
+        generated_parameters = torch.arange(prod(generated_parameters_shape)).reshape(
+            generated_parameters_shape,
+        )
+
+        weight_probs = F.sigmoid(torch.randn((batch_size,)))
+
+        output = m._GeneratorChoiceMixture__apply_parameter_weighting(
+            generated_parameters,
+            m.weight_probs_shape,
+            weight_probs,
+        )
+
+        self.assertEqual(
+            output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
+        )
+        for batch in range(batch_size):
+            for k in range(c.top_k):
+                weight_prob = weight_probs[batch]
+                expected_output = generated_parameters[batch][k] * weight_prob
+                actual_output = output[batch][k]
+                # print()
+                # print("Expected result: \n", expected_output)
+                # print("Actual result: \n", actual_output)
+                # print()
+                self.assertTrue(torch.equal(actual_output, expected_output))
+
+    def test__apply_parameter_weighting__top_k__k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        generated_parameters_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
+        generated_parameters = torch.arange(prod(generated_parameters_shape)).reshape(
+            generated_parameters_shape,
+        )
+
+        weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
+
+        output = m._GeneratorChoiceMixture__apply_parameter_weighting(
+            generated_parameters,
+            m.weight_probs_shape,
+            weight_probs,
+        )
+
+        self.assertEqual(
+            output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
+        )
+        for batch in range(batch_size):
+            for k in range(c.top_k):
+                weight_prob = weight_probs[batch][k]
+                expected_output = generated_parameters[batch][k] * weight_prob
+                actual_output = output[batch][k]
+                # print()
+                # print("Expected result: \n", expected_output)
+                # print("Actual result: \n", actual_output)
+                # print()
+                self.assertTrue(torch.equal(actual_output, expected_output))
+
+    def test__apply_parameter_weighting__full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=6,
             weighted_parameters_flag=True,
         )
         m = GeneratorChoiceMixture(c, overrides)
