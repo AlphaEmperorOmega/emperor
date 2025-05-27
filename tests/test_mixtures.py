@@ -2561,7 +2561,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
         bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        print("*" * 20)
         output_weights, output_biases = m._compute_parameter_mixture(
             input_batch,
             input_weight_bank_params,
@@ -2572,7 +2571,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             weight_probs,
             bias_probs,
         )
-        print("*" * 20)
 
         self.assertEqual(
             output_weights.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
