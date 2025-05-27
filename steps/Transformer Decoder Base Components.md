@@ -7,7 +7,7 @@
 ```{python}
 import torch
 import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, tanh
 from typing import Dict, Optional, List, Tuple
 
 from Emperor.components.transformer_decoder import TransformerDecoderBase
@@ -675,4 +675,215 @@ def testTransformerDecoderLayerBaseSingleLayerModel():
   trainer.fit(model, data, printLossFlag=True)
 
 testTransformerDecoderLayerBaseSingleLayerModel()
+```
+
+```{python}
+import torch, torch.nn.functional as F
+
+# build a rank-1 (hence singular) 2×2 matrix
+u = torch.randn((8,))
+v = torch.randn((8,))
+x = torch.randn((8,))
+y = torch.randn((8,))
+g = torch.randn((8))
+h = torch.randn((8))
+i = torch.randn((10,))
+o = torch.randn((8,1))
+
+print(torch.det(y.unsqueeze(1) @ i.unsqueeze(0)))
+print('-'*10)
+
+rand = torch.randn((8,8))
+print(torch.det(rand))
+print(torch.det(torch.sigmoid(rand)))
+A = u.unsqueeze(1) @ v.unsqueeze(0)     # [[1,3],[2,6]]
+B = x.unsqueeze(1) @ y.unsqueeze(0)     # [[1,3],[2,6]]
+print("det A =", torch.det(A))          # 0.0
+print("det B =", torch.det(B))          # 0.0
+
+# apply a smooth, injective activation
+A_sig = F.tanh(A) + torch.diag(g)
+B_sig = (F.tanh(B) + torch.diag(h)).T
+AB_sig = A_sig + B_sig
+# print(A_sig)
+
+print("det sigmoid(A) =", torch.det(A_sig))
+print("det sigmoid(B) =", torch.det(B_sig))
+print("det sigmoid(A + B) =", torch.det(AB_sig))
+# ≈ -0.11 → non-zero ⇒ invertible!
+```
+
+```{python}
+import torch, torch.nn.functional as F
+
+torch.manual_seed(42)
+
+batch_size = 2
+input = 5
+output = 3
+
+selected_weights = torch.ones(batch_size, input, output)
+weight_probs = F.softmax(torch.randn(input, batch_size).float(), dim=-1)
+selected_biases = torch.ones(batch_size, output)
+bias_probs = F.softmax(torch.randn(output, batch_size ).float(), dim=-1)
+
+probs = weight_probs.transpose(1,0).unsqueeze(-1)
+print(probs)
+weight_mixture = selected_weights * probs
+probs = bias_probs.transpose(1,0)
+print(probs)
+bias_mixture = selected_biases * probs
+print(weight_mixture)
+print(bias_mixture)
+```
+
+```{python}
+import torch, torch.nn.functional as F
+
+torch.manual_seed(42)
+
+batch_size = 2
+input = 5
+output = 3
+topk=3
+
+# [batch_size, input_dim, top_k, output_dim]
+selected_weights = torch.ones(batch_size, input, topk, output)
+selected_weights = torch.tensor(
+  [[[[ 5,  6,  7,  8,  9],
+      [ 0,  1,  2,  3,  4],
+      [10, 11, 12, 13, 14]],
+    [[30, 31, 32, 33, 34],
+      [25, 26, 27, 28, 29],
+      [35, 36, 37, 38, 39]],
+    [[45, 46, 47, 48, 49],
+      [55, 56, 57, 58, 59],
+      [40, 41, 42, 43, 44]]],
+    [[[10, 11, 12, 13, 14],
+      [15, 16, 17, 18, 19],
+      [ 5,  6,  7,  8,  9]],
+    [[20, 21, 22, 23, 24],
+      [25, 26, 27, 28, 29],
+      [35, 36, 37, 38, 39]],
+    [[55, 56, 57, 58, 59],
+      [50, 51, 52, 53, 54],
+      [40, 41, 42, 43, 44]]]]
+)
+
+weight_probs = F.softmax(torch.randn(input, batch_size, topk).float(), dim=-1)
+weight_probs = torch.tensor(
+  [[[0.1, 0.4, 0.5],
+    [0.3, 0.3, 0.4]],
+
+    [[0.6, 0.2, 0.2],
+    [0.3, 0.4, 0.3]],
+
+    [[0.1, 0.7, 0.2],
+    [0.3, 0.6, 0.1]]]
+)
+selected_biases = torch.tensor(
+  [[[ 1.,  0.,  2.],
+    [ 6.,  5.,  7.],
+    [ 9., 11.,  8.],
+    [14., 13., 15.],
+    [17., 19., 16.]],
+
+    [[ 2.,  3.,  1.],
+    [ 4.,  5.,  7.],
+    [11., 10.,  8.],
+    [12., 13., 15.],
+    [19., 18., 16.]]]
+)
+
+
+bias_probs = F.softmax(torch.randn(output, batch_size).float(), dim=-1)
+bias_probs = torch.tensor(
+  [[[0.1, 0.4, 0.5],
+    [0.3, 0.3, 0.4]],
+   [[0.6, 0.2, 0.2],
+    [0.3, 0.4, 0.3]],
+   [[0.6, 0.2, 0.2],
+    [0.3, 0.4, 0.3]],
+   [[0.6, 0.2, 0.2],
+    [0.3, 0.4, 0.3]],
+   [[0.1, 0.7, 0.2],
+    [0.3, 0.6, 0.1]]]
+)
+probs = weight_probs.transpose(1,0).unsqueeze(-1)
+# print(probs)
+weight_probs = selected_weights * probs
+# print(weight_probs)
+mixted_weights = weight_probs.sum(dim=-2)
+# print(mixted_weights)
+
+probs = bias_probs.transpose(1,0)
+print(probs.shape)
+print(selected_biases.shape)
+bias_mixture = selected_biases * probs
+print(bias_mixture)
+mixted_biases = bias_mixture.sum(dim=-1)
+print(mixted_biases)
+```
+
+```{python}
+import torch, torch.nn.functional as F
+
+torch.manual_seed(42)
+
+batch_size = 2
+input = 5
+output = 3
+topk= 3
+depth = 4
+
+# [batch_size, input_dim, top_k, output_dim]
+selected_weights = torch.tensor(
+[[[ 0,  1,  2,  3,  4],
+  [ 5,  6,  7,  8,  9],
+  [10, 11, 12, 13, 14],
+  [15, 16, 17, 18, 19]],
+ [[20, 21, 22, 23, 24],
+  [25, 26, 27, 28, 29],
+  [30, 31, 32, 33, 34],
+  [35, 36, 37, 38, 39]],
+ [[40, 41, 42, 43, 44],
+  [45, 46, 47, 48, 49],
+  [50, 51, 52, 53, 54],
+  [55, 56, 57, 58, 59]]]
+)
+selected_biases = torch.tensor(
+  [[ 0,  1,  2,  3],
+   [ 4,  5,  6,  7],
+   [ 8,  9, 10, 11]]
+)
+
+weight_probs = torch.tensor(
+[[[0.0, 0.4, 0.5, 0.0],
+  [1.0, 0.0, 0.0, 0.0]],
+ [[0.0, 0.5, 0.0, 0.5],
+  [0.2, 0.4, 0.1, 0.3]],
+ [[0.1, 0.7, 0.1, 0.1],
+  [0.3, 0.1, 0.3, 0.3]]]
+)
+
+bias_probs = torch.tensor(
+  [[[0.0, 0.4, 0.5, 0.0],
+    [1.0, 0.0, 0.0, 0.0]],
+   [[0.0, 0.5, 0.0, 0.5],
+    [0.2, 0.4, 0.1, 0.3]],
+   [[0.1, 0.7, 0.1, 0.1],
+    [0.3, 0.1, 0.3, 0.3]]]
+)
+
+probs = weight_probs.transpose(1,0).unsqueeze(-1)
+weight_probs = selected_weights.unsqueeze(0) * probs
+mixted_weights = weight_probs.sum(dim=-2)
+print(mixted_weights.shape)
+print(mixted_weights)
+
+probs = bias_probs.transpose(1,0)
+bias_mixture = selected_biases.unsqueeze(0) * probs
+mixted_biases = bias_mixture.sum(dim=-1)
+print(mixted_biases.shape)
+print(mixted_biases)
 ```
