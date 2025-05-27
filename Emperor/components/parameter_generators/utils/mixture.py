@@ -136,66 +136,293 @@ class TopkMixtureBehaviour:
         # [inputDim, batchSize, topK], [inputDim, batchSize, topK]
         weightTopKProbabilities, weightTopKIndexes = (
             self._sampleProbabilitiesAndIndexes(inputBatch)
-        )
-
-        biasTopKProbabilities, biasTopKIndexes = (None, None)
-        if self.biasFlag:
-            biasTopKProbabilities, biasTopKIndexes = (
-                self._sampleProbabilitiesAndIndexes(
-                    inputBatch
-                )
-            )
-
-        return (
-            weightTopKProbabilities,
-            weightTopKIndexes,
-            biasTopKProbabilities,
-            biasTopKIndexes,
-        )
-
-    def _sampleProbabilitiesAndIndexes(self, inputBatch):
-        return self.probabilitySampler.sampleProbabilitiesAndIndexes(
-            inputBatch,
-            isTrainingFlag=self.model.training,
-        )
 
 
-class FullMixtureBehaviour:
+class GeneratorChoiceMixture(ParameterGeneratorMixture):
     def __init__(
         self,
-        cfg: "ParameterGeneratorConfig",
-        model: "ParameterGenerator",
-    ):
-        super().__init__(cfg, model)
+        cfg: "MixtureConfig | ModelConfig",
+        overrides: "MixtureConfig | None" = None,
+    ) -> None:
+        super().__init__(cfg, overrides)
+        config = getattr(cfg, "mixture_model_config", cfg)
+        self.mixture_config: "MixtureConfig" = self._overwrite_config(config, overrides)
+        self.diagonal_dim = min(self.input_dim, self.output_dim)
 
-    def calculateMixture(self, inputBatch):  # [batchSize, inputDim]
-        weightFullProbabilities, biasFullProbabilities = self._sampleFullProbabilities(
-            inputBatch
+        self.einsum_vector_operation = self.__decide_einsum_computation()
+        self.diagonal_padding_shape = self.__compute_diagonal_shape()
+        self.weight_probs_shape, self.bias_probs_shape = (
+            self.__generate_probability_shapes()
         )
 
-        weightMixture, biasMixture = self.model.calculateParameterMixture(
-            self.model.weightBank,
-            weightFullProbabilities,
-            self.model.biasBank,
-            biasFullProbabilities,
-        )
+        (
+            self.input_weight_bank,
+            self.output_weight_bank,
+            self.diagonal_weight_bank,
+            self.anti_diagonal_weight_bank,
+            self.bias_bank,
+        ) = self.__init_parameter_banks()
 
-        # [batchSize, inputDim, outputDim]
-        return weightMixture, biasMixture, None
+    def __decide_einsum_computation(self) -> str:
+        if self.top_k == self.router_output_dim:
+            return "bi,kij->bkj"
+        return "bi,bkij->bkj"
 
-    def _sampleFullProbabilities(self, inputBatch):
-        weightFullProbabilities, _ = self._sampleProbabilities(inputBatch)
+    def __compute_diagonal_shape(self) -> tuple | None:
+        diagonal_padding_shape = None
+        if self.input_dim != self.output_dim:
+            padding_size = abs(self.input_dim - self.output_dim)
+            diagonal_padding_shape = (0, padding_size, 0, 0)
+            if self.input_dim > self.output_dim:
+                diagonal_padding_shape = (0, 0, 0, padding_size)
+        return diagonal_padding_shape
 
-        biasFullProbabilities = None
-        if self.model.biasFlag:
-            biasFullProbabilities, _ = self._sampleProbabilities(
-                inputBatch, 
+    def __generate_probability_shapes(self) -> tuple[tuple, tuple]:
+        weight_probs_shape = (-1, self.top_k, 1, 1)
+        bias_probs_shape = (-1, self.top_k, 1)
+        return weight_probs_shape, bias_probs_shape
+
+    def __init_parameter_banks(
+        self,
+    ) -> Tuple[Parameter, Parameter, Parameter, Parameter | None, Parameter | None]:
+        input_weight_shape = (self.depth_dim, self.input_dim, self.input_dim)
+        output_weight_shape = (self.depth_dim, self.input_dim, self.output_dim)
+        diagonal_weight_shape = (self.depth_dim, self.input_dim, self.diagonal_dim)
+        anti_diagonal_weight_shape = (self.depth_dim, self.input_dim, self.diagonal_dim)
+        bias_bank_shape = (self.depth_dim, self.input_dim, self.output_dim)
+
+        input_weight_bank = self._init_parameter_bank(input_weight_shape)
+        output_weight_bank = self._init_parameter_bank(output_weight_shape)
+        diagonal_weight_bank = self._init_parameter_bank(diagonal_weight_shape)
+
+        anti_diagonal_weight_bank = None
+        if self.cross_diagonal_flag:
+            anti_diagonal_weight_bank = self._init_parameter_bank(
+                anti_diagonal_weight_shape
             )
 
-        return weightFullProbabilities, biasFullProbabilities
+        bias_bank = None
+        if self.bias_parameters_flag:
+            bias_bank = self._init_parameter_bank(bias_bank_shape)
 
-    def _sampleProbabilities(self, inputBatch):
-        return self.probabilitySampler.sampleProbabilitiesAndIndexes(
-            inputBatch,
-            isTrainingFlag=self.model.training,
+        return (
+            input_weight_bank,
+            output_weight_bank,
+            diagonal_weight_bank,
+            anti_diagonal_weight_bank,
+            bias_bank,
         )
+
+    def _select_parameters(
+        self,
+        weight_indices: Tensor,
+        bias_indices: Tensor | None = None,
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor | None, Tensor | None]:
+        if self.top_k == 1:
+            weight_indices = weight_indices.unsqueeze(dim=-1)
+            if self.bias_parameters_flag:
+                bias_indices = bias_indices.unsqueeze(dim=-1)
+
+        selected_input_params = self.input_weight_bank[weight_indices]
+        selected_output_params = self.output_weight_bank[weight_indices]
+        selected_diagonal_params = self.diagonal_weight_bank[weight_indices]
+
+        selected_transposed_diagonal_params = None
+        if self.cross_diagonal_flag:
+            selected_transposed_diagonal_params = self.diagonal_weight_bank[
+                weight_indices
+            ]
+
+        selected_bias_params = None
+        if self.bias_parameters_flag:
+            selected_bias_params = self.bias_bank[bias_indices]
+
+        return (
+            selected_input_params,
+            selected_output_params,
+            selected_diagonal_params,
+            selected_transposed_diagonal_params,
+            selected_bias_params,
+        )
+
+    def _compute_parameter_mixture(
+        self,
+        input_batch: Tensor,
+        input_weight_params: Tensor,
+        output_weight_params: Tensor,
+        diagonal_params: Tensor,
+        anti_diagonal_params: Tensor | None = None,
+        bias_params: Tensor | None = None,
+        weight_probs: Tensor | None = None,
+        bias_probs: Tensor | None = None,
+    ) -> Tuple[Tensor, Tensor | None]:
+        (
+            input_vectors,
+            output_vectors,
+            diagonal_vectors,
+            anti_diagonal_vectors,
+            bias_vectors,
+        ) = self.__compute_parameter_vectors(
+            input_batch,
+            input_weight_params,
+            output_weight_params,
+            diagonal_params,
+            anti_diagonal_params,
+            bias_params,
+        )
+
+        generated_weights = self.__generate_weight_parameters(
+            input_vectors,
+            output_vectors,
+            diagonal_vectors,
+            anti_diagonal_vectors,
+            weight_probs,
+        )
+
+        generated_biases = self.__generate_bias_parameters(bias_vectors, bias_probs)
+
+        return generated_weights, generated_biases
+
+    def __compute_parameter_vectors(
+        self,
+        input_batch: Tensor,
+        input_weight_params: Tensor,
+        output_weight_params: Tensor,
+        diagonal_weight_params: Tensor,
+        anti_diagonal_params: Tensor | None = None,
+        bias_params: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None, Tensor | None]:
+        input_vectors = self.__compute_einsum(input_batch, input_weight_params)
+        output_vectors = self.__compute_einsum(input_batch, output_weight_params)
+        diagonal_vectors = self.__compute_einsum(input_batch, diagonal_weight_params)
+        anti_diagonal_vectors = self.__maybe_compute_einsum(
+            input_batch, anti_diagonal_params, self.cross_diagonal_flag
+        )
+        bias_output = self.__maybe_compute_einsum(
+            input_batch, bias_params, self.bias_parameters_flag
+        )
+
+        return (
+            input_vectors,
+            output_vectors,
+            diagonal_vectors,
+            anti_diagonal_vectors,
+            bias_output,
+        )
+
+    def __maybe_compute_einsum(
+        self, input_batch: Tensor, weight_params: Tensor, einsum_flag: bool = False
+    ) -> Tensor | None:
+        if einsum_flag:
+            return self.__compute_einsum(input_batch, weight_params)
+        return None
+
+    def __compute_einsum(
+        self,
+        input_batch: Tensor,
+        weight_params: Tensor,
+    ) -> Tensor:
+        vectors = torch.einsum(self.einsum_vector_operation, input_batch, weight_params)
+        # WARNING: if the scaler implemented in `__compute_outer_product`
+        # does not work when testing implement a way to normalize the
+        # inputs here `outer_product` here
+        # if self.normalize_vectors:
+        #     self._normalize_vectors(
+        #         input_vectors, output_vectors, diagonal_vectors, bias_vectors
+        #     )
+        return vectors
+
+    def __generate_weight_parameters(
+        self,
+        input_vectors: Tensor,
+        output_vectors: Tensor,
+        diagonal_vectors: Tensor,
+        anti_diagonal_vectors: Tensor | None = None,
+        weight_probs: Tensor | None = None,
+    ) -> Tensor:
+        outer_product = self.__compute_outer_product(input_vectors, output_vectors)
+        diagonal_matrix = self.__compute_diagonal_matrix(diagonal_vectors)
+        anti_diagonal_matrix = self.__compute_anti_diagonal_matrix(
+            anti_diagonal_vectors
+        )
+        generated_parameters = self.__assemble_parameters_matrix(
+            outer_product, diagonal_matrix, anti_diagonal_matrix
+        )
+
+        weighted_parameters = self.__apply_parameter_weighting(
+            generated_parameters, self.weight_probs_shape, weight_probs
+        )
+
+        if self.top_k > 1:
+            return torch.sum(weighted_parameters, dim=1)
+        return weighted_parameters.squeeze(1)
+
+    def __compute_outer_product(
+        self,
+        input_vectors: Tensor,
+        output_vectors: Tensor,
+    ):
+        # WARNING: Ensure the scaler works later when testing if this
+        # not work add the normal normalization in `__compute_einsum` method
+        if self.input_dim > self.output_dim:
+            scaled_input_vectors = input_vectors * self.diagonal_dim**-0.5
+            return torch.einsum("bij,bik->bijk", scaled_input_vectors, output_vectors)
+
+        scaled_output_vectors = output_vectors * self.diagonal_dim**-0.5
+        return torch.einsum("bij,bik->bijk", input_vectors, scaled_output_vectors)
+
+    def __compute_anti_diagonal_matrix(
+        self,
+        anti_diagonal_vectors: Tensor | None = None,
+    ) -> Tensor | None:
+        if self.cross_diagonal_flag:
+            anti_diagonal_matrix = self.__compute_diagonal_matrix(anti_diagonal_vectors)
+            return anti_diagonal_matrix.flip(dims=[2])
+        return None
+
+    def __compute_diagonal_matrix(
+        self,
+        diagonal_vectors: Tensor,
+    ) -> Tensor:
+        diagonal_matrix = torch.diag_embed(diagonal_vectors)
+        if self.diagonal_padding_shape is not None:
+            diagonal_matrix = F.pad(diagonal_matrix, self.diagonal_padding_shape)
+        return diagonal_matrix
+
+    def __assemble_parameters_matrix(
+        self,
+        outer_product: Tensor,
+        diagonal_matrix: Tensor,
+        anti_diagonal_matrix: Tensor | None = None,
+    ) -> Tensor:
+        generated_weights = outer_product + diagonal_matrix
+        if self.cross_diagonal_flag:
+            generated_weights = generated_weights + anti_diagonal_matrix
+        return generated_weights
+
+    def __apply_parameter_weighting(
+        self,
+        generated_parameters: Tensor,
+        parameter_shape: tuple,
+        weight_probs: Tensor | None = None,
+    ) -> Tensor:
+        if self.weighted_parameters_flag:
+            weight_probs = reshape(weight_probs, parameter_shape)
+            return generated_parameters * weight_probs
+        return generated_parameters
+
+    def __generate_bias_parameters(
+        self,
+        generated_biases: Tensor | None = None,
+        bias_probs: Tensor | None = None,
+    ) -> Tensor | None:
+        if not self.bias_parameters_flag:
+            return None
+
+        weighted_biases = self.__apply_parameter_weighting(
+            generated_biases, self.bias_probs_shape, bias_probs
+        )
+
+        if self.top_k > 1:
+            return torch.sum(weighted_biases, dim=1)
+        return weighted_biases.squeeze(1)
