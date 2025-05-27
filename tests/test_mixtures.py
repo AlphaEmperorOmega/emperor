@@ -2399,3 +2399,182 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         )
 
         self.assertEqual(output.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__compute_parameter_mixture__top_k__1(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+            cross_diagonal_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        input_batch_shape = (batch_size, c.input_dim)
+        input_batch = torch.arange(prod(input_batch_shape)).reshape(input_batch_shape)
+
+        input_params_shape = (batch_size, c.top_k, c.input_dim, c.input_dim)
+        selected_input_weight_params = torch.arange(prod(input_params_shape)).reshape(
+            input_params_shape
+        )
+
+        output_params_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
+        selected_output_weight_params = torch.arange(prod(output_params_shape)).reshape(
+            output_params_shape
+        )
+
+        diagonal = min(c.input_dim, c.output_dim)
+        diagonal_params_shape = (batch_size, c.top_k, c.input_dim, diagonal)
+        selected_diagonal_weight_params = torch.arange(
+            prod(diagonal_params_shape)
+        ).reshape(diagonal_params_shape)
+
+        anti_diagonal_params_shape = (batch_size, c.top_k, c.input_dim, diagonal)
+        selected_anti_diagonal_weight_params = torch.arange(
+            prod(anti_diagonal_params_shape)
+        ).reshape(anti_diagonal_params_shape)
+
+        selected_biases_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
+        selected_bias_params = torch.arange(prod(selected_biases_shape)).reshape(
+            selected_biases_shape
+        )
+
+        weight_probs = F.sigmoid(torch.randn((batch_size,)))
+        bias_probs = F.sigmoid(torch.randn((batch_size,)))
+
+        output_weights, output_biases = m._compute_parameter_mixture(
+            input_batch,
+            selected_input_weight_params,
+            selected_output_weight_params,
+            selected_diagonal_weight_params,
+            selected_anti_diagonal_weight_params,
+            selected_bias_params,
+            weight_probs,
+            bias_probs,
+        )
+
+        self.assertEqual(
+            output_weights.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(output_biases.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__compute_parameter_mixture__top_k__k(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+            cross_diagonal_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        input_batch_shape = (batch_size, c.input_dim)
+        input_batch = torch.arange(prod(input_batch_shape)).reshape(input_batch_shape)
+
+        input_params_shape = (batch_size, c.top_k, c.input_dim, c.input_dim)
+        selected_input_weight_params = torch.arange(prod(input_params_shape)).reshape(
+            input_params_shape
+        )
+
+        output_params_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
+        selected_output_weight_params = torch.arange(prod(output_params_shape)).reshape(
+            output_params_shape
+        )
+
+        diagonal = min(c.input_dim, c.output_dim)
+        diagonal_params_shape = (batch_size, c.top_k, c.input_dim, diagonal)
+        selected_diagonal_weight_params = torch.arange(
+            prod(diagonal_params_shape)
+        ).reshape(diagonal_params_shape)
+
+        anti_diagonal_params_shape = (batch_size, c.top_k, c.input_dim, diagonal)
+        selected_anti_diagonal_weight_params = torch.arange(
+            prod(anti_diagonal_params_shape)
+        ).reshape(anti_diagonal_params_shape)
+
+        selected_biases_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
+        selected_bias_params = torch.arange(prod(selected_biases_shape)).reshape(
+            selected_biases_shape
+        )
+
+        weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
+        bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
+
+        output_weights, output_biases = m._compute_parameter_mixture(
+            input_batch,
+            selected_input_weight_params,
+            selected_output_weight_params,
+            selected_diagonal_weight_params,
+            selected_anti_diagonal_weight_params,
+            selected_bias_params,
+            weight_probs,
+            bias_probs,
+        )
+
+        self.assertEqual(
+            output_weights.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(output_biases.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__compute_parameter_mixture__full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=6,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+            cross_diagonal_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        input_batch_shape = (batch_size, c.input_dim)
+        input_batch = torch.arange(prod(input_batch_shape)).reshape(input_batch_shape)
+
+        input_params_shape = (c.depth_dim, c.input_dim, c.input_dim)
+        input_weight_bank_params = torch.arange(prod(input_params_shape)).reshape(
+            input_params_shape
+        )
+
+        output_params_shape = (c.depth_dim, c.input_dim, c.output_dim)
+        output_weight_bank_params = torch.arange(prod(output_params_shape)).reshape(
+            output_params_shape
+        )
+
+        diagonal = min(c.input_dim, c.output_dim)
+        diagonal_params_shape = (c.depth_dim, c.input_dim, diagonal)
+        diagonal_weight_bank_params = torch.arange(prod(diagonal_params_shape)).reshape(
+            diagonal_params_shape
+        )
+
+        anti_diagonal_params_shape = (c.depth_dim, c.input_dim, diagonal)
+        anti_diagonal_weight_bank_params = torch.arange(
+            prod(anti_diagonal_params_shape)
+        ).reshape(anti_diagonal_params_shape)
+
+        selected_biases_shape = (c.depth_dim, c.input_dim, c.output_dim)
+        selected_bias_params = torch.arange(prod(selected_biases_shape)).reshape(
+            selected_biases_shape
+        )
+
+        weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
+        bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
+
+        print("*" * 20)
+        output_weights, output_biases = m._compute_parameter_mixture(
+            input_batch,
+            input_weight_bank_params,
+            output_weight_bank_params,
+            diagonal_weight_bank_params,
+            anti_diagonal_weight_bank_params,
+            selected_bias_params,
+            weight_probs,
+            bias_probs,
+        )
+        print("*" * 20)
+
+        self.assertEqual(
+            output_weights.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(output_biases.shape, torch.Size([batch_size, c.output_dim]))
