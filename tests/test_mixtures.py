@@ -1749,6 +1749,50 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
+    def test__compute_outer_product__full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            input_dim=6,
+            output_dim=5,
+            top_k=6,
+            sampler_threshold=0.001,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+        diagonal_dim = min(c.input_dim, c.output_dim)
+
+        input_vectors_shape = (batch_size, c.top_k, c.input_dim)
+        input_vectors = torch.arange(prod(input_vectors_shape)).reshape(
+            input_vectors_shape
+        )
+        output_vectors_shape = (batch_size, c.top_k, c.output_dim)
+        output_vectors = torch.arange(prod(output_vectors_shape)).reshape(
+            output_vectors_shape
+        )
+
+        output = m._GeneratorChoiceMixture__compute_outer_product(
+            input_vectors, output_vectors
+        )
+
+        scaled_input_vectors = input_vectors * diagonal_dim**-0.5
+
+        self.assertEqual(
+            output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
+        )
+        for batch in range(batch_size):
+            for k in range(c.top_k):
+                input_vector = scaled_input_vectors[batch][k]
+                output_vector = output_vectors[batch][k]
+                expected_output = torch.outer(input_vector, output_vector)
+                actual_output = output[batch][k]
+                # print()
+                # print(f"Input vector {batch}, {k}: \n", input_vector)
+                # print(f"Output vector {batch}, {k}: \n", output_vector)
+                # print("Expected result: \n", expected_output)
+                # print("Actual result: \n", actual_output)
+                # print()
+                self.assertTrue(torch.equal(actual_output, expected_output))
+
     def test__compute_diagonal__bigger_input(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
