@@ -119,23 +119,84 @@ class TopkMixtureBehaviour:
         # [batchSize, topK, inputDim, outputDim]
         selectedWeightParameters, selectedBiaseParameters = self.model.selectParameters(
             weightTopKIndexes, biasTopKIndexes
+
+class MatrixChoiceMixture(ParameterGeneratorMixture):
+    def __init__(
+        self,
+        cfg: "MixtureConfig | ModelConfig",
+        overrides: "MixtureConfig | None" = None,
+    ) -> None:
+        super().__init__(cfg, overrides)
+        config = getattr(cfg, "mixture_model_config", cfg)
+        self.mixture_config: "MixtureConfig" = self._overwrite_config(config, overrides)
+        self.weight_bank, self.bias_bank = self.__init_parameter_banks()
+
+        self.weight_probs_shape, self.bias_probs_shape = (
+            self.__generate_probability_shapes()
         )
 
-        # [batchSize, inputDim, outputDim]
-        weightMixture, biasMixture = self.model.calculateParameterMixture(
-            selectedWeightParameters,
-            weightTopKProbabilities,
-            selectedBiaseParameters,
-            biasTopKProbabilities,
+        if self.depth_dim == self.top_k:
+            assert self.weighted_parameters_flag is True
+
+    def __generate_probability_shapes(self) -> Tuple:
+        weight_probs_shape = (-1, self.top_k, 1)
+        bias_probs_shape = (-1, self.top_k)
+        if self.top_k > 1:
+            weight_probs_shape = (-1, self.top_k, 1, 1)
+            bias_probs_shape = (-1, self.top_k, 1)
+        return weight_probs_shape, bias_probs_shape
+
+    def __init_parameter_banks(self) -> Tuple[Parameter, Parameter | None]:
+        weight_bank_shape = (self.depth_dim, self.input_dim, self.output_dim)
+        weight_bank = self._init_parameter_bank(weight_bank_shape)
+
+        bias_bank = None
+        if self.bias_parameters_flag:
+            bias_bank_shape = (self.depth_dim, self.output_dim)
+            bias_bank = self._init_parameter_bank(bias_bank_shape)
+
+        return weight_bank, bias_bank
+
+    def _select_parameters(
+        self,
+        weight_indexes: Tensor,
+        bias_indexes: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
+        selected_weights = self.weight_bank[weight_indexes]
+        selected_biases = None
+        if self.bias_parameters_flag:
+            selected_biases = self.bias_bank[bias_indexes]
+
+        return selected_weights, selected_biases
+
+    def _compute_mixture(
+        self,
+        selected_parameters: Tensor,
+        probs: Tensor,
+        is_weight: bool = True,
+    ) -> Tensor:
+        parameter_mixture = self.__compute_weighted_parameters(
+            selected_parameters, probs, is_weight
         )
 
-        # [batchSize, inputDim, outputDim]
-        return weightMixture, biasMixture, None
+        if self.top_k > 1:
+            return parameter_mixture.sum(dim=1)
+        return parameter_mixture
 
-    def _sampleTopKProbabilitiesAndIndexes(self, inputBatch):
-        # [inputDim, batchSize, topK], [inputDim, batchSize, topK]
-        weightTopKProbabilities, weightTopKIndexes = (
-            self._sampleProbabilitiesAndIndexes(inputBatch)
+    def __compute_weighted_parameters(
+        self,
+        selected_parameters: Tensor,
+        probability: Tensor,
+        is_weight: bool = True,
+    ) -> Tensor:
+        probs_shape = self.bias_probs_shape
+        if is_weight:
+            probs_shape = self.weight_probs_shape
+
+        if self.weighted_parameters_flag:
+            probability = reshape(probability, probs_shape)
+            return selected_parameters * probability
+        return selected_parameters
 
 
 class GeneratorChoiceMixture(ParameterGeneratorMixture):
