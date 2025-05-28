@@ -467,6 +467,88 @@ class TestVectorChoiceMixture(unittest.TestCase):
         self.assertIsNone(bias_mixture)
 
 
+class TestMatrixChoiceMixture(unittest.TestCase):
+    def setUp(self):
+        self.cfg = MixtureConfig(
+            input_dim=4,
+            output_dim=5,
+            depth_dim=6,
+            top_k=2,
+            router_output_dim=6,
+            sampler_threshold=0.0,
+            cross_diagonal_flag=False,
+            weighted_parameters_flag=False,
+            bias_parameters_flag=False,
+        )
+
+    def test__class_initialization_with_custom_config(self):
+        c = copy.deepcopy(self.cfg)
+        m = MatrixChoiceMixture(c)
+
+        self.assertIsInstance(m, MatrixChoiceMixture)
+        self.assertEqual(m.input_dim, c.input_dim)
+        self.assertEqual(m.output_dim, c.output_dim)
+        self.assertEqual(m.depth_dim, c.depth_dim)
+        self.assertEqual(m.top_k, c.top_k)
+        self.assertEqual(m.router_output_dim, c.router_output_dim)
+        self.assertEqual(m.sampler_threshold, c.sampler_threshold)
+        self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
+        self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
+        self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
+
+    def test__class_initialization_with_overwride(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            input_dim=40,
+            output_dim=50,
+            depth_dim=60,
+            top_k=20,
+            router_output_dim=60,
+            sampler_threshold=1.0,
+            cross_diagonal_flag=True,
+            weighted_parameters_flag=True,
+            bias_parameters_flag=True,
+        )
+        m = MatrixChoiceMixture(c, overrides)
+
+        self.assertIsInstance(m, MatrixChoiceMixture)
+        self.assertEqual(m.input_dim, overrides.input_dim)
+        self.assertEqual(m.output_dim, overrides.output_dim)
+        self.assertEqual(m.depth_dim, overrides.depth_dim)
+        self.assertEqual(m.top_k, overrides.top_k)
+        self.assertEqual(m.router_output_dim, overrides.router_output_dim)
+        self.assertEqual(m.sampler_threshold, overrides.sampler_threshold)
+        self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
+        self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
+        self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
+
+    def test__generate_probability_shapes__top_k__1(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+        )
+        m = MatrixChoiceMixture(c, overrides)
+        weight_probs_shape, bias_probs_shape = (
+            m._MatrixChoiceMixture__generate_probability_shapes()
+        )
+
+        self.assertEqual(weight_probs_shape, (-1, c.top_k, 1))
+        self.assertEqual(bias_probs_shape, (-1, c.top_k))
+
+    def test__generate_probability_shapes__top_k__k(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=2,
+        )
+        m = MatrixChoiceMixture(c, overrides)
+        weight_probs_shape, bias_probs_shape = (
+            m._MatrixChoiceMixture__generate_probability_shapes()
+        )
+
+        self.assertEqual(weight_probs_shape, (-1, c.top_k, 1, 1))
+        self.assertEqual(bias_probs_shape, (-1, c.top_k, 1))
+
+
 class TestGeneratorChoiceMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
