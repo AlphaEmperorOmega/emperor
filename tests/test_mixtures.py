@@ -53,7 +53,6 @@ class TestMixtureBase(unittest.TestCase):
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
             router_output_dim=20,
-            sampler_threshold=0.1,
             cross_diagonal_flag=False,
         )
         m = MixtureBase(self.cfg, overrides)
@@ -422,7 +421,6 @@ class TestVectorChoiceMixture(unittest.TestCase):
     #         top_k=router_output_dim,
     #         depth_dim=router_output_dim,
     #         weighted_parameters_flag=False,
-    #         sampler_threshold=0.1,
     #     )
     #     m = VectorChoiceMixture(self.cfg, overrides)
     #
@@ -475,7 +473,6 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             depth_dim=6,
             top_k=2,
             router_output_dim=6,
-            sampler_threshold=0.0,
             cross_diagonal_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
@@ -491,7 +488,6 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, c.depth_dim)
         self.assertEqual(m.top_k, c.top_k)
         self.assertEqual(m.router_output_dim, c.router_output_dim)
-        self.assertEqual(m.sampler_threshold, c.sampler_threshold)
         self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
@@ -504,7 +500,6 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             depth_dim=60,
             top_k=20,
             router_output_dim=60,
-            sampler_threshold=1.0,
             cross_diagonal_flag=True,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
@@ -517,7 +512,6 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.router_output_dim, overrides.router_output_dim)
-        self.assertEqual(m.sampler_threshold, overrides.sampler_threshold)
         self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
@@ -749,7 +743,6 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=6,
             weighted_parameters_flag=True,
-            sampler_threshold=0.01,
         )
         m = MatrixChoiceMixture(c, overrides)
 
@@ -779,7 +772,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             depth_dim=6,
             top_k=2,
             router_output_dim=6,
-            sampler_threshold=0.0,
             cross_diagonal_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
@@ -830,7 +822,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, c.depth_dim)
         self.assertEqual(m.top_k, c.top_k)
         self.assertEqual(m.router_output_dim, c.router_output_dim)
-        self.assertEqual(m.sampler_threshold, c.sampler_threshold)
         self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
@@ -843,7 +834,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             depth_dim=60,
             top_k=20,
             router_output_dim=60,
-            sampler_threshold=1.0,
             cross_diagonal_flag=True,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
@@ -856,7 +846,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.router_output_dim, overrides.router_output_dim)
-        self.assertEqual(m.sampler_threshold, overrides.sampler_threshold)
         self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
@@ -1274,7 +1263,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=6,
             top_k=6,
-            sampler_threshold=0.001,
         )
         m = GeneratorChoiceMixture(c, overrides)
         batch_size = 2
@@ -1711,7 +1699,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             input_dim=6,
             output_dim=5,
             top_k=6,
-            sampler_threshold=0.001,
         )
         m = GeneratorChoiceMixture(c, overrides)
         batch_size = 2
