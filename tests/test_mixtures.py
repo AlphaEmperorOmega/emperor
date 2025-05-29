@@ -228,6 +228,107 @@ class TestVectorChoiceMixture(unittest.TestCase):
         self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim]))
         self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim]))
 
+    def test__select_parameters__bias_parameters_flag__False__top_k__1(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+            bias_parameters_flag=False,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        batch_size = 5
+        weight_indexes = torch.randint(0, c.depth_dim, (c.input_dim, batch_size))
+        bias_indexes = torch.randint(0, c.depth_dim, (c.output_dim, batch_size))
+
+        selected_weights, selected_biases = m._select_parameters(
+            weight_indexes, bias_indexes
+        )
+
+        self.assertEqual(
+            selected_weights.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertIsNone(selected_biases)
+
+    def test__select_parameters__bias_parameters_flag__True__top_k__1(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+            bias_parameters_flag=True,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        batch_size = 5
+        weight_indexes = torch.randint(0, c.depth_dim, (c.input_dim, batch_size))
+        bias_indexes = torch.randint(0, c.depth_dim, (c.output_dim, batch_size))
+
+        selected_weights, selected_biases = m._select_parameters(
+            weight_indexes, bias_indexes
+        )
+
+        self.assertEqual(
+            selected_weights.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(selected_biases.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__select_parameters__bias_parameters_flag__False__top_k__greater_than_1(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+            bias_parameters_flag=False,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        batch_size = 5
+        weight_indexes = torch.randint(
+            0, c.depth_dim, (c.input_dim, batch_size, c.top_k)
+        )
+        bias_indexes = torch.randint(
+            0, c.depth_dim, (c.output_dim, batch_size, c.top_k)
+        )
+
+        selected_weights, selected_biases = m._select_parameters(
+            weight_indexes, bias_indexes
+        )
+
+        self.assertEqual(
+            selected_weights.shape,
+            torch.Size([batch_size, c.input_dim, c.top_k, c.output_dim]),
+        )
+        self.assertIsNone(selected_biases)
+
+    def test__select_parameters__bias_parameters_flag__True__top_k__greater_than_1(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+            bias_parameters_flag=True,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        batch_size = 5
+        weight_indexes = torch.randint(
+            0, c.depth_dim, (c.input_dim, batch_size, c.top_k)
+        )
+        bias_indexes = torch.randint(
+            0, c.depth_dim, (c.output_dim, batch_size, c.top_k)
+        )
+
+        selected_weights, selected_biases = m._select_parameters(
+            weight_indexes, bias_indexes
+        )
+
+        self.assertEqual(
+            selected_weights.shape,
+            torch.Size([batch_size, c.input_dim, c.top_k, c.output_dim]),
+        )
+        self.assertEqual(
+            selected_biases.shape, torch.Size([batch_size, c.output_dim, c.top_k])
+        )
+
+
 class TestMatrixChoiceMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
