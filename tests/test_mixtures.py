@@ -516,6 +516,22 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
 
+    def test__init_parameter_banks(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            bias_parameters_flag=True,
+        )
+        m = MatrixChoiceMixture(c, overrides)
+        input_weight_bank, bias_bank = m._MatrixChoiceMixture__init_parameter_banks()
+
+        s = lambda x: torch.Size(x)
+        self.assertIsInstance(input_weight_bank, Parameter)
+        self.assertEqual(
+            input_weight_bank.shape, s([c.depth_dim, c.input_dim, c.output_dim])
+        )
+        self.assertIsInstance(bias_bank, Parameter)
+        self.assertEqual(bias_bank.shape, s([c.depth_dim, c.output_dim]))
+
     def test__generate_probability_shapes__top_k__1(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
@@ -526,23 +542,23 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             m._MatrixChoiceMixture__generate_probability_shapes()
         )
 
-        self.assertEqual(weight_probs_shape, (-1, c.top_k, 1))
-        self.assertEqual(bias_probs_shape, (-1, c.top_k))
+        self.assertEqual(weight_probs_shape, (-1, 1, 1))
+        self.assertEqual(bias_probs_shape, (-1, 1))
 
-    def test__generate_probability_shapes__top_k__k(self):
+    def test__generate_probability_shapes__top_k__greater_than_1(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
-            top_k=2,
+            top_k=3,
         )
         m = MatrixChoiceMixture(c, overrides)
         weight_probs_shape, bias_probs_shape = (
             m._MatrixChoiceMixture__generate_probability_shapes()
         )
 
-        self.assertEqual(weight_probs_shape, (-1, c.top_k, 1, 1))
-        self.assertEqual(bias_probs_shape, (-1, c.top_k, 1))
+        self.assertEqual(weight_probs_shape, (-1, 3, 1, 1))
+        self.assertEqual(bias_probs_shape, (-1, 3, 1))
 
-    def test__select_parameters(self):
+    def test__select_parameters__bias_parameters_flag__False(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
@@ -565,7 +581,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         self.assertIsNone(selected_biases)
 
-    def test__select_parameters__weighted_parameters_flag__True(self):
+    def test__select_parameters__bias_parameters_flag__True(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
@@ -577,10 +593,9 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         weight_indexes = torch.randint(0, c.depth_dim, (batch_size, m.top_k))
         bias_indexes = torch.randint(0, c.depth_dim, (batch_size, m.top_k))
 
-        (
-            selected_weights,
-            selected_biases,
-        ) = m._select_parameters(weight_indexes, bias_indexes)
+        selected_weights, selected_biases = m._select_parameters(
+            weight_indexes, bias_indexes
+        )
 
         s = lambda x: torch.Size(x)
         self.assertEqual(
@@ -596,6 +611,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
+            bias_parameters_flag=True,
         )
         m = MatrixChoiceMixture(c, overrides)
 
@@ -603,22 +619,21 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         weight_indexes = torch.randint(0, c.depth_dim, (batch_size,))
         bias_indexes = torch.randint(0, c.depth_dim, (batch_size,))
 
-        (
-            selected_weights,
-            selected_biases,
-        ) = m._select_parameters(weight_indexes, bias_indexes)
+        selected_weights, selected_biases = m._select_parameters(
+            weight_indexes, bias_indexes
+        )
 
         s = lambda x: torch.Size(x)
         self.assertEqual(
-            selected_weights.shape,
-            s([batch_size, c.input_dim, c.output_dim]),
+            selected_weights.shape, s([batch_size, c.input_dim, c.output_dim])
         )
-        self.assertIsNone(selected_biases)
+        self.assertEqual(selected_biases.shape, s([batch_size, c.output_dim]))
 
     def test__select_parameters__top_k__k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
-            top_k=2,
+            top_k=3,
+            bias_parameters_flag=True,
         )
         m = MatrixChoiceMixture(c, overrides)
 
@@ -636,9 +651,9 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             selected_weights.shape,
             s([batch_size, c.top_k, c.input_dim, c.output_dim]),
         )
-        self.assertIsNone(selected_biases)
+        self.assertEqual(selected_biases.shape, s([batch_size, c.top_k, c.output_dim]))
 
-    def test__compute_weighted_parameters(self):
+    def test__compute_weighted_parameters__weighted_parameters_flag__False(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
@@ -713,6 +728,34 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, c.input_dim, c.output_dim]),
         )
 
+    def test__compute_weighted_parameters__weighted_parameters_flag__False__top_k__1(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+            weighted_parameters_flag=False,
+        )
+        m = MatrixChoiceMixture(c, overrides)
+
+        batch_size = 2
+        selected_weight_shape = (batch_size, c.input_dim, c.output_dim)
+        selected_weight_params = torch.arange(prod(selected_weight_shape)).reshape(
+            selected_weight_shape
+        )
+        probability = F.sigmoid(torch.randn((batch_size, c.top_k)))
+
+        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+            selected_weight_params, probability
+        )
+
+        s = lambda x: torch.Size(x)
+        self.assertEqual(
+            weighted_parameters.shape,
+            s([batch_size, c.input_dim, c.output_dim]),
+        )
+        self.assertTrue(torch.equal(weighted_parameters, selected_weight_params))
+
     def test__compute_weighted_parameters__top_k__k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
@@ -738,11 +781,13 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, m.top_k, c.input_dim, c.output_dim]),
         )
 
-    def test__compute_weighted_parameters__full_mixture(self):
+    def test__compute_weighted_parameters__weighted_parameters_flag__False__top_k__k(
+        self,
+    ):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
-            top_k=6,
-            weighted_parameters_flag=True,
+            top_k=3,
+            weighted_parameters_flag=False,
         )
         m = MatrixChoiceMixture(c, overrides)
 
@@ -762,8 +807,35 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             weighted_parameters.shape,
             s([batch_size, m.top_k, c.input_dim, c.output_dim]),
         )
+        self.assertTrue(torch.equal(weighted_parameters, selected_weight_params))
 
-    def test___compute_mixture__top_k__1(self):
+    def test__compute_weighted_parameters__full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            depth_dim=10,
+            top_k=10,
+            weighted_parameters_flag=True,
+        )
+        m = MatrixChoiceMixture(c, overrides)
+
+        batch_size = 2
+        selected_weight_shape = (c.depth_dim, c.input_dim, c.output_dim)
+        selected_weight_params = torch.arange(prod(selected_weight_shape)).reshape(
+            selected_weight_shape
+        )
+        probability = F.sigmoid(torch.randn((batch_size, c.depth_dim)))
+
+        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+            selected_weight_params, probability
+        )
+
+        s = lambda x: torch.Size(x)
+        self.assertEqual(
+            weighted_parameters.shape,
+            s([batch_size, m.depth_dim, c.input_dim, c.output_dim]),
+        )
+
+    def test__compute_mixture__top_k__1(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -786,7 +858,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, c.input_dim, c.output_dim]),
         )
 
-    def test___compute_mixture__top_k__k(self):
+    def test__compute_mixture__top_k__k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
@@ -809,7 +881,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, c.input_dim, c.output_dim]),
         )
 
-    def test___compute_mixture__full_mixture(self):
+    def test__compute_mixture__full_mixture(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=6,
@@ -818,11 +890,11 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         m = MatrixChoiceMixture(c, overrides)
 
         batch_size = 2
-        selected_weight_shape = (batch_size, m.top_k, c.input_dim, c.output_dim)
+        selected_weight_shape = (c.depth_dim, c.input_dim, c.output_dim)
         selected_weight_params = torch.arange(prod(selected_weight_shape)).reshape(
             selected_weight_shape
         )
-        probability = F.sigmoid(torch.randn((batch_size, c.top_k)))
+        probability = F.sigmoid(torch.randn((batch_size, c.depth_dim)))
 
         weighted_parameters = m._compute_mixture(selected_weight_params, probability)
 
@@ -832,30 +904,92 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, c.input_dim, c.output_dim]),
         )
 
-    def test___compute_mixture__all_flags_true(self):
+    def test__compute_mixture__bias_parameters_flag__True__top_k__1(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
-            top_k=6,
-            cross_diagonal_flag=True,
+            top_k=1,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
         m = MatrixChoiceMixture(c, overrides)
 
         batch_size = 2
-        selected_weight_shape = (batch_size, m.top_k, c.input_dim, c.output_dim)
+        selected_weight_shape = (batch_size, c.output_dim)
+        selected_weight_params = torch.arange(prod(selected_weight_shape)).reshape(
+            selected_weight_shape
+        )
+        probability = F.sigmoid(torch.randn((batch_size,)))
+        bias_parameters = m._compute_mixture(
+            selected_weight_params, probability, is_weight=False
+        )
+
+        s = lambda x: torch.Size(x)
+        self.assertEqual(bias_parameters.shape, s([batch_size, c.output_dim]))
+
+    def test__compute_mixture__bias_parameters_flag__True__top_k__greater_than_1(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+            weighted_parameters_flag=True,
+            bias_parameters_flag=True,
+        )
+        m = MatrixChoiceMixture(c, overrides)
+
+        batch_size = 2
+        selected_weight_shape = (batch_size, c.top_k, c.output_dim)
         selected_weight_params = torch.arange(prod(selected_weight_shape)).reshape(
             selected_weight_shape
         )
         probability = F.sigmoid(torch.randn((batch_size, c.top_k)))
-
-        weighted_parameters = m._compute_mixture(selected_weight_params, probability)
+        bias_parameters = m._compute_mixture(
+            selected_weight_params, probability, is_weight=False
+        )
 
         s = lambda x: torch.Size(x)
-        self.assertEqual(
-            weighted_parameters.shape,
-            s([batch_size, c.input_dim, c.output_dim]),
+        self.assertEqual(bias_parameters.shape, s([batch_size, c.output_dim]))
+
+    def test__compute_mixture__bias_parameters_flag__True__full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            depth_dim=10,
+            top_k=10,
+            weighted_parameters_flag=True,
+            bias_parameters_flag=True,
         )
+        m = MatrixChoiceMixture(c, overrides)
+
+        batch_size = 2
+        selected_weight_shape = (c.depth_dim, c.output_dim)
+        selected_weight_params = torch.arange(prod(selected_weight_shape)).reshape(
+            selected_weight_shape
+        )
+        probability = F.sigmoid(torch.randn((batch_size, c.depth_dim)))
+        bias_parameters = m._compute_mixture(
+            selected_weight_params, probability, is_weight=False
+        )
+
+        s = lambda x: torch.Size(x)
+        self.assertEqual(bias_parameters.shape, s([batch_size, c.output_dim]))
+
+    def test_gradient_flow(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=2,
+            weighted_parameters_flag=True,
+        )
+        m = MatrixChoiceMixture(c, overrides)
+
+        batch_size = 2
+        selected_weight_shape = (batch_size, m.top_k, c.input_dim, c.output_dim)
+        selected_weight_params = torch.randn(*selected_weight_shape, requires_grad=True)
+        probability = torch.tensor([[0.3, 0.7]], requires_grad=True)
+
+        result = m._compute_mixture(selected_weight_params, probability)
+        loss = result.sum()
+        loss.backward()
+
+        self.assertIsNotNone(selected_weight_params.grad)
+        self.assertIsNotNone(probability.grad)
 
 
 class TestGeneratorChoiceMixture(unittest.TestCase):
