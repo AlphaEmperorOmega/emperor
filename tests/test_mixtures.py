@@ -88,6 +88,146 @@ class TestParameterBank(unittest.TestCase):
         self.assertEqual(param.shape, self.shape)
 
 
+class TestVectorChoiceMixture(unittest.TestCase):
+    def setUp(self):
+        self.cfg = MixtureConfig(
+            input_dim=4,
+            output_dim=5,
+            depth_dim=6,
+            top_k=2,
+            router_output_dim=6,
+            cross_diagonal_flag=False,
+            weighted_parameters_flag=False,
+            bias_parameters_flag=False,
+        )
+
+    def test__init_with_default_config(self):
+        main_c = ModelConfig()
+        c = main_c.mixture_model_config
+        overrides = MixtureConfig(
+            bias_parameters_flag=True,
+        )
+
+        m = VectorChoiceMixture(main_c, overrides)
+
+        self.assertIsInstance(m.weight_bank, Parameter)
+        self.assertEqual(
+            list(m.weight_bank.shape),
+            [c.input_dim, c.depth_dim, c.output_dim],
+        )
+        self.assertIsInstance(m.bias_bank, Parameter)
+        self.assertEqual(
+            list(m.bias_bank.shape),
+            [c.output_dim, c.depth_dim],
+        )
+
+    def test__class_initialization_with_custom_config(self):
+        c = copy.deepcopy(self.cfg)
+        m = VectorChoiceMixture(c)
+
+        self.assertIsInstance(m, VectorChoiceMixture)
+        self.assertEqual(m.input_dim, c.input_dim)
+        self.assertEqual(m.output_dim, c.output_dim)
+        self.assertEqual(m.depth_dim, c.depth_dim)
+        self.assertEqual(m.top_k, c.top_k)
+        self.assertEqual(m.router_output_dim, c.router_output_dim)
+        self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
+        self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
+        self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
+
+    def test__class_initialization_with_overwride(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            input_dim=40,
+            output_dim=50,
+            depth_dim=60,
+            top_k=20,
+            router_output_dim=60,
+            cross_diagonal_flag=True,
+            weighted_parameters_flag=True,
+            bias_parameters_flag=True,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        self.assertIsInstance(m, VectorChoiceMixture)
+        self.assertEqual(m.input_dim, overrides.input_dim)
+        self.assertEqual(m.output_dim, overrides.output_dim)
+        self.assertEqual(m.depth_dim, overrides.depth_dim)
+        self.assertEqual(m.top_k, overrides.top_k)
+        self.assertEqual(m.router_output_dim, overrides.router_output_dim)
+        self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
+        self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
+        self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
+
+    def test__init_parameter_banks(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig()
+        m = VectorChoiceMixture(c, overrides)
+        weight_bank, bias_bank = m._VectorChoiceMixture__init_parameter_banks()
+
+        self.assertIsInstance(weight_bank, Parameter)
+        self.assertEqual(
+            list(weight_bank.shape), [c.input_dim, c.depth_dim, c.output_dim]
+        )
+        self.assertIsNone(bias_bank)
+
+    def test__init_parameter_banks__bias_parameters_flag__true(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            bias_parameters_flag=True,
+        )
+        m = VectorChoiceMixture(c, overrides)
+        weight_bank, bias_bank = m._VectorChoiceMixture__init_parameter_banks()
+
+        self.assertIsInstance(weight_bank, Parameter)
+        self.assertEqual(
+            list(weight_bank.shape), [c.input_dim, c.depth_dim, c.output_dim]
+        )
+        self.assertIsInstance(bias_bank, Parameter)
+        self.assertEqual(list(bias_bank.shape), [c.output_dim, c.depth_dim])
+
+    def test__init_parameter_choice_ranges__top_k__1(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        range_weights, range_biases = (
+            m._VectorChoiceMixture__init_parameter_choice_ranges()
+        )
+        self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim]))
+        self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim]))
+
+    def test__init_parameter_choice_ranges__top_k__greater_than_1(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        range_weights, range_biases = (
+            m._VectorChoiceMixture__init_parameter_choice_ranges()
+        )
+        self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim, 1]))
+        self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim, 1]))
+
+    def test__init_parameter_choice_ranges__full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=10,
+            depth_dim=10,
+            router_output_dim=10,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        range_weights, range_biases = (
+            m._VectorChoiceMixture__init_parameter_choice_ranges()
+        )
+
+        self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim]))
+        self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim]))
+
 class TestMatrixChoiceMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
