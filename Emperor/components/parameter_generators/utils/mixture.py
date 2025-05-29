@@ -186,7 +186,7 @@ class MatrixChoiceMixture(ParameterGeneratorMixture):
     def __compute_weighted_parameters(
         self,
         selected_parameters: Tensor,
-        probability: Tensor,
+        probs: Tensor,
         is_weight: bool = True,
     ) -> Tensor:
         probs_shape = self.bias_probs_shape
@@ -194,8 +194,8 @@ class MatrixChoiceMixture(ParameterGeneratorMixture):
             probs_shape = self.weight_probs_shape
 
         if self.weighted_parameters_flag:
-            probability = reshape(probability, probs_shape)
-            return selected_parameters * probability
+            probs = reshape(probs, probs_shape)
+            return selected_parameters * probs
         return selected_parameters
 
 
