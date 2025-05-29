@@ -23,6 +23,7 @@ class TestMixtureBase(unittest.TestCase):
 
     def test__init_with_custom_mixture_config_only(self):
         cfg = MixtureConfig(
+            depth_dim=10,
             top_k=3,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
@@ -52,7 +53,7 @@ class TestMixtureBase(unittest.TestCase):
             top_k=5,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
-            router_output_dim=20,
+            router_output_dim=7,
             cross_diagonal_flag=False,
         )
         m = MixtureBase(self.cfg, overrides)
@@ -85,384 +86,6 @@ class TestParameterBank(unittest.TestCase):
         self.assertIs(param, m.parameter_bank)
         self.assertIsInstance(param, Parameter)
         self.assertEqual(param.shape, self.shape)
-
-
-class TestVectorChoiceMixture(unittest.TestCase):
-    def setUp(self):
-        self.cfg = ModelConfig()
-        self.mixture_cfg = self.cfg.mixture_model_config
-
-    def test__init_with_default_config(self):
-        m = VectorChoiceMixture(self.cfg)
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-
-        self.assertIsInstance(m.weight_bank, Parameter)
-        self.assertEqual(list(m.weight_bank.shape), [input, depth, output])
-        self.assertIsInstance(m.bias_bank, Parameter)
-        self.assertEqual(list(m.bias_bank.shape), [output, depth])
-
-        self.assertTrue(hasattr(m, "range_weights"))
-        self.assertTrue(hasattr(m, "range_biases"))
-
-    def test__init_parameter_banks(self):
-        m = VectorChoiceMixture(self.cfg)
-        weight_bank, bias_bank = m._VectorChoiceMixture__init_parameter_banks()
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-
-        self.assertIsInstance(weight_bank, Parameter)
-        self.assertEqual(list(weight_bank.shape), [input, depth, output])
-
-        self.assertIsInstance(bias_bank, Parameter)
-        self.assertEqual(list(bias_bank.shape), [output, depth])
-
-        m.bias_parameters_flag = False
-        weight_bank, bias_bank = m._VectorChoiceMixture__init_parameter_banks()
-        self.assertIsInstance(weight_bank, Parameter)
-        self.assertIsNone(bias_bank)
-
-    def test__init_parameter_choice_ranges(self):
-        m = VectorChoiceMixture(self.cfg)
-        input = self.mixture_cfg.input_dim
-        output = self.mixture_cfg.output_dim
-
-        m.top_k = 3
-        range_weights, range_biases = (
-            m._VectorChoiceMixture__init_parameter_choice_ranges()
-        )
-        self.assertEqual(range_weights.shape, torch.Size([1, input, 1]))
-        self.assertEqual(range_biases.shape, torch.Size([1, output, 1]))
-
-        m.top_k = 1
-        range_weights, range_biases = (
-            m._VectorChoiceMixture__init_parameter_choice_ranges()
-        )
-
-        self.assertEqual(range_weights.shape, torch.Size([1, input]))
-        self.assertEqual(range_biases.shape, torch.Size([1, output]))
-
-        m.top_k = 10
-        m.depth_dim = 10
-        range_weights, range_biases = (
-            m._VectorChoiceMixture__init_parameter_choice_ranges()
-        )
-
-        self.assertEqual(range_weights.shape, torch.Size([1, input]))
-        self.assertEqual(range_biases.shape, torch.Size([1, output]))
-
-    def test__select_parameters_top_1(self):
-        sz = lambda x: torch.Size(x)
-
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-        batch_size = 5
-
-        overrides = MixtureConfig(top_k=1)
-        m = VectorChoiceMixture(self.cfg, overrides)
-
-        weight_indexes = torch.randint(0, depth, (input, batch_size))
-        bias_indexes = torch.randint(0, depth, (output, batch_size))
-
-        selected_weights, selected_biases = m._select_parameters(
-            weight_indexes, bias_indexes
-        )
-
-        self.assertEqual(selected_weights.shape, sz([batch_size, input, output]))
-        self.assertEqual(selected_biases.shape, sz([batch_size, output]))
-
-        selected_weights, selected_biases = m._select_parameters(weight_indexes, None)
-
-        self.assertEqual(selected_weights.shape, sz([batch_size, input, output]))
-        self.assertIsNone(selected_biases)
-
-    def test__select_parameters_top_k(self):
-        sz = lambda x: torch.Size(x)
-
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-        top_k = self.mixture_cfg.top_k
-        batch_size = 5
-
-        m = VectorChoiceMixture(self.cfg)
-
-        weight_indexes = torch.randint(0, depth, (input, batch_size, top_k))
-        bias_indexes = torch.randint(0, depth, (output, batch_size, top_k))
-
-        selected_weights, selected_biases = m._select_parameters(
-            weight_indexes, bias_indexes
-        )
-
-        self.assertEqual(selected_weights.shape, sz([batch_size, input, top_k, output]))
-        self.assertEqual(selected_biases.shape, sz([batch_size, output, top_k]))
-
-        selected_weights, selected_biases = m._select_parameters(weight_indexes, None)
-
-        self.assertEqual(selected_weights.shape, sz([batch_size, input, top_k, output]))
-        self.assertIsNone(selected_biases)
-
-    def test__compute_parameter_mixture_top_1(self):
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-        batch_size = 5
-
-        overrides = MixtureConfig(top_k=1, weighted_parameters_flag=True)
-        m = VectorChoiceMixture(self.cfg, overrides)
-
-        weight_indexes = torch.randint(0, depth, (input, batch_size))
-        bias_indexes = torch.randint(0, depth, (output, batch_size))
-        weight_probs = F.sigmoid(torch.randn(input, batch_size))
-        bias_probs = F.sigmoid(torch.randn(output, batch_size))
-
-        selected_weights, selected_biases = m._select_parameters(
-            weight_indexes, bias_indexes
-        )
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            selected_weights, weight_probs, selected_biases, bias_probs
-        )
-
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, output]))
-
-        weight_probs_test = weight_probs.transpose(1, 0).unsqueeze(-1)
-        bias_probs_test = bias_probs.transpose(1, 0)
-
-        expected_weight_mixture = selected_weights * weight_probs_test
-        expected_bias_mixture = selected_biases * bias_probs_test
-
-        self.assertTrue(torch.allclose(weight_mixture, expected_weight_mixture))
-        self.assertTrue(torch.allclose(bias_mixture, expected_bias_mixture))
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            selected_weights, weight_probs, None, None
-        )
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertIsNone(bias_mixture)
-
-    def test__compute_parameter_mixture_top_1_weighted_parameters_false(self):
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-        batch_size = 5
-
-        overrides = MixtureConfig(top_k=1, weighted_parameters_flag=False)
-        m = VectorChoiceMixture(self.cfg, overrides)
-
-        weight_indexes = torch.randint(0, depth, (input, batch_size))
-        bias_indexes = torch.randint(0, depth, (output, batch_size))
-        weight_probs = F.softmax(torch.randn(input, batch_size), dim=-1)
-        bias_probs = F.softmax(torch.randn(output, batch_size), dim=-1)
-
-        selected_weights, selected_biases = m._select_parameters(
-            weight_indexes, bias_indexes
-        )
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            selected_weights, weight_probs, selected_biases, bias_probs
-        )
-
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, output]))
-
-        self.assertTrue(torch.allclose(weight_mixture, selected_weights))
-        self.assertTrue(torch.allclose(bias_mixture, selected_biases))
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            selected_weights, weight_probs, None, None
-        )
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertIsNone(bias_mixture)
-
-    def test__compute_parameter_mixture_top_k(self):
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-        top_k = self.mixture_cfg.top_k
-        batch_size = 5
-
-        m = VectorChoiceMixture(self.cfg)
-
-        weight_indexes = torch.randint(0, depth, (input, batch_size, top_k))
-        bias_indexes = torch.randint(0, depth, (output, batch_size, top_k))
-        weight_probs = F.softmax(torch.randn(input, batch_size, top_k), dim=-1)
-        bias_probs = F.softmax(torch.randn(output, batch_size, top_k), dim=-1)
-
-        selected_weights, selected_biases = m._select_parameters(
-            weight_indexes, bias_indexes
-        )
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            selected_weights, weight_probs, selected_biases, bias_probs
-        )
-
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, output]))
-
-        weight_probs_test = weight_probs.transpose(1, 0).unsqueeze(-1)
-        bias_probs_test = bias_probs.transpose(1, 0)
-
-        weighted_weights = selected_weights * weight_probs_test
-        weighted_biases = selected_biases * bias_probs_test
-
-        expected_weight_mixture = weighted_weights.sum(dim=-2)
-        expected_bias_mixture = weighted_biases.sum(dim=-1)
-
-        self.assertTrue(torch.allclose(weight_mixture, expected_weight_mixture))
-        self.assertTrue(torch.allclose(bias_mixture, expected_bias_mixture))
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            selected_weights, weight_probs, None, None
-        )
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertIsNone(bias_mixture)
-
-    def test__compute_parameter_mixture_top_k_weighted_parameters_false(self):
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-        top_k = self.mixture_cfg.top_k
-        batch_size = 5
-
-        overrides = MixtureConfig(weighted_parameters_flag=False)
-        m = VectorChoiceMixture(self.cfg, overrides)
-
-        weight_indexes = torch.randint(0, depth, (input, batch_size, top_k))
-        bias_indexes = torch.randint(0, depth, (output, batch_size, top_k))
-        weight_probs = F.softmax(torch.randn(input, batch_size, top_k), dim=-1)
-        bias_probs = F.softmax(torch.randn(output, batch_size, top_k), dim=-1)
-
-        selected_weights, selected_biases = m._select_parameters(
-            weight_indexes, bias_indexes
-        )
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            selected_weights, weight_probs, selected_biases, bias_probs
-        )
-
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, output]))
-
-        expected_weight_mixture = selected_weights.sum(dim=-2)
-        expected_bias_mixture = selected_biases.sum(dim=-1)
-
-        self.assertTrue(torch.allclose(weight_mixture, expected_weight_mixture))
-        self.assertTrue(torch.allclose(bias_mixture, expected_bias_mixture))
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            selected_weights, weight_probs, None, None
-        )
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertIsNone(bias_mixture)
-
-    def test__compute_parameter_mixture_full(self):
-        input = self.mixture_cfg.input_dim
-        depth = self.mixture_cfg.depth_dim
-        output = self.mixture_cfg.output_dim
-        top_k = self.mixture_cfg.top_k
-        router_output_dim = self.mixture_cfg.router_output_dim
-        batch_size = 5
-
-        overrides = MixtureConfig(
-            top_k=router_output_dim,
-            depth_dim=router_output_dim,
-            weighted_parameters_flag=True,
-        )
-        m = VectorChoiceMixture(self.cfg, overrides)
-
-        weight_probs = F.softmax(
-            torch.randn(input, batch_size, router_output_dim), dim=-1
-        )
-        bias_probs = F.softmax(
-            torch.randn(output, batch_size, router_output_dim), dim=-1
-        )
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            m.weight_bank.unsqueeze(0),
-            weight_probs,
-            m.bias_bank.unsqueeze(0),
-            bias_probs,
-        )
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, output]))
-
-        weight_probs_test = weight_probs.transpose(1, 0).unsqueeze(-1)
-        bias_probs_test = bias_probs.transpose(1, 0)
-
-        weighted_weights = m.weight_bank.unsqueeze(0) * weight_probs_test
-        weighted_biases = m.bias_bank.unsqueeze(0) * bias_probs_test
-
-        expected_weight_mixture = weighted_weights.sum(dim=-2)
-        expected_bias_mixture = weighted_biases.sum(dim=-1)
-
-        self.assertTrue(torch.allclose(weight_mixture, expected_weight_mixture))
-        self.assertTrue(torch.allclose(bias_mixture, expected_bias_mixture))
-
-        weight_mixture, bias_mixture = m._compute_parameter_mixture(
-            m.weight_bank.unsqueeze(0), weight_probs, None, None
-        )
-        self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-        self.assertIsNone(bias_mixture)
-
-    # def test__compute_parameter_mixture_full_weighted_parameters_false(self):
-    #     input = self.mixture_cfg.input_dim
-    #     depth = self.mixture_cfg.depth_dim
-    #     output = self.mixture_cfg.output_dim
-    #     top_k = self.mixture_cfg.top_k
-    #     router_output_dim = self.mixture_cfg.router_output_dim
-    #     threshold = 0.1
-    #     batch_size = 5
-    #
-    #     overrides = MixtureConfig(
-    #         top_k=router_output_dim,
-    #         depth_dim=router_output_dim,
-    #         weighted_parameters_flag=False,
-    #     )
-    #     m = VectorChoiceMixture(self.cfg, overrides)
-    #
-    #     weight_probs_shape = (input, batch_size, router_output_dim)
-    #     weight_logits = torch.randn(weight_probs_shape)
-    #     weight_mask = weight_logits > 0
-    #     weight_logits = weight_logits.masked_fill(weight_mask, float("-inf"))
-    #     weight_probs = F.softmax(weight_logits, dim=-1)
-    #
-    #     bias_probs_shape = (output, batch_size, router_output_dim)
-    #     bias_logits = torch.randn(bias_probs_shape)
-    #     bias_mask = bias_logits > 0
-    #     bias_logits = bias_logits.masked_fill(bias_mask, float("-inf"))
-    #     bias_probs = F.softmax(bias_logits, dim=-1)
-    #
-    #     weight_mixture, bias_mixture = m._compute_parameter_mixture(
-    #         m.weight_bank.unsqueeze(0),
-    #         weight_probs,
-    #         m.bias_bank.unsqueeze(0),
-    #         bias_probs,
-    #     )
-    #
-    #     self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-    #     self.assertEqual(bias_mixture.shape, torch.Size([batch_size, output]))
-    #
-    #     weight_probs_test = (weight_probs > 0).int().transpose(1, 0).unsqueeze(-1)
-    #     bias_probs_test = (bias_probs > 0).int().transpose(1, 0)
-    #
-    #     weighted_weights = m.weight_bank.unsqueeze(0) * weight_probs_test
-    #     weighted_biases = m.bias_bank.unsqueeze(0) * bias_probs_test
-    #
-    #     expected_weight_mixture = weighted_weights.sum(dim=-2)
-    #     expected_bias_mixture = weighted_biases.sum(dim=-1)
-    #
-    #     self.assertTrue(torch.allclose(weight_mixture, expected_weight_mixture))
-    #     self.assertTrue(torch.allclose(bias_mixture, expected_bias_mixture))
-    #
-    #     weight_mixture, bias_mixture = m._compute_parameter_mixture(
-    #         m.weight_bank, weight_probs, None, None
-    #     )
-    #     self.assertEqual(weight_mixture.shape, torch.Size([batch_size, input, output]))
-    #     self.assertIsNone(bias_mixture)
 
 
 class TestMatrixChoiceMixture(unittest.TestCase):
@@ -814,6 +437,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
+            router_output_dim=10,
             weighted_parameters_flag=True,
         )
         m = MatrixChoiceMixture(c, overrides)
@@ -953,6 +577,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
+            router_output_dim=10,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
@@ -1491,6 +1116,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=6,
             top_k=6,
+            router_output_dim=6,
         )
         m = GeneratorChoiceMixture(c, overrides)
         batch_size = 2
