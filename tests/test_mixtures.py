@@ -218,6 +218,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=10,
             depth_dim=10,
             router_output_dim=10,
+            weighted_parameters_flag=True,
         )
         m = VectorChoiceMixture(c, overrides)
 
@@ -668,7 +669,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
 
-    def test__compute_mixture__top_k__full_mixture__bias_params(
+    def test__compute_mixture__full_mixture__bias_params(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -1722,6 +1723,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             depth_dim=6,
             top_k=6,
             router_output_dim=6,
+            weighted_parameters_flag=True,
         )
         m = GeneratorChoiceMixture(c, overrides)
         batch_size = 2
@@ -2158,6 +2160,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             input_dim=6,
             output_dim=5,
             top_k=6,
+            weighted_parameters_flag=True,
         )
         m = GeneratorChoiceMixture(c, overrides)
         batch_size = 2
