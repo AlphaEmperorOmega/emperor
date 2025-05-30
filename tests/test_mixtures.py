@@ -370,7 +370,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(selected_params, output))
-        self.assertTrue(
+        self.assertEqual(
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
 
@@ -395,7 +395,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             probs,
         )
 
-        self.assertTrue(
+        self.assertEqual(
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
         probs = probs.transpose(1, 0)
@@ -425,7 +425,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             is_weight=False,
         )
 
-        self.assertTrue(output.shape, torch.Size([batch_size, c.output_dim]))
+        self.assertEqual(output.shape, torch.Size([batch_size, c.output_dim]))
         probs = probs.transpose(1, 0)
         expected_output = selected_params * probs
         self.assertTrue(torch.allclose(expected_output, output))
@@ -451,7 +451,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             probs,
         )
 
-        self.assertTrue(
+        self.assertEqual(
             output.shape, torch.Size([batch_size, c.input_dim, c.top_k, c.output_dim])
         )
 
@@ -482,7 +482,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             is_weight=False,
         )
 
-        self.assertTrue(output.shape, torch.Size([batch_size, c.output_dim, c.top_k]))
+        self.assertEqual(output.shape, torch.Size([batch_size, c.output_dim, c.top_k]))
         probs = probs.transpose(1, 0)
         expected_output = selected_params * probs
         self.assertTrue(torch.allclose(expected_output, output))
@@ -507,7 +507,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             selected_params,
             probs,
         )
-        self.assertTrue(
+        self.assertEqual(
             output.shape,
             torch.Size([batch_size, c.input_dim, c.depth_dim, c.output_dim]),
         )
@@ -538,7 +538,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             is_weight=False,
         )
 
-        self.assertTrue(
+        self.assertEqual(
             output.shape, torch.Size([batch_size, c.output_dim, c.depth_dim])
         )
         probs = probs.transpose(1, 0)
