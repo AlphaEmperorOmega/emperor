@@ -328,6 +328,28 @@ class TestVectorChoiceMixture(unittest.TestCase):
             selected_biases.shape, torch.Size([batch_size, c.output_dim, c.top_k])
         )
 
+    def test__select_parameter_vectors(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+            bias_parameters_flag=True,
+        )
+        m = VectorChoiceMixture(c, overrides)
+
+        batch_size = 5
+
+        indices_shape = (c.input_dim, batch_size, c.top_k)
+        indices = torch.randint(0, c.depth_dim, (indices_shape))
+        weight_bank_shape = (c.input_dim, c.depth_dim, c.output_dim)
+        weight_bank = torch.arange(prod(weight_bank_shape)).reshape(weight_bank_shape)
+        selected_parameters = m._VectorChoiceMixture__select_parameter_vectors(
+            indices, weight_bank, m.range_weights
+        )
+
+        self.assertEqual(
+            selected_parameters.shape,
+            torch.Size([batch_size, c.input_dim, c.top_k, c.output_dim]),
+        )
 
 class TestMatrixChoiceMixture(unittest.TestCase):
     def setUp(self):
