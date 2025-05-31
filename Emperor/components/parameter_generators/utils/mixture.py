@@ -498,6 +498,25 @@ class GeneratorChoiceMixture(ParameterGeneratorMixture):
             selected_bias_params,
         )
 
+    def _compute_mixture_full(
+        self,
+        weight_probs: Tensor,
+        bias_probs: Tensor | None = None,
+        *args,
+    ) -> tuple[Tensor, Tensor | None]:
+        weight_mixture, bias_mixture = self._compute_parameter_mixture(
+            self.input_weight_bank,
+            self.output_weight_bank,
+            self.diagonal_weight_bank,
+            self.anti_diagonal_weight_bank,
+            self.bias_bank,
+            weight_probs,
+            bias_probs,
+            *args,
+        )
+
+        return weight_mixture, bias_mixture
+
     def _compute_parameter_mixture(
         self,
         input_batch: Tensor,
