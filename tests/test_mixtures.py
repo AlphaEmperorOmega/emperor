@@ -186,7 +186,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         self.assertIsInstance(bias_bank, Parameter)
         self.assertEqual(list(bias_bank.shape), [c.output_dim, c.depth_dim])
 
-    def test__init_parameter_choice_ranges__top_k__1(self):
+    def test__init_parameter_choice_ranges__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -199,7 +199,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim]))
         self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim]))
 
-    def test__init_parameter_choice_ranges__top_k__greater_than_1(self):
+    def test__init_parameter_choice_ranges__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=3,
@@ -229,7 +229,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim]))
         self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim]))
 
-    def test__select_parameters__bias_parameters_flag__False__top_k__1(self):
+    def test__select_parameters__bias_parameters_flag__False__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -250,7 +250,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         )
         self.assertIsNone(selected_biases)
 
-    def test__select_parameters__bias_parameters_flag__True__top_k__1(self):
+    def test__select_parameters__bias_parameters_flag__True__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -271,7 +271,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         )
         self.assertEqual(selected_biases.shape, torch.Size([batch_size, c.output_dim]))
 
-    def test__select_parameters__bias_parameters_flag__False__top_k__greater_than_1(
+    def test__select_parameters__bias_parameters_flag__False__top_k(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -299,7 +299,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         )
         self.assertIsNone(selected_biases)
 
-    def test__select_parameters__bias_parameters_flag__True__top_k__greater_than_1(
+    def test__select_parameters__bias_parameters_flag__True__top_k(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -375,7 +375,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
 
-    def test__compute_weighted_parameters__weighted_parameters_flag__True__top_k__1(
+    def test__compute_weighted_parameters__weighted_parameters_flag__True__sparse(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -404,7 +404,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         expected_output = selected_params * probs
         self.assertTrue(torch.allclose(expected_output, output))
 
-    def test__compute_weighted_parameters__weighted_parameters_flag__True__top_k__1__bias_parameters(
+    def test__compute_weighted_parameters__weighted_parameters_flag__True__sparse__bias_parameters(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -431,7 +431,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         expected_output = selected_params * probs
         self.assertTrue(torch.allclose(expected_output, output))
 
-    def test__compute_weighted_parameters__weighted_parameters_flag__True__top_k__greater_than_1(
+    def test__compute_weighted_parameters__weighted_parameters_flag__True__top_k(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -461,7 +461,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         expected_output = selected_params * probs
         self.assertTrue(torch.allclose(expected_output, output))
 
-    def test__compute_weighted_parameters__weighted_parameters_flag__True__top_k__greater_than_1__bias_parameters(
+    def test__compute_weighted_parameters__weighted_parameters_flag__True__top_k__bias_parameters(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -488,7 +488,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         expected_output = selected_params * probs
         self.assertTrue(torch.allclose(expected_output, output))
 
-    def test__compute_weighted_parameters__weighted_parameters_flag__True__top_k__full_mixture(
+    def test__compute_weighted_parameters__weighted_parameters_flag__True__full_mixture(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -546,7 +546,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         expected_output = selected_params * probs
         self.assertTrue(torch.allclose(expected_output, output))
 
-    def test__compute_mixture__top_k__1(
+    def test__compute_mixture__sparse(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -571,7 +571,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
 
-    def test__compute_mixture__top_k__1__bias_params(
+    def test__compute_mixture__sparse__bias_params(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -595,7 +595,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
 
         self.assertEqual(output.shape, torch.Size([batch_size, c.output_dim]))
 
-    def test__compute_mixture__top_k__greater_than_1(
+    def test__compute_mixture__top_k(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -620,7 +620,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
 
-    def test__compute_mixture__top_k__greater_than_1__bias_params(
+    def test__compute_mixture__top_k__bias_params(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -761,7 +761,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         self.assertIsInstance(bias_bank, Parameter)
         self.assertEqual(bias_bank.shape, s([c.depth_dim, c.output_dim]))
 
-    def test__generate_probability_shapes__top_k__1(self):
+    def test__generate_probability_shapes__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -774,7 +774,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         self.assertEqual(weight_probs_shape, (-1, 1, 1))
         self.assertEqual(bias_probs_shape, (-1, 1))
 
-    def test__generate_probability_shapes__top_k__greater_than_1(self):
+    def test__generate_probability_shapes__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=3,
@@ -836,7 +836,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, m.top_k, c.output_dim]),
         )
 
-    def test__select_parameters__top_k__1(self):
+    def test__select_parameters__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -858,7 +858,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         self.assertEqual(selected_biases.shape, s([batch_size, c.output_dim]))
 
-    def test__select_parameters__top_k__k(self):
+    def test__select_parameters__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=3,
@@ -932,7 +932,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, c.top_k, c.input_dim, c.output_dim]),
         )
 
-    def test__compute_weighted_parameters__top_k__1(self):
+    def test__compute_weighted_parameters__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -957,7 +957,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, c.input_dim, c.output_dim]),
         )
 
-    def test__compute_weighted_parameters__weighted_parameters_flag__False__top_k__1(
+    def test__compute_weighted_parameters__weighted_parameters_flag__False__sparse(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -985,7 +985,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         self.assertTrue(torch.equal(weighted_parameters, selected_weight_params))
 
-    def test__compute_weighted_parameters__top_k__k(self):
+    def test__compute_weighted_parameters__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=3,
@@ -1010,7 +1010,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, m.top_k, c.input_dim, c.output_dim]),
         )
 
-    def test__compute_weighted_parameters__weighted_parameters_flag__False__top_k__k(
+    def test__compute_weighted_parameters__weighted_parameters_flag__False__top_k(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -1065,7 +1065,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, m.depth_dim, c.input_dim, c.output_dim]),
         )
 
-    def test__compute_mixture__top_k__1(self):
+    def test__compute_mixture__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -1088,7 +1088,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, c.input_dim, c.output_dim]),
         )
 
-    def test__compute_mixture__top_k__k(self):
+    def test__compute_mixture__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
@@ -1134,7 +1134,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             s([batch_size, c.input_dim, c.output_dim]),
         )
 
-    def test__compute_mixture__bias_parameters_flag__True__top_k__1(self):
+    def test__compute_mixture__bias_parameters_flag__True__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -1156,7 +1156,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         s = lambda x: torch.Size(x)
         self.assertEqual(bias_parameters.shape, s([batch_size, c.output_dim]))
 
-    def test__compute_mixture__bias_parameters_flag__True__top_k__greater_than_1(self):
+    def test__compute_mixture__bias_parameters_flag__True__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=3,
@@ -1413,7 +1413,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         self.assertIsInstance(bias_bank, Parameter)
         self.assertEqual(bias_bank.shape, s([c.depth_dim, c.input_dim, c.output_dim]))
 
-    def test__select_parameters_top_1(self):
+    def test__select_parameters_sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -1449,7 +1449,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         self.assertIsNone(selected_anti_diagonal_params)
         self.assertIsNone(selected_bias_params)
 
-    def test__select_parameters_top_1__cross_diagonal_flag__true(self):
+    def test__select_parameters_sparse__cross_diagonal_flag__true(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -1489,7 +1489,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         )
         self.assertIsNone(selected_bias_params)
 
-    def test__select_parameters_top_1__bias_parameters_flag__true(self):
+    def test__select_parameters_sparse__bias_parameters_flag__true(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -1645,7 +1645,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             s([batch_size, c.top_k, c.input_dim, c.output_dim]),
         )
 
-    def test__compute_einsum_top_1(self):
+    def test__compute_einsum_sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -2068,7 +2068,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
-    def test__compute_outer_product__top_k__1(self):
+    def test__compute_outer_product__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             input_dim=6,
@@ -2111,7 +2111,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
-    def test__compute_outer_product__top_k__k(self):
+    def test__compute_outer_product__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             input_dim=6,
@@ -2475,7 +2475,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
-    def test__apply_parameter_weighting__top_k__1(self):
+    def test__apply_parameter_weighting__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -2511,7 +2511,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
-    def test__apply_parameter_weighting__top_k__k(self):
+    def test__apply_parameter_weighting__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
@@ -2583,7 +2583,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
-    def test__generate_weight_parameters__top_k__1(self):
+    def test__generate_weight_parameters__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -2627,7 +2627,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
 
-    def test__generate_weight_parameters__top_k__k(self):
+    def test__generate_weight_parameters__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=3,
@@ -2736,7 +2736,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         self.assertIsNone(output)
 
-    def test__generate_bias_parameters__top_k__1(self):
+    def test__generate_bias_parameters__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -2759,7 +2759,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         self.assertEqual(output.shape, torch.Size([batch_size, c.output_dim]))
 
-    def test__generate_bias_parameters__top_k__k(self):
+    def test__generate_bias_parameters__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=4,
@@ -2805,7 +2805,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         self.assertEqual(output.shape, torch.Size([batch_size, c.output_dim]))
 
-    def test__compute_parameter_mixture__top_k__1(self):
+    def test__compute_parameter_mixture__sparse(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
@@ -2864,7 +2864,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         )
         self.assertEqual(output_biases.shape, torch.Size([batch_size, c.output_dim]))
 
-    def test__compute_parameter_mixture__top_k__k(self):
+    def test__compute_parameter_mixture__top_k(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=3,
