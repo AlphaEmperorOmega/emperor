@@ -519,7 +519,6 @@ class GeneratorChoiceMixture(ParameterGeneratorMixture):
 
     def _compute_parameter_mixture(
         self,
-        input_batch: Tensor,
         input_weight_params: Tensor,
         output_weight_params: Tensor,
         diagonal_params: Tensor,
@@ -527,6 +526,7 @@ class GeneratorChoiceMixture(ParameterGeneratorMixture):
         bias_params: Tensor | None = None,
         weight_probs: Tensor | None = None,
         bias_probs: Tensor | None = None,
+        input_batch: Tensor | None = None,
     ) -> Tuple[Tensor, Tensor | None]:
         (
             input_vectors,
