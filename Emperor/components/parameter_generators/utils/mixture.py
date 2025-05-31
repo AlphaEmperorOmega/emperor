@@ -38,26 +38,125 @@ class MixtureModel(Module):
                 self.__sample_probabilities_and_indexes(
                     inputBatch, skip_mask
                 )
+class ParameterGeneratorMixture(MixtureBase):
+    def __init__(
+        self,
+        cfg: "MixtureConfig | ModelConfig",
+        overrides: "MixtureConfig | None" = None,
+    ) -> None:
+        super().__init__(cfg, overrides)
+
+    def compute_mixture(
+        self,
+        weight_probs: Tensor,
+        weight_indexes: Tensor | None = None,
+        bias_probs: Tensor | None = None,
+        bias_indexes: Tensor | None = None,
+        *args,
+    ) -> tuple[Tensor, Tensor | None]:
+        if self.top_k == 1:
+            return self._compute_mixture_sparse(
+                weight_probs,
+                weight_indexes,
+                bias_probs,
+                bias_indexes,
+                *args,
             )
-            self.set_router_weight_flag(False)
+        elif self.top_k == self.depth_dim:
+            return self._compute_mixture_full(
+                weight_probs,
+                bias_probs,
+                *args,
+            )
+        else:
+            return self._compute_mixture_topk(
+                weight_probs,
+                weight_indexes,
+                bias_probs,
+                bias_indexes,
+                *args,
+            )
 
-        return weight_indexes, bias_indexes, weight_probabilities, bias_probabilities
+    def _compute_mixture_sparse(
+        self,
+        weight_probs: Tensor,
+        weight_indexes: Tensor,
+        bias_probs: Tensor | None = None,
+        bias_indexes: Tensor | None = None,
+        *args,
+    ) -> tuple[Tensor, Tensor | None]:
+        selected_params = self._select_parameters(weight_indexes, bias_indexes)
 
-    def set_router_weight_flag(self, compute_weight_logit_scores_flag: bool=True):
-        self.probability_sampler_model.sampler_model.set_compute_weight_flag(
-            compute_weight_logit_scores_flag
+        weight_mixture, bias_mixture = self._compute_parameter_mixture(
+            *selected_params,
+            weight_probs,
+            bias_probs,
+            *args,
         )
 
-    def _sampleProbabilities(self, inputBatch, skip_mask):
-        return self.probability_sampler_model(
-            input_matrix=inputBatch,
-            skip_mask=skip_mask,
-            is_training_flag=self.model.training,
-            custom_softmax_flag=False,
+        return weight_mixture, bias_mixture
+
+    def _compute_mixture_topk(
+        self,
+        weight_probs: Tensor,
+        weight_indexes: Tensor,
+        bias_probs: Tensor | None = None,
+        bias_indexes: Tensor | None = None,
+        *args,
+    ) -> tuple[Tensor, Tensor | None]:
+        selected_params = self._select_parameters(weight_indexes, bias_indexes)
+
+        weight_mixture, bias_mixture = self._compute_parameter_mixture(
+            *selected_params,
+            weight_probs,
+            bias_probs,
+            *args,
         )
 
+        return weight_mixture, bias_mixture
 
-class SparseMixtureBehaviour(MixtureModel):
+    def _compute_mixture_full(
+        self,
+        weight_probs: Tensor,
+        bias_probs: Tensor | None = None,
+        *args,
+    ) -> tuple[Tensor, Tensor | None]:
+        weight_mixture, bias_mixture = self._compute_parameter_mixture(
+            self.weight_bank,
+            self.bias_bank,
+            weight_probs,
+            bias_probs,
+            *args,
+        )
+
+        return weight_mixture, bias_mixture
+
+    def _compute_parameter_mixture(
+        self,
+        selected_weight_parameters: Tensor,
+        selected_bias_parameters: Tensor | None = None,
+        weight_probs: Tensor | None = None,
+        bias_probs: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
+        weight_mixture = self._compute_mixture(
+            selected_weight_parameters,
+            weight_probs,
+        )
+        bias_mixture = None
+        if self.bias_parameters_flag:
+            bias_mixture = self._compute_mixture(
+                selected_bias_parameters,
+                bias_probs,
+                is_weight=False,
+            )
+
+        return weight_mixture, bias_mixture
+
+    def _init_parameter_bank(self, parameter_shape: tuple) -> Parameter:
+        bank = ParameterBank(parameter_shape, self._initialize_parameters)
+        return bank.get()
+
+
     def __init__(
         self,
         cfg: "MixtureModel | ModelConfig | None" = None,
