@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase
 
 
+from Emperor.components.parameter_generators.utils.mixture import MixtureConfig
 from Emperor.components.parameter_generators.utils.samplers import SamplerConfig
 from Emperor.library.choice import Library as L
 from Emperor.components.parameter_generators.utils.routers import (
@@ -74,11 +75,13 @@ SWITCH_LOSS_WEIGHT: float = 0.0
 ZERO_CENTERED_LOSS_WEIGHT: float = 0.0
 MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
 
+DEPTH_DIM = 64
+
 ROUTER_INPUT_DIM = 16
 ROUTER_HIDDEN_DIM = 32
-ROUTER_OUTPUT_DIM = 64
+ROUTER_OUTPUT_DIM = DEPTH_DIM
 ROUTER_BIAS_FLAG = True
-ROUTER_NOISY_TOPK_FLAG = True
+ROUTER_NOISY_TOPK_FLAG = False
 ROUTER_ACTIVATION_FUNCTION = nn.ReLU()
 ROUTER_NUM_LAYERNUM_LAYERSS = 5
 
@@ -89,6 +92,16 @@ SAMPLER_NUM_TOPK_SAMPLES = 3
 SAMPLER_NORMALIZE_PROBABILITIES_FLAG = True
 SAMPLER_NOISY_TOPK_FLAG = ROUTER_NOISY_TOPK_FLAG
 SAMPLER_ROTUER_MODEL = RouterModel
+SAMPLER_BOOLEAN_MASK_FLAG = False
+
+MIXTURE_DEPTH_DIM = DEPTH_DIM
+MIXTURE_INPUT_DIM = 16
+MIXTURE_HIDDEN_DIM = 32
+MIXTURE_OUTPUT_DIM = 64
+MIXTURE_TOP_K = SAMPLER_TOP_K
+MIXTURE_WEIGHTED_PARAMETERS_FLAG = True
+MIXTURE_BIAS_PARAMETERS_FLAG = True
+MIXTURE_ROUTER_OUTPUT_DIM = DEPTH_DIM
 
 
 # @dataclass
@@ -300,16 +313,11 @@ class ModelConfig(DataClassBase):
         default=MUTUAL_INFORMATION_LOSS_WEIGHT,
         metadata={"help": ""},
     )
-    # parameter_geneartor_layer_config: ParameterGeneratorLayerConfig = field(
-    #     default_factory=ParameterGeneratorLayerConfig,
-    #     metadata={"help": "`ParameterGeneratorLayer` configuration"},
-    # )
     router_model_config: RouterConfig = field(
         default_factory=lambda: RouterConfig(
             input_dim=ROUTER_INPUT_DIM,
             hidden_dim=ROUTER_HIDDEN_DIM,
             output_dim=ROUTER_OUTPUT_DIM,
-            compute_bias_logits_flag=ROUTER_BIAS_FLAG,
             noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
             activation=ROUTER_ACTIVATION_FUNCTION,
             num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
@@ -325,9 +333,22 @@ class ModelConfig(DataClassBase):
             normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
             noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
             router_output_dim=ROUTER_OUTPUT_DIM,
-            router_model=lambda cfg: SAMPLER_ROTUER_MODEL(cfg),
+            boolean_mask_flag=SAMPLER_BOOLEAN_MASK_FLAG,
         ),
         metadata={"help": "`SamplerConfig` configuration"},
+    )
+    mixture_model_config: MixtureConfig = field(
+        default_factory=lambda: MixtureConfig(
+            input_dim=MIXTURE_INPUT_DIM,
+            output_dim=MIXTURE_OUTPUT_DIM,
+            depth_dim=MIXTURE_DEPTH_DIM,
+            top_k=MIXTURE_TOP_K,
+            bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
+            weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
+            router_output_dim=MIXTURE_ROUTER_OUTPUT_DIM,
+            cross_diagonal_flag=False,
+        ),
+        metadata={"help": "`MixtureConfig` configuration"},
     )
 
 
