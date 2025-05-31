@@ -1,15 +1,61 @@
-from Emperor.config import ModelConfig
-from .probabilitySamplers import SamplerModel
-from Emperor.base.utils import Module
+import torch
+from torch import Tensor, topk
+from torch.nn import Parameter
+import torch.nn.functional as F
+from torch.nn.modules import padding
+from Emperor.base.utils import Module, DataClassBase, randn, arange, reshape, matmul
+from dataclasses import dataclass, field
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple
 
 if TYPE_CHECKING:
-    from .base import ParameterGenerator
-    from Emperor.config import ParameterGeneratorConfig
+    from Emperor.config import ModelConfig
 
 
-class MixtureModel(Module):
+@dataclass
+class MixtureConfig(DataClassBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": "Mixture model input dimension"},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Mixture model output dimension"},
+    )
+    depth_dim: int | None = field(
+        default=None,
+        metadata={"help": "Mixture model depth dimension"},
+    )
+    top_k: int | None = field(
+        default=None,
+        metadata={
+            "help": "Inidicates the top-k probs and indices to be selected from a distribution"
+        },
+    )
+    weighted_parameters_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` the sepected parameters will be multiplied by their probs"
+        },
+    )
+    bias_parameters_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "Inidicates the top-k probs and indices to be selected from a distribution"
+        },
+    )
+    router_output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Router output dimension"},
+    )
+    cross_diagonal_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "Used for `VectorChoiceMixture` to enable cross diagonal matrices when computing weights"
+        },
+    )
+
+
     def __init__(
         self,
         model: "ParameterGenerator",
