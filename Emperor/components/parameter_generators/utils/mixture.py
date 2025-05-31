@@ -56,34 +56,33 @@ class MixtureConfig(DataClassBase):
     )
 
 
+class MixtureBase(Module):
     def __init__(
         self,
-        model: "ParameterGenerator",
-        cfg: "MixtureConfig | ModelConfig | None" = None,
-        bias_flag: bool | None = None,
+        cfg: "MixtureConfig | ModelConfig",
+        overrides: "MixtureConfig | None" = None,
     ):
         super().__init__()
-        self.model = model
+        config = getattr(cfg, "mixture_model_config", cfg)
+        self.cfg: "MixtureConfig" = self._overwrite_config(config, overrides)
 
-        self.cfg_main = cfg
-        self.cfg: "MixtureModel | None" = self._resolve_config(
-            cfg, "sampler_model_config"
+        self.input_dim = self.cfg.input_dim
+        self.depth_dim = self.cfg.depth_dim
+        self.output_dim = self.cfg.output_dim
+        self.top_k = self.cfg.top_k
+        self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
+        self.bias_parameters_flag = self.cfg.bias_parameters_flag
+        self.router_output_dim = self.cfg.router_output_dim
+        self.cross_diagonal_flag = self.cfg.cross_diagonal_flag
+        assert self.depth_dim == self.router_output_dim, (
+            "The `depth_dim` needs to be equal with `router_output_dim` since this is the dimension the router creates a distribution over."
         )
-        self.bias_flag = self._resolve(bias_flag, "bias_flag", cfg)
-        self.probability_sampler_model = SamplerModel(cfg)
+        if self.depth_dim == self.top_k:
+            assert self.weighted_parameters_flag is True, (
+                "If `full_mixture` is performed the `weighted_parameters_flag` must be True. Because the `weight_bank` or `bias_bank` needs to be broadcasted across the batch."
+            )
 
-    def _sample_weight_bias_probabilities_and_indexes(self, inputBatch, skip_mask):
-        weight_probabilities, weight_indexes = (
-            self._sample_probabilities_and_indexes(inputBatch, skip_mask)
-        )
 
-        bias_indexes = bias_probabilities = None
-        if self.bias_flag:
-            self.set_router_weight_flag(False)
-            bias_probabilities, bias_indexes = (
-                self.__sample_probabilities_and_indexes(
-                    inputBatch, skip_mask
-                )
 class ParameterGeneratorMixture(MixtureBase):
     def __init__(
         self,
@@ -203,20 +202,23 @@ class ParameterGeneratorMixture(MixtureBase):
         return bank.get()
 
 
+class ParameterBank:
     def __init__(
         self,
-        cfg: "MixtureModel | ModelConfig | None" = None,
-        model: "ParameterGenerator",
+        shape: tuple,
+        initializer: callable,
     ):
-        super().__init__(cfg, model)
+        self.shape = shape
+        self.initializer = initializer
+        self.parameter_bank = self.__create_bank()
 
-    def compute_mixture(self, inputBatch):
-        weight_indexes, bias_indexes, weight_probabilities, bias_probabilities = (
-            self._sample_probabilities_and_indexes(inputBatch)
-        )
+    def __create_bank(self) -> Parameter:
+        parameter_bank = Parameter(randn(*self.shape))
+        self.initializer(parameter_bank)
+        return parameter_bank
 
-        selected_weights, selected_biases = self.model.select_parameters(
-            weight_indexes, bias_indexes
+    def get(self) -> Parameter:
+        return self.parameter_bank
 
 
 class VectorChoiceMixture(ParameterGeneratorMixture):
