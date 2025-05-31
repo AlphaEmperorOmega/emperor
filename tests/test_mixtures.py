@@ -3505,3 +3505,207 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             weight_mixture.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
         )
         self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
+
+
+class TestParameterGeneratorMixture_GeneratorChoiceMixture(unittest.TestCase):
+    def setUp(self):
+        self.cfg = MixtureConfig(
+            input_dim=4,
+            output_dim=5,
+            depth_dim=6,
+            top_k=2,
+            router_output_dim=6,
+            cross_diagonal_flag=False,
+            weighted_parameters_flag=False,
+            bias_parameters_flag=False,
+        )
+
+    def test__compute_mixture_sparse(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        weight_shape = (batch_size,)
+        bias_shape = (batch_size,)
+
+        input_batch = torch.randint(0, c.depth_dim, (batch_size, c.input_dim)).float()
+        weight_indexes = torch.randint(0, c.depth_dim, (weight_shape))
+        bias_indexes = torch.randint(0, c.depth_dim, (bias_shape))
+        weight_probs = F.sigmoid(torch.randn(weight_shape))
+        bias_probs = F.sigmoid(torch.randn(bias_shape))
+
+        weight_mixture, bias_mixture = m._compute_mixture_sparse(
+            weight_probs,
+            weight_indexes,
+            bias_probs,
+            bias_indexes,
+            input_batch,
+        )
+
+        self.assertEqual(
+            weight_mixture.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__compute_mixture_topk(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        weight_shape = (batch_size, c.top_k)
+        bias_shape = (batch_size, c.top_k)
+
+        input_batch = torch.randint(0, c.depth_dim, (batch_size, c.input_dim)).float()
+        weight_indexes = torch.randint(0, c.depth_dim, (weight_shape))
+        bias_indexes = torch.randint(0, c.depth_dim, (bias_shape))
+        weight_probs = F.sigmoid(torch.randn(weight_shape))
+        bias_probs = F.sigmoid(torch.randn(bias_shape))
+
+        weight_mixture, bias_mixture = m._compute_mixture_topk(
+            weight_probs,
+            weight_indexes,
+            bias_probs,
+            bias_indexes,
+            input_batch,
+        )
+
+        self.assertEqual(
+            weight_mixture.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__compute_mixture_full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            depth_dim=10,
+            top_k=10,
+            router_output_dim=10,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        weight_shape = (batch_size, c.depth_dim)
+        bias_shape = (batch_size, c.depth_dim)
+
+        input_batch = torch.randint(0, c.depth_dim, (batch_size, c.input_dim)).float()
+        weight_probs = F.sigmoid(torch.randn(weight_shape))
+        bias_probs = F.sigmoid(torch.randn(bias_shape))
+
+        weight_mixture, bias_mixture = m._compute_mixture_full(
+            weight_probs,
+            bias_probs,
+            input_batch,
+        )
+
+        self.assertEqual(
+            weight_mixture.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__compute_mixture__sparse(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=1,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        weight_shape = (batch_size,)
+        bias_shape = (batch_size,)
+
+        input_batch = torch.randint(0, c.depth_dim, (batch_size, c.input_dim)).float()
+        weight_indexes = torch.randint(0, c.depth_dim, (weight_shape))
+        bias_indexes = torch.randint(0, c.depth_dim, (bias_shape))
+        weight_probs = F.sigmoid(torch.randn(weight_shape))
+        bias_probs = F.sigmoid(torch.randn(bias_shape))
+
+        weight_mixture, bias_mixture = m.compute_mixture(
+            weight_probs,
+            weight_indexes,
+            bias_probs,
+            bias_indexes,
+            input_batch,
+        )
+
+        self.assertEqual(
+            weight_mixture.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__compute_mixture__topk(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            top_k=3,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        weight_shape = (batch_size, c.top_k)
+        bias_shape = (batch_size, c.top_k)
+
+        input_batch = torch.randint(0, c.depth_dim, (batch_size, c.input_dim)).float()
+        weight_indexes = torch.randint(0, c.depth_dim, (weight_shape))
+        bias_indexes = torch.randint(0, c.depth_dim, (bias_shape))
+        weight_probs = F.sigmoid(torch.randn(weight_shape))
+        bias_probs = F.sigmoid(torch.randn(bias_shape))
+
+        weight_mixture, bias_mixture = m.compute_mixture(
+            weight_probs,
+            weight_indexes,
+            bias_probs,
+            bias_indexes,
+            input_batch,
+        )
+
+        self.assertEqual(
+            weight_mixture.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
+
+    def test__compute_mixture__full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureConfig(
+            depth_dim=10,
+            top_k=10,
+            router_output_dim=10,
+            bias_parameters_flag=True,
+            weighted_parameters_flag=True,
+        )
+        m = GeneratorChoiceMixture(c, overrides)
+        batch_size = 2
+
+        weight_shape = (batch_size, c.depth_dim)
+        bias_shape = (batch_size, c.depth_dim)
+
+        input_batch = torch.randint(0, c.depth_dim, (batch_size, c.input_dim)).float()
+        weight_probs = F.sigmoid(torch.randn(weight_shape))
+        bias_probs = F.sigmoid(torch.randn(bias_shape))
+
+        weight_mixture, bias_mixture = m.compute_mixture(
+            weight_probs,
+            None,
+            bias_probs,
+            None,
+            input_batch,
+        )
+
+        self.assertEqual(
+            weight_mixture.shape, torch.Size([batch_size, c.input_dim, c.output_dim])
+        )
+        self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
