@@ -1,9 +1,8 @@
 import torch
-from torch import Tensor, topk
+from torch import Tensor
 from torch.nn import Parameter
 import torch.nn.functional as F
-from torch.nn.modules import padding
-from Emperor.base.utils import Module, DataClassBase, randn, arange, reshape, matmul
+from Emperor.base.utils import Module, DataClassBase, randn, arange, reshape
 from dataclasses import dataclass, field
 
 from typing import TYPE_CHECKING, Tuple
