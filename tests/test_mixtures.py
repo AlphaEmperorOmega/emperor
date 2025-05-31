@@ -2849,7 +2849,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         bias_probs = F.sigmoid(torch.randn((batch_size,)))
 
         output_weights, output_biases = m._compute_parameter_mixture(
-            input_batch,
             selected_input_weight_params,
             selected_output_weight_params,
             selected_diagonal_weight_params,
@@ -2857,6 +2856,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             selected_bias_params,
             weight_probs,
             bias_probs,
+            input_batch,
         )
 
         self.assertEqual(
@@ -2908,7 +2908,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
         output_weights, output_biases = m._compute_parameter_mixture(
-            input_batch,
             selected_input_weight_params,
             selected_output_weight_params,
             selected_diagonal_weight_params,
@@ -2916,6 +2915,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             selected_bias_params,
             weight_probs,
             bias_probs,
+            input_batch,
         )
 
         self.assertEqual(
@@ -2967,7 +2967,6 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
         output_weights, output_biases = m._compute_parameter_mixture(
-            input_batch,
             input_weight_bank_params,
             output_weight_bank_params,
             diagonal_weight_bank_params,
@@ -2975,6 +2974,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             selected_bias_params,
             weight_probs,
             bias_probs,
+            input_batch,
         )
 
         self.assertEqual(
@@ -3022,8 +3022,8 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
 
         weight_mixture, bias_mixture = m._compute_parameter_mixture(
             selected_weight_parameters,
-            weight_probs,
             selected_bias_parameters,
+            weight_probs,
             bias_probs,
         )
 
@@ -3058,8 +3058,8 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
 
         weight_mixture, bias_mixture = m._compute_parameter_mixture(
             selected_weight_parameters,
-            weight_probs,
             selected_bias_parameters,
+            weight_probs,
             bias_probs,
         )
 
@@ -3284,8 +3284,8 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
 
         weight_mixture, bias_mixture = m._compute_parameter_mixture(
             selected_weight_parameters,
-            weight_probs,
             selected_bias_parameters,
+            weight_probs,
             bias_probs,
         )
 
@@ -3320,8 +3320,8 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
 
         weight_mixture, bias_mixture = m._compute_parameter_mixture(
             selected_weight_parameters,
-            weight_probs,
             selected_bias_parameters,
+            weight_probs,
             bias_probs,
         )
 
