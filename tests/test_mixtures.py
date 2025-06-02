@@ -1242,6 +1242,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         overrides = MixtureConfig(
             cross_diagonal_flag=True,
+            bias_parameters_flag=True,
         )
 
         m = GeneratorChoiceMixture(main_c, overrides)
