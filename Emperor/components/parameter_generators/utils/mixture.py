@@ -93,17 +93,17 @@ class ParameterGeneratorMixture(MixtureBase):
     def compute_mixture(
         self,
         weight_probs: Tensor,
-        weight_indexes: Tensor | None = None,
+        weight_indices: Tensor | None = None,
         bias_probs: Tensor | None = None,
-        bias_indexes: Tensor | None = None,
+        bias_indices: Tensor | None = None,
         *args,
     ) -> tuple[Tensor, Tensor | None]:
         if self.top_k == 1:
             return self._compute_mixture_sparse(
                 weight_probs,
-                weight_indexes,
+                weight_indices,
                 bias_probs,
-                bias_indexes,
+                bias_indices,
                 *args,
             )
         elif self.top_k == self.depth_dim:
@@ -115,21 +115,21 @@ class ParameterGeneratorMixture(MixtureBase):
         else:
             return self._compute_mixture_topk(
                 weight_probs,
-                weight_indexes,
+                weight_indices,
                 bias_probs,
-                bias_indexes,
+                bias_indices,
                 *args,
             )
 
     def _compute_mixture_sparse(
         self,
         weight_probs: Tensor,
-        weight_indexes: Tensor,
+        weight_indices: Tensor,
         bias_probs: Tensor | None = None,
-        bias_indexes: Tensor | None = None,
+        bias_indices: Tensor | None = None,
         *args,
     ) -> tuple[Tensor, Tensor | None]:
-        selected_params = self._select_parameters(weight_indexes, bias_indexes)
+        selected_params = self._select_parameters(weight_indices, bias_indices)
 
         weight_mixture, bias_mixture = self._compute_parameter_mixture(
             *selected_params,
@@ -143,12 +143,12 @@ class ParameterGeneratorMixture(MixtureBase):
     def _compute_mixture_topk(
         self,
         weight_probs: Tensor,
-        weight_indexes: Tensor,
+        weight_indices: Tensor,
         bias_probs: Tensor | None = None,
-        bias_indexes: Tensor | None = None,
+        bias_indices: Tensor | None = None,
         *args,
     ) -> tuple[Tensor, Tensor | None]:
-        selected_params = self._select_parameters(weight_indexes, bias_indexes)
+        selected_params = self._select_parameters(weight_indices, bias_indices)
 
         weight_mixture, bias_mixture = self._compute_parameter_mixture(
             *selected_params,
@@ -262,15 +262,15 @@ class VectorChoiceMixture(ParameterGeneratorMixture):
         return choice_range_weights, choice_range_biases
 
     def _select_parameters(
-        self, weight_indexes: Tensor, bias_indexes: Tensor | None = None
+        self, weight_indices: Tensor, bias_indices: Tensor | None = None
     ) -> Tuple:
         selected_weights = self.__select_parameter_vectors(
-            weight_indexes, self.weight_bank, self.range_weights
+            weight_indices, self.weight_bank, self.range_weights
         )
         selected_biases = None
         if self.bias_parameters_flag:
             selected_biases = self.__select_parameter_vectors(
-                bias_indexes, self.bias_bank, self.range_biases
+                bias_indices, self.bias_bank, self.range_biases
             )
 
         return selected_weights, selected_biases
@@ -350,13 +350,13 @@ class MatrixChoiceMixture(ParameterGeneratorMixture):
 
     def _select_parameters(
         self,
-        weight_indexes: Tensor,
-        bias_indexes: Tensor | None = None,
+        weight_indices: Tensor,
+        bias_indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
-        selected_weights = self.weight_bank[weight_indexes]
+        selected_weights = self.weight_bank[weight_indices]
         selected_biases = None
         if self.bias_parameters_flag:
-            selected_biases = self.bias_bank[bias_indexes]
+            selected_biases = self.bias_bank[bias_indices]
 
         return selected_weights, selected_biases
 
