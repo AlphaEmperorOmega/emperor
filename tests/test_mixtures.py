@@ -4,14 +4,13 @@ import torch
 import torch.nn.functional as F
 from math import prod
 from torch.nn import Parameter
-from Emperor.components.parameter_generators.utils import mixture
 from Emperor.components.parameter_generators.utils.mixture import (
     MixtureConfig,
     MixtureBase,
     ParameterBank,
-    VectorChoiceMixture,
-    MatrixChoiceMixture,
-    GeneratorChoiceMixture,
+    VectorMixture,
+    MatrixMixture,
+    GeneratorMixture,
 )
 from Emperor.config import ModelConfig
 
@@ -88,7 +87,7 @@ class TestParameterBank(unittest.TestCase):
         self.assertEqual(param.shape, self.shape)
 
 
-class TestVectorChoiceMixture(unittest.TestCase):
+class TestVectorMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
             input_dim=4,
@@ -108,7 +107,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
         )
 
-        m = VectorChoiceMixture(main_c, overrides)
+        m = VectorMixture(main_c, overrides)
 
         self.assertIsInstance(m.weight_bank, Parameter)
         self.assertEqual(
@@ -123,9 +122,9 @@ class TestVectorChoiceMixture(unittest.TestCase):
 
     def test__class_initialization_with_custom_config(self):
         c = copy.deepcopy(self.cfg)
-        m = VectorChoiceMixture(c)
+        m = VectorMixture(c)
 
-        self.assertIsInstance(m, VectorChoiceMixture)
+        self.assertIsInstance(m, VectorMixture)
         self.assertEqual(m.input_dim, c.input_dim)
         self.assertEqual(m.output_dim, c.output_dim)
         self.assertEqual(m.depth_dim, c.depth_dim)
@@ -147,9 +146,9 @@ class TestVectorChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
-        self.assertIsInstance(m, VectorChoiceMixture)
+        self.assertIsInstance(m, VectorMixture)
         self.assertEqual(m.input_dim, overrides.input_dim)
         self.assertEqual(m.output_dim, overrides.output_dim)
         self.assertEqual(m.depth_dim, overrides.depth_dim)
@@ -162,8 +161,8 @@ class TestVectorChoiceMixture(unittest.TestCase):
     def test__init_parameter_banks(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig()
-        m = VectorChoiceMixture(c, overrides)
-        weight_bank, bias_bank = m._VectorChoiceMixture__init_parameter_banks()
+        m = VectorMixture(c, overrides)
+        weight_bank, bias_bank = m._VectorMixture__init_parameter_banks()
 
         self.assertIsInstance(weight_bank, Parameter)
         self.assertEqual(
@@ -176,8 +175,8 @@ class TestVectorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             bias_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
-        weight_bank, bias_bank = m._VectorChoiceMixture__init_parameter_banks()
+        m = VectorMixture(c, overrides)
+        weight_bank, bias_bank = m._VectorMixture__init_parameter_banks()
 
         self.assertIsInstance(weight_bank, Parameter)
         self.assertEqual(
@@ -191,11 +190,9 @@ class TestVectorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=1,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
-        range_weights, range_biases = (
-            m._VectorChoiceMixture__init_parameter_choice_ranges()
-        )
+        range_weights, range_biases = m._VectorMixture__init_parameter_choice_ranges()
         self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim]))
         self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim]))
 
@@ -204,11 +201,9 @@ class TestVectorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=3,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
-        range_weights, range_biases = (
-            m._VectorChoiceMixture__init_parameter_choice_ranges()
-        )
+        range_weights, range_biases = m._VectorMixture__init_parameter_choice_ranges()
         self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim, 1]))
         self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim, 1]))
 
@@ -220,11 +215,9 @@ class TestVectorChoiceMixture(unittest.TestCase):
             router_output_dim=10,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
-        range_weights, range_biases = (
-            m._VectorChoiceMixture__init_parameter_choice_ranges()
-        )
+        range_weights, range_biases = m._VectorMixture__init_parameter_choice_ranges()
 
         self.assertEqual(range_weights.shape, torch.Size([1, c.input_dim]))
         self.assertEqual(range_biases.shape, torch.Size([1, c.output_dim]))
@@ -235,7 +228,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=1,
             bias_parameters_flag=False,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 5
         weight_indexes = torch.randint(0, c.depth_dim, (c.input_dim, batch_size))
@@ -256,7 +249,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=1,
             bias_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 5
         weight_indexes = torch.randint(0, c.depth_dim, (c.input_dim, batch_size))
@@ -279,7 +272,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=3,
             bias_parameters_flag=False,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 5
         weight_indexes = torch.randint(
@@ -307,7 +300,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=3,
             bias_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 5
         weight_indexes = torch.randint(
@@ -335,7 +328,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=3,
             bias_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 5
 
@@ -343,7 +336,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         indices = torch.randint(0, c.depth_dim, (indices_shape))
         weight_bank_shape = (c.input_dim, c.depth_dim, c.output_dim)
         weight_bank = torch.arange(prod(weight_bank_shape)).reshape(weight_bank_shape)
-        selected_parameters = m._VectorChoiceMixture__select_parameter_vectors(
+        selected_parameters = m._VectorMixture__select_parameter_vectors(
             indices, weight_bank, m.range_weights
         )
 
@@ -357,7 +350,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             weighted_parameters_flag=False,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.input_dim, c.output_dim)
@@ -365,7 +358,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         probs_shape = (c.input_dim, batch_size)
         probs = F.sigmoid(torch.randn(probs_shape))
 
-        output = m._VectorChoiceMixture__compute_weighted_parameters(
+        output = m._VectorMixture__compute_weighted_parameters(
             selected_params,
             probs,
         )
@@ -383,7 +376,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=1,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.input_dim, c.output_dim)
@@ -391,7 +384,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         probs_shape = (c.input_dim, batch_size)
         probs = F.sigmoid(torch.randn(probs_shape))
 
-        output = m._VectorChoiceMixture__compute_weighted_parameters(
+        output = m._VectorMixture__compute_weighted_parameters(
             selected_params,
             probs,
         )
@@ -412,7 +405,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=1,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.output_dim)
@@ -420,7 +413,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         probs_shape = (c.output_dim, batch_size)
         probs = F.sigmoid(torch.randn(probs_shape))
 
-        output = m._VectorChoiceMixture__compute_weighted_parameters(
+        output = m._VectorMixture__compute_weighted_parameters(
             selected_params,
             probs,
             is_weight=False,
@@ -439,7 +432,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=3,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.input_dim, c.top_k, c.output_dim)
@@ -447,7 +440,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         probs_shape = (c.input_dim, batch_size, c.top_k)
         probs = F.sigmoid(torch.randn(probs_shape))
 
-        output = m._VectorChoiceMixture__compute_weighted_parameters(
+        output = m._VectorMixture__compute_weighted_parameters(
             selected_params,
             probs,
         )
@@ -469,7 +462,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=3,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.output_dim, c.top_k)
@@ -477,7 +470,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         probs_shape = (c.output_dim, batch_size, c.top_k)
         probs = F.sigmoid(torch.randn(probs_shape))
 
-        output = m._VectorChoiceMixture__compute_weighted_parameters(
+        output = m._VectorMixture__compute_weighted_parameters(
             selected_params,
             probs,
             is_weight=False,
@@ -496,7 +489,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=3,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (c.input_dim, c.depth_dim, c.output_dim)
@@ -504,7 +497,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         probs_shape = (c.input_dim, batch_size, c.depth_dim)
         probs = F.sigmoid(torch.randn(probs_shape))
 
-        output = m._VectorChoiceMixture__compute_weighted_parameters(
+        output = m._VectorMixture__compute_weighted_parameters(
             selected_params,
             probs,
         )
@@ -525,7 +518,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=6,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (c.output_dim, c.depth_dim)
@@ -533,7 +526,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         probs_shape = (c.output_dim, batch_size, c.depth_dim)
         probs = F.sigmoid(torch.randn(probs_shape))
 
-        output = m._VectorChoiceMixture__compute_weighted_parameters(
+        output = m._VectorMixture__compute_weighted_parameters(
             selected_params,
             probs,
             is_weight=False,
@@ -554,7 +547,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=1,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.input_dim, c.output_dim)
@@ -579,7 +572,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=1,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.output_dim)
@@ -603,7 +596,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=2,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.input_dim, c.top_k, c.output_dim)
@@ -628,7 +621,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=3,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (batch_size, c.output_dim, c.top_k)
@@ -652,7 +645,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=2,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (c.input_dim, c.depth_dim, c.output_dim)
@@ -677,7 +670,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
             top_k=6,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
 
         batch_size = 2
         selected_shape = (c.output_dim, c.depth_dim)
@@ -694,7 +687,7 @@ class TestVectorChoiceMixture(unittest.TestCase):
         self.assertEqual(output.shape, torch.Size([batch_size, c.output_dim]))
 
 
-class TestMatrixChoiceMixture(unittest.TestCase):
+class TestMatrixMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
             input_dim=4,
@@ -709,9 +702,9 @@ class TestMatrixChoiceMixture(unittest.TestCase):
 
     def test__class_initialization_with_custom_config(self):
         c = copy.deepcopy(self.cfg)
-        m = MatrixChoiceMixture(c)
+        m = MatrixMixture(c)
 
-        self.assertIsInstance(m, MatrixChoiceMixture)
+        self.assertIsInstance(m, MatrixMixture)
         self.assertEqual(m.input_dim, c.input_dim)
         self.assertEqual(m.output_dim, c.output_dim)
         self.assertEqual(m.depth_dim, c.depth_dim)
@@ -733,9 +726,9 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
-        self.assertIsInstance(m, MatrixChoiceMixture)
+        self.assertIsInstance(m, MatrixMixture)
         self.assertEqual(m.input_dim, overrides.input_dim)
         self.assertEqual(m.output_dim, overrides.output_dim)
         self.assertEqual(m.depth_dim, overrides.depth_dim)
@@ -750,8 +743,8 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             bias_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
-        input_weight_bank, bias_bank = m._MatrixChoiceMixture__init_parameter_banks()
+        m = MatrixMixture(c, overrides)
+        input_weight_bank, bias_bank = m._MatrixMixture__init_parameter_banks()
 
         s = lambda x: torch.Size(x)
         self.assertIsInstance(input_weight_bank, Parameter)
@@ -766,9 +759,9 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=1,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         weight_probs_shape, bias_probs_shape = (
-            m._MatrixChoiceMixture__generate_probability_shapes()
+            m._MatrixMixture__generate_probability_shapes()
         )
 
         self.assertEqual(weight_probs_shape, (-1, 1, 1))
@@ -779,9 +772,9 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=3,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         weight_probs_shape, bias_probs_shape = (
-            m._MatrixChoiceMixture__generate_probability_shapes()
+            m._MatrixMixture__generate_probability_shapes()
         )
 
         self.assertEqual(weight_probs_shape, (-1, 3, 1, 1))
@@ -792,7 +785,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         weight_indexes = torch.randint(0, c.depth_dim, (batch_size, m.top_k))
@@ -816,7 +809,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=2,
             bias_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         weight_indexes = torch.randint(0, c.depth_dim, (batch_size, m.top_k))
@@ -842,7 +835,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=1,
             bias_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         weight_indexes = torch.randint(0, c.depth_dim, (batch_size,))
@@ -864,7 +857,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=3,
             bias_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         weight_indexes = torch.randint(0, c.depth_dim, (batch_size, m.top_k))
@@ -887,7 +880,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
@@ -896,7 +889,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         probability = torch.randint(0, c.depth_dim, (batch_size, m.top_k))
 
-        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+        weighted_parameters = m._MatrixMixture__compute_weighted_parameters(
             selected_weight_params, probability
         )
 
@@ -913,7 +906,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=2,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
@@ -922,7 +915,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         probability = torch.randint(0, c.depth_dim, (batch_size, m.top_k))
 
-        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+        weighted_parameters = m._MatrixMixture__compute_weighted_parameters(
             selected_weight_params, probability
         )
 
@@ -938,7 +931,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=1,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, c.input_dim, c.output_dim)
@@ -947,7 +940,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         probability = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+        weighted_parameters = m._MatrixMixture__compute_weighted_parameters(
             selected_weight_params, probability
         )
 
@@ -965,7 +958,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=1,
             weighted_parameters_flag=False,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, c.input_dim, c.output_dim)
@@ -974,7 +967,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         probability = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+        weighted_parameters = m._MatrixMixture__compute_weighted_parameters(
             selected_weight_params, probability
         )
 
@@ -991,7 +984,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=3,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, m.top_k, c.input_dim, c.output_dim)
@@ -1000,7 +993,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         probability = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+        weighted_parameters = m._MatrixMixture__compute_weighted_parameters(
             selected_weight_params, probability
         )
 
@@ -1018,7 +1011,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=3,
             weighted_parameters_flag=False,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, m.top_k, c.input_dim, c.output_dim)
@@ -1027,7 +1020,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         probability = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+        weighted_parameters = m._MatrixMixture__compute_weighted_parameters(
             selected_weight_params, probability
         )
 
@@ -1046,7 +1039,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             router_output_dim=10,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (c.depth_dim, c.input_dim, c.output_dim)
@@ -1055,7 +1048,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         )
         probability = F.sigmoid(torch.randn((batch_size, c.depth_dim)))
 
-        weighted_parameters = m._MatrixChoiceMixture__compute_weighted_parameters(
+        weighted_parameters = m._MatrixMixture__compute_weighted_parameters(
             selected_weight_params, probability
         )
 
@@ -1071,7 +1064,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=1,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, c.input_dim, c.output_dim)
@@ -1094,7 +1087,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=2,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, m.top_k, c.input_dim, c.output_dim)
@@ -1117,7 +1110,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=6,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (c.depth_dim, c.input_dim, c.output_dim)
@@ -1141,7 +1134,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, c.output_dim)
@@ -1163,7 +1156,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, c.top_k, c.output_dim)
@@ -1187,7 +1180,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (c.depth_dim, c.output_dim)
@@ -1208,7 +1201,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
             top_k=2,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
 
         batch_size = 2
         selected_weight_shape = (batch_size, m.top_k, c.input_dim, c.output_dim)
@@ -1223,7 +1216,7 @@ class TestMatrixChoiceMixture(unittest.TestCase):
         self.assertIsNotNone(probability.grad)
 
 
-class TestGeneratorChoiceMixture(unittest.TestCase):
+class TestGeneratorMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
             input_dim=4,
@@ -1245,7 +1238,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
         )
 
-        m = GeneratorChoiceMixture(main_c, overrides)
+        m = GeneratorMixture(main_c, overrides)
 
         self.assertIsInstance(m.input_weight_bank, Parameter)
         self.assertEqual(
@@ -1274,9 +1267,9 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
     def test__class_initialization_with_custom_config(self):
         c = copy.deepcopy(self.cfg)
-        m = GeneratorChoiceMixture(c)
+        m = GeneratorMixture(c)
 
-        self.assertIsInstance(m, GeneratorChoiceMixture)
+        self.assertIsInstance(m, GeneratorMixture)
         self.assertEqual(m.input_dim, c.input_dim)
         self.assertEqual(m.output_dim, c.output_dim)
         self.assertEqual(m.depth_dim, c.depth_dim)
@@ -1298,9 +1291,9 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
-        self.assertIsInstance(m, GeneratorChoiceMixture)
+        self.assertIsInstance(m, GeneratorMixture)
         self.assertEqual(m.input_dim, overrides.input_dim)
         self.assertEqual(m.output_dim, overrides.output_dim)
         self.assertEqual(m.depth_dim, overrides.depth_dim)
@@ -1312,9 +1305,9 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
     def test__generate_probability_shapes(self):
         c = copy.deepcopy(self.cfg)
-        m = GeneratorChoiceMixture(c)
+        m = GeneratorMixture(c)
         weight_probs_shape, bias_probs_shape = (
-            m._GeneratorChoiceMixture__generate_probability_shapes()
+            m._GeneratorMixture__generate_probability_shapes()
         )
 
         self.assertEqual(weight_probs_shape, (-1, c.top_k, 1, 1))
@@ -1322,14 +1315,14 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
     def test__init_parameter_banks(self):
         c = copy.deepcopy(self.cfg)
-        m = GeneratorChoiceMixture(c)
+        m = GeneratorMixture(c)
         (
             input_weight_bank,
             output_weight_bank,
             diagonal_weight_bank,
             anti_diagonal_weight_bank,
             bias_bank,
-        ) = m._GeneratorChoiceMixture__init_parameter_banks()
+        ) = m._GeneratorMixture__init_parameter_banks()
 
         s = lambda x: torch.Size(x)
         self.assertIsInstance(input_weight_bank, Parameter)
@@ -1352,14 +1345,14 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         (
             input_weight_bank,
             output_weight_bank,
             diagonal_weight_bank,
             anti_diagonal_weight_bank,
             bias_bank,
-        ) = m._GeneratorChoiceMixture__init_parameter_banks()
+        ) = m._GeneratorMixture__init_parameter_banks()
 
         s = lambda x: torch.Size(x)
         diagonal = min(c.input_dim, c.output_dim)
@@ -1387,14 +1380,14 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
         )
 
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         (
             input_weight_bank,
             output_weight_bank,
             diagonal_weight_bank,
             anti_diagonal_weight_bank,
             bias_bank,
-        ) = m._GeneratorChoiceMixture__init_parameter_banks()
+        ) = m._GeneratorMixture__init_parameter_banks()
 
         s = lambda x: torch.Size(x)
         diagonal = min(c.input_dim, c.output_dim)
@@ -1419,7 +1412,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=1,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
         batch_size = 2
         diagonal = min(c.input_dim, c.output_dim)
@@ -1456,7 +1449,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=1,
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
         batch_size = 2
         diagonal = min(c.input_dim, c.output_dim)
@@ -1496,7 +1489,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=1,
             bias_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
         batch_size = 2
         diagonal = min(c.input_dim, c.output_dim)
@@ -1535,7 +1528,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=5,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
         batch_size = 2
         diagonal = min(c.input_dim, c.output_dim)
@@ -1572,7 +1565,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=5,
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
         batch_size = 2
         diagonal = min(c.input_dim, c.output_dim)
@@ -1612,7 +1605,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=5,
             bias_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
         batch_size = 2
         diagonal = min(c.input_dim, c.output_dim)
@@ -1651,7 +1644,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=1,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_shape = (batch_size, c.input_dim)
@@ -1662,7 +1655,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             selected_weight_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_einsum(
+        output = m._GeneratorMixture__compute_einsum(
             input_batch, selected_weight_params
         )
 
@@ -1685,7 +1678,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_shape = (batch_size, c.input_dim)
@@ -1696,7 +1689,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             selected_weight_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_einsum(
+        output = m._GeneratorMixture__compute_einsum(
             input_batch, selected_weight_params
         )
 
@@ -1726,7 +1719,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             router_output_dim=6,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_shape = (batch_size, c.input_dim)
@@ -1737,9 +1730,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             full_weight_bank_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_einsum(
-            input_batch, full_weight_bank
-        )
+        output = m._GeneratorMixture__compute_einsum(input_batch, full_weight_bank)
 
         self.assertEqual(
             output.shape, torch.Size([batch_size, c.depth_dim, c.input_dim])
@@ -1763,7 +1754,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_batch_shape = (batch_size, c.input_dim)
@@ -1791,7 +1782,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             diagonal_vectors,
             anti_diagonal_vectors,
             bias_output,
-        ) = m._GeneratorChoiceMixture__compute_parameter_vectors(
+        ) = m._GeneratorMixture__compute_parameter_vectors(
             input_batch,
             selected_input_weight_params,
             selected_output_weight_params,
@@ -1817,7 +1808,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=2,
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_batch_shape = (batch_size, c.input_dim)
@@ -1850,7 +1841,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             diagonal_vectors,
             anti_diagonal_vectors,
             bias_output,
-        ) = m._GeneratorChoiceMixture__compute_parameter_vectors(
+        ) = m._GeneratorMixture__compute_parameter_vectors(
             input_batch,
             selected_input_weight_params,
             selected_output_weight_params,
@@ -1880,7 +1871,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=2,
             bias_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_batch_shape = (batch_size, c.input_dim)
@@ -1913,7 +1904,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             diagonal_vectors,
             anti_diagonal_vectors,
             bias_output,
-        ) = m._GeneratorChoiceMixture__compute_parameter_vectors(
+        ) = m._GeneratorMixture__compute_parameter_vectors(
             input_batch,
             selected_input_weight_params,
             selected_output_weight_params,
@@ -1941,7 +1932,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         input_batch_shape = (batch_size, c.input_dim)
         input_batch = torch.arange(prod(input_batch_shape)).reshape(input_batch_shape)
@@ -1951,9 +1942,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             weight_tensor_shape
         )
 
-        output = m._GeneratorChoiceMixture__maybe_compute_einsum(
-            input_batch, weight_tensor
-        )
+        output = m._GeneratorMixture__maybe_compute_einsum(input_batch, weight_tensor)
 
         self.assertIsNone(output)
 
@@ -1962,7 +1951,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_batch_shape = (batch_size, c.input_dim)
@@ -1973,11 +1962,11 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             weight_tensor_shape
         )
 
-        output = m._GeneratorChoiceMixture__maybe_compute_einsum(
+        output = m._GeneratorMixture__maybe_compute_einsum(
             input_batch, weight_tensor, True
         )
 
-        expected_output = m._GeneratorChoiceMixture__compute_einsum(
+        expected_output = m._GeneratorMixture__compute_einsum(
             input_batch, weight_tensor
         )
         self.assertTrue(torch.equal(output, expected_output))
@@ -1989,7 +1978,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_dim=5,
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
@@ -2003,7 +1992,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_outer_product(
+        output = m._GeneratorMixture__compute_outer_product(
             input_vectors, output_vectors
         )
 
@@ -2033,7 +2022,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_dim=5,
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
 
@@ -2046,7 +2035,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_outer_product(
+        output = m._GeneratorMixture__compute_outer_product(
             input_vectors, output_vectors
         )
 
@@ -2076,7 +2065,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_dim=5,
             top_k=1,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
 
@@ -2089,7 +2078,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_outer_product(
+        output = m._GeneratorMixture__compute_outer_product(
             input_vectors, output_vectors
         )
 
@@ -2119,7 +2108,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_dim=5,
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
 
@@ -2132,7 +2121,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_outer_product(
+        output = m._GeneratorMixture__compute_outer_product(
             input_vectors, output_vectors
         )
 
@@ -2163,7 +2152,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=6,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
 
@@ -2176,7 +2165,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_outer_product(
+        output = m._GeneratorMixture__compute_outer_product(
             input_vectors, output_vectors
         )
 
@@ -2206,7 +2195,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_dim=5,
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
 
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
@@ -2216,7 +2205,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             diagonal_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_diagonal_matrix(diagonal_vectors)
+        output = m._GeneratorMixture__compute_diagonal_matrix(diagonal_vectors)
 
         self.assertEqual(
             output.shape,
@@ -2243,7 +2232,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_dim=5,
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
 
@@ -2252,7 +2241,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             diagonal_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_diagonal_matrix(diagonal_vectors)
+        output = m._GeneratorMixture__compute_diagonal_matrix(diagonal_vectors)
 
         self.assertEqual(
             output.shape,
@@ -2279,7 +2268,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             output_dim=4,
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
 
@@ -2288,7 +2277,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             diagonal_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_diagonal_matrix(diagonal_vectors)
+        output = m._GeneratorMixture__compute_diagonal_matrix(diagonal_vectors)
 
         self.assertEqual(
             output.shape, torch.Size([batch_size, c.top_k, c.input_dim, diagonal_dim])
@@ -2311,7 +2300,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
 
@@ -2320,7 +2309,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             anti_diagonal_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_anti_diagonal_matrix(
+        output = m._GeneratorMixture__compute_anti_diagonal_matrix(
             anti_diagonal_vectors
         )
 
@@ -2332,7 +2321,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=2,
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim)
 
@@ -2341,7 +2330,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             anti_diagonal_vectors_shape
         )
 
-        output = m._GeneratorChoiceMixture__compute_anti_diagonal_matrix(
+        output = m._GeneratorMixture__compute_anti_diagonal_matrix(
             anti_diagonal_vectors
         )
 
@@ -2352,7 +2341,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         for batch in range(batch_size):
             for k in range(c.top_k):
                 anti_diagonal_vector = anti_diagonal_vectors[batch][k]
-                expected_output = m._GeneratorChoiceMixture__compute_diagonal_matrix(
+                expected_output = m._GeneratorMixture__compute_diagonal_matrix(
                     anti_diagonal_vector
                 )
                 expected_output = expected_output.flip(dims=[0])
@@ -2369,7 +2358,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim) + abs(c.input_dim - c.output_dim)
 
@@ -2383,7 +2372,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             diagonal_matrix_shape
         )
 
-        output = m._GeneratorChoiceMixture__assemble_parameters_matrix(
+        output = m._GeneratorMixture__assemble_parameters_matrix(
             outer_product,
             diagonal_matrix,
         )
@@ -2407,7 +2396,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=2,
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
         diagonal_dim = min(c.input_dim, c.output_dim) + abs(c.input_dim - c.output_dim)
 
@@ -2426,7 +2415,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             anti_diagonal_matrix_shape
         )
 
-        output = m._GeneratorChoiceMixture__assemble_parameters_matrix(
+        output = m._GeneratorMixture__assemble_parameters_matrix(
             outer_product,
             diagonal_matrix,
             anti_diagonal_matrix,
@@ -2451,7 +2440,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         generated_parameters_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
@@ -2459,7 +2448,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             generated_parameters_shape
         )
 
-        output = m._GeneratorChoiceMixture__apply_parameter_weighting(
+        output = m._GeneratorMixture__apply_parameter_weighting(
             generated_parameters, m.weight_probs_shape
         )
 
@@ -2482,7 +2471,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=1,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         generated_parameters_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
@@ -2492,7 +2481,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         weight_probs = F.sigmoid(torch.randn((batch_size,)))
 
-        output = m._GeneratorChoiceMixture__apply_parameter_weighting(
+        output = m._GeneratorMixture__apply_parameter_weighting(
             generated_parameters,
             m.weight_probs_shape,
             weight_probs,
@@ -2518,7 +2507,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=2,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         generated_parameters_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
@@ -2528,7 +2517,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__apply_parameter_weighting(
+        output = m._GeneratorMixture__apply_parameter_weighting(
             generated_parameters,
             m.weight_probs_shape,
             weight_probs,
@@ -2554,7 +2543,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             top_k=6,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         generated_parameters_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
@@ -2564,7 +2553,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__apply_parameter_weighting(
+        output = m._GeneratorMixture__apply_parameter_weighting(
             generated_parameters,
             m.weight_probs_shape,
             weight_probs,
@@ -2591,7 +2580,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             cross_diagonal_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_vectors_shape = (batch_size, c.top_k, c.input_dim)
@@ -2616,7 +2605,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__generate_weight_parameters(
+        output = m._GeneratorMixture__generate_weight_parameters(
             input_vectors,
             output_vectors,
             diagonal_vectors,
@@ -2635,7 +2624,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             cross_diagonal_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_vectors_shape = (batch_size, c.top_k, c.input_dim)
@@ -2660,7 +2649,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__generate_weight_parameters(
+        output = m._GeneratorMixture__generate_weight_parameters(
             input_vectors,
             output_vectors,
             diagonal_vectors,
@@ -2679,7 +2668,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             cross_diagonal_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_vectors_shape = (batch_size, c.top_k, c.input_dim)
@@ -2704,7 +2693,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
 
         weight_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__generate_weight_parameters(
+        output = m._GeneratorMixture__generate_weight_parameters(
             input_vectors,
             output_vectors,
             diagonal_vectors,
@@ -2721,7 +2710,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=2,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         generated_biases_shape = (batch_size, c.top_k, c.input_dim)
@@ -2730,7 +2719,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         )
         bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__generate_bias_parameters(
+        output = m._GeneratorMixture__generate_bias_parameters(
             generated_biases,
             bias_probs,
         )
@@ -2744,7 +2733,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         generated_biases_shape = (batch_size, c.top_k, c.output_dim)
@@ -2753,7 +2742,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         )
         bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__generate_bias_parameters(
+        output = m._GeneratorMixture__generate_bias_parameters(
             generated_biases,
             bias_probs,
         )
@@ -2767,7 +2756,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         generated_biases_shape = (batch_size, c.top_k, c.output_dim)
@@ -2776,7 +2765,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         )
         bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__generate_bias_parameters(
+        output = m._GeneratorMixture__generate_bias_parameters(
             generated_biases,
             bias_probs,
         )
@@ -2790,7 +2779,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         generated_biases_shape = (batch_size, c.top_k, c.output_dim)
@@ -2799,7 +2788,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         )
         bias_probs = F.sigmoid(torch.randn((batch_size, c.top_k)))
 
-        output = m._GeneratorChoiceMixture__generate_bias_parameters(
+        output = m._GeneratorMixture__generate_bias_parameters(
             generated_biases,
             bias_probs,
         )
@@ -2814,7 +2803,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_batch_shape = (batch_size, c.input_dim)
@@ -2873,7 +2862,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_batch_shape = (batch_size, c.input_dim)
@@ -2932,7 +2921,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
             weighted_parameters_flag=True,
             cross_diagonal_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         input_batch_shape = (batch_size, c.input_dim)
@@ -2984,7 +2973,7 @@ class TestGeneratorChoiceMixture(unittest.TestCase):
         self.assertEqual(output_biases.shape, torch.Size([batch_size, c.output_dim]))
 
 
-class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
+class TestParameterGeneratorMixture_VectorMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
             input_dim=4,
@@ -3004,7 +2993,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=False,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
         batch_size = 2
 
         selected_weight_shape = (batch_size, c.input_dim, c.top_k, c.output_dim)
@@ -3040,7 +3029,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
         batch_size = 2
 
         selected_weight_shape = (batch_size, c.input_dim, c.top_k, c.output_dim)
@@ -3076,7 +3065,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (m.input_dim, batch_size)
@@ -3106,7 +3095,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (c.input_dim, batch_size, c.top_k)
@@ -3138,7 +3127,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (c.input_dim, batch_size, c.depth_dim)
@@ -3164,7 +3153,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (m.input_dim, batch_size)
@@ -3194,7 +3183,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (c.input_dim, batch_size, c.top_k)
@@ -3226,7 +3215,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = VectorChoiceMixture(c, overrides)
+        m = VectorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (c.input_dim, batch_size, c.depth_dim)
@@ -3246,7 +3235,7 @@ class TestParameterGeneratorMixture_VectorChoiceMixture(unittest.TestCase):
         self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
 
 
-class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
+class TestParameterGeneratorMixture_MatrixMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
             input_dim=4,
@@ -3266,7 +3255,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             bias_parameters_flag=False,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         batch_size = 2
 
         selected_weight_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
@@ -3302,7 +3291,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         batch_size = 2
 
         selected_weight_shape = (batch_size, c.top_k, c.input_dim, c.output_dim)
@@ -3338,7 +3327,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size,)
@@ -3368,7 +3357,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size, c.top_k)
@@ -3400,7 +3389,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size, c.depth_dim)
@@ -3426,7 +3415,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size,)
@@ -3456,7 +3445,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size, c.top_k)
@@ -3488,7 +3477,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = MatrixChoiceMixture(c, overrides)
+        m = MatrixMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size, c.depth_dim)
@@ -3508,7 +3497,7 @@ class TestParameterGeneratorMixture_MatrixChoiceMixture(unittest.TestCase):
         self.assertEqual(bias_mixture.shape, torch.Size([batch_size, c.output_dim]))
 
 
-class TestParameterGeneratorMixture_GeneratorChoiceMixture(unittest.TestCase):
+class TestParameterGeneratorMixture_GeneratorMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = MixtureConfig(
             input_dim=4,
@@ -3528,7 +3517,7 @@ class TestParameterGeneratorMixture_GeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size,)
@@ -3560,7 +3549,7 @@ class TestParameterGeneratorMixture_GeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size, c.top_k)
@@ -3594,7 +3583,7 @@ class TestParameterGeneratorMixture_GeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size, c.depth_dim)
@@ -3622,7 +3611,7 @@ class TestParameterGeneratorMixture_GeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size,)
@@ -3654,7 +3643,7 @@ class TestParameterGeneratorMixture_GeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size, c.top_k)
@@ -3688,7 +3677,7 @@ class TestParameterGeneratorMixture_GeneratorChoiceMixture(unittest.TestCase):
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
-        m = GeneratorChoiceMixture(c, overrides)
+        m = GeneratorMixture(c, overrides)
         batch_size = 2
 
         weight_shape = (batch_size, c.depth_dim)
