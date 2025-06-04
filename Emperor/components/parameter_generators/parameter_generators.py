@@ -34,3 +34,22 @@ class VectorParameter(ParameterBase):
         return probabilities, indices
 
 
+class MatrixParameter(ParameterBase):
+    def __init__(
+        self,
+        cfg: "ParameterGeneratorConfig | ModelConfig",
+        overrides: "ParameterGeneratorConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+
+        self.weight_router: RouterModel = RouterModel(cfg)
+        self.bias_router = self._init_bias_router_model(cfg)
+        self.sampler: SamplerModel = SamplerModel(cfg)
+        self.mixture: MatrixMixture = MatrixMixture(cfg)
+
+    def _init_bias_router_model(self, cfg: "ModelConfig") -> RouterModel | None:
+        if self.bias_parameters_flag:
+            return RouterModel(cfg)
+        return None
+
+
