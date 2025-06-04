@@ -590,9 +590,13 @@ class GeneratorMixture(ParameterMixture):
 
     def __compute_einsum(
         self,
-        input_batch: Tensor,
+        input_batch: Tensor | None,
         weight_params: Tensor,
     ) -> Tensor:
+        if input_batch is None:
+            raise RuntimeError(
+                "`compute_mixture` requires an `input_batch` argument when using `GeneratorMixture`."
+            )
         vectors = torch.einsum(self.einsum_vector_operation, input_batch, weight_params)
         # WARNING: if the scaler implemented in `__compute_outer_product`
         # does not work when testing implement a way to normalize the
