@@ -53,3 +53,40 @@ class MatrixParameter(ParameterBase):
         return None
 
 
+class GeneratorParameter(ParameterBase):
+    def __init__(
+        self,
+        cfg: "ParameterGeneratorConfig | ModelConfig",
+        overrides: "ParameterGeneratorConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+
+        self.weight_router: RouterModel = RouterModel(cfg)
+        self.bias_router = self._init_bias_router_model(cfg)
+        self.sampler: SamplerModel = SamplerModel(cfg)
+        self.mixture: GeneratorMixture = GeneratorMixture(cfg)
+
+    def _init_bias_router_model(self, cfg: "ModelConfig") -> RouterModel | None:
+        if self.bias_parameters_flag:
+            return RouterModel(cfg)
+        return None
+
+    def forward(
+        self,
+        input_batch: Tensor,
+    ) -> tuple[Tensor, Tensor | None]:
+        weight_probabilities, weight_indices = self._compute_probabilities_and_indices(
+            input_batch
+        )
+        bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
+            input_batch
+        )
+        weight_parameters, bias_parameters = self.mixture.compute_mixture(
+            weight_probabilities,
+            weight_indices,
+            bias_probabilities,
+            bias_indices,
+            input_batch,
+        )
+
+        return weight_parameters, bias_parameters
