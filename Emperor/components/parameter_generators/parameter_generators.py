@@ -1,3 +1,96 @@
+from dataclasses import dataclass, field
+
+from torch import Tensor
+from Emperor.base.utils import Module, DataClassBase
+from Emperor.components.parameter_generators.utils.samplers import SamplerModel
+from Emperor.components.parameter_generators.utils.mixture import (
+    GeneratorMixture,
+    MatrixMixture,
+    VectorMixture,
+)
+from Emperor.components.parameter_generators.utils.routers import (
+    RouterModel,
+    VectorRouterModel,
+)
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from Emperor.config import ModelConfig
+
+
+@dataclass
+class ParameterGeneratorConfig(DataClassBase):
+    bias_parameters_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` it will generate bias parameters for each input sample."
+        },
+    )
+
+
+class ParameterBase(Module):
+    def __init__(
+        self,
+        cfg: "ParameterGeneratorConfig | ModelConfig",
+        overrides: "ParameterGeneratorConfig | None" = None,
+    ):
+        super().__init__()
+        config = getattr(cfg, "parameter_generator_model_config", cfg)
+        self.cfg: "ParameterGeneratorConfig" = self._overwrite_config(config, overrides)
+
+        self.bias_parameters_flag = self.cfg.bias_parameters_flag
+
+    def forward(
+        self,
+        input_batch: Tensor,
+    ) -> tuple[Tensor, Tensor | None]:
+        weight_probabilities, weight_indices = self._compute_probabilities_and_indices(
+            input_batch
+        )
+        bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
+            input_batch
+        )
+        weight_parameters, bias_parameters = self.mixture.compute_mixture(
+            weight_probabilities, weight_indices, bias_probabilities, bias_indices
+        )
+
+        return weight_parameters, bias_parameters
+
+    def _compute_bias_probabilities_and_indices(
+        self,
+        input_batch: Tensor,
+    ) -> tuple[Tensor | None, Tensor | None]:
+        if self.bias_parameters_flag:
+            return self._compute_probabilities_and_indices(
+                input_batch, self.bias_parameters_flag
+            )
+        return None, None
+
+    def _compute_probabilities_and_indices(
+        self,
+        input_batch: Tensor,
+        compute_bias_flag: bool = False,
+    ) -> tuple[Tensor, Tensor | None]:
+        logits = self._compute_logits(input_batch, compute_bias_flag)
+        probabilities, indices, _ = self.sampler.sample_probabilities_and_indices(
+            logits
+        )
+
+        return probabilities, indices
+
+    def _compute_logits(
+        self,
+        input_batch: Tensor,
+        compute_bias_flag: bool = False,
+    ):
+        if compute_bias_flag:
+            if self.bias_router is None:
+                raise RuntimeError("Bias router is not initialized.")
+            return self.bias_router.compute_logit_scores(input_batch)
+        return self.weight_router.compute_logit_scores(input_batch)
+
+
 class VectorParameter(ParameterBase):
     def __init__(
         self,
