@@ -82,7 +82,7 @@ class MixtureBase(Module):
             )
 
 
-class ParameterGeneratorMixture(MixtureBase):
+class ParameterMixture(MixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
@@ -220,7 +220,7 @@ class ParameterBank:
         return self.parameter_bank
 
 
-class VectorChoiceMixture(ParameterGeneratorMixture):
+class VectorMixture(ParameterMixture):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
@@ -311,7 +311,7 @@ class VectorChoiceMixture(ParameterGeneratorMixture):
         return selected_parameters
 
 
-class MatrixChoiceMixture(ParameterGeneratorMixture):
+class MatrixMixture(ParameterMixture):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
@@ -390,7 +390,7 @@ class MatrixChoiceMixture(ParameterGeneratorMixture):
         return selected_parameters
 
 
-class GeneratorChoiceMixture(ParameterGeneratorMixture):
+class GeneratorMixture(ParameterMixture):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
