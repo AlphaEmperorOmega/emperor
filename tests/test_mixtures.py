@@ -4,10 +4,10 @@ import torch
 import torch.nn.functional as F
 from math import prod
 from torch.nn import Parameter
+from Emperor.base.utils import ParameterBank
 from Emperor.components.parameter_generators.utils.mixture import (
     MixtureConfig,
     MixtureBase,
-    ParameterBank,
     VectorMixture,
     MatrixMixture,
     GeneratorMixture,
