@@ -91,12 +91,13 @@ class ParameterLayerBase(Module):
     def _generate_parameters(
         self,
         input_batch: Tensor,
+        skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         weight_probabilities, weight_indices = self._compute_probabilities_and_indices(
-            input_batch
+            input_batch, False, skip_mask
         )
         bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
-            input_batch
+            input_batch, skip_mask
         )
         weight_parameters, bias_parameters = self.mixture.compute_mixture(
             weight_probabilities, weight_indices, bias_probabilities, bias_indices
@@ -107,10 +108,11 @@ class ParameterLayerBase(Module):
     def _compute_bias_probabilities_and_indices(
         self,
         input_batch: Tensor,
+        skip_mask: Tensor | None = None,
     ) -> tuple[Tensor | None, Tensor | None]:
         if self.bias_parameters_flag:
             return self._compute_probabilities_and_indices(
-                input_batch, self.bias_parameters_flag
+                input_batch, self.bias_parameters_flag, skip_mask
             )
         return None, None
 
@@ -118,10 +120,11 @@ class ParameterLayerBase(Module):
         self,
         input_batch: Tensor,
         compute_bias_flag: bool = False,
+        skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         logits = self._compute_logits(input_batch, compute_bias_flag)
         probabilities, indices, _ = self.sampler.sample_probabilities_and_indices(
-            logits
+            logits, skip_mask
         )
 
         return probabilities, indices
@@ -160,13 +163,14 @@ class VectorParameterLayer(ParameterLayerBase):
         self,
         input_batch: Tensor,
         compute_bias_flag: bool = False,
+        skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         logits = self._compute_logits(input_batch, compute_bias_flag)
         input_dim, batch_size, depth_dim = logits.shape
         logits = logits.view(-1, depth_dim)
 
         probabilities, indices, _ = self.sampler.sample_probabilities_and_indices(
-            logits
+            logits, skip_mask
         )
         probabilities = probabilities.reshape(input_dim, batch_size, -1)
         indices = indices.reshape(input_dim, batch_size, -1)
