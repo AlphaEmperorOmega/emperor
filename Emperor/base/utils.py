@@ -6,7 +6,6 @@ import collections
 import IPython.display as display
 import matplotlib.pyplot as plt
 import random
-import inspect
 from torch.nn import Parameter, Linear, Sequential
 
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -339,6 +338,38 @@ class Module(nn.Module, HyperParameters):
                         )
                     return
                 raise ValueError(f"{config_field.name} is required but it was not set.")
+
+    def _init_parameter_bank(
+        self,
+        parameter_shape: tuple,
+        initializer: callable = None,
+    ) -> Parameter:
+        # TODO: Ensure you have the option to initialize the biases with
+        # as a zero zensor.
+        initializer = (
+            initializer if initializer is not None else self._initialize_parameters
+        )
+        bank = ParameterBank(parameter_shape, initializer)
+        return bank.get()
+
+
+class ParameterBank:
+    def __init__(
+        self,
+        shape: tuple,
+        initializer: callable,
+    ):
+        self.shape = shape
+        self.initializer = initializer
+        self.parameter_bank = self.__create_bank()
+
+    def __create_bank(self) -> Parameter:
+        parameter_bank = Parameter(randn(*self.shape))
+        self.initializer(parameter_bank)
+        return parameter_bank
+
+    def get(self) -> Parameter:
+        return self.parameter_bank
 
 
 class DataModule(HyperParameters):

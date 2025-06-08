@@ -196,29 +196,6 @@ class ParameterMixture(MixtureBase):
 
         return weight_mixture, bias_mixture
 
-    def _init_parameter_bank(self, parameter_shape: tuple) -> Parameter:
-        bank = ParameterBank(parameter_shape, self._initialize_parameters)
-        return bank.get()
-
-
-class ParameterBank:
-    def __init__(
-        self,
-        shape: tuple,
-        initializer: callable,
-    ):
-        self.shape = shape
-        self.initializer = initializer
-        self.parameter_bank = self.__create_bank()
-
-    def __create_bank(self) -> Parameter:
-        parameter_bank = Parameter(randn(*self.shape))
-        self.initializer(parameter_bank)
-        return parameter_bank
-
-    def get(self) -> Parameter:
-        return self.parameter_bank
-
 
 class VectorMixture(ParameterMixture):
     def __init__(
