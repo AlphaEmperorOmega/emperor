@@ -10,7 +10,6 @@ from Emperor.components.parameter_generators.layers import (
     VectorParameterLayer,
     MatrixParameterLayer,
 )
-
 from Emperor.components.parameter_generators.utils.mixture import (
     MixtureConfig,
 )
@@ -19,8 +18,10 @@ from Emperor.components.parameter_generators.utils.routers import (
     RouterModel,
     VectorRouterModel,
 )
-from Emperor.components.parameter_generators.utils.samplers import SamplerConfig
-from Emperor.config import PARAMETER_GENERATOR_TRACK_TIME_FLAG, ModelConfig
+from Emperor.components.parameter_generators.utils.samplers import (
+    SamplerConfig,
+)
+from Emperor.config import ModelConfig
 
 
 class TestVectorParameterLayer(unittest.TestCase):
@@ -90,12 +91,10 @@ class TestVectorParameterLayer(unittest.TestCase):
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
                 threshold=SAMPLER_THRESHOLD,
-                dynamic_topk_threshold=SAMPLER_DYNAMIC_TOPK_THRESHOLD,
                 num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
                 router_output_dim=SAMPLER_ROUTER_OUTPUT_DIM,
-                boolean_mask_flag=SAMPLER_BOOLEAN_MASK_FLAG,
             ),
             mixture_model_config=MixtureConfig(
                 input_dim=MIXTURE_INPUT_DIM,
@@ -109,7 +108,7 @@ class TestVectorParameterLayer(unittest.TestCase):
             ),
             parameter_generator_model_config=ParameterLayerConfig(
                 bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
-                time_tracker_flag=PARAMETER_GENERATOR_TRACK_TIME_FLAG,
+                time_tracker_flag=False,
             ),
         )
 
@@ -590,12 +589,10 @@ class TestMatrixParameterLayer(unittest.TestCase):
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
                 threshold=SAMPLER_THRESHOLD,
-                dynamic_topk_threshold=SAMPLER_DYNAMIC_TOPK_THRESHOLD,
                 num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
                 router_output_dim=SAMPLER_ROUTER_OUTPUT_DIM,
-                boolean_mask_flag=SAMPLER_BOOLEAN_MASK_FLAG,
             ),
             mixture_model_config=MixtureConfig(
                 input_dim=MIXTURE_INPUT_DIM,
@@ -1079,12 +1076,10 @@ class TestGeneratorParameterLayer(unittest.TestCase):
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
                 threshold=SAMPLER_THRESHOLD,
-                dynamic_topk_threshold=SAMPLER_DYNAMIC_TOPK_THRESHOLD,
                 num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
                 router_output_dim=SAMPLER_ROUTER_OUTPUT_DIM,
-                boolean_mask_flag=SAMPLER_BOOLEAN_MASK_FLAG,
             ),
             mixture_model_config=MixtureConfig(
                 input_dim=MIXTURE_INPUT_DIM,
