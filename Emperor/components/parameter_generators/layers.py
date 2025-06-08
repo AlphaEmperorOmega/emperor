@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import torch
 from torch import Tensor
+import torch.nn.functional as F
 from Emperor.base.decorators import timer
 from Emperor.base.utils import Module, DataClassBase
 from Emperor.components.parameter_generators.utils.samplers import SamplerModel
@@ -13,7 +14,6 @@ from Emperor.components.parameter_generators.utils.routers import (
     RouterModel,
     VectorRouterModel,
 )
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -139,6 +139,23 @@ class ParameterLayerBase(Module):
                 raise RuntimeError("Bias router is not initialized.")
             return self.bias_router.compute_logit_scores(input_batch)
         return self.weight_router.compute_logit_scores(input_batch)
+
+
+class DefaultLinearLayer(ParameterLayerBase):
+    def __init__(
+        self,
+        cfg: "ModelConfig",
+    ):
+        super().__init__(cfg, overrides)
+        weight_shape = (self.cfg.input_dim, self.cfg.output_dim)
+        bias_shape = (self.cfg.output_dim,)
+        self.weights = self._initialize_parameter_bank(weight_shape)
+        self.biases = None
+        if self.bias_parameters_flag:
+            self.biases = self._initialize_parameter_bank(bias_shape)
+
+    def _compute_layer_output(self, input_batch: Tensor) -> Tensor:
+        return F.linear(input_batch, self.weights, self.biases)
 
 
 class VectorParameterLayer(ParameterLayerBase):
