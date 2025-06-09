@@ -18,7 +18,7 @@ class FashionMNIST(DataModule):
         batch_size,
         resize=(28, 28),
         testDatasetFalg=False,
-        testDatasetNumSamples=512,
+        testDatasetNumSamples=64,
     ):
         super().__init__()
         self.save_hyperparameters()
