@@ -102,7 +102,6 @@ class ParameterLayerPresetOptions(Enum):
 
         model = MultiLayerClassifierModel(
             cfg=cfg,
-            layer_preset=layer_preset,
             hidden_layer_callback=create_hidden_layer_model,
             num_hidden_layers=2,
         )
