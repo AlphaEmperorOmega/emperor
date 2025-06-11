@@ -189,6 +189,88 @@ class TestVectorParameterLayer(unittest.TestCase):
             ],
         )
 
+    def test__compute_probabilities_and_indices__sparse(self):
+        c = copy.deepcopy(self.cfg)
+        c.sampler_model_config.top_k = 1
+        c.mixture_model_config.top_k = 1
+        m = VectorParameterLayer(c)
+
+        batch_size = 2
+        input_batch_shape = (batch_size, self.cfg.router_model_config.input_dim)
+        input_batch = (
+            torch.arange(prod(input_batch_shape)).reshape(input_batch_shape).float()
+        )
+
+        probabilities, indices = m._compute_probabilities_and_indices(input_batch)
+        self.assertEqual(
+            list(probabilities.shape),
+            [
+                c.mixture_model_config.input_dim,
+                batch_size,
+            ],
+        )
+        self.assertEqual(
+            list(indices.shape),
+            [
+                c.mixture_model_config.input_dim,
+                batch_size,
+            ],
+        )
+
+    def test__compute_probabilities_and_indices__topk(self):
+        c = copy.deepcopy(self.cfg)
+        c.sampler_model_config.top_k = 3
+        c.mixture_model_config.top_k = 3
+        m = VectorParameterLayer(c)
+
+        batch_size = 2
+        input_batch_shape = (batch_size, self.cfg.router_model_config.input_dim)
+        input_batch = (
+            torch.arange(prod(input_batch_shape)).reshape(input_batch_shape).float()
+        )
+
+        probabilities, indices = m._compute_probabilities_and_indices(input_batch)
+        self.assertEqual(
+            list(probabilities.shape),
+            [
+                c.mixture_model_config.input_dim,
+                batch_size,
+                c.sampler_model_config.top_k,
+            ],
+        )
+        self.assertEqual(
+            list(indices.shape),
+            [
+                c.mixture_model_config.input_dim,
+                batch_size,
+                c.sampler_model_config.top_k,
+            ],
+        )
+
+    def test__compute_probabilities_and_indices__full_mixture(self):
+        c = copy.deepcopy(self.cfg)
+        c.sampler_model_config.top_k = c.mixture_model_config.depth_dim
+        c.mixture_model_config.top_k = c.mixture_model_config.depth_dim
+        c.mixture_model_config.weighted_parameters_flag = True
+        m = VectorParameterLayer(c)
+
+        batch_size = 2
+        input_batch_shape = (batch_size, self.cfg.router_model_config.input_dim)
+        input_batch = (
+            torch.arange(prod(input_batch_shape)).reshape(input_batch_shape).float()
+        )
+
+        probabilities, indices = m._compute_probabilities_and_indices(input_batch)
+        self.assertEqual(
+            list(probabilities.shape),
+            [
+                c.mixture_model_config.input_dim,
+                batch_size,
+                c.mixture_model_config.depth_dim,
+            ],
+        )
+        self.assertIsNone(indices)
+
     def test__compute_probabilities_and_indices__compute_bias_flag__False(self):
         c = copy.deepcopy(self.cfg)
         m = VectorParameterLayer(c)
