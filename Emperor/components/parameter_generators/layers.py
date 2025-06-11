@@ -147,8 +147,8 @@ class DefaultLinearLayer(ParameterLayerBase):
         cfg: "ModelConfig",
     ):
         super().__init__(cfg, overrides)
-        weight_shape = (self.cfg.input_dim, self.cfg.output_dim)
-        bias_shape = (self.cfg.output_dim,)
+        weight_shape = (cfg.input_dim, cfg.output_dim)
+        bias_shape = (cfg.output_dim,)
         self.weights = self._initialize_parameter_bank(weight_shape)
         self.biases = None
         if self.bias_parameters_flag:
@@ -189,8 +189,16 @@ class VectorParameterLayer(ParameterLayerBase):
         probabilities, indices, _ = self.sampler.sample_probabilities_and_indices(
             logits, skip_mask
         )
-        probabilities = probabilities.reshape(input_dim, batch_size, -1)
-        indices = indices.reshape(input_dim, batch_size, -1)
+
+        probabilities_shape = (input_dim, batch_size)
+        indices_shape = (input_dim, batch_size)
+        if self.mixture.top_k > 1:
+            probabilities_shape = (input_dim, batch_size, -1)
+            indices_shape = (input_dim, batch_size, -1)
+
+        probabilities = probabilities.reshape(probabilities_shape)
+        if indices is not None:
+            indices = indices.reshape(indices_shape)
 
         return probabilities, indices
 
