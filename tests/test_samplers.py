@@ -229,7 +229,7 @@ class TestProbabilitySamplerSparse(unittest.TestCase):
         self.cfg = ModelConfig()
         self.router_model = RouterModel(self.cfg)
 
-    def test_probability_sampling_strategy(self):
+    def test__probability_sampling_strategy(self):
         sampler = SamplerSparse(self.cfg)
 
         probs = torch.tensor(
@@ -247,7 +247,7 @@ class TestProbabilitySamplerSparse(unittest.TestCase):
         torch.testing.assert_close(result_probs, expected_probs)
         torch.testing.assert_close(result_indices, expected_indices)
 
-    def test_compute_loss_hook(self):
+    def test__compute_loss_hook(self):
         sampler = SamplerSparse(self.cfg)
 
         output_dim = self.cfg.router_model_config.output_dim
@@ -271,7 +271,7 @@ class TestProbabilitySamplerTopk(unittest.TestCase):
         self.cfg = ModelConfig()
         self.router_model = RouterModel(self.cfg)
 
-    def test_probability_sampling_strategy_only_topk(self):
+    def test__probability_sampling_strategy_only_topk(self):
         overrides = SamplerConfig(top_k=2, num_topk_samples=0, threshold=0.0)
         sampler = SamplerTopk(self.cfg, overrides)
 
@@ -341,7 +341,7 @@ class TestProbabilitySamplerTopk(unittest.TestCase):
         torch.testing.assert_close(expected_top_deterministic, result_top_deterministic)
         self.assertEqual(expected_shape, result_shape)
 
-    def test_sample_topk_probabilities_training_false(self):
+    def test__sample_topk_probabilities_training_false(self):
         top_k = 4
         overrides = SamplerConfig(
             top_k=top_k,
@@ -377,7 +377,7 @@ class TestProbabilitySamplerFull(unittest.TestCase):
         self.cfg = ModelConfig()
         self.router_model = RouterModel(self.cfg)
 
-    def test_probability_sampling_strategy(self):
+    def test__probability_sampling_strategy(self):
         overrides = SamplerConfig(threshold=0.0)
         sampler = SamplerFull(self.cfg, overrides)
 
@@ -393,7 +393,7 @@ class TestProbabilitySamplerFull(unittest.TestCase):
         torch.testing.assert_close(result_probs, probs)
         self.assertIsNone(result_indices)
 
-    def test_sample_full_probabilities_with_threshold(self):
+    def test__sample_full_probabilities_with_threshold(self):
         overrides = SamplerConfig(
             dynamic_topk_threshold=0.3,
             normalize_probabilities_flag=False,
@@ -433,7 +433,7 @@ class TestProbabilitySamplerFull(unittest.TestCase):
         result_probs = sampler._SamplerFull__apply_dynamic_topk_threshold_mask(probs)
         torch.testing.assert_close(result_probs, expected_masked_probs)
 
-    def test_sample_full_probabilities_no_threshold(self):
+    def test__sample_full_probabilities_no_threshold(self):
         overrides = SamplerConfig(
             dynamic_topk_threshold=0.0,
         )
@@ -459,7 +459,7 @@ class TestProbabilitySamplerFull(unittest.TestCase):
 
         torch.testing.assert_close(result_probs, probs)
 
-    def test_mask_probs_by_threshold(self):
+    def test__mask_probs_by_threshold(self):
         overrides = SamplerConfig(
             dynamic_topk_threshold=0.3,
             normalize_probabilities_flag=False,
@@ -482,7 +482,7 @@ class TestProbabilitySamplerFull(unittest.TestCase):
 
         torch.testing.assert_close(result_probs, expected)
 
-    def test_mask_probs_by_threshold_with_normalized_probabilities(self):
+    def test__mask_probs_by_threshold_with_normalized_probabilities(self):
         overrides = SamplerConfig(
             dynamic_topk_threshold=0.3,
             normalize_probabilities_flag=True,
@@ -512,7 +512,7 @@ class TestSamplerModel(unittest.TestCase):
     def setUp(self):
         self.cfg = ModelConfig()
 
-    def test_init_no_config(self):
+    def test__init_no_config(self):
         config = SamplerConfig(
             top_k=3,
             threshold=0.0,
@@ -526,30 +526,32 @@ class TestSamplerModel(unittest.TestCase):
 
         self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
 
-    def test_init_sparse(self):
+    def test__init_sparse(self):
         overrides = SamplerConfig(top_k=1, num_topk_samples=0)
         model = SamplerModel(self.cfg, overrides)
         self.assertTrue(isinstance(model.sampler_model, SamplerSparse))
 
-    def test_init_full(self):
+    def test__init_full(self):
         top_k = self.cfg.sampler_model_config.router_output_dim
         overrides = SamplerConfig(top_k=top_k)
         model = SamplerModel(self.cfg, overrides)
         self.assertTrue(isinstance(model.sampler_model, SamplerFull))
 
-    def test_init_topk(self):
+    def test__init_topk(self):
         overrides = SamplerConfig(top_k=4)
         model = SamplerModel(self.cfg, overrides)
         self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
 
-    def test_sample_probs_and_indexes_sparse(self):
+    def test__sample_probs_and_indexes_sparse(self):
         overrides = SamplerConfig(top_k=1, num_topk_samples=0)
         sampler_model = SamplerModel(self.cfg, overrides)
 
         batch_size = self.cfg.batch_size
         features = self.cfg.router_model_config.input_dim
         test_input = torch.randn(batch_size, features)
-        probabilities, indices, skip_mask = sampler_model(test_input)
+        probabilities, indices, skip_mask = (
+            sampler_model.sample_probabilities_and_indices(test_input)
+        )
 
         expected_probabilities_shape = [
             self.cfg.batch_size,
@@ -563,7 +565,7 @@ class TestSamplerModel(unittest.TestCase):
         )
         self.assertIsNone(skip_mask)
 
-    def test_sample_probs_and_indexes_sparse_with_skip_mask(self):
+    def test__sample_probs_and_indexes_sparse_with_skip_mask(self):
         overrides = SamplerConfig(top_k=1, num_topk_samples=0)
         sampler_model = SamplerModel(self.cfg, overrides)
 
@@ -572,7 +574,9 @@ class TestSamplerModel(unittest.TestCase):
         test_input = torch.randn(batch_size, features)
         skip_mask = torch.randint(0, 2, (batch_size, 1))
 
-        probabilities, indices, skip_mask = sampler_model(test_input, skip_mask)
+        probabilities, indices, skip_mask = (
+            sampler_model.sample_probabilities_and_indices(test_input, skip_mask)
+        )
 
         expected_probabilities_shape = [self.cfg.batch_size]
         expected_mask_shape = [self.cfg.batch_size, 1]
@@ -585,7 +589,7 @@ class TestSamplerModel(unittest.TestCase):
         )
         self.assertEqual(torch.tensor(skip_mask.shape).tolist(), expected_mask_shape)
 
-    def test_sample_probs_and_indexes_topk(self):
+    def test__sample_probs_and_indexes_topk(self):
         topk = 4
         overrides = SamplerConfig(top_k=topk, num_topk_samples=2)
         sampler_model = SamplerModel(self.cfg, overrides)
@@ -594,7 +598,9 @@ class TestSamplerModel(unittest.TestCase):
         features = self.cfg.router_model_config.input_dim
         test_input = torch.randn(batch_size, features)
 
-        probabilities, indices, skip_mask = sampler_model(test_input)
+        probabilities, indices, skip_mask = (
+            sampler_model.sample_probabilities_and_indices(test_input)
+        )
 
         expected_probabilities_shape = [self.cfg.batch_size, topk]
 
@@ -606,7 +612,7 @@ class TestSamplerModel(unittest.TestCase):
         )
         self.assertIsNone(skip_mask)
 
-    def test_sample_probs_and_indexes_topk_with_skip_mask(self):
+    def test__sample_probs_and_indexes_topk_with_skip_mask(self):
         overrides = SamplerConfig(top_k=4, num_topk_samples=2)
         sampler_model = SamplerModel(self.cfg, overrides)
 
@@ -615,7 +621,10 @@ class TestSamplerModel(unittest.TestCase):
         test_input = torch.randn(batch_size, features)
         skip_mask = torch.randint(0, 2, (batch_size, 1))
 
-        probabilities, indices, skip_mask = sampler_model(test_input, skip_mask)
+        router_output = self.router_model.compute_logit_scores(test_input)
+        probabilities, indices, skip_mask = (
+            sampler_model.sample_probabilities_and_indices(router_output, skip_mask)
+        )
 
         expected_probabilities_shape = [
             self.cfg.batch_size,
@@ -631,7 +640,7 @@ class TestSamplerModel(unittest.TestCase):
         )
         self.assertEqual(torch.tensor(skip_mask.shape).tolist(), expected_mask_shape)
 
-    def test_sample_probs_and_indexes_full(self):
+    def test__sample_probs_and_indexes_full(self):
         top_k = self.cfg.sampler_model_config.router_output_dim
         overrides = SamplerConfig(top_k=top_k, num_topk_samples=0)
         sampler_model = SamplerModel(self.cfg, overrides)
@@ -641,7 +650,9 @@ class TestSamplerModel(unittest.TestCase):
         test_input = torch.randn(batch_size, features)
 
         router_output = self.router_model.compute_logit_scores(test_input)
-        probabilities, indices, skip_mask = sampler_model(router_output)
+        probabilities, indices, skip_mask = (
+            sampler_model.sample_probabilities_and_indices(router_output)
+        )
 
         expected_probabilities_shape = [
             self.cfg.batch_size,
@@ -654,7 +665,7 @@ class TestSamplerModel(unittest.TestCase):
         self.assertIsNone(indices)
         self.assertIsNone(skip_mask)
 
-    def test_sample_probs_and_indexes_full_with_skip_mask(self):
+    def test__sample_probs_and_indexes_full_with_skip_mask(self):
         top_k = self.cfg.sampler_model_config.router_output_dim
         overrides = SamplerConfig(top_k=top_k, num_topk_samples=0)
         sampler_model = SamplerModel(self.cfg, overrides)
@@ -665,7 +676,9 @@ class TestSamplerModel(unittest.TestCase):
         skip_mask = torch.randint(0, 2, (batch_size, 1))
 
         router_output = self.router_model.compute_logit_scores(test_input)
-        probabilities, indices, skip_mask = sampler_model(router_output, skip_mask)
+        probabilities, indices, skip_mask = (
+            sampler_model.sample_probabilities_and_indices(router_output, skip_mask)
+        )
 
         expected_probabilities_shape = [
             self.cfg.batch_size,
