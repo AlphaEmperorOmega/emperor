@@ -18,7 +18,6 @@ from Emperor.experiments.layers.layers_presets import (
     FashionMNISTModelTrainer,
     ParameterLayerPresetFactory,
 )
-from Emperor.model_config_presets import ModelConfigPresets
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -38,7 +37,7 @@ class ModelFactory(Enum):
 
 
 class ParameterLayerOptions(Enum):
-    DEFAULT = DefaultLinearLayer
+    # DEFAULT = DefaultLinearLayer
     VECTOR = VectorParameterLayer
     MATRIX = MatrixParameterLayer
     GENERATOR = GeneratorParameterLayer
@@ -65,8 +64,9 @@ class ParameterLayerPresetOptions(Enum):
     def train_single_layer_fashion_minist_dataset(
         self,
         layer_type: "ParameterLayerOptions",
+        mini_training_set_flag: bool = True,
     ) -> None:
-        cfg = ModelConfigPresets.fashion_minist_model_config()
+        cfg = FashionMNISTModelTrainer.config_preset()
         parameter_layer_preset = ParameterLayerPresetFactory(layer_type, cfg)
         parameter_layer_preset = getattr(parameter_layer_preset, self.value)()
         model = SingleLayerClassifierModel(
@@ -76,15 +76,16 @@ class ParameterLayerPresetOptions(Enum):
         dataset = FashionMNISTModelTrainer(
             model,
             cfg,
-            test_dataset_flag=False,
+            test_dataset_flag=mini_training_set_flag,
         )
         dataset.train()
 
     def train_multi_layer_fashion_minist_dataset(
         self,
         layer_preset: "ParameterLayerOptions",
+        mini_training_set_flag: bool = True,
     ) -> None:
-        cfg = ModelConfigPresets.fashion_minist_model_config()
+        cfg = FashionMNISTModelTrainer.config_preset()
 
         def create_hidden_layer_model(
             cfg: "ModelConfig",
@@ -108,6 +109,35 @@ class ParameterLayerPresetOptions(Enum):
         dataset = FashionMNISTModelTrainer(
             model,
             cfg,
-            test_dataset_flag=False,
+            test_dataset_flag=mini_training_set_flag,
         )
         dataset.train()
+
+
+class ParameterLayersPresetTester:
+    def test_all_presets_single_layer_models(self):
+        self.__test_all_preset_models(
+            "train_single_layer_fashion_minist_dataset",
+            mini_training_set_flag=True,
+        )
+
+    def test_all_presets_multi_layer_models(self):
+        self.__test_all_preset_models(
+            "train_multi_layer_fashion_minist_dataset",
+            mini_training_set_flag=True,
+        )
+
+    def __test_all_preset_models(
+        self, train_method_name: str, mini_training_set_flag: bool = True
+    ) -> None:
+        for layer_model in ParameterLayerOptions:
+            for layer_preset in ParameterLayerPresetOptions:
+                print("-" * 50)
+                print(
+                    f"\n Model type: {str(layer_model.name)} - preset: {str(layer_preset.name)}: \n"
+                )
+                getattr(layer_preset, train_method_name)(
+                    layer_model,
+                    mini_training_set_flag=mini_training_set_flag,
+                )
+                print("-" * 50 + "\n")
