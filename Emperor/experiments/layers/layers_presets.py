@@ -1,3 +1,4 @@
+import random
 import torch.nn as nn
 from Emperor.base.utils import Trainer
 from Emperor.base.datasets import FashionMNIST
@@ -46,6 +47,7 @@ class ParameterLayerPresetFactory:
         return self.__create_model()
 
     def create_full_mixture_layer(self) -> "ParameterLayerBase":
+        self.cfg.mixture_model_config.weighted_parameters_flag = True
         full_mixture = self.cfg.mixture_model_config.depth_dim
         self.__set_topk(full_mixture)
         return self.__create_model()
@@ -113,11 +115,16 @@ class FashionMNISTModelTrainer:
         model,
         cfg,
         test_dataset_flag: bool = True,
+        num_epochs: int = 5,
     ) -> None:
         self.cfg = cfg
         self.data = self.__create_dataset(test_dataset_flag)
         self.model = model
-        self.trainer = Trainer(max_epochs=10)
+        if test_dataset_flag:
+            assert cfg.batch_size < 64, (
+                "The entire mini dataset contains 64 samplers, ensure that the `batch_size` is smaller than 64"
+            )
+        self.trainer = Trainer(max_epochs=num_epochs)
 
     def __create_dataset(self, test_dataset_flag) -> FashionMNIST:
         return FashionMNIST(
@@ -129,9 +136,11 @@ class FashionMNISTModelTrainer:
         self.trainer.fit(self.model, self.data, printLossFlag=True)
 
     @staticmethod
-    def fashion_minist_model_config() -> "ModelConfig":
+    def config_preset() -> "ModelConfig":
+        from Emperor.config import ModelConfig
+
         # MODEL WISE CONFI
-        BATCH_SIZE = 256
+        BATCH_SIZE = 16
         INPUT_DIM = 784
         HIDDEN_DIM = 64
         OUTPUT_DIM = 10
