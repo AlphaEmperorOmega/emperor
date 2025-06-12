@@ -2,14 +2,14 @@ import copy
 from typing import Callable, List
 import torch.nn as nn
 from torch import Tensor
-from Emperor.base.utils import Module
+from Emperor.base.utils import LayerBlock
 from Emperor.base.models import Classifier
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.experiments.layers.layers_options import ParameterLayerOptions
+    from Emperor.experiments.layers.layers_factories import ParameterLayerOptions
     from Emperor.components.parameter_generators.layers import ParameterLayerBase
 
 
@@ -70,19 +70,18 @@ class MultiLayerClassifierModel(ClassifierExperiment):
         cfg = copy.deepcopy(self.cfg)
         layers = []
         for layer_idx, layer_shape in enumerate(self.__create_layer_shapes()):
-            is_not_last_layer = layer_idx != (self.num_hidden_layers + 2 - 1)
+            is_inner_layer_flag = layer_idx != (self.num_hidden_layers + 2 - 1)
             # model_type = self.model_type.value
             # if self.first_layer_preset is not None and layer_idx == 0:
             #     model_type = self.first_layer_preset.value
-            model_preset = self.hidden_layer_callback(cfg, layer_shape)
-            residual_flag = False if layer_idx == 0 else is_not_last_layer
-            layer = LinearLayerDecorator(
-                model=model_preset,
-                activation_function=nn.ReLU() if is_not_last_layer else None,
-                layer_norm_flag=is_not_last_layer,
-                residual_connection_flag=residual_flag,
-                output_dim=layer_shape[-1],
+            _, output_dim = layer_shape
+            layer_block_inputs = (
+                self.hidden_layer_callback(cfg, layer_shape),
+                nn.ReLU() if is_inner_layer_flag else None,
+                nn.LayerNorm(output_dim) if is_inner_layer_flag else None,
+                False if layer_idx == 0 else is_inner_layer_flag,
             )
+            layer = LayerBlock(*layer_block_inputs)
             layers.append(layer)
 
         return layers
@@ -91,32 +90,3 @@ class MultiLayerClassifierModel(ClassifierExperiment):
         output = self.model(input_batch)
         auxiliary_loss = 0.0
         return output, auxiliary_loss
-
-
-class LinearLayerDecorator(Module):
-    def __init__(
-        self,
-        model: "ParameterLayerBase",
-        activation_function: nn.Module | None = nn.ReLU(),
-        layer_norm_flag: bool = True,
-        residual_connection_flag: bool = False,
-        output_dim: int | None = None,
-    ):
-        super().__init__()
-        self.model = model
-        self.activation_function = activation_function
-        self.layer_norm_flag = layer_norm_flag
-        if self.layer_norm_flag:
-            self.layer_norm = nn.LayerNorm(output_dim)
-        self.residual_connection_flag = residual_connection_flag
-
-    def forward(self, input_batch: Tensor) -> Tensor:
-        output = self.model(input_batch)
-        if self.layer_norm_flag:
-            output = self.layer_norm(output)
-        if self.activation_function is not None:
-            output = self.activation_function(output)
-        if self.residual_connection_flag:
-            output = output + input_batch
-
-        return output
