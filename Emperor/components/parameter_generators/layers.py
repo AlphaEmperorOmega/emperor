@@ -150,14 +150,25 @@ class DefaultLinearLayer(ParameterLayerBase):
     def __init__(
         self,
         cfg: "ModelConfig",
+        overrides: "ParameterLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        weight_shape = (cfg.input_dim, cfg.output_dim)
-        bias_shape = (cfg.output_dim,)
-        self.weights = self._initialize_parameter_bank(weight_shape)
-        self.biases = None
+        self.cfg = cfg
+        self.input_dim = cfg.input_dim
+        self.output_dim = cfg.output_dim
+        self.weight_params, self.bias_params = self.__init_parameter_banks()
+
+    def __init_parameter_banks(self):
+        weight_shape = (self.input_dim, self.output_dim)
+        bias_shape = (self.output_dim,)
+        weight_params = self._init_parameter_bank(weight_shape)
+        bias_params = None
         if self.bias_parameters_flag:
-            self.biases = self._initialize_parameter_bank(bias_shape)
+            bias_params = self._init_parameter_bank(bias_shape, nn.init.zeros_)
+        return weight_params, bias_params
+
+    def _compute_layer_output(self, input_batch: Tensor) -> Tensor:
+        return F.linear(input_batch, self.weight_params.T, self.bias_params)
 
 
 class DynamicDiagonalLinearLayer(DefaultLinearLayer):
