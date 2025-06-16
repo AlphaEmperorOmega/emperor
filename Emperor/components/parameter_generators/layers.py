@@ -1,9 +1,14 @@
 from dataclasses import dataclass, field
 import torch
 from torch import Tensor
+import torch.nn as nn
 import torch.nn.functional as F
 from Emperor.base.decorators import timer
 from Emperor.base.utils import Module, DataClassBase
+from Emperor.components.parameter_generators.utils.behaviours import (
+    DynamicDiagonalParametersBehaviour,
+)
+
 from Emperor.components.parameter_generators.utils.samplers import SamplerModel
 from Emperor.components.parameter_generators.utils.mixture import (
     GeneratorMixture,
@@ -154,8 +159,22 @@ class DefaultLinearLayer(ParameterLayerBase):
         if self.bias_parameters_flag:
             self.biases = self._initialize_parameter_bank(bias_shape)
 
+
+class DynamicDiagonalLinearLayer(DefaultLinearLayer):
+    def __init__(
+        self,
+        cfg: "ModelConfig",
+        anti_diagonal_flag: bool = False,
+    ):
+        super().__init__(cfg)
+        self.diagonal_decorator = DynamicDiagonalParametersBehaviour(
+            self.weight_params,
+            self.bias_params,
+            anti_diagonal_flag,
+        )
+
     def _compute_layer_output(self, input_batch: Tensor) -> Tensor:
-        return F.linear(input_batch, self.weights, self.biases)
+        return self.diagonal_decorator(input_batch)
 
 
 class VectorParameterLayer(ParameterLayerBase):
