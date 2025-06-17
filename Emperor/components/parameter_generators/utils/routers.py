@@ -1,13 +1,18 @@
 from torch import Tensor
 import torch.nn as nn
 from dataclasses import dataclass, field
-from Emperor.base.utils import randn, matmul
+from Emperor.base.utils import LayerBlock, randn, matmul
 from torch.nn.parameter import Parameter
 from Emperor.base.utils import Module, DataClassBase
 from torch.nn import Linear, Sequential
 
 from typing import TYPE_CHECKING
 
+from Emperor.components.parameter_generators.utils.linears import (
+    DynamicDiagonalLinearLayer,
+    LinearLayer,
+    LinearLayerConfig,
+)
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -47,6 +52,12 @@ class RouterConfig(DataClassBase):
         default=None,
         metadata={"help": "Number of layers added to the router"},
     )
+    diagonal_linear_model_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` a `DynamicDiagonalLinearLayer` will be used instead of `nn.Linear`"
+        },
+    )
 
 
 class RouterModel(Module):
@@ -66,6 +77,7 @@ class RouterModel(Module):
         self.noisy_topk_flag = self.cfg.noisy_topk_flag
         self.activation = self.cfg.activation
         self.num_layers = self.cfg.num_layers
+        self.diagonal_linear_model_flag = self.cfg.diagonal_linear_model_flag
 
         self.router_output_dim = (
             2 * self.output_dim if self.noisy_topk_flag else self.output_dim
