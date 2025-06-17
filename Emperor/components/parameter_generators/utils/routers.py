@@ -88,8 +88,20 @@ class RouterModel(Module):
         self._build_models()
 
     def __assert_input_requirements(self):
+        assert self.input_dim > 0, "input_dim must be a positive integer"
+        assert self.hidden_dim > 0, "hidden_dim must be a positive integer"
+        assert self.output_dim > 0, "output_dim must be a positive integer"
+        assert isinstance(self.residual_flag, bool), "residual_flag must be a boolean"
+        assert isinstance(self.noisy_topk_flag, bool), (
+            "noisy_topk_flag must be a boolean"
+        )
+        assert self.num_layers > 0, "num_layers must be a positive integer"
+        assert isinstance(self.diagonal_linear_model_flag, bool), (
+            "diagonal_linear_model_flag must be a boolean"
+        )
+
         self._valudate_fields(self.cfg, RouterConfig)
-        assert self.num_layers is not None and self.num_layers > 0, (
+        assert self.num_layers > 0, (
             f"Expected `num_layers` in `RouterModel` to be at least one, received {type(self.num_layers)}"
         )
 
