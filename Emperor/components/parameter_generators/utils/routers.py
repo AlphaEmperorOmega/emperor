@@ -85,7 +85,7 @@ class RouterModel(Module):
 
         self.compute_weight_flag = True
         self.__assert_input_requirements()
-        self._build_models()
+        self.model = self.__build_model()
 
     def __assert_input_requirements(self):
         assert self.input_dim > 0, "input_dim must be a positive integer"
@@ -163,8 +163,8 @@ class RouterModel(Module):
             return DynamicDiagonalLinearLayer(cfg)
         return LinearLayer(cfg)
 
-    def _compute_bias_logit_scores(self, input_batch: Tensor) -> Tensor:
-        return self.bias_router_model(input_batch)
+    def compute_logit_scores(self, input_batch: Tensor) -> Tensor:
+        return self.model(input_batch)
 
 
 class RouterLayer(Module):
