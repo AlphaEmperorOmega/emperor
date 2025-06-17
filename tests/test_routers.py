@@ -1,15 +1,17 @@
 import copy
-import torch
 import torch.nn as nn
 import unittest
-from Emperor.base.utils import randn
+from Emperor.base.utils import LayerBlock, randn
+from Emperor.components.parameter_generators.utils.linears import (
+    DynamicDiagonalLinearLayer,
+    LinearLayer,
+)
 from Emperor.components.parameter_generators.utils.routers import (
     RouterModel,
-    RouterLayer,
-    VectorRouterModel,
     RouterConfig,
+    VectorRouterModel,
 )
-from Emperor.config import ROUTER_NUM_LAYERNUM_LAYERSS, ModelConfig
+from Emperor.config import ModelConfig
 
 
 class TestRouterModel(unittest.TestCase):
@@ -22,6 +24,7 @@ class TestRouterModel(unittest.TestCase):
             residual_flag=False,
             activation=nn.Sigmoid(),
             num_layers=3,
+            diagonal_linear_model_flag=False,
         )
 
     def test__init_with_invalid_num_layers(self):
@@ -52,6 +55,7 @@ class TestRouterModel(unittest.TestCase):
             noisy_topk_flag=True,
             output_dim=512,
             num_layers=40,
+            diagonal_linear_model_flag=True,
         )
 
         m = RouterModel(c, overrides)
@@ -59,6 +63,9 @@ class TestRouterModel(unittest.TestCase):
         self.assertEqual(m.output_dim, overrides.output_dim)
         self.assertEqual(m.num_layers, overrides.num_layers)
         self.assertEqual(m.noisy_topk_flag, overrides.noisy_topk_flag)
+        self.assertEqual(
+            m.diagonal_linear_model_flag, overrides.diagonal_linear_model_flag
+        )
 
     def test__init_with_main_config(self):
         m = RouterModel(self.cfg)
@@ -76,6 +83,7 @@ class TestRouterModel(unittest.TestCase):
             residual_flag=True,
             activation=nn.Sigmoid(),
             num_layers=3,
+            diagonal_linear_model_flag=True,
         )
         m = RouterModel(config)
 
@@ -94,7 +102,7 @@ class TestRouterModel(unittest.TestCase):
         m = RouterModel(c, overrides)
         model = m._RouterModel__build_model()
 
-        self.assertIsInstance(model, nn.Linear)
+        self.assertIsInstance(model, nn.Sequential)
 
     def test__build_model__num_layers__3(self):
         c = copy.deepcopy(self.cfg)
@@ -105,24 +113,16 @@ class TestRouterModel(unittest.TestCase):
         model = m._RouterModel__build_model()
 
         self.assertIsInstance(model, nn.Sequential)
-
-    def test__build_multilayer_router(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = RouterConfig(
-            num_layers=5,
-        )
-        m = RouterModel(c, overrides)
-        model = m._RouterModel__build_multilayer_router()
-
-        self.assertIsInstance(model[0], nn.Linear)
-        for idx in range(2, m.num_layers):
-            self.assertIsInstance(model[idx], RouterLayer)
+        self.assertIsInstance(model[0], LayerBlock)
+        for layer in model[:-1]:
+            self.assertIsInstance(layer, LayerBlock)
         self.assertIsInstance(model[-1], nn.Linear)
 
     def test__compute_logit_scores__noisy_topk__False(self):
         c = copy.deepcopy(self.cfg)
         overrides = RouterConfig(
             noisy_topk_flag=False,
+            diagonal_linear_model_flag=True,
         )
         m = RouterModel(c, overrides)
 
@@ -136,6 +136,7 @@ class TestRouterModel(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = RouterConfig(
             noisy_topk_flag=True,
+            diagonal_linear_model_flag=True,
         )
         m = RouterModel(c, overrides)
 
@@ -144,3 +145,86 @@ class TestRouterModel(unittest.TestCase):
         output = m.compute_logit_scores(input_batch)
 
         self.assertEqual(list(output.shape), [batch_size, m.output_dim * 2])
+
+    def test__create_router_layer_model__diagonal_linear_model_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = RouterConfig(noisy_topk_flag=True, diagonal_linear_model_flag=False)
+        m = RouterModel(c, overrides)
+
+        model = m._RouterModel__create_router_layer_model(c.input_dim, c.output_dim)
+
+        self.assertIsInstance(model, LinearLayer)
+
+    def test__create_router_layer_model__diagonal_linear_model_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = RouterConfig(
+            noisy_topk_flag=True,
+            diagonal_linear_model_flag=True,
+        )
+        m = RouterModel(c, overrides)
+
+        model = m._RouterModel__create_router_layer_model(c.input_dim, c.output_dim)
+
+        self.assertIsInstance(model, DynamicDiagonalLinearLayer)
+
+
+class TestVectorRouterModel(unittest.TestCase):
+    def setUp(self):
+        self.cfg = RouterConfig(
+            input_dim=5,
+            hidden_dim=6,
+            output_dim=7,
+            noisy_topk_flag=False,
+            residual_flag=False,
+            activation=nn.Sigmoid(),
+            num_layers=3,
+            diagonal_linear_model_flag=False,
+        )
+
+    def test__generate_parameter_bank__bias_parameters_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        m = VectorRouterModel(c)
+
+        parameters = m._VectorRouterModel__generate_parameter_bank()
+
+        expected_shape = [c.input_dim, c.input_dim, c.output_dim]
+        self.assertEqual(list(parameters.shape), expected_shape)
+
+    def test__generate_parameter_bank__bias_parameters_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        m = VectorRouterModel(c)
+
+        parameters = m._VectorRouterModel__generate_parameter_bank()
+
+        expected_shape = [c.input_dim, c.input_dim, c.output_dim]
+        self.assertEqual(list(parameters.shape), expected_shape)
+
+    def test__compute_logit_scores__noisy_topk__False(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = RouterConfig(
+            noisy_topk_flag=False,
+            diagonal_linear_model_flag=True,
+        )
+        m = VectorRouterModel(c)
+
+        batch_size = 2
+        input_batch = randn(batch_size, m.input_dim)
+        output = m.compute_logit_scores(input_batch)
+
+        self.assertEqual(list(output.shape), [m.input_dim, batch_size, m.output_dim])
+
+    def test__compute_logit_scores__noisy_topk__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = RouterConfig(
+            noisy_topk_flag=True,
+            diagonal_linear_model_flag=True,
+        )
+        m = VectorRouterModel(c, overrides)
+
+        batch_size = 2
+        input_batch = randn(batch_size, m.input_dim)
+        output = m.compute_logit_scores(input_batch)
+
+        self.assertEqual(
+            list(output.shape), [m.input_dim, batch_size, m.output_dim * 2]
+        )
