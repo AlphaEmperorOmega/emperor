@@ -33,12 +33,6 @@ class RouterConfig(DataClassBase):
             "help": "If true when you have 3 or more layers a residual connection is added between layers"
         },
     )
-    compute_bias_logits_flag: int | None = field(
-        default=None,
-        metadata={
-            "help": "If `True` generates bias parameters to be added in `ParameterGeneratorLayer`"
-        },
-    )
     noisy_topk_flag: int | None = field(
         default=None,
         metadata={
@@ -69,7 +63,6 @@ class RouterModel(Module):
         self.hidden_dim = self.cfg.hidden_dim
         self.output_dim = self.cfg.output_dim
         self.residual_flag = self.cfg.residual_flag
-        self.compute_bias_logits_flag = self.cfg.compute_bias_logits_flag
         self.noisy_topk_flag = self.cfg.noisy_topk_flag
         self.activation = self.cfg.activation
         self.num_layers = self.cfg.num_layers
