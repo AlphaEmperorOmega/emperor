@@ -81,53 +81,63 @@ class RouterModel(Module):
             f"Expected `num_layers` in `RouterModel` to be at least one, received {type(self.num_layers)}"
         )
 
-    def _build_models(self) -> None:
-        self.weight_router_model = self.__build_model()
-        self._initialize_parameters(self.weight_router_model)
-        if self.compute_bias_logits_flag:
-            self.bias_router_model = self.__build_model()
-            self._initialize_parameters(self.bias_router_model)
-
     def __build_model(self) -> Linear | Sequential:
-        if self.num_layers > 1:
-            router_model = self.__build_multilayer_router()
-        else:
-            router_model = Linear(self.input_dim, self.router_output_dim, bias=False)
-        self._initialize_parameters(router_model)
-        return router_model
-
-    def __build_multilayer_router(self) -> Sequential:
         router_layers = []
 
-        layer_adjustment = 1
-        if self.input_dim != self.hidden_dim:
-            assert self.activation is not None, (
-                "Activation function needs to be exists if more than two router layers are used"
-            )
-            layer_adjustment = 2
-            router_layers.append(Linear(self.input_dim, self.hidden_dim))
-            router_layers.append(self.activation)
+        layer_adjustment = self.__add_initial_layer(router_layers)
+        self.__add_hidden_layers(router_layers, layer_adjustment)
+        self.__add_output_layer(router_layers)
 
+        model = Sequential(*router_layers)
+        self._initialize_parameters(model)
+        return model
+
+    def __add_initial_layer(self, router_layers: list) -> int:
+        if self.input_dim != self.hidden_dim and self.num_layers > 1:
+            layer = self.__create_router_layer(self.input_dim, self.hidden_dim, False)
+            router_layers.append(layer)
+            return 2
+        return 1
+
+    def __add_hidden_layers(self, router_layers: list, layer_adjustment: int) -> None:
         for _ in range(self.num_layers - layer_adjustment):
-            layer = RouterLayer(self.hidden_dim, self.activation, self.residual_flag)
+            layer = self.__create_router_layer(self.hidden_dim, self.hidden_dim)
             router_layers.append(layer)
 
-        router_layers.append(
-            Linear(self.hidden_dim, self.router_output_dim, bias=False)
+    def __add_output_layer(self, router_layers: list) -> None:
+        layer_input = self.hidden_dim if self.num_layers > 1 else self.input_dim
+        router_layers.append(Linear(layer_input, self.router_output_dim, bias=False))
+
+    def __create_router_layer(
+        self,
+        input_dim: int,
+        output_dim: int,
+        residual_connection_flag: bool = True,
+    ):
+        return LayerBlock(
+            model=self.__create_router_layer_model(
+                input_dim,
+                output_dim,
+            ),
+            activation_function_module=self.activation,
+            layer_norm_module=nn.LayerNorm(output_dim),
+            residual_connection_flag=residual_connection_flag,
         )
-        return Sequential(*router_layers)
 
-    def compute_logit_scores(self, input_batch: Tensor) -> Tensor:
-        if self.compute_weight_flag:
-            return self._compute_weight_logit_scores(input_batch)
-        self.set_compute_weight_flag(False)
-        return self._compute_bias_logit_scores(input_batch)
-
-    def set_compute_weight_flag(self, compute_weight_flag: bool = True) -> None:
-        self.compute_weight_flag = compute_weight_flag
-
-    def _compute_weight_logit_scores(self, input_batch: Tensor) -> Tensor:
-        return self.weight_router_model(input_batch)
+    def __create_router_layer_model(
+        self,
+        input_dim: int,
+        output_dim: int,
+    ) -> DynamicDiagonalLinearLayer | LinearLayer:
+        cfg = LinearLayerConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            bias_flag=True,
+            anti_diagonal_flag=True,
+        )
+        if self.diagonal_linear_model_flag:
+            return DynamicDiagonalLinearLayer(cfg)
+        return LinearLayer(cfg)
 
     def _compute_bias_logit_scores(self, input_batch: Tensor) -> Tensor:
         return self.bias_router_model(input_batch)
