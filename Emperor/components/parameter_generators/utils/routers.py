@@ -167,45 +167,29 @@ class RouterModel(Module):
         return self.model(input_batch)
 
 
-class RouterLayer(Module):
+class VectorRouterModel(RouterModel):
     def __init__(
         self,
-        hidden_dim: int,
-        activation: Module,
-        residual_flag: bool = False,
-    ):
-        super().__init__()
-        self.hidden_dim = hidden_dim
-        self.activation = activation
-        self.residual_flag = residual_flag
-        self.layer = Linear(self.hidden_dim, self.hidden_dim)
+        cfg: "RouterConfig | ModelConfig",
+        overrides: "RouterConfig | None" = None,
+        bias_parameters_flag: bool = False,
+    ) -> None:
+        super().__init__(cfg, overrides)
+        self.bias_parameters_flag = bias_parameters_flag
+        self.parameter_bank = self.__generate_parameter_bank()
 
-    def forward(self, input_batch: Tensor):
-        output = self.layer(input_batch)
-        output = self.activation(output)
-        if self.residual_flag:
-            output = output + input_batch
-        return output
-
-
-class VectorChoiceRouterModel(RouterModel):
-    def __init__(self, cfg: "RouterInputs | ModelConfig") -> None:
-        super().__init__(cfg)
-
-    def _build_models(self) -> None:
-        self.weight_router_model = Parameter(
-            randn(self.input_dim, self.input_dim, self.router_output_dim)
+    def __generate_parameter_bank(self) -> Parameter:
+        # This is required for `VectorRouterModel` in case `feature_dim`
+        # you find this wierd in the future
+        feature_dim = self.output_dim if self.bias_parameters_flag else self.input_dim
+        parameters = Parameter(
+            randn(feature_dim, self.input_dim, self.router_output_dim)
         )
-        self._initialize_parameters(self.weight_router_model)
-        self.bias_router_model = None
-        if self.compute_bias_logits_flag:
-            self.bias_router_model = Parameter(
-                randn(self.output_dim, self.input_dim, self.router_output_dim)
-            )
-            self._initialize_parameters(self.bias_router_model)
+        self._initialize_parameters(parameters)
+        return parameters
 
-    def _compute_weight_logit_scores(self, input_batch: Tensor) -> Tensor:
-        return matmul(input_batch, self.weight_router_model)
-
-    def _compute_bias_logit_scores(self, input_batch: Tensor) -> Tensor:
-        return matmul(input_batch, self.bias_router_model)
+    def compute_logit_scores(
+        self,
+        input_batch: Tensor,
+    ) -> Tensor:
+        return matmul(input_batch, self.parameter_bank)
