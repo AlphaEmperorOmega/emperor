@@ -9,16 +9,25 @@ from Emperor.base.utils import Module
 class DynamicDiagonalParametersBehaviour(Module):
     def __init__(
         self,
-        weight_params: Tensor,
+        weight_params: Tensor | None = None,
         bias_params: Tensor | None = None,
         anti_diagonal_flag: bool = True,
     ):
         super().__init__()
 
-        self.input_dim, self.output_dim = weight_params.shape
+        self.input_dim, self.output_dim = (
+            weight_params.shape if weight_params is not None else (None, None)
+        )
         self.weight_params = weight_params
         self.bias_params = bias_params
         self.anti_diagonal_flag = anti_diagonal_flag
+        self.diagonal_model, self.anti_diagonal_model = self.__init_diagonal_models()
+        self.padding_shape = self.__get_diagonal_padding_shape()
+
+    def set_parameters(self, weight_params: Tensor, bias_params: Tensor | None = None):
+        self.input_dim, self.output_dim = weight_params.shape
+        self.weight_params = weight_params
+        self.bias_params = bias_params
         self.diagonal_model, self.anti_diagonal_model = self.__init_diagonal_models()
         self.padding_shape = self.__get_diagonal_padding_shape()
 
@@ -31,7 +40,9 @@ class DynamicDiagonalParametersBehaviour(Module):
                 diagonal_padding_shape = (0, 0, 0, padding_size)
         return diagonal_padding_shape
 
-    def __init_diagonal_models(self) -> tuple[nn.Linear, nn.Linear | None]:
+    def __init_diagonal_models(self) -> tuple[nn.Linear | None, nn.Linear | None]:
+        if self.input_dim is None and self.output_dim is None:
+            return (None, None)
         output_dim = min(self.input_dim, self.output_dim)
         diagonal_shape = (self.input_dim, output_dim)
         diagonal_model = nn.Linear(*diagonal_shape)
