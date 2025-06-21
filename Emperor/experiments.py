@@ -1,5 +1,4 @@
 from typing import List
-import torch
 import torch.nn as nn
 
 from Emperor.base.preprocess import PatchEmbeddingConv
