@@ -23,12 +23,6 @@ class TestDefaultLinearLayers(unittest.TestCase):
         OUTPUT_DIM = 6
         GATHER_FREQUENCY_FLAG = False
 
-        # AUXILIARY LOSSES OPITONS
-        COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.0
-        SWITCH_LOSS_WEIGHT: float = 0.0
-        ZERO_CENTERED_LOSS_WEIGHT: float = 0.0
-        MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
-
         # PARAMETER GENRETOR ROUTER OPITONS
         ROUTER_INPUT_DIM = HIDDEN_DIM
         ROUTER_HIDDEN_DIM = 8
@@ -45,7 +39,10 @@ class TestDefaultLinearLayers(unittest.TestCase):
         SAMPLER_NORMALIZE_PROBABILITIES_FLAG = False
         SAMPLER_NOISY_TOPK_FLAG = ROUTER_NOISY_TOPK_FLAG
         SAMPLER_ROUTER_OUTPUT_DIM = ROUTER_OUTPUT_DIM
-        SAMPLER_BOOLEAN_MASK_FLAG = False
+        SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT = 0.0
+        SAMPLER_SWITCH_WEIGHT = 0.0
+        SAMPLER_ZERO_CENTRED_WEIGHT = 0.0
+        SAMPLER_MUTUAL_INFORMATION_WEIGHT = 0.0
 
         # PARAMETER GENRETOR MIXTURE OPITONS
         MIXTURE_INPUT_DIM = ROUTER_INPUT_DIM
@@ -66,10 +63,6 @@ class TestDefaultLinearLayers(unittest.TestCase):
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
             gather_frequency_flag=GATHER_FREQUENCY_FLAG,
-            coefficient_of_variation_loss_weight=COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
-            switch_loss_weight=SWITCH_LOSS_WEIGHT,
-            zero_centered_loss_weight=ZERO_CENTERED_LOSS_WEIGHT,
-            mutual_information_loss_weight=MUTUAL_INFORMATION_LOSS_WEIGHT,
             router_model_config=RouterConfig(
                 input_dim=ROUTER_INPUT_DIM,
                 hidden_dim=ROUTER_HIDDEN_DIM,
@@ -85,6 +78,10 @@ class TestDefaultLinearLayers(unittest.TestCase):
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
                 router_output_dim=SAMPLER_ROUTER_OUTPUT_DIM,
+                coefficient_of_variation_weight=SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT,
+                switch_weight=SAMPLER_SWITCH_WEIGHT,
+                zero_centred_weight=SAMPLER_ZERO_CENTRED_WEIGHT,
+                mutual_information_weight=SAMPLER_MUTUAL_INFORMATION_WEIGHT,
             ),
             mixture_model_config=MixtureConfig(
                 input_dim=MIXTURE_INPUT_DIM,
@@ -224,7 +221,6 @@ class TestDefaultLinearLayers(unittest.TestCase):
 
     def test__compute_affine_transformation__no_bias_parameters(self):
         c = copy.deepcopy(self.cfg)
-        # Equal to make testing easier
         c.input_dim = 4
         c.output_dim = 4
         batch_size = 2
