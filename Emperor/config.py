@@ -4,6 +4,7 @@ from Emperor.base.utils import DataClassBase
 
 
 from Emperor.components.parameter_generators.layers import ParameterLayerConfig
+from Emperor.components.parameter_generators.utils.linears import LinearLayerConfig
 from Emperor.components.parameter_generators.utils.mixture import MixtureConfig
 from Emperor.components.parameter_generators.utils.samplers import SamplerConfig
 from Emperor.components.parameter_generators.utils.routers import (
@@ -18,12 +19,6 @@ HIDDEN_DIM = 32
 OUTPUT_DIM = 64
 GATHER_FREQUENCY_FLAG = False
 
-# AUXILIARY LOSSES OPITONS
-COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.0
-SWITCH_LOSS_WEIGHT: float = 0.0
-ZERO_CENTERED_LOSS_WEIGHT: float = 0.0
-MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
-
 # PARAMETER GENRETOR ROUTER OPITONS
 ROUTER_INPUT_DIM = HIDDEN_DIM
 ROUTER_HIDDEN_DIM = 32
@@ -31,6 +26,7 @@ ROUTER_OUTPUT_DIM = 128
 ROUTER_NOISY_TOPK_FLAG = False
 ROUTER_ACTIVATION_FUNCTION = nn.ReLU()
 ROUTER_NUM_LAYERNUM_LAYERSS = 3
+ROUTER_DIAGONAL_LINEAR_MODEL_FLAG = True
 
 # PARAMETER GENRETOR SAMPLER OPITONS
 SAMPLER_TOP_K = 8
@@ -41,6 +37,10 @@ SAMPLER_NORMALIZE_PROBABILITIES_FLAG = False
 SAMPLER_NOISY_TOPK_FLAG = ROUTER_NOISY_TOPK_FLAG
 SAMPLER_ROUTER_OUTPUT_DIM = ROUTER_OUTPUT_DIM
 SAMPLER_BOOLEAN_MASK_FLAG = False
+SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT = 0.0
+SAMPLER_SWITCH_WEIGHT = 0.0
+SAMPLER_ZERO_CENTRED_WEIGHT = 0.0
+SAMPLER_MUTUAL_INFORMATION_WEIGHT = 0.0
 
 # PARAMETER GENRETOR MIXTURE OPITONS
 MIXTURE_INPUT_DIM = 16
@@ -81,21 +81,6 @@ class ModelConfig(DataClassBase):
             "help": "Flag to control frequency of gathering operations for the purpose of visualization"
         },
     )
-    coefficient_of_variation_loss_weight: float = field(
-        default=COEFFICIENT_OF_VARIATION_LOSS_WEIGHT
-    )
-    switch_loss_weight: float = field(
-        default=SWITCH_LOSS_WEIGHT,
-        metadata={"help": ""},
-    )
-    zero_centered_loss_weight: float = field(
-        default=ZERO_CENTERED_LOSS_WEIGHT,
-        metadata={"help": ""},
-    )
-    mutual_information_loss_weight: float = field(
-        default=MUTUAL_INFORMATION_LOSS_WEIGHT,
-        metadata={"help": ""},
-    )
     router_model_config: RouterConfig = field(
         default_factory=lambda: RouterConfig(
             input_dim=ROUTER_INPUT_DIM,
@@ -104,6 +89,7 @@ class ModelConfig(DataClassBase):
             noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
             activation=ROUTER_ACTIVATION_FUNCTION,
             num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
+            diagonal_linear_model_flag=ROUTER_DIAGONAL_LINEAR_MODEL_FLAG,
         ),
         metadata={"help": "`RouterModel` configuration"},
     )
@@ -115,6 +101,10 @@ class ModelConfig(DataClassBase):
             normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
             noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
             router_output_dim=SAMPLER_ROUTER_OUTPUT_DIM,
+            coefficient_of_variation_weight=SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT,
+            switch_weight=SAMPLER_SWITCH_WEIGHT,
+            zero_centred_weight=SAMPLER_ZERO_CENTRED_WEIGHT,
+            mutual_information_weight=SAMPLER_MUTUAL_INFORMATION_WEIGHT,
         ),
         metadata={"help": "`SamplerConfig` configuration"},
     )
@@ -137,42 +127,12 @@ class ModelConfig(DataClassBase):
         ),
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
-
-
-# Flags
-# MULTIPLY_BY_GATES: bool = False
-# ATTENTION_PROJECTION_BIAS_FLAG: bool = False
-# ADD_ZERO_ATTENTION_FLAG: bool = False
-# SELF_ATTENTION_FLAG: bool = False
-# ENCODER_DECODER_ATTENTION_FLAG: bool = False
-#
-# # Transformer Attention Inputs
-# EMBEDDING_DIM: int = 784
-# QUERY_INPUT_DIM: Optional[int] = None
-# KEY_INPUT_DIM: Optional[int] = None
-# VALUE_INPUT_DIM: Optional[int] = None
-# QKV_HIDDEN_DIM: Optional[int] = 128
-# HEAD_DIM: int = 64
-# ATTENTION_OUTPUT_DIM: Optional[int] = 10
-#
-# # Transformer Config
-# QKV_INPUT_DIM: Optional[int] = None
-# QKV_OUTPUT_DIM: Optional[int] = None
-# FFN_INPUT_DIM: Optional[int] = None
-# FFN_HIDDEN_DIM: Optional[int] = None
-# FFN_OUTPUT_DIM: Optional[int] = None
-#
-# # Additional Flags
-# RETURN_RAW_FFN_OUTPUT_FLAG: bool = False
-# NORMALIZE_BEFORE_FLAG: bool = False
-# ADD_MEMORY_BIAS_KEY_VALUES_FLAG: bool = False
-#
-# # Dropout Probabilities
-# ATTN_DROPOUT_PROBABILITY: float = 0.0
-# FFN_DROPOUT_PROBABILITY: float = 0.0
-# DROPOUT_PROBABILITY: float = 0.0
-# QUANT_NOISE: float = 0.0
-# QUANT_BLOCK_SIZE: int = 0
-#
-# # Gating
-# GATING_DROPOUT: int = 0
+    linear_layer_model_config: LinearLayerConfig = field(
+        default_factory=lambda: LinearLayerConfig(
+            input_dim=INPUT_DIM,
+            output_dim=OUTPUT_DIM,
+            bias_flag=True,
+            anti_diagonal_flag=True,
+        ),
+        metadata={"help": "`LinearLayerConfig` configuration"},
+    )
