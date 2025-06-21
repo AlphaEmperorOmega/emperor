@@ -16,12 +16,10 @@ if TYPE_CHECKING:
 class ClassifierExperiment(Classifier):
     def __init__(
         self,
-        model: "ParameterLayerBase",
         learning_rate: float = 0.1,
     ):
         super().__init__()
         self.lr = learning_rate
-        self.model = model
         self.plotProgress = False
 
 
