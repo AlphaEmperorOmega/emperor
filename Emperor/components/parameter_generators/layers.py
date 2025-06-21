@@ -1,13 +1,8 @@
 from dataclasses import dataclass, field
 import torch
 from torch import Tensor
-import torch.nn as nn
-import torch.nn.functional as F
 from Emperor.base.decorators import timer
 from Emperor.base.utils import Module, DataClassBase
-from Emperor.components.parameter_generators.utils.behaviours import (
-    DynamicDiagonalParametersBehaviour,
-)
 
 from Emperor.components.parameter_generators.utils.samplers import SamplerModel
 from Emperor.components.parameter_generators.utils.mixture import (
@@ -19,10 +14,6 @@ from Emperor.components.parameter_generators.utils.routers import (
     RouterModel,
     VectorRouterModel,
 )
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
 
 
 @dataclass
@@ -146,48 +137,6 @@ class ParameterLayerBase(Module):
         return self.weight_router.compute_logit_scores(input_batch)
 
 
-class DefaultLinearLayer(ParameterLayerBase):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-        overrides: "ParameterLayerConfig | None" = None,
-    ):
-        super().__init__(cfg, overrides)
-        self.cfg = cfg
-        self.input_dim = cfg.input_dim
-        self.output_dim = cfg.output_dim
-        self.weight_params, self.bias_params = self.__init_parameter_banks()
-
-    def __init_parameter_banks(self):
-        weight_shape = (self.input_dim, self.output_dim)
-        bias_shape = (self.output_dim,)
-        weight_params = self._init_parameter_bank(weight_shape)
-        bias_params = None
-        if self.bias_parameters_flag:
-            bias_params = self._init_parameter_bank(bias_shape, nn.init.zeros_)
-        return weight_params, bias_params
-
-    def _compute_layer_output(self, input_batch: Tensor) -> Tensor:
-        return F.linear(input_batch, self.weight_params.T, self.bias_params)
-
-
-class DynamicDiagonalLinearLayer(DefaultLinearLayer):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-        anti_diagonal_flag: bool = False,
-    ):
-        super().__init__(cfg)
-        self.diagonal_decorator = DynamicDiagonalParametersBehaviour(
-            self.weight_params,
-            self.bias_params,
-            anti_diagonal_flag,
-        )
-
-    def _compute_layer_output(self, input_batch: Tensor) -> Tensor:
-        return self.diagonal_decorator(input_batch)
-
-
 class VectorParameterLayer(ParameterLayerBase):
     def __init__(
         self,
@@ -203,7 +152,10 @@ class VectorParameterLayer(ParameterLayerBase):
 
     def _init_bias_router_model(self, cfg: "ModelConfig") -> VectorRouterModel | None:
         if self.bias_parameters_flag:
-            return VectorRouterModel(cfg, self.bias_parameters_flag)
+            return VectorRouterModel(
+                cfg,
+                bias_parameters_flag=self.bias_parameters_flag,
+            )
         return None
 
     def _compute_probabilities_and_indices(
