@@ -1,121 +1,200 @@
 import torch
-import torch.nn as nn
+from torch import Tensor
 import torch.nn.functional as F
 
 
-class AuxiliaryLosses:
-    def __init__(self, cfg):
-        super().__init__()
-        # Temporarly remove the config requirements until refactored
-        self.coefficientOfVariationLoss = 0.0  # cfg.coefficientOfVariationLossWeight
-        self.switchLoss = 0.0  # cfg.switchLossWeight
-        self.zeroCentredLoss = 0.0  # cfg.zeroCentredLossWeight
-        self.mutualInformationLoss = 0.0  # cfg.mutualInformationLossWeight
-        # TEMPORARY
-        self.topK = 0.0  # cfg.topK
+class AuxiliaryLossBase:
+    def __init__(self, loss_weight: float = 0.0):
+        self.loss_weight = loss_weight
+        self.default_error = torch.tensor(0.0)
 
-        self.initializeAccumulatedStatistics()
+    def get_weighted_loss(self) -> Tensor:
+        if self.is_loss_weight_zero():
+            return self.default_error
+        return self.loss_weight * self._compute_loss()
 
-    def initializeAccumulatedStatistics(self):
-        self.probability_accumulation = 0.0
-        self.gate_accumulation = 0.0
-        self.frequency_accumulation = 0.0
-        self.squared_log_sum_exp_accumulation = 0.0
-        self.count_accumulation = 0
+    def is_loss_weight_zero(self) -> bool:
+        return self.loss_weight == 0.0
 
-        self.probabilities = []
-        self.log_probabilities = []
-        self.skip_masks = []
-
-    def update_accumulated_statistics(
-        self, logits, probabilities, gates, skipMasks=None
-    ):
-        squaredLogSumExp = torch.exp(logits)
-        squaredLogSumExp = squaredLogSumExp.sum(dim=-1)
-        squaredLogSumExp = torch.log(squaredLogSumExp)
-        squaredLogSumExp = squaredLogSumExp**2
-        logProbabilities = torch.log_softmax(logits, dim=-1)
-
-        self.probability_accumulation += torch.sum(probabilities, dim=0)
-        self.gate_accumulation += torch.sum(gates, dim=0)
-        self.frequency_accumulation += torch.sum((gates > 0).float(), dim=0)
-        self.squared_log_sum_exp_accumulation += torch.sum(squaredLogSumExp)
-        self.count_accumulation += logits.size(0)
-
-        self.probabilities.append(probabilities)
-        self.log_probabilities.append(logProbabilities)
-        if skipMasks is not None:
-            self.skip_masks.append(skipMasks)
-
-    def getAuxiliaryLossAndClear(self):
-        if (
-            isinstance(self.probabilityAccumulation, float)
-            and isinstance(self.gateAccumulation, float)
-            and isinstance(self.frequencyAccumulation, float)
-            and isinstance(self.squaredLogSumExpAccumulation, float)
-        ):
-            return 0.0
-
-        coefficientOfVariationSquaredLoss = self.computeCoefficientOfVariation(
-            self.gateAccumulation
-        )
-        switchLoss = self.computeSwitchLoss(
-            self.probabilityAccumulation, self.frequencyAccumulation
-        )
-        zLoss = self.computeZeroCentredLoss(
-            self.squaredLogSumExpAccumulation, self.countAccumulation
-        )
-        if len(self.skipMasks) != 0:
-            miLoss = self.computeMutualInformationLoss(
-                self.probabilities, self.logProbabilities, self.skipMasks
-            )
+    def _accumulate(self, attr, value):
+        if getattr(self, attr) is None:
+            setattr(self, attr, value)
         else:
-            miLoss = 0.0
+            getattr(self, attr).add_(value)
 
-        loss = (
-            self.coefficientOfVariationLoss * coefficientOfVariationSquaredLoss
-            + self.switchLoss * switchLoss
-            + self.zeroCentredLoss * zLoss
-            + self.mutualInformationLoss * miLoss
+    def _is_accumulation_none(self, accumulation: Tensor | None) -> None:
+        if accumulation is None:
+            raise ValueError(
+                "`self.accumulation` is `None`. Please call `update_accumulation` before validating accumulation."
+            )
+
+    def reset_loss(self) -> None:
+        raise NotImplementedError(
+            "`reset_loss` method must be implemented by subclasses of AuxiliaryLossBase"
         )
 
-        self.initializeAccumulatedStatistics()
-        return loss
+    def update_loss(self, *args, **kwargs) -> None:
+        raise NotImplementedError(
+            "`update_loss` method must be implemented by subclasses of AuxiliaryLossBase"
+        )
 
-    def computeCoefficientOfVariation(self, probabilities):
-        normalizedProbabilities = F.normalize(probabilities, p=1, dim=0)
-        return self.computeCoefficientOfVariationSquared(normalizedProbabilities)
+    def _compute_loss(self, *args, **kwargs) -> Tensor:
+        raise NotImplementedError(
+            "`_cumpute_loss` method must be implemented by subclasses of AuxiliaryLossBase"
+        )
 
-    def computeCoefficientOfVariationSquared(self, probabilities):
-        eps = 1e-10
 
-        if probabilities.shape[0] == 1:
-            return 0
+class CoefficientOfVariationLoss(AuxiliaryLossBase):
+    def __init__(self, loss_weight: float = 0.0):
+        super().__init__(loss_weight)
+        self.eps = 1e-10
+        self.probability_accumulation = None
 
+    def reset_loss(self) -> None:
+        self.probability_accumulation = None
+
+    def update_accumulation(self, probabilities: Tensor) -> None:
+        if self.is_loss_weight_zero():
+            return
+        probability = torch.sum(probabilities, dim=0)
+        self._accumulate("probability_accumulation", probability)
+
+    def _compute_loss(self) -> Tensor:
+        if self.__is_accumulation_shape_valid():
+            return self.default_error
+        return self.__compute_coefficient_of_variation()
+
+    def __is_accumulation_shape_valid(self) -> bool:
+        self._is_accumulation_none(self.probability_accumulation)
+        return self.probability_accumulation.shape[0] == 1
+
+    def __compute_coefficient_of_variation(self) -> Tensor:
+        probabilities = F.normalize(self.probability_accumulation, p=1, dim=0)
         variation = probabilities.float().var()
         mean = probabilities.float().mean() ** 2
 
-        return variation / (mean + eps)
+        return variation / (mean + self.eps)
 
-    def computeSwitchLoss(self, probabilities, frequency):
-        normalizedProbabilities = F.normalize(probabilities, p=1, dim=0)
-        normalizedFrequency = F.normalize(frequency, p=1, dim=0)
-        loss = normalizedProbabilities * normalizedFrequency
 
-        return self.topK * loss.sum()
+class SwitchLoss(AuxiliaryLossBase):
+    def __init__(self, top_k: int, loss_weight: float = 0.0):
+        super().__init__(loss_weight)
+        self.top_k = top_k
+        self.probability_accumulation = None
+        self.frequency_accumulation = None
 
-    def computeZeroCentredLoss(self, squaredLogSumExp, count):
-        return squaredLogSumExp / count
+    def reset_loss(self) -> None:
+        self.probability_accumulation = None
+        self.frequency_accumulation = None
 
-    def computeMutualInformationLoss(self, probabilities, logProbabilities, masks):
-        probabilities = torch.cat(probabilities, dim=0)
-        logProbabilities = torch.cat(logProbabilities, dim=0)
+    def update_accumulation(
+        self,
+        probabilities: Tensor,
+        gates: Tensor,
+    ) -> None:
+        if self.is_loss_weight_zero():
+            return
+        probability = torch.sum(probabilities, dim=0)
+        self._accumulate("probability_accumulation", probability)
+        frequency = torch.sum((gates > 0).float(), dim=0)
+        self._accumulate("frequency_accumulation", frequency)
 
-        masks = torch.cat(masks, dim=0)
+    def _compute_loss(self) -> Tensor:
+        self._is_accumulation_none(self.probability_accumulation)
+        self._is_accumulation_none(self.frequency_accumulation)
+        return self.__compute_switch_loss()
+
+    def __compute_switch_loss(self) -> Tensor:
+        probabilities = self.probability_accumulation
+        frequencies = self.frequency_accumulation
+        normalized_probabilities = F.normalize(probabilities, p=1, dim=0)
+        normalized_frequency = F.normalize(frequencies, p=1, dim=0)
+        loss = normalized_probabilities * normalized_frequency
+        return self.top_k * loss.sum()
+
+
+class ZeroCentredLoss(AuxiliaryLossBase):
+    def __init__(self, loss_weight: float = 0.0):
+        super().__init__(loss_weight)
+        self.squared_log_sum_exp_accumulation = None
+        self.count_accumulation = None
+
+    def reset_loss(self) -> None:
+        self.squared_log_sum_exp_accumulation = None
+        self.count_accumulation = None
+
+    def update_accumulation(self, logits: Tensor) -> None:
+        if self.is_loss_weight_zero():
+            return
+        squared_log_sum_exp = self.__compute_squared_log_sum_exp(logits)
+        squared_log_sum_exp = torch.sum(squared_log_sum_exp)
+        self._accumulate("squared_log_sum_exp_accumulation", squared_log_sum_exp)
+        count = torch.tensor(logits.size(0))
+        self._accumulate("count_accumulation", count)
+
+    def __compute_squared_log_sum_exp(self, logits: Tensor) -> Tensor:
+        squared_log_sum_exp = torch.exp(logits).sum(dim=-1)
+        squared_log_sum_exp = torch.log(squared_log_sum_exp) ** 2
+        return squared_log_sum_exp
+
+    def _compute_loss(self) -> Tensor:
+        self._is_accumulation_none(self.squared_log_sum_exp_accumulation)
+        self._is_accumulation_none(self.count_accumulation)
+        return self.__compute_zero_centred_loss()
+
+    def __compute_zero_centred_loss(self):
+        return self.squared_log_sum_exp_accumulation / self.count_accumulation
+
+
+class MutualInformationLoss(AuxiliaryLossBase):
+    def __init__(self, loss_weight: float = 0.0):
+        super().__init__(loss_weight)
+        self.log_probabilities = []
+        self.probabilities = []
+        self.skip_masks = []
+
+    def reset_loss(self) -> None:
+        self.log_probabilities = []
+        self.probabilities = []
+        self.skip_masks = []
+
+    def update_accumulation(
+        self,
+        logits: Tensor,
+        pribabilities: Tensor,
+        skip_masks: Tensor,
+    ) -> None:
+        if self.is_loss_weight_zero():
+            return
+        log_probabilities = torch.log_softmax(logits, dim=-1)
+        self.log_probabilities.append(log_probabilities)
+        self.probabilities.append(pribabilities)
+        self.skip_masks.append(skip_masks)
+
+    def _compute_loss(self) -> Tensor:
+        self._is_accumulation_list_empty(self.log_probabilities)
+        self._is_accumulation_list_empty(self.probabilities)
+        self._is_accumulation_list_empty(self.skip_masks)
+        return self.__compute_mutual_information_loss()
+
+    def _is_accumulation_list_empty(self, accumulation: list) -> None:
+        if len(accumulation) == 0:
+            raise ValueError(
+                "`self.accumulation_list` is `empty`. Please call `update_accumulation` before validating accumulation."
+            )
+
+    def __compute_mutual_information_loss(self):
+        probabilities = torch.cat(self.probabilities, dim=0)
+        log_probabilities = torch.cat(self.log_probabilities, dim=0)
+        masks = torch.cat(self.skip_masks, dim=0)
 
         p_x = masks / (masks.sum() + 1e-12)
         p_e = (p_x * probabilities).sum(0)
+        # WARNING: Ensure that `skip_mask` does not contain
+        # any zeros exist in `p_e.log()` will produce `-inf`
+        # `H_e` will store `nan` in it's result
         H_e = (p_e * p_e.log()).sum()
 
-        meg_H_e_given_x = (p_x * probabilities * logProbabilities).sum()
-        return -(meg_H_e_given_x + H_e)
+        neg_H_e_given_x = (p_x * probabilities * log_probabilities).sum()
+        mi_loss = -(neg_H_e_given_x + H_e)
+        return mi_loss
