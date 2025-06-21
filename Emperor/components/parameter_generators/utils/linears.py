@@ -73,11 +73,11 @@ class DynamicDiagonalLinearLayer(LinearLayer):
     ):
         super().__init__(cfg, overrides)
         self.anti_diagonal_flag = self.cfg.anti_diagonal_flag
-        self.diagonal_decorator = DynamicDiagonalParametersBehaviour(
+        self.diagonal_behaviour = DynamicDiagonalParametersBehaviour(
             self.weight_params,
             self.bias_params,
             self.anti_diagonal_flag,
         )
 
     def forward(self, input_batch: Tensor) -> Tensor:
-        return self.diagonal_decorator(input_batch)
+        return self.diagonal_behaviour(input_batch)
