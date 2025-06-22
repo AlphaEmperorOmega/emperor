@@ -79,7 +79,7 @@ class RouterModel(Module):
         self.num_layers = self.cfg.num_layers
         self.diagonal_linear_model_flag = self.cfg.diagonal_linear_model_flag
 
-        self.router_output_dim = (
+        self.num_experts = (
             2 * self.output_dim if self.noisy_topk_flag else self.output_dim
         )
 
@@ -130,7 +130,7 @@ class RouterModel(Module):
 
     def __add_output_layer(self, router_layers: list) -> None:
         layer_input = self.hidden_dim if self.num_layers > 1 else self.input_dim
-        router_layers.append(Linear(layer_input, self.router_output_dim, bias=False))
+        router_layers.append(Linear(layer_input, self.num_experts, bias=False))
 
     def __create_router_layer(
         self,
@@ -183,7 +183,7 @@ class VectorRouterModel(RouterModel):
         # you find this wierd in the future
         feature_dim = self.output_dim if self.bias_parameters_flag else self.input_dim
         parameters = Parameter(
-            randn(feature_dim, self.input_dim, self.router_output_dim)
+            randn(feature_dim, self.input_dim, self.num_experts)
         )
         self._initialize_parameters(parameters)
         return parameters

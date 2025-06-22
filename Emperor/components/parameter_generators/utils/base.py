@@ -38,7 +38,7 @@ class ParameterGenerator(Module):
         self.noisy_topk_flag = self._resolve(noisy_topk_flag, self.cfg.noisy_topk_flag)
         self.top_k = self._resolve(top_k, self.cfg.top_k)
 
-        self.router_output_dim = (
+        self.num_experts = (
             2 * self.depth_dim if self.noisy_topk_flag else self.depth_dim
         )
 
