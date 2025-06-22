@@ -137,7 +137,6 @@ class ZeroCentredLoss(AuxiliaryLossBase):
             return
         self._is_valid_input(logits, self)
         squared_log_sum_exp = self.__compute_squared_log_sum_exp(logits)
-        squared_log_sum_exp = torch.sum(squared_log_sum_exp)
         self._accumulate("squared_log_sum_exp_accumulation", squared_log_sum_exp)
         count = torch.tensor(logits.size(0))
         self._accumulate("count_accumulation", count)
@@ -145,6 +144,7 @@ class ZeroCentredLoss(AuxiliaryLossBase):
     def __compute_squared_log_sum_exp(self, logits: Tensor) -> Tensor:
         squared_log_sum_exp = torch.exp(logits).sum(dim=-1)
         squared_log_sum_exp = torch.log(squared_log_sum_exp) ** 2
+        squared_log_sum_exp = torch.sum(squared_log_sum_exp)
         return squared_log_sum_exp
 
     def _compute_loss(self) -> Tensor:
@@ -204,7 +204,7 @@ class MutualInformationLoss(AuxiliaryLossBase):
         masks = torch.cat(self.skip_masks, dim=0)
 
         p_x = masks / (masks.sum() + 1e-12)
-        p_e = (p_x * probabilities).sum(0)
+        p_e = (p_x * probabilities).sum(dim=0)
         # WARNING: Ensure that `skip_mask` does not contain
         # any zeros exist in `p_e.log()` will produce `-inf`
         # `H_e` will store `nan` in it's result
