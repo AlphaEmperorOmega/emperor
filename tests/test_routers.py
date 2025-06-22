@@ -38,7 +38,7 @@ class TestRouterModel(unittest.TestCase):
             noisy_topk_flag=False,
         )
         model = RouterModel(self.cfg, overrides)
-        self.assertEqual(model.router_output_dim, c.output_dim)
+        self.assertEqual(model.num_experts, c.output_dim)
 
     def test__init__noisy_topk_flag__True(self):
         c = copy.deepcopy(self.cfg)
@@ -46,7 +46,7 @@ class TestRouterModel(unittest.TestCase):
             noisy_topk_flag=True,
         )
         model = RouterModel(self.cfg, overrides)
-        self.assertEqual(model.router_output_dim, c.output_dim * 2)
+        self.assertEqual(model.num_experts, c.output_dim * 2)
 
     def test__main_config_override(self):
         c = ModelConfig()

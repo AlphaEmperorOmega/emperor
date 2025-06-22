@@ -90,7 +90,7 @@ class TestLinearLayers(unittest.TestCase):
                 num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
-                router_output_dim=SAMPLER_ROUTER_OUTPUT_DIM,
+                num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 coefficient_of_variation_weight=SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT,
                 switch_weight=SAMPLER_SWITCH_WEIGHT,
                 zero_centred_weight=SAMPLER_ZERO_CENTRED_WEIGHT,
@@ -103,7 +103,7 @@ class TestLinearLayers(unittest.TestCase):
                 top_k=MIXTURE_TOP_K,
                 bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
                 weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
-                router_output_dim=MIXTURE_ROUTER_OUTPUT_DIM,
+                num_experts=MIXTURE_ROUTER_OUTPUT_DIM,
                 cross_diagonal_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
             ),
             parameter_generator_model_config=ParameterLayerConfig(

@@ -26,14 +26,14 @@ class TestMixtureBase(unittest.TestCase):
             top_k=3,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
-            router_output_dim=10,
+            num_experts=10,
         )
         m = MixtureBase(cfg)
         self.assertEqual(m.cfg, cfg)
         self.assertEqual(m.top_k, cfg.top_k)
         self.assertEqual(m.bias_parameters_flag, cfg.bias_parameters_flag)
         self.assertEqual(m.weighted_parameters_flag, cfg.weighted_parameters_flag)
-        self.assertEqual(m.router_output_dim, cfg.router_output_dim)
+        self.assertEqual(m.num_experts, cfg.num_experts)
 
     def test__init_with_main_config(self):
         m = MixtureBase(self.cfg)
@@ -42,7 +42,7 @@ class TestMixtureBase(unittest.TestCase):
         self.assertEqual(
             m.weighted_parameters_flag, self.mixture_cfg.weighted_parameters_flag
         )
-        self.assertEqual(m.router_output_dim, self.mixture_cfg.router_output_dim)
+        self.assertEqual(m.num_experts, self.mixture_cfg.num_experts)
 
     def test__init_with_overrides(self):
         overrides = MixtureConfig(
@@ -52,14 +52,14 @@ class TestMixtureBase(unittest.TestCase):
             top_k=5,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
-            router_output_dim=7,
+            num_experts=7,
             cross_diagonal_flag=False,
         )
         m = MixtureBase(self.cfg, overrides)
         self.assertEqual(m.cfg, overrides)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
-        self.assertEqual(m.router_output_dim, overrides.router_output_dim)
+        self.assertEqual(m.num_experts, overrides.num_experts)
 
 
 class TestParameterBank(unittest.TestCase):
@@ -94,7 +94,7 @@ class TestVectorMixture(unittest.TestCase):
             output_dim=5,
             depth_dim=6,
             top_k=2,
-            router_output_dim=6,
+            num_experts=6,
             cross_diagonal_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
@@ -129,7 +129,7 @@ class TestVectorMixture(unittest.TestCase):
         self.assertEqual(m.output_dim, c.output_dim)
         self.assertEqual(m.depth_dim, c.depth_dim)
         self.assertEqual(m.top_k, c.top_k)
-        self.assertEqual(m.router_output_dim, c.router_output_dim)
+        self.assertEqual(m.num_experts, c.num_experts)
         self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
@@ -141,7 +141,7 @@ class TestVectorMixture(unittest.TestCase):
             output_dim=50,
             depth_dim=60,
             top_k=20,
-            router_output_dim=60,
+            num_experts=60,
             cross_diagonal_flag=True,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
@@ -153,7 +153,7 @@ class TestVectorMixture(unittest.TestCase):
         self.assertEqual(m.output_dim, overrides.output_dim)
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
-        self.assertEqual(m.router_output_dim, overrides.router_output_dim)
+        self.assertEqual(m.num_experts, overrides.num_experts)
         self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
@@ -212,7 +212,7 @@ class TestVectorMixture(unittest.TestCase):
         overrides = MixtureConfig(
             top_k=10,
             depth_dim=10,
-            router_output_dim=10,
+            num_experts=10,
             weighted_parameters_flag=True,
         )
         m = VectorMixture(c, overrides)
@@ -694,7 +694,7 @@ class TestMatrixMixture(unittest.TestCase):
             output_dim=5,
             depth_dim=6,
             top_k=2,
-            router_output_dim=6,
+            num_experts=6,
             cross_diagonal_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
@@ -709,7 +709,7 @@ class TestMatrixMixture(unittest.TestCase):
         self.assertEqual(m.output_dim, c.output_dim)
         self.assertEqual(m.depth_dim, c.depth_dim)
         self.assertEqual(m.top_k, c.top_k)
-        self.assertEqual(m.router_output_dim, c.router_output_dim)
+        self.assertEqual(m.num_experts, c.num_experts)
         self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
@@ -721,7 +721,7 @@ class TestMatrixMixture(unittest.TestCase):
             output_dim=50,
             depth_dim=60,
             top_k=20,
-            router_output_dim=60,
+            num_experts=60,
             cross_diagonal_flag=True,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
@@ -733,7 +733,7 @@ class TestMatrixMixture(unittest.TestCase):
         self.assertEqual(m.output_dim, overrides.output_dim)
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
-        self.assertEqual(m.router_output_dim, overrides.router_output_dim)
+        self.assertEqual(m.num_experts, overrides.num_experts)
         self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
@@ -1036,7 +1036,7 @@ class TestMatrixMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
-            router_output_dim=10,
+            num_experts=10,
             weighted_parameters_flag=True,
         )
         m = MatrixMixture(c, overrides)
@@ -1176,7 +1176,7 @@ class TestMatrixMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
-            router_output_dim=10,
+            num_experts=10,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
@@ -1223,7 +1223,7 @@ class TestGeneratorMixture(unittest.TestCase):
             output_dim=5,
             depth_dim=6,
             top_k=2,
-            router_output_dim=6,
+            num_experts=6,
             cross_diagonal_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
@@ -1274,7 +1274,7 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(m.output_dim, c.output_dim)
         self.assertEqual(m.depth_dim, c.depth_dim)
         self.assertEqual(m.top_k, c.top_k)
-        self.assertEqual(m.router_output_dim, c.router_output_dim)
+        self.assertEqual(m.num_experts, c.num_experts)
         self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
@@ -1286,7 +1286,7 @@ class TestGeneratorMixture(unittest.TestCase):
             output_dim=50,
             depth_dim=60,
             top_k=20,
-            router_output_dim=60,
+            num_experts=60,
             cross_diagonal_flag=True,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
@@ -1298,7 +1298,7 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(m.output_dim, overrides.output_dim)
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
-        self.assertEqual(m.router_output_dim, overrides.router_output_dim)
+        self.assertEqual(m.num_experts, overrides.num_experts)
         self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
@@ -1716,7 +1716,7 @@ class TestGeneratorMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=6,
             top_k=6,
-            router_output_dim=6,
+            num_experts=6,
             weighted_parameters_flag=True,
         )
         m = GeneratorMixture(c, overrides)
@@ -2980,7 +2980,7 @@ class TestParameterGeneratorMixture_VectorMixture(unittest.TestCase):
             output_dim=5,
             depth_dim=6,
             top_k=2,
-            router_output_dim=6,
+            num_experts=6,
             cross_diagonal_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
@@ -3123,7 +3123,7 @@ class TestParameterGeneratorMixture_VectorMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
-            router_output_dim=10,
+            num_experts=10,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
@@ -3211,7 +3211,7 @@ class TestParameterGeneratorMixture_VectorMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
-            router_output_dim=10,
+            num_experts=10,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
@@ -3242,7 +3242,7 @@ class TestParameterGeneratorMixture_MatrixMixture(unittest.TestCase):
             output_dim=5,
             depth_dim=6,
             top_k=2,
-            router_output_dim=6,
+            num_experts=6,
             cross_diagonal_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
@@ -3385,7 +3385,7 @@ class TestParameterGeneratorMixture_MatrixMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
-            router_output_dim=10,
+            num_experts=10,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
@@ -3473,7 +3473,7 @@ class TestParameterGeneratorMixture_MatrixMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
-            router_output_dim=10,
+            num_experts=10,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
@@ -3504,7 +3504,7 @@ class TestParameterGeneratorMixture_GeneratorMixture(unittest.TestCase):
             output_dim=5,
             depth_dim=6,
             top_k=2,
-            router_output_dim=6,
+            num_experts=6,
             cross_diagonal_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
@@ -3579,7 +3579,7 @@ class TestParameterGeneratorMixture_GeneratorMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
-            router_output_dim=10,
+            num_experts=10,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
@@ -3673,7 +3673,7 @@ class TestParameterGeneratorMixture_GeneratorMixture(unittest.TestCase):
         overrides = MixtureConfig(
             depth_dim=10,
             top_k=10,
-            router_output_dim=10,
+            num_experts=10,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
         )
