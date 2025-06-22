@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch import Tensor
 from torch.nn import Parameter
 import torch.nn.functional as F
@@ -43,7 +44,7 @@ class MixtureConfig(DataClassBase):
             "help": "Inidicates the top-k probs and indices to be selected from a distribution"
         },
     )
-    router_output_dim: int | None = field(
+    num_experts: int | None = field(
         default=None,
         metadata={"help": "Router output dimension"},
     )
@@ -71,10 +72,10 @@ class MixtureBase(Module):
         self.top_k = self.cfg.top_k
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
         self.bias_parameters_flag = self.cfg.bias_parameters_flag
-        self.router_output_dim = self.cfg.router_output_dim
+        self.num_experts = self.cfg.num_experts
         self.cross_diagonal_flag = self.cfg.cross_diagonal_flag
-        assert self.depth_dim == self.router_output_dim, (
-            "The `depth_dim` needs to be equal with `router_output_dim` since this is the dimension the router creates a distribution over."
+        assert self.depth_dim == self.num_experts, (
+            "The `depth_dim` needs to be equal with `num_experts` since this is the dimension the router creates a distribution over."
         )
         if self.depth_dim == self.top_k:
             assert self.weighted_parameters_flag is True, (
@@ -393,7 +394,7 @@ class GeneratorMixture(ParameterMixture):
         ) = self.__init_parameter_banks()
 
     def __decide_einsum_computation(self) -> str:
-        if self.top_k == self.router_output_dim:
+        if self.top_k == self.num_experts:
             return "bi,kij->bkj"
         return "bi,bkij->bkj"
 
