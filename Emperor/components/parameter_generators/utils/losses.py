@@ -54,17 +54,17 @@ class CoefficientOfVariationLoss(AuxiliaryLossBase):
     def __init__(self, loss_weight: float = 0.0):
         super().__init__(loss_weight)
         self.eps = 1e-10
-        self.probability_accumulation = None
+        self.gates_accumulation = None
 
     def reset_loss(self) -> None:
-        self.probability_accumulation = None
+        self.gates_accumulation = None
 
-    def update_accumulation(self, probabilities: Tensor | None = None) -> None:
+    def update_accumulation(self, gates: Tensor | None = None) -> None:
         if self.is_loss_weight_zero():
             return
-        self._is_valid_input(probabilities, self)
-        probability = torch.sum(probabilities, dim=0)
-        self._accumulate("probability_accumulation", probability)
+        self._is_valid_input(gates, self)
+        probability = torch.sum(gates, dim=0)
+        self._accumulate("gates_accumulation", probability)
 
     def _compute_loss(self) -> Tensor:
         if self.__is_accumulation_shape_valid():
@@ -72,11 +72,11 @@ class CoefficientOfVariationLoss(AuxiliaryLossBase):
         return self.__compute_coefficient_of_variation()
 
     def __is_accumulation_shape_valid(self) -> bool:
-        self._is_accumulation_none(self.probability_accumulation)
-        return self.probability_accumulation.shape[0] == 1
+        self._is_accumulation_none(self.gates_accumulation)
+        return self.gates_accumulation.shape[0] == 1
 
     def __compute_coefficient_of_variation(self) -> Tensor:
-        probabilities = F.normalize(self.probability_accumulation, p=1, dim=0)
+        probabilities = F.normalize(self.gates_accumulation, p=1, dim=0)
         variation = probabilities.float().var()
         mean = probabilities.float().mean() ** 2
 
