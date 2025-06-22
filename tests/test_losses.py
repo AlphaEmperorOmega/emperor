@@ -31,7 +31,7 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
 
         m.update_accumulation(probabilities)
 
-        self.assertIsNone(m.probability_accumulation)
+        self.assertIsNone(m.gates_accumulation)
 
     def test__update_accumulation__weight_loss__1(self):
         loss_weight = 1.0
@@ -45,9 +45,7 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
         m.update_accumulation(probabilities)
 
         expected_accumulation = torch.sum(probabilities, dim=0)
-        self.assertTrue(
-            torch.allclose(m.probability_accumulation, expected_accumulation)
-        )
+        self.assertTrue(torch.allclose(m.gates_accumulation, expected_accumulation))
 
     def test__update_accumulation__consecutive_updates(self):
         loss_weight = 1.0
@@ -64,9 +62,7 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
         expected_accumulation = torch.sum(probabilities, dim=0)
         expected_accumulation += torch.sum(probabilities, dim=0)
 
-        self.assertTrue(
-            torch.allclose(m.probability_accumulation, expected_accumulation)
-        )
+        self.assertTrue(torch.allclose(m.gates_accumulation, expected_accumulation))
 
     def test__compute_coefficient_of_variation(self):
         loss_weight = 1.0
@@ -81,7 +77,7 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
 
         output = m._CoefficientOfVariationLoss__compute_coefficient_of_variation()
 
-        probabilities = F.normalize(m.probability_accumulation, p=1, dim=0)
+        probabilities = F.normalize(m.gates_accumulation, p=1, dim=0)
         variation = probabilities.float().var()
         mean = probabilities.float().mean() ** 2
         expected_loss = variation / (mean + m.eps)
@@ -122,7 +118,7 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
         probabilities = torch.arange(prod(shape)).reshape(shape).float()
 
         m.update_accumulation(probabilities)
-        m.probability_accumulation = torch.unsqueeze(m.probability_accumulation, dim=0)
+        m.gates_accumulation = torch.unsqueeze(m.gates_accumulation, dim=0)
 
         output = m._CoefficientOfVariationLoss__is_accumulation_shape_valid()
 
@@ -154,7 +150,7 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
         probabilities = torch.arange(prod(shape)).reshape(shape).float()
 
         m.update_accumulation(probabilities)
-        m.probability_accumulation = torch.unsqueeze(m.probability_accumulation, dim=0)
+        m.gates_accumulation = torch.unsqueeze(m.gates_accumulation, dim=0)
 
         output = m._compute_loss()
 
@@ -173,7 +169,7 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
         m.update_accumulation(probabilities)
         m.reset_loss()
 
-        self.assertIsNone(m.probability_accumulation)
+        self.assertIsNone(m.gates_accumulation)
 
     def test__get_weighted_loss__loss_weight__0(self):
         loss_weight = 0.0
@@ -219,7 +215,7 @@ class TestSwitchLoss(unittest.TestCase):
         m = SwitchLoss(top_k, loss_weight)
 
         self.assertEqual(m.loss_weight, loss_weight)
-        self.assertEqual(m.top_k, top_k)
+        self.assertEqual(m.num_experts, top_k)
         self.assertIsInstance(m.default_error, torch.Tensor)
         self.assertIsInstance(m, AuxiliaryLossBase)
 
@@ -416,9 +412,9 @@ class TestZeroCentredLoss(unittest.TestCase):
 
         expected_output = torch.exp(logits).sum(dim=-1)
         expected_output = torch.log(expected_output) ** 2
+        expected_output = torch.sum(expected_output)
 
         self.assertIsInstance(output, torch.Tensor)
-        self.assertListEqual(list(output.shape), [batch_size])
         self.assertTrue(torch.allclose(output, expected_output))
 
     def test__update_accumulation__weight_loss__0(self):
