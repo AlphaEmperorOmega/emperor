@@ -28,6 +28,12 @@ class AuxiliaryLossBase:
                 "`self.accumulation` is `None`. Please call `update_accumulation` before validating accumulation."
             )
 
+    def _is_valid_input(self, input: Tensor | None, obj: object) -> None:
+        if input is None:
+            raise ValueError(
+                f"A valid input tensor is required when `loss_weight` > 0, for {obj.__class__.__name__} instance."
+            )
+
     def reset_loss(self) -> None:
         raise NotImplementedError(
             "`reset_loss` method must be implemented by subclasses of AuxiliaryLossBase"
@@ -53,9 +59,10 @@ class CoefficientOfVariationLoss(AuxiliaryLossBase):
     def reset_loss(self) -> None:
         self.probability_accumulation = None
 
-    def update_accumulation(self, probabilities: Tensor) -> None:
+    def update_accumulation(self, probabilities: Tensor | None = None) -> None:
         if self.is_loss_weight_zero():
             return
+        self._is_valid_input(probabilities, self)
         probability = torch.sum(probabilities, dim=0)
         self._accumulate("probability_accumulation", probability)
 
@@ -89,11 +96,13 @@ class SwitchLoss(AuxiliaryLossBase):
 
     def update_accumulation(
         self,
-        probabilities: Tensor,
-        gates: Tensor,
+        probabilities: Tensor | None = None,
+        gates: Tensor | None = None,
     ) -> None:
         if self.is_loss_weight_zero():
             return
+        self._is_valid_input(probabilities, self)
+        self._is_valid_input(gates, self)
         probability = torch.sum(probabilities, dim=0)
         self._accumulate("probability_accumulation", probability)
         frequency = torch.sum((gates > 0).float(), dim=0)
@@ -123,9 +132,10 @@ class ZeroCentredLoss(AuxiliaryLossBase):
         self.squared_log_sum_exp_accumulation = None
         self.count_accumulation = None
 
-    def update_accumulation(self, logits: Tensor) -> None:
+    def update_accumulation(self, logits: Tensor | None = None) -> None:
         if self.is_loss_weight_zero():
             return
+        self._is_valid_input(logits, self)
         squared_log_sum_exp = self.__compute_squared_log_sum_exp(logits)
         squared_log_sum_exp = torch.sum(squared_log_sum_exp)
         self._accumulate("squared_log_sum_exp_accumulation", squared_log_sum_exp)
@@ -160,15 +170,20 @@ class MutualInformationLoss(AuxiliaryLossBase):
 
     def update_accumulation(
         self,
-        logits: Tensor,
-        pribabilities: Tensor,
-        skip_masks: Tensor,
+        logits: Tensor | None = None,
+        probabilities: Tensor | None = None,
+        skip_masks: Tensor | None = None,
     ) -> None:
         if self.is_loss_weight_zero():
             return
+
+        self._is_valid_input(logits, self)
+        self._is_valid_input(probabilities, self)
+        self._is_valid_input(skip_masks, self)
+
         log_probabilities = torch.log_softmax(logits, dim=-1)
         self.log_probabilities.append(log_probabilities)
-        self.probabilities.append(pribabilities)
+        self.probabilities.append(probabilities)
         self.skip_masks.append(skip_masks)
 
     def _compute_loss(self) -> Tensor:
