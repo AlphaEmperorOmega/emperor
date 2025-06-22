@@ -84,9 +84,9 @@ class CoefficientOfVariationLoss(AuxiliaryLossBase):
 
 
 class SwitchLoss(AuxiliaryLossBase):
-    def __init__(self, top_k: int, loss_weight: float = 0.0):
+    def __init__(self, num_experts: int, loss_weight: float = 0.0):
         super().__init__(loss_weight)
-        self.top_k = top_k
+        self.num_experts = num_experts
         self.probability_accumulation = None
         self.frequency_accumulation = None
 
@@ -114,12 +114,12 @@ class SwitchLoss(AuxiliaryLossBase):
         return self.__compute_switch_loss()
 
     def __compute_switch_loss(self) -> Tensor:
-        probabilities = self.probability_accumulation
-        frequencies = self.frequency_accumulation
-        normalized_probabilities = F.normalize(probabilities, p=1, dim=0)
-        normalized_frequency = F.normalize(frequencies, p=1, dim=0)
+        p = self.probability_accumulation
+        f = self.frequency_accumulation
+        normalized_probabilities = F.normalize(p, p=1, dim=0)
+        normalized_frequency = F.normalize(f, p=1, dim=0)
         loss = normalized_probabilities * normalized_frequency
-        return self.top_k * loss.sum()
+        return self.num_experts * loss.sum()
 
 
 class ZeroCentredLoss(AuxiliaryLossBase):
