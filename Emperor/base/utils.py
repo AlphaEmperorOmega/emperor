@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.config import Configuration
 
 ones_like = torch.ones_like
 ones = torch.ones
@@ -477,32 +476,6 @@ class Trainer(HyperParameters):
         if norm > grad_clip_val:
             for param in params:
                 param.grad[:] *= grad_clip_val / norm
-
-
-class LayerBlock(Module):
-    def __init__(
-        self,
-        model: "Module",
-        activation_function_module: nn.Module | None = nn.ReLU(),
-        layer_norm_module: nn.Module | None = None,
-        residual_connection_flag: bool = False,
-    ):
-        super().__init__()
-        self.model = model
-        self.activation_function_module = activation_function_module
-        self.layer_norm_module = layer_norm_module
-        self.residual_connection_flag = residual_connection_flag
-
-    def forward(self, input_batch: torch.Tensor) -> torch.Tensor:
-        output = self.model(input_batch)
-        if self.layer_norm_module is not None:
-            output = self.layer_norm_module(output)
-        if self.activation_function_module is not None:
-            output = self.activation_function_module(output)
-        if self.residual_connection_flag:
-            output = output + input_batch
-
-        return output
 
 
 @dataclass
