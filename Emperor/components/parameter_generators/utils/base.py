@@ -1,63 +1,110 @@
-from torch import Tensor
+import torch
+import torch.nn as nn
+from dataclasses import dataclass, field
+from torch.nn import Linear, Sequential
 from Emperor.base.utils import Module
+from Emperor.base.utils import DataClassBase
 
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
-class ParameterGenerator(Module):
+@dataclass
+class LinearBlockStackConfig(DataClassBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": "Input dimension of the first `Linear` layer"},
+    )
+    hidden_dim: int | None = field(
+        default=None,
+        metadata={"help": "Dimension of the hidden `Linear` layers"},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Output dimension of the output `Linear` layer"},
+    )
+    num_layers: int | None = field(
+        default=None,
+        metadata={"help": "Number of layers in the model"},
+    )
+    activation: nn.Linear | None = field(
+        default=None,
+        metadata={"help": "Activation function or layer to use"},
+    )
+    layer_norm_flag: int | None = field(
+        default=None,
+        metadata={"help": "Flag indicating whether to apply layer normalization"},
+    )
+    linear_model: nn.Module | None = field(
+        default=None,
+        metadata={"help": "Linear model module used for output transformation"},
+    )
+
+
+class LinearBlockStack(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
-        batch_size: Optional[int] = None,
-        input_dim: Optional[int] = None,
-        output_dim: Optional[int] = None,
-        depth_dim: Optional[int] = None,
-        num_router_layers: Optional[int] = None,
-        bias_flag: Optional[bool] = None,
-        gather_frequency_flag: Optional[bool] = None,
-        noisy_topk_flag: Optional[bool] = None,
-        top_k: Optional[bool] = None,
-        **kwargs,
+        cfg: "LinearBlockStackConfig | ModelConfig",
+        overrides: "LinearBlockStackConfig | None" = None,
     ):
         super().__init__()
-        self.cfg = cfg
-        self.batch_size = self._resolve(batch_size, self.cfg.batch_size)
-        self.input_dim = self._resolve(input_dim, self.cfg.input_dim)
-        self.output_dim = self._resolve(output_dim, self.cfg.output_dim)
-        self.depth_dim = self._resolve(depth_dim, self.cfg.depth_dim)
-        self.num_router_layers = self._resolve(
-            num_router_layers, self.cfg.num_router_layers
+        config = getattr(cfg, "linear_layer_model_config", cfg)
+        self.cfg: "LinearBlockStackConfig" = self._overwrite_config(config, overrides)
+
+        self.input_dim = self.cfg.input_dim
+        self.hidden_dim = self.cfg.hidden_dim
+        self.output_dim = self.cfg.output_dim
+        self.num_layers = self.cfg.num_layers
+        self.activation = self.cfg.activation()
+        self.layer_norm_flag = self.cfg.layer_norm_flag
+        self.linear_model = self.cfg.linear_model
+
+    def build_model(self) -> Linear | Sequential:
+        layers = []
+
+        layer_adjustment = self.__add_initial_layer(layers)
+        self.__add_hidden_layers(layers, layer_adjustment)
+        self.__add_output_layer(layers)
+
+        model = Sequential(*layers)
+        self._initialize_parameters(model)
+        return model
+
+    def __add_initial_layer(self, layers: list) -> int:
+        if self.input_dim != self.hidden_dim and self.num_layers > 1:
+            layer = self.__create_layer(self.input_dim, self.hidden_dim, False)
+            layers.append(layer)
+            return 2
+        return 1
+
+    def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
+        for _ in range(self.num_layers - layer_adjustment):
+            layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
+            layers.append(layer)
+
+    def __add_output_layer(self, layers: list) -> None:
+        layer_input = self.hidden_dim if self.num_layers > 1 else self.input_dim
+        layers.append(Linear(layer_input, self.output_dim))
+
+    def __create_layer(
+        self,
+        input_dim: int,
+        output_dim: int,
+        residual_connection_flag: bool = True,
+    ):
+        layer_norm_module = None
+        if self.layer_norm_flag:
+            layer_norm_module = nn.LayerNorm(output_dim)
+        return LayerBlock(
+            model=self.linear_model(
+                input_dim,
+                output_dim,
+            ),
+            activation_function_module=self.activation,
+            layer_norm_module=layer_norm_module,
+            residual_connection_flag=residual_connection_flag,
         )
-        self.bias_flag = self._resolve(bias_flag, self.cfg.bias_flag)
-        self.gather_frequency_flag = self._resolve(
-            gather_frequency_flag, self.cfg.gather_frequency_flag
-        )
-        self.noisy_topk_flag = self._resolve(noisy_topk_flag, self.cfg.noisy_topk_flag)
-        self.top_k = self._resolve(top_k, self.cfg.top_k)
 
-        self.num_experts = (
-            2 * self.depth_dim if self.noisy_topk_flag else self.depth_dim
-        )
 
-    def _init_frequency_model(self):
-        # TODO: later implement the frequency gathering methanism
-        # frequencyClass = cfg.weightAndBiasGeneratorType.value + "Frequency"
-        # self.gatherFrequencyCheck = (
-        #     self.gatherFrequencyFlag and frequencyClass in globals()
-        # )
-        # if self.gatherFrequencyCheck:
-        #     self.frequency = globals()[frequencyClass](cfg)
-        pass
-
-    def gather_frequency(self, sparse_indexes) -> None:
-        if self.gather_frequency_flag:
-            self.frequency.update(sparse_indexes)
-
-    def _handle_probabilities_shape_hook(self, probabilities: Tensor) -> Tensor:
-        return probabilities
-
-    def _select_parameters(self, weight_indexes, bias_indexes) -> Tuple:
-        pass
