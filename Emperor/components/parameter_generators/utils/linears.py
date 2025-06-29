@@ -91,4 +91,24 @@ class DynamicDiagonalLinearLayer(LinearLayer):
         )
 
     def forward(self, input_batch: Tensor) -> Tensor:
-        return self.diagonal_behaviour(input_batch)
+        diagonal_matrix, bias_parameters = self.dynamic_diagonal_params_model(
+            input_batch
+        )
+        output = self.__compute_linear_transformation(input_batch, diagonal_matrix)
+        return self.__add_bias_parameters(output, bias_parameters)
+
+    def __compute_linear_transformation(
+        self,
+        logits: Tensor,
+        dynamic_weight_params: Tensor,
+    ) -> Tensor:
+        return torch.einsum("ij,ijk->ik", logits, dynamic_weight_params)
+
+    def __add_bias_parameters(
+        self,
+        linear_transform: Tensor,
+        bias_params: Tensor | None,
+    ) -> Tensor:
+        if self.bias_flag:
+            return linear_transform + bias_params
+        return linear_transform
