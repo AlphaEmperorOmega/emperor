@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass, field
@@ -35,6 +36,12 @@ class LinearLayerConfig(DataClassBase):
             "help": "When `True` the `DynamicDiagonalLinearLayer` will add `anti_diagonal_matrix` after linear transformation"
         },
     )
+    dynamic_bias_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
+        },
+    )
 
 
 class LinearLayer(Module):
@@ -50,6 +57,7 @@ class LinearLayer(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.bias_flag = self.cfg.bias_flag
+        self.dynamic_bias_flag = self.cfg.dynamic_bias_flag
         self.weight_params, self.bias_params = self.__init_parameter_banks()
 
     def __init_parameter_banks(self):
@@ -73,10 +81,13 @@ class DynamicDiagonalLinearLayer(LinearLayer):
     ):
         super().__init__(cfg, overrides)
         self.anti_diagonal_flag = self.cfg.anti_diagonal_flag
-        self.diagonal_behaviour = DynamicDiagonalParametersBehaviour(
-            self.weight_params,
-            self.bias_params,
+        self.dynamic_diagonal_params_model = DynamicDiagonalParametersBehaviour(
+            self.input_dim,
+            self.output_dim,
             self.anti_diagonal_flag,
+            self.dynamic_bias_flag,
+            self.weight_params,
+            self.bias_params + 2,
         )
 
     def forward(self, input_batch: Tensor) -> Tensor:
