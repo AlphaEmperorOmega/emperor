@@ -91,7 +91,7 @@ class TestDefaultLinearLayers(unittest.TestCase):
                 bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
                 weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
                 num_experts=MIXTURE_ROUTER_OUTPUT_DIM,
-                cross_diagonal_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
+                dynamic_diagonal_params_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
             ),
             parameter_generator_model_config=ParameterLayerConfig(
                 bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
@@ -106,13 +106,14 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
             anti_diagonal_flag=False,
         )
 
         self.assertEqual(m.input_dim, c.input_dim)
         self.assertEqual(m.output_dim, c.output_dim)
-        self.assertIsInstance(m.diagonal_model, nn.Linear)
         self.assertIsNone(m.anti_diagonal_model)
 
     def test__initialization__anti_diagonal_flag__True(self):
@@ -123,15 +124,15 @@ class TestDefaultLinearLayers(unittest.TestCase):
         bias_params = torch.arange(prod(bias_shape)).reshape(bias_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
-            bias_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
+            bias_params=bias_params,
             anti_diagonal_flag=True,
         )
 
         self.assertEqual(m.input_dim, c.input_dim)
         self.assertEqual(m.output_dim, c.output_dim)
-        self.assertIsInstance(m.diagonal_model, nn.Linear)
-        self.assertIsInstance(m.anti_diagonal_model, nn.Linear)
 
     def test__get_diagonal_padding_shape__input_dim_equals_output_dim(self):
         c = copy.deepcopy(self.cfg)
@@ -141,7 +142,9 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
             anti_diagonal_flag=True,
         )
         padding_shape = (
@@ -157,7 +160,9 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
             anti_diagonal_flag=True,
         )
         padding_shape = (
@@ -176,7 +181,9 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
             anti_diagonal_flag=True,
         )
         padding_shape = (
@@ -193,15 +200,19 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
             anti_diagonal_flag=False,
+            dynamic_bias_flag=False,
         )
-        diagonal_model, anti_diagonal_model = (
+        diagonal_model, anti_diagonal_model, bias_model = (
             m._DynamicDiagonalParametersBehaviour__init_diagonal_models()
         )
 
-        self.assertIsInstance(diagonal_model, nn.Linear)
+        self.assertIsInstance(diagonal_model, (nn.Linear, nn.Sequential))
         self.assertIsNone(anti_diagonal_model)
+        self.assertIsNone(bias_model)
 
     def test__init_diagonal_models__anti_diagonal_flag__True(self):
         c = copy.deepcopy(self.cfg)
@@ -209,69 +220,38 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
             anti_diagonal_flag=True,
         )
-        diagonal_model, anti_diagonal_model = (
+        diagonal_model, anti_diagonal_model, bias_model = (
             m._DynamicDiagonalParametersBehaviour__init_diagonal_models()
         )
 
-        self.assertIsInstance(diagonal_model, nn.Linear)
-        self.assertIsInstance(anti_diagonal_model, nn.Linear)
+        self.assertIsInstance(diagonal_model, (nn.Linear, nn.Sequential))
+        self.assertIsInstance(anti_diagonal_model, (nn.Linear, nn.Sequential))
+        self.assertIsNone(bias_model)
 
-    def test__compute_affine_transformation__no_bias_parameters(self):
+    def test__init_diagonal_models__dynamic_bias_flag__True(self):
         c = copy.deepcopy(self.cfg)
-        c.input_dim = 4
-        c.output_dim = 4
-        batch_size = 2
         weight_shape = (c.input_dim, c.output_dim)
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
+            anti_diagonal_flag=True,
+            dynamic_bias_flag=True,
+        )
+        diagonal_model, anti_diagonal_model, bias_model = (
+            m._DynamicDiagonalParametersBehaviour__init_diagonal_models()
         )
 
-        logits = torch.randn(batch_size, c.input_dim)
-        diagonals = torch.randn(batch_size, c.input_dim)
-        diagonal_matrices = torch.diag_embed(diagonals)
-        dynamic_weights = diagonal_matrices + weight_params
-
-        output = m._DynamicDiagonalParametersBehaviour__compute_affine_transformation(
-            logits, dynamic_weights
-        )
-
-        expected_output = torch.einsum("ij,ijk->ik", logits, dynamic_weights)
-
-        self.assertTrue(torch.allclose(expected_output, output))
-
-    def test__compute_affine_transformation__with_bias_parameters(self):
-        c = copy.deepcopy(self.cfg)
-        c.input_dim = 4
-        c.output_dim = 4
-        batch_size = 2
-        weight_shape = (c.input_dim, c.output_dim)
-        weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
-        bias_shape = (c.output_dim,)
-        bias_params = torch.arange(prod(bias_shape)).reshape(bias_shape).float()
-
-        m = DynamicDiagonalParametersBehaviour(
-            weight_params,
-            bias_params,
-        )
-
-        logits = torch.randn(batch_size, c.input_dim)
-        diagonals = torch.randn(batch_size, c.input_dim)
-        diagonal_matrices = torch.diag_embed(diagonals)
-        dynamic_weights = diagonal_matrices + weight_params
-
-        output = m._DynamicDiagonalParametersBehaviour__compute_affine_transformation(
-            logits, dynamic_weights
-        )
-
-        expected_output = torch.einsum("ij,ijk->ik", logits, dynamic_weights)
-        expected_output = expected_output + bias_params
-
-        self.assertTrue(torch.allclose(expected_output, output))
+        self.assertIsInstance(diagonal_model, (nn.Linear, nn.Sequential))
+        self.assertIsInstance(anti_diagonal_model, (nn.Linear, nn.Sequential))
+        self.assertIsInstance(bias_model, (nn.Linear, nn.Sequential))
 
     def test__convert_to_diagonal_matrix__padding_shape__None(self):
         c = copy.deepcopy(self.cfg)
@@ -282,7 +262,9 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
         )
 
         vector_matrix_shape = (batch_size, c.output_dim)
@@ -305,7 +287,9 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
         )
 
         vector_matrix_shape = (batch_size, c.output_dim)
@@ -329,7 +313,9 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
             anti_diagonal_flag=False,
         )
 
@@ -349,8 +335,11 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
             anti_diagonal_flag=True,
+            dynamic_bias_flag=False,
+            weight_params=weight_params,
         )
 
         logits_shape = (batch_size, c.input_dim)
@@ -369,7 +358,9 @@ class TestDefaultLinearLayers(unittest.TestCase):
         weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
         )
 
         logits_shape = (batch_size, c.input_dim)
@@ -379,7 +370,7 @@ class TestDefaultLinearLayers(unittest.TestCase):
 
         self.assertEqual(list(output.shape), [batch_size, c.input_dim, c.output_dim])
 
-    def test__forward(self):
+    def test__maybe_update_bias_parameters__dynamic_bias_flag__False(self):
         c = copy.deepcopy(self.cfg)
         batch_size = 2
         weight_shape = (c.input_dim, c.output_dim)
@@ -388,14 +379,92 @@ class TestDefaultLinearLayers(unittest.TestCase):
         bias_params = torch.arange(prod(bias_shape)).reshape(bias_shape).float()
 
         m = DynamicDiagonalParametersBehaviour(
-            weight_params,
-            bias_params,
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
+            bias_params=bias_params,
+            dynamic_bias_flag=False,
+        )
+
+        logits_shape = (batch_size, c.input_dim)
+        logits = torch.arange(prod(logits_shape)).reshape(logits_shape).float()
+        output = m._DynamicDiagonalParametersBehaviour__maybe_update_bias_parameters(
+            logits
+        )
+
+        self.assertTrue(torch.allclose(output, bias_params))
+
+    def test__maybe_update_bias_parameters__dynamic_bias_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        batch_size = 2
+        weight_shape = (c.input_dim, c.output_dim)
+        weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
+        bias_shape = (c.output_dim,)
+        bias_params = torch.arange(prod(bias_shape)).reshape(bias_shape).float()
+
+        m = DynamicDiagonalParametersBehaviour(
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
+            bias_params=bias_params,
+            dynamic_bias_flag=True,
+        )
+
+        logits_shape = (batch_size, c.input_dim)
+        logits = torch.arange(prod(logits_shape)).reshape(logits_shape).float()
+        output = m._DynamicDiagonalParametersBehaviour__maybe_update_bias_parameters(
+            logits
+        )
+        bias_scalars = m.bias_model(logits)
+        bias_scaling_factor, bias_offset = bias_scalars.chunk(2, dim=-1)
+        expected_output = bias_scaling_factor * bias_params + bias_offset
+
+        self.assertTrue(torch.allclose(output, expected_output))
+
+    def test__forward__with__bias_parametes(self):
+        c = copy.deepcopy(self.cfg)
+        batch_size = 2
+        weight_shape = (c.input_dim, c.output_dim)
+        weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
+        bias_shape = (c.output_dim,)
+        bias_params = torch.arange(prod(bias_shape)).reshape(bias_shape).float()
+
+        m = DynamicDiagonalParametersBehaviour(
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
+            bias_params=bias_params,
             anti_diagonal_flag=True,
+            dynamic_bias_flag=True,
+        )
+
+        logits_shape = (batch_size, c.input_dim)
+        logits = torch.arange(prod(logits_shape)).reshape(logits_shape).float()
+        weight_params, bias_params = m.forward(logits)
+        self.assertEqual(
+            list(weight_params.shape), [batch_size, c.input_dim, c.output_dim]
+        )
+        self.assertEqual(list(bias_params.shape), [batch_size, c.output_dim])
+
+    def test__forward__no__bias_parametes(self):
+        c = copy.deepcopy(self.cfg)
+        batch_size = 2
+        weight_shape = (c.input_dim, c.output_dim)
+        weight_params = torch.arange(prod(weight_shape)).reshape(weight_shape).float()
+
+        m = DynamicDiagonalParametersBehaviour(
+            c.input_dim,
+            c.output_dim,
+            weight_params=weight_params,
+            anti_diagonal_flag=True,
+            dynamic_bias_flag=True,
         )
 
         logits_shape = (batch_size, c.input_dim)
         logits = torch.arange(prod(logits_shape)).reshape(logits_shape).float()
 
-        output = m.forward(logits)
-
-        self.assertEqual(list(output.shape), [batch_size, c.output_dim])
+        weight_params, bias_params = m.forward(logits)
+        self.assertListEqual(
+            list(weight_params.shape), [batch_size, c.input_dim, c.output_dim]
+        )
+        self.assertIsNone(bias_params)
