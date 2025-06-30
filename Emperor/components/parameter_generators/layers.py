@@ -229,7 +229,8 @@ class VectorParameterLayer(ParameterLayerBase):
 
         self.weight_router: VectorRouterModel = VectorRouterModel(cfg)
         self.bias_router = self._init_bias_router_model(cfg)
-        self.sampler: SamplerModel = SamplerModel(cfg)
+        self.weight_sampler: SamplerModel = SamplerModel(cfg)
+        self.bias_sampler: SamplerModel = SamplerModel(cfg)
         self.mixture: VectorMixture = VectorMixture(cfg)
 
     def _init_bias_router_model(self, cfg: "ModelConfig") -> VectorRouterModel | None:
@@ -250,8 +251,8 @@ class VectorParameterLayer(ParameterLayerBase):
         input_dim, batch_size, depth_dim = logits.shape
         logits = logits.view(-1, depth_dim)
 
-        probabilities, indices, _ = self.sampler.sample_probabilities_and_indices(
-            logits, skip_mask
+        probabilities, indices = self._sample_probabilities_and_indices(
+            logits, skip_mask, compute_bias_flag
         )
 
         probabilities_shape = (input_dim, batch_size)
@@ -277,7 +278,8 @@ class MatrixParameterLayer(ParameterLayerBase):
 
         self.weight_router: RouterModel = RouterModel(cfg)
         self.bias_router = self._init_bias_router_model(cfg)
-        self.sampler: SamplerModel = SamplerModel(cfg)
+        self.weight_sampler: SamplerModel = SamplerModel(cfg)
+        self.bias_sampler: SamplerModel = SamplerModel(cfg)
         self.mixture: MatrixMixture = MatrixMixture(cfg)
 
     def _init_bias_router_model(self, cfg: "ModelConfig") -> RouterModel | None:
@@ -296,7 +298,8 @@ class GeneratorParameterLayer(ParameterLayerBase):
 
         self.weight_router: RouterModel = RouterModel(cfg)
         self.bias_router = self._init_bias_router_model(cfg)
-        self.sampler: SamplerModel = SamplerModel(cfg)
+        self.weight_sampler: SamplerModel = SamplerModel(cfg)
+        self.bias_sampler: SamplerModel = SamplerModel(cfg)
         self.mixture: GeneratorMixture = GeneratorMixture(cfg)
 
     def _init_bias_router_model(self, cfg: "ModelConfig") -> RouterModel | None:
@@ -314,6 +317,7 @@ class GeneratorParameterLayer(ParameterLayerBase):
         bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
             input_batch
         )
+
         weight_parameters, bias_parameters = self.mixture.compute_mixture(
             weight_probabilities,
             weight_indices,
