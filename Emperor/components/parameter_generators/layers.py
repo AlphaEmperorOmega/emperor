@@ -4,6 +4,9 @@ from torch import Tensor
 from Emperor.base.decorators import timer
 from Emperor.base.utils import Module, DataClassBase
 
+from Emperor.components.parameter_generators.utils.behaviours import (
+    DynamicDiagonalParametersBehaviour,
+)
 from Emperor.components.parameter_generators.utils.samplers import SamplerModel
 from Emperor.components.parameter_generators.utils.mixture import (
     GeneratorMixture,
@@ -14,6 +17,11 @@ from Emperor.components.parameter_generators.utils.routers import (
     RouterModel,
     VectorRouterModel,
 )
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from Emperor.config import ModelConfig
 
 
 @dataclass
@@ -30,6 +38,12 @@ class ParameterLayerConfig(DataClassBase):
             "help": "When `True` it will generate bias parameters for each input sample."
         },
     )
+    dynamic_diagonal_params_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` for weight parameters a set of `diagonal` and `anti_diagonal` parameters are added to the generated weight_parameters for each input sampele, for biases a set of parameters that scale the biases are generated and biases are added to the bias parameters that shift them for each sample."
+        },
+    )
 
 
 class ParameterLayerBase(Module):
@@ -44,45 +58,57 @@ class ParameterLayerBase(Module):
 
         self.bias_parameters_flag = self.cfg.bias_parameters_flag
         self.time_tracker_flag = self.cfg.time_tracker_flag
+        self.dynamic_diagonal_params_flag = self.cfg.dynamic_diagonal_params_flag
+        self.dyagonal_params_model = self.__create_diagonal_params_model()
+
+    def __create_diagonal_params_model(
+        self,
+    ) -> DynamicDiagonalParametersBehaviour | None:
+        if self.dynamic_diagonal_params_flag:
+            return DynamicDiagonalParametersBehaviour(
+                self.input_dim,
+                self.output_dim,
+                anti_diagonal_flag=True,
+                dynamic_bias_flag=True,
+            )
+        return None
 
     def forward(
         self,
         input_batch: Tensor,
-    ) -> Tensor:
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
         if self.time_tracker_flag:
-            return self._track_layer_output_time(input_batch)
-        return self._compute_layer_output(input_batch)
+            return self._track_layer_output_time(input_batch, skip_mask)
+        return self._compute_layer_output(input_batch, skip_mask)
 
     @timer
     def _track_layer_output_time(
         self,
         input_batch: Tensor,
-    ) -> Tensor:
-        return self.compute_layer_output(input_batch)
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
+        return self.compute_layer_output(input_batch, skip_mask)
 
-    def _compute_layer_output(self, input_batch: Tensor) -> Tensor:
-        generated_weights, generated_biases = self._generate_parameters(input_batch)
-
-        output = self._apply_generated_weights(input_batch, generated_weights)
-        output = self._apply_generated_biases(output, generated_biases)
-
-        return output
-
-    def _apply_generated_weights(
+    def _compute_layer_output(
         self,
         input_batch: Tensor,
-        generated_weights: Tensor,
-    ) -> Tensor:
-        return torch.einsum("bi,bij->bj", input_batch, generated_weights)
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
+        generated_weights, generated_biases = self._generate_parameters(
+            input_batch, skip_mask
+        )
+        generated_weights, generated_biases = self.__add_dynamic_diagonal_params(
+            input_batch, generated_weights, generated_biases
+        )
 
-    def _apply_generated_biases(
-        self,
-        weighted_inputs: Tensor,
-        generated_biases: Tensor | None = None,
-    ) -> Tensor:
-        if self.bias_parameters_flag:
-            return weighted_inputs + generated_biases
-        return weighted_inputs
+        output = self.__apply_generated_weights(input_batch, generated_weights)
+        output = self.__apply_generated_biases(output, generated_biases)
+
+        updated_skip_mask = self.__get_updated_skip_mask()
+        total_layer_loss = self.__get_total_layer_loss()
+
+        return output, updated_skip_mask, total_layer_loss
 
     def _generate_parameters(
         self,
@@ -98,8 +124,34 @@ class ParameterLayerBase(Module):
         weight_parameters, bias_parameters = self.mixture.compute_mixture(
             weight_probabilities, weight_indices, bias_probabilities, bias_indices
         )
-
         return weight_parameters, bias_parameters
+
+    def __add_dynamic_diagonal_params(
+        self,
+        input_batch: Tensor,
+        weight_params: Tensor,
+        bias_params: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
+        if self.dynamic_diagonal_params_flag:
+            self.dyagonal_params_model.set_parameters(weight_params, bias_params)
+            return self.dynamic_diagonal_params_model(input_batch)
+        return weight_params, bias_params
+
+    def __apply_generated_weights(
+        self,
+        input_batch: Tensor,
+        generated_weights: Tensor,
+    ) -> Tensor:
+        return torch.einsum("bi,bij->bj", input_batch, generated_weights)
+
+    def __apply_generated_biases(
+        self,
+        weighted_inputs: Tensor,
+        generated_biases: Tensor | None = None,
+    ) -> Tensor:
+        if self.bias_parameters_flag:
+            return weighted_inputs + generated_biases
+        return weighted_inputs
 
     def _compute_bias_probabilities_and_indices(
         self,
