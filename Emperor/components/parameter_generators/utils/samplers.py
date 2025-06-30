@@ -136,25 +136,33 @@ class SamplerBase(Module):
             f"threshold must be between 0.0 and 1.0 (inclusive), got {self.threshold}"
         )
 
-    def sample_probabilities_and_indices(
+    def get_probabilities_and_indices(
         self,
         router_logit_scores: Tensor,
         skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None, Tensor | None]:
+    ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
         full_probabilities, logits = self.__compute_masked_probabilities(
             router_logit_scores, skip_mask
         )
-        probabilities, indices = self.__sample_probabilities_and_indices(
+        selected_probs, selected_indices = self._sample_probabilities_and_indices(
             full_probabilities
         )
-
-        self._compute_loss(logits, full_probabilities, probabilities, indices)
-
-        probabilities = self._normalize_probabilities(probabilities)
-
+        loss = self._compute_loss(
+            logits, full_probabilities, selected_probs, selected_indices, skip_mask
+        )
+        probabilities = self._normalize_probabilities(selected_probs)
         skip_mask = self.__update_mask_given_threshold(full_probabilities, skip_mask)
 
-        return probabilities, indices, skip_mask
+        self.set_auxiliary_loss(loss)
+        self.set_updated_skip_mask(skip_mask)
+
+        return probabilities, selected_indices, skip_mask, loss
+
+    def set_updated_skip_mask(self, updated_skip_mask: Tensor | None) -> None:
+        self.updated_skip_mask = updated_skip_mask
+
+    def set_auxiliary_loss(self, loss: Tensor) -> None:
+        self.auxiliary_loss = loss
 
     def __compute_masked_probabilities(
         self,
