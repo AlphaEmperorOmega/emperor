@@ -400,9 +400,27 @@ class SamplerFull(SamplerBase):
         overrides: "SamplerConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.auxiliary_losses = None
+        self.__validate_init_parameters()
 
-    def _probability_sampling_strategy(
+    def __validate_init_parameters(self):
+        assert self.top_k == self.num_experts, (
+            "When `SamplerFull` is used, `top_k` must be equal to `num_experts`"
+        )
+        assert self.num_topk_samples == 0, (
+            "`SamplerFull` does not randomly sample `top_k` experts"
+        )
+        assert self.coefficient_of_variation_weight == 0.0, (
+            "`SamplerFull` does not use `CoefficientOfVariationLoss`"
+        )
+        assert self.switch_weight == 0.0, "`SamplerFull` does not use `SwitchLoss`"
+        assert self.zero_centred_weight == 0.0, (
+            "`SamplerFull` does not use `ZeroCentredLoss`"
+        )
+        assert self.mutual_information_weight == 0.0, (
+            "`SamplerFull` does not use `MutualInformationLoss`"
+        )
+
+    def _sample_probabilities_and_indices(
         self, probability_matrix: Tensor
     ) -> tuple[Tensor, Tensor | None]:
         probability_matrix = self.__apply_dynamic_topk_threshold_mask(
@@ -411,10 +429,10 @@ class SamplerFull(SamplerBase):
         return probability_matrix, None
 
     def __apply_dynamic_topk_threshold_mask(self, probabilities: Tensor) -> Tensor:
-        if self.dynamic_topk_threshold == 0.0:
+        if self.threshold == 0.0:
             return probabilities
 
-        dynamic_topk_mask = probabilities < self.dynamic_topk_threshold
+        dynamic_topk_mask = probabilities < self.threshold
         masked_probabilities = torch.where(dynamic_topk_mask, 0.0, probabilities)
         normalized_probabilities = self._normalize_probabilities(masked_probabilities)
         return normalized_probabilities
@@ -433,26 +451,31 @@ class SamplerModel(Module):
         config = getattr(cfg, "sampler_model_config", cfg)
         self.sampler_config: "SamplerConfig" = self._overwrite_config(config, overrides)
 
-        self.router_output_dim = self.sampler_config.router_output_dim
+        self.num_experts = self.sampler_config.num_experts
         self.sampler_model = self._init_sampler_model()
 
     def _init_sampler_model(self) -> SamplerBase:
         if self.sampler_config.top_k == 1:
             return SamplerSparse(self.cfg, self.overrides)
-        elif self.sampler_config.top_k == self.router_output_dim:
+        elif self.sampler_config.top_k == self.num_experts:
             return SamplerFull(self.cfg, self.overrides)
         else:
             return SamplerTopk(self.cfg, self.overrides)
 
-    def set_router_model(
+    def sample_probabilities_and_indices(
         self,
-        router_model: "RouterModel",
-        cfg: "RouterConfig | ModelConfig",
-        return_flag: bool = False,
-    ) -> "RouterModel | None":
-        self.router_model.set_router_model(router_model, cfg, return_flag)
+        input_matrix: Tensor,
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
+        return self.sampler_model.get_probabilities_and_indices(input_matrix, skip_mask)
 
-    def forward(
+    def get_updated_skip_mask(self) -> Tensor | None:
+        return self.sampler_model.updated_skip_mask
+
+    def get_auxiliary_loss(self) -> Tensor:
+        return self.sampler_model.auxiliary_loss
+
+
         self,
         input_matrix: Tensor,
         skip_mask: Tensor | None = None,
