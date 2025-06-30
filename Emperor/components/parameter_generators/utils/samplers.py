@@ -220,22 +220,15 @@ class SamplerBase(Module):
         mask_update = threshold_mask.all(dim=-1).unsqueeze(-1)
         return masked_fill(skip_mask, mask_update, 0)
 
-    def __sample_probabilities_and_indices(
-        self, probabilities_matrix: Tensor
-    ) -> Tensor | tuple[Tensor, Tensor]:
-        selected_probs, selected_indices = self._probability_sampling_strategy(
-            probabilities_matrix
-        )
-        return selected_probs, selected_indices
-
     def _compute_loss(
         self,
         logits: Tensor,
         full_probabilities: Tensor,
-        probabilities: Tensor,
+        sampled_probabilities: Tensor,
         indices: Tensor,
-    ) -> float:
-        return 0.0
+        skip_mask: Optional[Tensor] = None,
+    ) -> Tensor:
+        return self.default_loss
 
     def _sample_probabilities_and_indices(
         self, *args, **kwargs
@@ -258,6 +251,18 @@ class SamplerSparse(SamplerBase):
         overrides: "SamplerConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
+        self.top_k = 1
+
+        self.__validate_init_parameters()
+
+    def __validate_init_parameters(self):
+        assert self.top_k == 1, "`top_k` must be 1 when using `SamplerSparse`."
+        assert not self.normalize_probabilities_flag, (
+            "`normalize_probabilities_flag` must be False when using `SamplerSparse`."
+        )
+        assert self.num_topk_samples == 0, (
+            "`num_topk_samples` must be 0 when using `SamplerSparse`."
+        )
 
     def _sample_probabilities_and_indices(
         self, probabilities: Tensor
@@ -269,28 +274,39 @@ class SamplerSparse(SamplerBase):
         self,
         logits: Tensor,
         full_probabilities: Tensor,
-        probabilities: Tensor,
+        sampled_probabilities: Tensor,
         indices: Tensor,
         skip_mask: Optional[Tensor] = None,
-    ) -> None:
-        input_dim = prod(tensor(probabilities.shape))
-        output_dim = self.router_output_dim
-        gates_buffer = zeros(input_dim, output_dim).to(device)
+    ) -> Tensor:
+        gates = self.__prepare_loss_gates(sampled_probabilities, indices)
+        logits = logits.reshape(-1, self.num_experts)
+        full_probabilities = full_probabilities.reshape(-1, self.num_experts)
+        skip_mask = self.__prepare_loss_skip_mask(skip_mask)
 
-        gates = gates_buffer.scatter(
-            1,
-            indices.view(-1, 1),
-            probabilities.view(-1, 1),
-        ).to(device)
-
-        logits = logits.reshape(-1, output_dim)
-        full_probabilities = full_probabilities.reshape(-1, output_dim)
-        if skip_mask is not None:
-            skip_mask = skip_mask.reshape(-1, output_dim)
-
-        self.auxiliary_losses.update_accumulated_statistics(
+        self.auxiliary_loss_model.update_accumulated_statistics(
             logits, full_probabilities, gates, skip_mask
         )
+        return self.auxiliary_loss_model.get_auxiliary_loss_and_clear()
+
+    def __prepare_loss_gates(
+        self, sampled_probabilities: Tensor, indices: Tensor
+    ) -> Tensor:
+        input_dim = prod(tensor(sampled_probabilities.shape))
+        gates_buffer = zeros(input_dim, self.num_experts).to(device)
+        gates = gates_buffer.scatter(
+            1,
+            indices.view(-1, self.top_k),
+            sampled_probabilities.view(-1, self.top_k),
+        ).to(device)
+
+        return gates
+
+    def __prepare_loss_skip_mask(
+        self, skip_mask: Tensor | None = None
+    ) -> Tensor | None:
+        if skip_mask is not None:
+            return skip_mask.reshape(-1, 1)
+        return None
 
 
 class SamplerTopk(SamplerBase):
