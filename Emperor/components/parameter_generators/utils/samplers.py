@@ -259,10 +259,10 @@ class SamplerSparse(SamplerBase):
     ) -> None:
         super().__init__(cfg, overrides)
 
-    def _probability_sampling_strategy(
-        self, probabilities_matrix: Tensor
-    ) -> Tensor | tuple[Tensor, Tensor | None]:
-        probability, indices = torch.max(probabilities_matrix, dim=-1)
+    def _sample_probabilities_and_indices(
+        self, probabilities: Tensor
+    ) -> tuple[Tensor, Tensor | None]:
+        probability, indices = torch.max(probabilities, dim=-1)
         return probability, indices
 
     def _compute_loss(
