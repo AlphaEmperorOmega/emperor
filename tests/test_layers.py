@@ -44,7 +44,8 @@ class TestVectorParameterLayer(unittest.TestCase):
 
         # PARAMETER GENRETOR SAMPLER OPITONS
         SAMPLER_TOP_K = 3
-        SAMPLER_THRESHOLD = 0.1
+        SAMPLER_THRESHOLD = 0.0
+        SAMPLER_FILTER_THRESHOLD = False
         SAMPLER_DYNAMIC_TOPK_THRESHOLD = (1 / ROUTER_OUTPUT_DIM) * 1e-6
         SAMPLER_NUM_TOPK_SAMPLES = 0
         SAMPLER_NORMALIZE_PROBABILITIES_FLAG = False
@@ -86,6 +87,7 @@ class TestVectorParameterLayer(unittest.TestCase):
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
                 threshold=SAMPLER_THRESHOLD,
+                filter_above_threshold=SAMPLER_FILTER_THRESHOLD,
                 num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
@@ -103,7 +105,7 @@ class TestVectorParameterLayer(unittest.TestCase):
                 bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
                 weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
                 num_experts=MIXTURE_ROUTER_OUTPUT_DIM,
-                cross_diagonal_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
+                dynamic_diagonal_params_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
             ),
             parameter_generator_model_config=ParameterLayerConfig(
                 bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
@@ -251,6 +253,7 @@ class TestVectorParameterLayer(unittest.TestCase):
         c.sampler_model_config.top_k = c.mixture_model_config.depth_dim
         c.mixture_model_config.top_k = c.mixture_model_config.depth_dim
         c.mixture_model_config.weighted_parameters_flag = True
+        c.sampler_model_config.mutual_information_weight = 0.0
         m = VectorParameterLayer(c)
 
         batch_size = 2
@@ -457,7 +460,9 @@ class TestVectorParameterLayer(unittest.TestCase):
             .float()
         )
 
-        output = m._apply_generated_biases(weighted_inputs, generated_biases)
+        output = m._ParameterLayerBase__apply_generated_biases(
+            weighted_inputs, generated_biases
+        )
 
         self.assertEqual(
             list(output.shape),
@@ -489,7 +494,9 @@ class TestVectorParameterLayer(unittest.TestCase):
             .float()
         )
 
-        output = m._apply_generated_biases(weighted_inputs, generated_biases)
+        output = m._ParameterLayerBase__apply_generated_biases(
+            weighted_inputs, generated_biases
+        )
 
         self.assertEqual(
             list(output.shape),
@@ -535,7 +542,9 @@ class TestVectorParameterLayer(unittest.TestCase):
             .float()
         )
 
-        output = m._apply_generated_weights(weighted_inputs, generated_weights)
+        output = m._ParameterLayerBase__apply_generated_weights(
+            weighted_inputs, generated_weights
+        )
 
         self.assertEqual(
             list(output.shape),
@@ -569,7 +578,7 @@ class TestVectorParameterLayer(unittest.TestCase):
             .reshape(weighted_inputs_shape)
             .float()
         )
-        output = m._compute_layer_output(weighted_inputs)
+        output, updated_skip_mask, total_loss = m._compute_layer_output(weighted_inputs)
 
         self.assertEqual(
             list(output.shape),
@@ -592,7 +601,7 @@ class TestVectorParameterLayer(unittest.TestCase):
             .reshape(weighted_inputs_shape)
             .float()
         )
-        output = m._compute_layer_output(weighted_inputs)
+        output, updated_skip_mask, total_loss = m._compute_layer_output(weighted_inputs)
 
         self.assertEqual(
             list(output.shape),
@@ -613,9 +622,9 @@ class TestMatrixParameterLayer(unittest.TestCase):
         GATHER_FREQUENCY_FLAG = False
 
         # AUXILIARY LOSSES OPITONS
-        COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.0
-        SWITCH_LOSS_WEIGHT: float = 0.0
-        ZERO_CENTERED_LOSS_WEIGHT: float = 0.0
+        COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.9
+        SWITCH_LOSS_WEIGHT: float = 0.9
+        ZERO_CENTERED_LOSS_WEIGHT: float = 0.9
         MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
 
         # PARAMETER GENRETOR ROUTER OPITONS
@@ -629,7 +638,8 @@ class TestMatrixParameterLayer(unittest.TestCase):
 
         # PARAMETER GENRETOR SAMPLER OPITONS
         SAMPLER_TOP_K = 3
-        SAMPLER_THRESHOLD = 0.1
+        SAMPLER_THRESHOLD = 0.0
+        SAMPLER_FILTER_THRESHOLD = False
         SAMPLER_DYNAMIC_TOPK_THRESHOLD = (1 / ROUTER_OUTPUT_DIM) * 1e-6
         SAMPLER_NUM_TOPK_SAMPLES = 0
         SAMPLER_NORMALIZE_PROBABILITIES_FLAG = False
@@ -668,13 +678,14 @@ class TestMatrixParameterLayer(unittest.TestCase):
                 top_k=SAMPLER_TOP_K,
                 threshold=SAMPLER_THRESHOLD,
                 num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
+                filter_above_threshold=SAMPLER_FILTER_THRESHOLD,
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
-                coefficient_of_variation_weight=0.0,
-                switch_weight=0.0,
-                zero_centred_weight=0.0,
-                mutual_information_weight=0.0,
+                coefficient_of_variation_weight=COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
+                switch_weight=SWITCH_LOSS_WEIGHT,
+                zero_centred_weight=ZERO_CENTERED_LOSS_WEIGHT,
+                mutual_information_weight=MUTUAL_INFORMATION_LOSS_WEIGHT,
             ),
             mixture_model_config=MixtureConfig(
                 input_dim=MIXTURE_INPUT_DIM,
@@ -684,7 +695,7 @@ class TestMatrixParameterLayer(unittest.TestCase):
                 bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
                 weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
                 num_experts=MIXTURE_ROUTER_OUTPUT_DIM,
-                cross_diagonal_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
+                dynamic_diagonal_params_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
             ),
             parameter_generator_model_config=ParameterLayerConfig(
                 bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
@@ -947,7 +958,9 @@ class TestMatrixParameterLayer(unittest.TestCase):
             .float()
         )
 
-        output = m._apply_generated_biases(weighted_inputs, generated_biases)
+        output = m._ParameterLayerBase__apply_generated_biases(
+            weighted_inputs, generated_biases
+        )
 
         self.assertEqual(
             list(output.shape),
@@ -979,7 +992,9 @@ class TestMatrixParameterLayer(unittest.TestCase):
             .float()
         )
 
-        output = m._apply_generated_biases(weighted_inputs, generated_biases)
+        output = m._ParameterLayerBase__apply_generated_biases(
+            weighted_inputs, generated_biases
+        )
 
         self.assertEqual(
             list(output.shape),
@@ -1023,7 +1038,9 @@ class TestMatrixParameterLayer(unittest.TestCase):
             .float()
         )
 
-        output = m._apply_generated_weights(weighted_inputs, generated_weights)
+        output = m._ParameterLayerBase__apply_generated_weights(
+            weighted_inputs, generated_weights
+        )
 
         self.assertEqual(
             list(output.shape),
@@ -1057,7 +1074,7 @@ class TestMatrixParameterLayer(unittest.TestCase):
             .reshape(weighted_inputs_shape)
             .float()
         )
-        output = m._compute_layer_output(weighted_inputs)
+        output, updated_skip_mask, total_loss = m._compute_layer_output(weighted_inputs)
 
         self.assertEqual(
             list(output.shape),
@@ -1080,7 +1097,7 @@ class TestMatrixParameterLayer(unittest.TestCase):
             .reshape(weighted_inputs_shape)
             .float()
         )
-        output = m._compute_layer_output(weighted_inputs)
+        output, updated_skip_mask, total_loss = m._compute_layer_output(weighted_inputs)
 
         self.assertEqual(
             list(output.shape),
@@ -1117,7 +1134,8 @@ class TestGeneratorParameterLayer(unittest.TestCase):
 
         # PARAMETER GENRETOR SAMPLER OPITONS
         SAMPLER_TOP_K = 3
-        SAMPLER_THRESHOLD = 0.1
+        SAMPLER_THRESHOLD = 0.0
+        SAMPLER_FILTER_THRESHOLD = False
         SAMPLER_DYNAMIC_TOPK_THRESHOLD = (1 / ROUTER_OUTPUT_DIM) * 1e-6
         SAMPLER_NUM_TOPK_SAMPLES = 0
         SAMPLER_NORMALIZE_PROBABILITIES_FLAG = False
@@ -1155,6 +1173,7 @@ class TestGeneratorParameterLayer(unittest.TestCase):
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
                 threshold=SAMPLER_THRESHOLD,
+                filter_above_threshold=SAMPLER_FILTER_THRESHOLD,
                 num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
@@ -1172,7 +1191,7 @@ class TestGeneratorParameterLayer(unittest.TestCase):
                 bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
                 weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
                 num_experts=MIXTURE_ROUTER_OUTPUT_DIM,
-                cross_diagonal_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
+                dynamic_diagonal_params_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
             ),
             parameter_generator_model_config=ParameterLayerConfig(
                 bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
@@ -1435,7 +1454,9 @@ class TestGeneratorParameterLayer(unittest.TestCase):
             .float()
         )
 
-        output = m._apply_generated_biases(weighted_inputs, generated_biases)
+        output = m._ParameterLayerBase__apply_generated_biases(
+            weighted_inputs, generated_biases
+        )
 
         self.assertEqual(
             list(output.shape),
@@ -1467,7 +1488,9 @@ class TestGeneratorParameterLayer(unittest.TestCase):
             .float()
         )
 
-        output = m._apply_generated_biases(weighted_inputs, generated_biases)
+        output = m._ParameterLayerBase__apply_generated_biases(
+            weighted_inputs, generated_biases
+        )
 
         self.assertEqual(
             list(output.shape),
