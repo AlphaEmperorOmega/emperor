@@ -1,7 +1,8 @@
 import copy
 import torch.nn as nn
 import unittest
-from Emperor.base.utils import LayerBlock, randn
+from Emperor.base.utils import randn
+from Emperor.components.parameter_generators.utils.base import LayerBlock
 from Emperor.components.parameter_generators.utils.linears import (
     DynamicDiagonalLinearLayer,
     LinearLayer,
