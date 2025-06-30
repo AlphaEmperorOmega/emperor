@@ -424,7 +424,7 @@ class GeneratorMixture(ParameterMixture):
         diagonal_weight_bank = self._init_parameter_bank(diagonal_weight_shape)
 
         anti_diagonal_weight_bank = None
-        if self.cross_diagonal_flag:
+        if self.dynamic_diagonal_params_flag:
             anti_diagonal_weight_bank = self._init_parameter_bank(
                 anti_diagonal_weight_shape
             )
@@ -455,11 +455,9 @@ class GeneratorMixture(ParameterMixture):
         selected_output_params = self.output_weight_bank[weight_indices]
         selected_diagonal_params = self.diagonal_weight_bank[weight_indices]
 
-        selected_transposed_diagonal_params = None
-        if self.cross_diagonal_flag:
-            selected_transposed_diagonal_params = self.diagonal_weight_bank[
-                weight_indices
-            ]
+        selected_anti_diagonal_params = None
+        if self.dynamic_diagonal_params_flag:
+            selected_anti_diagonal_params = self.diagonal_weight_bank[weight_indices]
 
         selected_bias_params = None
         if self.bias_parameters_flag:
@@ -469,7 +467,7 @@ class GeneratorMixture(ParameterMixture):
             selected_input_params,
             selected_output_params,
             selected_diagonal_params,
-            selected_transposed_diagonal_params,
+            selected_anti_diagonal_params,
             selected_bias_params,
         )
 
@@ -543,7 +541,7 @@ class GeneratorMixture(ParameterMixture):
         output_vectors = self.__compute_einsum(input_batch, output_weight_params)
         diagonal_vectors = self.__compute_einsum(input_batch, diagonal_weight_params)
         anti_diagonal_vectors = self.__maybe_compute_einsum(
-            input_batch, anti_diagonal_params, self.cross_diagonal_flag
+            input_batch, anti_diagonal_params, self.dynamic_diagonal_params_flag
         )
         bias_output = self.__maybe_compute_einsum(
             input_batch, bias_params, self.bias_parameters_flag
@@ -626,7 +624,7 @@ class GeneratorMixture(ParameterMixture):
         self,
         anti_diagonal_vectors: Tensor | None = None,
     ) -> Tensor | None:
-        if self.cross_diagonal_flag:
+        if self.dynamic_diagonal_params_flag:
             anti_diagonal_matrix = self.__compute_diagonal_matrix(anti_diagonal_vectors)
             return anti_diagonal_matrix.flip(dims=[2])
         return None
@@ -647,7 +645,7 @@ class GeneratorMixture(ParameterMixture):
         anti_diagonal_matrix: Tensor | None = None,
     ) -> Tensor:
         generated_weights = outer_product + diagonal_matrix
-        if self.cross_diagonal_flag:
+        if self.dynamic_diagonal_params_flag:
             generated_weights = generated_weights + anti_diagonal_matrix
         return generated_weights
 
