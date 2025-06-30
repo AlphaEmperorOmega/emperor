@@ -169,24 +169,54 @@ class ParameterLayerBase(Module):
         input_batch: Tensor,
         compute_bias_flag: bool = False,
         skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None]:
-        logits = self._compute_logits(input_batch, compute_bias_flag)
-        probabilities, indices, _ = self.sampler.sample_probabilities_and_indices(
-            logits, skip_mask
+    ):
+        if compute_bias_flag:
+            logits = self._compute_logits(input_batch)
+            return self._sample_probabilities_and_indices(
+                logits, skip_mask, compute_bias_flag
+            )
+        logits = self._compute_logits(input_batch)
+        return self._sample_probabilities_and_indices(
+            logits, skip_mask, compute_bias_flag
         )
-
-        return probabilities, indices
 
     def _compute_logits(
         self,
         input_batch: Tensor,
         compute_bias_flag: bool = False,
-    ):
+    ) -> Tensor:
         if compute_bias_flag:
-            if self.bias_router is None:
+            if self.bias_router is None or self.bias_sampler is None:
                 raise RuntimeError("Bias router is not initialized.")
             return self.bias_router.compute_logit_scores(input_batch)
         return self.weight_router.compute_logit_scores(input_batch)
+
+    def _sample_probabilities_and_indices(
+        self,
+        logits: Tensor,
+        skip_mask: Tensor | None = None,
+        compute_bias_flag: bool = False,
+    ) -> tuple[Tensor, Tensor | None]:
+        if compute_bias_flag:
+            if self.bias_sampler is None:
+                raise RuntimeError("Bias sampler is not initialized.")
+            probabilities, selected_indices, _, _ = (
+                self.bias_sampler.sample_probabilities_and_indices(logits, skip_mask)
+            )
+            return probabilities, selected_indices
+
+        probabilities, selected_indices, _, _ = (
+            self.weight_sampler.sample_probabilities_and_indices(logits, skip_mask)
+        )
+        return probabilities, selected_indices
+
+    def __get_updated_skip_mask(self):
+        return self.weight_sampler.get_updated_skip_mask()
+
+    def __get_total_layer_loss(self) -> Tensor:
+        weight_loss = self.weight_sampler.get_auxiliary_loss()
+        bias_loss = self.bias_sampler.get_auxiliary_loss()
+        return weight_loss + bias_loss
 
 
 class VectorParameterLayer(ParameterLayerBase):
