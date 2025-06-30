@@ -1,7 +1,8 @@
 from torch import Tensor
 import torch.nn as nn
 from dataclasses import dataclass, field
-from Emperor.base.utils import LayerBlock, randn, matmul
+from Emperor.base.utils import randn, matmul
+from Emperor.components.parameter_generators.utils.base import LayerBlock
 from torch.nn.parameter import Parameter
 from Emperor.base.utils import Module, DataClassBase
 from torch.nn import Linear, Sequential
@@ -85,6 +86,10 @@ class RouterModel(Module):
 
         self.compute_weight_flag = True
         self.__assert_input_requirements()
+        # TODO: In the future replace the build model method with
+        # an instance of `LinearBlockStack`. The reason this is
+        # not done right now is that i need to implement more
+        # important features like the `Attention` mechanism
         self.model = self.__build_model()
 
     def __assert_input_requirements(self):
@@ -182,9 +187,7 @@ class VectorRouterModel(RouterModel):
         # This is required for `VectorRouterModel` in case `feature_dim`
         # you find this wierd in the future
         feature_dim = self.output_dim if self.bias_parameters_flag else self.input_dim
-        parameters = Parameter(
-            randn(feature_dim, self.input_dim, self.num_experts)
-        )
+        parameters = Parameter(randn(feature_dim, self.input_dim, self.num_experts))
         self._initialize_parameters(parameters)
         return parameters
 
