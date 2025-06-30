@@ -33,6 +33,7 @@ SAMPLER_TOP_K = 8
 SAMPLER_THRESHOLD = 0.1
 SAMPLER_DYNAMIC_TOPK_THRESHOLD = (1 / ROUTER_OUTPUT_DIM) * 1e-6
 SAMPLER_NUM_TOPK_SAMPLES = 0
+SAMPLER_FILTER_THRESHOLD = False
 SAMPLER_NORMALIZE_PROBABILITIES_FLAG = False
 SAMPLER_NOISY_TOPK_FLAG = ROUTER_NOISY_TOPK_FLAG
 SAMPLER_ROUTER_OUTPUT_DIM = ROUTER_OUTPUT_DIM
@@ -97,6 +98,7 @@ class ModelConfig(DataClassBase):
         default_factory=lambda: SamplerConfig(
             top_k=SAMPLER_TOP_K,
             threshold=SAMPLER_THRESHOLD,
+            filter_above_threshold=SAMPLER_FILTER_THRESHOLD,
             num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
             normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
             noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
@@ -117,7 +119,7 @@ class ModelConfig(DataClassBase):
             bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
             weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
             num_experts=MIXTURE_ROUTER_OUTPUT_DIM,
-            cross_diagonal_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
+            dynamic_diagonal_params_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
         ),
         metadata={"help": "`MixtureConfig` configuration"},
     )
@@ -133,6 +135,7 @@ class ModelConfig(DataClassBase):
             output_dim=OUTPUT_DIM,
             bias_flag=True,
             anti_diagonal_flag=True,
+            dynamic_bias_flag=True,
         ),
         metadata={"help": "`LinearLayerConfig` configuration"},
     )
