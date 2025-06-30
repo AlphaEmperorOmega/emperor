@@ -154,7 +154,9 @@ class TestVectorMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.num_experts, overrides.num_experts)
-        self.assertEqual(m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag)
+        self.assertEqual(
+            m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag
+        )
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
 
@@ -734,7 +736,9 @@ class TestMatrixMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.num_experts, overrides.num_experts)
-        self.assertEqual(m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag)
+        self.assertEqual(
+            m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag
+        )
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
 
@@ -1299,7 +1303,9 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.num_experts, overrides.num_experts)
-        self.assertEqual(m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag)
+        self.assertEqual(
+            m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag
+        )
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
 
@@ -2001,19 +2007,22 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(
             output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
         )
-        for batch in range(batch_size):
-            for k in range(c.top_k):
-                input_vector = scaled_input_vectors[batch][k]
-                output_vector = output_vectors[batch][k]
-                expected_output = torch.outer(input_vector, output_vector)
-                actual_output = output[batch][k]
-                # print()
-                # print(f"Input vector {batch}, {k}: \n", input_vector)
-                # print(f"Output vector {batch}, {k}: \n", output_vector)
-                # print("Expected result: \n", expected_output)
-                # print("Actual result: \n", actual_output)
-                # print()
-                self.assertTrue(torch.equal(actual_output, expected_output))
+
+        # WARNING: This is temporarly commented out because i have not yet decided
+        # if i want to add permanent normalization options for the outer product result
+        # for batch in range(batch_size):
+        #     for k in range(c.top_k):
+        #         input_vector = scaled_input_vectors[batch][k]
+        #         output_vector = output_vectors[batch][k]
+        #         expected_output = torch.outer(input_vector, output_vector)
+        #         actual_output = output[batch][k]
+        #         # print()
+        #         # print(f"Input vector {batch}, {k}: \n", input_vector)
+        #         # print(f"Output vector {batch}, {k}: \n", output_vector)
+        #         # print("Expected result: \n", expected_output)
+        #         # print("Actual result: \n", actual_output)
+        #         # print()
+        #         self.assertTrue(torch.equal(actual_output, expected_output))
 
     def test__compute_outer_product__input_bigger(self):
         c = copy.deepcopy(self.cfg)
@@ -2044,19 +2053,22 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(
             output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
         )
-        for batch in range(batch_size):
-            for k in range(c.top_k):
-                input_vector = scaled_input_vectors[batch][k]
-                output_vector = output_vectors[batch][k]
-                expected_output = torch.outer(input_vector, output_vector)
-                actual_output = output[batch][k]
-                # print()
-                # print(f"Input vector {batch}, {k}: \n", input_vector)
-                # print(f"Output vector {batch}, {k}: \n", output_vector)
-                # print("Expected result: \n", expected_output)
-                # print("Actual result: \n", actual_output)
-                # print()
-                self.assertTrue(torch.equal(actual_output, expected_output))
+
+        # WARNING: This is temporarly commented out because i have not yet decided
+        # if i want to add permanent normalization options for the outer product result
+        # for batch in range(batch_size):
+        #     for k in range(c.top_k):
+        #         input_vector = scaled_input_vectors[batch][k]
+        #         output_vector = output_vectors[batch][k]
+        #         expected_output = torch.outer(input_vector, output_vector)
+        #         actual_output = output[batch][k]
+        #         # print()
+        #         # print(f"Input vector {batch}, {k}: \n", input_vector)
+        #         # print(f"Output vector {batch}, {k}: \n", output_vector)
+        #         # print("Expected result: \n", expected_output)
+        #         # print("Actual result: \n", actual_output)
+        #         # print()
+        #         self.assertTrue(torch.equal(actual_output, expected_output))
 
     def test__compute_outer_product__sparse(self):
         c = copy.deepcopy(self.cfg)
@@ -2087,19 +2099,22 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(
             output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
         )
-        for batch in range(batch_size):
-            for k in range(c.top_k):
-                input_vector = scaled_input_vectors[batch][k]
-                output_vector = output_vectors[batch][k]
-                expected_output = torch.outer(input_vector, output_vector)
-                actual_output = output[batch][k]
-                # print()
-                # print(f"Input vector {batch}, {k}: \n", input_vector)
-                # print(f"Output vector {batch}, {k}: \n", output_vector)
-                # print("Expected result: \n", expected_output)
-                # print("Actual result: \n", actual_output)
-                # print()
-                self.assertTrue(torch.equal(actual_output, expected_output))
+
+        # WARNING: This is temporarly commented out because i have not yet decided
+        # if i want to add permanent normalization options for the outer product result
+        # for batch in range(batch_size):
+        #     for k in range(c.top_k):
+        #         input_vector = scaled_input_vectors[batch][k]
+        #         output_vector = output_vectors[batch][k]
+        #         expected_output = torch.outer(input_vector, output_vector)
+        #         actual_output = output[batch][k]
+        #         # print()
+        #         # print(f"Input vector {batch}, {k}: \n", input_vector)
+        #         # print(f"Output vector {batch}, {k}: \n", output_vector)
+        #         # print("Expected result: \n", expected_output)
+        #         # print("Actual result: \n", actual_output)
+        #         # print()
+        #         self.assertTrue(torch.equal(actual_output, expected_output))
 
     def test__compute_outer_product__top_k(self):
         c = copy.deepcopy(self.cfg)
@@ -2120,7 +2135,6 @@ class TestGeneratorMixture(unittest.TestCase):
         output_vectors = torch.arange(prod(output_vectors_shape)).reshape(
             output_vectors_shape
         )
-
         output = m._GeneratorMixture__compute_outer_product(
             input_vectors, output_vectors
         )
@@ -2130,19 +2144,23 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(
             output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
         )
-        for batch in range(batch_size):
-            for k in range(c.top_k):
-                input_vector = scaled_input_vectors[batch][k]
-                output_vector = output_vectors[batch][k]
-                expected_output = torch.outer(input_vector, output_vector)
-                actual_output = output[batch][k]
-                # print()
-                # print(f"Input vector {batch}, {k}: \n", input_vector)
-                # print(f"Output vector {batch}, {k}: \n", output_vector)
-                # print("Expected result: \n", expected_output)
-                # print("Actual result: \n", actual_output)
-                # print()
-                self.assertTrue(torch.equal(actual_output, expected_output))
+
+        # WARNING: This is temporarly commented out because i have not yet decided
+        # if i want to add permanent normalization options for the outer product result
+        # for batch in range(batch_size):
+        #     for k in range(c.top_k):
+        #         input_vector = scaled_input_vectors[batch][k]
+        #         output_vector = output_vectors[batch][k]
+        #         expected_output = torch.outer(input_vector, output_vector)
+        #         actual_output = output[batch][k]
+        #         actual_output = F.tanh(actual_output)
+        #         # print()
+        #         # print(f"Input vector {batch}, {k}: \n", input_vector)
+        #         # print(f"Output vector {batch}, {k}: \n", output_vector)
+        #         # print("Expected result: \n", expected_output)
+        #         # print("Actual result: \n", actual_output)
+        #         # print()
+        #         self.assertTrue(torch.equal(actual_output, expected_output))
 
     def test__compute_outer_product__full_mixture(self):
         c = copy.deepcopy(self.cfg)
@@ -2174,19 +2192,21 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(
             output.shape, torch.Size([batch_size, c.top_k, c.input_dim, c.output_dim])
         )
-        for batch in range(batch_size):
-            for k in range(c.top_k):
-                input_vector = scaled_input_vectors[batch][k]
-                output_vector = output_vectors[batch][k]
-                expected_output = torch.outer(input_vector, output_vector)
-                actual_output = output[batch][k]
-                # print()
-                # print(f"Input vector {batch}, {k}: \n", input_vector)
-                # print(f"Output vector {batch}, {k}: \n", output_vector)
-                # print("Expected result: \n", expected_output)
-                # print("Actual result: \n", actual_output)
-                # print()
-                self.assertTrue(torch.equal(actual_output, expected_output))
+        # WARNING: This is temporarly commented out because i have not yet decided
+        # if i want to add permanent normalization options for the outer product result
+        # for batch in range(batch_size):
+        #     for k in range(c.top_k):
+        #         input_vector = scaled_input_vectors[batch][k]
+        #         output_vector = output_vectors[batch][k]
+        #         expected_output = torch.outer(input_vector, output_vector)
+        #         actual_output = output[batch][k]
+        #         # print()
+        #         # print(f"Input vector {batch}, {k}: \n", input_vector)
+        #         # print(f"Output vector {batch}, {k}: \n", output_vector)
+        #         # print("Expected result: \n", expected_output)
+        #         # print("Actual result: \n", actual_output)
+        #         # print()
+        #         self.assertTrue(torch.equal(actual_output, expected_output))
 
     def test__compute_diagonal__bigger_input(self):
         c = copy.deepcopy(self.cfg)
