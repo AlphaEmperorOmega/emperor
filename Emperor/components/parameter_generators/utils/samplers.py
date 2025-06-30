@@ -127,7 +127,6 @@ class SamplerBase(Module):
 
     def __validate_input_parameters(self):
         self._valudate_fields(self.cfg, SamplerConfig)
-
         assert self.top_k >= 0, f"top_k must be non-negative, got {self.top_k}"
         assert self.num_topk_samples <= self.top_k, (
             f"num_topk_samples ({self.num_topk_samples}) cannot exceed top_k ({self.top_k})"
@@ -171,7 +170,10 @@ class SamplerBase(Module):
     ) -> tuple[Tensor, Tensor]:
         logits = self.__add_noise_to_logits(router_logit_scores)
         probabilities = torch.softmax(logits, dim=-1)
-        return self.__apply_skip_mask(probabilities, logits, skip_mask)
+        masked_probabilities, masked_logit_scores = self.__apply_skip_mask(
+            probabilities, logits, skip_mask
+        )
+        return masked_probabilities, masked_logit_scores
 
     def __add_noise_to_logits(self, logit_scores_matrix: Tensor) -> Tensor:
         if not self.noisy_topk_flag:
@@ -203,7 +205,6 @@ class SamplerBase(Module):
             mask = skip_mask == 0
             probabilities = masked_fill(probabilities, mask, 0)
             router_logit_scores = masked_fill(router_logit_scores, mask, 0)
-
         return probabilities, router_logit_scores
 
     def __update_mask_given_threshold(
