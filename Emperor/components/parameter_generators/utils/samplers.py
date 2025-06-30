@@ -1,29 +1,30 @@
-from dataclasses import dataclass, field, fields
 import torch
+from math import prod
 from torch import Tensor
-
-
-from Emperor.components.parameter_generators.utils.losses import AuxiliaryLosses
+from dataclasses import dataclass, field
+from Emperor.components.parameter_generators.utils.losses import (
+    CoefficientOfVariationLoss,
+    MutualInformationLoss,
+    SwitchLoss,
+    ZeroCentredLoss,
+)
 from Emperor.base.utils import Module, DataClassBase
-from .routers import RouterConfig, RouterModel
 from Emperor.base.utils import (
     sigmoid,
     randn_like,
     masked_fill,
-    tensor,
-    zeros,
     arange,
     expand_dims,
     concat,
-    prod,
     device,
+    zeros,
+    tensor,
 )
 
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from .routers import RouterConfig
 
 
 @dataclass
@@ -68,6 +69,30 @@ class SamplerConfig(DataClassBase):
         default=None,
         metadata={"help": "Router output dimension"},
     )
+    coefficient_of_variation_weight: float | None = field(
+        default=None,
+        metadata={
+            "help": "Scaling factor for the coefficient of variation loss. Higher values promote consistent variance across outputs. Set to `0.0` to disable this regularization term."
+        },
+    )
+    switch_weight: float | None = field(
+        default=None,
+        metadata={
+            "help": "Scaling factor for the switch loss which encourages distinct transitions between parameter states. Higher values lead to more binary/discrete behavior. Set to `0.0` to disable."
+        },
+    )
+    zero_centred_weight: float | None = field(
+        default=None,
+        metadata={
+            "help": "Scaling factor for the zero-centering loss which penalizes deviations from zero mean. Higher values push parameter distributions to be centered around zero. Set to `0.0` to disable."
+        },
+    )
+    mutual_information_weight: float | None = field(
+        default=None,
+        metadata={
+            "help": "Scaling factor for the mutual information loss which promotes diversity and independence between parameters. Higher values reduce redundancy in parameter space. Set to `0.0` to disable."
+        },
+    )
 
 
 class SamplerBase(Module):
@@ -88,10 +113,17 @@ class SamplerBase(Module):
         self.dynamic_topk_threshold = self.cfg.dynamic_topk_threshold
         self.normalize_probabilities_flag = self.cfg.normalize_probabilities_flag
         self.router_output_dim = self.cfg.router_output_dim
+        self.coefficient_of_variation_weight = self.cfg.coefficient_of_variation_weight
+        self.switch_weight = self.cfg.switch_weight
+        self.zero_centred_weight = self.cfg.zero_centred_weight
+        self.mutual_information_weight = self.cfg.mutual_information_weight
         self.__validate_input_parameters()
 
         self.noise_epsilon = 1e-2
-        self.auxiliary_losses = AuxiliaryLosses(self.cfg)
+        self.auxiliary_loss_model = SamplerAuxiliaryLosses(self.cfg)
+        self.default_loss = torch.tensor(0.0, device=device, requires_grad=False)
+        self.updated_skip_mask = None
+        self.auxiliary_loss = self.default_loss
 
     def __validate_input_parameters(self):
         self._valudate_fields(self.cfg, SamplerConfig)
