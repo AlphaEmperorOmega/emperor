@@ -53,7 +53,7 @@ class TestMixtureBase(unittest.TestCase):
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
             num_experts=7,
-            cross_diagonal_flag=False,
+            dynamic_diagonal_params_flag=False,
         )
         m = MixtureBase(self.cfg, overrides)
         self.assertEqual(m.cfg, overrides)
@@ -95,7 +95,7 @@ class TestVectorMixture(unittest.TestCase):
             depth_dim=6,
             top_k=2,
             num_experts=6,
-            cross_diagonal_flag=False,
+            dynamic_diagonal_params_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
         )
@@ -130,7 +130,7 @@ class TestVectorMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, c.depth_dim)
         self.assertEqual(m.top_k, c.top_k)
         self.assertEqual(m.num_experts, c.num_experts)
-        self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
+        self.assertEqual(m.dynamic_diagonal_params_flag, c.dynamic_diagonal_params_flag)
         self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
 
@@ -142,7 +142,7 @@ class TestVectorMixture(unittest.TestCase):
             depth_dim=60,
             top_k=20,
             num_experts=60,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
@@ -154,7 +154,7 @@ class TestVectorMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.num_experts, overrides.num_experts)
-        self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
+        self.assertEqual(m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag)
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
 
@@ -695,7 +695,7 @@ class TestMatrixMixture(unittest.TestCase):
             depth_dim=6,
             top_k=2,
             num_experts=6,
-            cross_diagonal_flag=False,
+            dynamic_diagonal_params_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
         )
@@ -710,7 +710,7 @@ class TestMatrixMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, c.depth_dim)
         self.assertEqual(m.top_k, c.top_k)
         self.assertEqual(m.num_experts, c.num_experts)
-        self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
+        self.assertEqual(m.dynamic_diagonal_params_flag, c.dynamic_diagonal_params_flag)
         self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
 
@@ -722,7 +722,7 @@ class TestMatrixMixture(unittest.TestCase):
             depth_dim=60,
             top_k=20,
             num_experts=60,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
@@ -734,7 +734,7 @@ class TestMatrixMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.num_experts, overrides.num_experts)
-        self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
+        self.assertEqual(m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag)
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
 
@@ -1224,7 +1224,7 @@ class TestGeneratorMixture(unittest.TestCase):
             depth_dim=6,
             top_k=2,
             num_experts=6,
-            cross_diagonal_flag=False,
+            dynamic_diagonal_params_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
         )
@@ -1234,7 +1234,7 @@ class TestGeneratorMixture(unittest.TestCase):
         c = main_c.mixture_model_config
 
         overrides = MixtureConfig(
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
             bias_parameters_flag=True,
         )
 
@@ -1275,7 +1275,7 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, c.depth_dim)
         self.assertEqual(m.top_k, c.top_k)
         self.assertEqual(m.num_experts, c.num_experts)
-        self.assertEqual(m.cross_diagonal_flag, c.cross_diagonal_flag)
+        self.assertEqual(m.dynamic_diagonal_params_flag, c.dynamic_diagonal_params_flag)
         self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, c.bias_parameters_flag)
 
@@ -1287,7 +1287,7 @@ class TestGeneratorMixture(unittest.TestCase):
             depth_dim=60,
             top_k=20,
             num_experts=60,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
             weighted_parameters_flag=True,
             bias_parameters_flag=True,
         )
@@ -1299,7 +1299,7 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertEqual(m.depth_dim, overrides.depth_dim)
         self.assertEqual(m.top_k, overrides.top_k)
         self.assertEqual(m.num_experts, overrides.num_experts)
-        self.assertEqual(m.cross_diagonal_flag, overrides.cross_diagonal_flag)
+        self.assertEqual(m.dynamic_diagonal_params_flag, overrides.dynamic_diagonal_params_flag)
         self.assertEqual(m.weighted_parameters_flag, overrides.weighted_parameters_flag)
         self.assertEqual(m.bias_parameters_flag, overrides.bias_parameters_flag)
 
@@ -1340,10 +1340,10 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertIsNone(anti_diagonal_weight_bank)
         self.assertIsNone(bias_bank)
 
-    def test__init_parameter_banks__cross_diagonal_flag__true(self):
+    def test__init_parameter_banks__dynamic_diagonal_params_flag__true(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
         (
@@ -1443,11 +1443,11 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertIsNone(selected_anti_diagonal_params)
         self.assertIsNone(selected_bias_params)
 
-    def test__select_parameters_sparse__cross_diagonal_flag__true(self):
+    def test__select_parameters_sparse__dynamic_diagonal_params_flag__true(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
 
@@ -1559,11 +1559,11 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertIsNone(selected_anti_diagonal_params)
         self.assertIsNone(selected_bias_params)
 
-    def test__select_parameters_top_k__cross_diagonal_flag__true(self):
+    def test__select_parameters_top_k__dynamic_diagonal_params_flag__true(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=5,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
 
@@ -1802,11 +1802,11 @@ class TestGeneratorMixture(unittest.TestCase):
         self.assertIsNone(anti_diagonal_vectors)
         self.assertIsNone(bias_output)
 
-    def test__compute_parameter_vectors__cross_diagonal_flag__true(self):
+    def test__compute_parameter_vectors__dynamic_diagonal_params_flag__true(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
         batch_size = 2
@@ -2315,11 +2315,11 @@ class TestGeneratorMixture(unittest.TestCase):
 
         self.assertIsNone(output)
 
-    def test__anti_compute_diagonal__cross_diagonal_flag__true(self):
+    def test__anti_compute_diagonal__dynamic_diagonal_params_flag__true(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
         batch_size = 2
@@ -2390,11 +2390,11 @@ class TestGeneratorMixture(unittest.TestCase):
                 # print()
                 self.assertTrue(torch.equal(actual_output, expected_output))
 
-    def test__assemble_parameters_matrix__cross_diagonal_flag__True(self):
+    def test__assemble_parameters_matrix__dynamic_diagonal_params_flag__True(self):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=2,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
         batch_size = 2
@@ -2577,7 +2577,7 @@ class TestGeneratorMixture(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=1,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
             weighted_parameters_flag=True,
         )
         m = GeneratorMixture(c, overrides)
@@ -2621,7 +2621,7 @@ class TestGeneratorMixture(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=3,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
             weighted_parameters_flag=True,
         )
         m = GeneratorMixture(c, overrides)
@@ -2665,7 +2665,7 @@ class TestGeneratorMixture(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureConfig(
             top_k=6,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
             weighted_parameters_flag=True,
         )
         m = GeneratorMixture(c, overrides)
@@ -2801,7 +2801,7 @@ class TestGeneratorMixture(unittest.TestCase):
             top_k=1,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
         batch_size = 2
@@ -2860,7 +2860,7 @@ class TestGeneratorMixture(unittest.TestCase):
             top_k=3,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
         batch_size = 2
@@ -2919,7 +2919,7 @@ class TestGeneratorMixture(unittest.TestCase):
             top_k=6,
             bias_parameters_flag=True,
             weighted_parameters_flag=True,
-            cross_diagonal_flag=True,
+            dynamic_diagonal_params_flag=True,
         )
         m = GeneratorMixture(c, overrides)
         batch_size = 2
@@ -2981,7 +2981,7 @@ class TestParameterGeneratorMixture_VectorMixture(unittest.TestCase):
             depth_dim=6,
             top_k=2,
             num_experts=6,
-            cross_diagonal_flag=False,
+            dynamic_diagonal_params_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
         )
@@ -3243,7 +3243,7 @@ class TestParameterGeneratorMixture_MatrixMixture(unittest.TestCase):
             depth_dim=6,
             top_k=2,
             num_experts=6,
-            cross_diagonal_flag=False,
+            dynamic_diagonal_params_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
         )
@@ -3505,7 +3505,7 @@ class TestParameterGeneratorMixture_GeneratorMixture(unittest.TestCase):
             depth_dim=6,
             top_k=2,
             num_experts=6,
-            cross_diagonal_flag=False,
+            dynamic_diagonal_params_flag=False,
             weighted_parameters_flag=False,
             bias_parameters_flag=False,
         )
