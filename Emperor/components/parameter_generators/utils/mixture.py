@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from torch.nn import Parameter
+from enum import Enum
 import torch.nn.functional as F
 from Emperor.base.utils import Module, DataClassBase, arange, reshape
 from dataclasses import dataclass, field
@@ -54,6 +55,13 @@ class MixtureConfig(DataClassBase):
             "help": "Used for `GeneratorMixture` to enable cross diagonal matrices when computing weights"
         },
     )
+
+
+class OuterProductNormOptions(Enum):
+    RELU = 1
+    TANH = 2
+    SIGMOID = 3
+    LAYER_NORM = 4
 
 
 class MixtureBase(Module):
@@ -391,6 +399,12 @@ class GeneratorMixture(ParameterMixture):
             self.bias_bank,
         ) = self.__init_parameter_banks()
 
+        self.outper_product_norm = nn.LayerNorm(
+            self.output_dim,
+            elementwise_affine=False,
+            # bias=False,
+        )
+
     def __decide_einsum_computation(self) -> str:
         if self.top_k == self.num_experts:
             return "bi,kij->bkj"
@@ -572,13 +586,6 @@ class GeneratorMixture(ParameterMixture):
                 "`compute_mixture` requires an `input_batch` argument when using `GeneratorMixture`."
             )
         vectors = torch.einsum(self.einsum_vector_operation, input_batch, weight_params)
-        # WARNING: if the scaler implemented in `__compute_outer_product`
-        # does not work when testing implement a way to normalize the
-        # inputs here `outer_product` here
-        # if self.normalize_vectors:
-        #     self._normalize_vectors(
-        #         input_vectors, output_vectors, diagonal_vectors, bias_vectors
-        #     )
         return vectors
 
     def __generate_weight_parameters(
@@ -610,15 +617,47 @@ class GeneratorMixture(ParameterMixture):
         self,
         input_vectors: Tensor,
         output_vectors: Tensor,
-    ):
-        # WARNING: Ensure the scaler works later when testing if this
-        # not work add the normal normalization in `__compute_einsum` method
-        if self.input_dim > self.output_dim:
-            scaled_input_vectors = input_vectors * self.diagonal_dim**-0.5
-            return torch.einsum("bij,bik->bijk", scaled_input_vectors, output_vectors)
+    ) -> Tensor:
+        normalize_before = False
+        if normalize_before:
+            input_vectors = self.__normalize_outer_product_parameters(
+                input_vectors,
+                OuterProductNormOptions.TANH,
+            )
+            output_vectors = self.__normalize_outer_product_parameters(
+                input_vectors,
+                OuterProductNormOptions.TANH,
+            )
 
-        scaled_output_vectors = output_vectors * self.diagonal_dim**-0.5
-        return torch.einsum("bij,bik->bijk", input_vectors, scaled_output_vectors)
+        outer_product = torch.einsum("bij,bik->bijk", input_vectors, output_vectors)
+
+        if normalize_before:
+            return outer_product
+
+        return self.__normalize_outer_product_parameters(
+            outer_product, OuterProductNormOptions.TANH
+        )
+
+    def __normalize_outer_product_parameters(
+        self,
+        outer_product: Tensor,
+        outer_product_norm_option: OuterProductNormOptions | None,
+    ) -> Tensor:
+        match outer_product_norm_option:
+            case OuterProductNormOptions.RELU:
+                return F.relu(outer_product)
+            case OuterProductNormOptions.TANH:
+                return F.tanh(outer_product)
+            case OuterProductNormOptions.SIGMOID:
+                return F.sigmoid(outer_product)
+            case OuterProductNormOptions.LAYER_NORM:
+                # TODO: Layer usualy has a scalar and bias that is applied
+                # to the normalized output. In this case i need in the future
+                # to select the scalar and bias based on the parameters
+                # chosen by the router and sampler
+                return self.outper_product_norm(outer_product)
+            case _:
+                return outer_product
 
     def __compute_anti_diagonal_matrix(
         self,
