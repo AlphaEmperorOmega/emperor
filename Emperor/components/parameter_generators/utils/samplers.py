@@ -245,9 +245,10 @@ class SamplerBase(Module):
         )
 
     def _normalize_probabilities(self, probabilities: Tensor) -> Tensor:
-        if not self.normalize_probabilities_flag:
-            return probabilities
-        return probabilities / (torch.sum(probabilities, dim=-1, keepdim=True) + 1e-6)
+        if self.normalize_probabilities_flag:
+            denominator = torch.sum(probabilities, dim=-1, keepdim=True) + 1e-6
+            return probabilities / denominator
+        return probabilities
 
 
 class SamplerSparse(SamplerBase):
