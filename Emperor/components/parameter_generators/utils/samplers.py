@@ -237,10 +237,12 @@ class SamplerBase(Module):
     ) -> float:
         return 0.0
 
-    def _probability_sampling_strategy(
-        self, probabilities_matrix: Tensor
-    ) -> Tensor | tuple[Tensor, None]:
-        return probabilities_matrix, None
+    def _sample_probabilities_and_indices(
+        self, *args, **kwargs
+    ) -> tuple[Tensor, Tensor | None]:
+        raise NotImplementedError(
+            "`_sample_probabilities_and_indices` has to be implemented in classes that inherit `SamplerBase`."
+        )
 
     def _normalize_probabilities(self, probabilities: Tensor) -> Tensor:
         if not self.normalize_probabilities_flag:
