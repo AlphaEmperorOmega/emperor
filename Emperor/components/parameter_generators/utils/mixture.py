@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch import Tensor
 from torch.nn import Parameter
 import torch.nn.functional as F
-from Emperor.base.utils import Module, DataClassBase, randn, arange, reshape
+from Emperor.base.utils import Module, DataClassBase, arange, reshape
 from dataclasses import dataclass, field
 
 from typing import TYPE_CHECKING, Tuple
@@ -48,10 +48,10 @@ class MixtureConfig(DataClassBase):
         default=None,
         metadata={"help": "Router output dimension"},
     )
-    cross_diagonal_flag: bool | None = field(
+    dynamic_diagonal_params_flag: bool | None = field(
         default=None,
         metadata={
-            "help": "Used for `VectorChoiceMixture` to enable cross diagonal matrices when computing weights"
+            "help": "Used for `GeneratorMixture` to enable cross diagonal matrices when computing weights"
         },
     )
 
@@ -73,7 +73,7 @@ class MixtureBase(Module):
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
         self.bias_parameters_flag = self.cfg.bias_parameters_flag
         self.num_experts = self.cfg.num_experts
-        self.cross_diagonal_flag = self.cfg.cross_diagonal_flag
+        self.dynamic_diagonal_params_flag = self.cfg.dynamic_diagonal_params_flag
         assert self.depth_dim == self.num_experts, (
             "The `depth_dim` needs to be equal with `num_experts` since this is the dimension the router creates a distribution over."
         )
@@ -150,14 +150,12 @@ class ParameterMixture(MixtureBase):
         *args,
     ) -> tuple[Tensor, Tensor | None]:
         selected_params = self._select_parameters(weight_indices, bias_indices)
-
         weight_mixture, bias_mixture = self._compute_parameter_mixture(
             *selected_params,
             weight_probs,
             bias_probs,
             *args,
         )
-
         return weight_mixture, bias_mixture
 
     def _compute_mixture_full(
