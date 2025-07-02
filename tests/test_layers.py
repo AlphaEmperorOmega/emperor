@@ -92,10 +92,10 @@ class TestVectorParameterLayer(unittest.TestCase):
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
-                coefficient_of_variation_weight=SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT,
-                switch_weight=SAMPLER_SWITCH_WEIGHT,
-                zero_centred_weight=SAMPLER_ZERO_CENTRED_WEIGHT,
-                mutual_information_weight=SAMPLER_MUTUAL_INFORMATION_WEIGHT,
+                coefficient_of_variation_loss_weight=SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT,
+                switch_loss_weight=SAMPLER_SWITCH_WEIGHT,
+                zero_centred_loss_weight=SAMPLER_ZERO_CENTRED_WEIGHT,
+                mutual_information_loss_weight=SAMPLER_MUTUAL_INFORMATION_WEIGHT,
             ),
             mixture_model_config=MixtureConfig(
                 input_dim=MIXTURE_INPUT_DIM,
@@ -253,7 +253,7 @@ class TestVectorParameterLayer(unittest.TestCase):
         c.sampler_model_config.top_k = c.mixture_model_config.depth_dim
         c.mixture_model_config.top_k = c.mixture_model_config.depth_dim
         c.mixture_model_config.weighted_parameters_flag = True
-        c.sampler_model_config.mutual_information_weight = 0.0
+        c.sampler_model_config.mutual_information_loss_weight = 0.0
         m = VectorParameterLayer(c)
 
         batch_size = 2
@@ -682,10 +682,10 @@ class TestMatrixParameterLayer(unittest.TestCase):
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
-                coefficient_of_variation_weight=COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
-                switch_weight=SWITCH_LOSS_WEIGHT,
-                zero_centred_weight=ZERO_CENTERED_LOSS_WEIGHT,
-                mutual_information_weight=MUTUAL_INFORMATION_LOSS_WEIGHT,
+                coefficient_of_variation_loss_weight=COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
+                switch_loss_weight=SWITCH_LOSS_WEIGHT,
+                zero_centred_loss_weight=ZERO_CENTERED_LOSS_WEIGHT,
+                mutual_information_loss_weight=MUTUAL_INFORMATION_LOSS_WEIGHT,
             ),
             mixture_model_config=MixtureConfig(
                 input_dim=MIXTURE_INPUT_DIM,
@@ -1178,10 +1178,10 @@ class TestGeneratorParameterLayer(unittest.TestCase):
                 normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
                 noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
-                coefficient_of_variation_weight=0.0,
-                switch_weight=0.0,
-                zero_centred_weight=0.0,
-                mutual_information_weight=0.0,
+                coefficient_of_variation_loss_weight=0.0,
+                switch_loss_weight=0.0,
+                zero_centred_loss_weight=0.0,
+                mutual_information_loss_weight=0.0,
             ),
             mixture_model_config=MixtureConfig(
                 input_dim=MIXTURE_INPUT_DIM,

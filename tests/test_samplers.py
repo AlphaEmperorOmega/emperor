@@ -30,10 +30,10 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=False,
             num_experts=5,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
 
     def test__init_with_cfg(self):
@@ -50,10 +50,10 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
     def test__update_accumulated_statistics(self):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.1,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.1,
         )
         m = SamplerAuxiliaryLosses(c, overrides)
 
@@ -79,10 +79,10 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
     def test__reset_all_accumulations(self):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.1,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.1,
         )
         m = SamplerAuxiliaryLosses(c, overrides)
 
@@ -109,10 +109,10 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
     def test__compute_total_loss(self):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
-            coefficient_of_variation_weight=1.0,
-            switch_weight=1.0,
-            zero_centred_weight=1.0,
-            mutual_information_weight=1.0,
+            coefficient_of_variation_loss_weight=1.0,
+            switch_loss_weight=1.0,
+            zero_centred_loss_weight=1.0,
+            mutual_information_loss_weight=1.0,
         )
         m = SamplerAuxiliaryLosses(c, overrides)
 
@@ -133,10 +133,10 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
     def test__get_auxiliary_loss_and_clear(self):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.1,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.1,
         )
         m = SamplerAuxiliaryLosses(c, overrides)
 
@@ -173,10 +173,10 @@ class TestProbabilitySampler(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=False,
             num_experts=5,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
 
     def test__init_with_cfg(self):
@@ -197,10 +197,10 @@ class TestProbabilitySampler(unittest.TestCase):
             num_topk_samples=2,
             normalize_probabilities_flag=True,
             num_experts=10,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.1,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.1,
         )
 
         sampler = SamplerBase(config)
@@ -484,10 +484,10 @@ class TestSamplerSparse(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=False,
             num_experts=5,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
 
     def test__sample_probabilities_and_indices(self):
@@ -510,10 +510,10 @@ class TestSamplerSparse(unittest.TestCase):
     def test__get_probabilities_and_indices(self):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerSparse(c, overrides)
 
@@ -543,10 +543,10 @@ class TestSamplerSparse(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
             noisy_topk_flag=True,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerSparse(c, overrides)
 
@@ -577,10 +577,10 @@ class TestSamplerSparse(unittest.TestCase):
         overrides = SamplerConfig(
             noisy_topk_flag=True,
             threshold=0.2,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerSparse(c, overrides)
 
@@ -613,10 +613,10 @@ class TestSamplerSparse(unittest.TestCase):
             threshold=0.8,
             filter_above_threshold=True,
             normalize_probabilities_flag=False,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.1,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.1,
         )
         m = SamplerSparse(c, overrides)
 
@@ -678,10 +678,10 @@ class TestSamplerSparse(unittest.TestCase):
             threshold=0.8,
             filter_above_threshold=True,
             normalize_probabilities_flag=False,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.1,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.1,
         )
         m = SamplerSparse(c, overrides)
 
@@ -719,10 +719,10 @@ class TestSamplerTopk(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=False,
             num_experts=5,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
 
     def test__sample_probabilities_and_indices(self):
@@ -746,10 +746,10 @@ class TestSamplerTopk(unittest.TestCase):
     def test__get_probabilities_and_indices(self):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerTopk(c, overrides)
 
@@ -782,10 +782,10 @@ class TestSamplerTopk(unittest.TestCase):
         overrides = SamplerConfig(
             top_k=3,
             noisy_topk_flag=True,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerTopk(c, overrides)
 
@@ -819,10 +819,10 @@ class TestSamplerTopk(unittest.TestCase):
             top_k=3,
             noisy_topk_flag=True,
             threshold=0.2,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerTopk(c, overrides)
 
@@ -858,10 +858,10 @@ class TestSamplerTopk(unittest.TestCase):
             threshold=0.8,
             filter_above_threshold=True,
             normalize_probabilities_flag=True,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.1,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.1,
         )
         m = SamplerTopk(c, overrides)
 
@@ -925,10 +925,10 @@ class TestSamplerTopk(unittest.TestCase):
             threshold=0.8,
             filter_above_threshold=True,
             normalize_probabilities_flag=True,
-            coefficient_of_variation_weight=0.1,
-            switch_weight=0.1,
-            zero_centred_weight=0.1,
-            mutual_information_weight=0.1,
+            coefficient_of_variation_loss_weight=0.1,
+            switch_loss_weight=0.1,
+            zero_centred_loss_weight=0.1,
+            mutual_information_loss_weight=0.1,
         )
         m = SamplerTopk(c, overrides)
 
@@ -966,10 +966,10 @@ class TestSamplerFull(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=False,
             num_experts=5,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
 
     def test__sample_probabilities_and_indices(self):
@@ -992,10 +992,10 @@ class TestSamplerFull(unittest.TestCase):
     def test__get_probabilities_and_indices(self):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerFull(c, overrides)
 
@@ -1026,10 +1026,10 @@ class TestSamplerFull(unittest.TestCase):
         overrides = SamplerConfig(
             top_k=5,
             noisy_topk_flag=True,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerFull(c, overrides)
 
@@ -1061,10 +1061,10 @@ class TestSamplerFull(unittest.TestCase):
             top_k=5,
             noisy_topk_flag=True,
             threshold=0.2,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerFull(c, overrides)
 
@@ -1098,10 +1098,10 @@ class TestSamplerFull(unittest.TestCase):
             threshold=0.8,
             filter_above_threshold=True,
             normalize_probabilities_flag=True,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
         m = SamplerFull(c, overrides)
 
@@ -1175,10 +1175,10 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=False,
             num_experts=5,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
-            mutual_information_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
         )
 
     def test__init_no_config(self):
@@ -1190,10 +1190,10 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=False,
             num_experts=10,
-            coefficient_of_variation_weight=0.5,
-            switch_weight=0.5,
-            zero_centred_weight=0.5,
-            mutual_information_weight=0.5,
+            coefficient_of_variation_loss_weight=0.5,
+            switch_loss_weight=0.5,
+            zero_centred_loss_weight=0.5,
+            mutual_information_loss_weight=0.5,
         )
         model = SamplerModel(config)
         self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
@@ -1229,7 +1229,7 @@ class TestSamplerModel(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
             threshold=0.0,
-            mutual_information_weight=0.0,
+            mutual_information_loss_weight=0.0,
             #############################
             top_k=1,
             num_topk_samples=0,
@@ -1237,9 +1237,9 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=True,
             num_experts=10,
-            coefficient_of_variation_weight=0.5,
-            switch_weight=0.5,
-            zero_centred_weight=0.5,
+            coefficient_of_variation_loss_weight=0.5,
+            switch_loss_weight=0.5,
+            zero_centred_loss_weight=0.5,
         )
         m = SamplerModel(c, overrides)
 
@@ -1261,7 +1261,7 @@ class TestSamplerModel(unittest.TestCase):
 
         overrides = SamplerConfig(
             threshold=0.1,
-            mutual_information_weight=0.1,
+            mutual_information_loss_weight=0.1,
             #############################
             top_k=1,
             num_topk_samples=0,
@@ -1269,9 +1269,9 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=False,
             noisy_topk_flag=True,
             num_experts=10,
-            coefficient_of_variation_weight=0.5,
-            switch_weight=0.5,
-            zero_centred_weight=0.5,
+            coefficient_of_variation_loss_weight=0.5,
+            switch_loss_weight=0.5,
+            zero_centred_loss_weight=0.5,
         )
         m = SamplerModel(c, overrides)
 
@@ -1295,7 +1295,7 @@ class TestSamplerModel(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
             threshold=0.0,
-            mutual_information_weight=0.0,
+            mutual_information_loss_weight=0.0,
             #############################
             top_k=3,
             num_topk_samples=1,
@@ -1303,9 +1303,9 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=True,
             noisy_topk_flag=True,
             num_experts=10,
-            coefficient_of_variation_weight=0.5,
-            switch_weight=0.5,
-            zero_centred_weight=0.5,
+            coefficient_of_variation_loss_weight=0.5,
+            switch_loss_weight=0.5,
+            zero_centred_loss_weight=0.5,
         )
         m = SamplerModel(c, overrides)
 
@@ -1331,7 +1331,7 @@ class TestSamplerModel(unittest.TestCase):
 
         overrides = SamplerConfig(
             threshold=0.1,
-            mutual_information_weight=0.1,
+            mutual_information_loss_weight=0.1,
             #############################
             top_k=3,
             num_topk_samples=1,
@@ -1339,9 +1339,9 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=True,
             noisy_topk_flag=True,
             num_experts=10,
-            coefficient_of_variation_weight=0.5,
-            switch_weight=0.5,
-            zero_centred_weight=0.5,
+            coefficient_of_variation_loss_weight=0.5,
+            switch_loss_weight=0.5,
+            zero_centred_loss_weight=0.5,
         )
         m = SamplerModel(c, overrides)
 
@@ -1369,7 +1369,7 @@ class TestSamplerModel(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = SamplerConfig(
             threshold=0.0,
-            mutual_information_weight=0.0,
+            mutual_information_loss_weight=0.0,
             #############################
             top_k=10,
             num_topk_samples=0,
@@ -1377,9 +1377,9 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=True,
             noisy_topk_flag=True,
             num_experts=10,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
         )
         m = SamplerModel(c, overrides)
 
@@ -1404,7 +1404,7 @@ class TestSamplerModel(unittest.TestCase):
 
         overrides = SamplerConfig(
             threshold=0.1,
-            mutual_information_weight=0.0,
+            mutual_information_loss_weight=0.0,
             #############################
             top_k=10,
             num_topk_samples=0,
@@ -1412,9 +1412,9 @@ class TestSamplerModel(unittest.TestCase):
             normalize_probabilities_flag=True,
             noisy_topk_flag=True,
             num_experts=10,
-            coefficient_of_variation_weight=0.0,
-            switch_weight=0.0,
-            zero_centred_weight=0.0,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
         )
         m = SamplerModel(c, overrides)
 
