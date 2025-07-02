@@ -618,14 +618,14 @@ class GeneratorMixture(ParameterMixture):
         input_vectors: Tensor,
         output_vectors: Tensor,
     ) -> Tensor:
-        normalize_before = False
+        normalize_before = True
         if normalize_before:
             input_vectors = self.__normalize_outer_product_parameters(
                 input_vectors,
                 OuterProductNormOptions.TANH,
             )
             output_vectors = self.__normalize_outer_product_parameters(
-                input_vectors,
+                output_vectors,
                 OuterProductNormOptions.TANH,
             )
 
