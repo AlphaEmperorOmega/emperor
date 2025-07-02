@@ -69,25 +69,25 @@ class SamplerConfig(DataClassBase):
         default=None,
         metadata={"help": "Router output dimension"},
     )
-    coefficient_of_variation_weight: float | None = field(
+    coefficient_of_variation_loss_weight: float | None = field(
         default=None,
         metadata={
             "help": "Scaling factor for the coefficient of variation loss. Higher values promote consistent variance across outputs. Set to `0.0` to disable this regularization term."
         },
     )
-    switch_weight: float | None = field(
+    switch_loss_weight: float | None = field(
         default=None,
         metadata={
             "help": "Scaling factor for the switch loss which encourages distinct transitions between parameter states. Higher values lead to more binary/discrete behavior. Set to `0.0` to disable."
         },
     )
-    zero_centred_weight: float | None = field(
+    zero_centred_loss_weight: float | None = field(
         default=None,
         metadata={
             "help": "Scaling factor for the zero-centering loss which penalizes deviations from zero mean. Higher values push parameter distributions to be centered around zero. Set to `0.0` to disable."
         },
     )
-    mutual_information_weight: float | None = field(
+    mutual_information_loss_weight: float | None = field(
         default=None,
         metadata={
             "help": "Scaling factor for the mutual information loss which promotes diversity and independence between parameters. Higher values reduce redundancy in parameter space. Set to `0.0` to disable."
@@ -113,10 +113,10 @@ class SamplerBase(Module):
         self.num_topk_samples = self.cfg.num_topk_samples
         self.normalize_probabilities_flag = self.cfg.normalize_probabilities_flag
         self.num_experts = self.cfg.num_experts
-        self.coefficient_of_variation_weight = self.cfg.coefficient_of_variation_weight
-        self.switch_weight = self.cfg.switch_weight
-        self.zero_centred_weight = self.cfg.zero_centred_weight
-        self.mutual_information_weight = self.cfg.mutual_information_weight
+        self.coefficient_of_variation_loss_weight = self.cfg.coefficient_of_variation_loss_weight
+        self.switch_loss_weight = self.cfg.switch_loss_weight
+        self.zero_centred_loss_weight = self.cfg.zero_centred_loss_weight
+        self.mutual_information_loss_weight = self.cfg.mutual_information_loss_weight
         self.__validate_input_parameters()
 
         self.noise_epsilon = 1e-2
@@ -409,14 +409,14 @@ class SamplerFull(SamplerBase):
         assert self.num_topk_samples == 0, (
             "`SamplerFull` does not randomly sample `top_k` experts"
         )
-        assert self.coefficient_of_variation_weight == 0.0, (
+        assert self.coefficient_of_variation_loss_weight == 0.0, (
             "`SamplerFull` does not use `CoefficientOfVariationLoss`"
         )
-        assert self.switch_weight == 0.0, "`SamplerFull` does not use `SwitchLoss`"
-        assert self.zero_centred_weight == 0.0, (
+        assert self.switch_loss_weight == 0.0, "`SamplerFull` does not use `SwitchLoss`"
+        assert self.zero_centred_loss_weight == 0.0, (
             "`SamplerFull` does not use `ZeroCentredLoss`"
         )
-        assert self.mutual_information_weight == 0.0, (
+        assert self.mutual_information_loss_weight == 0.0, (
             "`SamplerFull` does not use `MutualInformationLoss`"
         )
 
@@ -488,18 +488,18 @@ class SamplerAuxiliaryLosses(Module):
         self.cfg: "SamplerConfig" = self._overwrite_config(config, overrides)
 
         self.num_experts = self.cfg.num_experts
-        self.coefficient_of_variation_weight = self.cfg.coefficient_of_variation_weight
-        self.switch_weight = self.cfg.switch_weight
-        self.zero_centred_weight = self.cfg.zero_centred_weight
-        self.mutual_information_weight = self.cfg.mutual_information_weight
+        self.coefficient_of_variation_loss_weight = self.cfg.coefficient_of_variation_loss_weight
+        self.switch_loss_weight = self.cfg.switch_loss_weight
+        self.zero_centred_loss_weight = self.cfg.zero_centred_loss_weight
+        self.mutual_information_loss_weight = self.cfg.mutual_information_loss_weight
 
         self.coefficient_of_variation_loss = CoefficientOfVariationLoss(
-            self.coefficient_of_variation_weight
+            self.coefficient_of_variation_loss_weight
         )
-        self.switch_loss = SwitchLoss(self.num_experts, self.switch_weight)
-        self.zero_centred_loss = ZeroCentredLoss(self.zero_centred_weight)
+        self.switch_loss = SwitchLoss(self.num_experts, self.switch_loss_weight)
+        self.zero_centred_loss = ZeroCentredLoss(self.zero_centred_loss_weight)
         self.mutual_information_loss = MutualInformationLoss(
-            self.mutual_information_weight
+            self.mutual_information_loss_weight
         )
 
     def update_accumulated_statistics(
