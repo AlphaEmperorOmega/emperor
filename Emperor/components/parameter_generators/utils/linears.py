@@ -87,7 +87,7 @@ class DynamicDiagonalLinearLayer(LinearLayer):
             self.anti_diagonal_flag,
             self.dynamic_bias_flag,
             self.weight_params,
-            self.bias_params + 2,
+            self.bias_params,
         )
 
     def forward(self, input_batch: Tensor) -> Tensor:
