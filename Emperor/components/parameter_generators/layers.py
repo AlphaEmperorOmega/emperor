@@ -116,7 +116,7 @@ class ParameterLayerBase(Module):
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         weight_probabilities, weight_indices = self._compute_probabilities_and_indices(
-            input_batch, False, skip_mask
+            input_batch, skip_mask=skip_mask
         )
         bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
             input_batch, skip_mask
@@ -310,9 +310,10 @@ class GeneratorParameterLayer(ParameterLayerBase):
     def _generate_parameters(
         self,
         input_batch: Tensor,
+        skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         weight_probabilities, weight_indices = self._compute_probabilities_and_indices(
-            input_batch
+            input_batch,
         )
         bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
             input_batch
