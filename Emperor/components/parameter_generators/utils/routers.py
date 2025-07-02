@@ -34,7 +34,7 @@ class RouterConfig(DataClassBase):
         metadata={"help": "Router output dimension"},
     )
     residual_flag: bool | None = field(
-        default=False,
+        default=None,
         metadata={
             "help": "If true when you have 3 or more layers a residual connection is added between layers"
         },
