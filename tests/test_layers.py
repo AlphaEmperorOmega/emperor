@@ -83,6 +83,7 @@ class TestVectorParameterLayer(unittest.TestCase):
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
                 diagonal_linear_model_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
+                residual_flag=False,
             ),
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
@@ -673,6 +674,7 @@ class TestMatrixParameterLayer(unittest.TestCase):
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
                 diagonal_linear_model_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
+                residual_flag=False,
             ),
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
@@ -1169,6 +1171,7 @@ class TestGeneratorParameterLayer(unittest.TestCase):
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
                 diagonal_linear_model_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
+                residual_flag=False,
             ),
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
