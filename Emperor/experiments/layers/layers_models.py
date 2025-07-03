@@ -2,10 +2,11 @@ import copy
 from typing import Callable, List
 import torch.nn as nn
 from torch import Tensor
-from Emperor.base.utils import LayerBlock
 from Emperor.base.models import Classifier
 
 from typing import TYPE_CHECKING
+
+from Emperor.components.parameter_generators.utils.base import LayerBlock
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -34,8 +35,10 @@ class SingleLayerClassifierModel(ClassifierExperiment):
 
     def forward(self, input_batch: Tensor):
         output = self.model(input_batch)
-        auxiliary_loss = 0.0
-        return output, auxiliary_loss
+        if isinstance(output, tuple):
+            output_tensor, skip_mask, auxiliary_loss = output
+            return output_tensor, auxiliary_loss
+        return output, 0.0
 
 
 class MultiLayerClassifierModel(ClassifierExperiment):
