@@ -42,7 +42,7 @@ class MixtureConfig(DataClassBase):
     bias_parameters_flag: bool | None = field(
         default=None,
         metadata={
-            "help": "Inidicates the top-k probs and indices to be selected from a distribution"
+            "help": "When `True` parameter `bias_parameters` will aslo be generated with the `weight_parameters`"
         },
     )
     num_experts: int | None = field(
@@ -52,7 +52,7 @@ class MixtureConfig(DataClassBase):
     dynamic_diagonal_params_flag: bool | None = field(
         default=None,
         metadata={
-            "help": "Used for `GeneratorMixture` to enable cross diagonal matrices when computing weights"
+            "help": "Used for `GeneratorMixture`. When `True` `anti diagonal parameters` are added to every set or parameters for the topk samplers. Diagonal parameters are added by default"
         },
     )
 
@@ -471,7 +471,9 @@ class GeneratorMixture(ParameterMixture):
 
         selected_anti_diagonal_params = None
         if self.dynamic_diagonal_params_flag:
-            selected_anti_diagonal_params = self.diagonal_weight_bank[weight_indices]
+            selected_anti_diagonal_params = self.anti_diagonal_weight_bank[
+                weight_indices
+            ]
 
         selected_bias_params = None
         if self.bias_parameters_flag:
