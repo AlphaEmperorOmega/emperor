@@ -10,6 +10,9 @@ from Emperor.components.parameter_generators.layers import (
     VectorParameterLayer,
     MatrixParameterLayer,
 )
+from Emperor.components.parameter_generators.utils.behaviours import (
+    DynamicDiagonalParametersBehaviour,
+)
 from Emperor.components.parameter_generators.utils.mixture import (
     MixtureConfig,
 )
@@ -111,6 +114,7 @@ class TestVectorParameterLayer(unittest.TestCase):
             parameter_generator_model_config=ParameterLayerConfig(
                 bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
                 time_tracker_flag=False,
+                dynamic_diagonal_params_flag=False,
             ),
         )
 
@@ -612,6 +616,26 @@ class TestVectorParameterLayer(unittest.TestCase):
             ],
         )
 
+    def test__create_diagonal_params_model__False(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=False,
+        )
+        m = VectorParameterLayer(c, overrides)
+
+        self.assertIsNone(m.dyagonal_params_model)
+
+    def test__create_diagonal_params_model__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=True,
+        )
+        m = VectorParameterLayer(c, overrides)
+
+        self.assertIsInstance(
+            m.dyagonal_params_model, DynamicDiagonalParametersBehaviour
+        )
+
 
 class TestMatrixParameterLayer(unittest.TestCase):
     def setUp(self):
@@ -1109,6 +1133,26 @@ class TestMatrixParameterLayer(unittest.TestCase):
             ],
         )
 
+    def test__create_diagonal_params_model__False(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=False,
+        )
+        m = MatrixParameterLayer(c, overrides)
+
+        self.assertIsNone(m.dyagonal_params_model)
+
+    def test__create_diagonal_params_model__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=True,
+        )
+        m = MatrixParameterLayer(c, overrides)
+
+        self.assertIsInstance(
+            m.dyagonal_params_model, DynamicDiagonalParametersBehaviour
+        )
+
 
 class TestGeneratorParameterLayer(unittest.TestCase):
     def setUp(self):
@@ -1513,3 +1557,23 @@ class TestGeneratorParameterLayer(unittest.TestCase):
             # print("Actual result: \n", actual_output)
             # print()
             self.assertTrue(torch.allclose(expected_output, actual_output))
+
+    def test__create_diagonal_params_model__False(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=False,
+        )
+        m = GeneratorParameterLayer(c, overrides)
+
+        self.assertIsNone(m.dyagonal_params_model)
+
+    def test__create_diagonal_params_model__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=True,
+        )
+        m = GeneratorParameterLayer(c, overrides)
+
+        self.assertIsInstance(
+            m.dyagonal_params_model, DynamicDiagonalParametersBehaviour
+        )
