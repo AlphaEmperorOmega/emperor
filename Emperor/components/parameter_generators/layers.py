@@ -56,6 +56,8 @@ class ParameterLayerBase(Module):
         config = getattr(cfg, "parameter_generator_model_config", cfg)
         self.cfg: "ParameterLayerConfig" = self._overwrite_config(config, overrides)
 
+        self.input_dim = cfg.mixture_model_config.input_dim
+        self.output_dim = cfg.mixture_model_config.output_dim
         self.bias_parameters_flag = self.cfg.bias_parameters_flag
         self.time_tracker_flag = self.cfg.time_tracker_flag
         self.dynamic_diagonal_params_flag = self.cfg.dynamic_diagonal_params_flag
@@ -63,15 +65,16 @@ class ParameterLayerBase(Module):
 
     def __create_diagonal_params_model(
         self,
-    ) -> DynamicDiagonalParametersBehaviour | None:
-        if self.dynamic_diagonal_params_flag:
-            return DynamicDiagonalParametersBehaviour(
-                self.input_dim,
-                self.output_dim,
-                anti_diagonal_flag=True,
-                dynamic_bias_flag=True,
-            )
-        return None
+    ) -> "DynamicDiagonalParametersBehaviour | None":
+        if not self.dynamic_diagonal_params_flag:
+            return None
+
+        return DynamicDiagonalParametersBehaviour(
+            self.input_dim,
+            self.output_dim,
+            anti_diagonal_flag=True,
+            dynamic_bias_flag=True,
+        )
 
     def forward(
         self,
