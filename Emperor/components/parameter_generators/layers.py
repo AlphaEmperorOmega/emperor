@@ -137,7 +137,7 @@ class ParameterLayerBase(Module):
     ) -> tuple[Tensor, Tensor | None]:
         if self.dynamic_diagonal_params_flag:
             self.dyagonal_params_model.set_parameters(weight_params, bias_params)
-            return self.dynamic_diagonal_params_model(input_batch)
+            return self.dyagonal_params_model(input_batch)
         return weight_params, bias_params
 
     def __apply_generated_weights(
