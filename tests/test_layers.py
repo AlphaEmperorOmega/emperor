@@ -636,6 +636,53 @@ class TestVectorParameterLayer(unittest.TestCase):
             m.dyagonal_params_model, DynamicDiagonalParametersBehaviour
         )
 
+    def test__add_dynamic_diagonal_params__dynamic_diagonal_params_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=False,
+        )
+        m = VectorParameterLayer(c, overrides)
+
+        batch_size = 2
+        input_dim = c.mixture_model_config.input_dim
+        output_dim = c.mixture_model_config.output_dim
+        shape = (2, input_dim, output_dim)
+        input_batch = torch.randn(shape)
+        input_weight_params = torch.ones(shape)
+        shape = (batch_size, output_dim)
+        input_bias_params = torch.ones(shape)
+
+        weight_params, bias_params = m._ParameterLayerBase__add_dynamic_diagonal_params(
+            input_batch, input_weight_params, input_bias_params
+        )
+        self.assertTrue(torch.allclose(weight_params, input_weight_params))
+        self.assertTrue(torch.allclose(bias_params, input_bias_params))
+
+    def test__add_dynamic_diagonal_params__dynamic_diagonal_params_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=True,
+        )
+        c.mixture_model_config.input_dim = 5
+        c.mixture_model_config.output_dim = 5
+        m = VectorParameterLayer(c, overrides)
+
+        batch_size = 2
+        input_dim = c.mixture_model_config.input_dim
+        output_dim = c.mixture_model_config.output_dim
+        shape = (batch_size, input_dim)
+        input_batch = torch.randn(shape)
+        shape = (batch_size, input_dim, output_dim)
+        input_weight_params = torch.ones(shape)
+        shape = (batch_size, output_dim)
+        input_bias_params = torch.ones(shape)
+
+        weight_params, bias_params = m._ParameterLayerBase__add_dynamic_diagonal_params(
+            input_batch, input_weight_params, input_bias_params
+        )
+        self.assertFalse(torch.all(weight_params == 1.0))
+        self.assertFalse(torch.all(bias_params == 1.0))
+
 
 class TestMatrixParameterLayer(unittest.TestCase):
     def setUp(self):
@@ -1153,6 +1200,53 @@ class TestMatrixParameterLayer(unittest.TestCase):
             m.dyagonal_params_model, DynamicDiagonalParametersBehaviour
         )
 
+    def test__add_dynamic_diagonal_params__dynamic_diagonal_params_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=False,
+        )
+        m = MatrixParameterLayer(c, overrides)
+
+        batch_size = 2
+        input_dim = c.mixture_model_config.input_dim
+        output_dim = c.mixture_model_config.output_dim
+        shape = (2, input_dim, output_dim)
+        input_batch = torch.randn(shape)
+        input_weight_params = torch.ones(shape)
+        shape = (batch_size, output_dim)
+        input_bias_params = torch.ones(shape)
+
+        weight_params, bias_params = m._ParameterLayerBase__add_dynamic_diagonal_params(
+            input_batch, input_weight_params, input_bias_params
+        )
+        self.assertTrue(torch.allclose(weight_params, input_weight_params))
+        self.assertTrue(torch.allclose(bias_params, input_bias_params))
+
+    def test__add_dynamic_diagonal_params__dynamic_diagonal_params_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=True,
+        )
+        c.mixture_model_config.input_dim = 5
+        c.mixture_model_config.output_dim = 5
+        m = MatrixParameterLayer(c, overrides)
+
+        batch_size = 2
+        input_dim = c.mixture_model_config.input_dim
+        output_dim = c.mixture_model_config.output_dim
+        shape = (batch_size, input_dim)
+        input_batch = torch.randn(shape)
+        shape = (batch_size, input_dim, output_dim)
+        input_weight_params = torch.ones(shape)
+        shape = (batch_size, output_dim)
+        input_bias_params = torch.ones(shape)
+
+        weight_params, bias_params = m._ParameterLayerBase__add_dynamic_diagonal_params(
+            input_batch, input_weight_params, input_bias_params
+        )
+        self.assertFalse(torch.all(weight_params == 1.0))
+        self.assertFalse(torch.all(bias_params == 1.0))
+
 
 class TestGeneratorParameterLayer(unittest.TestCase):
     def setUp(self):
@@ -1577,3 +1671,50 @@ class TestGeneratorParameterLayer(unittest.TestCase):
         self.assertIsInstance(
             m.dyagonal_params_model, DynamicDiagonalParametersBehaviour
         )
+
+    def test__add_dynamic_diagonal_params__dynamic_diagonal_params_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=False,
+        )
+        m = GeneratorParameterLayer(c, overrides)
+
+        batch_size = 2
+        input_dim = c.mixture_model_config.input_dim
+        output_dim = c.mixture_model_config.output_dim
+        shape = (2, input_dim, output_dim)
+        input_batch = torch.randn(shape)
+        input_weight_params = torch.ones(shape)
+        shape = (batch_size, output_dim)
+        input_bias_params = torch.ones(shape)
+
+        weight_params, bias_params = m._ParameterLayerBase__add_dynamic_diagonal_params(
+            input_batch, input_weight_params, input_bias_params
+        )
+        self.assertTrue(torch.allclose(weight_params, input_weight_params))
+        self.assertTrue(torch.allclose(bias_params, input_bias_params))
+
+    def test__add_dynamic_diagonal_params__dynamic_diagonal_params_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        overrides = ParameterLayerConfig(
+            dynamic_diagonal_params_flag=True,
+        )
+        c.mixture_model_config.input_dim = 5
+        c.mixture_model_config.output_dim = 5
+        m = GeneratorParameterLayer(c, overrides)
+
+        batch_size = 2
+        input_dim = c.mixture_model_config.input_dim
+        output_dim = c.mixture_model_config.output_dim
+        shape = (batch_size, input_dim)
+        input_batch = torch.randn(shape)
+        shape = (batch_size, input_dim, output_dim)
+        input_weight_params = torch.ones(shape)
+        shape = (batch_size, output_dim)
+        input_bias_params = torch.ones(shape)
+
+        weight_params, bias_params = m._ParameterLayerBase__add_dynamic_diagonal_params(
+            input_batch, input_weight_params, input_bias_params
+        )
+        self.assertFalse(torch.all(weight_params == 1.0))
+        self.assertFalse(torch.all(bias_params == 1.0))
