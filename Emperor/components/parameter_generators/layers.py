@@ -174,14 +174,12 @@ class ParameterLayerBase(Module):
         skip_mask: Tensor | None = None,
     ):
         if compute_bias_flag:
-            logits = self._compute_logits(input_batch)
+            logits = self._compute_logits(input_batch, compute_bias_flag)
             return self._sample_probabilities_and_indices(
                 logits, skip_mask, compute_bias_flag
             )
         logits = self._compute_logits(input_batch)
-        return self._sample_probabilities_and_indices(
-            logits, skip_mask, compute_bias_flag
-        )
+        return self._sample_probabilities_and_indices(logits, skip_mask)
 
     def _compute_logits(
         self,
@@ -231,16 +229,17 @@ class VectorParameterLayer(ParameterLayerBase):
         super().__init__(cfg, overrides)
 
         self.weight_router: VectorRouterModel = VectorRouterModel(cfg)
-        self.bias_router = self._init_bias_router_model(cfg)
         self.weight_sampler: SamplerModel = SamplerModel(cfg)
         self.bias_sampler: SamplerModel = SamplerModel(cfg)
         self.mixture: VectorMixture = VectorMixture(cfg)
+        self.bias_router = self._init_bias_router_model(cfg)
 
     def _init_bias_router_model(self, cfg: "ModelConfig") -> VectorRouterModel | None:
         if self.bias_parameters_flag:
             return VectorRouterModel(
                 cfg,
                 bias_parameters_flag=self.bias_parameters_flag,
+                bias_output_dim=self.mixture.output_dim,
             )
         return None
 
