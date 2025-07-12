@@ -410,7 +410,7 @@ class DataModule(HyperParameters):
 class Trainer(HyperParameters):
     def __init__(self, max_epochs, num_gpu=0, gradient_clip_val=0, view_progress=True):
         self.save_hyperparameters()
-        self.printLoss = False
+        self.print_loss = False
         self.gpus = [gpu(i) for i in range(min(num_gpu, num_gpus()))]
 
     def prepare_data(self, data):
@@ -426,8 +426,8 @@ class Trainer(HyperParameters):
         model.board.xlim = [0, self.max_epochs]
         self.model = model
 
-    def fit(self, model, data, printLossFlag: bool = False):
-        self.printLossFlag = printLossFlag
+    def fit(self, model, data, print_loss_flag: bool = False):
+        self.print_loss_flag = print_loss_flag
         self.prepare_data(data)
         self.prepare_model(model)
         self.optim = model.configure_optimizers()
@@ -440,16 +440,16 @@ class Trainer(HyperParameters):
     def fit_epoch(self):
         self.model.train()
         for batch in self.train_dataloader:
-            loss = self.model.training_step(self.prepare_batch(batch))
-            if self.printLossFlag:
-                print(f"Epoch {self.epoch}, loss: {loss}")
+            loss, auxiliary_loss = self.model.training_step(self.prepare_batch(batch))
+            self.__print_batch_messages(loss, auxiliary_loss)
             self.optim.zero_grad()
             with torch.no_grad():
                 loss.backward()
-                if self.gradient_clip_val > 0:  # To be discussed later
+                if self.gradient_clip_val > 0:
                     self.clip_gradients(self.gradient_clip_val, self.model)
                 self.optim.step()
             self.train_batch_idx += 1
+        self.train_batch_idx = 0
         if self.val_dataloader is None:
             return
         self.model.eval()
