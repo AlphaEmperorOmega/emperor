@@ -115,14 +115,29 @@ class LayerBlock(Module):
         activation_function_module: nn.Module | None = nn.ReLU(),
         layer_norm_module: nn.Module | None = None,
         residual_connection_flag: bool = False,
+        is_adaptive_computation: bool = False,
     ):
         super().__init__()
         self.model = model
         self.activation_function_module = activation_function_module
         self.layer_norm_module = layer_norm_module
         self.residual_connection_flag = residual_connection_flag
+        self.is_adaptive_computation = is_adaptive_computation
 
-    def forward(self, input_batch: torch.Tensor) -> torch.Tensor:
+    def create_adaptive_computation_module(self):
+        pass
+        # TODO: In the future add a layer that can compute a
+        # score for each token in the input, when the
+        # sum of scores from the previews layers reaches 1
+        # update the skip mask in order to make sure that the
+        # further layers no longer process that token
+        # and move it to the end of the model via resudual connection
+
+    def forward(
+        self,
+        input_batch: torch.Tensor,
+        skip_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         output = self.model(input_batch)
         if self.layer_norm_module is not None:
             output = self.layer_norm_module(output)
