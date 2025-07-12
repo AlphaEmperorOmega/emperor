@@ -113,7 +113,9 @@ class SamplerBase(Module):
         self.num_topk_samples = self.cfg.num_topk_samples
         self.normalize_probabilities_flag = self.cfg.normalize_probabilities_flag
         self.num_experts = self.cfg.num_experts
-        self.coefficient_of_variation_loss_weight = self.cfg.coefficient_of_variation_loss_weight
+        self.coefficient_of_variation_loss_weight = (
+            self.cfg.coefficient_of_variation_loss_weight
+        )
         self.switch_loss_weight = self.cfg.switch_loss_weight
         self.zero_centred_loss_weight = self.cfg.zero_centred_loss_weight
         self.mutual_information_loss_weight = self.cfg.mutual_information_loss_weight
@@ -201,7 +203,7 @@ class SamplerBase(Module):
         router_logit_scores: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        if self.threshold != 0.0:
+        if self.threshold != 0.0 and skip_mask is not None:
             mask = skip_mask == 0
             probabilities = masked_fill(probabilities, mask, 0)
             router_logit_scores = masked_fill(router_logit_scores, mask, 0)
@@ -488,7 +490,9 @@ class SamplerAuxiliaryLosses(Module):
         self.cfg: "SamplerConfig" = self._overwrite_config(config, overrides)
 
         self.num_experts = self.cfg.num_experts
-        self.coefficient_of_variation_loss_weight = self.cfg.coefficient_of_variation_loss_weight
+        self.coefficient_of_variation_loss_weight = (
+            self.cfg.coefficient_of_variation_loss_weight
+        )
         self.switch_loss_weight = self.cfg.switch_loss_weight
         self.zero_centred_loss_weight = self.cfg.zero_centred_loss_weight
         self.mutual_information_loss_weight = self.cfg.mutual_information_loss_weight
