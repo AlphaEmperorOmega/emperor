@@ -1,7 +1,4 @@
-from Emperor.experiments.layers.layers_factories import (
-    ParameterLayersPresetTester,
-)
-
+from Emperor.experiments.layers.layers_factories import TrainPresetsWrapper
 
 if __name__ == "__main__":
-    ParameterLayersPresetTester().test_all_presets_single_layer_models()
+    TrainPresetsWrapper().test_all_preset_models(False)
