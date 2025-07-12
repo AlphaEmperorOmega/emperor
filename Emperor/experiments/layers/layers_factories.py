@@ -1,14 +1,16 @@
 from enum import Enum
+import torch.nn as nn
+from Emperor.components.parameter_generators.utils.linears import (
+    DynamicDiagonalLinearLayer,
+    LinearLayer,
+)
 
 from Emperor.components.parameter_generators.layers import (
-    DefaultLinearLayer,
     GeneratorParameterLayer,
     MatrixParameterLayer,
     ParameterLayerBase,
     VectorParameterLayer,
 )
-
-from typing import TYPE_CHECKING
 
 from Emperor.experiments.layers.layers_models import (
     MultiLayerClassifierModel,
@@ -16,11 +18,26 @@ from Emperor.experiments.layers.layers_models import (
 )
 from Emperor.experiments.layers.layers_presets import (
     FashionMNISTModelTrainer,
-    ParameterLayerPresetFactory,
+    FullMixtureLayerDynamicMaskPreset,
+    FullMixtureNoWeightSumDepthFivePreset,
+    FullMixtureNoWeightSumDepthFourPreset,
+    FullMixtureNoWeightSumDepthThreePreset,
+    FullMixtureNoWeightSumDepthTwoPreset,
+    FullMixturePreset,
+    FullMixtureThresholdPreset,
+    SparseAuxiliaryAndWeightedParametersPreset,
+    SparseNoAuxiliaryPreset,
+    SparseThresholdPreset,
+    SparseWithAuxiliaryPreset,
+    TopKAuxiliaryAndWeightedParametersPreset,
+    TopKNoAuxiliaryPreset,
+    TopKThresholdPreset,
+    TopkWithAuxiliaryPreset,
 )
 
+from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
     from Emperor.experiments.layers.layers_models import ClassifierExperiment
 
 
@@ -36,108 +53,154 @@ class ModelFactory(Enum):
         return self.value(model, learning_rate)
 
 
-class ParameterLayerOptions(Enum):
-    # DEFAULT = DefaultLinearLayer
-    VECTOR = VectorParameterLayer
-    MATRIX = MatrixParameterLayer
-    GENERATOR = GeneratorParameterLayer
+class PresetCollections:
+    def __init__(self):
+        pass
 
-    def create(
+    def get_layers_and_assigned_presets(self):
+        return {
+            LinearLayer: self.__get_linear_presets(),
+            DynamicDiagonalLinearLayer: self.__get_dynamic_diagonal_presets(),
+            VectorParameterLayer: self.__get_vector_presets(),
+            MatrixParameterLayer: self.__get_matrix_presets(),
+            GeneratorParameterLayer: self.__get_generator_presets(),
+        }
+
+    def __get_linear_presets(self) -> list:
+        return [SparseWithAuxiliaryPreset]
+
+    def __get_dynamic_diagonal_presets(self) -> list:
+        return [SparseWithAuxiliaryPreset]
+
+    def __get_vector_presets(self) -> list:
+        return [
+            SparseWithAuxiliaryPreset,
+            TopkWithAuxiliaryPreset,
+            SparseNoAuxiliaryPreset,
+            TopKNoAuxiliaryPreset,
+            SparseAuxiliaryAndWeightedParametersPreset,
+            TopKAuxiliaryAndWeightedParametersPreset,
+            FullMixturePreset,
+            FullMixtureLayerDynamicMaskPreset,
+            SparseThresholdPreset,
+            TopKThresholdPreset,
+            FullMixtureThresholdPreset,
+        ]
+
+    def __get_matrix_presets(self) -> list:
+        return [
+            SparseWithAuxiliaryPreset,
+            TopkWithAuxiliaryPreset,
+            SparseNoAuxiliaryPreset,
+            TopKNoAuxiliaryPreset,
+            SparseAuxiliaryAndWeightedParametersPreset,
+            TopKAuxiliaryAndWeightedParametersPreset,
+            FullMixturePreset,
+            FullMixtureLayerDynamicMaskPreset,
+            SparseThresholdPreset,
+            TopKThresholdPreset,
+            FullMixtureThresholdPreset,
+        ]
+
+    def __get_generator_presets(self) -> list:
+        return [
+            SparseWithAuxiliaryPreset,
+            TopkWithAuxiliaryPreset,
+            SparseNoAuxiliaryPreset,
+            TopKNoAuxiliaryPreset,
+            SparseAuxiliaryAndWeightedParametersPreset,
+            TopKAuxiliaryAndWeightedParametersPreset,
+            FullMixturePreset,
+            FullMixtureLayerDynamicMaskPreset,
+            SparseThresholdPreset,
+            TopKThresholdPreset,
+            FullMixtureThresholdPreset,
+            FullMixtureNoWeightSumDepthTwoPreset,
+            FullMixtureNoWeightSumDepthThreePreset,
+            FullMixtureNoWeightSumDepthFourPreset,
+            FullMixtureNoWeightSumDepthFivePreset,
+        ]
+
+
+class ModelTrainer:
+    def __init__(
         self,
-        cfg: "ModelConfig",
-    ) -> ParameterLayerBase:
-        return self.value(cfg)
+        layer_preset,
+        model_type,
+        layer_type,
+        learning_rate,
+        trainer_type,
+        mini_datasetset_flag,
+    ):
+        self.cfg = layer_preset.create().get_preset_config()
+        self.model = model_type(self.cfg, layer_type, learning_rate)
+        self.trainer = trainer_type(
+            self.model,
+            self.cfg,
+            mini_datasetset_flag,
+        )
+
+    def train(self):
+        self.trainer.train()
 
 
-class ParameterLayerPresetOptions(Enum):
-    SPARSE = "create_sparse_layer"
-    TOPK = "create_topk_layer"
-    FULL_MIXTURE = "create_full_mixture_layer"
-    RANDOM_TOPK = "create_random_topk_layer"
-    SPARSE_THRESHOLD = "create_sparse_threshold_layer"
-    TOPK_THRESHOLD = "create_topk_threshold_layer"
-    FULL_MIXTURE_THRESHOLD = "create_full_mixture_threshold_layer"
-    SPARSE_NOISY_TOPK = "create_sparse_noisy_topk_layer"
-    TOPK_NOISY_TOPK = "create_topk_noisy_topk_layer"
-    FULL_MIXTURE_NOISY_TOPK = "create_full_mixture_noisy_topk_layer"
+class TrainPresetsWrapper:
+    def __init__(self) -> None:
+        self.preset_collections = PresetCollections().get_layers_and_assigned_presets()
+        self.learning_rates = [
+            # 1e-5,
+            # 3e-5,
+            # 5e-5,
+            # 7e-5,
+            # 1e-4,
+            # 3e-4,
+            # 5e-4,
+            # 7e-4,
+            1e-3,
+            # 3e-3,
+            1e-2,
+            # 3e-2,
+            1e-1,
+        ]
 
-    def train_single_layer_fashion_minist_dataset(
+        self.model_types = [
+            SingleLayerClassifierModel,
+        ]
+        self.trainer_types = [
+            FashionMNISTModelTrainer,
+        ]
+
+    def test_all_preset_models(
         self,
-        layer_type: "ParameterLayerOptions",
-        mini_training_set_flag: bool = True,
+        mini_datasetset_flag: bool = True,
     ) -> None:
-        cfg = FashionMNISTModelTrainer.config_preset()
-        parameter_layer_preset = ParameterLayerPresetFactory(layer_type, cfg)
-        parameter_layer_preset = getattr(parameter_layer_preset, self.value)()
-        model = SingleLayerClassifierModel(
-            parameter_layer_preset,
-            learning_rate=0.0001,
-        )
-        dataset = FashionMNISTModelTrainer(
-            model,
-            cfg,
-            test_dataset_flag=mini_training_set_flag,
-        )
-        dataset.train()
+        for learning_rate in self.learning_rates:
+            for layer_type, all_layer_type_presets in self.preset_collections.items():
+                for trainer_type in self.trainer_types:
+                    for model_type in self.model_types:
+                        for layer_preset in all_layer_type_presets:
+                            self.print_model_title(
+                                layer_type, layer_preset, learning_rate
+                            )
+                            trainer = ModelTrainer(
+                                layer_preset,
+                                model_type,
+                                layer_type,
+                                learning_rate,
+                                trainer_type,
+                                mini_datasetset_flag,
+                            )
+                            trainer.train()
 
-    def train_multi_layer_fashion_minist_dataset(
+    def print_model_title(
         self,
-        layer_preset: "ParameterLayerOptions",
-        mini_training_set_flag: bool = True,
+        layer_type,
+        layer_preset,
+        learning_rate: float,
     ) -> None:
-        cfg = FashionMNISTModelTrainer.config_preset()
-
-        def create_hidden_layer_model(
-            cfg: "ModelConfig",
-            layer_shape: list[int],
-            layer_type: "ParameterLayerBase | None" = None,
-        ):
-            input_dim, output_dim = layer_shape
-            parameter_layer_preset = ParameterLayerPresetFactory(layer_preset, cfg)
-            parameter_layer_preset.set_layer_input_dim(input_dim)
-            parameter_layer_preset.set_layer_output_dim(output_dim)
-
-            layer_type_method = self.value if layer_type is None else layer_type
-
-            return getattr(parameter_layer_preset, self.value)()
-
-        model = MultiLayerClassifierModel(
-            cfg=cfg,
-            hidden_layer_callback=create_hidden_layer_model,
-            num_hidden_layers=2,
-        )
-        dataset = FashionMNISTModelTrainer(
-            model,
-            cfg,
-            test_dataset_flag=mini_training_set_flag,
-        )
-        dataset.train()
-
-
-class ParameterLayersPresetTester:
-    def test_all_presets_single_layer_models(self):
-        self.__test_all_preset_models(
-            "train_single_layer_fashion_minist_dataset",
-            mini_training_set_flag=True,
-        )
-
-    def test_all_presets_multi_layer_models(self):
-        self.__test_all_preset_models(
-            "train_multi_layer_fashion_minist_dataset",
-            mini_training_set_flag=True,
-        )
-
-    def __test_all_preset_models(
-        self, train_method_name: str, mini_training_set_flag: bool = True
-    ) -> None:
-        for layer_model in ParameterLayerOptions:
-            for layer_preset in ParameterLayerPresetOptions:
-                print("-" * 50)
-                print(
-                    f"\n Model type: {str(layer_model.name)} - preset: {str(layer_preset.name)}: \n"
-                )
-                getattr(layer_preset, train_method_name)(
-                    layer_model,
-                    mini_training_set_flag=mini_training_set_flag,
-                )
-                print("-" * 50 + "\n")
+        print("\n" * 2 + "-" * 50)
+        model_type_msg = f"Model type: {layer_type.__name__} "
+        model_preset_msg = f" Model preset: {layer_preset.__name__} "
+        learning_rate_msg = f" Learning rate: {learning_rate} "
+        message = "\n " + model_type_msg + model_preset_msg + learning_rate_msg + " \n"
+        print(message)
