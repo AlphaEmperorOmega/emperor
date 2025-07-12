@@ -458,6 +458,22 @@ class Trainer(HyperParameters):
                 self.model.validation_step(self.prepare_batch(batch))
             self.val_batch_idx += 1
 
+    def __print_batch_messages(
+        self,
+        loss: torch.Tensor,
+        auxiliary_loss: torch.Tensor,
+        batch_rate: int = 1,
+    ) -> None:
+        if self.print_loss_flag and self.train_batch_idx % batch_rate == 0:
+            message = [
+                f"Epoch: {self.epoch}",
+                f"Batch: {self.train_batch_idx}",
+                f"Total loss: {round(loss.item(), 4)}",
+                f"Model loss: {round(loss.item() - auxiliary_loss.item(), 4)}",
+                f"Auxiliary loss: {round(auxiliary_loss.item(), 4)}",
+            ]
+            print(", ".join(message))
+
     def prepare_batch(self, batch):
         if self.gpus:
             batch = [to(a, self.gpus[0]) for a in batch]
