@@ -240,14 +240,14 @@ class Module(nn.Module, HyperParameters):
             )
 
     def training_step(self, batch):
-        modelOutput, auxilaryLoss = self(*batch[:-1])
+        modelOutput, auxilary_loss = self(*batch[:-1])
         loss = self.loss(modelOutput, batch[-1])
 
-        if auxilaryLoss is not None:
-            loss += auxilaryLoss
+        if auxilary_loss is not None:
+            loss += auxilary_loss
 
         self.plot("loss", loss, train=True)
-        return loss
+        return loss, auxilary_loss
 
     def validation_step(self, batch):
         modelOutput, auxilaryLoss = self(*batch[:-1])
