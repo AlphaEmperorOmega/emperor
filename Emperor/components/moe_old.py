@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
-from torch import Tensor, Size
+from dataclasses import dataclass, field
+from torch import Tensor
 from dataclasses import replace
-from Emperor.base.utils import Module
+from dataclasses import dataclass, field
+from Emperor.base.utils import DataClassBase, Module
 from Emperor.library.choice import Library as L
-from .experts import ParallelExperts
-from .parameter_generators.utils.probabilitySamplers import ProbabilitySamplerTopk
 
 
 from typing import TYPE_CHECKING, Optional
@@ -14,45 +14,61 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
+@dataclass
+class MixtureOfExpertsConfig(DataClassBase):
+    input_dim: Optional[int] = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    hidden_dim: Optional[int] = field(
+        default=None,
+        metadata={"help": "Expert hidden dimension"},
+    )
+    output_dim: Optional[int] = field(
+        default=None,
+        metadata={"help": "Expert output dimension"},
+    )
+    multiply_by_gates_flag: Optional[bool] = field(
+        default=None,
+        metadata={"help": "If true, multiply expert output by gate values."},
+    )
+    activation_function: Optional[nn.Module] = field(
+        default=None,
+        metadata={"help": "Activation function for expert layers."},
+    )
+    hidden_dropout_probability: Optional[float] = field(
+        default=None,
+        metadata={"help": "Dropout probability for expert hidden layers."},
+    )
+    hidden_layer_norm_flag: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "If true, apply layer normalization to expert hidden layers."
+        },
+    )
+
+
 class MixtureOfExperts(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
-        inputDim: Optional[int] = None,
-        hiddenDim: Optional[int] = None,
-        outputDim: Optional[int] = None,
-        multiplyByGatesFlag: Optional[bool] = None,
-        activationFunction: Optional[nn.Module] = None,
-        hiddenDropoutProbability: Optional[float] = None,
-        hiddenLayerNormFlag: Optional[bool] = None,
+        cfg: "MixtureOfExpertsConfig | ModelConfig",
     ) -> None:
         super().__init__()
         self.cfg = cfg
-        self.inputDim: int = self._getValue(inputDim, cfg.inputDim)
-        self.hiddenDim: int = self._getValue(hiddenDim, cfg.hiddenDim)
-        self.outputDim: int = self._getValue(outputDim, cfg.outputDim)
-        self.multiplyByGatesFlag: int = self._getValue(
-            multiplyByGatesFlag, cfg.multiplyByGatesFlag
-        )
-        self.activationFunction: nn.Module = self._getValue(
-            activationFunction, cfg.activationFunction
-        )
-        self.hiddenDropoutProbability: float = self._getValue(
-            hiddenDropoutProbability, cfg.hiddenDropoutProbability
-        )
-        self.hiddenLayerNormFlag: float = self._getValue(
-            hiddenLayerNormFlag, cfg.hiddenLayerNormFlag
-        )
+        self.input_dim = self.cfg.input_dim
+        self.hidden_dim = self.cfg.hidden_dim
+        self.output_dim = self.cfg.output_dim
+        self.multiply_by_gates_flag = self.cfg.multiply_by_gates_flag
+        self.activation_function = self.cfg.activation_function
+        self.hidden_dropout_probability = self.cfg.hidden_dropout_probability
+        self.hidden_layer_norm_flag = self.cfg.hidden_layer_norm_flag
+        self.input_batch_shape = None
 
-        self.inputBatchShape: Optional[Size] = None
-        # TODO: figure out later if you need to dynamically return indices
-        # returnIndices = False
+        self._init_expert_layers()
+        self._init_expert_sampler()
+        self._init_hidden_modules()
 
-        self._initExpertLayers()
-        self._initExpertSampler()
-        self._initHiddenModules()
-
-    def _initExpertLayers(self):
+    def _init_expert_layers(self):
         inputExpertsConfig = replace(
             self.cfg, inputDim=self.inputDim, outputDim=self.hiddenDim
         )
@@ -62,7 +78,7 @@ class MixtureOfExperts(Module):
         )
         self.outputExperts = ParallelExperts(outputExpertsConfig)
 
-    def _initExpertSampler(self):
+    def _init_expert_sampler(self):
         cfg = replace(
             self.cfg,
             depthDim=self.cfg.numExperts,
@@ -70,7 +86,7 @@ class MixtureOfExperts(Module):
         )
         self.sampler = ProbabilitySamplerTopk(cfg)
 
-    def _initHiddenModules(self):
+    def _init_hidden_modules(self):
         self.dropoutModule = self.hiddenLayerNormModule = None
         if (
             self.hiddenDropoutProbability is not None
@@ -217,6 +233,39 @@ class MixtureOfExperts(Module):
         )
 
         return expertOutputMixture.view(outputShape)
+
+
+class ParallelExperts(Module):
+    def __init__(self, cfg: "ModelConfig"):
+        super().__init__()
+
+        self.cfg = cfg
+        self.num_experts = cfg.num_experts
+        self.experts = self.__create_experts()
+
+    def __create_experts(self):
+        experts = []
+        for _ in range(self.num_experts):
+            layer = ParameterLayerBase(self.cfg)
+            experts.append(layer)
+
+        return nn.ModuleList(experts)
+
+    def forward(self, expert_ordered_input, expert_frequency):
+        expert_inputs = self._split_input_experts(
+            expert_ordered_input, expert_frequency
+        )
+        expert_outputs = []
+        for expert_index in range(self.num_experts):
+            input_tensor = expert_inputs[expert_index]
+            output = self.experts[expert_index](input_tensor)
+            expert_outputs.append(output)
+
+        return torch.cat(expert_outputs, dim=0)
+
+    def _split_input_experts(self, expert_ordered_input, expert_frequency):
+        expert_frequency_list = expert_frequency.tolist()
+        return expert_ordered_input.split(expert_frequency_list)
 
 
 class MixtureOfAttentionHeads(MixtureOfExperts):
