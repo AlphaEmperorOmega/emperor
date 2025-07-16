@@ -1,11 +1,16 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from dataclasses import dataclass, field
 from torch.nn import Linear, Sequential
 from Emperor.base.utils import Module
 from Emperor.base.utils import DataClassBase
 
 from typing import TYPE_CHECKING
+
+from Emperor.components.parameter_generators.utils.enums import (
+    ActivationFunctionOptions,
+)
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -112,26 +117,39 @@ class LayerBlock(Module):
     def __init__(
         self,
         model: "Module",
-        activation_function_module: nn.Module | None = nn.ReLU(),
-        layer_norm_module: nn.Module | None = None,
+        activation_function: "ActivationFunctionOptions | None" = None,
+        layer_norm_flag: bool = False,
         residual_connection_flag: bool = False,
         is_adaptive_computation: bool = False,
+        dropout_probability: float = 0.0,
     ):
         super().__init__()
+
         self.model = model
-        self.activation_function_module = activation_function_module
-        self.layer_norm_module = layer_norm_module
+        self.activation_function = activation_function
+        self.layer_norm_flag = layer_norm_flag
         self.residual_connection_flag = residual_connection_flag
         self.is_adaptive_computation = is_adaptive_computation
+        self.dropout_probability = dropout_probability
+
+        self.has_layer_norm = self.layer_norm_module is not None
+        self.has_activation = self.activation_function is not None
+        self.has_dropout = self.dropout_probability > 0.0
+
+        self.dropout_module = self.__init_dropout_module()
+        self.layer_norm_module = self.__init_layer_norm_module()
+
+    def __init_dropout_module(self) -> nn.Module | None:
+        if self.has_dropout:
+            return nn.Dropout(self.hiddenDropoutProbability)
+        return None
+
+    def __init_layer_norm_module(self) -> nn.Module | None:
+        if self.layer_norm_flag:
+            return nn.LayerNorm(self.hiddenDim)
 
     def create_adaptive_computation_module(self):
         pass
-        # TODO: In the future add a layer that can compute a
-        # score for each token in the input, when the
-        # sum of scores from the previews layers reaches 1
-        # update the skip mask in order to make sure that the
-        # further layers no longer process that token
-        # and move it to the end of the model via resudual connection
 
     def forward(
         self,
@@ -139,10 +157,12 @@ class LayerBlock(Module):
         skip_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         output = self.model(input_batch)
-        if self.layer_norm_module is not None:
+        if self.layer_norm_flag:
             output = self.layer_norm_module(output)
-        if self.activation_function_module is not None:
-            output = self.activation_function_module(output)
+        if self.has_activation:
+            output = self.activation_function(output)
+        if self.has_dropout:
+            output = self.dropout_module(output)
         if self.residual_connection_flag:
             output = output + input_batch
 
