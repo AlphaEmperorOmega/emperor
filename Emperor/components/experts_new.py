@@ -1,3 +1,4 @@
+import torch
 from .layer import ParameterGeneratorLayer
 from Emperor.library.choice import Library as L
 from Emperor.base.utils import Module
@@ -133,3 +134,59 @@ class ExpertSelector:
             nonzeroProbabilityIndexes,
             _expertSortedNonzeroTopKIndexes,
         )
+
+    def __computed_gating(
+        self,
+        probabilities: Tensor,
+        indices: Tensor,
+    ):
+        flattened_probabilities = probabilities.flatten()
+        nonzero_probability_indices = flattened_probabilities.nonzero()
+        nonzero_probability_indices = nonzero_probability_indices.squeeze(-1)
+        flattened_indices = indices.flatten()
+        filtered_nonzero_indexes = flattened_indices[nonzero_probability_indices]
+        _, _expert_sorted_filtered_nonzero_indexes = filtered_nonzero_indexes.sort(0)
+
+        expert_sorted_filtered_nonzero_indexes = nonzero_probability_indices[
+            _expert_sorted_filtered_nonzero_indexes
+        ]
+
+        expert_sorted_batch_indices = expert_sorted_filtered_nonzero_indexes.div(
+            self.top_k, rounding_mode="trunc"
+        )
+        expert_sperted_probabilities = flattened_probabilities[
+            expert_sorted_filtered_nonzero_indexes
+        ]
+        batch_experts_frequency, scattered_probabilities = self.__compute_frequency(
+            probabilities,
+            indices,
+        )
+
+        return (
+            expert_sorted_batch_indices,
+            expert_sperted_probabilities,
+            scattered_probabilities,
+            batch_experts_frequency,
+            expert_sorted_filtered_nonzero_indexes,
+        )
+
+    def __compute_frequency(
+        self,
+        probabilities: Tensor,
+        indices: Tensor,
+    ):
+        batch_size = probabilities.shape[0]
+        probabilities_scattered_placeholder = torch.zeros(
+            [batch_size, self.num_experts], device=device
+        )
+        scattered_probabilities = probabilities_scattered_placeholder.scatter(
+            1, indices, probabilities
+        )
+
+        batch_experts_frequency = scattered_probabilities > 0
+        batch_experts_frequency = batch_experts_frequency.long()
+        batch_experts_frequency = batch_experts_frequency.sum(dim=0)
+        return batch_experts_frequency, scattered_probabilities
+
+
+torch.nn.TransformerEncoderLayer
