@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase, Module
 from torch import Tensor
-from Emperor.components.parameter_generators.utils.behaviours import (
+from Emperor.layers.utils.behaviours import (
     DynamicDiagonalParametersBehaviour,
 )
 

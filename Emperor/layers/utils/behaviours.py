@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear, Sequential
 from Emperor.base.utils import Module
-from Emperor.components.parameter_generators.utils.base import (
+from Emperor.layers.utils.base import (
     LinearBlockStack,
     LinearBlockStackConfig,
 )

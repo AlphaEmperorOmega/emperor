@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from dataclasses import dataclass, field
 from torch.nn import Linear, Sequential
 from Emperor.base.utils import Module
@@ -8,11 +7,8 @@ from Emperor.base.utils import DataClassBase
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
-    from Emperor.components.parameter_generators.utils.enums import (
-        ActivationFunctionOptions,
-    )
+    from Emperor.layers.utils.enums import ActivationFunctionOptions
     from Emperor.config import ModelConfig
 
 

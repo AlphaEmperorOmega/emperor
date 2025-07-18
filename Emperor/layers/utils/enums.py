@@ -1,12 +1,12 @@
 from enum import Enum
 import torch.nn.functional as F
 
-from Emperor.components.parameter_generators.layers import (
+from Emperor.layers.layers import (
     GeneratorParameterLayer,
     MatrixParameterLayer,
     VectorParameterLayer,
 )
-from Emperor.components.parameter_generators.utils.linears import (
+from Emperor.layers.utils.linears import (
     DynamicDiagonalLinearLayer,
     LinearLayer,
 )

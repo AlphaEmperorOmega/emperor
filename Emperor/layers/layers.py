@@ -4,16 +4,16 @@ from torch import Tensor
 from Emperor.base.decorators import timer
 from Emperor.base.utils import Module, DataClassBase
 
-from Emperor.components.parameter_generators.utils.behaviours import (
+from Emperor.layers.utils.behaviours import (
     DynamicDiagonalParametersBehaviour,
 )
-from Emperor.components.parameter_generators.utils.samplers import SamplerModel
-from Emperor.components.parameter_generators.utils.mixture import (
+from Emperor.layers.utils.samplers import SamplerModel
+from Emperor.layers.utils.mixture import (
     GeneratorMixture,
     MatrixMixture,
     VectorMixture,
 )
-from Emperor.components.parameter_generators.utils.routers import (
+from Emperor.layers.utils.routers import (
     RouterModel,
     VectorRouterModel,
 )

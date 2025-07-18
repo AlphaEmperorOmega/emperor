@@ -2,7 +2,7 @@ import torch
 from math import prod
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.components.parameter_generators.utils.losses import (
+from Emperor.layers.utils.losses import (
     CoefficientOfVariationLoss,
     MutualInformationLoss,
     SwitchLoss,

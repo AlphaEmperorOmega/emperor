@@ -2,14 +2,14 @@ from torch import Tensor
 import torch.nn as nn
 from dataclasses import dataclass, field
 from Emperor.base.utils import randn, matmul
-from Emperor.components.parameter_generators.utils.base import LayerBlock
+from Emperor.layers.utils.base import LayerBlock
 from torch.nn.parameter import Parameter
 from Emperor.base.utils import Module, DataClassBase
 from torch.nn import Linear, Sequential
 
 from typing import TYPE_CHECKING
 
-from Emperor.components.parameter_generators.utils.linears import (
+from Emperor.layers.utils.linears import (
     DynamicDiagonalLinearLayer,
     LinearLayer,
     LinearLayerConfig,
