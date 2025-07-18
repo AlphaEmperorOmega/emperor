@@ -1,9 +1,8 @@
-import copy
 import unittest
-from Emperor.components.parameter_generators.layers import ParameterLayerConfig
-from Emperor.components.parameter_generators.utils.mixture import MixtureConfig
-from Emperor.components.parameter_generators.utils.routers import RouterConfig
-from Emperor.components.parameter_generators.utils.samplers import SamplerConfig
+from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.mixture import MixtureConfig
+from Emperor.layers.utils.routers import RouterConfig
+from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.config import ModelConfig
 
 

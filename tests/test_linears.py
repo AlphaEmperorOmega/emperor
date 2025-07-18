@@ -4,18 +4,18 @@ import torch
 import torch.nn as nn
 from math import prod
 
-from Emperor.components.parameter_generators.layers import ParameterLayerConfig
-from Emperor.components.parameter_generators.utils.behaviours import (
+from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.behaviours import (
     DynamicDiagonalParametersBehaviour,
 )
-from Emperor.components.parameter_generators.utils.linears import (
+from Emperor.layers.utils.linears import (
     DynamicDiagonalLinearLayer,
     LinearLayer,
     LinearLayerConfig,
 )
-from Emperor.components.parameter_generators.utils.mixture import MixtureConfig
-from Emperor.components.parameter_generators.utils.routers import RouterConfig
-from Emperor.components.parameter_generators.utils.samplers import SamplerConfig
+from Emperor.layers.utils.mixture import MixtureConfig
+from Emperor.layers.utils.routers import RouterConfig
+from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.config import ModelConfig
 
 
