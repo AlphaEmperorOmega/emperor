@@ -148,8 +148,8 @@ class RouterModel(Module):
                 input_dim,
                 output_dim,
             ),
-            activation_function_module=self.activation,
-            layer_norm_module=nn.LayerNorm(output_dim),
+            activation_function=self.activation,
+            layer_norm_output_dim=output_dim,
             residual_connection_flag=residual_connection_flag,
         )
 
