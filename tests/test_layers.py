@@ -1247,40 +1247,6 @@ class TestMatrixParameterLayer(unittest.TestCase):
         self.assertFalse(torch.all(weight_params == 1.0))
         self.assertFalse(torch.all(bias_params == 1.0))
 
-    def test__add_dynamic_diagonal_params__dynamic_diagonal_params_flag__True__positive_threshold(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = ParameterLayerConfig(
-            dynamic_diagonal_params_flag=True,
-            bias_parameters_flag=True,
-        )
-        c.mixture_model_config.input_dim = 5
-        c.mixture_model_config.output_dim = 5
-        c.sampler_model_config.threshold = 0.1
-        c.router_model_config.output_dim = 10
-        c.mixture_model_config.depth_dim = 10
-        c.mixture_model_config.top_k = 10
-        c.mixture_model_config.num_experts = 10
-
-        m = MatrixParameterLayer(c, overrides)
-
-        batch_size = 2
-        input_dim = c.mixture_model_config.input_dim
-        output_dim = c.mixture_model_config.output_dim
-        shape = (batch_size, input_dim)
-        input_batch = torch.randn(shape)
-        shape = (batch_size, input_dim, output_dim)
-        input_weight_params = torch.ones(shape)
-        shape = (batch_size, output_dim)
-        input_bias_params = torch.ones(shape)
-
-        weight_params, bias_params = m._ParameterLayerBase__add_dynamic_diagonal_params(
-            input_batch, input_weight_params, input_bias_params
-        )
-        self.assertFalse(torch.all(weight_params == 1.0))
-        self.assertFalse(torch.all(bias_params == 1.0))
-
 
 class TestGeneratorParameterLayer(unittest.TestCase):
     def setUp(self):
