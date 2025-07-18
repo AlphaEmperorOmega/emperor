@@ -3,11 +3,11 @@ from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase
 
 
-from Emperor.components.parameter_generators.layers import ParameterLayerConfig
-from Emperor.components.parameter_generators.utils.linears import LinearLayerConfig
-from Emperor.components.parameter_generators.utils.mixture import MixtureConfig
-from Emperor.components.parameter_generators.utils.samplers import SamplerConfig
-from Emperor.components.parameter_generators.utils.routers import (
+from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.linears import LinearLayerConfig
+from Emperor.layers.utils.mixture import MixtureConfig
+from Emperor.layers.utils.samplers import SamplerConfig
+from Emperor.layers.utils.routers import (
     RouterConfig,
 )
 
