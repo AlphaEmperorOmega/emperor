@@ -8,11 +8,11 @@ from Emperor.base.utils import DataClassBase
 
 from typing import TYPE_CHECKING
 
-from Emperor.components.parameter_generators.utils.enums import (
-    ActivationFunctionOptions,
-)
 
 if TYPE_CHECKING:
+    from Emperor.components.parameter_generators.utils.enums import (
+        ActivationFunctionOptions,
+    )
     from Emperor.config import ModelConfig
 
 
@@ -99,16 +99,16 @@ class LinearBlockStack(Module):
         output_dim: int,
         residual_connection_flag: bool = True,
     ):
-        layer_norm_module = None
+        layer_norm_output_dim = None
         if self.layer_norm_flag:
-            layer_norm_module = nn.LayerNorm(output_dim)
+            layer_norm_output_dim = output_dim
         return LayerBlock(
             model=self.linear_model(
                 input_dim,
                 output_dim,
             ),
-            activation_function_module=self.activation,
-            layer_norm_module=layer_norm_module,
+            activation_function=self.activation,
+            layer_norm_output_dim=layer_norm_output_dim,
             residual_connection_flag=residual_connection_flag,
         )
 
@@ -118,7 +118,7 @@ class LayerBlock(Module):
         self,
         model: "Module",
         activation_function: "ActivationFunctionOptions | None" = None,
-        layer_norm_flag: bool = False,
+        layer_norm_output_dim: int | None = None,
         residual_connection_flag: bool = False,
         is_adaptive_computation: bool = False,
         dropout_probability: float = 0.0,
@@ -127,12 +127,11 @@ class LayerBlock(Module):
 
         self.model = model
         self.activation_function = activation_function
-        self.layer_norm_flag = layer_norm_flag
+        self.layer_norm_output_dim = layer_norm_output_dim
         self.residual_connection_flag = residual_connection_flag
         self.is_adaptive_computation = is_adaptive_computation
         self.dropout_probability = dropout_probability
 
-        self.has_layer_norm = self.layer_norm_module is not None
         self.has_activation = self.activation_function is not None
         self.has_dropout = self.dropout_probability > 0.0
 
@@ -141,12 +140,13 @@ class LayerBlock(Module):
 
     def __init_dropout_module(self) -> nn.Module | None:
         if self.has_dropout:
-            return nn.Dropout(self.hiddenDropoutProbability)
+            return nn.Dropout(self.dropout_probability)
         return None
 
     def __init_layer_norm_module(self) -> nn.Module | None:
-        if self.layer_norm_flag:
-            return nn.LayerNorm(self.hiddenDim)
+        if self.layer_norm_output_dim is not None:
+            return nn.LayerNorm(self.layer_norm_output_dim)
+        return None
 
     def create_adaptive_computation_module(self):
         pass
@@ -157,7 +157,7 @@ class LayerBlock(Module):
         skip_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         output = self.model(input_batch)
-        if self.layer_norm_flag:
+        if self.layer_norm_output_dim is not None:
             output = self.layer_norm_module(output)
         if self.has_activation:
             output = self.activation_function(output)
