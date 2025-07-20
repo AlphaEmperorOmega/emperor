@@ -13,11 +13,11 @@ from Emperor.layers.utils.linears import (
 
 
 class LayerTypes(Enum):
-    BASE: LinearLayer
-    DYNAMIC_BASE: DynamicDiagonalLinearLayer
-    VECTOR: VectorParameterLayer
-    MATRIX: MatrixParameterLayer
-    GENERATOR: GeneratorParameterLayer
+    BASE = LinearLayer
+    DYNAMIC_BASE = DynamicDiagonalLinearLayer
+    VECTOR = VectorParameterLayer
+    MATRIX = MatrixParameterLayer
+    GENERATOR = GeneratorParameterLayer
 
 
 class ActivationFunctionOptions(Enum):
