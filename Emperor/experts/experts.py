@@ -115,7 +115,7 @@ class MixtureOfExperts(Module):
 
 
 @dataclass
-class ExpertsConfig(DataClassBase):
+class ExpertsLayerConfig(DataClassBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Expert input dimension"},
@@ -124,13 +124,23 @@ class ExpertsConfig(DataClassBase):
         default=None,
         metadata={"help": "Expert output dimension"},
     )
-    activation: ActivationFunctionOptions | None = field(
+    dropout_probability: float | None = field(
         default=None,
-        metadata={"help": "Activation function for the experts."},
+        metadata={
+            "help": "Float between (0.0, 1.0), that indicates the percentage of features being dropped out."
+        },
+    )
+    layer_norm_flag: bool | None = field(
+        default=None,
+        metadata={"help": "Type of layer used for the experts."},
     )
     model_type: LayerTypes | None = field(
         default=None,
         metadata={"help": "Type of layer used for the experts."},
+    )
+    activation: ActivationFunctionOptions | None = field(
+        default=None,
+        metadata={"help": "Activation function for the experts."},
     )
     num_experts: int | None = field(
         default=None,
@@ -141,41 +151,67 @@ class ExpertsConfig(DataClassBase):
 class ExpertsLayer(Module):
     def __init__(
         self,
-        cfg: "ExpertsConfig | ModelConfig",
-        overrides: "ExpertsConfig | None" = None,
+        cfg: "ExpertsLayerConfig | ModelConfig",
+        overrides: "ExpertsLayerConfig | None" = None,
+        is_output_layer_flag: bool = False,
     ):
         super().__init__()
-        config = getattr(cfg, "expert_model_config", cfg)
-        self.cfg: "ExpertsConfig" = self._overwrite_config(config, overrides)
+        self.is_output_layer_flag = is_output_layer_flag
+        config = getattr(cfg, self.__resolve_config_type(), cfg)
+        self.cfg: "ExpertsLayerConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.num_experts = self.cfg.num_experts
+        self.layer_norm_flag = self.cfg.layer_norm_flag
+        self.dropout_probability = self.cfg.dropout_probability
         self.activation = self.cfg.activation
         self.model_type = self.cfg.model_type
-        self._valudate_fields(self.cfg, ExpertsConfig)
+        self._valudate_fields(self.cfg, ExpertsLayerConfig)
 
-        self.experts_module = self.__create_experts()
+        self.expert_modules = self.__create_experts(cfg)
 
-    def __create_experts(self) -> nn.ModuleList:
+    def __resolve_config_type(self) -> str:
+        if self.is_output_layer_flag:
+            return "output_moe_layer_config"
+        return "input_moe_layer_config"
+
+    def __create_experts(self, cfg: "ModelConfig") -> nn.ModuleList:
         expert_list = []
         for _ in range(self.num_experts):
-            model = self.model_type.value(self.cfg)
+            model = self.model_type.value(self.__resolve_model_type_overrides(cfg))
+            layer_norm_output_dim = self.output_dim if self.layer_norm_flag else None
             layer_block = LayerBlock(
                 model=model,
                 activation_function=self.activation.value,
-                dropout_probability=0.0,
-                layer_norm_flag=True,
+                layer_norm_output_dim=layer_norm_output_dim,
+                dropout_probability=self.dropout_probability,
             )
             expert_list.append(layer_block)
         return nn.ModuleList(expert_list)
 
-    def forward(self, input_batch: Tensor, indices: Tensor) -> Tensor:
+    def __resolve_model_type_overrides(self, cfg: "ModelConfig"):
+        c = copy.deepcopy(cfg)
+        if issubclass(self.model_type.value, LinearLayer):
+            c.linear_layer_model_config.input_dim = self.input_dim
+            c.linear_layer_model_config.output_dim = self.output_dim
+            return c
+        c.mixture_model_config.input_dim = self.input_dim
+        c.mixture_model_config.output_dim = self.output_dim
+        return c
+
+    def compute_expert_outputs(
+        self,
+        input_batch: Tensor,
+        indices: Tensor,
+    ) -> Tensor:
         expert_outputs = []
-        for expert_index in range(self.num_experts):
-            indices_for_expert = self.__get_expert_indices(indices, expert_index)
-            expert_assigned_samples = input_batch[indices_for_expert]
-            output = self.experts[expert_index](expert_assigned_samples)
+        for expert_index, expert_model in enumerate(self.expert_modules):
+            expert_sample_indices = self.__get_expert_indices(indices, expert_index)
+            if expert_sample_indices.numel() == 0:
+                continue
+            expert_assigned_samples = input_batch[expert_sample_indices]
+            output = expert_model(expert_assigned_samples)
             expert_outputs.append(output)
         return torch.cat(expert_outputs, dim=0)
 
@@ -187,7 +223,7 @@ class ExpertsLayer(Module):
         boolean_tensor = indices == expert_index
         flattened_tensor = boolean_tensor.sum(dim=-1)
         indices_for_expert = flattened_tensor.nonzero()
-        return indices_for_expert
+        return indices_for_expert.squeeze(dim=-1)
 
 
 class MixtureOfAttentionHeads(MixtureOfExperts):
