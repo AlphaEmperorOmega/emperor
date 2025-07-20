@@ -23,43 +23,11 @@ if TYPE_CHECKING:
 
 @dataclass
 class MixtureOfExpertsConfig(DataClassBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    hidden_dim: int | None = field(
-        default=None,
-        metadata={"help": "Expert hidden dimension"},
-    )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Expert output dimension"},
-    )
-    multiply_by_gates_flag: bool | None = field(
-        default=None,
-        metadata={"help": "If true, multiply expert output by gate values."},
-    )
-    activation_function: nn.Module | None = field(
-        default=None,
-        metadata={"help": "Activation function for expert layers."},
-    )
-    dropout_probability: float | None = field(
-        default=None,
-        metadata={"help": "Dropout probability for expert hidden layers."},
-    )
-    hidden_layer_norm_flag: bool | None = field(
+    weighted_parameters_flag: bool | None = field(
         default=None,
         metadata={
-            "help": "If true, apply layer normalization to expert hidden layers."
+            "help": "When `True` the sepected parameters will be multiplied by their probs."
         },
-    )
-    input_expert_config: "ExpertsConfig | None" = field(
-        default=None,
-        metadata={"help": "Configuration for the input experts"},
-    )
-    output_expert_config: "ExpertsConfig | None" = field(
-        default=None,
-        metadata={"help": "Configuration for the output experts"},
     )
 
 
@@ -70,23 +38,14 @@ class MixtureOfExperts(Module):
     ) -> None:
         super().__init__()
         self.cfg = cfg
-        self.input_dim = self.cfg.input_dim
-        self.hidden_dim = self.cfg.hidden_dim
-        self.output_dim = self.cfg.output_dim
-        self.multiply_by_gates_flag = self.cfg.multiply_by_gates_flag
-        self.activation_function = self.cfg.activation_function
-        self.dropout_probability = self.cfg.dropout_probability
-        self.layer_norm_flag = self.cfg.layer_norm_flag
-        self.input_experts_config = self.cfg.input_expert_config
-        self.output_experts_config = self.cfg.output_expert_config
 
-        self.utils = ExpertSelectorUtils()
+        self.batch_size = None
+        self.sequence_length = None
+        self.output_shape = None
         self.router = RouterModel(cfg)
         self.sampler = SamplerModel(cfg)
-        self.input_experts = ExpertsLayer(self.input_experts_config)
-        # Output experts should be raw
-        self.output_experts = ExpertsLayer(self.output_experts_config)
-        self.input_batch_shape = None
+        self.input_experts = ExpertsLayer(cfg)
+        self.output_experts = ExpertsLayer(cfg)
 
     def forward(
         self,
