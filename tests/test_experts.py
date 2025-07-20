@@ -1,12 +1,22 @@
+import copy
 import unittest
+import torch
+import torch.nn as nn
+from Emperor.config import ModelConfig
+from Emperor.experts.experts import (
+    ExpertsLayer,
+    ExpertsLayerConfig,
+    MixtureOfExpertsConfig,
+)
 from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.base import LayerBlock
+from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
 from Emperor.layers.utils.samplers import SamplerConfig
-from Emperor.config import ModelConfig
 
 
-class TestMixtureOfExperts(unittest.TestCase):
+class TestExpertsLayer(unittest.TestCase):
     def setUp(self):
         # MODEL WISE CONFI
         BATCH_SIZE = 2
@@ -95,6 +105,304 @@ class TestMixtureOfExperts(unittest.TestCase):
                 time_tracker_flag=False,
                 dynamic_diagonal_params_flag=False,
             ),
+            moe_config=MixtureOfExpertsConfig(
+                weighted_parameters_flag=True,
+            ),
+            input_moe_layer_config=ExpertsLayerConfig(
+                input_dim=ROUTER_INPUT_DIM,
+                output_dim=64,
+                dropout_probability=0.1,
+                layer_norm_flag=True,
+                activation=ActivationFunctionOptions.GELU,
+                model_type=LayerTypes.DYNAMIC_BASE,
+                num_experts=SAMPLER_TOP_K,
+            ),
+            output_moe_layer_config=ExpertsLayerConfig(
+                input_dim=64,
+                output_dim=ROUTER_INPUT_DIM,
+                dropout_probability=0.1,
+                layer_norm_flag=True,
+                activation=ActivationFunctionOptions.GELU,
+                model_type=LayerTypes.DYNAMIC_BASE,
+                num_experts=SAMPLER_TOP_K,
+            ),
         )
 
-        self.parameter_generator_cfg = self.cfg.mixture_model_config
+    def test__init_input_layer_with_default_config(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.input_moe_layer_config
+        m = ExpertsLayer(c)
+
+        self.assertIsInstance(m, ExpertsLayer)
+        self.assertEqual(m.input_dim, config.input_dim)
+        self.assertEqual(m.output_dim, config.output_dim)
+        self.assertEqual(m.dropout_probability, config.dropout_probability)
+        self.assertEqual(m.layer_norm_flag, config.layer_norm_flag)
+        self.assertEqual(m.activation, config.activation)
+        self.assertEqual(m.model_type, config.model_type)
+        self.assertEqual(m.num_experts, config.num_experts)
+
+    def test__init_output_layer_with_default_config(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.output_moe_layer_config
+        m = ExpertsLayer(c, is_output_layer_flag=True)
+
+        self.assertIsInstance(m, ExpertsLayer)
+        self.assertEqual(m.input_dim, config.input_dim)
+        self.assertEqual(m.output_dim, config.output_dim)
+        self.assertEqual(m.dropout_probability, config.dropout_probability)
+        self.assertEqual(m.layer_norm_flag, config.layer_norm_flag)
+        self.assertEqual(m.activation, config.activation)
+        self.assertEqual(m.model_type, config.model_type)
+        self.assertEqual(m.num_experts, config.num_experts)
+
+    def test__resolve_config_type(self):
+        c = copy.deepcopy(self.cfg)
+
+        m_input = ExpertsLayer(c)
+        input_config_type = m_input._ExpertsLayer__resolve_config_type()
+        m_output = ExpertsLayer(c, is_output_layer_flag=True)
+        output_config_type = m_output._ExpertsLayer__resolve_config_type()
+
+        self.assertEqual(m_input.cfg, c.input_moe_layer_config)
+        self.assertEqual(m_output.cfg, c.output_moe_layer_config)
+        self.assertEqual(input_config_type, "input_moe_layer_config")
+        self.assertEqual(output_config_type, "output_moe_layer_config")
+
+    def test__create_experts(self):
+        c = copy.deepcopy(self.cfg)
+        m = ExpertsLayer(c)
+
+        expert_models = m._ExpertsLayer__create_experts(c)
+
+        self.assertEqual(len(m.expert_modules), m.num_experts)
+        for expert in expert_models:
+            self.assertIsInstance(expert, LayerBlock)
+
+    def test__create_experts_with_different_dimensions(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.input_dim = 64
+        c.input_moe_layer_config.output_dim = 128
+        c.input_moe_layer_config.num_experts = 8
+        config = c.input_moe_layer_config
+
+        m = ExpertsLayer(c)
+        expert_models = m._ExpertsLayer__create_experts(c)
+        self.assertEqual(len(m.expert_modules), m.num_experts)
+        for expert in expert_models:
+            input_dim, output_dim = expert.model.weight_params.shape
+            bias_dim = (
+                expert.model.bias_params.shape[0]
+                if expert.model.bias_params is not None
+                else None
+            )
+            self.assertIsInstance(expert, LayerBlock)
+            self.assertEqual(input_dim, config.input_dim)
+            self.assertEqual(output_dim, config.output_dim)
+            if expert.model.bias_params is not None:
+                self.assertEqual(bias_dim, config.output_dim)
+
+    def test__create_experts_with_different_dimensions__LinearLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.BASE
+        config = c.input_moe_layer_config
+
+        m = ExpertsLayer(c)
+        expert_models = m._ExpertsLayer__create_experts(c)
+        self.assertEqual(len(m.expert_modules), m.num_experts)
+        for expert in expert_models:
+            input_dim, output_dim = expert.model.weight_params.shape
+            bias_dim = (
+                expert.model.bias_params.shape[0]
+                if expert.model.bias_params is not None
+                else None
+            )
+            self.assertIsInstance(expert, LayerBlock)
+            self.assertEqual(input_dim, config.input_dim)
+            self.assertEqual(output_dim, config.output_dim)
+            if expert.model.bias_params is not None:
+                self.assertEqual(bias_dim, config.output_dim)
+
+    def test__create_experts_with_different_dimensions__DynamicDiagonalLinearLayer(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.DYNAMIC_BASE
+        config = c.input_moe_layer_config
+
+        m = ExpertsLayer(c)
+        expert_models = m._ExpertsLayer__create_experts(c)
+        self.assertEqual(len(m.expert_modules), m.num_experts)
+        for expert in expert_models:
+            input_dim, output_dim = expert.model.weight_params.shape
+            bias_dim = (
+                expert.model.bias_params.shape[0]
+                if expert.model.bias_params is not None
+                else None
+            )
+            self.assertIsInstance(expert, LayerBlock)
+            self.assertEqual(input_dim, config.input_dim)
+            self.assertEqual(output_dim, config.output_dim)
+            if expert.model.bias_params is not None:
+                self.assertEqual(bias_dim, config.output_dim)
+
+    def test__create_experts_with_different_dimensions__VectorParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.VECTOR
+        config = c.input_moe_layer_config
+
+        m = ExpertsLayer(c)
+        expert_models = m._ExpertsLayer__create_experts(c)
+        self.assertEqual(len(m.expert_modules), m.num_experts)
+        for expert in expert_models:
+            input_dim, _, output_dim = expert.model.mixture.weight_bank.shape
+            self.assertIsInstance(expert, LayerBlock)
+            self.assertEqual(input_dim, config.input_dim)
+            self.assertEqual(output_dim, config.output_dim)
+
+    def test__create_experts_with_different_dimensions__MatrixParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.MATRIX
+        config = c.input_moe_layer_config
+
+        m = ExpertsLayer(c)
+        expert_models = m._ExpertsLayer__create_experts(c)
+        self.assertEqual(len(m.expert_modules), m.num_experts)
+        for expert in expert_models:
+            _, input_dim, output_dim = expert.model.mixture.weight_bank.shape
+            self.assertIsInstance(expert, LayerBlock)
+            self.assertEqual(input_dim, config.input_dim)
+            self.assertEqual(output_dim, config.output_dim)
+
+    def test__create_experts_with_different_dimensions__GeneratorParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        config = c.input_moe_layer_config
+
+        m = ExpertsLayer(c)
+        expert_models = m._ExpertsLayer__create_experts(c)
+        self.assertEqual(len(m.expert_modules), m.num_experts)
+        for expert in expert_models:
+            _, input_dim, _ = expert.model.mixture.input_weight_bank.shape
+            _, _, output_dim = expert.model.mixture.output_weight_bank.shape
+            self.assertIsInstance(expert, LayerBlock)
+            self.assertEqual(input_dim, config.input_dim)
+            self.assertEqual(output_dim, config.output_dim)
+
+    def test__get_expert_indices(self):
+        c = copy.deepcopy(self.cfg)
+        m = ExpertsLayer(c)
+
+        top_k = c.sampler_model_config.top_k
+        indices = torch.stack([torch.randperm(m.num_experts)[:top_k] for _ in range(5)])
+
+        for expert_index in range(m.num_experts):
+            output = m._ExpertsLayer__get_expert_indices(indices, expert_index)
+            self.assertIsInstance(output, torch.Tensor)
+
+    def test__forward__LinearLayer(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.input_moe_layer_config
+        m = ExpertsLayer(c)
+
+        top_k = c.sampler_model_config.top_k
+        batch_size = 5
+        for _ in range(3):
+            indices = torch.stack(
+                [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
+            )
+            input_batch = torch.randn(batch_size, config.input_dim)
+
+            output = m.compute_expert_outputs(input_batch, indices)
+
+            self.assertIsInstance(output, torch.Tensor)
+            self.assertEqual(
+                list(output.shape), [batch_size * top_k, config.output_dim]
+            )
+
+    def test__forward__DynamicDiagonalLinearLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.DYNAMIC_BASE
+        config = c.input_moe_layer_config
+        m = ExpertsLayer(c)
+
+        top_k = c.sampler_model_config.top_k
+        batch_size = 5
+        for _ in range(3):
+            indices = torch.stack(
+                [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
+            )
+            input_batch = torch.randn(batch_size, config.input_dim)
+
+            output = m.compute_expert_outputs(input_batch, indices)
+
+            self.assertIsInstance(output, torch.Tensor)
+            self.assertEqual(
+                list(output.shape), [batch_size * top_k, config.output_dim]
+            )
+
+    def test__forward__VectorParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.VECTOR
+        config = c.input_moe_layer_config
+        m = ExpertsLayer(c)
+
+        top_k = c.sampler_model_config.top_k
+        batch_size = 5
+        print("*" * 20)
+        for _ in range(3):
+            indices = torch.stack(
+                [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
+            )
+            input_batch = torch.randn(batch_size, config.input_dim)
+
+            output = m.compute_expert_outputs(input_batch, indices)
+
+            self.assertIsInstance(output, torch.Tensor)
+            self.assertEqual(
+                list(output.shape), [batch_size * top_k, config.output_dim]
+            )
+
+        print("-" * 20)
+
+    # def test__forward__MatrixParameterLayer(self):
+    #     c = copy.deepcopy(self.cfg)
+    #     c.input_moe_layer_config.model_type = LayerTypes.MATRIX
+    #     config = c.input_moe_layer_config
+    #     m = ExpertsLayer(c)
+    #
+    #     top_k = c.sampler_model_config.top_k
+    #     batch_size = 5
+    #     for _ in range(3):
+    #         indices = torch.stack(
+    #             [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
+    #         )
+    #         input_batch = torch.randn(batch_size, config.input_dim)
+    #
+    #         output = m.compute_expert_outputs(input_batch, indices)
+    #
+    #         self.assertIsInstance(output, torch.Tensor)
+    #         self.assertEqual(
+    #             list(output.shape), [batch_size * top_k, config.output_dim]
+    #         )
+    #
+    # def test__forward__GeneratorParameterLayer(self):
+    #     c = copy.deepcopy(self.cfg)
+    #     c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+    #     config = c.input_moe_layer_config
+    #     m = ExpertsLayer(c)
+    #
+    #     top_k = c.sampler_model_config.top_k
+    #     batch_size = 5
+    #     for _ in range(3):
+    #         indices = torch.stack(
+    #             [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
+    #         )
+    #         input_batch = torch.randn(batch_size, config.input_dim)
+    #
+    #         output = m.compute_expert_outputs(input_batch, indices)
+    #
+    #         self.assertIsInstance(output, torch.Tensor)
+    #         self.assertEqual(
+    #             list(output.shape), [batch_size * top_k, config.output_dim]
+    #         )
