@@ -57,66 +57,61 @@ class MixtureOfExperts(Module):
         probabilities, indices, skip_mask, loss = (
             self.sampler.sample_probabilities_and_indices(logits, skip_mask)
         )
-        experts_output = self.__compute_projections(input_batch, indices)
-
+        input_experts_projection = self.input_experts(input_batch, indices)
+        output_experts_projection = self.output_experts(
+            input_experts_projection, indices
+        )
         expert_mixture_output = self.__compute_expert_mixture(
-            experts_output,
+            output_experts_projection,
             indices,
             probabilities,
         )
 
-        return expert_mixture_output
+        return expert_mixture_output, skip_mask
 
     def __prepare_inputs(
         self,
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
-        self.input_batch_shape = input_batch.size()
+        self.__resolve_output_shape(input_batch)
         input_batch = input_batch.reshape(-1, self.inputDim)
         if skip_mask is not None:
             skip_mask = skip_mask.view(-1, 1)
         return input_batch, skip_mask
 
-    def __compute_projections(
-        self,
-        input_batch: Tensor,
-        indices: Tensor | None = None,
-    ) -> Tensor:
-        expanded_projection = self.input_experts(input_batch, indices)
-        reduction_projection = self.output_experts(expanded_projection, indices)
-
-        return reduction_projection
+    def __resolve_output_shape(self, input_batch: Tensor) -> None:
+        input_shape = input_batch.shape
+        if len(self._input_batch_shape) > 2:
+            self.batch_size, self.sequence_length, _ = input_shape
+            self.output_shape = [self.batch_size, self.sequence_length, -1]
+            return
+        self.sequence_length = 1
+        self.batch_size, _ = input_shape
+        self.output_shape = [self.batch_size, -1]
 
     def __compute_expert_mixture(
         self,
-        experts_output,
-        expert_sorted_indices,
-        expert_sorted_probabilities,
+        experts_output: Tensor,
+        expert_sorted_indices: Tensor,
+        expert_sorted_probabilities: Tensor,
     ):
-        if len(self._input_batch_shape) > 2:
-            batch_size, sequence_length, _ = self._input_batch_shape
-            output_shape = [batch_size, sequence_length, self.output_dim]
-        else:
-            sequence_length = 1
-            batch_size, _ = self._input_batch_shape
-            output_shape = [batch_size, self.output_dim]
-
-        if self.multiply_by_gates_flag:
+        if self.weighted_parameters_flag:
             flattened_probabilities = expert_sorted_probabilities.view(-1, 1)
             experts_output = experts_output * flattened_probabilities
 
+        _, output_dim = experts_output.shape
         experts_shaped_zeros = torch.zeros(
-            (batch_size * sequence_length, self.output_dim),
+            (self.batch_size * self.sequence_length, output_dim),
             dtype=experts_output.dtype,
-            device=L.Device,
+            device=device,
         )
 
         output = experts_shaped_zeros.index_add(
             0, expert_sorted_indices, experts_output
         )
 
-        return output.view(output_shape)
+        return output.view(self.output_shape)
 
 
 @dataclass
