@@ -1,16 +1,19 @@
+import copy
 import torch
 import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, overrides
 from dataclasses import dataclass, field
 
 from Emperor.base.utils import DataClassBase, Module, device
-from Emperor.components.parameter_generators.utils.base import LayerBlock
-from Emperor.components.parameter_generators.utils.enums import (
+from Emperor.layers.utils.base import LayerBlock
+from Emperor.layers.utils.enums import (
     ActivationFunctionOptions,
     LayerTypes,
 )
-from Emperor.components.parameter_generators.utils.routers import RouterModel
-from Emperor.components.parameter_generators.utils.samplers import SamplerModel
+from Emperor.layers.utils.linears import LinearLayer, LinearLayerConfig
+from Emperor.layers.utils.mixture import MixtureConfig
+from Emperor.layers.utils.routers import RouterModel
+from Emperor.layers.utils.samplers import SamplerModel
 
 from typing import TYPE_CHECKING
 
