@@ -1,9 +1,12 @@
 import torch.nn as nn
 from dataclasses import dataclass, field
+
 from Emperor.base.utils import DataClassBase
 
 
+from Emperor.experts.experts import ExpertsLayerConfig, MixtureOfExpertsConfig
 from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.samplers import SamplerConfig
@@ -146,4 +149,34 @@ class ModelConfig(DataClassBase):
             dynamic_bias_flag=True,
         ),
         metadata={"help": "`LinearLayerConfig` configuration"},
+    )
+    moe_config: MixtureOfExpertsConfig = field(
+        default_factory=lambda: MixtureOfExpertsConfig(
+            weighted_parameters_flag=True,
+        ),
+        metadata={"help": "`MixtureOfExpertsConfig` configuration"},
+    )
+    input_moe_layer_config: ExpertsLayerConfig = field(
+        default_factory=lambda: ExpertsLayerConfig(
+                input_dim=32,
+                output_dim=64,
+                dropout_probability=0.1,
+                layer_norm_flag=True,
+                activation=ActivationFunctionOptions.GELU,
+                model_type=LayerTypes.DYNAMIC_BASE,
+                num_experts=12,
+        ),
+        metadata={"help": "`MixtureOfExpertsConfig` configuration"},
+    )
+    output_moe_layer_config: ExpertsLayerConfig = field(
+        default_factory=lambda: ExpertsLayerConfig(
+                input_dim=32,
+                output_dim=64,
+                dropout_probability=0.1,
+                layer_norm_flag=True,
+                activation=ActivationFunctionOptions.GELU,
+                model_type=LayerTypes.DYNAMIC_BASE,
+                num_experts=12,
+        ),
+        metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
