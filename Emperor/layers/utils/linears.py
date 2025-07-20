@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from enum import Enum
 import torch.nn.functional as F
 from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase, Module
@@ -112,9 +113,6 @@ class DynamicDiagonalLinearLayer(LinearLayer):
         if self.bias_flag:
             return linear_transform + bias_params
         return linear_transform
-
-
-from enum import Enum
 
 
 class LinearLayerWithMemoryOptions(Enum):
