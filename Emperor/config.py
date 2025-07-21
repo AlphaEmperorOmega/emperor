@@ -150,7 +150,7 @@ class ModelConfig(DataClassBase):
         ),
         metadata={"help": "`LinearLayerConfig` configuration"},
     )
-    moe_config: MixtureOfExpertsConfig = field(
+    mixture_of_experts_config: MixtureOfExpertsConfig = field(
         default_factory=lambda: MixtureOfExpertsConfig(
             weighted_parameters_flag=True,
         ),
