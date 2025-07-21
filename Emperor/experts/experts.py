@@ -1,7 +1,7 @@
 import copy
 import torch
 import torch.nn as nn
-from torch import Tensor, overrides
+from torch import Tensor
 from dataclasses import dataclass, field
 
 from Emperor.base.utils import DataClassBase, Module, device
@@ -10,8 +10,7 @@ from Emperor.layers.utils.enums import (
     ActivationFunctionOptions,
     LayerTypes,
 )
-from Emperor.layers.utils.linears import LinearLayer, LinearLayerConfig
-from Emperor.layers.utils.mixture import MixtureConfig
+from Emperor.layers.utils.linears import LinearLayer
 from Emperor.layers.utils.routers import RouterModel
 from Emperor.layers.utils.samplers import SamplerModel
 
@@ -115,7 +114,7 @@ class MixtureOfExperts(Module):
 
 
 @dataclass
-class ExpertsLayerConfig(DataClassBase):
+class ExpertsModuleConfig(DataClassBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Expert input dimension"},
@@ -148,17 +147,17 @@ class ExpertsLayerConfig(DataClassBase):
     )
 
 
-class ExpertsLayer(Module):
+class ExpertsModule(Module):
     def __init__(
         self,
-        cfg: "ExpertsLayerConfig | ModelConfig",
-        overrides: "ExpertsLayerConfig | None" = None,
+        cfg: "ExpertsModuleConfig | ModelConfig",
+        overrides: "ExpertsModuleConfig | None" = None,
         is_output_layer_flag: bool = False,
     ):
         super().__init__()
         self.is_output_layer_flag = is_output_layer_flag
         config = getattr(cfg, self.__resolve_config_type(), cfg)
-        self.cfg: "ExpertsLayerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "ExpertsModuleConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
@@ -167,7 +166,7 @@ class ExpertsLayer(Module):
         self.dropout_probability = self.cfg.dropout_probability
         self.activation = self.cfg.activation
         self.model_type = self.cfg.model_type
-        self._valudate_fields(self.cfg, ExpertsLayerConfig)
+        self._valudate_fields(self.cfg, ExpertsModuleConfig)
 
         self.expert_modules = self.__create_experts(cfg)
 

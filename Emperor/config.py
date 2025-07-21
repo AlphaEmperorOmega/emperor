@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase
 
 
-from Emperor.experts.experts import ExpertsLayerConfig, MixtureOfExpertsConfig
+from Emperor.experts.experts import ExpertsModuleConfig, MixtureOfExpertsConfig
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
 from Emperor.layers.utils.linears import LinearLayerConfig
@@ -156,27 +156,27 @@ class ModelConfig(DataClassBase):
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
-    input_moe_layer_config: ExpertsLayerConfig = field(
-        default_factory=lambda: ExpertsLayerConfig(
-                input_dim=32,
-                output_dim=64,
-                dropout_probability=0.1,
-                layer_norm_flag=True,
-                activation=ActivationFunctionOptions.GELU,
-                model_type=LayerTypes.DYNAMIC_BASE,
-                num_experts=12,
+    input_moe_layer_config: ExpertsModuleConfig = field(
+        default_factory=lambda: ExpertsModuleConfig(
+            input_dim=32,
+            output_dim=64,
+            dropout_probability=0.1,
+            layer_norm_flag=True,
+            activation=ActivationFunctionOptions.GELU,
+            model_type=LayerTypes.DYNAMIC_BASE,
+            num_experts=12,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
-    output_moe_layer_config: ExpertsLayerConfig = field(
-        default_factory=lambda: ExpertsLayerConfig(
-                input_dim=32,
-                output_dim=64,
-                dropout_probability=0.1,
-                layer_norm_flag=True,
-                activation=ActivationFunctionOptions.GELU,
-                model_type=LayerTypes.DYNAMIC_BASE,
-                num_experts=12,
+    output_moe_layer_config: ExpertsModuleConfig = field(
+        default_factory=lambda: ExpertsModuleConfig(
+            input_dim=32,
+            output_dim=64,
+            dropout_probability=0.1,
+            layer_norm_flag=True,
+            activation=ActivationFunctionOptions.GELU,
+            model_type=LayerTypes.DYNAMIC_BASE,
+            num_experts=12,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
