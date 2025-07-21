@@ -43,9 +43,9 @@ class TestExpertsLayer(unittest.TestCase):
         SAMPLER_NORMALIZE_PROBABILITIES_FLAG = False
         SAMPLER_NOISY_TOPK_FLAG = ROUTER_NOISY_TOPK_FLAG
         SAMPLER_ROUTER_OUTPUT_DIM = ROUTER_OUTPUT_DIM
-        SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT = 0.0
-        SAMPLER_SWITCH_WEIGHT = 0.0
-        SAMPLER_ZERO_CENTRED_WEIGHT = 0.0
+        SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT = 0.1
+        SAMPLER_SWITCH_WEIGHT = 0.1
+        SAMPLER_ZERO_CENTRED_WEIGHT = 0.1
         SAMPLER_MUTUAL_INFORMATION_WEIGHT = 0.0
 
         # PARAMETER GENRETOR MIXTURE OPITONS
@@ -115,7 +115,7 @@ class TestExpertsLayer(unittest.TestCase):
                 layer_norm_flag=True,
                 activation=ActivationFunctionOptions.GELU,
                 model_type=LayerTypes.DYNAMIC_BASE,
-                num_experts=SAMPLER_TOP_K,
+                num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             ),
             output_moe_layer_config=ExpertsLayerConfig(
                 input_dim=64,
@@ -124,7 +124,7 @@ class TestExpertsLayer(unittest.TestCase):
                 layer_norm_flag=True,
                 activation=ActivationFunctionOptions.GELU,
                 model_type=LayerTypes.DYNAMIC_BASE,
-                num_experts=SAMPLER_TOP_K,
+                num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             ),
         )
 
@@ -349,7 +349,6 @@ class TestExpertsLayer(unittest.TestCase):
 
         top_k = c.sampler_model_config.top_k
         batch_size = 5
-        print("*" * 20)
         for _ in range(3):
             indices = torch.stack(
                 [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
@@ -357,13 +356,65 @@ class TestExpertsLayer(unittest.TestCase):
             input_batch = torch.randn(batch_size, config.input_dim)
 
             output = m.compute_expert_outputs(input_batch, indices)
+            expert_outputs, loss = output
 
-            self.assertIsInstance(output, torch.Tensor)
+            self.assertIsInstance(output, tuple)
+            self.assertIsInstance(expert_outputs, torch.Tensor)
+            self.assertIsInstance(loss, torch.Tensor)
+            self.assertTrue(loss > 0)
             self.assertEqual(
-                list(output.shape), [batch_size * top_k, config.output_dim]
+                list(expert_outputs.shape), [batch_size * top_k, config.output_dim]
             )
 
-        print("-" * 20)
+    def test__forward__GeneratorParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.MATRIX
+        config = c.input_moe_layer_config
+        m = ExpertsLayer(c)
+
+        top_k = c.sampler_model_config.top_k
+        batch_size = 5
+        for _ in range(3):
+            indices = torch.stack(
+                [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
+            )
+            input_batch = torch.randn(batch_size, config.input_dim)
+
+            output = m.compute_expert_outputs(input_batch, indices)
+            expert_outputs, loss = output
+
+            self.assertIsInstance(output, tuple)
+            self.assertIsInstance(expert_outputs, torch.Tensor)
+            self.assertIsInstance(loss, torch.Tensor)
+            self.assertTrue(loss > 0)
+            self.assertEqual(
+                list(expert_outputs.shape), [batch_size * top_k, config.output_dim]
+            )
+
+    def test__forward__MatrixParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        config = c.input_moe_layer_config
+        m = ExpertsLayer(c)
+
+        top_k = c.sampler_model_config.top_k
+        batch_size = 5
+        for _ in range(3):
+            indices = torch.stack(
+                [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
+            )
+            input_batch = torch.randn(batch_size, config.input_dim)
+
+            output = m.compute_expert_outputs(input_batch, indices)
+            expert_outputs, loss = output
+
+            self.assertIsInstance(output, tuple)
+            self.assertIsInstance(expert_outputs, torch.Tensor)
+            self.assertIsInstance(loss, torch.Tensor)
+            self.assertTrue(loss > 0)
+            self.assertEqual(
+                list(expert_outputs.shape), [batch_size * top_k, config.output_dim]
+            )
 
     # def test__forward__MatrixParameterLayer(self):
     #     c = copy.deepcopy(self.cfg)
