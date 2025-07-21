@@ -203,10 +203,11 @@ class SamplerBase(Module):
         router_logit_scores: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        if self.threshold != 0.0 and skip_mask is not None:
-            mask = skip_mask == 0
-            probabilities = masked_fill(probabilities, mask, 0)
-            router_logit_scores = masked_fill(router_logit_scores, mask, 0)
+        if self.threshold == 0.0 and skip_mask is None:
+            return probabilities, router_logit_scores
+        mask = skip_mask == 0
+        probabilities = masked_fill(probabilities, mask, 0)
+        router_logit_scores = masked_fill(router_logit_scores, mask, 0)
         return probabilities, router_logit_scores
 
     def __update_mask_given_threshold(
