@@ -204,15 +204,28 @@ class ExpertsLayer(Module):
         self,
         input_batch: Tensor,
         indices: Tensor,
-    ) -> Tensor:
+    ) -> Tensor | tuple[Tensor, Tensor]:
         expert_outputs = []
+        layer_loss = torch.tensor(0.0)
+        is_tuple = False
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
             if expert_sample_indices.numel() == 0:
                 continue
             expert_assigned_samples = input_batch[expert_sample_indices]
             output = expert_model(expert_assigned_samples)
+            # TODO: Refactor in the future when objects are to store data
+            # instead of tuples
+            is_tuple = isinstance(output, tuple)
+            if is_tuple:
+                output, loss = output
+                expert_outputs.append(output)
+                layer_loss += loss
+                continue
             expert_outputs.append(output)
+        if is_tuple:
+            experts_output = torch.cat(expert_outputs, dim=0)
+            return experts_output, layer_loss
         return torch.cat(expert_outputs, dim=0)
 
     def __get_expert_indices(
