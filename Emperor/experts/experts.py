@@ -34,17 +34,21 @@ class MixtureOfExperts(Module):
     def __init__(
         self,
         cfg: "MixtureOfExpertsConfig | ModelConfig",
+        overrides: "MixtureOfExpertsConfig | None" = None,
     ) -> None:
         super().__init__()
-        self.cfg = cfg
+        config = getattr(cfg, "mixture_of_experts_config", cfg)
+        self.cfg: MixtureOfExpertsConfig = self._overwrite_config(config, overrides)
+        self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
+
+        self.router = RouterModel(cfg)
+        self.sampler = SamplerModel(cfg)
+        self.input_expert_module = ExpertsModule(cfg)
+        self.output_expert_module = ExpertsModule(cfg)
 
         self.batch_size = None
         self.sequence_length = None
         self.output_shape = None
-        self.router = RouterModel(cfg)
-        self.sampler = SamplerModel(cfg)
-        self.input_experts = ExpertsLayer(cfg)
-        self.output_experts = ExpertsLayer(cfg)
 
     def forward(
         self,
@@ -56,8 +60,8 @@ class MixtureOfExperts(Module):
         probabilities, indices, skip_mask, loss = (
             self.sampler.sample_probabilities_and_indices(logits, skip_mask)
         )
-        input_experts_projection = self.input_experts(input_batch, indices)
-        output_experts_projection = self.output_experts(
+        input_experts_projection = self.input_expert_module(input_batch, indices)
+        output_experts_projection = self.output_expert_module(
             input_experts_projection, indices
         )
         expert_mixture_output = self.__compute_expert_mixture(
@@ -74,14 +78,16 @@ class MixtureOfExperts(Module):
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         self.__resolve_output_shape(input_batch)
-        input_batch = input_batch.reshape(-1, self.inputDim)
+        input_batch = input_batch.reshape(self.batch_size * self.sequence_length, -1)
         if skip_mask is not None:
             skip_mask = skip_mask.view(-1, 1)
         return input_batch, skip_mask
 
     def __resolve_output_shape(self, input_batch: Tensor) -> None:
         input_shape = input_batch.shape
-        if len(self._input_batch_shape) > 2:
+        if self.batch_size is not None:
+            return
+        if len(input_shape) > 2:
             self.batch_size, self.sequence_length, _ = input_shape
             self.output_shape = [self.batch_size, self.sequence_length, -1]
             return
@@ -92,23 +98,17 @@ class MixtureOfExperts(Module):
     def __compute_expert_mixture(
         self,
         experts_output: Tensor,
-        expert_sorted_indices: Tensor,
-        expert_sorted_probabilities: Tensor,
+        probabilities: Tensor,
+        indices: Tensor,
     ):
         if self.weighted_parameters_flag:
-            flattened_probabilities = expert_sorted_probabilities.view(-1, 1)
-            experts_output = experts_output * flattened_probabilities
+            probabilities = probabilities.view(-1, 1)
+            experts_output = experts_output * probabilities
 
         _, output_dim = experts_output.shape
-        experts_shaped_zeros = torch.zeros(
-            (self.batch_size * self.sequence_length, output_dim),
-            dtype=experts_output.dtype,
-            device=device,
-        )
-
-        output = experts_shaped_zeros.index_add(
-            0, expert_sorted_indices, experts_output
-        )
+        output_shape = (self.batch_size * self.sequence_length, output_dim)
+        output = torch.zeros(output_shape, dtype=experts_output.dtype, device=device)
+        output.index_add_(0, indices, experts_output)
 
         return output.view(self.output_shape)
 
