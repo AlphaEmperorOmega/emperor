@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 from Emperor.config import ModelConfig
 from Emperor.experts.experts import (
-    ExpertsLayer,
-    ExpertsLayerConfig,
+    ExpertsModule,
+    ExpertsModuleConfig,
     MixtureOfExpertsConfig,
 )
 from Emperor.layers.layers import ParameterLayerConfig
@@ -16,7 +16,7 @@ from Emperor.layers.utils.routers import RouterConfig
 from Emperor.layers.utils.samplers import SamplerConfig
 
 
-class TestExpertsLayer(unittest.TestCase):
+class TestExpertsModule(unittest.TestCase):
     def setUp(self):
         # MODEL WISE CONFI
         BATCH_SIZE = 2
@@ -108,7 +108,7 @@ class TestExpertsLayer(unittest.TestCase):
             moe_config=MixtureOfExpertsConfig(
                 weighted_parameters_flag=True,
             ),
-            input_moe_layer_config=ExpertsLayerConfig(
+            input_moe_layer_config=ExpertsModuleConfig(
                 input_dim=ROUTER_INPUT_DIM,
                 output_dim=64,
                 dropout_probability=0.1,
@@ -117,7 +117,7 @@ class TestExpertsLayer(unittest.TestCase):
                 model_type=LayerTypes.DYNAMIC_BASE,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             ),
-            output_moe_layer_config=ExpertsLayerConfig(
+            output_moe_layer_config=ExpertsModuleConfig(
                 input_dim=64,
                 output_dim=ROUTER_INPUT_DIM,
                 dropout_probability=0.1,
@@ -131,9 +131,9 @@ class TestExpertsLayer(unittest.TestCase):
     def test__init_input_layer_with_default_config(self):
         c = copy.deepcopy(self.cfg)
         config = c.input_moe_layer_config
-        m = ExpertsLayer(c)
+        m = ExpertsModule(c)
 
-        self.assertIsInstance(m, ExpertsLayer)
+        self.assertIsInstance(m, ExpertsModule)
         self.assertEqual(m.input_dim, config.input_dim)
         self.assertEqual(m.output_dim, config.output_dim)
         self.assertEqual(m.dropout_probability, config.dropout_probability)
@@ -145,9 +145,9 @@ class TestExpertsLayer(unittest.TestCase):
     def test__init_output_layer_with_default_config(self):
         c = copy.deepcopy(self.cfg)
         config = c.output_moe_layer_config
-        m = ExpertsLayer(c, is_output_layer_flag=True)
+        m = ExpertsModule(c, is_output_layer_flag=True)
 
-        self.assertIsInstance(m, ExpertsLayer)
+        self.assertIsInstance(m, ExpertsModule)
         self.assertEqual(m.input_dim, config.input_dim)
         self.assertEqual(m.output_dim, config.output_dim)
         self.assertEqual(m.dropout_probability, config.dropout_probability)
@@ -159,10 +159,10 @@ class TestExpertsLayer(unittest.TestCase):
     def test__resolve_config_type(self):
         c = copy.deepcopy(self.cfg)
 
-        m_input = ExpertsLayer(c)
-        input_config_type = m_input._ExpertsLayer__resolve_config_type()
-        m_output = ExpertsLayer(c, is_output_layer_flag=True)
-        output_config_type = m_output._ExpertsLayer__resolve_config_type()
+        m_input = ExpertsModule(c)
+        input_config_type = m_input._ExpertsModule__resolve_config_type()
+        m_output = ExpertsModule(c, is_output_layer_flag=True)
+        output_config_type = m_output._ExpertsModule__resolve_config_type()
 
         self.assertEqual(m_input.cfg, c.input_moe_layer_config)
         self.assertEqual(m_output.cfg, c.output_moe_layer_config)
@@ -171,9 +171,9 @@ class TestExpertsLayer(unittest.TestCase):
 
     def test__create_experts(self):
         c = copy.deepcopy(self.cfg)
-        m = ExpertsLayer(c)
+        m = ExpertsModule(c)
 
-        expert_models = m._ExpertsLayer__create_experts(c)
+        expert_models = m._ExpertsModule__create_experts(c)
 
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
@@ -186,8 +186,8 @@ class TestExpertsLayer(unittest.TestCase):
         c.input_moe_layer_config.num_experts = 8
         config = c.input_moe_layer_config
 
-        m = ExpertsLayer(c)
-        expert_models = m._ExpertsLayer__create_experts(c)
+        m = ExpertsModule(c)
+        expert_models = m._ExpertsModule__create_experts(c)
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
             input_dim, output_dim = expert.model.weight_params.shape
@@ -207,8 +207,8 @@ class TestExpertsLayer(unittest.TestCase):
         c.input_moe_layer_config.model_type = LayerTypes.BASE
         config = c.input_moe_layer_config
 
-        m = ExpertsLayer(c)
-        expert_models = m._ExpertsLayer__create_experts(c)
+        m = ExpertsModule(c)
+        expert_models = m._ExpertsModule__create_experts(c)
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
             input_dim, output_dim = expert.model.weight_params.shape
@@ -230,8 +230,8 @@ class TestExpertsLayer(unittest.TestCase):
         c.input_moe_layer_config.model_type = LayerTypes.DYNAMIC_BASE
         config = c.input_moe_layer_config
 
-        m = ExpertsLayer(c)
-        expert_models = m._ExpertsLayer__create_experts(c)
+        m = ExpertsModule(c)
+        expert_models = m._ExpertsModule__create_experts(c)
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
             input_dim, output_dim = expert.model.weight_params.shape
@@ -251,8 +251,8 @@ class TestExpertsLayer(unittest.TestCase):
         c.input_moe_layer_config.model_type = LayerTypes.VECTOR
         config = c.input_moe_layer_config
 
-        m = ExpertsLayer(c)
-        expert_models = m._ExpertsLayer__create_experts(c)
+        m = ExpertsModule(c)
+        expert_models = m._ExpertsModule__create_experts(c)
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
             input_dim, _, output_dim = expert.model.mixture.weight_bank.shape
@@ -265,8 +265,8 @@ class TestExpertsLayer(unittest.TestCase):
         c.input_moe_layer_config.model_type = LayerTypes.MATRIX
         config = c.input_moe_layer_config
 
-        m = ExpertsLayer(c)
-        expert_models = m._ExpertsLayer__create_experts(c)
+        m = ExpertsModule(c)
+        expert_models = m._ExpertsModule__create_experts(c)
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
             _, input_dim, output_dim = expert.model.mixture.weight_bank.shape
@@ -279,8 +279,8 @@ class TestExpertsLayer(unittest.TestCase):
         c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
         config = c.input_moe_layer_config
 
-        m = ExpertsLayer(c)
-        expert_models = m._ExpertsLayer__create_experts(c)
+        m = ExpertsModule(c)
+        expert_models = m._ExpertsModule__create_experts(c)
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
             _, input_dim, _ = expert.model.mixture.input_weight_bank.shape
@@ -291,19 +291,19 @@ class TestExpertsLayer(unittest.TestCase):
 
     def test__get_expert_indices(self):
         c = copy.deepcopy(self.cfg)
-        m = ExpertsLayer(c)
+        m = ExpertsModule(c)
 
         top_k = c.sampler_model_config.top_k
         indices = torch.stack([torch.randperm(m.num_experts)[:top_k] for _ in range(5)])
 
         for expert_index in range(m.num_experts):
-            output = m._ExpertsLayer__get_expert_indices(indices, expert_index)
+            output = m._ExpertsModule__get_expert_indices(indices, expert_index)
             self.assertIsInstance(output, torch.Tensor)
 
     def test__forward__LinearLayer(self):
         c = copy.deepcopy(self.cfg)
         config = c.input_moe_layer_config
-        m = ExpertsLayer(c)
+        m = ExpertsModule(c)
 
         top_k = c.sampler_model_config.top_k
         batch_size = 5
@@ -324,7 +324,7 @@ class TestExpertsLayer(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         c.input_moe_layer_config.model_type = LayerTypes.DYNAMIC_BASE
         config = c.input_moe_layer_config
-        m = ExpertsLayer(c)
+        m = ExpertsModule(c)
 
         top_k = c.sampler_model_config.top_k
         batch_size = 5
@@ -345,7 +345,7 @@ class TestExpertsLayer(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         c.input_moe_layer_config.model_type = LayerTypes.VECTOR
         config = c.input_moe_layer_config
-        m = ExpertsLayer(c)
+        m = ExpertsModule(c)
 
         top_k = c.sampler_model_config.top_k
         batch_size = 5
@@ -370,7 +370,7 @@ class TestExpertsLayer(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         c.input_moe_layer_config.model_type = LayerTypes.MATRIX
         config = c.input_moe_layer_config
-        m = ExpertsLayer(c)
+        m = ExpertsModule(c)
 
         top_k = c.sampler_model_config.top_k
         batch_size = 5
@@ -395,7 +395,7 @@ class TestExpertsLayer(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
         config = c.input_moe_layer_config
-        m = ExpertsLayer(c)
+        m = ExpertsModule(c)
 
         top_k = c.sampler_model_config.top_k
         batch_size = 5
@@ -415,45 +415,3 @@ class TestExpertsLayer(unittest.TestCase):
             self.assertEqual(
                 list(expert_outputs.shape), [batch_size * top_k, config.output_dim]
             )
-
-    # def test__forward__MatrixParameterLayer(self):
-    #     c = copy.deepcopy(self.cfg)
-    #     c.input_moe_layer_config.model_type = LayerTypes.MATRIX
-    #     config = c.input_moe_layer_config
-    #     m = ExpertsLayer(c)
-    #
-    #     top_k = c.sampler_model_config.top_k
-    #     batch_size = 5
-    #     for _ in range(3):
-    #         indices = torch.stack(
-    #             [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
-    #         )
-    #         input_batch = torch.randn(batch_size, config.input_dim)
-    #
-    #         output = m.compute_expert_outputs(input_batch, indices)
-    #
-    #         self.assertIsInstance(output, torch.Tensor)
-    #         self.assertEqual(
-    #             list(output.shape), [batch_size * top_k, config.output_dim]
-    #         )
-    #
-    # def test__forward__GeneratorParameterLayer(self):
-    #     c = copy.deepcopy(self.cfg)
-    #     c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
-    #     config = c.input_moe_layer_config
-    #     m = ExpertsLayer(c)
-    #
-    #     top_k = c.sampler_model_config.top_k
-    #     batch_size = 5
-    #     for _ in range(3):
-    #         indices = torch.stack(
-    #             [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
-    #         )
-    #         input_batch = torch.randn(batch_size, config.input_dim)
-    #
-    #         output = m.compute_expert_outputs(input_batch, indices)
-    #
-    #         self.assertIsInstance(output, torch.Tensor)
-    #         self.assertEqual(
-    #             list(output.shape), [batch_size * top_k, config.output_dim]
-    #         )
