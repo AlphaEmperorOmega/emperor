@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from dataclasses import dataclass, field
 from torch.nn import Linear, Sequential
+from torch.nn.modules import loss
+from torch.types import Tensor
 from Emperor.base.utils import Module
 from Emperor.base.utils import DataClassBase
 
@@ -133,6 +135,7 @@ class LayerBlock(Module):
 
         self.dropout_module = self.__init_dropout_module()
         self.layer_norm_module = self.__init_layer_norm_module()
+        # self.block_data = LayerBlockOuputs()
 
     def __init_dropout_module(self) -> nn.Module | None:
         if self.has_dropout:
@@ -149,10 +152,16 @@ class LayerBlock(Module):
 
     def forward(
         self,
-        input_batch: torch.Tensor,
-        skip_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        input_batch: Tensor,
+        skip_mask: Tensor | None = None,
+    ) -> Tensor | tuple[Tensor, Tensor]:
+        # TODO: Ensure that the skip_maks will be used
+        # in the future.
         output = self.model(input_batch)
+        is_tuple = isinstance(output, tuple)
+        if is_tuple:
+            output, skip_mask, loss = output
+
         if self.layer_norm_output_dim is not None:
             output = self.layer_norm_module(output)
         if self.has_activation:
@@ -162,4 +171,36 @@ class LayerBlock(Module):
         if self.residual_connection_flag:
             output = output + input_batch
 
+        if is_tuple:
+            return output, loss
         return output
+
+    # TODO: In the future instead multiple function inputs
+    # use a dataset class to encapsulate the inputs and outputs
+    # of the block
+    # def forward(
+    #     self,
+    #     data: LayerBlockData,
+    # ) -> LayerBlockData:
+    #     output = self.model(data.tensor)
+    #     is_tuple = isinstance(output, tuple)
+    #     if is_tuple:
+    #         output, _, loss = output
+    #         self.block_data.loss = loss
+    #     if self.layer_norm_output_dim is not None:
+    #         output = self.layer_norm_module(output)
+    #     if self.has_activation:
+    #         output = self.activation_function(output)
+    #     if self.has_dropout:
+    #         output = self.dropout_module(output)
+    #     if self.residual_connection_flag:
+    #         output = output + input_batch
+    #     self.block_data.tensor = output
+    #     return self.blcok_data
+
+
+# @dataclass
+# class LayerBlockData:
+#     tensor: Tensor | None = None
+#     skip_mask: Tensor | None = None
+#     loss: Tensor | None = None
