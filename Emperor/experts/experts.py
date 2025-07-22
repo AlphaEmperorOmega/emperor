@@ -98,9 +98,9 @@ class MixtureOfExperts(Module):
     def __compute_expert_mixture(
         self,
         experts_output: Tensor,
-        probabilities: Tensor,
         indices: Tensor,
-    ):
+        probabilities: Tensor | None = None,
+    ) -> Tensor:
         if self.weighted_parameters_flag:
             probabilities = probabilities.view(-1, 1)
             experts_output = experts_output * probabilities
