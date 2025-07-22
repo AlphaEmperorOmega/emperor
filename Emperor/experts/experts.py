@@ -43,8 +43,8 @@ class MixtureOfExperts(Module):
 
         self.router = RouterModel(cfg)
         self.sampler = SamplerModel(cfg)
-        self.input_expert_module = ExpertsModule(cfg)
-        self.output_expert_module = ExpertsModule(cfg)
+        self.input_module = ExpertsModule(cfg)
+        self.output_module = ExpertsModule(cfg, is_output_layer_flag=True)
 
         self.batch_size = None
         self.sequence_length = None
@@ -54,23 +54,27 @@ class MixtureOfExperts(Module):
         self,
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None]:
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
         input_batch_matrix, skip_mask = self.__prepare_inputs(input_batch, skip_mask)
         logits = self.router.compute_logit_scores(input_batch_matrix)
         probabilities, indices, skip_mask, loss = (
             self.sampler.sample_probabilities_and_indices(logits, skip_mask)
         )
-        input_experts_projection = self.input_expert_module(input_batch, indices)
-        output_experts_projection = self.output_expert_module(
-            input_experts_projection, indices
+        input_projection, expert_indices, input_loss = (
+            self.input_module.compute_expert_outputs(input_batch_matrix, indices)
+        )
+        output_projection, _, output_loss = self.output_module.compute_expert_outputs(
+            input_projection, indices
         )
         expert_mixture_output = self.__compute_expert_mixture(
-            output_experts_projection,
-            indices,
+            output_projection,
+            expert_indices,
             probabilities,
         )
 
-        return expert_mixture_output, skip_mask
+        total_loss = loss + input_loss + output_loss
+
+        return expert_mixture_output, skip_mask, total_loss
 
     def __prepare_inputs(
         self,
@@ -203,14 +207,16 @@ class ExpertsModule(Module):
         self,
         input_batch: Tensor,
         indices: Tensor,
-    ) -> Tensor | tuple[Tensor, Tensor]:
-        expert_outputs = []
-        layer_loss = torch.tensor(0.0)
+    ) -> tuple[Tensor, Tensor, Tensor]:
         is_tuple = False
+        expert_outputs = []
+        experts_indices_list = []
+        layer_loss = torch.tensor(0.0)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
             if expert_sample_indices.numel() == 0:
                 continue
+            experts_indices_list.append(expert_sample_indices)
             expert_assigned_samples = input_batch[expert_sample_indices]
             output = expert_model(expert_assigned_samples)
             # TODO: Refactor in the future when objects are to store data
@@ -222,10 +228,12 @@ class ExpertsModule(Module):
                 layer_loss += loss
                 continue
             expert_outputs.append(output)
+
+        experts_output = torch.cat(expert_outputs, dim=0)
+        experts_indices = torch.cat(experts_indices_list)
         if is_tuple:
-            experts_output = torch.cat(expert_outputs, dim=0)
-            return experts_output, layer_loss
-        return torch.cat(expert_outputs, dim=0)
+            return experts_output, experts_indices, layer_loss
+        return experts_output, experts_indices, layer_loss
 
     def __get_expert_indices(
         self,
