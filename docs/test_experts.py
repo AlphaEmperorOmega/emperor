@@ -313,13 +313,13 @@ class TestExpertsModule(unittest.TestCase):
                 [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
             )
             input_batch = torch.randn(batch_size, config.input_dim)
-
-            output = m.compute_expert_outputs(input_batch, indices)
+            output, indices, loss = m.compute_expert_outputs(input_batch, indices)
 
             self.assertIsInstance(output, torch.Tensor)
             self.assertEqual(
                 list(output.shape), [batch_size * top_k, config.output_dim]
             )
+            self.assertEqual(loss.item(), 0.0)
 
     def test__forward__DynamicDiagonalLinearLayer(self):
         c = copy.deepcopy(self.cfg)
@@ -335,12 +335,13 @@ class TestExpertsModule(unittest.TestCase):
             )
             input_batch = torch.randn(batch_size, config.input_dim)
 
-            output = m.compute_expert_outputs(input_batch, indices)
+            output, indices, loss = m.compute_expert_outputs(input_batch, indices)
 
             self.assertIsInstance(output, torch.Tensor)
             self.assertEqual(
                 list(output.shape), [batch_size * top_k, config.output_dim]
             )
+            self.assertEqual(loss.item(), 0.0)
 
     def test__forward__VectorParameterLayer(self):
         c = copy.deepcopy(self.cfg)
@@ -357,7 +358,7 @@ class TestExpertsModule(unittest.TestCase):
             input_batch = torch.randn(batch_size, config.input_dim)
 
             output = m.compute_expert_outputs(input_batch, indices)
-            expert_outputs, loss = output
+            expert_outputs, indices, loss = output
 
             self.assertIsInstance(output, tuple)
             self.assertIsInstance(expert_outputs, torch.Tensor)
@@ -382,7 +383,7 @@ class TestExpertsModule(unittest.TestCase):
             input_batch = torch.randn(batch_size, config.input_dim)
 
             output = m.compute_expert_outputs(input_batch, indices)
-            expert_outputs, loss = output
+            expert_outputs, indices, loss = output
 
             self.assertIsInstance(output, tuple)
             self.assertIsInstance(expert_outputs, torch.Tensor)
@@ -407,7 +408,7 @@ class TestExpertsModule(unittest.TestCase):
             input_batch = torch.randn(batch_size, config.input_dim)
 
             output = m.compute_expert_outputs(input_batch, indices)
-            expert_outputs, loss = output
+            expert_outputs, indices, loss = output
 
             self.assertIsInstance(output, tuple)
             self.assertIsInstance(expert_outputs, torch.Tensor)
@@ -645,6 +646,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         original_input = torch.randn(batch_size, embedding_dim)
         experts_output = torch.randn(top_k * batch_size, embedding_dim)
         probabilities = torch.randn(top_k * batch_size)
+        sample_indices = torch.randint(0, batch_size, (batch_size, top_k))
         sample_indices = torch.tensor([1, 3, 2, 4, 3, 0, 0, 2, 4, 2, 4, 3, 1, 1, 2])
 
         m._MixtureOfExperts__resolve_output_shape(original_input)
@@ -666,3 +668,93 @@ class TestMixtureOfExperts(unittest.TestCase):
 
         self.assertEqual(list(output.shape), [batch_size, embedding_dim])
         self.assertTrue(torch.allclose(output, expected_output))
+
+    def test__forward__LinearLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.BASE
+        m = MixtureOfExperts(c)
+
+        batch_size = 7
+        sequence_length = 6
+        embedding_dim = 5
+        input_batch = torch.randn(batch_size, sequence_length, embedding_dim)
+        output, skip_mask, loss = m(input_batch)
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            list(output.shape), [batch_size, sequence_length, embedding_dim]
+        )
+        self.assertIsNone(skip_mask)
+        self.assertTrue(loss > 0.0)
+
+    def test__forward__DynamicDiagonalLinearLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.DYNAMIC_BASE
+        m = MixtureOfExperts(c)
+
+        batch_size = 7
+        sequence_length = 6
+        embedding_dim = 5
+        input_batch = torch.randn(batch_size, sequence_length, embedding_dim)
+        output, skip_mask, loss = m(input_batch)
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            list(output.shape), [batch_size, sequence_length, embedding_dim]
+        )
+        self.assertIsNone(skip_mask)
+        self.assertTrue(loss > 0.0)
+
+    def test__forward__VectorParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.VECTOR
+        m = MixtureOfExperts(c)
+
+        batch_size = 7
+        sequence_length = 6
+        embedding_dim = 5
+        input_batch = torch.randn(batch_size, sequence_length, embedding_dim)
+        output, skip_mask, loss = m(input_batch)
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            list(output.shape), [batch_size, sequence_length, embedding_dim]
+        )
+        self.assertIsNone(skip_mask)
+        self.assertTrue(loss > 0.0)
+
+    def test__forward__MatrixParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.MATRIX
+        m = MixtureOfExperts(c)
+
+        batch_size = 7
+        sequence_length = 6
+        embedding_dim = 5
+        input_batch = torch.randn(batch_size, sequence_length, embedding_dim)
+        output, skip_mask, loss = m(input_batch)
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            list(output.shape), [batch_size, sequence_length, embedding_dim]
+        )
+        self.assertIsNone(skip_mask)
+        self.assertTrue(loss > 0.0)
+
+    def test__forward__GeneratorParameterLayer(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        m = MixtureOfExperts(c)
+
+        batch_size = 7
+        sequence_length = 6
+        embedding_dim = 5
+        input_batch = torch.randn(batch_size, sequence_length, embedding_dim)
+        output, skip_mask, loss = m(input_batch)
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            list(output.shape), [batch_size, sequence_length, embedding_dim]
+        )
+        self.assertIsNone(skip_mask)
+        self.assertTrue(loss > 0.0)
