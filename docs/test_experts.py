@@ -424,18 +424,42 @@ class TestMixtureOfExperts(unittest.TestCase):
                 list(expert_outputs.shape), [batch_size * top_k, config.output_dim]
             )
 
-    def test__compute_expert_mixture__weighted_parameters_flag__False(self):
+    def test__compute_expert_mixture__weighted_parameters_flag__False__compute_expert_mixture_flag__False(
+        self,
+    ):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureOfExpertsConfig(
             weighted_parameters_flag=False,
+            compute_expert_mixture_flag=False,
         )
         m = MixtureOfExperts(c, overrides)
 
         top_k = 3
         batch_size = 5
         embedding_dim = 7
-        original_input = torch.randn(batch_size, embedding_dim)
-        experts_output = torch.randn(top_k * batch_size, embedding_dim)
+        input = torch.randn(batch_size * top_k, embedding_dim)
+        sample_indices = torch.randint(0, batch_size, (top_k * batch_size,))
+        sample_indices = torch.tensor([1, 3, 2, 4, 3, 0, 0, 2, 4, 2, 4, 3, 1, 1, 2])
+
+        output = m._MixtureOfExperts__compute_expert_mixture(input, sample_indices)
+
+        self.assertEqual(list(output.shape), [batch_size * top_k, embedding_dim])
+        self.assertTrue(torch.allclose(output, input))
+
+    def test__compute_expert_mixture__weighted_parameters_flag__False__compute_expert_mixture_flag__True(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        overrides = MixtureOfExpertsConfig(
+            weighted_parameters_flag=False,
+            compute_expert_mixture_flag=True,
+        )
+        m = MixtureOfExperts(c, overrides)
+
+        top_k = 3
+        batch_size = 5
+        embedding_dim = 7
+        experts_output = torch.randn(batch_size * top_k, embedding_dim)
         sample_indices = torch.randint(0, batch_size, (top_k * batch_size,))
         sample_indices = torch.tensor([1, 3, 2, 4, 3, 0, 0, 2, 4, 2, 4, 3, 1, 1, 2])
 
@@ -443,54 +467,56 @@ class TestMixtureOfExperts(unittest.TestCase):
             experts_output, sample_indices
         )
 
-        # output_dict = {}
-        # for key, sample_indice in enumerate(sample_indices):
-        #     if sample_indice.item() not in output_dict:
-        #         output_dict[sample_indice.item()] = 0.0
-        #     output_dict[sample_indice.item()] = (
-        #         output_dict[sample_indice.item()] + experts_output[key]
-        #     )
-        # expected_output = torch.zeros(batch_size, embedding_dim)
-        # for key, value in output_dict.items():
-        #     expected_output[key] = value
+        output_dict = {}
+        for key, sample_indice in enumerate(sample_indices):
+            if sample_indice.item() not in output_dict:
+                output_dict[sample_indice.item()] = 0.0
+            output_dict[sample_indice.item()] = (
+                output_dict[sample_indice.item()] + experts_output[key]
+            )
+        expected_output = torch.zeros(batch_size, embedding_dim)
+        for key, value in output_dict.items():
+            expected_output[key] = value
 
         self.assertEqual(list(output.shape), [batch_size, embedding_dim])
-        # self.assertTrue(torch.allclose(output, expected_output))
+        self.assertTrue(torch.allclose(output, expected_output))
 
-    def test__compute_expert_mixture__weighted_parameters_flag__True(self):
+    def test__compute_expert_mixture__weighted_parameters_flag__True__compute_expert_mixture_flag__True(
+        self,
+    ):
         c = copy.deepcopy(self.cfg)
         overrides = MixtureOfExpertsConfig(
             weighted_parameters_flag=True,
+            compute_expert_mixture_flag=True,
         )
         m = MixtureOfExperts(c, overrides)
 
         top_k = 3
         batch_size = 5
         embedding_dim = 7
-        original_input = torch.randn(batch_size, embedding_dim)
-        experts_output = torch.randn(top_k * batch_size, embedding_dim)
         probabilities = torch.randn(top_k * batch_size)
-        sample_indices = torch.randint(0, batch_size, (batch_size, top_k))
+        experts_output = torch.randn(batch_size * top_k, embedding_dim)
+        sample_indices = torch.randint(0, batch_size, (top_k * batch_size,))
         sample_indices = torch.tensor([1, 3, 2, 4, 3, 0, 0, 2, 4, 2, 4, 3, 1, 1, 2])
 
         output = m._MixtureOfExperts__compute_expert_mixture(
             experts_output, sample_indices, probabilities
         )
 
-        # output_dict = {}
-        # for key, sample_indice in enumerate(sample_indices):
-        #     if sample_indice.item() not in output_dict:
-        #         output_dict[sample_indice.item()] = 0.0
-        #     output_dict[sample_indice.item()] = (
-        #         output_dict[sample_indice.item()]
-        #         + experts_output[key] * probabilities[key]
-        #     )
-        # expected_output = torch.zeros(batch_size, embedding_dim)
-        # for key, value in output_dict.items():
-        #     expected_output[key] = value
+        output_dict = {}
+        for key, sample_indice in enumerate(sample_indices):
+            if sample_indice.item() not in output_dict:
+                output_dict[sample_indice.item()] = 0.0
+            output_dict[sample_indice.item()] = (
+                output_dict[sample_indice.item()]
+                + experts_output[key] * probabilities[key]
+            )
+        expected_output = torch.zeros(batch_size, embedding_dim)
+        for key, value in output_dict.items():
+            expected_output[key] = value
 
         self.assertEqual(list(output.shape), [batch_size, embedding_dim])
-        # self.assertTrue(torch.allclose(output, expected_output))
+        self.assertTrue(torch.allclose(output, expected_output))
 
 
 class TestMixtureOfExpertsFeedForward(unittest.TestCase):
