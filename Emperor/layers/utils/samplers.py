@@ -32,7 +32,7 @@ class SamplerConfig(DataClassBase):
     top_k: int | None = field(
         default=None,
         metadata={
-            "help": "Inidicates the top-k probabilities and indices to be selected from a distribution"
+            "help": "Top-k probabilities and indices to be selected from a distribution"
         },
     )
     threshold: float | None = field(
