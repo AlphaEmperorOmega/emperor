@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase
 
 
-from Emperor.experts.experts import ExpertsModuleConfig, MixtureOfExpertsConfig
+from Emperor.experts.experts import (
+    MixtureOfExpertsFeedForwardConfig,
+    MixtureOfExpertsConfig,
+)
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
 from Emperor.layers.utils.linears import LinearLayerConfig
@@ -16,6 +19,7 @@ from Emperor.layers.utils.routers import (
 
 # MODEL WISE CONFI
 BATCH_SIZE = 10
+SEQUENCE_LENGTH = 5
 INPUT_DIM = 16
 HIDDEN_DIM = 32
 OUTPUT_DIM = 64
@@ -71,6 +75,10 @@ class ModelConfig(DataClassBase):
     batch_size: int = field(
         default=BATCH_SIZE,
         metadata={"help": "Batch size for training and inference"},
+    )
+    sequence_length: int = field(
+        default=SEQUENCE_LENGTH,
+        metadata={"help": "Number of tokens for each sequence in the input batch."},
     )
     input_dim: int = field(
         default=INPUT_DIM,
@@ -150,33 +158,39 @@ class ModelConfig(DataClassBase):
         ),
         metadata={"help": "`LinearLayerConfig` configuration"},
     )
-    mixture_of_experts_config: MixtureOfExpertsConfig = field(
-        default_factory=lambda: MixtureOfExpertsConfig(
+    mixture_of_experts_config: MixtureOfExpertsFeedForwardConfig = field(
+        default_factory=lambda: MixtureOfExpertsFeedForwardConfig(
             weighted_parameters_flag=True,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
-    input_moe_layer_config: ExpertsModuleConfig = field(
-        default_factory=lambda: ExpertsModuleConfig(
+    input_moe_layer_config: MixtureOfExpertsConfig = field(
+        default_factory=lambda: MixtureOfExpertsConfig(
             input_dim=32,
             output_dim=64,
+            top_k=MIXTURE_TOP_K,
             dropout_probability=0.1,
             layer_norm_flag=True,
             activation=ActivationFunctionOptions.GELU,
             model_type=LayerTypes.DYNAMIC_BASE,
             num_experts=12,
+            compute_expert_mixture_flag=False,
+            weighted_parameters_flag=False,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
-    output_moe_layer_config: ExpertsModuleConfig = field(
-        default_factory=lambda: ExpertsModuleConfig(
+    output_moe_layer_config: MixtureOfExpertsConfig = field(
+        default_factory=lambda: MixtureOfExpertsConfig(
             input_dim=32,
             output_dim=64,
+            top_k=MIXTURE_TOP_K,
             dropout_probability=0.1,
             layer_norm_flag=True,
             activation=ActivationFunctionOptions.GELU,
             model_type=LayerTypes.DYNAMIC_BASE,
             num_experts=12,
+            compute_expert_mixture_flag=True,
+            weighted_parameters_flag=True,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
