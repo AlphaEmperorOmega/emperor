@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class MixtureOfExpertsConfig(DataClassBase):
+class MixtureOfExpertsFeedForwardConfig(DataClassBase):
     weighted_parameters_flag: bool | None = field(
         default=None,
         metadata={
@@ -30,21 +30,23 @@ class MixtureOfExpertsConfig(DataClassBase):
     )
 
 
-class MixtureOfExperts(Module):
+class MixtureOfExpertsFeedForward(Module):
     def __init__(
         self,
-        cfg: "MixtureOfExpertsConfig | ModelConfig",
-        overrides: "MixtureOfExpertsConfig | None" = None,
+        cfg: "MixtureOfExpertsFeedForwardConfig | ModelConfig",
+        overrides: "MixtureOfExpertsFeedForwardConfig | None" = None,
     ) -> None:
         super().__init__()
         config = getattr(cfg, "mixture_of_experts_config", cfg)
-        self.cfg: MixtureOfExpertsConfig = self._overwrite_config(config, overrides)
+        self.cfg: MixtureOfExpertsFeedForwardConfig = self._overwrite_config(
+            config, overrides
+        )
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
 
         self.router = RouterModel(cfg)
         self.sampler = SamplerModel(cfg)
-        self.input_module = ExpertsModule(cfg)
-        self.output_module = ExpertsModule(cfg, is_output_layer_flag=True)
+        self.input_module = MixtureOfExperts(cfg)
+        self.output_module = MixtureOfExperts(cfg, is_output_layer_flag=True)
 
         self.batch_size = None
         self.sequence_length = None
@@ -57,24 +59,20 @@ class MixtureOfExperts(Module):
     ) -> tuple[Tensor, Tensor | None, Tensor]:
         input_batch_matrix, skip_mask = self.__prepare_inputs(input_batch, skip_mask)
         logits = self.router.compute_logit_scores(input_batch_matrix)
-        probabilities, indices, skip_mask, loss = (
+        probabilities, indices, skip_mask, sampler_loss = (
             self.sampler.sample_probabilities_and_indices(logits, skip_mask)
         )
-        input_projection, expert_indices, input_loss = (
-            self.input_module.compute_expert_outputs(input_batch_matrix, indices)
+        input_projection, input_loss = self.input_module.compute_expert_outputs(
+            input_batch_matrix, indices
         )
-        output_projection, _, output_loss = self.output_module.compute_expert_outputs(
-            input_projection, indices
+        output_projection, output_loss = self.output_module.compute_expert_outputs(
+            input_projection, indices, probabilities
         )
-        expert_mixture_output = self.__compute_expert_mixture(
-            output_projection,
-            expert_indices,
-            probabilities,
-        )
+        expert_mixture_output = output_projection.view(self.output_shape)
 
-        total_loss = loss + input_loss + output_loss
+        loss = sampler_loss + input_loss + output_loss
 
-        return expert_mixture_output, skip_mask, total_loss
+        return expert_mixture_output, skip_mask, loss
 
     def __prepare_inputs(
         self,
@@ -99,26 +97,9 @@ class MixtureOfExperts(Module):
         self.batch_size, _ = input_shape
         self.output_shape = [self.batch_size, -1]
 
-    def __compute_expert_mixture(
-        self,
-        experts_output: Tensor,
-        indices: Tensor,
-        probabilities: Tensor | None = None,
-    ) -> Tensor:
-        if self.weighted_parameters_flag:
-            probabilities = probabilities.view(-1, 1)
-            experts_output = experts_output * probabilities
-
-        _, output_dim = experts_output.shape
-        output_shape = (self.batch_size * self.sequence_length, output_dim)
-        output = torch.zeros(output_shape, dtype=experts_output.dtype, device=device)
-        output.index_add_(0, indices, experts_output)
-
-        return output.view(self.output_shape)
-
 
 @dataclass
-class ExpertsModuleConfig(DataClassBase):
+class MixtureOfExpertsConfig(DataClassBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Expert input dimension"},
@@ -126,6 +107,12 @@ class ExpertsModuleConfig(DataClassBase):
     output_dim: int | None = field(
         default=None,
         metadata={"help": "Expert output dimension"},
+    )
+    top_k: int | None = field(
+        default=None,
+        metadata={
+            "help": "Top-k probabilities and indices to be selected from a distribution"
+        },
     )
     dropout_probability: float | None = field(
         default=None,
@@ -149,28 +136,41 @@ class ExpertsModuleConfig(DataClassBase):
         default=None,
         metadata={"help": "Number of experts in the model"},
     )
+    compute_expert_mixture_flag: bool | None = field(
+        default=None,
+        metadata={"help": "When true computes the expert mixture for this layer."},
+    )
+    weighted_parameters_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` the sepected parameters will be multiplied by their probs."
+        },
+    )
 
 
-class ExpertsModule(Module):
+class MixtureOfExperts(Module):
     def __init__(
         self,
-        cfg: "ExpertsModuleConfig | ModelConfig",
-        overrides: "ExpertsModuleConfig | None" = None,
+        cfg: "MixtureOfExpertsConfig | ModelConfig",
+        overrides: "MixtureOfExpertsConfig | None" = None,
         is_output_layer_flag: bool = False,
     ):
         super().__init__()
         self.is_output_layer_flag = is_output_layer_flag
         config = getattr(cfg, self.__resolve_config_type(), cfg)
-        self.cfg: "ExpertsModuleConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "MixtureOfExpertsConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
+        self.top_k = self.cfg.top_k
         self.num_experts = self.cfg.num_experts
         self.layer_norm_flag = self.cfg.layer_norm_flag
         self.dropout_probability = self.cfg.dropout_probability
         self.activation = self.cfg.activation
         self.model_type = self.cfg.model_type
-        self._valudate_fields(self.cfg, ExpertsModuleConfig)
+        self.compute_expert_mixture_flag = self.cfg.compute_expert_mixture_flag
+        self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
+        self._valudate_fields(self.cfg, MixtureOfExpertsConfig)
 
         self.expert_modules = self.__create_experts(cfg)
 
@@ -207,11 +207,11 @@ class ExpertsModule(Module):
         self,
         input_batch: Tensor,
         indices: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        is_tuple = False
+        probabilities: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
         expert_outputs = []
         experts_indices_list = []
-        layer_loss = torch.tensor(0.0)
+        loss = torch.tensor(0.0)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
             if expert_sample_indices.numel() == 0:
@@ -219,21 +219,18 @@ class ExpertsModule(Module):
             experts_indices_list.append(expert_sample_indices)
             expert_assigned_samples = input_batch[expert_sample_indices]
             output = expert_model(expert_assigned_samples)
-            # TODO: Refactor in the future when objects are to store data
-            # instead of tuples
-            is_tuple = isinstance(output, tuple)
-            if is_tuple:
-                output, loss = output
+            if isinstance(output, tuple):
+                output, expert_loss = output
                 expert_outputs.append(output)
-                layer_loss += loss
+                loss += expert_loss
                 continue
             expert_outputs.append(output)
 
-        experts_output = torch.cat(expert_outputs, dim=0)
         experts_indices = torch.cat(experts_indices_list)
-        if is_tuple:
-            return experts_output, experts_indices, layer_loss
-        return experts_output, experts_indices, layer_loss
+        output = torch.cat(expert_outputs, dim=0)
+        output = self.__compute_expert_mixture(output, experts_indices, probabilities)
+
+        return output, loss
 
     def __get_expert_indices(
         self,
@@ -244,6 +241,25 @@ class ExpertsModule(Module):
         flattened_tensor = boolean_tensor.sum(dim=-1)
         indices_for_expert = flattened_tensor.nonzero()
         return indices_for_expert.squeeze(dim=-1)
+
+    def __compute_expert_mixture(
+        self,
+        experts_output: Tensor,
+        indices: Tensor,
+        probabilities: Tensor | None = None,
+    ) -> Tensor:
+        if not self.compute_expert_mixture_flag:
+            return experts_output
+
+        if self.weighted_parameters_flag:
+            probabilities = probabilities.view(-1, 1)
+            experts_output = experts_output * probabilities
+
+        input_dim, output_dim = experts_output.shape
+        output_shape = (input_dim // self.top_k, output_dim)
+        output = torch.zeros(output_shape, dtype=experts_output.dtype, device=device)
+        output.index_add_(0, indices, experts_output)
+        return output
 
 
 class MixtureOfAttentionHeads(MixtureOfExperts):
@@ -288,10 +304,6 @@ class MixtureOfAttentionHeads(MixtureOfExperts):
         return expandProjectionOutput
 
     def conputeOutputProjection(self, attentionOutput):
-        """
-        The self variables are computed in MixtureOfExperts.expandProjection
-        (or the method above in case you don't see)
-        """
         batchSize, sequenceLength, _, _ = attentionOutput.shape
 
         attentionOutput = attentionOutput.reshape(-1, self.hiddenDim)
