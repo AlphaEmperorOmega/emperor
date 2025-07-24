@@ -268,7 +268,7 @@ class MixtureOfAttentionHeads(MixtureOfExpertsFeedForward):
         self.skip_mask = None
         self.total_loss
 
-    def compute_expert_input_layer(
+    def compute_expert_input_projection(
         self,
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
@@ -282,47 +282,12 @@ class MixtureOfAttentionHeads(MixtureOfExpertsFeedForward):
             input_batch_matrix, self.indices
         )
 
-        # inputBatchZeros = L.zeros(
-        #     (batchSize * sequenceLength * self.cfg.topK, self.hiddenDim),
-        #     dtype=expertsOutput.dtype,
-        #     device=L.Device,
-        # )
-        # expertOutputMixture = inputBatchZeros.index_add(
-        #     0, expertSortedNonzeroProbabilityIndexes, expertsOutput
-        # )
-        # topKIndexes = topKIndexes.view(batchSize, sequenceLength, -1)
-        # self.expertSortedTopKBatchIndexes = expertSortedTopKBatchIndexes
-        # self.expertSortedTopKBatchProbabilities = expertSortedTopKBatchProbabilities
-        # self.batchExpertFrequency = batchExpertFrequency
-        # self.expertSortedNonzeroProbabilityIndexes = (
-        #     expertSortedNonzeroProbabilityIndexes
-        # )
-        # reshaped_projection_outputs = experts_projection.view(
-        #     batch_size, sequence_length, self.cfg.top_k, self.hidden_dim
-        # )
+        output_shape = (batch_size, sequence_length, self.cfg.top_k, self.hidden_dim)
+        return experts_projection.view(output_shape)
 
-        return experts_projection.view(self.output_shape)
+    def compute_expert_output_projection(self, attention_output: Tensor) -> Tensor:
+        input_batch_matrix, skip_mask = self._prepare_inputs(input_batch, skip_mask)
+        output = self.outputExperts(expertInputs, self.batchExpertFrequency)
 
-    def conputeOutputProjection(self, attentionOutput):
-        batchSize, sequenceLength, _, _ = attentionOutput.shape
-
-        attentionOutput = attentionOutput.reshape(-1, self.hiddenDim)
-
-        expertInputs = attentionOutput[self.expertSortedNonzeroProbabilityIndexes]
-
-        expertsOutput = self.outputExperts(expertInputs, self.batchExpertFrequency)
-
-        if self.multiplyByGatesFlag:
-            expertsOutput = (
-                expertsOutput * self.expertSortedTopKBatchProbabilities.view(-1, 1)
-            )
-
-        inputBatchZeros = L.zeros(
-            (batchSize * sequenceLength, self.outputDim),
-            dtype=expertsOutput.dtype,
-            device=L.Device,
-        )
-        expertOutputMixture = inputBatchZeros.index_add(
-            0, self.expertSortedTopKBatchIndexes, expertsOutput
-        )
-        return expertOutputMixture.view(batchSize, sequenceLength, self.outputDim)
+        output_shape = (batchSize, sequenceLength, self.outputDim)
+        return output.view(output_shape)
