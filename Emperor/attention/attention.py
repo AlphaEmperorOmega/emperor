@@ -82,36 +82,30 @@ class MultiHeadAttention(Module):
         self.value_dim = self.cfg.value_dim
         self.query_dim = self.embedding_dim
         self.head_dim = self.embedding_dim // self.num_heads
-
-        if self.__are_key_query_value_dims_equal():
-            self.query_key_value_module = nn.Linear(
-                self.embedding_dim, self.embedding_dim * 3
-            )
-            self.register_parameter("query_module", None)
-            self.register_parameter("key_module", None)
-            self.register_parameter("query_module", None)
-        else:
-            self.query_module = nn.Linear(self.embedding_dim, self.query_dim)
-            self.key_module = nn.Linear(self.embedding_dim, self.key_dim)
-            self.value_module = nn.Linear(self.embedding_dim, self.value_dim)
-            self.register_parameter("query_key_value_module", None)
+        self.__create_projection_models(cfg)
 
         assert (self.head_dim * self.num_heads) == self.embedding_dim, (
             "`embedding_dim` must be perfectly divisible by `number_of_heads`."
         )
 
-    def __create_projection_models(self):
-        if self.__are_key_query_value_dims_equal():
-            query_key_value_module = nn.Linear(
-                self.embedding_dim, self.embedding_dim * 3
-            )
-            return query_key_value_module
-        query_module = nn.Linear(self.embedding_dim, self.query_dim)
-        key_module = nn.Linear(self.embedding_dim, self.key_dim)
-        value_module = nn.Linear(self.embedding_dim, self.value_dim)
-        return query_module, key_module, value_module
-
     def __are_key_query_value_dims_equal(self) -> bool:
         are_keys_querys_same = self.key_dim == self.embed_dim
         are_values_querys_same = self.value_dim == self.embed_dim
         return are_keys_querys_same and are_values_querys_same
+
+    def __create_projection_models(self, cfg: "ModelConfig") -> None:
+        self.output_dim = self.model_type.value(cfg)
+        if self.__are_key_query_value_dims_equal():
+            self.query_key_value_module = self.model_type.value(cfg)
+            return
+        self.query_module = self.model_type.value(cfg)
+        self.key_module = self.model_type.value(cfg)
+        self.value_module = self.model_type.value(cfg)
+
+        # if self.__are_key_query_value_dims_equal():
+        #     self.query_key_value_module = nn.Linear(
+        #         self.embedding_dim, self.embedding_dim * 3
+        #     )
+        # self.query_module = nn.Linear(self.embedding_dim, self.query_dim)
+        # self.key_module = nn.Linear(self.embedding_dim, self.key_dim)
+        # self.value_module = nn.Linear(self.embedding_dim, self.value_dim)
