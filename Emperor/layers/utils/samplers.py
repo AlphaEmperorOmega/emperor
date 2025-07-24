@@ -21,7 +21,7 @@ from Emperor.base.utils import (
     tensor,
 )
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -230,7 +230,7 @@ class SamplerBase(Module):
         full_probabilities: Tensor,
         sampled_probabilities: Tensor,
         indices: Tensor,
-        skip_mask: Optional[Tensor] = None,
+        skip_mask: Tensor | None = None,
     ) -> Tensor:
         return self.default_loss
 
@@ -280,7 +280,7 @@ class SamplerSparse(SamplerBase):
         full_probabilities: Tensor,
         sampled_probabilities: Tensor,
         indices: Tensor,
-        skip_mask: Optional[Tensor] = None,
+        skip_mask: Tensor | None = None,
     ) -> Tensor:
         gates = self.__prepare_loss_gates(sampled_probabilities, indices)
         logits = logits.reshape(-1, self.num_experts)
