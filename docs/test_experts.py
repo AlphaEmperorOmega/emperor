@@ -653,7 +653,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
         sequence_length = 6
         embedding_dim = 7
         input_batch = torch.randn(batch_size, sequence_length, embedding_dim)
-        output, skip_mask = m._MixtureOfExpertsFeedForward__prepare_inputs(input_batch)
+        output, skip_mask = m._prepare_inputs(input_batch)
         output_combined_dims, output_embedding_dim = output.shape
 
         self.assertEqual(output_combined_dims, batch_size * sequence_length)
@@ -669,9 +669,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
         embedding_dim = 7
         input_batch = torch.randn(batch_size, sequence_length, embedding_dim)
         skip_mask = torch.randint(0, 2, (batch_size, sequence_length))
-        output, reshaped_skip_ask = m._MixtureOfExpertsFeedForward__prepare_inputs(
-            input_batch, skip_mask
-        )
+        output, reshaped_skip_ask = m._prepare_inputs(input_batch, skip_mask)
         output_combined_dims, output_embedding_dim = output.shape
 
         self.assertEqual(output_combined_dims, batch_size * sequence_length)
