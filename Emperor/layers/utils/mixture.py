@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from Emperor.base.utils import Module, DataClassBase, arange, reshape
 from dataclasses import dataclass, field
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -219,7 +219,7 @@ class VectorMixture(ParameterMixture):
         self.register_buffer("range_weights", range_weights)
         self.register_buffer("range_biases", range_biases)
 
-    def __init_parameter_banks(self) -> Tuple[Parameter, Parameter | None]:
+    def __init_parameter_banks(self) -> tuple[Parameter, Parameter | None]:
         weight_bank_shape = (self.input_dim, self.depth_dim, self.output_dim)
         weight_bank = self._init_parameter_bank(weight_bank_shape)
 
@@ -230,7 +230,7 @@ class VectorMixture(ParameterMixture):
 
         return weight_bank, bias_bank
 
-    def __init_parameter_choice_ranges(self) -> Tuple[Tensor, Tensor]:
+    def __init_parameter_choice_ranges(self) -> tuple[Tensor, Tensor]:
         input_range = arange(self.input_dim)
         output_range = arange(self.output_dim)
 
@@ -247,7 +247,7 @@ class VectorMixture(ParameterMixture):
 
     def _select_parameters(
         self, weight_indices: Tensor, bias_indices: Tensor | None = None
-    ) -> Tuple:
+    ) -> tuple:
         selected_weights = self.__select_parameter_vectors(
             weight_indices, self.weight_bank, self.range_weights
         )
@@ -313,7 +313,7 @@ class MatrixMixture(ParameterMixture):
         if self.depth_dim == self.top_k:
             assert self.weighted_parameters_flag is True
 
-    def __generate_probability_shapes(self) -> Tuple:
+    def __generate_probability_shapes(self) -> tuple:
         weight_probs_shape = (-1, self.top_k, 1)
         bias_probs_shape = (-1, self.top_k)
         if self.top_k > 1:
@@ -321,7 +321,7 @@ class MatrixMixture(ParameterMixture):
             bias_probs_shape = (-1, self.top_k, 1)
         return weight_probs_shape, bias_probs_shape
 
-    def __init_parameter_banks(self) -> Tuple[Parameter, Parameter | None]:
+    def __init_parameter_banks(self) -> tuple[Parameter, Parameter | None]:
         weight_bank_shape = (self.depth_dim, self.input_dim, self.output_dim)
         weight_bank = self._init_parameter_bank(weight_bank_shape)
 
@@ -426,7 +426,7 @@ class GeneratorMixture(ParameterMixture):
 
     def __init_parameter_banks(
         self,
-    ) -> Tuple[Parameter, Parameter, Parameter, Parameter | None, Parameter | None]:
+    ) -> tuple[Parameter, Parameter, Parameter, Parameter | None, Parameter | None]:
         input_weight_shape = (self.depth_dim, self.input_dim, self.input_dim)
         output_weight_shape = (self.depth_dim, self.input_dim, self.output_dim)
         diagonal_weight_shape = (self.depth_dim, self.input_dim, self.diagonal_dim)
@@ -459,7 +459,7 @@ class GeneratorMixture(ParameterMixture):
         self,
         weight_indices: Tensor,
         bias_indices: Tensor | None = None,
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor | None, Tensor | None]:
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None, Tensor | None]:
         if self.top_k == 1:
             weight_indices = weight_indices.unsqueeze(dim=-1)
             if self.bias_parameters_flag:
@@ -516,7 +516,7 @@ class GeneratorMixture(ParameterMixture):
         weight_probs: Tensor | None = None,
         bias_probs: Tensor | None = None,
         input_batch: Tensor | None = None,
-    ) -> Tuple[Tensor, Tensor | None]:
+    ) -> tuple[Tensor, Tensor | None]:
         (
             input_vectors,
             output_vectors,
