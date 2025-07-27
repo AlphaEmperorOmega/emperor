@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, embedding
 from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase, Module, device
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class MultiHeadAttentionConfig(DataClassBase):
+class AttentionConfig(DataClassBase):
     model_type: LayerTypes | None = field(
         default=None,
         metadata={
@@ -62,7 +62,7 @@ class MultiHeadAttentionConfig(DataClassBase):
     )
 
 
-class MultiHeadAttention(Module):
+class Attention(Module):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig | ModelConfig",
@@ -126,7 +126,7 @@ class MultiHeadAttention(Module):
         average_attention_weights: bool = False,
         causal_attention_mask: bool = False,
     ) -> tuple[Tensor, Tensor | None]:
-        self.input_tesnor_3D_flag = query.dim() == 3
+        self.set_input_tensor_3D_flag(query)
         key_padding_mask, attention_mask = self.__update_masks(
             key_padding_mask, attention_mask, query.dtype
         )
@@ -136,10 +136,11 @@ class MultiHeadAttention(Module):
 
     def is_input_tensor_3D(self) -> bool:
         if self.input_tesnor_3D_flag is None:
-            AssertionError(
-                "Input matrix flag is not set. Call `is_input_matrix` first."
-            )
+            AssertionError("`input_tesnor_3D_flag` flag is not set.")
         return self.input_tesnor_3D_flag
+
+    def set_input_tensor_3D_flag(self, query: Tensor) -> None:
+        self.input_tesnor_3D_flag = query.dim() == 3
 
     def __update_masks(
         self,
@@ -150,7 +151,7 @@ class MultiHeadAttention(Module):
         key_padding_mask = F._canonical_mask(
             mask=key_padding_mask,
             mask_name="key_padding_mask",
-            other_type=F._none_or_dtype(key_padding_mask, self.dtype),
+            other_type=F._none_or_dtype(attention_mask),
             other_name="attention_mask",
             target_type=target_type,
         )
@@ -180,3 +181,323 @@ class MultiHeadAttention(Module):
             else:
                 query, key, value = (x.transpose(0, 1) for x in (query, key, value))
         return query, key, value
+
+
+class MultiHeadAttentionBehaviour(Module):
+    def __init__(self):
+        super().__init__()
+        self.num_heads = num_heads
+        self.shape_validator = AttentionShapeValidator(self.num_heads)
+        self.masks = AttentionMaskUpdates()
+        self.target_dtype: DType | None = None
+
+    def forward(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        embed_dim_to_check: int,
+        num_heads: int,
+        input_projection_weight: Tensor | None,
+        input_projection_bias: Tensor | None,
+        bias_key: Tensor | None,
+        bias_value: Tensor | None,
+        add_zero_attention: bool,
+        dropout_probability: float,
+        output_projection_weight: Tensor,
+        output_projection_bias: Tensor | None,
+        training: bool = True,
+        key_padding_mask: Tensor | None = None,
+        need_weights: bool = True,
+        attention_mask: Tensor | None = None,
+        use_separate_projection_weight: bool = False,
+        query_projection_weight: Tensor | None = None,
+        key_projection_weight: Tensor | None = None,
+        value_projection_weight: Tensor | None = None,
+        static_key: Tensor | None = None,
+        static_values: Tensor | None = None,
+        average_attention_weights: bool = True,
+        is_causal: bool = False,
+    ):
+        self.target_dtype = query.dtype
+        self.shape_validator.assert_shapes(
+            query, key, value, key_padding_mask, attention_mask
+        )
+        query, key, value, key_padding_mask = self.__add_batch_dimension_if_missing(
+            query, key, value, key_padding_mask
+        )
+
+        key_padding_mask, attention_mask, causal_attention_mask_flag = (
+            self.masks.create_masks(
+                attention_mask,
+                key_padding_mask,
+                causal_attention_mask_flag,
+                need_weights,
+            )
+        )
+
+        target_sequence_length, batch_size, embedding_dim = query.shape
+        source_sequence_length, _, _ = key.shape
+
+        head_dim = self.__resolve_head_dim(embedding_dim)
+
+        self.assert_qkv_based_on_weight_projection(use_separate_projection_weight)
+
+        if use_separate_projection_weight:
+            q, k, v = _in_projection_packed(query, key, value, in_proj_weight, in_proj_bias)
+        else:
+            if in_proj_bias is None:
+                b_q = b_k = b_v = None
+            else:
+                b_q, b_k, b_v = in_proj_bias.chunk(3)
+            q, k, v = _in_projection(
+                query,
+                key,
+                value,
+                q_proj_weight,
+                k_proj_weight,
+                v_proj_weight,
+                b_q,
+                b_k,
+                b_v,
+            )
+
+
+
+    def __get_target_dtype(self) -> DType:
+        if self.has_batch_dimension is None:
+            assert self.target_dtype is not None, (
+                "Ensure that `self.target_dtype` has been set before calling this method"
+            )
+        return self.has_batch_dimension
+
+    def __add_batch_dimension_if_missing(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        key_padding_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None]:
+        if self.shape_validator.is_input_batched(query):
+            return query, key, value, key_padding_mask
+        query = query.unsqueeze(1)
+        key = key.unsqueeze(1)
+        value = value.unsqueeze(1)
+        if key_padding_mask is not None:
+            key_padding_mask = key_padding_mask.unsqueeze(0)
+        return query, key, value, key_padding_mask
+
+    def __resolve_head_dim(self, embedding_dim: int | Tensor) -> :
+        self.shape_validator.assert_correct_embedding_dim(embedding_dim)
+        if isinstance(embedding_dim, torch.Tensor):
+            # embed_dim can be a tensor when JIT tracing
+            head_dim = embedding_dim.div(self.num_heads, rounding_mode="trunc")
+        else:
+            head_dim = embedding_dim // self.num_heads
+
+        self.shape_validator.assert_correct_head_dim(head_dim)
+
+        return head_dim
+
+class AttentionMaskUpdates():
+    def __init__(self, target_dtype: DType):
+        self.target_dtype = target_dtype
+        pass
+
+    def create_masks(
+        self,
+        attention_mask: Tensor | None,
+        key_padding_mask: Tensor | None,
+        causal_attention_mask_flag: bool = False,
+        need_weights: bool = False,
+    ) -> tuple[Tensor | None, Tensor | None, bool]:
+        key_padding_mask = F._canonical_mask(
+            mask=key_padding_mask,
+            mask_name="key_padding_mask",
+            other_type=F._none_or_dtype(attention_mask),
+            other_name="attention_mask",
+            target_type=self.target_dtype,
+        )
+        attention_mask, causal_attention_mask_flag = self.__validate_attention_mask(
+            attention_mask,
+            key_padding_mask,
+            causal_attention_mask_flag,
+            need_weights,
+        )
+        return key_padding_mask, attention_mask, causal_attention_mask_flag
+
+    def __validate_attention_mask(
+        self,
+        attention_mask: Tensor | None,
+        key_padding_mask: Tensor | None,
+        causal_attention_mask_flag: bool,
+        need_weights: bool,
+    ) -> tuple[Tensor | None, bool]:
+        if causal_attention_mask_flag and key_padding_mask is None and not need_weights:
+            return None, causal_attention_mask_flag
+
+        if key_padding_mask is not None:
+            causal_attention_mask_flag = False
+
+        attention_mask = F._canonical_mask(
+            mask=attention_mask,
+            mask_name="attention_mask",
+            other_type=None,
+            other_name="",
+            target_type=self.__get_target_dtype(),
+            check_other=False,
+        )
+
+        return attention_mask, causal_attention_mask_flag
+
+
+class AttentionShapeValidator:
+    def __init__(
+        self,
+        num_heads: int,
+        causal_attention_mask_flag: bool = False,
+    ):
+        self.num_heads = num_heads
+        self.causal_attention_mask_flag = causal_attention_mask_flag
+        self.query_dims = None
+        self.key_dims = None
+        self.value_dims = None
+        self.embedding_dim = None
+        self.key_sequence_length = None
+        self.has_batch_dimension = None
+        self.query_sequence_length = None
+
+    def assert_shapes(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        key_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ) -> bool:
+        self.has_batch_dimension = query.dim() == 3
+        self.query_dims = query.dim()
+        self.key_dims = key.dim()
+        self.value_dims = value.dim()
+        self.embedding_dim = query.shape[-1]
+        self.query_sequence_length = query.shape[0]
+        self.key_sequence_length = value.shape[0]
+
+        self.__check_query_dims()
+        self.__check_key_value_dims()
+        self.__check_key_padding_mask_dims(key_padding_mask)
+        self.__check_attention_mask_dims(attention_mask)
+        self.__ensure_attention_mask_if_causal(attention_mask)
+
+        return self.has_batch_dimension
+
+    def __check_query_dims(self) -> None:
+        if self.query_dims not in (2, 3):
+            raise AssertionError(
+                f"Query should be unbatched 2D or batched 3D tensor but received {self.query_dims}-D tensor"
+            )
+
+    def __check_key_value_dims(self) -> None:
+        expected_dim = 3 if self.has_batch_dimension else 2
+        query_key_shape_check = self.key_dims == expected_dim
+        query_value_shapes_check = self.value_dims == expected_dim
+        are_qkv_shapes_same = query_key_shape_check and query_value_shapes_check
+        assert are_qkv_shapes_same, (
+            f"For {self.__format_dimension_context()} query, expected key and value to be {expected_dim}-D "
+            f"but found {self.key_dims}-D and {self.value_dims}-D tensors respectively"
+        )
+
+    def __check_key_padding_mask_dims(
+        self, key_padding_mask: Tensor | None = None
+    ) -> None:
+        if key_padding_mask is None:
+            return
+
+        expected_dim = 2 if self.has_batch_dimension else 1
+        key_padding_dims = key_padding_mask.dim()
+        key_padding_mask_dims_check = key_padding_dims == expected_dim
+        assert key_padding_mask_dims_check, (
+            f"For {self.__format_dimension_context()} query, expected `key_padding_mask` to be None or {expected_dim}-D "
+            f"but found {key_padding_dims}-D tensor instead"
+        )
+
+    def __check_attention_mask_dims(self, attention_mask: Tensor | None = None) -> None:
+        if attention_mask is None:
+            return
+
+        attention_mask_dims = attention_mask.dim()
+        assert attention_mask_dims in (2, 3), (
+            f"For {self.__format_dimension_context()} query, expected attn_mask to be None, 2-D, or 3-D "
+            f"but found {attention_mask_dims}-D tensor instead"
+        )
+
+        if attention_mask_dims == 3:
+            expected_shape = (
+                self.num_heads,
+                self.query_sequence_length,
+                self.key_sequence_length,
+            )
+            attention_mask_shape_check = attention_mask.shape == expected_shape
+            assert attention_mask_shape_check, (
+                f"Expected `attention_mask` shape to be {expected_shape} but got {attention_mask.shape}"
+            )
+
+    def __format_dimension_context(self) -> str:
+        return "batched (3-D)" if self.has_batch_dimension else "unbatched (2-D)"
+
+    def __ensure_attention_mask_if_causal(
+        self, attention_mask: Tensor | None = None
+    ) -> None:
+        if attention_mask is None:
+            return
+
+        ensure_attention_mask_if_causal = (
+            self.causal_attention_mask_flag and attention_mask is None
+        )
+        if ensure_attention_mask_if_causal:
+            raise RuntimeError(
+                "Need `attention_mask` if specifying the `causal_attention_mask_flag` hint. "
+                "You may use the Transformer module method "
+                "`generate_square_subsequent_mask` to create this mask."
+            )
+
+    def is_input_batched(self, query: Tensor | None = None) -> bool:
+        if self.has_batch_dimension is None:
+            assert query is not None, (
+                "Query tensor must be provided to check batch dimension."
+            )
+            return query.dim() == 3
+        return self.has_batch_dimension
+
+    def assert_correct_embedding_dim(self, expected_embedding_dim: int):
+        assert self.embedding_dim == expected_embedding_dim, (
+            f"Was expecting embedding dimension of {expected_embedding_dim}, but got {self.embedding_dim}"
+        )
+
+    def assert_correct_head_dim(self, head_dim: int):
+        assert (
+            head_dim * self.num_heads == self.embedding_dim
+        ), f"`embed_dim` {self.embedding_dim} not divisible by num_heads {self.num_heads}"
+
+    def assert_separate_projection_layer(self):
+        assert (
+            key.shape == value.shape
+        ), f"key shape {key.shape} does not match value shape {value.shape}"
+        assert (
+            q_proj_weight is not None
+        ), "use_separate_proj_weight is True but q_proj_weight is None"
+        assert (
+            k_proj_weight is not None
+        ), "use_separate_proj_weight is True but k_proj_weight is None"
+        assert (
+            v_proj_weight is not None
+        ), "use_separate_proj_weight is True but v_proj_weight is None"
+
+
+    def assert_single_projection_layer(self):
+        assert (
+            self.key.shape[:2] == value.shape[:2]
+        ), f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
+        assert (
+            in_proj_weight is not None
+        ), "use_separate_proj_weight is False but in_proj_weight is None"
