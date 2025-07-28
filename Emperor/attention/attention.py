@@ -187,9 +187,14 @@ class MultiHeadAttentionBehaviour(Module):
     def __init__(self):
         super().__init__()
         self.num_heads = num_heads
-        self.shape_validator = AttentionShapeValidator(self.num_heads)
-        self.masks = AttentionMaskUpdates()
+        self.shape_validator = AttentionValidator(self.num_heads)
+        self.attetnion_masks = AttentionMaskUpdates()
         self.target_dtype: DType | None = None
+
+        self.shared_projection_model = nn.Linear(,bias=False)
+        self.query_model = nn.Linear(,bias=False)
+        self.key_model = nn.Linear(,bias=False)
+        self.value_model = nn.Linear(,bias=False)
 
     def forward(
         self,
@@ -228,7 +233,7 @@ class MultiHeadAttentionBehaviour(Module):
         )
 
         key_padding_mask, attention_mask, causal_attention_mask_flag = (
-            self.masks.create_masks(
+            self.attetnion_masks.create_masks(
                 attention_mask,
                 key_padding_mask,
                 causal_attention_mask_flag,
@@ -238,38 +243,48 @@ class MultiHeadAttentionBehaviour(Module):
 
         target_sequence_length, batch_size, embedding_dim = query.shape
         source_sequence_length, _, _ = key.shape
-
         head_dim = self.__resolve_head_dim(embedding_dim)
 
         self.assert_qkv_based_on_weight_projection(use_separate_projection_weight)
 
+    def compute_qkv_projections(
+        self,
+        use_separate_projection_weight: bool = False,
+    ):
+        self.assert_qkv_based_on_weight_projection(use_separate_projection_weight)
+        embedding_dim = query.size(-1)
+        are_key_values_same = key is value
+        are_query_key_same = query is key
+
         if use_separate_projection_weight:
-            q, k, v = _in_projection_packed(query, key, value, in_proj_weight, in_proj_bias)
+            if are_key_values_same:
+                if are_query_key_same:
+                    return self.__compute_self_projections()
+                else:
+                    return self.__compute_ecnoder_decoder_projections()
         else:
-            if in_proj_bias is None:
-                b_q = b_k = b_v = None
-            else:
-                b_q, b_k, b_v = in_proj_bias.chunk(3)
-            q, k, v = _in_projection(
-                query,
-                key,
-                value,
-                q_proj_weight,
-                k_proj_weight,
-                v_proj_weight,
-                b_q,
-                b_k,
-                b_v,
-            )
+            return self.__compute_base_projections()
 
 
+    def __compute_self_projections(self):
+        shared_qkv_projection = self.shared_projection_model(query)
+        projections = shared_qkv_projection.unflatten(-1, (3, embedding_dim))
+        projections = projections.unsqueeze(0)
+        projections = projections.transpose(0, -2)
+        projections = projections.squeeze(-2)
+        projections = projections.contiguous()
+        query, key, value = projections[0], projections[1], projections[2]
+        return query, key, value
 
-    def __get_target_dtype(self) -> DType:
-        if self.has_batch_dimension is None:
-            assert self.target_dtype is not None, (
-                "Ensure that `self.target_dtype` has been set before calling this method"
-            )
-        return self.has_batch_dimension
+    def __compute_ecnoder_decoder_projections(self):
+        pass
+
+    def __compute_base_projections(self):
+        query_projections = self.query_module(query)
+        key_projections = self.key_module(key)
+        value_projections = self.value_module(value)
+        return query_projections, key_projections, value_projections
+
 
     def __add_batch_dimension_if_missing(
         self,
@@ -287,7 +302,7 @@ class MultiHeadAttentionBehaviour(Module):
             key_padding_mask = key_padding_mask.unsqueeze(0)
         return query, key, value, key_padding_mask
 
-    def __resolve_head_dim(self, embedding_dim: int | Tensor) -> :
+    def __resolve_head_dim(self, embedding_dim: int | Tensor) -> None:
         self.shape_validator.assert_correct_embedding_dim(embedding_dim)
         if isinstance(embedding_dim, torch.Tensor):
             # embed_dim can be a tensor when JIT tracing
@@ -299,9 +314,12 @@ class MultiHeadAttentionBehaviour(Module):
 
         return head_dim
 
-class AttentionMaskUpdates():
+
+class AttentionMaskUpdates:
     def __init__(self, target_dtype: DType):
         self.target_dtype = target_dtype
+        self.validator = AttentionValidator()
+
         pass
 
     def create_masks(
@@ -311,7 +329,7 @@ class AttentionMaskUpdates():
         causal_attention_mask_flag: bool = False,
         need_weights: bool = False,
     ) -> tuple[Tensor | None, Tensor | None, bool]:
-        key_padding_mask = F._canonical_mask(
+        key_padding_mask = self.__canonical_mask(
             mask=key_padding_mask,
             mask_name="key_padding_mask",
             other_type=F._none_or_dtype(attention_mask),
@@ -339,19 +357,41 @@ class AttentionMaskUpdates():
         if key_padding_mask is not None:
             causal_attention_mask_flag = False
 
-        attention_mask = F._canonical_mask(
+        attention_mask = self.__canonical_mask(
             mask=attention_mask,
             mask_name="attention_mask",
             other_type=None,
             other_name="",
-            target_type=self.__get_target_dtype(),
+            target_type=self.target_dtype,
             check_other=False,
         )
 
         return attention_mask, causal_attention_mask_flag
 
+    def __canonical_mask(
+        self,
+        mask: Tensor | None,
+        mask_name: str,
+        other_type: DType | None,
+        other_name: str,
+        target_type: DType,
+        check_other: bool = True,
+    ) -> Tensor | None:
+        if mask is None:
+            return mask
 
-class AttentionShapeValidator:
+        self.validator.assert_mask_float_or_bool(mask, mask_name)
+        self.validator.assert_correct_mask_dtype(
+            mask, mask_name, other_type, other_name, check_other
+        )
+
+        if not torch.is_floating_point(mask):
+            mask = torch.zeros_like(mask, dtype=target_type)
+            mask = mask.masked_fill(mask, float("-inf"))
+        return mask
+
+
+class AttentionValidator:
     def __init__(
         self,
         num_heads: int,
@@ -366,6 +406,38 @@ class AttentionShapeValidator:
         self.key_sequence_length = None
         self.has_batch_dimension = None
         self.query_sequence_length = None
+
+    def assert_mask_float_or_bool(
+        self,
+        mask: Tensor,
+        mask_name: str,
+    ) -> None:
+        mask_dtype = mask.dtype
+        mask_float_check = torch.is_floating_point(mask)
+        is_mask_bool = mask_dtype == torch.bool
+        is_mask_float_or_bool = is_mask_bool and not mask_float_check
+        if is_mask_float_or_bool:
+            raise AssertionError(
+                f"only bool and floating types of {mask_name} are supported"
+            )
+
+    def assert_correct_mask_dtype(
+        self,
+        mask: Tensor,
+        mask_name: str,
+        other_type: DType | None,
+        other_name: str,
+        check_other: bool = True,
+    ):
+        mask_dtype = mask.dtype
+        should_check_other_dtype = check_other and other_type is not None
+        if should_check_other_dtype:
+            does_dtype_match = mask_dtype == other_type
+            if not does_dtype_match:
+                raise AssertionError(
+                    f"Support for mismatched {mask_name} and {other_name} "
+                    "is deprecated. Use same type for both instead."
+                )
 
     def assert_shapes(
         self,
@@ -475,29 +547,36 @@ class AttentionShapeValidator:
         )
 
     def assert_correct_head_dim(self, head_dim: int):
-        assert (
-            head_dim * self.num_heads == self.embedding_dim
-        ), f"`embed_dim` {self.embedding_dim} not divisible by num_heads {self.num_heads}"
+        assert head_dim * self.num_heads == self.embedding_dim, (
+            f"`embed_dim` {self.embedding_dim} not divisible by num_heads {self.num_heads}"
+        )
 
     def assert_separate_projection_layer(self):
-        assert (
-            key.shape == value.shape
-        ), f"key shape {key.shape} does not match value shape {value.shape}"
-        assert (
-            q_proj_weight is not None
-        ), "use_separate_proj_weight is True but q_proj_weight is None"
-        assert (
-            k_proj_weight is not None
-        ), "use_separate_proj_weight is True but k_proj_weight is None"
-        assert (
-            v_proj_weight is not None
-        ), "use_separate_proj_weight is True but v_proj_weight is None"
+        assert key.shape == value.shape, (
+            f"key shape {key.shape} does not match value shape {value.shape}"
+        )
+        assert q_proj_weight is not None, (
+            "use_separate_proj_weight is True but q_proj_weight is None"
+        )
+        assert k_proj_weight is not None, (
+            "use_separate_proj_weight is True but k_proj_weight is None"
+        )
+        assert v_proj_weight is not None, (
+            "use_separate_proj_weight is True but v_proj_weight is None"
+        )
 
+    def assert_shared_projection_layer(self):
+        assert self.key.shape[:2] == value.shape[:2], (
+            f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
+        )
+        assert in_proj_weight is not None, (
+            "use_separate_proj_weight is False but in_proj_weight is None"
+        )
 
-    def assert_single_projection_layer(self):
-        assert (
-            self.key.shape[:2] == value.shape[:2]
-        ), f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
-        assert (
-            in_proj_weight is not None
-        ), "use_separate_proj_weight is False but in_proj_weight is None"
+    def assert_qkv_based_on_weight_projection(
+        self, use_separate_projection_weight: bool
+    ):
+        if use_separate_projection_weight:
+            self.assert_separate_projection_layer()
+        else:
+            self.assert_shared_projection_layer()
