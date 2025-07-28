@@ -183,18 +183,68 @@ class Attention(Module):
         return query, key, value
 
 
-class MultiHeadAttentionBehaviour(Module):
-    def __init__(self):
-        super().__init__()
-        self.num_heads = num_heads
-        self.shape_validator = AttentionValidator(self.num_heads)
-        self.attetnion_masks = AttentionMaskUpdates()
-        self.target_dtype: DType | None = None
+@dataclass
+class MultiHeadAttentionConfig(DataClassBase):
+    model_type: LayerTypes | None = field(
+        default=None,
+        metadata={
+            "help": "Type of layer used for to generate query, key, value projections."
+        },
+    )
+    batch_size: int | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    embedding_dim: int | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    target_sequence_length: int | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    source_sequence_length: int | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    target_dtype: DType | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    use_separate_projection_weight: bool | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
 
-        self.shared_projection_model = nn.Linear(,bias=False)
-        self.query_model = nn.Linear(,bias=False)
-        self.key_model = nn.Linear(,bias=False)
-        self.value_model = nn.Linear(,bias=False)
+
+class MultiHeadAttentionBehaviour(Module):
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig | ModelConfig",
+        overrides: "MultiHeadAttentionConfig | None" = None,
+    ):
+        super().__init__()
+        config = getattr(cfg, "multi_head_attention_model_config", cfg)
+        self.cfg: "MultiHeadAttentionConfig" = self._overwrite_config(config, overrides)
+
+        self.model_type = self.cfg.model_type
+        self.batch_size = self.cfg.batch_size
+        self.embedding_dim = self.cfg.embedding_dim
+        self.target_sequence_length = self.cfg.target_sequence_length
+        self.source_sequence_length = self.cfg.source_sequence_length
+        self.target_dtype = self.cfg.target_dtype
+        self.use_separate_projection_weight = self.cfg.use_separate_projection_weight
+        self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
+
+        self.validator = AttentionValidator(self.num_heads)
+        self.masks = AttentionMaskUpdates()
+        self.ptrojections = AttentionProjections()
+
+        self.query_model = self.model_type.value(cfg)
+        self.key_model = self.model_type.value(cfg)
+        self.value_model = self.model_type.value(cfg)
+
+        self.shared_projection_model = self.model_type.value(cfg)
 
     def forward(
         self,
@@ -225,7 +275,7 @@ class MultiHeadAttentionBehaviour(Module):
         is_causal: bool = False,
     ):
         self.target_dtype = query.dtype
-        self.shape_validator.assert_shapes(
+        self.validator.assert_shapes(
             query, key, value, key_padding_mask, attention_mask
         )
         query, key, value, key_padding_mask = self.__add_batch_dimension_if_missing(
@@ -233,7 +283,7 @@ class MultiHeadAttentionBehaviour(Module):
         )
 
         key_padding_mask, attention_mask, causal_attention_mask_flag = (
-            self.attetnion_masks.create_masks(
+            self.masks.create_masks(
                 attention_mask,
                 key_padding_mask,
                 causal_attention_mask_flag,
@@ -241,50 +291,26 @@ class MultiHeadAttentionBehaviour(Module):
             )
         )
 
-        target_sequence_length, batch_size, embedding_dim = query.shape
-        source_sequence_length, _, _ = key.shape
-        head_dim = self.__resolve_head_dim(embedding_dim)
-
-        self.assert_qkv_based_on_weight_projection(use_separate_projection_weight)
-
-    def compute_qkv_projections(
-        self,
-        use_separate_projection_weight: bool = False,
-    ):
-        self.assert_qkv_based_on_weight_projection(use_separate_projection_weight)
-        embedding_dim = query.size(-1)
-        are_key_values_same = key is value
-        are_query_key_same = query is key
-
-        if use_separate_projection_weight:
-            if are_key_values_same:
-                if are_query_key_same:
-                    return self.__compute_self_projections()
-                else:
-                    return self.__compute_ecnoder_decoder_projections()
-        else:
-            return self.__compute_base_projections()
-
-
-    def __compute_self_projections(self):
-        shared_qkv_projection = self.shared_projection_model(query)
-        projections = shared_qkv_projection.unflatten(-1, (3, embedding_dim))
-        projections = projections.unsqueeze(0)
-        projections = projections.transpose(0, -2)
-        projections = projections.squeeze(-2)
-        projections = projections.contiguous()
-        query, key, value = projections[0], projections[1], projections[2]
-        return query, key, value
-
-    def __compute_ecnoder_decoder_projections(self):
-        pass
-
-    def __compute_base_projections(self):
-        query_projections = self.query_module(query)
-        key_projections = self.key_module(key)
-        value_projections = self.value_module(value)
-        return query_projections, key_projections, value_projections
-
+        head_dim = self.__resolve_head_dim(self.embedding_dim)
+        query_projections, key_projections, value_projections = (
+            self.ptrojections.compute_qkv_projections(query, key, value)
+        )
+        attention_mask = self.__updated_attention_mask(attention_mask)
+        (
+            key_projections,
+            value_projections,
+            key_padding_mask,
+            attention_mask,
+        ) = self.__add_bias_vectors_to_kv(
+            query,
+            key,
+            value,
+            attention_mask,
+            key_padding_mask,
+        )
+        reshaped_query, reshaped_key, reshaped_value = self.__reshape_qkv_projection(
+            query, key, value, static_key, static_values
+        )
 
     def __add_batch_dimension_if_missing(
         self,
@@ -302,17 +328,132 @@ class MultiHeadAttentionBehaviour(Module):
             key_padding_mask = key_padding_mask.unsqueeze(0)
         return query, key, value, key_padding_mask
 
-    def __resolve_head_dim(self, embedding_dim: int | Tensor) -> None:
+    def __resolve_head_dim(self, embedding_dim: int | Tensor) -> Tensor:
         self.shape_validator.assert_correct_embedding_dim(embedding_dim)
         if isinstance(embedding_dim, torch.Tensor):
             # embed_dim can be a tensor when JIT tracing
             head_dim = embedding_dim.div(self.num_heads, rounding_mode="trunc")
         else:
             head_dim = embedding_dim // self.num_heads
-
         self.shape_validator.assert_correct_head_dim(head_dim)
-
         return head_dim
+
+    def __updated_attention_mask(self, attention_mask: Tensor | None):
+        self.validator.assert_attention_mask_shape(attention_mask)
+        is_2d_mask = attention_mask.dim() == 2
+        is_3d_mask = attention_mask.dim() == 3
+        if is_2d_mask:
+            attention_mask = attention_mask.unsqueeze(0)
+        elif is_3d_mask:
+            attention_mask = attention_mask.unsqueeze(1)
+        return attention_mask
+
+    def __add_bias_vectors_to_kv(
+        self,
+        key_projections: Tensor,
+        value_projections: Tensor,
+        key_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
+        if self.bias_key is None or self.bias_value is None:
+            return (
+                key_projections,
+                value_projections,
+                key_padding_mask,
+                attention_mask,
+            )
+        repeated_key_bias = self.key_bias.repeat(1, self.batch_size, 1)
+        repeated_value_bias = self.value_bias.repeat(1, self.batch_size, 1)
+        key_projections_with_bias_vector = torch.cat(
+            [key_projections, repeated_key_bias]
+        )
+        value_projections_with_bias_vector = torch.cat(
+            [value_projections, repeated_value_bias]
+        )
+        if key_padding_mask is not None:
+            key_padding_mask = F.pad(key_padding_mask, (0, 1))
+        if attention_mask is not None:
+            attention_mask = F.pad(attention_mask, (0, 1))
+
+        return (
+            key_projections_with_bias_vector,
+            value_projections_with_bias_vector,
+            key_padding_mask,
+            attention_mask,
+        )
+
+    def __reshape_qkv_projection(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        static_keys: Tensor | None = None,
+        static_values: Tensor | None = None,
+    ):
+        self.assert_correct_static_projection_shapes()
+        query = query.view(self.__get_expected_qkv_shapes(self.target_sequence_length))
+        query = query.transpose(0, 1)
+        if static_keys is None:
+            key_sequence_length = key.shape[0]
+            key = key.view(self.__get_expected_qkv_shapes(key_sequence_length))
+            key = key.transpose(0, 1)
+        else:
+            key = static_keys
+        if static_values is None:
+            value_sequence_length = value.shape[0]
+            value = value.view(self.__get_expected_qkv_shapes(value_sequence_length))
+            value = value.transpose(0, 1)
+        else:
+            value = static_values
+
+        return query, key, value
+
+    def __get_expected_qkv_shapes(self, sequence_length):
+        return sequence_length, bsz * num_heads, head_dim
+
+
+class AttentionProjections:
+    def __init__(self):
+        self.validator = AttentionValidator()
+
+    def compute_qkv_projections(
+        self,
+        use_separate_projection_weight: bool = False,
+    ):
+        self.validator.assert_qkv_based_on_weight_projection(
+            use_separate_projection_weight
+        )
+        embedding_dim = query.size(-1)
+        are_key_values_same = key is value
+        are_query_key_same = query is key
+
+        if use_separate_projection_weight:
+            if are_key_values_same:
+                if are_query_key_same:
+                    return self.__compute_self_projections(query, key, value)
+                else:
+                    return self.__compute_ecnoder_decoder_projections(query, key, value)
+        else:
+            return self.__compute_projections(query, key, value)
+
+    def __compute_self_projections(self):
+        shared_qkv_projection = self.shared_projection_model(query)
+        projections = shared_qkv_projection.unflatten(-1, (3, embedding_dim))
+        projections = projections.unsqueeze(0)
+        projections = projections.transpose(0, -2)
+        projections = projections.squeeze(-2)
+        projections = projections.contiguous()
+        query, key, value = projections[0], projections[1], projections[2]
+        return query, key, value
+
+    def __compute_ecnoder_decoder_projections(self):
+        pass
+
+    def __compute_projections(self):
+        query_projections = self.query_module(query)
+        key_projections = self.key_module(key)
+        value_projections = self.value_module(value)
+        return query_projections, key_projections, value_projections
 
 
 class AttentionMaskUpdates:
@@ -580,3 +721,50 @@ class AttentionValidator:
             self.assert_separate_projection_layer()
         else:
             self.assert_shared_projection_layer()
+
+    def assert_attention_mask_shape(self, attention_mask):
+        is_2d_mask = attention_mask.dim() == 2
+        is_3d_mask = attention_mask.dim() == 3
+        if is_2d_mask:
+            expected_2d_mask_shape = (
+                self.target_sequence_length,
+                self.source_sequence_length,
+            )
+            if attention_mask.shape != expected_2d_mask_shape:
+                raise RuntimeError(
+                    f"The shape of the 2D attn_mask is {attn_mask.shape}, but should be {correct_2d_size}."
+                )
+        elif is_3d_mask:
+            expected_3d_mask_shape = (
+                self.batch_size * self.num_heads,
+                self.target_sequence_length,
+                self.source_sequence_length,
+            )
+            if expected_3d_mask_shape == 3:
+                raise RuntimeError(
+                    f"Expected attention_mask to be 2D or 3D, but got {attention_mask.dim()}D."
+                )
+        else:
+            raise RuntimeError(
+                f"attention_mask's dimension {attention_mask.dim()} is not supported"
+            )
+
+    def assert_correct_static_projection_shapes(
+        self,
+        static_keys: Tensor | None,
+        static_values: Tensor | None,
+    ):
+        if static_keys:
+            assert static_keys.size(0) == self.batch_size * self.num_heads, (
+                f"expecting static_k.size(0) of {self.batch_size * self.num_heads}, but got {static_keys.size(0)}"
+            )
+            assert static_keys.size(2) == self.head_dim, (
+                f"expecting static_k.size(2) of {self.head_dim}, but got {static_keys.size(2)}"
+            )
+        if static_values is not None:
+            assert static_values.size(0) == self.batch_size * self.num_heads, (
+                f"expecting static_v.size(0) of {self.batch_size * self.num_heads}, but got {static_values.size(0)}"
+            )
+            assert static_values.size(2) == self.head_dim, (
+                f"expecting static_v.size(2) of {self.head_dim}, but got {static_values.size(2)}"
+            )
