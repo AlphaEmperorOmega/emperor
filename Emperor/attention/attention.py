@@ -239,6 +239,7 @@ class MultiHeadAttentionBehaviour(Module):
         self.validator = AttentionValidator(self.num_heads)
         self.masks = AttentionMaskUpdates()
         self.ptrojections = AttentionProjections()
+        self.attention_computation = AttetentionComputation()
 
         self.query_model = self.model_type.value(cfg)
         self.key_model = self.model_type.value(cfg)
@@ -281,7 +282,6 @@ class MultiHeadAttentionBehaviour(Module):
         query, key, value, key_padding_mask = self.__add_batch_dimension_if_missing(
             query, key, value, key_padding_mask
         )
-
         key_padding_mask, attention_mask, causal_attention_mask_flag = (
             self.masks.create_masks(
                 attention_mask,
@@ -290,7 +290,6 @@ class MultiHeadAttentionBehaviour(Module):
                 need_weights,
             )
         )
-
         head_dim = self.__resolve_head_dim(self.embedding_dim)
         query_projections, key_projections, value_projections = (
             self.ptrojections.compute_qkv_projections(query, key, value)
@@ -314,11 +313,14 @@ class MultiHeadAttentionBehaviour(Module):
         key, value, attention_mask, key_padding_mask = self.__add_zero_attention(
             key, value, attention_mask, key_padding_mask
         )
-
         updated_source_sequence_length = key.size(1)
         attention_mask, key_padding_mask = self.__update_key_padding_mask(
             attention_mask, key_padding_mask
         )
+        attention_output, attention_weights = (
+            self.attention_computation.compute_attetnion()
+        )
+        return attention_output, attention_weights
 
     def __add_batch_dimension_if_missing(
         self,
@@ -473,79 +475,160 @@ class MultiHeadAttentionBehaviour(Module):
 
 
 class AttetentionComputation:
+    def __init__(self):
+        self.attention_output_model = nn.Linear()
+        self.need_weights = self.cfg.need_weights
+
     def compute_attetnion(self):
-        if need_weights:
-            attn_output, attn_output_weights = self.__need_weights_case()
-            return attn_output, attn_output_weights
+        if self.need_weights:
+            attention_output, attention_output_weights = self.__need_weights_case()
+            return attention_output, attention_output_weights
         else:
             output = self.__default_case()
             return output, None
 
-    def __default_case(self):
-        # attn_mask can be either (L,S) or (N*num_heads, L, S)
-        # if attn_mask's shape is (1, L, S) we need to unsqueeze to (1, 1, L, S)
-        # in order to match the input for SDPA of (N, num_heads, L, S)
-        if attn_mask is not None:
-            if attn_mask.size(0) == 1 and attn_mask.dim() == 3:
-                attn_mask = attn_mask.unsqueeze(0)
-            else:
-                attn_mask = attn_mask.view(bsz, num_heads, -1, src_len)
-
-        q = q.view(bsz, num_heads, tgt_len, head_dim)
-        k = k.view(bsz, num_heads, src_len, head_dim)
-        v = v.view(bsz, num_heads, src_len, head_dim)
-
-        attn_output = scaled_dot_product_attention(
-            q, k, v, attn_mask, dropout_p, is_causal
-        )
-        attn_output = (
-            attn_output.permute(2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
+    def __need_weights_case(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_mask: Tensor | None,
+    ) -> tuple[Tensor, Tensor]:
+        attention_weights = self.__compute_attention_masked(query, key, attention_mask)
+        weighted_value = self.__compute_weighted_values(attention_weights, value)
+        attention_output = self.__compute_attention_output(weighted_value)
+        attention_output, attention_weights = self.__prepare_attention_output(
+            attention_output, attention_weights
         )
 
-        attn_output = linear(attn_output, out_proj_weight, out_proj_bias)
-        attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
+        return attention_output, attention_weights
 
-        if not is_batched:
-            # squeeze the output if input was unbatched
-            attn_output = attn_output.squeeze(1)
-        return attn_output
-
-    def __need_weights_case(self):
-        _B, _Nt, E = q.shape
-        q_scaled = q * math.sqrt(1.0 / float(E))
-
-        assert not (is_causal and attn_mask is None), (
-            "FIXME: is_causal not implemented for need_weights"
+    def __prepare_attention_output(
+        self,
+        attention_output: Tensor,
+        attention_weights: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        attention_weights_shape = (
+            self.batch_size,
+            self.num_heads,
+            self.target_sequence_length,
+            self.source_sequence_length,
         )
+        attention_weights = attention_weights.view(attention_weights_shape)
+        if self.average_attn_weights:
+            attention_weights = attention_weights.mean(dim=1)
 
-        if attn_mask is not None:
-            attn_output_weights = torch.baddbmm(
-                attn_mask, q_scaled, k.transpose(-2, -1)
+        if not self.is_batched:
+            attention_output = attention_output.squeeze(1)
+            attention_weights = attention_weights.squeeze(0)
+        return attention_output, attention_weights
+
+    def __compute_attention_masked(
+        self,
+        query: Tensor,
+        key: Tensor,
+        attention_mask: Tensor | None,
+    ) -> Tensor:
+        _, _, embedding_dim = query.shape
+        scaled_qeury = query * math.sqrt(1.0 / float(embedding_dim))
+        if attention_mask is not None:
+            attention_output_weights = torch.baddbmm(
+                attention_mask, scaled_qeury, key.transpose(-2, -1)
             )
-        else:
-            attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
-        attn_output_weights = softmax(attn_output_weights, dim=-1)
-        if dropout_p > 0.0:
-            attn_output_weights = dropout(attn_output_weights, p=dropout_p)
+            attention_output_weights = softmax(attention_output_weights, dim=-1)
+        attention_output_weights = torch.bmm(scaled_qeury, key.transpose(-2, -1))
+        attention_output_weights = softmax(attention_output_weights, dim=-1)
+        return attention_output_weights
 
-        attn_output = torch.bmm(attn_output_weights, v)
-
-        attn_output = (
-            attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
+    def __compute_weighted_values(self, attention_weights: Tensor, values: Tensor):
+        weighted_values_shape = (
+            self.target_sequence_length * self.batch_size,
+            self.embedding_dim,
         )
-        attn_output = linear(attn_output, out_proj_weight, out_proj_bias)
-        attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
+        weighted_values = torch.bmm(attention_weights, values)
+        weighted_values = weighted_values.transpose(0, 1)
+        weighted_values = weighted_values.contiguous()
+        weighted_values = weighted_values.view(weighted_values_shape)
+        return weighted_values
 
-        # optionally average attention weights over heads
-        attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
-        if average_attn_weights:
-            attn_output_weights = attn_output_weights.mean(dim=1)
+    def __compute_attention_output(self, weighted_value: Tensor):
+        attention_output = self.attention_output_model(weighted_value)
+        attention_output_shape = (
+            self.target_sequence_length,
+            self.batch_size,
+            attention_output.size(1),
+        )
+        attention_output = attention_output.view(attention_output_shape)
+        return attention_output
+
+    def __default_case(self):
+        attention_mask = self.__prepare_attnetion_mask(attention_mask)
+        query, key, value = self.__prepare_qkv_for_attention(query, key, value)
+        weighted_values = self.__compute_weighted_values(
+            query,
+            key,
+            value,
+            attention_mask,
+            dropout_probability,
+            is_causal,
+        )
+        attention_output = self.__compute_attention_output(weighted_values)
 
         if not is_batched:
-            # squeeze the output if input was unbatched
-            attn_output = attn_output.squeeze(1)
-            attn_output_weights = attn_output_weights.squeeze(0)
-        return attn_output, attn_output_weights
+            return attention_output.squeeze(1), None
+        return attention_output, None
+
+    def __prepare_attnetion_mask(self, attention_mask: Tensor | None) -> Tensor | None:
+        if attention_mask is None:
+            return None
+        is_attention_one_batch = attention_mask.size(0) == 1
+        is_attention_mask_3D = attention_mask.dim() == 3
+        if is_attention_one_batch and is_attention_mask_3D:
+            return attention_mask.unsqueeze(0)
+        attention_mask_shape = (
+            self.batch_size,
+            self.num_heads,
+            -1,
+            self.source_sequence_length,
+        )
+        attention_mask = attention_mask.view(attention_mask_shape)
+        return attention_mask
+
+    def __prepare_qkv_for_attention(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+    ):
+        qery_shape = (self.bsz, self.num_heads, self.tgt_len, self.head_dim)
+        key_value_shape = (self.bsz, self.num_heads, self.src_len, self.head_dim)
+        query = query.view(qery_shape)
+        key = key.view(key_value_shape)
+        value = value.view(key_value_shape)
+        return query, key, value
+
+    def __compute_weighted_values(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_mask: Tensor | None,
+        dropout_probability: float,
+        is_causal: bool = False,
+    ):
+        weighted_values = scaled_dot_product_attention(
+            query, key, value, attention_mask, dropout_probability, is_causal
+        )
+
+        weighted_values = weighted_values.permute(2, 0, 1, 3)
+        weighted_values = weighted_values.contiguous()
+        weighted_values_shape = (
+            self.batch_size * self.target_sequence_length,
+            self.embedding_dim,
+        )
+        weighted_values = weighted_values.view(weighted_values_shape)
+
+        return weighted_values
 
 
 class AttentionProjections:
@@ -776,7 +859,7 @@ class AttentionValidator:
 
         attention_mask_dims = attention_mask.dim()
         assert attention_mask_dims in (2, 3), (
-            f"For {self.__format_dimension_context()} query, expected attn_mask to be None, 2-D, or 3-D "
+            f"For {self.__format_dimension_context()} query, expected attention_mask to be None, 2-D, or 3-D "
             f"but found {attention_mask_dims}-D tensor instead"
         )
 
@@ -868,7 +951,7 @@ class AttentionValidator:
             )
             if attention_mask.shape != expected_2d_mask_shape:
                 raise RuntimeError(
-                    f"The shape of the 2D attn_mask is {attn_mask.shape}, but should be {correct_2d_size}."
+                    f"The shape of the 2D attention_mask is {attention_mask.shape}, but should be {correct_2d_size}."
                 )
         elif is_3d_mask:
             expected_3d_mask_shape = (
@@ -904,3 +987,5 @@ class AttentionValidator:
             assert static_values.size(2) == self.head_dim, (
                 f"expecting static_v.size(2) of {self.head_dim}, but got {static_values.size(2)}"
             )
+
+
