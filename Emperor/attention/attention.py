@@ -308,8 +308,16 @@ class MultiHeadAttentionBehaviour(Module):
             attention_mask,
             key_padding_mask,
         )
-        reshaped_query, reshaped_key, reshaped_value = self.__reshape_qkv_projection(
+        query, key, value = self.__prepare_qkv_projection_for_attention(
             query, key, value, static_key, static_values
+        )
+        key, value, attention_mask, key_padding_mask = self.__add_zero_attention(
+            key, value, attention_mask, key_padding_mask
+        )
+
+        updated_source_sequence_length = key.size(1)
+        attention_mask, key_padding_mask = self.__update_key_padding_mask(
+            attention_mask, key_padding_mask
         )
 
     def __add_batch_dimension_if_missing(
@@ -382,7 +390,7 @@ class MultiHeadAttentionBehaviour(Module):
             attention_mask,
         )
 
-    def __reshape_qkv_projection(
+    def __prepare_qkv_projection_for_attention(
         self,
         query: Tensor,
         key: Tensor,
@@ -391,25 +399,153 @@ class MultiHeadAttentionBehaviour(Module):
         static_values: Tensor | None = None,
     ):
         self.assert_correct_static_projection_shapes()
-        query = query.view(self.__get_expected_qkv_shapes(self.target_sequence_length))
+        query_shape = self.__get_expected_qkv_shapes(self.target_sequence_length)
+        query = query.view(query_shape)
         query = query.transpose(0, 1)
+
+        updated_keys = static_keys
         if static_keys is None:
             key_sequence_length = key.shape[0]
-            key = key.view(self.__get_expected_qkv_shapes(key_sequence_length))
-            key = key.transpose(0, 1)
-        else:
-            key = static_keys
+            key_shape = self.__get_expected_qkv_shapes(key_sequence_length)
+            updated_keys = updated_keys.view(key_shape)
+            updated_keys = updated_keys.transpose(0, 1)
+
+        updated_values = static_values
         if static_values is None:
             value_sequence_length = value.shape[0]
-            value = value.view(self.__get_expected_qkv_shapes(value_sequence_length))
-            value = value.transpose(0, 1)
-        else:
-            value = static_values
+            value_shape = self.__get_expected_qkv_shapes(value_sequence_length)
+            updated_values = updated_values.view(value_shape)
+            updated_values = updated_values.transpose(0, 1)
 
         return query, key, value
 
     def __get_expected_qkv_shapes(self, sequence_length):
         return sequence_length, bsz * num_heads, head_dim
+
+    def __add_zero_attention(
+        self,
+        key: Tensor,
+        value: Tensor,
+        attention_mask: Tensor | None = None,
+        key_padding_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
+        if not self.zero_attention_flag:
+            return key, value, attention_mask, key_padding_mask
+
+        zero_attention_shape = (self.batch_size * self.num_heads, 1, self.head_dim)
+        key_zeros = torch.zeros(
+            zero_attention_shape, dtype=key.dtype, device=key.device
+        )
+        key = torch.cat([key, key_zeros], dim=1)
+        value_zeros = torch.zeros(
+            zero_attention_shape, dtype=value.dtype, device=value.device
+        )
+        value = torch.cat([value, value_zeros], dim=1)
+        if attention_mask is not None:
+            attention_mask = F.pad(attention_mask, (0, 1))
+        if key_padding_mask is not None:
+            key_padding_mask = F.pad(key_padding_mask, (0, 1))
+
+        return key, value, attention_mask, key_padding_mask
+
+    def __update_masks(
+        self,
+        attention_mask: Tensor | None,
+        key_padding_mask: Tensor | None,
+    ) -> Tensor | None:
+        if key_padding_mask is None:
+            return attention_mask, key_padding_mask
+
+        if not torch.jit.is_scripting() and not torch.jit.is_tracing():
+            _check_key_padding_mask(key_padding_mask, src_len, bsz)
+
+        key_padding_mask_shape = (self.batch_size, 1, 1, self.source_sequence_length)
+        key_padding_mask = (
+            key_padding_mask.view(key_padding_mask_shape)
+            .expand(-1, self.num_heads, -1, -1)
+            .reshape(self.batch_size * self.num_heads, 1, self.source_sequence_length)
+        )
+        attention_mask = key_padding_mask
+        if attention_mask is not None:
+            attention_mask = attention_mask + key_padding_mask
+
+        return attention_mask, key_padding_mask
+
+
+class AttetentionComputation:
+    def compute_attetnion(self):
+        if need_weights:
+            attn_output, attn_output_weights = self.__need_weights_case()
+            return attn_output, attn_output_weights
+        else:
+            output = self.__default_case()
+            return output, None
+
+    def __default_case(self):
+        # attn_mask can be either (L,S) or (N*num_heads, L, S)
+        # if attn_mask's shape is (1, L, S) we need to unsqueeze to (1, 1, L, S)
+        # in order to match the input for SDPA of (N, num_heads, L, S)
+        if attn_mask is not None:
+            if attn_mask.size(0) == 1 and attn_mask.dim() == 3:
+                attn_mask = attn_mask.unsqueeze(0)
+            else:
+                attn_mask = attn_mask.view(bsz, num_heads, -1, src_len)
+
+        q = q.view(bsz, num_heads, tgt_len, head_dim)
+        k = k.view(bsz, num_heads, src_len, head_dim)
+        v = v.view(bsz, num_heads, src_len, head_dim)
+
+        attn_output = scaled_dot_product_attention(
+            q, k, v, attn_mask, dropout_p, is_causal
+        )
+        attn_output = (
+            attn_output.permute(2, 0, 1, 3).contiguous().view(bsz * tgt_len, embed_dim)
+        )
+
+        attn_output = linear(attn_output, out_proj_weight, out_proj_bias)
+        attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
+
+        if not is_batched:
+            # squeeze the output if input was unbatched
+            attn_output = attn_output.squeeze(1)
+        return attn_output
+
+    def __need_weights_case(self):
+        _B, _Nt, E = q.shape
+        q_scaled = q * math.sqrt(1.0 / float(E))
+
+        assert not (is_causal and attn_mask is None), (
+            "FIXME: is_causal not implemented for need_weights"
+        )
+
+        if attn_mask is not None:
+            attn_output_weights = torch.baddbmm(
+                attn_mask, q_scaled, k.transpose(-2, -1)
+            )
+        else:
+            attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
+        attn_output_weights = softmax(attn_output_weights, dim=-1)
+        if dropout_p > 0.0:
+            attn_output_weights = dropout(attn_output_weights, p=dropout_p)
+
+        attn_output = torch.bmm(attn_output_weights, v)
+
+        attn_output = (
+            attn_output.transpose(0, 1).contiguous().view(tgt_len * bsz, embed_dim)
+        )
+        attn_output = linear(attn_output, out_proj_weight, out_proj_bias)
+        attn_output = attn_output.view(tgt_len, bsz, attn_output.size(1))
+
+        # optionally average attention weights over heads
+        attn_output_weights = attn_output_weights.view(bsz, num_heads, tgt_len, src_len)
+        if average_attn_weights:
+            attn_output_weights = attn_output_weights.mean(dim=1)
+
+        if not is_batched:
+            # squeeze the output if input was unbatched
+            attn_output = attn_output.squeeze(1)
+            attn_output_weights = attn_output_weights.squeeze(0)
+        return attn_output, attn_output_weights
 
 
 class AttentionProjections:
