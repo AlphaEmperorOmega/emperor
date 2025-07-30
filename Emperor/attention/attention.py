@@ -81,39 +81,50 @@ class Attention(Module):
         self.batch_first_flag = self.cfg.batch_first_flag
         self.model_type = self.cfg.model_type
         self.dtype = self.cfg.dtype
+        self.query_dim = self.embedding_dim
         self.key_dim = self.cfg.key_dim
         self.value_dim = self.cfg.value_dim
-        self.query_dim = self.embedding_dim
         self.head_dim = self.embedding_dim // self.num_heads
-
+        self.__resolve_kv_dimensions()
+        self._valudate_fields(self.cfg, AttentionConfig)
         temp = nn.MultiheadAttention
 
-        self.query_key_value_module = None
-        self.query_module = None
-        self.key_module = None
-        self.value_module = None
-        self.input_tesnor_3D_flag = None
-        self.__create_projection_models(cfg)
-        self.__assert_input_requirements()
+        self.is_input_tesnor_3D_flag = False
 
-    def __assert_input_requirements(self):
+        models = self.__create_projection_models(cfg)
+        if isinstance(models, tuple):
+            self.query_module, self.key_module, self.value_module = models
+        else:
+            self.qkv_module = models
+        self.__validate_requirements()
+
+    def __resolve_kv_dimensions(self):
+        self.key_dim = self.cfg.key_dim if self.cfg.key_dim is not None else self.embedding_dim
+        self.value_dim = self.cfg.value_dim if self.cfg.value_dim is not None else self.embedding_dim
+
+    def __validate_requirements(self):
         assert (self.head_dim * self.num_heads) == self.embedding_dim, (
             "`embedding_dim` must be perfectly divisible by `number_of_heads`."
         )
 
-    def __are_key_query_value_dims_equal(self) -> bool:
+    def __create_projection_models(self, cfg: "ModelConfig") -> :
+        self.output_dim = self.model_type.value(cfg)
+        if self.__are_qkv_dimensions_equal():
+            self.register_parameter("query_module", None)
+            self.register_parameter("key_module", None)
+            self.register_parameter("value_module", None)
+            qkv_module = self.model_type.value(cfg)
+            return qkv_module
+        self.register_parameter("qkv_module", None)
+        query_module = self.model_type.value(cfg)
+        key_module = self.model_type.value(cfg)
+        value_module = self.model_type.value(cfg)
+        return query_module, key_module, value_module
+
+    def __are_qkv_dimensions_equal(self) -> bool:
         are_keys_querys_same = self.key_dim == self.embed_dim
         are_values_querys_same = self.value_dim == self.embed_dim
         return are_keys_querys_same and are_values_querys_same
-
-    def __create_projection_models(self, cfg: "ModelConfig") -> None:
-        self.output_dim = self.model_type.value(cfg)
-        if self.__are_key_query_value_dims_equal():
-            self.query_key_value_module = self.model_type.value(cfg)
-            return
-        self.query_module = self.model_type.value(cfg)
-        self.key_module = self.model_type.value(cfg)
-        self.value_module = self.model_type.value(cfg)
 
     def forward(
         self,
@@ -126,7 +137,7 @@ class Attention(Module):
         average_attention_weights: bool = False,
         causal_attention_mask: bool = False,
     ) -> tuple[Tensor, Tensor | None]:
-        self.set_input_tensor_3D_flag(query)
+        self.set_is_input_tesnor_3D_flag(query)
         key_padding_mask, attention_mask = self.__update_masks(
             key_padding_mask, attention_mask, query.dtype
         )
@@ -134,13 +145,13 @@ class Attention(Module):
 
         return ()
 
-    def is_input_tensor_3D(self) -> bool:
-        if self.input_tesnor_3D_flag is None:
-            AssertionError("`input_tesnor_3D_flag` flag is not set.")
-        return self.input_tesnor_3D_flag
+    def get_is_input_tesnor_3D_flag(self) -> bool:
+        if self.is_input_tesnor_3D_flag is None:
+            AssertionError("`is_input_tesnor_3D_flag` flag is not set.")
+        return self.is_input_tesnor_3D_flag
 
-    def set_input_tensor_3D_flag(self, query: Tensor) -> None:
-        self.input_tesnor_3D_flag = query.dim() == 3
+    def set_is_input_tesnor_3D_flag(self, query: Tensor) -> None:
+        self.is_input_tesnor_3D_flag = query.dim() == 3
 
     def __update_masks(
         self,
@@ -227,25 +238,71 @@ class MultiHeadAttentionBehaviour(Module):
         config = getattr(cfg, "multi_head_attention_model_config", cfg)
         self.cfg: "MultiHeadAttentionConfig" = self._overwrite_config(config, overrides)
 
-        self.model_type = self.cfg.model_type
+
+
         self.batch_size = self.cfg.batch_size
+        self.model_type = self.cfg.model_type
+        self.num_heads = self.cfg.num_heads
         self.embedding_dim = self.cfg.embedding_dim
+        self.target_dtype = self.cfg.target_dtype
         self.target_sequence_length = self.cfg.target_sequence_length
         self.source_sequence_length = self.cfg.source_sequence_length
-        self.target_dtype = self.cfg.target_dtype
         self.use_separate_projection_weight = self.cfg.use_separate_projection_weight
+        self.dropout_probability = self.cfg.dropout_probability
+        self.key_value_bias_flag = self.cfg.key_value_bias_flag
+        self.zero_attention_flag = self.cfg.zero_attention_flag
+        self.batch_first_flag = self.cfg.batch_first_flag
+        self.model_type = self.cfg.model_type
+        self.dtype = self.cfg.dtype
+        self.query_dim = self.embedding_dim
+        self.key_dim = self.cfg.key_dim
+        self.value_dim = self.cfg.value_dim
+        self.head_dim = self.embedding_dim // self.num_heads
+        self.__resolve_kv_dimensions()
+
         self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
+        # temp = nn.MultiheadAttention
+        models = self.__create_projection_models(cfg)
+        if isinstance(models, tuple):
+            self.query_module, self.key_module, self.value_module = models
+        else:
+            self.qkv_module = models
 
         self.validator = AttentionValidator(self.num_heads)
         self.masks = AttentionMaskUpdates()
         self.ptrojections = AttentionProjections()
         self.attention_computation = AttetentionComputation()
 
-        self.query_model = self.model_type.value(cfg)
-        self.key_model = self.model_type.value(cfg)
-        self.value_model = self.model_type.value(cfg)
+        self.__validate_requirements()
+        self.is_input_batched_flag = None
 
-        self.shared_projection_model = self.model_type.value(cfg)
+    def __resolve_kv_dimensions(self):
+        self.key_dim = self.cfg.key_dim if self.cfg.key_dim is not None else self.embedding_dim
+        self.value_dim = self.cfg.value_dim if self.cfg.value_dim is not None else self.embedding_dim
+
+    def __validate_requirements(self):
+        assert (self.head_dim * self.num_heads) == self.embedding_dim, (
+            "`embedding_dim` must be perfectly divisible by `number_of_heads`."
+        )
+
+    def __create_projection_models(self, cfg: "ModelConfig") -> :
+        self.output_dim = self.model_type.value(cfg)
+        if self.__are_qkv_dimensions_equal():
+            self.register_parameter("query_module", None)
+            self.register_parameter("key_module", None)
+            self.register_parameter("value_module", None)
+            qkv_module = self.model_type.value(cfg)
+            return qkv_module
+        self.register_parameter("qkv_module", None)
+        query_module = self.model_type.value(cfg)
+        key_module = self.model_type.value(cfg)
+        value_module = self.model_type.value(cfg)
+        return query_module, key_module, value_module
+
+    def __are_qkv_dimensions_equal(self) -> bool:
+        are_keys_querys_same = self.key_dim == self.embed_dim
+        are_values_querys_same = self.value_dim == self.embed_dim
+        return are_keys_querys_same and are_values_querys_same
 
     def forward(
         self,
@@ -275,7 +332,10 @@ class MultiHeadAttentionBehaviour(Module):
         average_attention_weights: bool = True,
         is_causal: bool = False,
     ):
-        self.target_dtype = query.dtype
+        self.__set_is_input_batched_flag(query)
+        query, key, value = self.__transpose_qkv_if_batched(
+            query, key, value
+        )
         self.validator.assert_shapes(
             query, key, value, key_padding_mask, attention_mask
         )
@@ -321,6 +381,38 @@ class MultiHeadAttentionBehaviour(Module):
             self.attention_computation.compute_attetnion()
         )
         return attention_output, attention_weights
+
+    def get_is_input_batched_flag(self) -> bool | None:
+        if self.is_input_batched_flag is None:
+            AssertionError("`is_input_tesnor_3D_flag` flag is not set.")
+        return self.is_input_batched_flag
+
+    def __set_is_input_batched_flag(self, query: Tensor) -> None:
+        self.is_input_batched_flag = query.dim() == 3
+
+    def __transpose_qkv_if_batched(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+    ):
+        is_batch_first_flag = self.batch_first_flag and self.get_is_input_batched_flag()
+        if not is_batch_first_flag:
+            return query, key, value
+
+        if key is value:
+            query, key, value = self.__transpose_shared_qkv(query, key)
+            return query, key, value
+        query, key, value = (x.transpose(0, 1) for x in (query, key, value))
+        return query, key, value
+
+    def __transpose_shared_qkv(self, query: Tensor, key: Tensor):
+        if query is key:
+            query = key = value = query.transpose(0, 1)
+            return query, key, value
+        query, key = (x.transpose(0, 1) for x in (query, key))
+        value = key
+        return query, key, value
 
     def __add_batch_dimension_if_missing(
         self,
@@ -987,5 +1079,3 @@ class AttentionValidator:
             assert static_values.size(2) == self.head_dim, (
                 f"expecting static_v.size(2) of {self.head_dim}, but got {static_values.size(2)}"
             )
-
-
