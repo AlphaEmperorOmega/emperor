@@ -8,6 +8,7 @@ from docs.test_behaviours import *
 from docs.test_linears import *
 from docs.test_losses import *
 from docs.test_experts import *
+from docs.test_attention import *
 
 if __name__ == "__main__":
     unittest.main()

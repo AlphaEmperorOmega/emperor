@@ -12,7 +12,7 @@ from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
 from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
-from Emperor.attention.attention import MultiHeadAttention
+from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 
 
 class TestMultiHeadAttention(unittest.TestCase):
@@ -131,18 +131,44 @@ class TestMultiHeadAttention(unittest.TestCase):
                 compute_expert_mixture_flag=True,
                 weighted_parameters_flag=True,
             ),
+            multi_head_attention_model_config=MultiHeadAttentionConfig(
+                model_type=LayerTypes.DYNAMIC_BASE,
+                batch_size=BATCH_SIZE,
+                num_heads=4,
+                embedding_dim=64,
+                target_sequence_length=16,
+                source_sequence_length=32,
+                target_dtype=torch.float32,
+                use_separate_projection_weight=False,
+                dropout_probability=0.0,
+                key_value_bias_flag=False,
+                zero_attention_flag=False,
+                batch_first_flag=False,
+                key_dim=16,
+                value_dim=32,
+            ),
         )
 
     def test__init_input_layer_with_default_config(self):
         c = copy.deepcopy(self.cfg)
-        config = c.input_moe_layer_config
+        config = c.multi_head_attention_model_config
         m = MultiHeadAttention(c)
 
         self.assertIsInstance(m, MultiHeadAttention)
-        self.assertEqual(m.input_dim, config.input_dim)
-        self.assertEqual(m.output_dim, config.output_dim)
-        self.assertEqual(m.dropout_probability, config.dropout_probability)
-        self.assertEqual(m.layer_norm_flag, config.layer_norm_flag)
-        self.assertEqual(m.activation, config.activation)
+        self.assertEqual(m.batch_size, config.batch_size)
         self.assertEqual(m.model_type, config.model_type)
-        self.assertEqual(m.num_experts, config.num_experts)
+        self.assertEqual(m.num_heads, config.num_heads)
+        self.assertEqual(m.embedding_dim, config.embedding_dim)
+        self.assertEqual(m.target_dtype, config.target_dtype)
+        self.assertEqual(m.target_sequence_length, config.target_sequence_length)
+        self.assertEqual(m.source_sequence_length, config.source_sequence_length)
+        self.assertEqual(
+            m.use_separate_projection_weight, config.use_separate_projection_weight
+        )
+        self.assertEqual(m.dropout_probability, config.dropout_probability)
+        self.assertEqual(m.key_value_bias_flag, config.key_value_bias_flag)
+        self.assertEqual(m.zero_attention_flag, config.zero_attention_flag)
+        self.assertEqual(m.batch_first_flag, config.batch_first_flag)
+        self.assertEqual(m.query_dim, config.embedding_dim)
+        self.assertEqual(m.key_dim, config.key_dim)
+        self.assertEqual(m.value_dim, config.value_dim)
