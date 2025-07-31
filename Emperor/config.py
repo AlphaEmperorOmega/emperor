@@ -2,7 +2,7 @@ from torch import float32
 import torch.nn as nn
 from dataclasses import dataclass, field
 
-from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
+from Emperor.attention.attention import MultiHeadAttentionConfig
 from Emperor.base.utils import DataClassBase
 
 
