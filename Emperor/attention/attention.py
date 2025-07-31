@@ -16,183 +16,6 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
-@dataclass
-class AttentionConfig(DataClassBase):
-    model_type: LayerTypes | None = field(
-        default=None,
-        metadata={
-            "help": "Type of layer used for to generate query, key, value projections."
-        },
-    )
-    embedding_dim: int | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    num_heads: int | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    dropout_probability: int | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    key_value_bias_flag: bool | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    zero_attention_flag: bool | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    key_dim: int | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    value_dim: int | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    batch_first_flag: bool | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    dtype: torch.dtype | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-
-
-class Attention(Module):
-    def __init__(
-        self,
-        cfg: "MultiHeadAttentionConfig | ModelConfig",
-        overrides: "MultiHeadAttentionConfig | None" = None,
-    ):
-        super().__init__()
-        config = getattr(cfg, "multi_head_attention_model_config", cfg)
-        self.cfg: "MultiHeadAttentionConfig" = self._overwrite_config(config, overrides)
-
-        self.model_type = self.cfg.model_type
-        self.embedding_dim = self.cfg.embedding_dim
-        self.num_heads = self.cfg.num_heads
-        self.dropout_probability = self.cfg.dropout_probability
-        self.key_value_bias_flag = self.cfg.key_value_bias_flag
-        self.zero_attention_flag = self.cfg.zero_attention_flag
-        self.batch_first_flag = self.cfg.batch_first_flag
-        self.model_type = self.cfg.model_type
-        self.dtype = self.cfg.dtype
-        self.query_dim = self.embedding_dim
-        self.key_dim = self.cfg.key_dim
-        self.value_dim = self.cfg.value_dim
-        self.head_dim = self.embedding_dim // self.num_heads
-        self.__resolve_kv_dimensions()
-        self._valudate_fields(self.cfg, AttentionConfig)
-        temp = nn.MultiheadAttention
-
-        self.is_input_tesnor_3D_flag = False
-
-        models = self.__create_projection_models(cfg)
-        if isinstance(models, tuple):
-            self.query_module, self.key_module, self.value_module = models
-        else:
-            self.qkv_module = models
-        self.__validate_requirements()
-
-    def __resolve_kv_dimensions(self):
-        self.key_dim = self.cfg.key_dim if self.cfg.key_dim is not None else self.embedding_dim
-        self.value_dim = self.cfg.value_dim if self.cfg.value_dim is not None else self.embedding_dim
-
-    def __validate_requirements(self):
-        assert (self.head_dim * self.num_heads) == self.embedding_dim, (
-            "`embedding_dim` must be perfectly divisible by `number_of_heads`."
-        )
-
-    def __create_projection_models(self, cfg: "ModelConfig"):
-        self.output_dim = self.model_type.value(cfg)
-        if self.__are_qkv_dimensions_equal():
-            self.register_parameter("query_module", None)
-            self.register_parameter("key_module", None)
-            self.register_parameter("value_module", None)
-            qkv_module = self.model_type.value(cfg)
-            return qkv_module
-        self.register_parameter("qkv_module", None)
-        query_module = self.model_type.value(cfg)
-        key_module = self.model_type.value(cfg)
-        value_module = self.model_type.value(cfg)
-        return query_module, key_module, value_module
-
-    def __are_qkv_dimensions_equal(self) -> bool:
-        are_keys_querys_same = self.key_dim == self.embed_dim
-        are_values_querys_same = self.value_dim == self.embed_dim
-        return are_keys_querys_same and are_values_querys_same
-
-    def forward(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        key_padding_mask: Tensor | None = None,
-        need_weights: bool = False,
-        attention_mask: Tensor | None = None,
-        average_attention_weights: bool = False,
-        causal_attention_mask: bool = False,
-    ) -> tuple[Tensor, Tensor | None]:
-        self.set_is_input_tesnor_3D_flag(query)
-        key_padding_mask, attention_mask = self.__update_masks(
-            key_padding_mask, attention_mask, query.dtype
-        )
-        query, key, value = self.__resolve_query_key_value_shapes(query, key, value)
-
-        return ()
-
-    def get_is_input_tesnor_3D_flag(self) -> bool:
-        if self.is_input_tesnor_3D_flag is None:
-            AssertionError("`is_input_tesnor_3D_flag` flag is not set.")
-        return self.is_input_tesnor_3D_flag
-
-    def set_is_input_tesnor_3D_flag(self, query: Tensor) -> None:
-        self.is_input_tesnor_3D_flag = query.dim() == 3
-
-    def __update_masks(
-        self,
-        key_padding_mask: Tensor | None,
-        attention_mask: Tensor | None,
-        target_type: DType,
-    ) -> tuple[Tensor | None, Tensor | None]:
-        key_padding_mask = F._canonical_mask(
-            mask=key_padding_mask,
-            mask_name="key_padding_mask",
-            other_type=F._none_or_dtype(attention_mask),
-            other_name="attention_mask",
-            target_type=target_type,
-        )
-        attention_mask = F._canonical_mask(
-            mask=attention_mask,
-            mask_name="attention_mask",
-            other_type=None,
-            other_name="",
-            target_type=target_type,
-            check_other=False,
-        )
-        return key_padding_mask, attention_mask
-
-    def __resolve_query_key_value_shapes(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-    ):
-        if self.batch_first_flag and self.is_input_tensor_3D():
-            if key is value:
-                if query is key:
-                    key = query = value = query.transpose(0, 1)
-                else:
-                    query, key = (x.transpose(0, 1) for x in (query, key))
-                    value = key
-            else:
-                query, key, value = (x.transpose(0, 1) for x in (query, key, value))
-        return query, key, value
-
 
 @dataclass
 class MultiHeadAttentionConfig(DataClassBase):
@@ -203,6 +26,10 @@ class MultiHeadAttentionConfig(DataClassBase):
         },
     )
     batch_size: int | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    num_heads: int | None = field(
         default=None,
         metadata={"help": "Expert input dimension"},
     )
@@ -226,9 +53,37 @@ class MultiHeadAttentionConfig(DataClassBase):
         default=None,
         metadata={"help": "Expert input dimension"},
     )
+    dropout_probability: float | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    key_value_bias_flag: bool | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    zero_attention_flag: bool | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    batch_first_flag: bool | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    dtype: "DType | None" = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    key_dim: int | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
+    value_dim: int | None = field(
+        default=None,
+        metadata={"help": "Expert input dimension"},
+    )
 
 
-class MultiHeadAttentionBehaviour(Module):
+class MultiHeadAttention(Module):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig | ModelConfig",
@@ -255,23 +110,24 @@ class MultiHeadAttentionBehaviour(Module):
         self.query_dim = self.embedding_dim
         self.key_dim = self.cfg.key_dim
         self.value_dim = self.cfg.value_dim
+        self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
+
         self.head_dim = self.embedding_dim // self.num_heads
         self.__resolve_kv_dimensions()
 
-        self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
-        # temp = nn.MultiheadAttention
         models = self.__create_projection_models(cfg)
         if isinstance(models, tuple):
             self.query_module, self.key_module, self.value_module = models
         else:
             self.qkv_module = models
 
-        self.validator = AttentionValidator(self.num_heads)
-        self.masks = AttentionMaskUpdates()
-        self.ptrojections = AttentionProjections()
+        self.validator = AttentionValidator(self.num_heads, self.causal_attention_mask_flag)
+        self.masks = AttentionMaskUpdates(self.validator, self.dtype, self.causal_attention_mask_flag)
+        self.ptrojections = AttentionProjections(self.validator)
         self.attention_computation = AttetentionComputation()
+        self.utils = AttentionUtils(self.validator)
 
-        self.__validate_requirements()
+        self.validator.assert_correct_head_dim()
         # This might need to be added to config not sure why this is here
         # because why would the input be a different shape ? than the 
         # expected one ?
@@ -280,11 +136,6 @@ class MultiHeadAttentionBehaviour(Module):
     def __resolve_kv_dimensions(self):
         self.key_dim = self.cfg.key_dim if self.cfg.key_dim is not None else self.embedding_dim
         self.value_dim = self.cfg.value_dim if self.cfg.value_dim is not None else self.embedding_dim
-
-    def __validate_requirements(self):
-        assert (self.head_dim * self.num_heads) == self.embedding_dim, (
-            "`embedding_dim` must be perfectly divisible by `number_of_heads`."
-        )
 
     def __create_projection_models(self, cfg: "ModelConfig") -> :
         self.output_dim = self.model_type.value(cfg)
@@ -333,14 +184,13 @@ class MultiHeadAttentionBehaviour(Module):
         average_attention_weights: bool = True,
         is_causal: bool = False,
     ):
-        self.__set_batched_input_flag(query)
-        query, key, value = self.__transpose_qkv_if_batched(
+        query, key, value = self.utils.transpose_qkv_if_batched(
             query, key, value
         )
         self.validator.assert_multi_head_attention_shape(
             query, key, value, key_padding_mask, attention_mask
         )
-        query, key, value, key_padding_mask = self.__add_batch_dimension_if_missing(
+        query, key, value, key_padding_mask = self.utils.add_batch_dimension_if_missing(
             query, key, value, key_padding_mask
         )
         key_padding_mask, attention_mask = (
@@ -350,55 +200,66 @@ class MultiHeadAttentionBehaviour(Module):
                 need_weights,
             )
         )
+
         # This is resolved in the __init__
         # head_dim = self.__resolve_head_dim()
 
-        query_projections, key_projections, value_projections = (
+        query, key, value = (
             self.ptrojections.compute_qkv_projections(query, key, value)
         )
-        attention_mask = self.__updated_attention_mask(attention_mask)
         (
-            key_projections,
-            value_projections,
-            key_padding_mask,
-            attention_mask,
-        ) = self.__add_bias_vectors_to_kv(
-            query,
             key,
             value,
-            attention_mask,
             key_padding_mask,
+            attention_mask,
+        ) = self.utils.add_bias_vectors_to_kv(
+            key,
+            value,
+            key_padding_mask,
+            attention_mask,
         )
-        query, key, value = self.__prepare_qkv_projection_for_attention(
+        query, key, value = self.utils.prepare_qkv_projection_for_attention(
             query, key, value, static_key, static_values
         )
-        key, value, attention_mask, key_padding_mask = self.__add_zero_attention(
+        key, value, attention_mask, key_padding_mask = self.utils.add_zero_attention(
             key, value, attention_mask, key_padding_mask
         )
         updated_source_sequence_length = key.size(1)
-        attention_mask, key_padding_mask = self.__update_key_padding_mask(
+        merged_mask = self.masks.merge_masks(
             attention_mask, key_padding_mask
         )
         attention_output, attention_weights = (
-            self.attention_computation.compute_attetnion()
+            self.attention_computation.compute_attetnion(
+                query, key, value, merged_mask
+            )
         )
         return attention_output, attention_weights
 
-    def __get_batched_input_flag(self) -> bool | None:
-        if self.batched_input_flag is None:
-            AssertionError("`is_input_tesnor_3D_flag` flag is not set.")
-        return self.batched_input_flag 
 
-    def __set_batched_input_flag(self, query: Tensor) -> None:
-        self.batched_input_flag = query.dim() == 3
+    # def __resolve_head_dim(self) -> Tensor:
+    #     self.shape_validator.assert_correct_embedding_dim(self.embedding_dim)
+    #     if isinstance(self.embedding_dim, torch.Tensor):
+    #         # embed_dim can be a tensor when JIT tracing
+    #         head_dim = self.embedding_dim.div(self.num_heads, rounding_mode="trunc")
+    #     else:
+    #         head_dim = self.embedding_dim // self.num_heads
+    #     self.shape_validator.assert_correct_head_dim(head_dim)
+    #     return head_dim
 
-    def __transpose_qkv_if_batched(
+
+class AttentionUtils:
+    def __init__(self, validator: "AttentionValidator"):
+        self.validator = validator
+        self.batch_first_flag = None
+
+    def transpose_qkv_if_batched(
         self,
         query: Tensor,
         key: Tensor,
         value: Tensor,
     ):
-        is_batch_first_flag = self.batch_first_flag and self.__get_batched_input_flag()
+        batched_input_flag = query.dim() == 3
+        is_batch_first_flag = self.batch_first_flag and batched_input_flag
         if not is_batch_first_flag:
             return query, key, value
 
@@ -417,7 +278,7 @@ class MultiHeadAttentionBehaviour(Module):
         value = key
         return query, key, value
 
-    def __add_batch_dimension_if_missing(
+    def add_batch_dimension_if_missing(
         self,
         query: Tensor,
         key: Tensor,
@@ -433,27 +294,7 @@ class MultiHeadAttentionBehaviour(Module):
             key_padding_mask = key_padding_mask.unsqueeze(0)
         return query, key, value, key_padding_mask
 
-    # def __resolve_head_dim(self) -> Tensor:
-    #     self.shape_validator.assert_correct_embedding_dim(self.embedding_dim)
-    #     if isinstance(self.embedding_dim, torch.Tensor):
-    #         # embed_dim can be a tensor when JIT tracing
-    #         head_dim = self.embedding_dim.div(self.num_heads, rounding_mode="trunc")
-    #     else:
-    #         head_dim = self.embedding_dim // self.num_heads
-    #     self.shape_validator.assert_correct_head_dim(head_dim)
-    #     return head_dim
-
-    def __updated_attention_mask(self, attention_mask: Tensor | None):
-        self.validator.assert_attention_mask_shape(attention_mask)
-        is_2d_mask = attention_mask.dim() == 2
-        is_3d_mask = attention_mask.dim() == 3
-        if is_2d_mask:
-            attention_mask = attention_mask.unsqueeze(0)
-        elif is_3d_mask:
-            attention_mask = attention_mask.unsqueeze(1)
-        return attention_mask
-
-    def __add_bias_vectors_to_kv(
+    def add_bias_vectors_to_kv(
         self,
         key_projections: Tensor,
         value_projections: Tensor,
@@ -487,7 +328,7 @@ class MultiHeadAttentionBehaviour(Module):
             attention_mask,
         )
 
-    def __prepare_qkv_projection_for_attention(
+    def prepare_qkv_projection_for_attention(
         self,
         query: Tensor,
         key: Tensor,
@@ -519,68 +360,25 @@ class MultiHeadAttentionBehaviour(Module):
     def __get_expected_qkv_shapes(self, sequence_length):
         return sequence_length, bsz * num_heads, head_dim
 
-    def __add_zero_attention(
-        self,
-        key: Tensor,
-        value: Tensor,
-        attention_mask: Tensor | None = None,
-        key_padding_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
-        if not self.zero_attention_flag:
-            return key, value, attention_mask, key_padding_mask
-
-        zero_attention_shape = (self.batch_size * self.num_heads, 1, self.head_dim)
-        key_zeros = torch.zeros(
-            zero_attention_shape, dtype=key.dtype, device=key.device
-        )
-        key = torch.cat([key, key_zeros], dim=1)
-        value_zeros = torch.zeros(
-            zero_attention_shape, dtype=value.dtype, device=value.device
-        )
-        value = torch.cat([value, value_zeros], dim=1)
-        if attention_mask is not None:
-            attention_mask = F.pad(attention_mask, (0, 1))
-        if key_padding_mask is not None:
-            key_padding_mask = F.pad(key_padding_mask, (0, 1))
-
-        return key, value, attention_mask, key_padding_mask
-
-    def __update_masks(
-        self,
-        attention_mask: Tensor | None,
-        key_padding_mask: Tensor | None,
-    ) -> Tensor | None:
-        if key_padding_mask is None:
-            return attention_mask, key_padding_mask
-
-        if not torch.jit.is_scripting() and not torch.jit.is_tracing():
-            _check_key_padding_mask(key_padding_mask, src_len, bsz)
-
-        key_padding_mask_shape = (self.batch_size, 1, 1, self.source_sequence_length)
-        key_padding_mask = (
-            key_padding_mask.view(key_padding_mask_shape)
-            .expand(-1, self.num_heads, -1, -1)
-            .reshape(self.batch_size * self.num_heads, 1, self.source_sequence_length)
-        )
-        attention_mask = key_padding_mask
-        if attention_mask is not None:
-            attention_mask = attention_mask + key_padding_mask
-
-        return attention_mask, key_padding_mask
-
-
 class AttetentionComputation:
     def __init__(self):
         self.attention_output_model = nn.Linear()
         self.need_weights = self.cfg.need_weights
 
-    def compute_attetnion(self):
+    def compute_attetnion(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_mask: Tensor | None,
+    ) -> tuple[Tensor, Tensor | None]:
         if self.need_weights:
-            attention_output, attention_output_weights = self.__need_weights_case()
-            return attention_output, attention_output_weights
-        else:
-            output = self.__default_case()
-            return output, None
+            return self.__need_weights_case(
+                query, key, value, attention_mask
+            )
+        return self.__default_case(
+            query, key, value, attention_mask
+        )
 
     def __need_weights_case(
         self,
@@ -656,7 +454,13 @@ class AttetentionComputation:
         attention_output = attention_output.view(attention_output_shape)
         return attention_output
 
-    def __default_case(self):
+    def __default_case(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_mask: Tensor | None,
+    ) -> tuple[Tensor, None]:
         attention_mask = self.__prepare_attnetion_mask(attention_mask)
         query, key, value = self.__prepare_qkv_for_attention(query, key, value)
         weighted_values = self.__compute_weighted_values(
@@ -740,7 +544,7 @@ class AttentionProjections:
         self.validator.assert_qkv_based_on_weight_projection(
             indepentent_projection_flag
         )
-        are_qkv_same =key is value and query is key
+        are_qkv_same = key is value and query is key
         if are_qkv_same:
             return self.__compute_self_projections(query)
         return self.__compute_indepentet_projections(query, key, value)
@@ -752,8 +556,8 @@ class AttentionProjections:
         projections = projections.transpose(0, -2)
         projections = projections.squeeze(-2)
         projections = projections.contiguous()
-        query, key, value = projections[0], projections[1], projections[2]
-        return query, key, value
+        query_projections, key_projections, value_projections = projections[0], projections[1], projections[2]
+        return query_projections, key_projections, value_projections
 
     def __compute_indepentet_projections(
         self, query: Tensor, key: Tensor, value: Tensor
@@ -765,10 +569,33 @@ class AttentionProjections:
 
 
 class AttentionMaskUpdates:
-    def __init__(self, target_dtype: DType, causal_attention_mask_flag: bool):
+    def __init__(self, validator: "AttentionValidator",target_dtype: DType, causal_attention_mask_flag: bool, ):
         self.target_dtype = target_dtype
-        self.validator = AttentionValidator(causal_attention_mask_flag)
+        self.validator = validator
         self.causal_attention_mask_flag = causal_attention_mask_flag
+
+    def merge_masks(
+        self,
+        attention_mask: Tensor | None,
+        key_padding_mask: Tensor | None,
+    ) -> Tensor | None:
+        if key_padding_mask is None:
+            return attention_mask
+
+        if not torch.jit.is_scripting() and not torch.jit.is_tracing():
+            _check_key_padding_mask(key_padding_mask, src_len, bsz)
+
+        key_padding_mask_shape = (self.batch_size, 1, 1, self.source_sequence_length)
+        key_padding_mask = (
+            key_padding_mask.view(key_padding_mask_shape)
+            .expand(-1, self.num_heads, -1, -1)
+            .reshape(self.batch_size * self.num_heads, 1, self.source_sequence_length)
+        )
+        attention_mask = key_padding_mask
+        if attention_mask is not None:
+            attention_mask = attention_mask + key_padding_mask
+
+        return attention_mask
 
     def validate_padding_and_attention_masks(
         self,
@@ -811,6 +638,16 @@ class AttentionMaskUpdates:
             check_other=False,
         )
 
+        attention_mask = self.__ensure_correct_shape(attention_mask)
+
+        return attention_mask
+
+    def __ensure_correct_shape(self, attention_mask: Tensor | None) -> Tensor | None:
+        self.validator.assert_attention_mask_shape(attention_mask)
+        if attention_mask.dim() == 2:
+            return attention_mask.unsqueeze(0)
+        elif attention_mask.dim() == 3:
+            return attention_mask.unsqueeze(1)
         return attention_mask
 
     def __canonical_mask(
@@ -854,6 +691,11 @@ class AttentionValidator:
         self.key_sequence_length = None
         self.batched_input_flag = None
         self.query_sequence_length = None
+
+    def assert_correct_head_dim(self):
+        assert (self.head_dim * self.num_heads) == self.embedding_dim, (
+            "`embedding_dim` must be perfectly divisible by `number_of_heads`."
+        )
 
     def assert_mask_float_or_bool(
         self,
@@ -990,11 +832,6 @@ class AttentionValidator:
             f"Was expecting embedding dimension of {expected_embedding_dim}, but got {self.embedding_dim}"
         )
 
-    def assert_correct_head_dim(self, head_dim: int):
-        assert head_dim * self.num_heads == self.embedding_dim, (
-            f"`embed_dim` {self.embedding_dim} not divisible by num_heads {self.num_heads}"
-        )
-
     def assert_separate_projection_layer(self):
         assert key.shape == value.shape, (
             f"key shape {key.shape} does not match value shape {value.shape}"
@@ -1071,3 +908,183 @@ class AttentionValidator:
             assert static_values.size(2) == self.head_dim, (
                 f"expecting static_v.size(2) of {self.head_dim}, but got {static_values.size(2)}"
             )
+#
+#
+#
+# @dataclass
+# class AttentionConfig(DataClassBase):
+#     model_type: LayerTypes | None = field(
+#         default=None,
+#         metadata={
+#             "help": "Type of layer used for to generate query, key, value projections."
+#         },
+#     )
+#     embedding_dim: int | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#     num_heads: int | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#     dropout_probability: int | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#     key_value_bias_flag: bool | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#     zero_attention_flag: bool | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#     key_dim: int | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#     value_dim: int | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#     batch_first_flag: bool | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#     dtype: torch.dtype | None = field(
+#         default=None,
+#         metadata={"help": "Expert input dimension"},
+#     )
+#
+#
+# class Attention(Module):
+#     def __init__(
+#         self,
+#         cfg: "MultiHeadAttentionConfig | ModelConfig",
+#         overrides: "MultiHeadAttentionConfig | None" = None,
+#     ):
+#         super().__init__()
+#         config = getattr(cfg, "multi_head_attention_model_config", cfg)
+#         self.cfg: "MultiHeadAttentionConfig" = self._overwrite_config(config, overrides)
+#
+#         self.model_type = self.cfg.model_type
+#         self.embedding_dim = self.cfg.embedding_dim
+#         self.num_heads = self.cfg.num_heads
+#         self.dropout_probability = self.cfg.dropout_probability
+#         self.key_value_bias_flag = self.cfg.key_value_bias_flag
+#         self.zero_attention_flag = self.cfg.zero_attention_flag
+#         self.batch_first_flag = self.cfg.batch_first_flag
+#         self.model_type = self.cfg.model_type
+#         self.dtype = self.cfg.dtype
+#         self.query_dim = self.embedding_dim
+#         self.key_dim = self.cfg.key_dim
+#         self.value_dim = self.cfg.value_dim
+#         self.head_dim = self.embedding_dim // self.num_heads
+#         self.__resolve_kv_dimensions()
+#         self._valudate_fields(self.cfg, AttentionConfig)
+#         temp = nn.MultiheadAttention
+#
+#         self.is_input_tesnor_3D_flag = False
+#
+#         models = self.__create_projection_models(cfg)
+#         if isinstance(models, tuple):
+#             self.query_module, self.key_module, self.value_module = models
+#         else:
+#             self.qkv_module = models
+#         self.__validate_requirements()
+#
+#     def __resolve_kv_dimensions(self):
+#         self.key_dim = self.cfg.key_dim if self.cfg.key_dim is not None else self.embedding_dim
+#         self.value_dim = self.cfg.value_dim if self.cfg.value_dim is not None else self.embedding_dim
+#
+#     def __validate_requirements(self):
+#         assert (self.head_dim * self.num_heads) == self.embedding_dim, (
+#             "`embedding_dim` must be perfectly divisible by `number_of_heads`."
+#         )
+#
+#     def __create_projection_models(self, cfg: "ModelConfig"):
+#         self.output_dim = self.model_type.value(cfg)
+#         if self.__are_qkv_dimensions_equal():
+#             self.register_parameter("query_module", None)
+#             self.register_parameter("key_module", None)
+#             self.register_parameter("value_module", None)
+#             qkv_module = self.model_type.value(cfg)
+#             return qkv_module
+#         self.register_parameter("qkv_module", None)
+#         query_module = self.model_type.value(cfg)
+#         key_module = self.model_type.value(cfg)
+#         value_module = self.model_type.value(cfg)
+#         return query_module, key_module, value_module
+#
+#     def __are_qkv_dimensions_equal(self) -> bool:
+#         are_keys_querys_same = self.key_dim == self.embed_dim
+#         are_values_querys_same = self.value_dim == self.embed_dim
+#         return are_keys_querys_same and are_values_querys_same
+#
+#     def forward(
+#         self,
+#         query: Tensor,
+#         key: Tensor,
+#         value: Tensor,
+#         key_padding_mask: Tensor | None = None,
+#         need_weights: bool = False,
+#         attention_mask: Tensor | None = None,
+#         average_attention_weights: bool = False,
+#         causal_attention_mask: bool = False,
+#     ) -> tuple[Tensor, Tensor | None]:
+#         self.set_is_input_tesnor_3D_flag(query)
+#         key_padding_mask, attention_mask = self.__update_masks(
+#             key_padding_mask, attention_mask, query.dtype
+#         )
+#         query, key, value = self.__resolve_query_key_value_shapes(query, key, value)
+#
+#         return ()
+#
+#     def get_is_input_tesnor_3D_flag(self) -> bool:
+#         if self.is_input_tesnor_3D_flag is None:
+#             AssertionError("`is_input_tesnor_3D_flag` flag is not set.")
+#         return self.is_input_tesnor_3D_flag
+#
+#     def set_is_input_tesnor_3D_flag(self, query: Tensor) -> None:
+#         self.is_input_tesnor_3D_flag = query.dim() == 3
+#
+#     def __update_masks(
+#         self,
+#         key_padding_mask: Tensor | None,
+#         attention_mask: Tensor | None,
+#         target_type: DType,
+#     ) -> tuple[Tensor | None, Tensor | None]:
+#         key_padding_mask = F._canonical_mask(
+#             mask=key_padding_mask,
+#             mask_name="key_padding_mask",
+#             other_type=F._none_or_dtype(attention_mask),
+#             other_name="attention_mask",
+#             target_type=target_type,
+#         )
+#         attention_mask = F._canonical_mask(
+#             mask=attention_mask,
+#             mask_name="attention_mask",
+#             other_type=None,
+#             other_name="",
+#             target_type=target_type,
+#             check_other=False,
+#         )
+#         return key_padding_mask, attention_mask
+#
+#     def __resolve_query_key_value_shapes(
+#         self,
+#         query: Tensor,
+#         key: Tensor,
+#         value: Tensor,
+#     ):
+#         if self.batch_first_flag and self.is_input_tensor_3D():
+#             if key is value:
+#                 if query is key:
+#                     key = query = value = query.transpose(0, 1)
+#                 else:
+#                     query, key = (x.transpose(0, 1) for x in (query, key))
+#                     value = key
+#             else:
+#                 query, key, value = (x.transpose(0, 1) for x in (query, key, value))
+#         return query, key, value
+#
