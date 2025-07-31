@@ -1,6 +1,8 @@
+from torch import float32
 import torch.nn as nn
 from dataclasses import dataclass, field
 
+from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.base.utils import DataClassBase
 
 
@@ -193,4 +195,23 @@ class ModelConfig(DataClassBase):
             weighted_parameters_flag=True,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
+    )
+    multi_head_attention_model_config: MultiHeadAttentionConfig = field(
+        default_factory=lambda: MultiHeadAttentionConfig(
+            model_type=LayerTypes.DYNAMIC_BASE,
+            batch_size=BATCH_SIZE,
+            num_heads=NUM_EXPERTS,
+            embedding_dim=64,
+            target_sequence_length=16,
+            source_sequence_length=32,
+            target_dtype=float32,
+            use_separate_projection_weight=False,
+            dropout_probability=0.0,
+            key_value_bias_flag=False,
+            zero_attention_flag=False,
+            batch_first_flag=False,
+            key_dim=16,
+            value_dim=32,
+        ),
+        metadata={"help": "`MultiHeadAttention` configuration"},
     )
