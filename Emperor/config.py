@@ -201,6 +201,8 @@ class ModelConfig(DataClassBase):
             model_type=LayerTypes.DYNAMIC_BASE,
             batch_size=BATCH_SIZE,
             num_heads=NUM_EXPERTS,
+            key_dim=16,
+            value_dim=32,
             embedding_dim=64,
             target_sequence_length=16,
             source_sequence_length=32,
@@ -210,8 +212,7 @@ class ModelConfig(DataClassBase):
             key_value_bias_flag=False,
             zero_attention_flag=False,
             batch_first_flag=False,
-            key_dim=16,
-            value_dim=32,
+            causal_attention_mask_flag=False,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
