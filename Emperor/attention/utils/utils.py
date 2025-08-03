@@ -2,45 +2,46 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from dataclasses import dataclass, field
-from Emperor.base.utils import DataClassBase, Module, device
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
+    from Emperor.attention.attention import MultiHeadAttentionConfig
 
 
 class AttentionUtils:
-    def __init__(self, validator: "AttentionValidator"):
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig",
+        validator: "AttentionValidator",
+    ):
+        self.cfg = cfg
         self.validator = validator
-        self.batch_first_flag = None
+        self.batch_first_flag = self.cfg.batch_first_flag
 
-    def transpose_qkv_if_batched(
+    def maybe_transpose_qkv(
         self,
         query: Tensor,
         key: Tensor,
         value: Tensor,
     ):
-        batched_input_flag = query.dim() == 3
-        is_batch_first_flag = self.batch_first_flag and batched_input_flag
-        if not is_batch_first_flag:
+        should_transpose_qkv = self.batch_first_flag and self.__is_tensor_batched(query)
+        if not should_transpose_qkv:
             return query, key, value
-
         if key is value:
-            query, key, value = self.__transpose_shared_qkv(query, key)
-            return query, key, value
-
-        query, key, value = (x.transpose(0, 1) for x in (query, key, value))
-        return query, key, value
+            return self.__transpose_shared_qkv(query, key)
+        return (tensor.transpose(0, 1) for tensor in (query, key, value))
 
     def __transpose_shared_qkv(self, query: Tensor, key: Tensor):
         if query is key:
             query = key = value = query.transpose(0, 1)
             return query, key, value
-        query, key = (x.transpose(0, 1) for x in (query, key))
+        query, key = (tensor.transpose(0, 1) for tensor in (query, key))
         value = key
         return query, key, value
+
+    def __is_tensor_batched(self, tensor: Tensor) -> bool:
+        return tensor.dim() == 3
 
     def add_batch_dimension_if_missing(
         self,
@@ -126,9 +127,12 @@ class AttentionUtils:
 
 
 class AttentionProcessor:
-    def __init__(self):
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig",
+    ):
+        self.cfg = cfg
         self.attention_output_model = nn.Linear(1, 1)
-        # self.need_weights = self.cfg.need_weights
 
     def compute_attetnion(
         self,
@@ -292,7 +296,12 @@ class AttentionProcessor:
 
 
 class AttentionProjector:
-    def __init__(self, validator: "AttentionValidator"):
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig",
+        validator: "AttentionValidator",
+    ):
+        self.cfg = cfg
         self.validator = validator
 
     def compute_qkv_projections(
@@ -338,13 +347,13 @@ class AttentionProjector:
 class AttentionMask:
     def __init__(
         self,
+        cfg: "MultiHeadAttentionConfig",
         validator: "AttentionValidator",
-        target_dtype: "DType",
-        causal_attention_mask_flag: bool,
     ):
+        self.cfg = cfg
         self.validator = validator
-        self.target_dtype = target_dtype
-        self.causal_attention_mask_flag = causal_attention_mask_flag
+        self.target_dtype = self.cfg.target_dtype
+        self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
 
     def merge_masks(
         self,
@@ -455,23 +464,18 @@ class AttentionMask:
 class AttentionValidator:
     def __init__(
         self,
-        num_heads: int,
-        embedding_dim: int,
-        causal_attention_mask_flag: bool = False,
+        cfg: "MultiHeadAttentionConfig",
     ):
-        self.num_heads = num_heads
-        self.config_embeding_dim = embedding_dim
-        self.causal_attention_mask_flag = causal_attention_mask_flag
-        self.query_dims = None
-        self.key_dims = None
-        self.value_dims = None
-        self.embedding_dim = None
+        self.cfg = cfg
+        self.num_heads = self.cfg.num_heads
+        self.embeding_dim = self.cfg.embedding_dim
+        self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.key_sequence_length = None
         self.batched_input_flag = None
         self.query_sequence_length = None
 
     def assert_correct_head_dim(self, head_dim: int) -> None:
-        assert (head_dim * self.num_heads) == self.config_embeding_dim, (
+        assert (head_dim * self.num_heads) == self.embeding_dim, (
             "`embedding_dim` must be perfectly divisible by `number_of_heads`."
         )
 
@@ -506,7 +510,7 @@ class AttentionValidator:
                     "is deprecated. Use same type for both instead."
                 )
 
-    def assert_multi_head_attention_shape(
+    def multi_head_attention_input_shapes(
         self,
         query: Tensor,
         key: Tensor,
@@ -515,35 +519,31 @@ class AttentionValidator:
         attention_mask: Tensor | None = None,
     ) -> bool:
         self.batched_input_flag = query.dim() == 3
-        self.query_dims = query.dim()
-        self.key_dims = key.dim()
-        self.value_dims = value.dim()
-        self.embedding_dim = query.shape[-1]
         self.query_sequence_length = query.shape[0]
         self.key_sequence_length = value.shape[0]
 
-        self.__check_query_dims()
-        self.__check_query_key_value_dimensions()
+        self.__check_query_dims(query)
+        self.__check_query_key_value_dimensions(key, value)
         self.__check_key_padding_mask_dimensions(key_padding_mask)
         self.__check_attention_mask_dimensions(attention_mask)
         self.__ensure_attention_mask_if_causal(attention_mask)
 
         return self.batched_input_flag
 
-    def __check_query_dims(self) -> None:
-        if self.query_dims not in (2, 3):
+    def __check_query_dims(self, query: Tensor) -> None:
+        if query.dim() not in (2, 3):
             raise AssertionError(
-                f"Query should be unbatched 2D or batched 3D tensor but received {self.query_dims}-D tensor"
+                f"Query should be unbatched 2D or batched 3D tensor but received {query.dim()}-D tensor"
             )
 
-    def __check_query_key_value_dimensions(self) -> None:
+    def __check_query_key_value_dimensions(self, key: Tensor, value: Tensor) -> None:
         expected_dims = 3 if self.batched_input_flag else 2
-        qk_dimension_check = self.key_dims == expected_dims
-        qv_dimension_check = self.value_dims == expected_dims
+        qk_dimension_check = key.dim() == expected_dims
+        qv_dimension_check = value.dim() == expected_dims
         are_qkv_dimensions_same = qk_dimension_check and qv_dimension_check
         assert are_qkv_dimensions_same, (
             f"For {self.__format_dimension_context()} query, expected key and value to be {expected_dims}-D "
-            f"but found {self.key_dims}-D and {self.value_dims}-D tensors respectively"
+            f"but found {key.dim()}-D and {value.dim()}-D tensors respectively"
         )
 
     def __check_key_padding_mask_dimensions(
@@ -566,13 +566,12 @@ class AttentionValidator:
         if attention_mask is None:
             return
 
-        attention_mask_dimensions = attention_mask.dim()
-        assert attention_mask_dimensions in (2, 3), (
+        assert attention_mask.dim() in (2, 3), (
             f"For {self.__format_dimension_context()} query, expected attention_mask to be None, 2-D, or 3-D "
-            f"but found {attention_mask_dimensions}-D tensor instead"
+            f"but found {attention_mask.dim()}-D tensor instead"
         )
 
-        if attention_mask_dimensions == 3:
+        if attention_mask.dim() == 3:
             expected_shape = (
                 self.num_heads,
                 self.query_sequence_length,
@@ -583,7 +582,7 @@ class AttentionValidator:
             )
 
     def __format_dimension_context(self) -> str:
-        return "batched (3-D)" if self.has_batch_dimension else "unbatched (2-D)"
+        return "batched (3-D)" if self.batched_input_flag else "unbatched (2-D)"
 
     def __ensure_attention_mask_if_causal(
         self,
@@ -602,13 +601,13 @@ class AttentionValidator:
                 "`generate_square_subsequent_mask` to create this mask."
             )
 
-    def is_input_batched(self, query: Tensor | None = None) -> bool:
-        if self.has_batch_dimension is None:
-            assert query is not None, (
-                "Query tensor must be provided to check batch dimension."
+    def is_input_batched(self, tensor: Tensor | None = None) -> bool:
+        if self.batched_input_flag is None:
+            assert tensor is not None, (
+                "Tensor must be provided to check batch dimension."
             )
-            return query.dim() == 3
-        return self.has_batch_dimension
+            return tensor.dim() == 3
+        return self.batched_input_flag
 
     def assert_correct_embedding_dim(self, expected_embedding_dim: int):
         assert self.embedding_dim == expected_embedding_dim, (
