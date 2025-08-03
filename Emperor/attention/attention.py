@@ -118,10 +118,10 @@ class MultiHeadAttention(Module):
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.__resolve_kv_dimensions()
         self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
-        self.__init_attention_utils()
+        self.__initialize_attention_components()
         self.head_dim = self.__resolve_head_dim()
 
-        m = self.__create_models(cfg)
+        m = self.__build_projection_models(cfg)
         if len(m) == 4:
             self.query_model, self.key_model, self.value_model, self.output_model = m
         else:
@@ -138,38 +138,32 @@ class MultiHeadAttention(Module):
             self.embedding_dim if self.cfg.value_dim == 0 else self.cfg.value_dim
         )
 
-    def __init_attention_utils(self):
-        self.validator = AttentionValidator(
-            self.num_heads,
-            self.embedding_dim,
-            self.causal_attention_mask_flag,
-        )
-        self.masks = AttentionMask(
-            self.validator, self.target_dtype, self.causal_attention_mask_flag
-        )
-        self.projector = AttentionProjector(self.validator)
-        self.processor = AttentionProcessor()
-        self.utils = AttentionUtils(self.validator)
+    def __initialize_attention_components(self):
+        self.validator = AttentionValidator(self.cfg)
+        self.masks = AttentionMask(self.cfg, self.validator)
+        self.projector = AttentionProjector(self.cfg, self.validator)
+        self.processor = AttentionProcessor(self.cfg)
+        self.utils = AttentionUtils(self.cfg, self.validator)
 
-    def __create_models(self, cfg: "ModelConfig") -> tuple:
+    def __build_projection_models(self, cfg: "ModelConfig") -> tuple:
         if self.__are_qkv_dimensions_equal():
-            return self.__create_independend_projection_models(cfg)
-        return self.__create_shared_projection_models(cfg)
+            return self.__build_shared_projection_models(cfg)
+        return self.__build_separate_projection_models(cfg)
 
-    def __create_independend_projection_models(self, cfg: "ModelConfig"):
-        self.register_parameter("qkv_model", None)
+    def __build_separate_projection_models(self, cfg: "ModelConfig"):
         query_model = self.model_type.value(cfg)
         key_model = self.model_type.value(cfg)
         value_model = self.model_type.value(cfg)
         output_model = self.model_type.value(cfg)
+        self.register_parameter("qkv_model", None)
         return query_model, key_model, value_model, output_model
 
-    def __create_shared_projection_models(self, cfg: "ModelConfig"):
+    def __build_shared_projection_models(self, cfg: "ModelConfig"):
         self.register_parameter("query_model", None)
         self.register_parameter("key_model", None)
         self.register_parameter("value_model", None)
-        qkv_model = self.model_type.value(cfg)
         output_model = self.model_type.value(cfg)
+        qkv_model = self.model_type.value(cfg)
         return qkv_model, output_model
 
     def __are_qkv_dimensions_equal(self) -> bool:
@@ -205,8 +199,8 @@ class MultiHeadAttention(Module):
         average_attention_weights: bool = True,
         is_causal: bool = False,
     ):
-        query, key, value = self.utils.transpose_qkv_if_batched(query, key, value)
-        self.validator.assert_multi_head_attention_shape(
+        query, key, value = self.utils.maybe_transpose_qkv(query, key, value)
+        self.validator.multi_head_attention_input_shapes(
             query, key, value, key_padding_mask, attention_mask
         )
         query, key, value, key_padding_mask = self.utils.add_batch_dimension_if_missing(
@@ -220,7 +214,7 @@ class MultiHeadAttention(Module):
             )
         )
 
-        query, key, value = self.ptrojections.compute_qkv_projections(query, key, value)
+        query, key, value = self.projector.compute_qkv_projections(query, key, value)
         (
             key,
             value,
@@ -240,17 +234,7 @@ class MultiHeadAttention(Module):
         )
         updated_source_sequence_length = key.size(1)
         merged_mask = self.masks.merge_masks(attention_mask, key_padding_mask)
-        attention_output, attention_weights = (
-            self.attention_computation.compute_attetnion(query, key, value, merged_mask)
+        attention_output, attention_weights = self.attention_computation.compute_(
+            query, key, value, merged_mask
         )
         return attention_output, attention_weights
-
-    # def __resolve_head_dim(self) -> Tensor:
-    #     self.shape_validator.assert_correct_embedding_dim(self.embedding_dim)
-    #     if isinstance(self.embedding_dim, torch.Tensor):
-    #         # embed_dim can be a tensor when JIT tracing
-    #         head_dim = self.embedding_dim.div(self.num_heads, rounding_mode="trunc")
-    #     else:
-    #         head_dim = self.embedding_dim // self.num_heads
-    #     self.shape_validator.assert_correct_head_dim(head_dim)
-    #     return head_dim
