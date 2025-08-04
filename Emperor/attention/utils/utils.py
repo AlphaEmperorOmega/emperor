@@ -520,8 +520,6 @@ class AttentionValidator:
         attention_mask: Tensor | None = None,
     ) -> bool:
         self.batched_input_flag = query.dim() == 3
-        self.query_sequence_length = query.shape[0]
-        self.key_sequence_length = value.shape[0]
 
         self.__check_query_dims(query)
         self.__check_query_key_value_dimensions(key, value)
