@@ -2,6 +2,7 @@ import copy
 import unittest
 import torch
 import torch.nn as nn
+from torch.nn.functional import scaled_dot_product_attention
 from Emperor.attention.utils.utils import (
     AttentionMask,
     AttentionProcessor,
@@ -514,13 +515,16 @@ class TestAttentionValidator(TestAttention):
         embedding_dim = config.embedding_dim
 
         query = torch.randn(embedding_dim)
-        with self.assertRaises(AssertionError) as context:
+        with self.assertRaises(RuntimeError) as context:
             m._AttentionValidator__check_query_dims(query)
 
-    def test__check_query_key_value_dimensions(self):
+    def test__check_query_key_value_dimensions__batched_input_flag__False__incorrect_input_dim(
+        self,
+    ):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
+        m.batched_input_flag = False
 
         batch_size = 3
         sequence_length = 12
@@ -528,8 +532,59 @@ class TestAttentionValidator(TestAttention):
 
         key = torch.randn(sequence_length, batch_size, embedding_dim)
         value = torch.randn(sequence_length * batch_size, embedding_dim)
-        with self.assertRaises(AssertionError) as context:
+        with self.assertRaises(RuntimeError) as context:
             m._AttentionValidator__check_query_key_value_dimensions(key, value)
+
+    def test__check_query_key_value_dimensions__batched_input_flag__True__incorrect_input_dim(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = True
+
+        batch_size = 3
+        sequence_length = 12
+        embedding_dim = config.embedding_dim
+
+        key = torch.randn(sequence_length, batch_size, embedding_dim)
+        value = torch.randn(sequence_length * batch_size, embedding_dim)
+        with self.assertRaises(RuntimeError) as context:
+            m._AttentionValidator__check_query_key_value_dimensions(key, value)
+
+    def test__check_query_key_value_dimensions__batched_input_flag__False__correct_input_dim(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = False
+
+        batch_size = 3
+        sequence_length = 12
+        embedding_dim = config.embedding_dim
+
+        key = torch.randn(sequence_length * batch_size, embedding_dim)
+        value = torch.randn(sequence_length * batch_size, embedding_dim)
+        output = m._AttentionValidator__check_query_key_value_dimensions(key, value)
+        self.assertIsNone(output)
+
+    def test__check_query_key_value_dimensions__batched_input_flag__True__correct_input_dim(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = True
+
+        batch_size = 3
+        sequence_length = 12
+        embedding_dim = config.embedding_dim
+
+        key = torch.randn(sequence_length, batch_size, embedding_dim)
+        value = torch.randn(sequence_length, batch_size, embedding_dim)
+        output = m._AttentionValidator__check_query_key_value_dimensions(key, value)
+        self.assertIsNone(output)
 
     def test__check_key_padding_mask_dimensions_None(self):
         c = copy.deepcopy(self.cfg)
@@ -550,18 +605,77 @@ class TestAttentionValidator(TestAttention):
         embedding_dim = config.embedding_dim
 
         key_padding_mask = torch.randn(sequence_length, batch_size, embedding_dim)
-        with self.assertRaises(AssertionError) as context:
+        with self.assertRaises(RuntimeError) as context:
             m._AttentionValidator__check_key_padding_mask_dimensions(key_padding_mask)
 
-    def test__check_attention_mask_dimensions__None(self):
+    def test__check_attention_mask__None(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
         m.batched_input_flag = True
 
-        self.assertIsNone(m._AttentionValidator__check_attention_mask_dimensions(None))
+        output = m._AttentionValidator__check_attention_mask(None)
+        self.assertIsNone(output)
 
-    def test__check_attention_mask_dimensions__assert_one_dim_mask(
+    def test__check_attention_mask__assert_one_dim__incorrect_input_shape(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = True
+
+        source_sequence_length = m.source_sequence_length
+
+        attention_mask = torch.randn(source_sequence_length)
+        with self.assertRaises(RuntimeError) as context:
+            m._AttentionValidator__check_attention_mask(attention_mask)
+
+    def test__check_attention_mask__assert_two_dim__incorrect_input_shape(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = True
+
+        source_sequence_length = 12
+        target_sequence_length = m.target_sequence_length
+
+        attention_mask = torch.randn(source_sequence_length, target_sequence_length)
+
+        with self.assertRaises(RuntimeError) as context:
+            m._AttentionValidator__check_attention_mask(attention_mask)
+
+    def test__check_attention_mask__assert_two_dim__correct_input_shape(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = True
+
+        source_sequence_length = m.source_sequence_length
+        target_sequence_length = m.target_sequence_length
+
+        attention_mask = torch.randn(source_sequence_length, target_sequence_length)
+
+        output = m._AttentionValidator__check_attention_mask(attention_mask)
+        self.assertIsNone(output)
+
+    def test__check_attention_mask__assert_three_dim__incorrect_input_shape(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = True
+
+        batch_size = 2
+        num_heads = 3
+        source_sequence_length = 12
+        target_sequence_length = m.target_sequence_length
+
+        attention_mask = torch.randn(
+            batch_size * num_heads, source_sequence_length, target_sequence_length
+        )
+
+        with self.assertRaises(RuntimeError) as context:
+            m._AttentionValidator__check_attention_mask(attention_mask)
+
+    def test__check_attention_mask__assert_three_dim__correct_input_shape(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -569,38 +683,101 @@ class TestAttentionValidator(TestAttention):
         m = AttentionValidator(config)
         m.batched_input_flag = True
 
-        embedding_dim = config.embedding_dim
+        batch_size = m.batch_size
+        num_heads = m.num_heads
+        source_sequence_length = m.source_sequence_length
+        target_sequence_length = m.target_sequence_length
 
-        attention_mask = torch.randn(embedding_dim)
-        with self.assertRaises(AssertionError) as context:
-            m._AttentionValidator__check_attention_mask_dimensions(attention_mask)
+        attention_mask = torch.randn(
+            batch_size * num_heads, source_sequence_length, target_sequence_length
+        )
 
-    def test__check_attention_mask_dimensions__assert_two_dim_mask(self):
+        output = m._AttentionValidator__check_attention_mask(attention_mask)
+        self.assertIsNone(output)
+
+    def test__check_attention_mask__assert_four_dim__not_supported(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
         m.batched_input_flag = True
 
-        batch_size = 3
-        sequence_length = 12
-        embedding_dim = config.embedding_dim
+        batch_size = 2
+        num_heads = 3
+        source_sequence_length = 12
+        target_sequence_length = m.target_sequence_length
 
-        attention_mask = torch.randn(sequence_length, batch_size)
-        self.assertIsNone(
-            m._AttentionValidator__check_attention_mask_dimensions(attention_mask)
+        attention_mask = torch.randn(
+            num_heads,
+            batch_size,
+            source_sequence_length,
+            target_sequence_length,
         )
 
-    def test__check_attention_mask_dimensions__assert_three_dim_mask(self):
+        with self.assertRaises(RuntimeError) as context:
+            m._AttentionValidator__check_attention_mask(attention_mask)
+
+    def test__resolve_attention_mask_shape__two_dim_shape(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
         m.batched_input_flag = True
 
-        batch_size = 3
-        sequence_length = 12
-        embedding_dim = config.embedding_dim
+        source_sequence_length = m.source_sequence_length
+        target_sequence_length = m.target_sequence_length
 
-        attention_mask = torch.randn(sequence_length, batch_size, embedding_dim)
-        self.assertIsNone(
-            m._AttentionValidator__check_attention_mask_dimensions(attention_mask)
+        attention_mask = torch.randn(
+            source_sequence_length,
+            target_sequence_length,
         )
+
+        with self.assertRaises(RuntimeError) as context:
+            m._AttentionValidator__resolve_attention_mask_shape(attention_mask)
+
+    def test__resolve_attention_mask_shape__three_dim_shape(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = True
+
+        batch_size = m.batch_size
+        num_heads = m.num_heads
+        source_sequence_length = m.source_sequence_length
+        target_sequence_length = m.target_sequence_length
+
+        attention_mask = torch.randn(
+            batch_size * num_heads,
+            source_sequence_length,
+            target_sequence_length,
+        )
+
+        with self.assertRaises(RuntimeError) as context:
+            m._AttentionValidator__resolve_attention_mask_shape(attention_mask)
+
+    def test__ensure_attention_mask_if_causal__None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.causal_attention_mask_flag = True
+
+        with self.assertRaises(RuntimeError) as context:
+            m._AttentionValidator__ensure_attention_mask_if_causal(None)
+
+    def test__ensure_attention_mask_if_causal__causal_attention_mask_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.causal_attention_mask_flag = True
+
+        batch_size = m.batch_size
+        num_heads = m.num_heads
+        source_sequence_length = m.source_sequence_length
+        target_sequence_length = m.target_sequence_length
+
+        attention_mask = torch.randn(
+            batch_size * num_heads,
+            source_sequence_length,
+            target_sequence_length,
+        )
+
+        output = m._AttentionValidator__ensure_attention_mask_if_causal(attention_mask)
+        self.assertIsNone(output)
