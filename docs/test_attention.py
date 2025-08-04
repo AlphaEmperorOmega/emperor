@@ -725,13 +725,13 @@ class TestAttentionValidator(TestAttention):
         source_sequence_length = m.source_sequence_length
         target_sequence_length = m.target_sequence_length
 
-        attention_mask = torch.randn(
+        expected_attention_mask_shape = (
             source_sequence_length,
             target_sequence_length,
         )
 
-        with self.assertRaises(RuntimeError) as context:
-            m._AttentionValidator__resolve_attention_mask_shape(attention_mask)
+        output = m._AttentionValidator__resolve_attention_mask_shape(2)
+        self.assertEqual(output, expected_attention_mask_shape)
 
     def test__resolve_attention_mask_shape__three_dim_shape(self):
         c = copy.deepcopy(self.cfg)
@@ -744,14 +744,14 @@ class TestAttentionValidator(TestAttention):
         source_sequence_length = m.source_sequence_length
         target_sequence_length = m.target_sequence_length
 
-        attention_mask = torch.randn(
+        expected_attention_mask_shape = (
             batch_size * num_heads,
             source_sequence_length,
             target_sequence_length,
         )
 
-        with self.assertRaises(RuntimeError) as context:
-            m._AttentionValidator__resolve_attention_mask_shape(attention_mask)
+        output = m._AttentionValidator__resolve_attention_mask_shape(3)
+        self.assertEqual(output, expected_attention_mask_shape)
 
     def test__ensure_attention_mask_if_causal__None(self):
         c = copy.deepcopy(self.cfg)
