@@ -467,12 +467,13 @@ class AttentionValidator:
         cfg: "MultiHeadAttentionConfig",
     ):
         self.cfg = cfg
+        self.batch_size = self.cfg.batch_size
         self.num_heads = self.cfg.num_heads
         self.embeding_dim = self.cfg.embedding_dim
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
-        self.key_sequence_length = None
         self.batched_input_flag = None
-        self.query_sequence_length = None
+        self.source_sequence_length = self.cfg.source_sequence_length
+        self.target_sequence_length = self.cfg.target_sequence_length
 
     def assert_correct_head_dim(self, head_dim: int) -> None:
         assert (head_dim * self.num_heads) == self.embeding_dim, (
@@ -525,14 +526,14 @@ class AttentionValidator:
         self.__check_query_dims(query)
         self.__check_query_key_value_dimensions(key, value)
         self.__check_key_padding_mask_dimensions(key_padding_mask)
-        self.__check_attention_mask_dimensions(attention_mask)
         self.__ensure_attention_mask_if_causal(attention_mask)
+        self.__check_attention_mask(attention_mask)
 
         return self.batched_input_flag
 
     def __check_query_dims(self, query: Tensor) -> None:
         if query.dim() not in (2, 3):
-            raise AssertionError(
+            raise RuntimeError(
                 f"Query should be unbatched 2D or batched 3D tensor but received {query.dim()}-D tensor"
             )
 
@@ -541,10 +542,11 @@ class AttentionValidator:
         qk_dimension_check = key.dim() == expected_dims
         qv_dimension_check = value.dim() == expected_dims
         are_qkv_dimensions_same = qk_dimension_check and qv_dimension_check
-        assert are_qkv_dimensions_same, (
-            f"For {self.__format_dimension_context()} query, expected key and value to be {expected_dims}-D "
-            f"but found {key.dim()}-D and {value.dim()}-D tensors respectively"
-        )
+        if not are_qkv_dimensions_same:
+            raise RuntimeError(
+                f"For {self.__format_dimension_context()} query, expected key and value to be {expected_dims}-D "
+                f"but found {key.dim()}-D and {value.dim()}-D tensors respectively"
+            )
 
     def __check_key_padding_mask_dimensions(
         self,
@@ -554,32 +556,41 @@ class AttentionValidator:
             return
 
         expected_dim = 2 if self.batched_input_flag else 1
-        assert key_padding_mask.dim() == expected_dim, (
-            f"For {self.__format_dimension_context()} query, expected `key_padding_mask` to be None or {expected_dim}-D "
-            f"but found {key_padding_mask.dim()}-D tensor instead"
-        )
+        if key_padding_mask.dim() != expected_dim:
+            raise RuntimeError(
+                f"For {self.__format_dimension_context()} query, expected `key_padding_mask` to be None or {expected_dim}-D "
+                f"but found {key_padding_mask.dim()}-D tensor instead"
+            )
 
-    def __check_attention_mask_dimensions(
+    def __check_attention_mask(
         self,
         attention_mask: Tensor | None = None,
     ) -> None:
         if attention_mask is None:
             return
 
-        assert attention_mask.dim() in (2, 3), (
-            f"For {self.__format_dimension_context()} query, expected attention_mask to be None, 2-D, or 3-D "
-            f"but found {attention_mask.dim()}-D tensor instead"
-        )
-
-        if attention_mask.dim() == 3:
-            expected_shape = (
-                self.num_heads,
-                self.query_sequence_length,
-                self.key_sequence_length,
+        if attention_mask.dim() not in (2, 3):
+            raise RuntimeError(
+                f"For {self.__format_dimension_context()} query, expected attention_mask to be None, 2-D, or 3-D tensor "
+                f"but found {attention_mask.dim()}-D tensor instead"
             )
-            assert attention_mask.shape == expected_shape, (
+
+        expected_shape = self.__resolve_attention_mask_shape(attention_mask.dim())
+        if attention_mask.shape != expected_shape:
+            raise RuntimeError(
                 f"Expected `attention_mask` shape to be {expected_shape} but got {attention_mask.shape}"
             )
+
+    def __resolve_attention_mask_shape(
+        self, attention_mask_dim: int
+    ) -> tuple[int, int, int] | tuple[int, int]:
+        if attention_mask_dim == 3:
+            return (
+                self.batch_size * self.num_heads,
+                self.source_sequence_length,
+                self.target_sequence_length,
+            )
+        return (self.source_sequence_length, self.target_sequence_length)
 
     def __format_dimension_context(self) -> str:
         return "batched (3-D)" if self.batched_input_flag else "unbatched (2-D)"
@@ -588,13 +599,7 @@ class AttentionValidator:
         self,
         attention_mask: Tensor | None = None,
     ) -> None:
-        if attention_mask is None:
-            return
-
-        ensure_attention_mask_if_causal = (
-            self.causal_attention_mask_flag and attention_mask is None
-        )
-        if ensure_attention_mask_if_causal:
+        if self.causal_attention_mask_flag and attention_mask is None:
             raise RuntimeError(
                 "Need `attention_mask` if specifying the `causal_attention_mask_flag` hint. "
                 "You may use the Transformer module method "
