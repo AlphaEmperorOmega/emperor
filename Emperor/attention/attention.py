@@ -203,8 +203,10 @@ class MultiHeadAttention(Module):
         self.validator.multi_head_attention_input_shapes(
             query, key, value, key_padding_mask, attention_mask
         )
-        query, key, value, key_padding_mask = self.utils.add_batch_dimension_if_missing(
-            query, key, value, key_padding_mask
+        query, key, value, key_padding_mask, attention_mask = (
+            self.utils.add_batch_dimension_if_missing(
+                query, key, value, key_padding_mask, attention_mask
+            )
         )
         key_padding_mask, attention_mask = (
             self.masks.validate_padding_and_attention_masks(

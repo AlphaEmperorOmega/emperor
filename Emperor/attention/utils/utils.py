@@ -49,15 +49,18 @@ class AttentionUtils:
         key: Tensor,
         value: Tensor,
         key_padding_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None]:
-        if self.validator.is_input_batched(query):
-            return query, key, value, key_padding_mask
+        attention_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None, Tensor | None]:
+        if self.validator.is_tensor_batched(query):
+            return query, key, value, key_padding_mask, attention_mask
         query = query.unsqueeze(1)
         key = key.unsqueeze(1)
         value = value.unsqueeze(1)
         if key_padding_mask is not None:
             key_padding_mask = key_padding_mask.unsqueeze(0)
-        return query, key, value, key_padding_mask
+        if attention_mask is not None:
+            attention_mask = attention_mask.unsqueeze(0)
+        return query, key, value, key_padding_mask, attention_mask
 
     def add_bias_vectors_to_kv(
         self,
@@ -380,8 +383,8 @@ class AttentionMask:
 
     def validate_padding_and_attention_masks(
         self,
-        attention_mask: Tensor | None,
         key_padding_mask: Tensor | None,
+        attention_mask: Tensor | None,
         need_weights: bool = False,
     ) -> tuple[Tensor | None, Tensor | None]:
         key_padding_mask = self.__canonical_mask(
@@ -396,20 +399,21 @@ class AttentionMask:
             attention_mask,
             need_weights,
         )
+
         return key_padding_mask, attention_mask
 
     def __validate_attention_mask(
         self,
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
-        need_weights: bool,
+        need_weights: bool = False,
     ) -> Tensor | None:
         if (
             self.causal_attention_mask_flag
             and key_padding_mask is None
             and not need_weights
         ):
-            return None
+            return
 
         if key_padding_mask is not None:
             self.causal_attention_mask_flag = False
@@ -423,16 +427,6 @@ class AttentionMask:
             check_other=False,
         )
 
-        attention_mask = self.__ensure_correct_shape(attention_mask)
-
-        return attention_mask
-
-    def __ensure_correct_shape(self, attention_mask: Tensor | None) -> Tensor | None:
-        self.validator.assert_attention_mask_shape(attention_mask)
-        if attention_mask.dim() == 2:
-            return attention_mask.unsqueeze(0)
-        elif attention_mask.dim() == 3:
-            return attention_mask.unsqueeze(1)
         return attention_mask
 
     def __canonical_mask(
@@ -457,9 +451,6 @@ class AttentionMask:
                 mask, float("-inf")
             )
         return mask
-
-    def get_causal_attention_mask_flag(self) -> bool:
-        return self.causal_attention_mask_flag
 
 
 class AttentionValidator:
@@ -525,8 +516,8 @@ class AttentionValidator:
         self.__check_query_dims(query)
         self.__check_query_key_value_dimensions(key, value)
         self.__check_key_padding_mask_dimensions(key_padding_mask)
-        self.__ensure_attention_mask_if_causal(attention_mask)
         self.__check_attention_mask(attention_mask)
+        self.__ensure_attention_mask_if_causal(attention_mask)
 
         return self.batched_input_flag
 
@@ -580,6 +571,9 @@ class AttentionValidator:
                 f"Expected `attention_mask` shape to be {expected_shape} but got {attention_mask.shape}"
             )
 
+    def __format_dimension_context(self) -> str:
+        return "batched (3-D)" if self.batched_input_flag else "unbatched (2-D)"
+
     def __resolve_attention_mask_shape(
         self, attention_mask: Tensor
     ) -> tuple[int, int, int] | tuple[int, int]:
@@ -591,9 +585,6 @@ class AttentionValidator:
             )
         return (self.source_sequence_length, self.target_sequence_length)
 
-    def __format_dimension_context(self) -> str:
-        return "batched (3-D)" if self.batched_input_flag else "unbatched (2-D)"
-
     def __ensure_attention_mask_if_causal(
         self,
         attention_mask: Tensor | None = None,
@@ -604,6 +595,9 @@ class AttentionValidator:
                 "You may use the Transformer module method "
                 "`generate_square_subsequent_mask` to create this mask."
             )
+
+    def is_tensor_batched(self, tensor: Tensor) -> bool:
+        return tensor.dim() == 3
 
     def is_input_batched(self, tensor: Tensor | None = None) -> bool:
         if self.batched_input_flag is None:
@@ -648,33 +642,6 @@ class AttentionValidator:
             self.assert_separate_projection_layer()
         else:
             self.assert_shared_projection_layer()
-
-    def assert_attention_mask_shape(self, attention_mask):
-        is_2d_mask = attention_mask.dim() == 2
-        is_3d_mask = attention_mask.dim() == 3
-        if is_2d_mask:
-            expected_2d_mask_shape = (
-                self.target_sequence_length,
-                self.source_sequence_length,
-            )
-            if attention_mask.shape != expected_2d_mask_shape:
-                raise RuntimeError(
-                    f"The shape of the 2D attention_mask is {attention_mask.shape}, but should be {correct_2d_size}."
-                )
-        elif is_3d_mask:
-            expected_3d_mask_shape = (
-                self.batch_size * self.num_heads,
-                self.target_sequence_length,
-                self.source_sequence_length,
-            )
-            if expected_3d_mask_shape == 3:
-                raise RuntimeError(
-                    f"Expected attention_mask to be 2D or 3D, but got {attention_mask.dim()}D."
-                )
-        else:
-            raise RuntimeError(
-                f"attention_mask's dimension {attention_mask.dim()} is not supported"
-            )
 
     def assert_correct_static_projection_shapes(
         self,
