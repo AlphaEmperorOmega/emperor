@@ -573,16 +573,16 @@ class AttentionValidator:
                 f"but found {attention_mask.dim()}-D tensor instead"
             )
 
-        expected_shape = self.__resolve_attention_mask_shape(attention_mask.dim())
+        expected_shape = self.__resolve_attention_mask_shape(attention_mask)
         if attention_mask.shape != expected_shape:
             raise RuntimeError(
                 f"Expected `attention_mask` shape to be {expected_shape} but got {attention_mask.shape}"
             )
 
     def __resolve_attention_mask_shape(
-        self, attention_mask_dim: int
+        self, attention_mask: Tensor
     ) -> tuple[int, int, int] | tuple[int, int]:
-        if attention_mask_dim == 3:
+        if attention_mask.dim() == 3:
             return (
                 self.batch_size * self.num_heads,
                 self.source_sequence_length,
