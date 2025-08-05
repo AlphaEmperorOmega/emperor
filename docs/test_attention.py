@@ -1,6 +1,7 @@
 import copy
 import unittest
 import torch
+from torch._C import dtype
 import torch.nn as nn
 from torch.nn.functional import scaled_dot_product_attention
 from Emperor.attention.utils.utils import (
@@ -538,13 +539,59 @@ class TestAttentionUtils(TestAttention):
         self.assertTrue(torch.all(output_q != output_k))
         self.assertTrue(torch.all(output_q != output_v))
 
-
-class TestAttentionValidator(TestAttention):
-    def test__assert_multi_head_attention_shape(self):
+    def test__add_batch_dimension_if_missing__batched_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = AttentionValidator(config)
+        config.batch_first_flag = True
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
 
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        query = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+
+        output_q, output_k, output_v, output_padding = m.add_batch_dimension_if_missing(
+            query, key, value, key_padding_mask
+        )
+
+        self.assertEqual(query.shape, output_q.shape)
+        self.assertEqual(key.shape, output_k.shape)
+        self.assertEqual(value.shape, output_v.shape)
+        self.assertEqual(key_padding_mask.shape, output_padding.shape)
+
+    def test__add_batch_dimension_if_missing__non_batched_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.batch_first_flag = True
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        query = torch.randn(target_sequence_length, embedding_dim)
+        key = torch.randn(source_sequence_length, embedding_dim)
+        value = torch.randn(source_sequence_length, embedding_dim)
+        key_padding_mask = torch.randint(0, 1, (source_sequence_length,))
+
+        output_q, output_k, output_v, output_padding = m.add_batch_dimension_if_missing(
+            query, key, value, key_padding_mask
+        )
+
+        self.assertEqual(output_q.shape, (target_sequence_length, 1, embedding_dim))
+        self.assertEqual(output_k.shape, (source_sequence_length, 1, embedding_dim))
+        self.assertEqual(output_v.shape, (source_sequence_length, 1, embedding_dim))
+        self.assertEqual(output_padding.shape, (1, source_sequence_length))
+
+
+class TestAttentionValidator(TestAttention):
     def test__check_query_dims__incorrect_inputs_1D(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -935,3 +982,147 @@ class TestAttentionValidator(TestAttention):
         )
 
         self.assertFalse(output)
+
+    def test__is_mask_float_or_bool__incorect_int_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = False
+
+        mask = torch.randint(0, 10, (10, 10))
+        maks_name = "test_mask"
+
+        with self.assertRaises(RuntimeError) as context:
+            m.is_mask_float_or_bool(mask, maks_name)
+
+    def test__is_mask_float_or_bool__correct_float_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = False
+
+        mask = torch.randn(10, 10)
+        maks_name = "test_mask"
+
+        output = m.is_mask_float_or_bool(mask, maks_name)
+        self.assertIsNone(output)
+
+    def test__is_mask_float_or_bool__correct_boolean_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = False
+
+        mask = torch.randn(10, 10) > 0
+        maks_name = "test_mask"
+
+        output = m.is_mask_float_or_bool(mask, maks_name)
+        self.assertIsNone(output)
+
+    def test__is_mask_correct_dtype__incorrect_dtype__check_other__True(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = False
+
+        mask = torch.randn(10, 10, dtype=torch.float64)
+        maks_name = "test_mask"
+        other_type = torch.float32
+        other_name = "real_maks_dtype"
+        check_other = True
+
+        with self.assertRaises(RuntimeError) as context:
+            m.is_mask_correct_dtype(
+                mask, maks_name, other_type, other_name, check_other
+            )
+
+    def test__is_mask_correct_dtype__incorrect_dtype__check_other__False(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = False
+
+        mask = torch.randn(10, 10, dtype=torch.float64)
+        maks_name = "test_mask"
+        other_type = torch.float32
+        other_name = "real_maks_dtype"
+        check_other = False
+
+        output = m.is_mask_correct_dtype(
+            mask, maks_name, other_type, other_name, check_other
+        )
+        self.assertIsNone(output)
+
+    def test__is_mask_correct_dtype__same_dtype(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = False
+
+        mask = torch.randn(10, 10, dtype=torch.float32)
+        maks_name = "test_mask"
+        other_type = torch.float32
+        other_name = "real_maks_dtype"
+        check_other = True
+
+        output = m.is_mask_correct_dtype(
+            mask, maks_name, other_type, other_name, check_other
+        )
+        self.assertIsNone(output)
+
+    def test__is_mask_correct_dtype__other_type__None__check_other__True(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+        m.batched_input_flag = False
+
+        mask = torch.randn(10, 10, dtype=torch.float32)
+        maks_name = "test_mask"
+        other_type = None
+        other_name = "real_maks_dtype"
+        check_other = True
+
+        output = m.is_mask_correct_dtype(
+            mask, maks_name, other_type, other_name, check_other
+        )
+        self.assertIsNone(output)
+
+
+class TestAttentionMask(TestAttention):
+    def test__canonical_mask__input__None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+
+        mask = None
+        mask_name = ""
+        other_type = None
+        other_name = ""
+        target_type = torch.float32
+        check_other = False
+
+        output = m._AttentionMask__canonical_mask(
+            mask, mask_name, other_type, other_name, target_type, check_other
+        )
+        self.assertIsNone(output)
+
+    def test__canonical_mask__boolean_mask_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+
+        mask = torch.randn(10, 10, dtype=torch.float32) > 0
+        mask_name = "maks_to_test"
+        other_type = torch.bool
+        other_name = "required_mask_dtype"
+        target_type = torch.float32
+        check_other = True
+
+        output = m._AttentionMask__canonical_mask(
+            mask, mask_name, other_type, other_name, target_type, check_other
+        )
+
+        self.assertTrue(output.dtype == torch.float32)
+        self.assertFalse(output.dtype == mask.dtype)
