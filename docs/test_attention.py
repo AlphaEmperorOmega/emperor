@@ -347,19 +347,25 @@ class TestAttentionUtils(TestAttention):
         validator = AttentionValidator(config)
         m = AttentionUtils(config, validator)
 
-        batch_size = 3
-        sequence_length = 10
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
         embedding_dim = config.embedding_dim
 
-        query = key = torch.randn(sequence_length, batch_size, embedding_dim)
+        query = key = torch.randn(target_sequence_length, batch_size, embedding_dim)
 
         output_q, output_k, output_v = m._AttentionUtils__transpose_shared_qkv(
             query, key
         )
 
-        self.assertEqual(output_q.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_k.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_v.shape, (batch_size, sequence_length, embedding_dim))
+        self.assertEqual(
+            output_q.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_k.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_v.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
         self.assertTrue(torch.equal(output_q, output_k))
         self.assertTrue(torch.equal(output_k, output_v))
 
@@ -369,20 +375,27 @@ class TestAttentionUtils(TestAttention):
         validator = AttentionValidator(config)
         m = AttentionUtils(config, validator)
 
-        batch_size = 3
-        sequence_length = 10
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
+        source_sequence_length = config.target_sequence_length
         embedding_dim = config.embedding_dim
 
-        query = torch.randn(sequence_length, batch_size, embedding_dim)
-        key = torch.randn(sequence_length, batch_size, embedding_dim)
+        query = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
 
         output_q, output_k, output_v = m._AttentionUtils__transpose_shared_qkv(
             query, key
         )
 
-        self.assertEqual(output_q.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_k.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_v.shape, (batch_size, sequence_length, embedding_dim))
+        self.assertEqual(
+            output_q.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_k.shape, (batch_size, source_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_v.shape, (batch_size, source_sequence_length, embedding_dim)
+        )
         self.assertTrue(torch.all(output_q != output_k))
         self.assertTrue(torch.all(output_q != output_v))
         self.assertTrue(torch.equal(output_k, output_v))
@@ -422,11 +435,13 @@ class TestAttentionUtils(TestAttention):
         validator = AttentionValidator(config)
         m = AttentionUtils(config, validator)
 
-        batch_size = 3
-        sequence_length = 10
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
         embedding_dim = config.embedding_dim
 
-        query = key = value = torch.randn(sequence_length, batch_size, embedding_dim)
+        query = key = value = torch.randn(
+            target_sequence_length, batch_size, embedding_dim
+        )
 
         output_q, output_k, output_v = m.maybe_transpose_qkv(query, key, value)
 
@@ -441,16 +456,25 @@ class TestAttentionUtils(TestAttention):
         validator = AttentionValidator(config)
         m = AttentionUtils(config, validator)
 
-        batch_size = 3
-        sequence_length = 10
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
+        source_sequence_length = config.target_sequence_length
         embedding_dim = config.embedding_dim
 
-        query = key = value = torch.randn(sequence_length, batch_size, embedding_dim)
+        query = key = value = torch.randn(
+            target_sequence_length, batch_size, embedding_dim
+        )
         output_q, output_k, output_v = m.maybe_transpose_qkv(query, key, value)
 
-        self.assertEqual(output_q.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_k.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_v.shape, (batch_size, sequence_length, embedding_dim))
+        self.assertEqual(
+            output_q.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_k.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_v.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
         self.assertTrue(torch.equal(output_q, output_k))
         self.assertTrue(torch.equal(output_k, output_v))
         self.assertTrue(torch.equal(output_q, output_v))
@@ -462,17 +486,24 @@ class TestAttentionUtils(TestAttention):
         validator = AttentionValidator(config)
         m = AttentionUtils(config, validator)
 
-        batch_size = 3
-        sequence_length = 10
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
+        source_sequence_length = config.target_sequence_length
         embedding_dim = config.embedding_dim
 
-        query = torch.randn(sequence_length, batch_size, embedding_dim)
-        key = value = torch.randn(sequence_length, batch_size, embedding_dim)
+        query = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        key = value = torch.randn(source_sequence_length, batch_size, embedding_dim)
         output_q, output_k, output_v = m.maybe_transpose_qkv(query, key, value)
 
-        self.assertEqual(output_q.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_k.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_v.shape, (batch_size, sequence_length, embedding_dim))
+        self.assertEqual(
+            output_q.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_k.shape, (batch_size, source_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_v.shape, (batch_size, source_sequence_length, embedding_dim)
+        )
         self.assertTrue(torch.equal(output_k, output_v))
         self.assertTrue(torch.all(output_q != output_k))
         self.assertTrue(torch.all(output_q != output_v))
@@ -484,18 +515,25 @@ class TestAttentionUtils(TestAttention):
         validator = AttentionValidator(config)
         m = AttentionUtils(config, validator)
 
-        batch_size = 3
-        sequence_length = 10
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
         embedding_dim = config.embedding_dim
 
-        query = torch.randn(sequence_length, batch_size, embedding_dim)
-        key = torch.randn(sequence_length, batch_size, embedding_dim)
-        value = torch.randn(sequence_length, batch_size, embedding_dim)
+        query = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
         output_q, output_k, output_v = m.maybe_transpose_qkv(query, key, value)
 
-        self.assertEqual(output_q.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_k.shape, (batch_size, sequence_length, embedding_dim))
-        self.assertEqual(output_v.shape, (batch_size, sequence_length, embedding_dim))
+        self.assertEqual(
+            output_q.shape, (batch_size, target_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_k.shape, (batch_size, source_sequence_length, embedding_dim)
+        )
+        self.assertEqual(
+            output_v.shape, (batch_size, source_sequence_length, embedding_dim)
+        )
         self.assertTrue(torch.all(output_k != output_v))
         self.assertTrue(torch.all(output_q != output_k))
         self.assertTrue(torch.all(output_q != output_v))
@@ -507,16 +545,43 @@ class TestAttentionValidator(TestAttention):
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
 
-    def test__check_query_dims(self):
+    def test__check_query_dims__incorrect_inputs_1D(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
 
-        embedding_dim = config.embedding_dim
+        test_dim = config.embedding_dim
 
-        query = torch.randn(embedding_dim)
+        query = torch.randn(test_dim)
         with self.assertRaises(RuntimeError) as context:
             m._AttentionValidator__check_query_dims(query)
+
+    def test__check_query_dims__correct_inputs_2D(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        target_sequence_length = m.target_sequence_length
+        embedding_dim = config.embedding_dim
+
+        query = torch.randn(target_sequence_length, embedding_dim)
+
+        output = m._AttentionValidator__check_query_dims(query)
+        self.assertIsNone(output)
+
+    def test__check_query_dims__correct_inputs_3D(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = m.batch_size
+        target_sequence_length = m.target_sequence_length
+        embedding_dim = config.embedding_dim
+
+        query = torch.randn(target_sequence_length, batch_size, embedding_dim)
+
+        output = m._AttentionValidator__check_query_dims(query)
+        self.assertIsNone(output)
 
     def test__check_query_key_value_dimensions__batched_input_flag__False__incorrect_input_dim(
         self,
@@ -526,12 +591,12 @@ class TestAttentionValidator(TestAttention):
         m = AttentionValidator(config)
         m.batched_input_flag = False
 
-        batch_size = 3
-        sequence_length = 12
+        batch_size = m.batch_size
+        source_sequence_length = m.source_sequence_length
         embedding_dim = config.embedding_dim
 
-        key = torch.randn(sequence_length, batch_size, embedding_dim)
-        value = torch.randn(sequence_length * batch_size, embedding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length * batch_size, embedding_dim)
         with self.assertRaises(RuntimeError) as context:
             m._AttentionValidator__check_query_key_value_dimensions(key, value)
 
@@ -543,12 +608,12 @@ class TestAttentionValidator(TestAttention):
         m = AttentionValidator(config)
         m.batched_input_flag = True
 
-        batch_size = 3
-        sequence_length = 12
+        batch_size = m.batch_size
+        source_sequence_length = m.source_sequence_length
         embedding_dim = config.embedding_dim
 
-        key = torch.randn(sequence_length, batch_size, embedding_dim)
-        value = torch.randn(sequence_length * batch_size, embedding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length * batch_size, embedding_dim)
         with self.assertRaises(RuntimeError) as context:
             m._AttentionValidator__check_query_key_value_dimensions(key, value)
 
@@ -560,12 +625,12 @@ class TestAttentionValidator(TestAttention):
         m = AttentionValidator(config)
         m.batched_input_flag = False
 
-        batch_size = 3
-        sequence_length = 12
+        batch_size = m.batch_size
+        source_sequence_length = m.source_sequence_length
         embedding_dim = config.embedding_dim
 
-        key = torch.randn(sequence_length * batch_size, embedding_dim)
-        value = torch.randn(sequence_length * batch_size, embedding_dim)
+        key = torch.randn(source_sequence_length * batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length * batch_size, embedding_dim)
         output = m._AttentionValidator__check_query_key_value_dimensions(key, value)
         self.assertIsNone(output)
 
@@ -577,12 +642,12 @@ class TestAttentionValidator(TestAttention):
         m = AttentionValidator(config)
         m.batched_input_flag = True
 
-        batch_size = 3
-        sequence_length = 12
+        batch_size = m.batch_size
+        source_sequence_length = m.source_sequence_length
         embedding_dim = config.embedding_dim
 
-        key = torch.randn(sequence_length, batch_size, embedding_dim)
-        value = torch.randn(sequence_length, batch_size, embedding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
         output = m._AttentionValidator__check_query_key_value_dimensions(key, value)
         self.assertIsNone(output)
 
@@ -599,10 +664,13 @@ class TestAttentionValidator(TestAttention):
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
 
-        batch_size = 3
-        sequence_length = 12
+        batch_size = m.batch_size
+        source_sequence_length = m.source_sequence_length
+        embedding_dim = config.embedding_dim
 
-        key_padding_mask = torch.randn(sequence_length, batch_size, sequence_length)
+        key_padding_mask = torch.randn(
+            source_sequence_length, batch_size, embedding_dim
+        )
         with self.assertRaises(RuntimeError) as context:
             m._AttentionValidator__check_key_padding_mask_dimensions(key_padding_mask)
 
@@ -612,10 +680,10 @@ class TestAttentionValidator(TestAttention):
         m = AttentionValidator(config)
         m.batched_input_flag = True
 
-        batch_size = 3
-        sequence_length = 12
+        batch_size = m.batch_size
+        source_sequence_length = m.source_sequence_length
 
-        key_padding_mask = torch.randn(batch_size, sequence_length)
+        key_padding_mask = torch.randn(batch_size, source_sequence_length)
         output = m._AttentionValidator__check_key_padding_mask_dimensions(
             key_padding_mask
         )
@@ -627,9 +695,9 @@ class TestAttentionValidator(TestAttention):
         m = AttentionValidator(config)
         m.batched_input_flag = False
 
-        batch_size = 3
+        source_sequence_length = m.source_sequence_length
 
-        key_padding_mask = torch.randn(batch_size)
+        key_padding_mask = torch.randn(source_sequence_length)
         output = m._AttentionValidator__check_key_padding_mask_dimensions(
             key_padding_mask
         )
@@ -757,7 +825,12 @@ class TestAttentionValidator(TestAttention):
             target_sequence_length,
         )
 
-        output = m._AttentionValidator__resolve_attention_mask_shape(2)
+        attention_mask = torch.randn(
+            source_sequence_length,
+            target_sequence_length,
+        )
+
+        output = m._AttentionValidator__resolve_attention_mask_shape(attention_mask)
         self.assertEqual(output, expected_attention_mask_shape)
 
     def test__resolve_attention_mask_shape__three_dim_shape(self):
@@ -777,7 +850,13 @@ class TestAttentionValidator(TestAttention):
             target_sequence_length,
         )
 
-        output = m._AttentionValidator__resolve_attention_mask_shape(3)
+        attention_mask = torch.randn(
+            batch_size * num_heads,
+            source_sequence_length,
+            target_sequence_length,
+        )
+
+        output = m._AttentionValidator__resolve_attention_mask_shape(attention_mask)
         self.assertEqual(output, expected_attention_mask_shape)
 
     def test__ensure_attention_mask_if_causal__None(self):
