@@ -392,16 +392,16 @@ class AttentionMask:
             target_type=self.target_dtype,
         )
         attention_mask = self.__validate_attention_mask(
-            attention_mask,
             key_padding_mask,
+            attention_mask,
             need_weights,
         )
         return key_padding_mask, attention_mask
 
     def __validate_attention_mask(
         self,
-        attention_mask: Tensor | None,
         key_padding_mask: Tensor | None,
+        attention_mask: Tensor | None,
         need_weights: bool,
     ) -> Tensor | None:
         if (
@@ -447,14 +447,15 @@ class AttentionMask:
         if mask is None:
             return mask
 
-        self.validator.assert_mask_float_or_bool(mask, mask_name)
-        self.validator.assert_correct_mask_dtype(
+        self.validator.is_mask_float_or_bool(mask, mask_name)
+        self.validator.is_mask_correct_dtype(
             mask, mask_name, other_type, other_name, check_other
         )
 
         if not torch.is_floating_point(mask):
-            mask = torch.zeros_like(mask, dtype=target_type)
-            mask = mask.masked_fill(mask, float("-inf"))
+            mask = torch.zeros_like(mask, dtype=target_type).masked_fill_(
+                mask, float("-inf")
+            )
         return mask
 
     def get_causal_attention_mask_flag(self) -> bool:
@@ -480,7 +481,7 @@ class AttentionValidator:
             "`embedding_dim` must be perfectly divisible by `number_of_heads`."
         )
 
-    def assert_mask_float_or_bool(
+    def is_mask_float_or_bool(
         self,
         mask: Tensor,
         mask_name: str,
@@ -489,11 +490,11 @@ class AttentionValidator:
         is_mask_bool = mask.dtype == torch.bool
         is_mask_float_or_bool = not is_mask_bool and not is_float_float
         if is_mask_float_or_bool:
-            raise AssertionError(
+            raise RuntimeError(
                 f"only bool and floating types of {mask_name} are supported"
             )
 
-    def assert_correct_mask_dtype(
+    def is_mask_correct_dtype(
         self,
         mask: Tensor,
         mask_name: str,
@@ -506,7 +507,7 @@ class AttentionValidator:
         if should_check_other_dtype:
             does_dtype_match = mask_dtype == other_type
             if not does_dtype_match:
-                raise AssertionError(
+                raise RuntimeError(
                     f"Support for mismatched {mask_name} and {other_name} "
                     "is deprecated. Use same type for both instead."
                 )
@@ -609,7 +610,8 @@ class AttentionValidator:
             assert tensor is not None, (
                 "Tensor must be provided to check batch dimension."
             )
-            return tensor.dim() == 3
+            self.batched_input_flag = tensor.dim() == 3
+            return self.batched_input_flag
         return self.batched_input_flag
 
     def assert_correct_embedding_dim(self, expected_embedding_dim: int):
