@@ -1194,8 +1194,8 @@ class TestAttentionValidator____canonical_mask(TestAttention):
         self.assertTrue(torch.equal(output, mask))
 
 
-class TestAttentionMask(TestAttention):
-    def test____validate_attention_mask(self):
+class TestAttentionMask__validate_attention_mask(TestAttention):
+    def test__key_padding_mask__None(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         validator = AttentionValidator(config)
@@ -1222,7 +1222,7 @@ class TestAttentionMask(TestAttention):
 
         self.assertIsNone(output)
 
-    def test____validate_attention_mask__boolean_attention_mask(self):
+    def test__boolean_attention_mask(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         validator = AttentionValidator(config)
@@ -1252,7 +1252,7 @@ class TestAttentionMask(TestAttention):
         self.assertEqual(output.dtype, config.target_dtype)
         self.assertFalse(m.causal_attention_mask_flag)
 
-    def test____validate_attention_mask__float_attention_mask(self):
+    def test__float_attention_mask(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         validator = AttentionValidator(config)
