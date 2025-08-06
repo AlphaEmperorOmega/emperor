@@ -25,7 +25,9 @@ class AttentionUtils:
         key: Tensor,
         value: Tensor,
     ):
-        should_transpose_qkv = self.batch_first_flag and self.__is_tensor_batched(query)
+        should_transpose_qkv = (
+            self.batch_first_flag and self.validator.is_tensor_batched(query)
+        )
         if not should_transpose_qkv:
             return query, key, value
         if key is value:
@@ -39,9 +41,6 @@ class AttentionUtils:
         query, key = (tensor.transpose(0, 1) for tensor in (query, key))
         value = key
         return query, key, value
-
-    def __is_tensor_batched(self, tensor: Tensor) -> bool:
-        return tensor.dim() == 3
 
     def add_batch_dimension_if_missing(
         self,
