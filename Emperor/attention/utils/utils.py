@@ -510,7 +510,7 @@ class AttentionValidator:
         key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> bool:
-        self.batched_input_flag = query.dim() == 3
+        self.batched_input_flag = self.is_tensor_batched(query)
 
         self.__check_query_dims(query)
         self.__check_query_key_value_dimensions(key, value)
