@@ -191,9 +191,6 @@ class TestMultiHeadAttention__init(TestAttention):
 
 
 class TestMultIHeadAttention____resolve_kv_dimensions(TestAttention):
-    def __resolve_kv_dimensions(self):
-        pass
-
     def test__kv_zero(self):
         c = copy.deepcopy(self.cfg)
         c.multi_head_attention_model_config.key_dim = 0
@@ -218,9 +215,6 @@ class TestMultIHeadAttention____resolve_kv_dimensions(TestAttention):
 
 
 class TestMultIHeadAttention____resolve_head_dim(TestAttention):
-    def __resolve_head_dim(self):
-        pass
-
     def test__computed_head_dim(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -240,9 +234,6 @@ class TestMultIHeadAttention____resolve_head_dim(TestAttention):
 
 
 class TestMultIHeadAttention____initialize_attention_components(TestAttention):
-    def __initialize_attention_components(self):
-        pass
-
     def test__ensure_componets_are_initialzied(self):
         c = copy.deepcopy(self.cfg)
         m = MultiHeadAttention(c)
@@ -255,9 +246,6 @@ class TestMultIHeadAttention____initialize_attention_components(TestAttention):
 
 
 class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttention):
-    def __are_qkv_dimensions_equal(self):
-        pass
-
     def test__different_embedding_dim(self):
         c = copy.deepcopy(self.cfg)
         c.multi_head_attention_model_config.embedding_dim = 64
@@ -304,9 +292,6 @@ class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttention):
 
 
 class TestMultIHeadAttention____build_shared_projection_models(TestAttention):
-    def __build_shared_projection_models(self):
-        pass
-
     def test__shared_model_inizialization(self):
         c = copy.deepcopy(self.cfg)
         # This exists here to ensure because of `register_parameter` in the
@@ -327,9 +312,6 @@ class TestMultIHeadAttention____build_shared_projection_models(TestAttention):
 
 
 class TestMultIHeadAttention____build_separate_projection_models(TestAttention):
-    def __build_separate_projection_models(self):
-        pass
-
     def test__separate_models_initializations(self):
         c = copy.deepcopy(self.cfg)
         c.multi_head_attention_model_config.embedding_dim = 32
@@ -348,9 +330,6 @@ class TestMultIHeadAttention____build_separate_projection_models(TestAttention):
 
 
 class TestMultIHeadAttention____build_projection_models(TestAttention):
-    def __build_projection_models(self):
-        pass
-
     def test__same_qkv_dim(self):
         c = copy.deepcopy(self.cfg)
         c.multi_head_attention_model_config.embedding_dim = 32
@@ -379,9 +358,6 @@ class TestMultIHeadAttention____build_projection_models(TestAttention):
 
 
 class TestAttentionUtils____transpose_shared_qkv(TestAttention):
-    def __transpose_shared_qkv(self):
-        pass
-
     def test__same_tensor_for_kv(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -443,9 +419,6 @@ class TestAttentionUtils____transpose_shared_qkv(TestAttention):
 
 
 class TestAttentionUtils__maybe_transpose_qkv(TestAttention):
-    def maybe_transpose_qkv(self):
-        pass
-
     def test__batch_first__False(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -558,9 +531,6 @@ class TestAttentionUtils__maybe_transpose_qkv(TestAttention):
 
 
 class TestAttentionUtils__add_batch_dimension_if_missing(TestAttention):
-    def add_batch_dimension_if_missing(self):
-        pass
-
     def test__batched_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -628,9 +598,6 @@ class TestAttentionUtils__add_batch_dimension_if_missing(TestAttention):
 
 
 class TestAttentionValidator____check_query_dims(TestAttention):
-    def __check_query_dims(self):
-        pass
-
     def test__incorrect_1D_tensor(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -671,9 +638,6 @@ class TestAttentionValidator____check_query_dims(TestAttention):
 
 
 class TestAttentionValidator____check_query_key_value_dimensions(TestAttention):
-    def __check_query_key_value_dimensions(self):
-        pass
-
     def test__batched_input_flag__False__incorrect_input_dim(
         self,
     ):
@@ -744,9 +708,6 @@ class TestAttentionValidator____check_query_key_value_dimensions(TestAttention):
 
 
 class TestAttentionValidator____check_key_padding_mask_dimensions(TestAttention):
-    def __check_key_padding_mask_dimensions(self):
-        pass
-
     def test__None_as_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -801,9 +762,6 @@ class TestAttentionValidator____check_key_padding_mask_dimensions(TestAttention)
 
 
 class TestAttentionValidator____check_attention_mask(TestAttention):
-    def __check_attention_mask(self):
-        pass
-
     def test__None_as_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -914,9 +872,6 @@ class TestAttentionValidator____check_attention_mask(TestAttention):
 
 
 class TestAttentionValidator____resolve_attention_mask_shape(TestAttention):
-    def __resolve_attention_mask_shape(self):
-        pass
-
     def test__ensure_correct_shape_for_2D_mask(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -967,9 +922,6 @@ class TestAttentionValidator____resolve_attention_mask_shape(TestAttention):
 
 
 class TestAttentionValidator____ensure_attention_mask_if_causal(TestAttention):
-    def __ensure_attention_mask_if_causal(self):
-        pass
-
     def test__None_as_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -1010,9 +962,6 @@ class TestAttentionValidator____ensure_attention_mask_if_causal(TestAttention):
 
 
 class TestAttentionValidator__multi_head_attention_input_shapes(TestAttention):
-    def multi_head_attention_input_shapes(self):
-        pass
-
     def test__all_inputs_batched(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -1079,9 +1028,6 @@ class TestAttentionValidator__multi_head_attention_input_shapes(TestAttention):
 
 
 class TestAttentionValidator__is_mask_float_or_bool(TestAttention):
-    def is_mask_float_or_bool(self):
-        pass
-
     def test__incorect_int_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -1120,10 +1066,7 @@ class TestAttentionValidator__is_mask_float_or_bool(TestAttention):
 
 
 class TestAttentionValidator__is_mask_correct_dtype(TestAttention):
-    def is_mask_correct_dtype(self):
-        pass
-
-    def test__incorrect_dtype__check_other__True(self):
+    def test__incorrect__other_dtype__check_other__True(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
@@ -1140,7 +1083,7 @@ class TestAttentionValidator__is_mask_correct_dtype(TestAttention):
                 mask, maks_name, other_type, other_name, check_other
             )
 
-    def test__incorrect_dtype__check_other__False(self):
+    def test__incorrect__other_dtype__check_other__False(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
@@ -1157,7 +1100,7 @@ class TestAttentionValidator__is_mask_correct_dtype(TestAttention):
         )
         self.assertIsNone(output)
 
-    def test__same_dtype(self):
+    def test__mask__and__other_type__same_dtype(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         m = AttentionValidator(config)
@@ -1192,8 +1135,8 @@ class TestAttentionValidator__is_mask_correct_dtype(TestAttention):
         self.assertIsNone(output)
 
 
-class TestAttentionMask(TestAttention):
-    def test__canonical_mask__input__None(self):
+class TestAttentionValidator____canonical_mask(TestAttention):
+    def test__input_as_None(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         validator = AttentionValidator(config)
@@ -1211,7 +1154,7 @@ class TestAttentionMask(TestAttention):
         )
         self.assertIsNone(output)
 
-    def test__canonical_mask__boolean_mask_input(self):
+    def test__boolean_mask_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         validator = AttentionValidator(config)
@@ -1231,6 +1174,27 @@ class TestAttentionMask(TestAttention):
         self.assertTrue(output.dtype == torch.float32)
         self.assertFalse(output.dtype == mask.dtype)
 
+    def test__float_mask_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+
+        mask = torch.randn(10, 10, dtype=torch.float32)
+        mask_name = "maks_to_test"
+        other_type = torch.float32
+        other_name = "required_mask_dtype"
+        target_type = torch.float32
+        check_other = True
+
+        output = m._AttentionMask__canonical_mask(
+            mask, mask_name, other_type, other_name, target_type, check_other
+        )
+
+        self.assertTrue(torch.equal(output, mask))
+
+
+class TestAttentionMask(TestAttention):
     def test____validate_attention_mask(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
