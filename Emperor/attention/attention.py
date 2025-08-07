@@ -118,14 +118,15 @@ class MultiHeadAttention(Module):
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.__resolve_kv_dimensions()
         self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
-        self.__initialize_attention_components()
-        self.head_dim = self.__resolve_head_dim()
 
         m = self.__build_projection_models(cfg)
         if len(m) == 4:
             self.query_model, self.key_model, self.value_model, self.output_model = m
         else:
             self.qkv_model, self.output_model = m
+
+        self.__initialize_attention_components()
+        self.head_dim = self.__resolve_head_dim()
 
     def __resolve_head_dim(self):
         head_dim = self.embedding_dim // self.num_heads
@@ -141,7 +142,14 @@ class MultiHeadAttention(Module):
     def __initialize_attention_components(self):
         self.validator = AttentionValidator(self.cfg)
         self.masks = AttentionMask(self.cfg, self.validator)
-        self.projector = AttentionProjector(self.cfg, self.validator)
+        self.projector = AttentionProjector(
+            self.cfg,
+            self.validator,
+            self.qkv_model,
+            self.query_model,
+            self.key_model,
+            self.value_model,
+        )
         self.processor = AttentionProcessor(self.cfg)
         self.utils = AttentionUtils(self.cfg, self.validator)
 

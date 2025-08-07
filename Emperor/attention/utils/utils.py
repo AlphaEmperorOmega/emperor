@@ -302,9 +302,19 @@ class AttentionProjector:
         self,
         cfg: "MultiHeadAttentionConfig",
         validator: "AttentionValidator",
+        qkv_model: nn.Module | None = None,
+        query_model: nn.Module | None = None,
+        key_model: nn.Module | None = None,
+        value_model: nn.Module | None = None,
     ):
         self.cfg = cfg
         self.validator = validator
+        self.embedding_dim = self.cfg.embedding_dim
+
+        self.query_model = query_model
+        self.key_model = key_model
+        self.value_model = value_model
+        self.qkv_model = qkv_model
 
     def compute_qkv_projections(
         self,
@@ -324,26 +334,40 @@ class AttentionProjector:
     def __compute_self_projections(
         self, query: Tensor
     ) -> tuple[Tensor, Tensor, Tensor]:
-        shared_qkv_projection = self.shared_projection_model(query)
-        projections = shared_qkv_projection.unflatten(-1, (3, self.embedding_dim))
+        qkv_projections = self.shared_projection_model(query)
+        query_projections, key_projections, value_projections = (
+            self.__split_self_projections(qkv_projections)
+        )
+        return query_projections, key_projections, value_projections
+
+    def __split_self_projections(
+        self, qkv_projections: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        projections = qkv_projections.unflatten(-1, (3, self.embedding_dim))
         projections = projections.unsqueeze(0)
         projections = projections.transpose(0, -2)
         projections = projections.squeeze(-2)
         projections = projections.contiguous()
-        query_projections, key_projections, value_projections = (
-            projections[0],
-            projections[1],
-            projections[2],
-        )
+        query_projections = projections[0]
+        key_projections = projections[1]
+        value_projections = projections[2]
+
         return query_projections, key_projections, value_projections
 
     def __compute_indepentet_projections(
         self, query: Tensor, key: Tensor, value: Tensor
     ) -> tuple[Tensor, Tensor, Tensor]:
-        query_projections = self.query_module(query)
-        key_projections = self.key_module(key)
-        value_projections = self.value_module(value)
+        query_projections = self.__compute_projection(query, self.query_model)
+        key_projections = self.__compute_projection(key, self.key_model)
+        value_projections = self.__compute_projection(value, self.value_model)
+
         return query_projections, key_projections, value_projections
+
+    def __compute_projection(self, tensor: Tensor, model: nn.Module) -> Tensor:
+        sequence_length, batch_size, embedding_dim = tensor.shape
+        tensor_reshaped = tensor.view(-1, embedding_dim)
+        projections = model(tensor_reshaped)
+        return projections.view(sequence_length, batch_size, -1)
 
 
 class AttentionMask:
@@ -446,9 +470,8 @@ class AttentionMask:
         )
 
         if not torch.is_floating_point(mask):
-            mask = torch.zeros_like(mask, dtype=target_type).masked_fill_(
-                mask, float("-inf")
-            )
+            mask_placeholder = torch.zeros_like(mask, dtype=target_type)
+            mask = mask_placeholder.masked_fill_(mask, float("-inf"))
         return mask
 
 
