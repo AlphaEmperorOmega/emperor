@@ -309,7 +309,6 @@ class AttentionProjector:
     ):
         self.cfg = cfg
         self.validator = validator
-        self.embedding_dim = self.cfg.embedding_dim
 
         self.query_model = query_model
         self.key_model = key_model
@@ -321,29 +320,27 @@ class AttentionProjector:
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        indepentent_projection_flag: bool = False,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        self.validator.assert_qkv_based_on_weight_projection(
-            indepentent_projection_flag
-        )
         are_qkv_same = key is value and query is key
         if are_qkv_same:
-            return self.__compute_self_projections(query)
+            self.validator.check_self_attention_projection_inputs(key, value)
+            return self.__compute_self_attention_projections(query)
+        self.validator.check_indepentent_projections_inputs(key, value)
         return self.__compute_indepentet_projections(query, key, value)
 
-    def __compute_self_projections(
+    def __compute_self_attention_projections(
         self, query: Tensor
     ) -> tuple[Tensor, Tensor, Tensor]:
-        qkv_projections = self.shared_projection_model(query)
+        qkv_projection = self.__compute_projection(query, self.qkv_model)
         query_projections, key_projections, value_projections = (
-            self.__split_self_projections(qkv_projections)
+            self.__split_self_attention_projection(qkv_projection)
         )
         return query_projections, key_projections, value_projections
 
-    def __split_self_projections(
+    def __split_self_attention_projection(
         self, qkv_projections: Tensor
     ) -> tuple[Tensor, Tensor, Tensor]:
-        projections = qkv_projections.unflatten(-1, (3, self.embedding_dim))
+        projections = qkv_projections.unflatten(-1, (3, -1))
         projections = projections.unsqueeze(0)
         projections = projections.transpose(0, -2)
         projections = projections.squeeze(-2)
@@ -635,35 +632,21 @@ class AttentionValidator:
             f"Was expecting embedding dimension of {expected_embedding_dim}, but got {self.embedding_dim}"
         )
 
-    def assert_separate_projection_layer(self):
-        assert key.shape == value.shape, (
+    def check_indepentent_projections_inputs(self, key: Tensor, value: Tensor) -> None:
+        k_sequence_length, k_batch_size, _ = key.shape
+        v_sequence_length, v_batch_size, _ = value.shape
+        is_kv_sequence_length_same = k_sequence_length == v_sequence_length
+        is_kv_batch_size_same = k_batch_size == v_batch_size
+        if not (is_kv_sequence_length_same and is_kv_batch_size_same):
+            raise RuntimeError(
+                f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
+            )
+
+    def check_self_attention_projection_inputs(self, key: Tensor, value: Tensor):
+        are_kv_shapes_same = key.shape == value.shape
+        assert are_kv_shapes_same, (
             f"key shape {key.shape} does not match value shape {value.shape}"
         )
-        assert q_proj_weight is not None, (
-            "use_separate_proj_weight is True but q_proj_weight is None"
-        )
-        assert k_proj_weight is not None, (
-            "use_separate_proj_weight is True but k_proj_weight is None"
-        )
-        assert v_proj_weight is not None, (
-            "use_separate_proj_weight is True but v_proj_weight is None"
-        )
-
-    def assert_shared_projection_layer(self):
-        assert self.key.shape[:2] == value.shape[:2], (
-            f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
-        )
-        assert in_proj_weight is not None, (
-            "use_separate_proj_weight is False but in_proj_weight is None"
-        )
-
-    def assert_qkv_based_on_weight_projection(
-        self, use_separate_projection_weight: bool
-    ):
-        if use_separate_projection_weight:
-            self.assert_separate_projection_layer()
-        else:
-            self.assert_shared_projection_layer()
 
     def assert_correct_static_projection_shapes(
         self,

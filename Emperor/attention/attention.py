@@ -1,4 +1,5 @@
 import torch
+import copy
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
@@ -17,6 +18,8 @@ from Emperor.layers.utils.enums import (
 )
 
 from typing import TYPE_CHECKING
+
+from Emperor.layers.utils.linears import LinearLayer
 
 if TYPE_CHECKING:
     from torch.types import _dtype as DType
@@ -103,7 +106,6 @@ class MultiHeadAttention(Module):
         self.model_type = self.cfg.model_type
         self.num_heads = self.cfg.num_heads
         self.embedding_dim = self.cfg.embedding_dim
-        self.query_dim = self.embedding_dim
         self.key_dim = self.cfg.key_dim
         self.value_dim = self.cfg.value_dim
         self.target_dtype = self.cfg.target_dtype
@@ -134,10 +136,8 @@ class MultiHeadAttention(Module):
         return head_dim
 
     def __resolve_kv_dimensions(self):
-        self.key_dim = self.embedding_dim if self.cfg.key_dim == 0 else self.cfg.key_dim
-        self.value_dim = (
-            self.embedding_dim if self.cfg.value_dim == 0 else self.cfg.value_dim
-        )
+        self.key_dim = self.embedding_dim if self.key_dim == 0 else self.key_dim
+        self.value_dim = self.embedding_dim if self.value_dim == 0 else self.value_dim
 
     def __initialize_attention_components(self):
         self.validator = AttentionValidator(self.cfg)
@@ -159,10 +159,22 @@ class MultiHeadAttention(Module):
         return self.__build_separate_projection_models(cfg)
 
     def __build_separate_projection_models(self, cfg: "ModelConfig"):
-        query_model = self.model_type.value(cfg)
-        key_model = self.model_type.value(cfg)
-        value_model = self.model_type.value(cfg)
-        output_model = self.model_type.value(cfg)
+        config = self.__resolve_model_type_overrides(
+            cfg, self.embedding_dim, self.key_dim
+        )
+        query_model = self.model_type.value(config)
+        config = self.__resolve_model_type_overrides(
+            cfg, self.embedding_dim, self.key_dim
+        )
+        key_model = self.model_type.value(config)
+        config = self.__resolve_model_type_overrides(
+            cfg, self.embedding_dim, self.value_dim
+        )
+        value_model = self.model_type.value(config)
+        config = self.__resolve_model_type_overrides(
+            cfg, self.value_dim, self.embedding_dim
+        )
+        output_model = self.model_type.value(config)
         self.register_parameter("qkv_model", None)
         return query_model, key_model, value_model, output_model
 
@@ -170,14 +182,35 @@ class MultiHeadAttention(Module):
         self.register_parameter("query_model", None)
         self.register_parameter("key_model", None)
         self.register_parameter("value_model", None)
-        output_model = self.model_type.value(cfg)
-        qkv_model = self.model_type.value(cfg)
+        config = self.__resolve_model_type_overrides(
+            cfg, self.embedding_dim, self.embedding_dim
+        )
+        output_model = self.model_type.value(config)
+        config = self.__resolve_model_type_overrides(
+            cfg, self.embedding_dim, self.embedding_dim * 3
+        )
+        qkv_model = self.model_type.value(config)
         return qkv_model, output_model
 
+    def __resolve_model_type_overrides(
+        self,
+        cfg: "ModelConfig",
+        input_dim: int,
+        output_dim: int,
+    ):
+        c = copy.deepcopy(cfg)
+        if issubclass(self.model_type.value, LinearLayer):
+            c.linear_layer_model_config.input_dim = input_dim
+            c.linear_layer_model_config.output_dim = output_dim
+            return c
+        c.mixture_model_config.input_dim = input_dim
+        c.mixture_model_config.output_dim = output_dim
+        return c
+
     def __are_qkv_dimensions_equal(self) -> bool:
-        are_keys_querys_same = self.key_dim == self.embedding_dim
-        are_values_querys_same = self.value_dim == self.embedding_dim
-        return are_keys_querys_same and are_values_querys_same
+        are_qk_dims_same = self.embedding_dim == self.key_dim
+        are_qv_dims_same = self.embedding_dim == self.value_dim
+        return are_qk_dims_same and are_qv_dims_same
 
     def forward(
         self,
