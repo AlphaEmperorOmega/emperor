@@ -1,7 +1,6 @@
 import copy
 import unittest
 import torch
-from torch._C import dtype
 import torch.nn as nn
 from torch.nn.functional import scaled_dot_product_attention
 from Emperor.attention.utils.utils import (
@@ -17,6 +16,7 @@ from Emperor.experts.experts import (
     MixtureOfExpertsFeedForwardConfig,
 )
 from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
 from Emperor.layers.utils.samplers import SamplerConfig
@@ -113,6 +113,13 @@ class TestAttention(unittest.TestCase):
                 time_tracker_flag=False,
                 dynamic_diagonal_params_flag=False,
             ),
+            linear_layer_model_config=LinearLayerConfig(
+                input_dim=INPUT_DIM,
+                output_dim=OUTPUT_DIM,
+                bias_flag=True,
+                anti_diagonal_flag=True,
+                dynamic_bias_flag=True,
+            ),
             mixture_of_experts_config=MixtureOfExpertsFeedForwardConfig(
                 weighted_parameters_flag=True,
             ),
@@ -153,7 +160,7 @@ class TestAttention(unittest.TestCase):
                 key_value_bias_flag=False,
                 zero_attention_flag=False,
                 batch_first_flag=False,
-                key_dim=16,
+                key_dim=64,
                 value_dim=32,
                 causal_attention_mask_flag=False,
             ),
@@ -1281,34 +1288,263 @@ class TestAttentionMask__validate_attention_mask(TestAttention):
         self.assertTrue(torch.equal(output, attention_mask))
         self.assertFalse(m.causal_attention_mask_flag)
 
-    # def test__validate_padding_and_attention_masks(self):
-    #     c = copy.deepcopy(self.cfg)
-    #     config = c.multi_head_attention_model_config
-    #     validator = AttentionValidator(config)
-    #     m = AttentionMask(config, validator)
-    #     m.causal_attention_mask_flag = True
-    #
-    #     batch_size = config.batch_size
-    #     num_heads = config.num_heads
-    #     source_sequence_length = config.source_sequence_length
-    #     target_sequence_length = config.target_sequence_length
-    #
-    #     key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length)) > 0
-    #     attention_mask = (
-    #         torch.randn(
-    #             batch_size * num_heads, source_sequence_length, target_sequence_length
-    #         )
-    #         > 0
-    #     )
-    #     need_weights = True
-    #
-    #     output = m.validate_padding_and_attention_masks(
-    #         key_padding_mask,
-    #         attention_mask,
-    #         need_weights,
-    #     )
-    #
-    #     self.assertIsInstance(output, torch.Tensor)
-    #     self.assertEqual(output.dtype, attention_mask.dtype)
-    #     self.assertTrue(torch.equal(output, attention_mask))
-    #     self.assertFalse(m.causal_attention_mask_flag)
+
+class TestAttentionMask__validate_padding_and_attention_masks(TestAttention):
+    def test__inputs_as_None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+        m.causal_attention_mask_flag = True
+
+        key_padding_mask = None
+        attention_mask = None
+        need_weights = True
+
+        key_padding_mask, attention_mask = m.validate_padding_and_attention_masks(
+            key_padding_mask,
+            attention_mask,
+            need_weights,
+        )
+
+        self.assertIsNone(key_padding_mask)
+        self.assertIsNone(attention_mask)
+
+    def test__only_key_padding_mask_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+        m.causal_attention_mask_flag = True
+
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+
+        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length)) > 0
+        attention_mask = None
+        need_weights = True
+
+        output_key_padding_mask, output_attention_mask = (
+            m.validate_padding_and_attention_masks(
+                key_padding_mask,
+                attention_mask,
+                need_weights,
+            )
+        )
+
+        self.assertIsInstance(output_key_padding_mask, torch.Tensor)
+        self.assertEqual(output_key_padding_mask.dtype, torch.float32)
+        self.assertIsNone(output_attention_mask)
+
+    def test__only_attention_mask_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+        m.causal_attention_mask_flag = True
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.target_sequence_length
+
+        key_padding_mask = None
+        attention_mask = (
+            torch.randn(
+                batch_size * num_heads, source_sequence_length, target_sequence_length
+            )
+            > 0
+        )
+        need_weights = True
+
+        key_padding_mask, attention_mask = m.validate_padding_and_attention_masks(
+            key_padding_mask,
+            attention_mask,
+            need_weights,
+        )
+
+        self.assertIsNone(key_padding_mask)
+        self.assertIsInstance(attention_mask, torch.Tensor)
+        self.assertEqual(attention_mask.dtype, config.target_dtype)
+
+    def test__key_padding_mask__and__attention_mask_input(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+        m.causal_attention_mask_flag = True
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.target_sequence_length
+
+        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length)) > 0
+        attention_mask = (
+            torch.randn(
+                batch_size * num_heads, source_sequence_length, target_sequence_length
+            )
+            > 0
+        )
+        need_weights = True
+
+        key_padding_mask, attention_mask = m.validate_padding_and_attention_masks(
+            key_padding_mask,
+            attention_mask,
+            need_weights,
+        )
+
+        self.assertIsInstance(key_padding_mask, torch.Tensor)
+        self.assertEqual(key_padding_mask.dtype, torch.float32)
+        self.assertIsInstance(attention_mask, torch.Tensor)
+        self.assertEqual(attention_mask.dtype, torch.float32)
+
+    def test__key_padding_mask__and__attention_mask__as__float_inputs(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+        m.causal_attention_mask_flag = True
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.target_sequence_length
+
+        key_padding_mask = torch.randn(batch_size, source_sequence_length)
+        attention_mask = torch.randn(
+            batch_size * num_heads, source_sequence_length, target_sequence_length
+        )
+        need_weights = True
+
+        output_key_padding_mask, output_attention_mask = (
+            m.validate_padding_and_attention_masks(
+                key_padding_mask,
+                attention_mask,
+                need_weights,
+            )
+        )
+
+        self.assertTrue(torch.equal(output_key_padding_mask, key_padding_mask))
+        self.assertTrue(torch.equal(output_attention_mask, attention_mask))
+
+
+class TestAttentionProjector____compute_projection(TestAttention):
+    def test_method(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.embedding_dim = 4
+        validator = AttentionValidator(config)
+        query_model = config.model_type.value(c)
+        key_model = config.model_type.value(c)
+        value_model = config.model_type.value(c)
+        qkv_model = None
+        m = AttentionProjector(
+            config, validator, qkv_model, query_model, key_model, value_model
+        )
+
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
+        embedding_dim = config.embedding_dim
+
+        tensor = torch.randn(target_sequence_length, batch_size, embedding_dim)
+
+        projected_tensor = m._AttentionProjector__compute_projection(
+            tensor, query_model
+        )
+
+        self.assertIsInstance(projected_tensor, torch.Tensor)
+
+        output_embedding = c.linear_layer_model_config.output_dim
+        self.assertEqual(
+            projected_tensor.shape,
+            (target_sequence_length, batch_size, output_embedding),
+        )
+
+
+class TestAttentionProjector____compute_indepentet_projections(TestAttention):
+    def test_method(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.embedding_dim = 4
+        validator = AttentionValidator(config)
+        query_model = config.model_type.value(c)
+        key_model = config.model_type.value(c)
+        value_model = config.model_type.value(c)
+        qkv_model = None
+        m = AttentionProjector(
+            config, validator, qkv_model, query_model, key_model, value_model
+        )
+
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
+        source_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        query = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
+
+        query_projections, key_projections, value_projections = (
+            m._AttentionProjector__compute_indepentet_projections(query, key, value)
+        )
+
+        self.assertIsInstance(query_projections, torch.Tensor)
+        self.assertIsInstance(key_projections, torch.Tensor)
+        self.assertIsInstance(value_projections, torch.Tensor)
+
+        output_embedding = c.linear_layer_model_config.output_dim
+        self.assertEqual(
+            query_projections.shape,
+            (target_sequence_length, batch_size, output_embedding),
+        )
+        self.assertEqual(
+            key_projections.shape,
+            (source_sequence_length, batch_size, output_embedding),
+        )
+        self.assertEqual(
+            value_projections.shape,
+            (source_sequence_length, batch_size, output_embedding),
+        )
+
+
+class TestAttentionProjector____split_self_projections(TestAttention):
+    def test_method(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.embedding_dim = 4
+        validator = AttentionValidator(config)
+        query_model = None
+        key_model = None
+        value_model = None
+        qkv_model = None
+
+        output_embedding = c.linear_layer_model_config.output_dim
+        m = AttentionProjector(
+            config, validator, qkv_model, query_model, key_model, value_model
+        )
+        m.embedding_dim = output_embedding
+
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
+
+        shared_projections = torch.randn(
+            target_sequence_length, batch_size, output_embedding * 3
+        )
+
+        query_projections, key_projections, value_projections = (
+            m._AttentionProjector__split_self_projections(shared_projections)
+        )
+
+        self.assertEqual(
+            query_projections.shape,
+            (target_sequence_length, batch_size, output_embedding),
+        )
+        self.assertEqual(
+            key_projections.shape,
+            (target_sequence_length, batch_size, output_embedding),
+        )
+        self.assertEqual(
+            value_projections.shape,
+            (target_sequence_length, batch_size, output_embedding),
+        )
