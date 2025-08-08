@@ -16,6 +16,7 @@ from Emperor.experts.experts import (
     MixtureOfExpertsFeedForwardConfig,
 )
 from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
@@ -29,7 +30,7 @@ class TestAttention(unittest.TestCase):
         # MODEL WISE CONFI
         BATCH_SIZE = 2
         INPUT_DIM = 4
-        HIDDEN_DIM = 5
+        HIDDEN_DIM = 8
         OUTPUT_DIM = 6
         GATHER_FREQUENCY_FLAG = False
 
@@ -151,7 +152,7 @@ class TestAttention(unittest.TestCase):
                 model_type=LayerTypes.DYNAMIC_BASE,
                 batch_size=BATCH_SIZE,
                 num_heads=4,
-                embedding_dim=64,
+                embedding_dim=HIDDEN_DIM,
                 target_sequence_length=16,
                 source_sequence_length=32,
                 target_dtype=torch.float32,
@@ -313,8 +314,8 @@ class TestMultIHeadAttention____build_shared_projection_models(TestAttention):
         self.assertIsNone(m.query_model)
         self.assertIsNone(m.key_model)
         self.assertIsNone(m.value_model)
-        self.assertIsInstance(qkv_model, m.model_type.value)
-        self.assertIsInstance(output_model, m.model_type.value)
+        self.assertIsInstance(qkv_model, LayerBlock)
+        self.assertIsInstance(output_model, LayerBlock)
 
 
 class TestMultIHeadAttention____build_separate_projection_models(TestAttention):
@@ -328,26 +329,41 @@ class TestMultIHeadAttention____build_separate_projection_models(TestAttention):
             m._MultiHeadAttention__build_separate_projection_models(c)
         )
 
-        self.assertIsInstance(query_model, m.model_type.value)
-        self.assertIsInstance(key_model, m.model_type.value)
-        self.assertIsInstance(value_model, m.model_type.value)
-        self.assertIsInstance(output_model, m.model_type.value)
+        self.assertIsInstance(query_model, LayerBlock)
+        self.assertIsInstance(key_model, LayerBlock)
+        self.assertIsInstance(value_model, LayerBlock)
+        self.assertIsInstance(output_model, LayerBlock)
         self.assertIsNone(m.qkv_model)
 
 
 class TestMultIHeadAttention____build_projection_models(TestAttention):
-    def test__same_qkv_dim(self):
+    def test__same_qkv_dim__use_separate_projection_weight__False(self):
         c = copy.deepcopy(self.cfg)
         c.multi_head_attention_model_config.embedding_dim = 32
         c.multi_head_attention_model_config.key_dim = 32
         c.multi_head_attention_model_config.value_dim = 32
+        c.multi_head_attention_model_config.use_separate_projection_weight = False
         m = MultiHeadAttention(c)
 
-        self.assertIsInstance(m.qkv_model, m.model_type.value)
-        self.assertIsInstance(m.output_model, m.model_type.value)
+        self.assertIsInstance(m.qkv_model, LayerBlock)
+        self.assertIsInstance(m.output_model, LayerBlock)
         self.assertIsNone(m.query_model)
         self.assertIsNone(m.key_model)
         self.assertIsNone(m.value_model)
+
+    def test__same_qkv_dim__use_separate_projection_weight__True(self):
+        c = copy.deepcopy(self.cfg)
+        c.multi_head_attention_model_config.embedding_dim = 32
+        c.multi_head_attention_model_config.key_dim = 32
+        c.multi_head_attention_model_config.value_dim = 32
+        c.multi_head_attention_model_config.use_separate_projection_weight = True
+        m = MultiHeadAttention(c)
+
+        self.assertIsInstance(m.query_model, LayerBlock)
+        self.assertIsInstance(m.key_model, LayerBlock)
+        self.assertIsInstance(m.value_model, LayerBlock)
+        self.assertIsInstance(m.output_model, LayerBlock)
+        self.assertIsNone(m.qkv_model)
 
     def test__different_qkv_dim(self):
         c = copy.deepcopy(self.cfg)
@@ -356,10 +372,10 @@ class TestMultIHeadAttention____build_projection_models(TestAttention):
         c.multi_head_attention_model_config.value_dim = 32
         m = MultiHeadAttention(c)
 
-        self.assertIsInstance(m.query_model, m.model_type.value)
-        self.assertIsInstance(m.key_model, m.model_type.value)
-        self.assertIsInstance(m.value_model, m.model_type.value)
-        self.assertIsInstance(m.output_model, m.model_type.value)
+        self.assertIsInstance(m.query_model, LayerBlock)
+        self.assertIsInstance(m.key_model, LayerBlock)
+        self.assertIsInstance(m.value_model, LayerBlock)
+        self.assertIsInstance(m.output_model, LayerBlock)
         self.assertIsNone(m.qkv_model)
 
 
@@ -1766,6 +1782,7 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
     def test__indepented_projections__model_type__vector(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
+        config.use_separate_projection_weight = True
         config.key_dim = 32
         config.value_dim = 64
         config.model_type = LayerTypes.VECTOR
@@ -1773,10 +1790,10 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
 
         model = MultiHeadAttention(c)
         validator = AttentionValidator(config)
+        qkv_model = model.qkv_model
         query_model = model.query_model
         key_model = model.key_model
         value_model = model.value_model
-        qkv_model = model.qkv_model
 
         m = AttentionProjector(
             config, validator, qkv_model, query_model, key_model, value_model
@@ -1785,7 +1802,7 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
         batch_size = config.batch_size
         target_sequence_length = source_sequence_length = config.target_sequence_length
 
-        embeding_dim = layer_config.input_dim
+        embeding_dim = c.hidden_dim
         query = torch.randn(target_sequence_length, batch_size, embeding_dim)
         key = torch.randn(source_sequence_length, batch_size, embeding_dim)
         value = torch.randn(source_sequence_length, batch_size, embeding_dim)
@@ -1796,15 +1813,15 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
         expected_output_embedding_dim = c.linear_layer_model_config.output_dim
         self.assertEqual(
             query_projections.shape,
-            (target_sequence_length, batch_size, expected_output_embedding_dim),
+            (target_sequence_length, batch_size, config.key_dim),
         )
         self.assertEqual(
             key_projections.shape,
-            (source_sequence_length, batch_size, expected_output_embedding_dim),
+            (source_sequence_length, batch_size, config.key_dim),
         )
         self.assertEqual(
             value_projections.shape,
-            (source_sequence_length, batch_size, expected_output_embedding_dim),
+            (source_sequence_length, batch_size, config.value_dim),
         )
 
     # def test__self_attention_projections__model_type__vector(self):
