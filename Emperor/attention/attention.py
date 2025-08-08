@@ -13,6 +13,7 @@ from Emperor.attention.utils.utils import (
 )
 from Emperor.base.utils import DataClassBase, Module, device
 
+from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.enums import (
     LayerTypes,
 )
@@ -31,64 +32,90 @@ class MultiHeadAttentionConfig(DataClassBase):
     model_type: LayerTypes | None = field(
         default=None,
         metadata={
-            "help": "Type of layer used for to generate query, key, value projections."
+            "help": "Type of model used to generate parameters query, key, and value projections"
         },
     )
     batch_size: int | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Number of samples (batch size) processed in parallel during training/inference."
+        },
     )
     num_heads: int | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={"help": "Number of attention heads to use for multi-head attention."},
     )
     embedding_dim: int | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Dimension of the input embedding vector (input feature size)."
+        },
     )
     key_dim: int | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Dimension of the key vectors (defaults to embedding_dim if 0)."
+        },
     )
     value_dim: int | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Dimension of the value vectors (defaults to embedding_dim if 0)."
+        },
     )
     target_sequence_length: int | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Length of the target sequence for decoding or output (number of target tokens)."
+        },
     )
     source_sequence_length: int | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Length of the source/input sequence (number of input tokens)."
+        },
     )
     target_dtype: "DType | None" = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Data type (dtype) for the attention outputs (e.g. torch.float32)."
+        },
     )
     use_separate_projection_weight: bool | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "If True, use separate projection weights for Q, K, V. If False, use shared projection weights (single QKV matrix)."
+        },
     )
     dropout_probability: float | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Dropout probability applied to attention weights (prevents overfitting)."
+        },
     )
     key_value_bias_flag: bool | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "If True, add learnable bias vectors to key and value projections."
+        },
     )
     zero_attention_flag: bool | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "If True, add zero vectors to attention keys/values to allow explicit non-attending positions."
+        },
     )
     batch_first_flag: bool | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "If True, input/output tensors are in (batch, seq, feature) format. If False, uses (seq, batch, feature)."
+        },
     )
     causal_attention_mask_flag: bool | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "If True, use a causal mask to prevent attention to future positions (for decoding/generation)."
+        },
     )
 
 
@@ -154,7 +181,10 @@ class MultiHeadAttention(Module):
         self.utils = AttentionUtils(self.cfg, self.validator)
 
     def __build_projection_models(self, cfg: "ModelConfig") -> tuple:
-        if self.__are_qkv_dimensions_equal():
+        if (
+            not self.use_separate_projection_weight
+            and self.__are_qkv_dimensions_equal()
+        ):
             return self.__build_shared_projection_models(cfg)
         return self.__build_separate_projection_models(cfg)
 
@@ -163,18 +193,22 @@ class MultiHeadAttention(Module):
             cfg, self.embedding_dim, self.key_dim
         )
         query_model = self.model_type.value(config)
+        query_model = LayerBlock(model=query_model)
         config = self.__resolve_model_type_overrides(
             cfg, self.embedding_dim, self.key_dim
         )
         key_model = self.model_type.value(config)
+        key_model = LayerBlock(model=key_model)
         config = self.__resolve_model_type_overrides(
             cfg, self.embedding_dim, self.value_dim
         )
         value_model = self.model_type.value(config)
+        value_model = LayerBlock(model=value_model)
         config = self.__resolve_model_type_overrides(
             cfg, self.value_dim, self.embedding_dim
         )
         output_model = self.model_type.value(config)
+        output_model = LayerBlock(model=output_model)
         self.register_parameter("qkv_model", None)
         return query_model, key_model, value_model, output_model
 
@@ -186,10 +220,12 @@ class MultiHeadAttention(Module):
             cfg, self.embedding_dim, self.embedding_dim
         )
         output_model = self.model_type.value(config)
+        output_model = LayerBlock(model=output_model)
         config = self.__resolve_model_type_overrides(
             cfg, self.embedding_dim, self.embedding_dim * 3
         )
         qkv_model = self.model_type.value(config)
+        qkv_model = LayerBlock(model=qkv_model)
         return qkv_model, output_model
 
     def __resolve_model_type_overrides(

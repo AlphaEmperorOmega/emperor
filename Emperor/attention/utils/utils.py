@@ -364,6 +364,8 @@ class AttentionProjector:
         sequence_length, batch_size, embedding_dim = tensor.shape
         tensor_reshaped = tensor.view(-1, embedding_dim)
         projections = model(tensor_reshaped)
+        if isinstance(projections, tuple):
+            projections, _ = projections
         return projections.view(sequence_length, batch_size, -1)
 
 
