@@ -11,7 +11,7 @@ from Emperor.attention.utils.utils import (
     AttentionUtils,
     AttentionValidator,
 )
-from Emperor.base.utils import DataClassBase, Module, device
+from Emperor.base.utils import DataClassBase, Module, ParameterBank, device
 
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.enums import (
@@ -117,6 +117,10 @@ class MultiHeadAttentionConfig(DataClassBase):
             "help": "If True, use a causal mask to prevent attention to future positions (for decoding/generation)."
         },
     )
+    add_key_value_bias_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
 
 
 class MultiHeadAttention(Module):
@@ -129,6 +133,7 @@ class MultiHeadAttention(Module):
         config = getattr(cfg, "multi_head_attention_model_config", cfg)
         self.cfg: "MultiHeadAttentionConfig" = self._overwrite_config(config, overrides)
 
+        self.main_cfg = cfg
         self.batch_size = self.cfg.batch_size
         self.model_type = self.cfg.model_type
         self.num_heads = self.cfg.num_heads
@@ -145,14 +150,16 @@ class MultiHeadAttention(Module):
         self.batch_first_flag = self.cfg.batch_first_flag
         self.model_type = self.cfg.model_type
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
+        self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.__resolve_kv_dimensions()
         self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
 
-        m = self.__build_projection_models(cfg)
+        m = self.__build_projection_models()
         if len(m) == 4:
             self.query_model, self.key_model, self.value_model, self.output_model = m
         else:
             self.qkv_model, self.output_model = m
+        self.key_bias_vector, self.value_bias_vector = self.__build_kv_bias_vectors()
 
         self.__initialize_attention_components()
         self.head_dim = self.__resolve_head_dim()
@@ -178,55 +185,50 @@ class MultiHeadAttention(Module):
             self.value_model,
         )
         self.processor = AttentionProcessor(self.cfg)
-        self.utils = AttentionUtils(self.cfg, self.validator)
+        self.utils = AttentionUtils(
+            self.cfg,
+            self.validator,
+            self.key_bias_vector,
+            self.value_bias_vector,
+        )
 
-    def __build_projection_models(self, cfg: "ModelConfig") -> tuple:
+    def __build_projection_models(self) -> tuple:
         if (
             not self.use_separate_projection_weight
             and self.__are_qkv_dimensions_equal()
         ):
-            return self.__build_shared_projection_models(cfg)
-        return self.__build_separate_projection_models(cfg)
+            return self.__build_shared_projection_models()
+        return self.__build_separate_projection_models()
 
-    def __build_separate_projection_models(self, cfg: "ModelConfig"):
-        config = self.__resolve_model_type_overrides(
-            cfg, self.embedding_dim, self.key_dim
-        )
-        query_model = self.model_type.value(config)
-        query_model = LayerBlock(model=query_model)
-        config = self.__resolve_model_type_overrides(
-            cfg, self.embedding_dim, self.key_dim
-        )
-        key_model = self.model_type.value(config)
-        key_model = LayerBlock(model=key_model)
-        config = self.__resolve_model_type_overrides(
-            cfg, self.embedding_dim, self.value_dim
-        )
-        value_model = self.model_type.value(config)
-        value_model = LayerBlock(model=value_model)
-        config = self.__resolve_model_type_overrides(
-            cfg, self.value_dim, self.embedding_dim
-        )
-        output_model = self.model_type.value(config)
-        output_model = LayerBlock(model=output_model)
+    def __build_kv_bias_vectors(self):
+        if self.add_key_value_bias_flag:
+            bias_k = self._init_parameter_bank((1, 1, self.embedding_dim))
+            bias_v = self._init_parameter_bank((1, 1, self.embedding_dim))
+            return bias_k, bias_v
+        return None, None
+
+    def __build_separate_projection_models(self) -> tuple:
+        query_model = self.__create_model(self.embedding_dim, self.key_dim)
+        key_model = self.__create_model(self.embedding_dim, self.key_dim)
+        value_model = self.__create_model(self.embedding_dim, self.value_dim)
+        output_model = self.__create_model(self.value_dim, self.embedding_dim)
         self.register_parameter("qkv_model", None)
         return query_model, key_model, value_model, output_model
 
-    def __build_shared_projection_models(self, cfg: "ModelConfig"):
+    def __build_shared_projection_models(self) -> tuple:
         self.register_parameter("query_model", None)
         self.register_parameter("key_model", None)
         self.register_parameter("value_model", None)
+        output_model = self.__create_model(self.embedding_dim, self.embedding_dim)
+        qkv_model = self.__create_model(self.embedding_dim, self.embedding_dim * 3)
+        return qkv_model, output_model
+
+    def __create_model(self, input_dim: int, output_dim: int):
         config = self.__resolve_model_type_overrides(
-            cfg, self.embedding_dim, self.embedding_dim
+            self.main_cfg, input_dim, output_dim
         )
         output_model = self.model_type.value(config)
-        output_model = LayerBlock(model=output_model)
-        config = self.__resolve_model_type_overrides(
-            cfg, self.embedding_dim, self.embedding_dim * 3
-        )
-        qkv_model = self.model_type.value(config)
-        qkv_model = LayerBlock(model=qkv_model)
-        return qkv_model, output_model
+        return LayerBlock(model=output_model)
 
     def __resolve_model_type_overrides(
         self,
@@ -292,7 +294,7 @@ class MultiHeadAttention(Module):
                 need_weights,
             )
         )
-
+        nn.MultiheadAttention
         query, key, value = self.projector.compute_qkv_projections(query, key, value)
         (
             key,

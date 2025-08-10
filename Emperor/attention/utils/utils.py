@@ -14,10 +14,20 @@ class AttentionUtils:
         self,
         cfg: "MultiHeadAttentionConfig",
         validator: "AttentionValidator",
+        key_bias_vector: Tensor | None = None,
+        value_bias_vector: Tensor | None = None,
     ):
         self.cfg = cfg
+        self.batch_size = self.cfg.batch_size
         self.validator = validator
         self.batch_first_flag = self.cfg.batch_first_flag
+        self.num_heads = self.cfg.num_heads
+        self.embedding_dim = self.cfg.embedding_dim
+        self.head_dim = self.embedding_dim // self.num_heads
+        self.zero_attention_flag = self.cfg.zero_attention_flag
+
+        self.value_bias_vector = value_bias_vector
+        self.key_bias_vector = key_bias_vector
 
     def maybe_transpose_qkv(
         self,
@@ -68,18 +78,18 @@ class AttentionUtils:
         key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
-        if self.bias_key is None or self.bias_value is None:
+        if self.key_bias_vector is None or self.value_bias_vector is None:
             return (
                 key_projections,
                 value_projections,
                 key_padding_mask,
                 attention_mask,
             )
-        repeated_key_bias = self.key_bias.repeat(1, self.batch_size, 1)
-        repeated_value_bias = self.value_bias.repeat(1, self.batch_size, 1)
+        repeated_key_bias = self.key_bias_vector.repeat(1, self.batch_size, 1)
         key_projections_with_bias_vector = torch.cat(
             [key_projections, repeated_key_bias]
         )
+        repeated_value_bias = self.value_bias_vector.repeat(1, self.batch_size, 1)
         value_projections_with_bias_vector = torch.cat(
             [value_projections, repeated_value_bias]
         )
@@ -102,30 +112,53 @@ class AttentionUtils:
         value: Tensor,
         static_keys: Tensor | None = None,
         static_values: Tensor | None = None,
-    ):
-        self.assert_correct_static_projection_shapes()
-        query_shape = self.__get_expected_qkv_shapes(self.target_sequence_length)
-        query = query.view(query_shape)
-        query = query.transpose(0, 1)
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        self.validator.check_static_projection_shapes(static_keys, static_values)
 
-        updated_keys = static_keys
-        if static_keys is None:
-            key_sequence_length = key.shape[0]
-            key_shape = self.__get_expected_qkv_shapes(key_sequence_length)
-            updated_keys = updated_keys.view(key_shape)
-            updated_keys = updated_keys.transpose(0, 1)
-
-        updated_values = static_values
-        if static_values is None:
-            value_sequence_length = value.shape[0]
-            value_shape = self.__get_expected_qkv_shapes(value_sequence_length)
-            updated_values = updated_values.view(value_shape)
-            updated_values = updated_values.transpose(0, 1)
+        query = self.__reshape_projection_tesnor(query)
+        key = self.__reshape_projection_tesnor(key, static_keys)
+        value = self.__reshape_projection_tesnor(value, static_values)
 
         return query, key, value
 
-    def __get_expected_qkv_shapes(self, sequence_length):
-        return sequence_length, bsz * num_heads, head_dim
+    def __reshape_projection_tesnor(
+        self,
+        tensor: Tensor,
+        static_tensor: Tensor | None = None,
+    ) -> Tensor:
+        if static_tensor is not None:
+            return static_tensor
+
+        sequence_length = tensor.shape[0]
+        shape = (sequence_length, self.batch_size * self.num_heads, self.head_dim)
+        reshaped_tensor = tensor.view(shape)
+        return reshaped_tensor.transpose(0, 1)
+
+    def add_zero_attiention_vector(
+        self,
+        key: Tensor,
+        value: Tensor,
+        key_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ):
+        if not self.zero_attention_flag:
+            return key, value, key_padding_mask, attention_mask
+
+        padded_key = self.__add_zeros_tensor(key)
+        padded_value = self.__add_zeros_tensor(value)
+        if key_padding_mask is not None:
+            key_padding_mask = F.pad(key_padding_mask, (0, 1))
+        if attention_mask is not None:
+            attention_mask = F.pad(attention_mask, (0, 1))
+
+        return padded_key, padded_value, key_padding_mask, attention_mask
+
+    def __add_zeros_tensor(self, tensor: Tensor) -> Tensor:
+        zero_attetion_shape = (self.batch_size * self.num_heads, 1, self.head_dim)
+        zeros_tensor = torch.zeros(
+            zero_attetion_shape, dtype=tensor.dtype, device=tensor.device
+        )
+        return torch.cat([tensor, zeros_tensor], dim=1)
 
 
 class AttentionProcessor:
@@ -484,6 +517,7 @@ class AttentionValidator:
         self.num_heads = self.cfg.num_heads
         self.embeding_dim = self.cfg.embedding_dim
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
+        self.head_dim = self.embeding_dim // self.num_heads
         self.batched_input_flag = None
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
@@ -641,31 +675,40 @@ class AttentionValidator:
         is_kv_batch_size_same = k_batch_size == v_batch_size
         if not (is_kv_sequence_length_same and is_kv_batch_size_same):
             raise RuntimeError(
+                f"key shape {key.shape} does not match value shape {value.shape}"
+            )
+
+    def check_self_attention_projection_inputs(
+        self, key: Tensor, value: Tensor
+    ) -> None:
+        are_kv_shapes_same = key.shape == value.shape
+        if not are_kv_shapes_same:
+            raise RuntimeError(
                 f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
             )
 
-    def check_self_attention_projection_inputs(self, key: Tensor, value: Tensor):
-        are_kv_shapes_same = key.shape == value.shape
-        assert are_kv_shapes_same, (
-            f"key shape {key.shape} does not match value shape {value.shape}"
-        )
-
-    def assert_correct_static_projection_shapes(
+    def check_static_projection_shapes(
         self,
-        static_keys: Tensor | None,
-        static_values: Tensor | None,
+        static_keys: Tensor | None = None,
+        static_values: Tensor | None = None,
     ):
-        if static_keys:
-            assert static_keys.size(0) == self.batch_size * self.num_heads, (
-                f"expecting static_k.size(0) of {self.batch_size * self.num_heads}, but got {static_keys.size(0)}"
+        self.__resolve_static_projection_shape(static_keys)
+        self.__resolve_static_projection_shape(static_values, True)
+
+    def __resolve_static_projection_shape(
+        self,
+        static_tensor: Tensor | None = None,
+        value_tensor_flag: bool = False,
+    ) -> None:
+        if static_tensor is not None:
+            tensor_type = self.__resolve_static_projection_type(value_tensor_flag)
+            expected_first_dim = self.batch_size * self.num_heads
+            assert static_tensor.size(0) == expected_first_dim, (
+                f"expecting {tensor_type}.size(0) of {expected_first_dim}, but got {static_tensor.size(0)}"
             )
-            assert static_keys.size(2) == self.head_dim, (
-                f"expecting static_k.size(2) of {self.head_dim}, but got {static_keys.size(2)}"
+            assert static_tensor.size(2) == self.head_dim, (
+                f"expecting {tensor_type}.size(2) of {self.head_dim}, but got {static_tensor.size(2)}"
             )
-        if static_values is not None:
-            assert static_values.size(0) == self.batch_size * self.num_heads, (
-                f"expecting static_v.size(0) of {self.batch_size * self.num_heads}, but got {static_values.size(0)}"
-            )
-            assert static_values.size(2) == self.head_dim, (
-                f"expecting static_v.size(2) of {self.head_dim}, but got {static_values.size(2)}"
-            )
+
+    def __resolve_static_projection_type(self, value_tensor_flag: bool = False) -> str:
+        return "static_values" if value_tensor_flag else "static_keys"
