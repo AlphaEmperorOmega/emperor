@@ -2,7 +2,6 @@ import copy
 import unittest
 import torch
 import torch.nn as nn
-from torch.nn.functional import scaled_dot_product_attention
 from Emperor.attention.utils.utils import (
     AttentionMask,
     AttentionProcessor,
@@ -30,7 +29,7 @@ class TestAttention(unittest.TestCase):
         # MODEL WISE CONFI
         BATCH_SIZE = 2
         INPUT_DIM = 4
-        HIDDEN_DIM = 8
+        HIDDEN_DIM = 12
         OUTPUT_DIM = 6
         GATHER_FREQUENCY_FLAG = False
 
@@ -164,6 +163,7 @@ class TestAttention(unittest.TestCase):
                 key_dim=0,
                 value_dim=0,
                 causal_attention_mask_flag=False,
+                add_key_value_bias_flag=False,
             ),
         )
 
@@ -307,8 +307,8 @@ class TestMultIHeadAttention____build_shared_projection_models(TestAttention):
         c.multi_head_attention_model_config.key_dim = 32
         c.multi_head_attention_model_config.value_dim = 32
         m = MultiHeadAttention(c)
-        qkv_model, output_model = m._MultiHeadAttention__build_shared_projection_models(
-            c
+        qkv_model, output_model = (
+            m._MultiHeadAttention__build_shared_projection_models()
         )
 
         self.assertIsNone(m.query_model)
@@ -326,7 +326,7 @@ class TestMultIHeadAttention____build_separate_projection_models(TestAttention):
         c.multi_head_attention_model_config.value_dim = 32
         m = MultiHeadAttention(c)
         query_model, key_model, value_model, output_model = (
-            m._MultiHeadAttention__build_separate_projection_models(c)
+            m._MultiHeadAttention__build_separate_projection_models()
         )
 
         self.assertIsInstance(query_model, LayerBlock)
@@ -616,6 +616,197 @@ class TestAttentionUtils__add_batch_dimension_if_missing(TestAttention):
         self.assertEqual(
             output_attention_mask.shape,
             (1, target_sequence_length, source_sequence_length),
+        )
+
+
+class TestAttentionUtils__add_bias_vectors_to_kv(TestAttention):
+    def test__kv_input_tensor_only__no_kv_biases(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.batch_first_flag = True
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        key_projections = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value_projections = torch.randn(
+            source_sequence_length, batch_size, embedding_dim
+        )
+
+        (
+            out_key_projections,
+            out_value_projections,
+            out_key_padding_mask,
+            out_attention_mask,
+        ) = m.add_bias_vectors_to_kv(key_projections, value_projections)
+        self.assertEqual(out_key_projections.shape, key_projections.shape)
+        self.assertEqual(out_value_projections.shape, out_value_projections.shape)
+        self.assertIsNone(out_key_padding_mask)
+        self.assertIsNone(out_attention_mask)
+
+    def test__all_inputs__no_kv_biases(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.batch_first_flag = True
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        num_heads = config.num_heads
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        key_projections = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value_projections = torch.randn(
+            source_sequence_length, batch_size, embedding_dim
+        )
+        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        attention_mask = torch.randn(
+            batch_size * num_heads, target_sequence_length, source_sequence_length
+        )
+
+        (
+            out_key_projections,
+            out_value_projections,
+            out_key_padding_mask,
+            out_attention_mask,
+        ) = m.add_bias_vectors_to_kv(
+            key_projections, value_projections, key_padding_mask, attention_mask
+        )
+        self.assertEqual(out_key_projections.shape, key_projections.shape)
+        self.assertEqual(out_value_projections.shape, out_value_projections.shape)
+        self.assertEqual(out_key_padding_mask.shape, key_padding_mask.shape)
+        self.assertEqual(out_attention_mask.shape, attention_mask.shape)
+        self.assertTrue(torch.equal(out_key_projections, key_projections))
+        self.assertTrue(torch.equal(out_value_projections, out_value_projections))
+        self.assertTrue(torch.equal(out_key_padding_mask, key_padding_mask))
+        self.assertTrue(torch.equal(out_attention_mask, attention_mask))
+
+    def test__all_inputs__add_key_value_bias_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        c.multi_head_attention_model_config.add_key_value_bias_flag = True
+        config = c.multi_head_attention_model_config
+        config.batch_first_flag = True
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        m = AttentionUtils(
+            config, validator, model.key_bias_vector, model.value_bias_vector
+        )
+
+        num_heads = config.num_heads
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        key_projections = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value_projections = torch.randn(
+            source_sequence_length, batch_size, embedding_dim
+        )
+        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        attention_mask = torch.randn(
+            batch_size * num_heads, target_sequence_length, source_sequence_length
+        )
+
+        (
+            out_key_projections,
+            out_value_projections,
+            out_key_padding_mask,
+            out_attention_mask,
+        ) = m.add_bias_vectors_to_kv(
+            key_projections, value_projections, key_padding_mask, attention_mask
+        )
+        source_sequence_length_updated = source_sequence_length + 1
+        self.assertEqual(
+            out_key_projections.shape,
+            (source_sequence_length_updated, batch_size, embedding_dim),
+        )
+        self.assertEqual(
+            out_value_projections.shape,
+            (source_sequence_length_updated, batch_size, embedding_dim),
+        )
+        self.assertEqual(
+            out_key_padding_mask.shape, (batch_size, source_sequence_length_updated)
+        )
+        self.assertEqual(
+            out_attention_mask.shape,
+            (
+                batch_size * num_heads,
+                target_sequence_length,
+                source_sequence_length_updated,
+            ),
+        )
+
+
+class TestAttentionUtils____reshape_projection_tesnor(TestAttention):
+    def test__input_as_tensor_and_static_tensor(self):
+        c = copy.deepcopy(self.cfg)
+        c.multi_head_attention_model_config.add_key_value_bias_flag = True
+        config = c.multi_head_attention_model_config
+        config.batch_first_flag = True
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        m = AttentionUtils(
+            config, validator, model.key_bias_vector, model.value_bias_vector
+        )
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        embedding_dim = config.embedding_dim
+        head_dim = embedding_dim // num_heads
+        sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
+
+        tensor = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        static_tensor = torch.randn(
+            batch_size * num_heads, sequence_length, head_dim, embedding_dim
+        )
+        output = m._AttentionUtils__reshape_projection_tesnor(tensor, static_tensor)
+
+        self.assertTrue(torch.equal(output, static_tensor))
+
+    def test__input_as_tensor_and_static_vensor__None(self):
+        c = copy.deepcopy(self.cfg)
+        c.multi_head_attention_model_config.add_key_value_bias_flag = True
+        config = c.multi_head_attention_model_config
+        config.batch_first_flag = True
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        m = AttentionUtils(
+            config, validator, model.key_bias_vector, model.value_bias_vector
+        )
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        sequence_length = config.source_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        tensor = torch.randn(sequence_length, batch_size, embedding_dim)
+        static_tensor = None
+        output = m._AttentionUtils__reshape_projection_tesnor(tensor, static_tensor)
+
+        self.assertEqual(
+            output.shape,
+            (batch_size * num_heads, sequence_length, head_dim),
+        )
+
+
+class TestAttentionUtils__add_zero_attention(TestAttention):
+    def test__input_as_tensor_and_static_tensor(self):
+        c = copy.deepcopy(self.cfg)
+        c.multi_head_attention_model_config.add_key_value_bias_flag = True
+        config = c.multi_head_attention_model_config
+        config.batch_first_flag = True
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        nn.MultiheadAttention
+        m = AttentionUtils(
+            config, validator, model.key_bias_vector, model.value_bias_vector
         )
 
 
@@ -1216,6 +1407,211 @@ class TestAttentionValidator____canonical_mask(TestAttention):
         self.assertTrue(torch.equal(output, mask))
 
 
+class TestAttentionValidator__check_self_attention_projection_inputs(TestAttention):
+    def test__method(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
+
+        output = m.check_self_attention_projection_inputs(key, value)
+
+        self.assertIsNone(output)
+
+    def test__is_error_raised(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        changed_sequence_length = source_sequence_length + 1
+        key = torch.randn(changed_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
+
+        with self.assertRaises(RuntimeError) as context:
+            m.check_self_attention_projection_inputs(key, value)
+
+
+class TestAttentionValidator__check_indepentent_projections_inputs(TestAttention):
+    def test__method(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
+
+        output = m.check_self_attention_projection_inputs(key, value)
+
+        self.assertIsNone(output)
+
+    def test__is_error_raised(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = config.batch_size
+        source_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        changed_sequence_length = source_sequence_length + 1
+        key = torch.randn(changed_sequence_length, batch_size, embedding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
+
+        with self.assertRaises(RuntimeError) as context:
+            m.check_self_attention_projection_inputs(key, value)
+
+
+class TestAttentionValidator____resolve_static_projection_type(TestAttention):
+    def test__value_tensor_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        value_tensor_flag = False
+
+        output = m._AttentionValidator__resolve_static_projection_type(
+            value_tensor_flag
+        )
+
+        self.assertEqual(output, "static_keys")
+
+    def test__value_tensor_flag__True(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        value_tensor_flag = True
+
+        output = m._AttentionValidator__resolve_static_projection_type(
+            value_tensor_flag
+        )
+        self.assertEqual(output, "static_values")
+
+
+class TestAttentionValidator____resolve_static_projection_shape(TestAttention):
+    def test__static_tensor__None__value_tensor_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        static_tensor = None
+        value_tensor_flag = False
+        output = m._AttentionValidator__resolve_static_projection_shape(
+            static_tensor, value_tensor_flag
+        )
+
+        self.assertIsNone(output)
+
+    def test__value_tensor_flag__False(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = m.batch_size
+        num_heads = m.num_heads
+        embedding_dim = config.embedding_dim
+        head_dim = embedding_dim // num_heads
+        sequence_length = m.source_sequence_length
+
+        static_tensor = torch.randn(
+            batch_size * num_heads, sequence_length, head_dim, embedding_dim
+        )
+        value_tensor_flag = False
+        output = m._AttentionValidator__resolve_static_projection_shape(
+            static_tensor, value_tensor_flag
+        )
+
+        self.assertIsNone(output)
+
+    def test__is_assertion_raised(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = m.batch_size
+        num_heads = m.num_heads
+        embedding_dim = config.embedding_dim
+        head_dim = embedding_dim // num_heads
+        sequence_length = m.source_sequence_length
+
+        static_tensor = torch.randn(
+            batch_size, sequence_length, head_dim, embedding_dim
+        )
+        value_tensor_flag = False
+        with self.assertRaises(AssertionError) as context:
+            m._AttentionValidator__resolve_static_projection_shape(
+                static_tensor, value_tensor_flag
+            )
+
+
+class TestAttentionValidator__check_static_projection_shapes(TestAttention):
+    def test__no_inputs(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        static_keys = None
+        static_values = None
+
+        output = m.check_static_projection_shapes(static_keys, static_values)
+
+        self.assertIsNone(output)
+
+    def test__check_static_projection_shapes(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = m.batch_size
+        num_heads = m.num_heads
+        embedding_dim = config.embedding_dim
+        head_dim = embedding_dim // num_heads
+        sequence_length = m.source_sequence_length
+
+        static_keys = torch.randn(
+            batch_size * num_heads, sequence_length, head_dim, embedding_dim
+        )
+        static_values = torch.randn(
+            batch_size * num_heads, sequence_length, head_dim, embedding_dim
+        )
+
+        output = m.check_static_projection_shapes(static_keys, static_values)
+        self.assertIsNone(output)
+
+    def test__is_assertion_raised(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        m = AttentionValidator(config)
+
+        batch_size = m.batch_size
+        num_heads = m.num_heads
+        embedding_dim = config.embedding_dim
+        head_dim = embedding_dim // num_heads
+        sequence_length = m.source_sequence_length
+
+        static_keys = torch.randn(batch_size, sequence_length, head_dim, embedding_dim)
+        static_values = torch.randn(
+            batch_size * num_heads, sequence_length, head_dim, embedding_dim
+        )
+
+        with self.assertRaises(AssertionError) as context:
+            m.check_static_projection_shapes(static_keys, static_values)
+
+
 class TestAttentionMask__validate_attention_mask(TestAttention):
     def test__key_padding_mask__None(self):
         c = copy.deepcopy(self.cfg)
@@ -1786,11 +2182,10 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
         config.key_dim = 32
         config.value_dim = 64
         config.model_type = LayerTypes.VECTOR
-        layer_config = c.linear_layer_model_config
 
         model = MultiHeadAttention(c)
         validator = AttentionValidator(config)
-        qkv_model = model.qkv_model
+        qkv_model = None
         query_model = model.query_model
         key_model = model.key_model
         value_model = model.value_model
@@ -1802,7 +2197,7 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
         batch_size = config.batch_size
         target_sequence_length = source_sequence_length = config.target_sequence_length
 
-        embeding_dim = c.hidden_dim
+        embeding_dim = config.embedding_dim
         query = torch.randn(target_sequence_length, batch_size, embeding_dim)
         key = torch.randn(source_sequence_length, batch_size, embeding_dim)
         value = torch.randn(source_sequence_length, batch_size, embeding_dim)
@@ -1810,7 +2205,6 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
         query_projections, key_projections, value_projections = (
             m.compute_qkv_projections(query, key, value)
         )
-        expected_output_embedding_dim = c.linear_layer_model_config.output_dim
         self.assertEqual(
             query_projections.shape,
             (target_sequence_length, batch_size, config.key_dim),
@@ -1824,211 +2218,214 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
             (source_sequence_length, batch_size, config.value_dim),
         )
 
-    # def test__self_attention_projections__model_type__vector(self):
-    #     c = copy.deepcopy(self.cfg)
-    #     old_output_dim = c.linear_layer_model_config.output_dim
-    #     # When shared `__compute_self_projections` is used ensure that
-    #     # ensure that `output_dim` is 3 * expected projection dimension
-    #     c.linear_layer_model_config.output_dim = old_output_dim * 3
-    #     config = c.multi_head_attention_model_config
-    #     config.model_type = LayerTypes.VECTOR
-    #     layer_config = c.linear_layer_model_config
-    #     validator = AttentionValidator(config)
-    #     query_model = None
-    #     key_model = None
-    #     value_model = None
-    #     qkv_model = config.model_type.value(c)
-    #
-    #     m = AttentionProjector(
-    #         config, validator, qkv_model, query_model, key_model, value_model
-    #     )
-    #
-    #     batch_size = config.batch_size
-    #     target_sequence_length = source_sequence_length = config.target_sequence_length
-    #
-    #     embeding_dim = layer_config.input_dim
-    #     tensor = torch.randn(target_sequence_length, batch_size, embeding_dim)
-    #     query = key = value = tensor
-    #
-    #     query_projections, key_projections, value_projections = (
-    #         m.compute_qkv_projections(query, key, value)
-    #     )
-    #     expected_output_embedding_dim = c.linear_layer_model_config.output_dim // 3
-    #     self.assertEqual(
-    #         query_projections.shape,
-    #         (target_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         key_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         value_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #
-    # def test__indepented_projections__model_type__matrix(self):
-    #     c = copy.deepcopy(self.cfg)
-    #     config = c.multi_head_attention_model_config
-    #     config.model_type = LayerTypes.MATRIX
-    #     layer_config = c.linear_layer_model_config
-    #     validator = AttentionValidator(config)
-    #     query_model = config.model_type.value(c)
-    #     key_model = config.model_type.value(c)
-    #     value_model = config.model_type.value(c)
-    #     qkv_model = None
-    #
-    #     m = AttentionProjector(
-    #         config, validator, qkv_model, query_model, key_model, value_model
-    #     )
-    #
-    #     batch_size = config.batch_size
-    #     target_sequence_length = source_sequence_length = config.target_sequence_length
-    #
-    #     embeding_dim = layer_config.input_dim
-    #     query = torch.randn(target_sequence_length, batch_size, embeding_dim)
-    #     key = torch.randn(source_sequence_length, batch_size, embeding_dim)
-    #     value = torch.randn(source_sequence_length, batch_size, embeding_dim)
-    #
-    #     query_projections, key_projections, value_projections = (
-    #         m.compute_qkv_projections(query, key, value)
-    #     )
-    #     expected_output_embedding_dim = c.linear_layer_model_config.output_dim
-    #     self.assertEqual(
-    #         query_projections.shape,
-    #         (target_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         key_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         value_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #
-    # def test__self_attention_projections__model_type__matrix(self):
-    #     c = copy.deepcopy(self.cfg)
-    #     old_output_dim = c.linear_layer_model_config.output_dim
-    #     # When shared `__compute_self_projections` is used ensure that
-    #     # ensure that `output_dim` is 3 * expected projection dimension
-    #     c.linear_layer_model_config.output_dim = old_output_dim * 3
-    #     config = c.multi_head_attention_model_config
-    #     config.model_type = LayerTypes.MATRIX
-    #     layer_config = c.linear_layer_model_config
-    #     validator = AttentionValidator(config)
-    #     query_model = None
-    #     key_model = None
-    #     value_model = None
-    #     qkv_model = config.model_type.value(c)
-    #
-    #     m = AttentionProjector(
-    #         config, validator, qkv_model, query_model, key_model, value_model
-    #     )
-    #
-    #     batch_size = config.batch_size
-    #     target_sequence_length = source_sequence_length = config.target_sequence_length
-    #
-    #     embeding_dim = layer_config.input_dim
-    #     tensor = torch.randn(target_sequence_length, batch_size, embeding_dim)
-    #     query = key = value = tensor
-    #
-    #     query_projections, key_projections, value_projections = (
-    #         m.compute_qkv_projections(query, key, value)
-    #     )
-    #     expected_output_embedding_dim = c.linear_layer_model_config.output_dim // 3
-    #     self.assertEqual(
-    #         query_projections.shape,
-    #         (target_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         key_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         value_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #
-    # def test__indepented_projections__model_type__generator(self):
-    #     c = copy.deepcopy(self.cfg)
-    #     config = c.multi_head_attention_model_config
-    #     config.model_type = LayerTypes.GENERATOR
-    #     layer_config = c.linear_layer_model_config
-    #     validator = AttentionValidator(config)
-    #     query_model = config.model_type.value(c)
-    #     key_model = config.model_type.value(c)
-    #     value_model = config.model_type.value(c)
-    #     qkv_model = None
-    #
-    #     m = AttentionProjector(
-    #         config, validator, qkv_model, query_model, key_model, value_model
-    #     )
-    #
-    #     batch_size = config.batch_size
-    #     target_sequence_length = source_sequence_length = config.target_sequence_length
-    #
-    #     embeding_dim = layer_config.input_dim
-    #     query = torch.randn(target_sequence_length, batch_size, embeding_dim)
-    #     key = torch.randn(source_sequence_length, batch_size, embeding_dim)
-    #     value = torch.randn(source_sequence_length, batch_size, embeding_dim)
-    #
-    #     query_projections, key_projections, value_projections = (
-    #         m.compute_qkv_projections(query, key, value)
-    #     )
-    #     expected_output_embedding_dim = c.linear_layer_model_config.output_dim
-    #     self.assertEqual(
-    #         query_projections.shape,
-    #         (target_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         key_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         value_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #
-    # def test__self_attention_projections__model_type__generator(self):
-    #     c = copy.deepcopy(self.cfg)
-    #     old_output_dim = c.linear_layer_model_config.output_dim
-    #     # When shared `__compute_self_projections` is used ensure that
-    #     # ensure that `output_dim` is 3 * expected projection dimension
-    #     c.linear_layer_model_config.output_dim = old_output_dim * 3
-    #     config = c.multi_head_attention_model_config
-    #     config.model_type = LayerTypes.GENERATOR
-    #     layer_config = c.linear_layer_model_config
-    #     validator = AttentionValidator(config)
-    #     query_model = None
-    #     key_model = None
-    #     value_model = None
-    #     qkv_model = config.model_type.value(c)
-    #
-    #     m = AttentionProjector(
-    #         config, validator, qkv_model, query_model, key_model, value_model
-    #     )
-    #
-    #     batch_size = config.batch_size
-    #     target_sequence_length = source_sequence_length = config.target_sequence_length
-    #
-    #     embeding_dim = layer_config.input_dim
-    #     tensor = torch.randn(target_sequence_length, batch_size, embeding_dim)
-    #     query = key = value = tensor
-    #
-    #     query_projections, key_projections, value_projections = (
-    #         m.compute_qkv_projections(query, key, value)
-    #     )
-    #     expected_output_embedding_dim = c.linear_layer_model_config.output_dim // 3
-    #     self.assertEqual(
-    #         query_projections.shape,
-    #         (target_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         key_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
-    #     self.assertEqual(
-    #         value_projections.shape,
-    #         (source_sequence_length, batch_size, expected_output_embedding_dim),
-    #     )
+    def test__self_attention_projections__model_type__vector(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.use_separate_projection_weight = False
+        config.key_dim = config.embedding_dim
+        config.value_dim = config.embedding_dim
+        config.model_type = LayerTypes.VECTOR
+
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        query_model = None
+        key_model = None
+        value_model = None
+        qkv_model = model.qkv_model
+
+        m = AttentionProjector(
+            config, validator, qkv_model, query_model, key_model, value_model
+        )
+
+        batch_size = config.batch_size
+        target_sequence_length = source_sequence_length = config.target_sequence_length
+
+        embedding_dim = config.embedding_dim
+        tensor = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        query = key = value = tensor
+
+        query_projections, key_projections, value_projections = (
+            m.compute_qkv_projections(query, key, value)
+        )
+        self.assertEqual(
+            query_projections.shape,
+            (target_sequence_length, batch_size, config.embedding_dim),
+        )
+        self.assertEqual(
+            key_projections.shape,
+            (source_sequence_length, batch_size, config.embedding_dim),
+        )
+        self.assertEqual(
+            value_projections.shape,
+            (source_sequence_length, batch_size, config.embedding_dim),
+        )
+
+    def test__indepented_projections__model_type__matrix(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.use_separate_projection_weight = True
+        config.key_dim = 32
+        config.value_dim = 64
+        config.model_type = LayerTypes.MATRIX
+
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        qkv_model = None
+        query_model = model.query_model
+        key_model = model.key_model
+        value_model = model.value_model
+
+        m = AttentionProjector(
+            config, validator, qkv_model, query_model, key_model, value_model
+        )
+
+        batch_size = config.batch_size
+        target_sequence_length = source_sequence_length = config.target_sequence_length
+
+        embeding_dim = config.embedding_dim
+        query = torch.randn(target_sequence_length, batch_size, embeding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embeding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embeding_dim)
+
+        query_projections, key_projections, value_projections = (
+            m.compute_qkv_projections(query, key, value)
+        )
+        self.assertEqual(
+            query_projections.shape,
+            (target_sequence_length, batch_size, config.key_dim),
+        )
+        self.assertEqual(
+            key_projections.shape,
+            (source_sequence_length, batch_size, config.key_dim),
+        )
+        self.assertEqual(
+            value_projections.shape,
+            (source_sequence_length, batch_size, config.value_dim),
+        )
+
+    def test__self_attention_projections__model_type__matrix(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.use_separate_projection_weight = False
+        config.key_dim = config.embedding_dim
+        config.value_dim = config.embedding_dim
+        config.model_type = LayerTypes.MATRIX
+
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        query_model = None
+        key_model = None
+        value_model = None
+        qkv_model = model.qkv_model
+
+        m = AttentionProjector(
+            config, validator, qkv_model, query_model, key_model, value_model
+        )
+
+        batch_size = config.batch_size
+        target_sequence_length = source_sequence_length = config.target_sequence_length
+
+        embedding_dim = config.embedding_dim
+        tensor = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        query = key = value = tensor
+
+        query_projections, key_projections, value_projections = (
+            m.compute_qkv_projections(query, key, value)
+        )
+        self.assertEqual(
+            query_projections.shape,
+            (target_sequence_length, batch_size, config.embedding_dim),
+        )
+        self.assertEqual(
+            key_projections.shape,
+            (source_sequence_length, batch_size, config.embedding_dim),
+        )
+        self.assertEqual(
+            value_projections.shape,
+            (source_sequence_length, batch_size, config.embedding_dim),
+        )
+
+    def test__indepented_projections__model_type__generator(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.use_separate_projection_weight = True
+        config.key_dim = 32
+        config.value_dim = 64
+        config.model_type = LayerTypes.GENERATOR
+
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        qkv_model = None
+        query_model = model.query_model
+        key_model = model.key_model
+        value_model = model.value_model
+
+        m = AttentionProjector(
+            config, validator, qkv_model, query_model, key_model, value_model
+        )
+
+        batch_size = config.batch_size
+        target_sequence_length = source_sequence_length = config.target_sequence_length
+
+        embeding_dim = config.embedding_dim
+        query = torch.randn(target_sequence_length, batch_size, embeding_dim)
+        key = torch.randn(source_sequence_length, batch_size, embeding_dim)
+        value = torch.randn(source_sequence_length, batch_size, embeding_dim)
+
+        query_projections, key_projections, value_projections = (
+            m.compute_qkv_projections(query, key, value)
+        )
+        self.assertEqual(
+            query_projections.shape,
+            (target_sequence_length, batch_size, config.key_dim),
+        )
+        self.assertEqual(
+            key_projections.shape,
+            (source_sequence_length, batch_size, config.key_dim),
+        )
+        self.assertEqual(
+            value_projections.shape,
+            (source_sequence_length, batch_size, config.value_dim),
+        )
+
+    def test__self_attention_projections__model_type__generator(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.use_separate_projection_weight = False
+        config.key_dim = config.embedding_dim
+        config.value_dim = config.embedding_dim
+        config.model_type = LayerTypes.GENERATOR
+
+        model = MultiHeadAttention(c)
+        validator = AttentionValidator(config)
+        query_model = None
+        key_model = None
+        value_model = None
+        qkv_model = model.qkv_model
+
+        m = AttentionProjector(
+            config, validator, qkv_model, query_model, key_model, value_model
+        )
+
+        batch_size = config.batch_size
+        target_sequence_length = source_sequence_length = config.target_sequence_length
+
+        embedding_dim = config.embedding_dim
+        tensor = torch.randn(target_sequence_length, batch_size, embedding_dim)
+        query = key = value = tensor
+
+        query_projections, key_projections, value_projections = (
+            m.compute_qkv_projections(query, key, value)
+        )
+        self.assertEqual(
+            query_projections.shape,
+            (target_sequence_length, batch_size, config.embedding_dim),
+        )
+        self.assertEqual(
+            key_projections.shape,
+            (source_sequence_length, batch_size, config.embedding_dim),
+        )
+        self.assertEqual(
+            value_projections.shape,
+            (source_sequence_length, batch_size, config.embedding_dim),
+        )
