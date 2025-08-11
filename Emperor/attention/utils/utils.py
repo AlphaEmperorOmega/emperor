@@ -71,7 +71,7 @@ class AttentionUtils:
             attention_mask = attention_mask.unsqueeze(0)
         return query, key, value, key_padding_mask, attention_mask
 
-    def add_bias_vectors_to_kv(
+    def add_learnable_bias_vectors(
         self,
         key_projections: Tensor,
         value_projections: Tensor,
@@ -134,18 +134,18 @@ class AttentionUtils:
         reshaped_tensor = tensor.view(shape)
         return reshaped_tensor.transpose(0, 1)
 
-    def add_zero_attiention_vector(
+    def add_zero_attention(
         self,
         key: Tensor,
         value: Tensor,
         key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
-    ):
+    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
         if not self.zero_attention_flag:
             return key, value, key_padding_mask, attention_mask
 
-        padded_key = self.__add_zeros_tensor(key)
-        padded_value = self.__add_zeros_tensor(value)
+        padded_key = self.__concatenate_zeros_tensor(key)
+        padded_value = self.__concatenate_zeros_tensor(value)
         if key_padding_mask is not None:
             key_padding_mask = F.pad(key_padding_mask, (0, 1))
         if attention_mask is not None:
@@ -153,7 +153,7 @@ class AttentionUtils:
 
         return padded_key, padded_value, key_padding_mask, attention_mask
 
-    def __add_zeros_tensor(self, tensor: Tensor) -> Tensor:
+    def __concatenate_zeros_tensor(self, tensor: Tensor) -> Tensor:
         zero_attetion_shape = (self.batch_size * self.num_heads, 1, self.head_dim)
         zeros_tensor = torch.zeros(
             zero_attetion_shape, dtype=tensor.dtype, device=tensor.device

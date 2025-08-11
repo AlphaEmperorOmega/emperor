@@ -301,7 +301,7 @@ class MultiHeadAttention(Module):
             value,
             key_padding_mask,
             attention_mask,
-        ) = self.utils.add_bias_vectors_to_kv(
+        ) = self.utils.add_learnable_bias_vectors(
             key,
             value,
             key_padding_mask,
