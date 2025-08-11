@@ -421,14 +421,19 @@ class AttentionMask:
         if key_padding_mask is None:
             return attention_mask
 
-        if not torch.jit.is_scripting() and not torch.jit.is_tracing():
-            _check_key_padding_mask(key_padding_mask, src_len, bsz)
+        # if not torch.jit.is_scripting() and not torch.jit.is_tracing():
+        #     _check_key_padding_mask(key_padding_mask, src_len, bsz)
 
-        key_padding_mask_shape = (self.batch_size, 1, 1, self.source_sequence_length)
+        padding_shape = (self.batch_size, 1, 1, self.source_sequence_length)
+        reshape_padding_shape = (
+            self.batch_size * self.num_heads,
+            1,
+            self.source_sequence_length,
+        )
         key_padding_mask = (
-            key_padding_mask.view(key_padding_mask_shape)
+            key_padding_mask.view(padding_shape)
             .expand(-1, self.num_heads, -1, -1)
-            .reshape(self.batch_size * self.num_heads, 1, self.source_sequence_length)
+            .reshape(reshape_padding_shape)
         )
         attention_mask = key_padding_mask
         if attention_mask is not None:
