@@ -380,31 +380,34 @@ class TestMultIHeadAttention____build_projection_models(TestAttention):
 
 
 class TestAttentionUtils____transpose_shared_qkv(TestAttention):
+    def setUp(self):
+        super().setUp()
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        batch_size = config.batch_size
+        target_sequence_length = config.target_sequence_length
+        source_sequence_length = config.source_sequence_length
+        embedding_dim = config.embedding_dim
+
+        self.q_input_shape = (target_sequence_length, batch_size, embedding_dim)
+        self.kv_input_shape = (source_sequence_length, batch_size, embedding_dim)
+        self.q_output_shape = (batch_size, target_sequence_length, embedding_dim)
+        self.kv_output_shape = (batch_size, source_sequence_length, embedding_dim)
+
     def test__same_tensor_for_kv(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         validator = AttentionValidator(config)
         m = AttentionUtils(config, validator)
 
-        batch_size = config.batch_size
-        target_sequence_length = config.target_sequence_length
-        embedding_dim = config.embedding_dim
-
-        query = key = torch.randn(target_sequence_length, batch_size, embedding_dim)
-
+        query = key = torch.randn(self.q_input_shape)
         output_q, output_k, output_v = m._AttentionUtils__transpose_shared_qkv(
             query, key
         )
 
-        self.assertEqual(
-            output_q.shape, (batch_size, target_sequence_length, embedding_dim)
-        )
-        self.assertEqual(
-            output_k.shape, (batch_size, target_sequence_length, embedding_dim)
-        )
-        self.assertEqual(
-            output_v.shape, (batch_size, target_sequence_length, embedding_dim)
-        )
+        self.assertEqual(output_q.shape, self.q_output_shape)
+        self.assertEqual(output_k.shape, self.q_output_shape)
+        self.assertEqual(output_v.shape, self.q_output_shape)
         self.assertTrue(torch.equal(output_q, output_k))
         self.assertTrue(torch.equal(output_k, output_v))
 
@@ -414,29 +417,18 @@ class TestAttentionUtils____transpose_shared_qkv(TestAttention):
         validator = AttentionValidator(config)
         m = AttentionUtils(config, validator)
 
-        batch_size = config.batch_size
-        target_sequence_length = config.target_sequence_length
-        source_sequence_length = config.target_sequence_length
-        embedding_dim = config.embedding_dim
-
-        query = torch.randn(target_sequence_length, batch_size, embedding_dim)
-        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
+        query = torch.randn(self.q_input_shape)
+        key = torch.randn(self.kv_input_shape)
 
         output_q, output_k, output_v = m._AttentionUtils__transpose_shared_qkv(
             query, key
         )
 
-        self.assertEqual(
-            output_q.shape, (batch_size, target_sequence_length, embedding_dim)
-        )
-        self.assertEqual(
-            output_k.shape, (batch_size, source_sequence_length, embedding_dim)
-        )
-        self.assertEqual(
-            output_v.shape, (batch_size, source_sequence_length, embedding_dim)
-        )
-        self.assertTrue(torch.all(output_q != output_k))
-        self.assertTrue(torch.all(output_q != output_v))
+        self.assertEqual(output_q.shape, self.q_output_shape)
+        self.assertEqual(output_k.shape, self.kv_output_shape)
+        self.assertEqual(output_v.shape, self.kv_output_shape)
+        self.assertFalse(torch.equal(output_q, output_k))
+        self.assertFalse(torch.equal(output_q, output_v))
         self.assertTrue(torch.equal(output_k, output_v))
 
 
@@ -2031,6 +2023,17 @@ class TestAttentionMask__validate_padding_and_attention_masks(TestAttention):
 
         self.assertTrue(torch.equal(output_key_padding_mask, key_padding_mask))
         self.assertTrue(torch.equal(output_attention_mask, attention_mask))
+
+
+class TestAttentionMask__merge_masks(TestAttention):
+    def test__inputs_as_None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionMask(config, validator)
+        m.causal_attention_mask_flag = True
+
+        nn.MultiheadAttention
 
 
 class TestAttentionProjector____compute_projection(TestAttention):
