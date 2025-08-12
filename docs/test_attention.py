@@ -561,7 +561,7 @@ class TestAttentionUtils__add_batch_dimension_if_missing(TestAttention):
         query = torch.randn(target_sequence_length, batch_size, embedding_dim)
         key = torch.randn(source_sequence_length, batch_size, embedding_dim)
         value = torch.randn(source_sequence_length, batch_size, embedding_dim)
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
             batch_size * num_heads, target_sequence_length, source_sequence_length
         )
@@ -592,7 +592,7 @@ class TestAttentionUtils__add_batch_dimension_if_missing(TestAttention):
         query = torch.randn(target_sequence_length, embedding_dim)
         key = torch.randn(source_sequence_length, embedding_dim)
         value = torch.randn(source_sequence_length, embedding_dim)
-        key_padding_mask = torch.randint(0, 1, (source_sequence_length,))
+        key_padding_mask = torch.randint(0, 2, (source_sequence_length,))
         attention_mask = torch.randn(target_sequence_length, source_sequence_length)
 
         output_q, output_k, output_v, output_padding, output_attention_mask = (
@@ -656,7 +656,7 @@ class TestAttentionUtils__add_learnable_bias_vectors(TestAttention):
         value_projections = torch.randn(
             source_sequence_length, batch_size, embedding_dim
         )
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
             batch_size * num_heads, target_sequence_length, source_sequence_length
         )
@@ -699,7 +699,7 @@ class TestAttentionUtils__add_learnable_bias_vectors(TestAttention):
         value_projections = torch.randn(
             source_sequence_length, batch_size, embedding_dim
         )
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
             batch_size * num_heads, target_sequence_length, source_sequence_length
         )
@@ -911,7 +911,7 @@ class TestAttentionUtils__add_zero_attention(TestAttention):
 
         key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
         value = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
             batch_size * num_heads, target_sequence_length, source_sequence_length
         )
@@ -973,7 +973,7 @@ class TestAttentionUtils__add_zero_attention(TestAttention):
 
         key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
         value = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
             batch_size * num_heads, target_sequence_length, source_sequence_length
         )
@@ -997,6 +997,165 @@ class TestAttentionUtils__add_zero_attention(TestAttention):
         self.assertEqual(padded_value.shape, expected_shape)
         self.assertEqual(key_padding_mask.shape, expected_key_padding_shape)
         self.assertEqual(attention_mask.shape, expected_attention_mask_shape)
+
+
+class TestAttentionUtils____merge_attention_and_padding_mask(TestAttention):
+    def test__inputs_as_None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        key_padding_mask = None
+        attention_mask = None
+
+        output = m._AttentionUtils__merge_attention_and_padding_mask(
+            key_padding_mask, attention_mask
+        )
+        self.assertIsNone(output)
+
+    def test__attention_mask__None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        source_sequence_length = config.source_sequence_length
+
+        key_padding_mask = torch.randint(
+            0, 1, (batch_size * num_heads, 1, source_sequence_length)
+        )
+        attention_mask = None
+
+        output = m._AttentionUtils__merge_attention_and_padding_mask(
+            key_padding_mask, attention_mask
+        )
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertTrue(torch.equal(output, key_padding_mask))
+
+    def test__all_inputs(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
+
+        key_padding_mask = torch.randint(
+            0, 2, (batch_size * num_heads, 1, source_sequence_length)
+        )
+        attention_mask = torch.randn(
+            batch_size * num_heads, target_sequence_length, source_sequence_length
+        )
+
+        output = m._AttentionUtils__merge_attention_and_padding_mask(
+            key_padding_mask, attention_mask
+        )
+
+        self.assertIsInstance(output, torch.Tensor)
+        expected_output = attention_mask + key_padding_mask
+        self.assertTrue(torch.equal(output, expected_output))
+
+
+class TestAttentionUtils__merge_masks(TestAttention):
+    def test__inputs_as_None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        embedding_dim = config.embedding_dim
+        source_sequence_length = config.source_sequence_length
+        head_dim = embedding_dim // num_heads
+
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        key_padding_mask = None
+        attention_mask = None
+
+        output = m.merge_masks(key, key_padding_mask, attention_mask)
+
+        self.assertIsNone(output)
+
+    def test__attention_mask__None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        embedding_dim = config.embedding_dim
+        source_sequence_length = config.source_sequence_length
+        head_dim = embedding_dim // num_heads
+
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
+        attention_mask = None
+
+        output = m.merge_masks(key, key_padding_mask, attention_mask)
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            output.shape, (batch_size * num_heads, 1, source_sequence_length)
+        )
+
+    def test__key_padding_mask__None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        embedding_dim = config.embedding_dim
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
+        head_dim = embedding_dim // num_heads
+
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        key_padding_mask = None
+        attention_mask = torch.randn(
+            batch_size * num_heads, target_sequence_length, source_sequence_length
+        )
+        output = m.merge_masks(key, key_padding_mask, attention_mask)
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertTrue(torch.equal(output, attention_mask))
+
+    def test__all_inputs(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        validator = AttentionValidator(config)
+        m = AttentionUtils(config, validator)
+
+        batch_size = config.batch_size
+        num_heads = config.num_heads
+        embedding_dim = config.embedding_dim
+        source_sequence_length = config.source_sequence_length
+        target_sequence_length = config.source_sequence_length
+        head_dim = embedding_dim // num_heads
+
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
+        attention_mask = torch.randn(
+            batch_size * num_heads, target_sequence_length, source_sequence_length
+        )
+
+        output = m.merge_masks(key, key_padding_mask, attention_mask)
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            output.shape,
+            (batch_size * num_heads, target_sequence_length, source_sequence_length),
+        )
 
 
 class TestAttentionValidator____check_query_dims(TestAttention):
@@ -1378,7 +1537,7 @@ class TestAttentionValidator__multi_head_attention_input_shapes(TestAttention):
         query = torch.randn(target_sequence_length, batch_size, embedding_dim)
         key = torch.randn(source_sequence_length, batch_size, embedding_dim)
         value = torch.randn(source_sequence_length, batch_size, embedding_dim)
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
             batch_size * num_heads, source_sequence_length, target_sequence_length
         )
@@ -1401,7 +1560,7 @@ class TestAttentionValidator__multi_head_attention_input_shapes(TestAttention):
         query = torch.randn(target_sequence_length, embedding_dim)
         key = torch.randn(source_sequence_length, embedding_dim)
         value = torch.randn(source_sequence_length, embedding_dim)
-        key_padding_mask = torch.randint(0, 1, (source_sequence_length,))
+        key_padding_mask = torch.randint(0, 2, (source_sequence_length,))
         attention_mask = torch.randn(source_sequence_length, target_sequence_length)
 
         output = m.multi_head_attention_input_shapes(
@@ -1436,7 +1595,7 @@ class TestAttentionValidator__is_mask_float_or_bool(TestAttention):
         m = AttentionValidator(config)
         m.batched_input_flag = False
 
-        mask = torch.randint(0, 10, (10, 10))
+        mask = torch.randint(0, 20, (10, 10))
         maks_name = "test_mask"
 
         with self.assertRaises(RuntimeError) as context:
@@ -1837,7 +1996,7 @@ class TestAttentionMask__validate_attention_mask(TestAttention):
         source_sequence_length = config.source_sequence_length
         target_sequence_length = config.target_sequence_length
 
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
             batch_size * num_heads, source_sequence_length, target_sequence_length
         )
@@ -1867,7 +2026,7 @@ class TestAttentionMask__validate_attention_mask(TestAttention):
         source_sequence_length = config.source_sequence_length
         target_sequence_length = config.target_sequence_length
 
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length))
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
             batch_size * num_heads, source_sequence_length, target_sequence_length
         )
@@ -1916,7 +2075,7 @@ class TestAttentionMask__validate_padding_and_attention_masks(TestAttention):
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
 
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length)) > 0
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length)) > 0
         attention_mask = None
         need_weights = True
 
@@ -1975,7 +2134,7 @@ class TestAttentionMask__validate_padding_and_attention_masks(TestAttention):
         source_sequence_length = config.source_sequence_length
         target_sequence_length = config.target_sequence_length
 
-        key_padding_mask = torch.randint(0, 1, (batch_size, source_sequence_length)) > 0
+        key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length)) > 0
         attention_mask = (
             torch.randn(
                 batch_size * num_heads, source_sequence_length, target_sequence_length
@@ -2625,3 +2784,16 @@ class TestAttentionProjector__compute_qkv_projections(TestAttention):
             value_projections.shape,
             (source_sequence_length, batch_size, config.embedding_dim),
         )
+
+
+class TestAttentionProcessor__init(TestAttention):
+    def test__init(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        self.assertIsInstance(m, AttentionProcessor)
+        self.assertIsInstance(m.output_model, LayerBlock)
