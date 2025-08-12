@@ -314,7 +314,7 @@ class MultiHeadAttention(Module):
         )
 
         self.update_source_sequence_length(key)
-        merged_mask = self.utils.merge_masks(attention_mask, key_padding_mask)
+        merged_mask = self.utils.merge_masks(key_padding_mask, attention_mask)
         attention_output, attention_weights = self.processor.compute_attetnion(
             query, key, value, merged_mask
         )

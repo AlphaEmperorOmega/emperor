@@ -1,4 +1,5 @@
 import torch
+import math
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
@@ -175,12 +176,13 @@ class AttentionUtils:
         source_sequence_length = key.size(1)
 
         shape_view = (self.batch_size, 1, 1, self.source_sequence_length)
+        key_padding_mask = key_padding_mask.view(shape_view)
+
         shape_expand = (-1, self.num_heads, -1, -1)
+        key_padding_mask = key_padding_mask.expand(shape_expand)
+
         batch_size = self.batch_size * self.num_heads
         shape_reshape = (batch_size, 1, source_sequence_length)
-
-        key_padding_mask = key_padding_mask.view(shape_view)
-        key_padding_mask = key_padding_mask.expand(shape_expand)
         key_padding_mask = key_padding_mask.reshape(shape_reshape)
 
         attention_mask = self.__merge_attention_and_padding_mask(
@@ -225,8 +227,8 @@ class AttentionProcessor:
         value: Tensor,
         attention_mask: Tensor | None,
     ) -> tuple[Tensor, Tensor]:
-        attention_weights = self.__compute_attention_masked(query, key, attention_mask)
-        weighted_value = self.__compute_weighted_values(attention_weights, value)
+        weights = self.__compute_masked_attention_weights(query, key, attention_mask)
+        weighted_value = self.__compute_weighted_values(weights, value)
         attention_output = self.__compute_attention_output(weighted_value)
         attention_output, attention_weights = self.__prepare_output(
             attention_output, attention_weights
@@ -234,22 +236,33 @@ class AttentionProcessor:
 
         return attention_output, attention_weights
 
-    def __compute_attention_masked(
+    def __compute_masked_attention_weights(
         self,
         query: Tensor,
         key: Tensor,
         attention_mask: Tensor | None,
     ) -> Tensor:
-        _, _, embedding_dim = query.shape
-        scaled_qeury = query * math.sqrt(1.0 / float(embedding_dim))
+        scaled_query = self.__scale_query(query)
+        raw_weights = self.__compute_raw_masked_attention_weights(
+            scaled_query, key, attention_mask
+        )
+        return F.softmax(raw_weights, dim=-1)
+
+    def __scale_query(self, query: Tensor) -> Tensor:
+        head_dim = query.size(-1)
+        query_scalar = math.sqrt(1.0 / float(head_dim))
+        return query * query_scalar
+
+    def __compute_raw_masked_attention_weights(
+        self,
+        query: Tensor,
+        key: Tensor,
+        attention_mask: Tensor | None = None,
+    ) -> Tensor:
+        key = key.transpose(-2, -1)
         if attention_mask is not None:
-            attention_output_weights = torch.baddbmm(
-                attention_mask, scaled_qeury, key.transpose(-2, -1)
-            )
-            attention_output_weights = softmax(attention_output_weights, dim=-1)
-        attention_output_weights = torch.bmm(scaled_qeury, key.transpose(-2, -1))
-        attention_output_weights = softmax(attention_output_weights, dim=-1)
-        return attention_output_weights
+            return torch.baddbmm(attention_mask, query, key)
+        return torch.bmm(query, key)
 
     def __compute_weighted_values(self, attention_weights: Tensor, values: Tensor):
         weighted_values_shape = (
