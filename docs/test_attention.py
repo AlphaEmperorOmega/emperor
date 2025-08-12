@@ -1,7 +1,10 @@
 import copy
+import math
 import unittest
+from unittest.mock import MagicMock, Mock, patch
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from Emperor.attention.utils.utils import (
     AttentionMask,
     AttentionProcessor,
@@ -2184,17 +2187,6 @@ class TestAttentionMask__validate_padding_and_attention_masks(TestAttention):
         self.assertTrue(torch.equal(output_attention_mask, attention_mask))
 
 
-class TestAttentionMask__merge_masks(TestAttention):
-    def test__inputs_as_None(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        validator = AttentionValidator(config)
-        m = AttentionMask(config, validator)
-        m.causal_attention_mask_flag = True
-
-        nn.MultiheadAttention
-
-
 class TestAttentionProjector____compute_projection(TestAttention):
     def test_method(self):
         c = copy.deepcopy(self.cfg)
@@ -2797,3 +2789,261 @@ class TestAttentionProcessor__init(TestAttention):
 
         self.assertIsInstance(m, AttentionProcessor)
         self.assertIsInstance(m.output_model, LayerBlock)
+
+
+# class TestAttentionProcessor____compute_masked_attention_weights(TestAttention):
+#     def test__init(self):
+#         c = copy.deepcopy(self.cfg)
+#         config = c.multi_head_attention_model_config
+#         model = MultiHeadAttention(c)
+#         output_model = model.output_model
+#
+#         m = AttentionProcessor(config, output_model)
+#
+#         batch_size = config.batch_size
+#         embedding_dim = config.embedding_dim
+#         target_sequence_length = config.source_sequence_length
+#         source_sequence_length = config.source_sequence_length
+#         num_heads = config.num_heads
+#         head_dim = embedding_dim // num_heads
+#
+#         query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
+#         key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+#         attention_mask = torch.randn(
+#             batch_size * num_heads, target_sequence_length, source_sequence_length
+#         )
+#
+#         attention_output_weights = m._AttentionProcessor__compute_attention_masked(
+#             query, key, attention_mask
+#         )
+#
+#         self.assertIsInstance(m, AttentionProcessor)
+#         self.assertIsInstance(m.output_model, LayerBlock)
+#
+
+
+class TestAttentionProcessor____scale_query(TestAttention):
+    def test__method(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
+
+        scaled_query_tensor = m._AttentionProcessor__scale_query(query)
+
+        expected_result = query * math.sqrt(1.0 / float(head_dim))
+        self.assertIsInstance(scaled_query_tensor, torch.Tensor)
+        self.assertEqual(query.shape, scaled_query_tensor.shape)
+        self.assertTrue(torch.equal(scaled_query_tensor, expected_result))
+
+
+class TestAttentionProcessor____compute_raw_masked_attention_weights(TestAttention):
+    def test__attention_mask__None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+        source_sequence_length = config.target_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        attention_mask = None
+
+        raw_unmasked_weights = (
+            m._AttentionProcessor__compute_raw_masked_attention_weights(
+                query, key, attention_mask
+            )
+        )
+
+        self.assertIsInstance(raw_unmasked_weights, torch.Tensor)
+        self.assertEqual(
+            raw_unmasked_weights.shape,
+            (batch_size * num_heads, target_sequence_length, source_sequence_length),
+        )
+        transposed_keys = key.transpose(-2, -1)
+        for idx in range(key.size(0)):
+            q = query[idx]
+            k = transposed_keys[idx]
+            single_head_qk_attention_weights = torch.mm(q, k)
+            self.assertTrue(
+                torch.equal(raw_unmasked_weights[idx], single_head_qk_attention_weights)
+            )
+
+    def test__all_inputs(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+        source_sequence_length = config.target_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        attention_mask = torch.randn(1, target_sequence_length, source_sequence_length)
+        attention_mask = torch.where(
+            attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+        )
+        attention_mask = attention_mask.repeat(batch_size * num_heads, 1, 1)
+
+        raw_masked_weights = (
+            m._AttentionProcessor__compute_raw_masked_attention_weights(
+                query, key, attention_mask
+            )
+        )
+
+        self.assertIsInstance(raw_masked_weights, torch.Tensor)
+        self.assertEqual(
+            raw_masked_weights.shape,
+            (batch_size * num_heads, target_sequence_length, source_sequence_length),
+        )
+
+        transposed_keys = key.transpose(-2, -1)
+        for idx in range(key.size(0)):
+            q = query[idx]
+            k = transposed_keys[idx]
+            single_head_qk_attention_weights = torch.mm(q, k).masked_fill(
+                (attention_mask[idx] == float("-inf")), torch.tensor(float("-inf"))
+            )
+            self.assertTrue(
+                torch.equal(raw_masked_weights[idx], single_head_qk_attention_weights)
+            )
+
+
+class TestAttentionProcessor____compute_masked_attention_weights(TestAttention):
+    def test__method_using_mock(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+        source_sequence_length = config.target_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        mock_scaled_query = torch.randn(
+            batch_size * num_heads, target_sequence_length, head_dim
+        )
+        mock_raw_weights = torch.randn(
+            batch_size * num_heads, target_sequence_length, source_sequence_length
+        )
+
+        m._AttentionProcessor__scale_query = MagicMock(return_value=mock_scaled_query)
+        m._AttentionProcessor__compute_raw_masked_attention_weights = MagicMock(
+            return_value=mock_raw_weights
+        )
+
+        query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        attention_mask = None
+
+        result = m._AttentionProcessor__compute_masked_attention_weights(
+            query, key, attention_mask
+        )
+
+        m._AttentionProcessor__scale_query.assert_called_once_with(query)
+        m._AttentionProcessor__compute_raw_masked_attention_weights.assert_called_once_with(
+            mock_scaled_query, key, attention_mask
+        )
+
+        expected = F.softmax(mock_raw_weights, dim=-1)
+        self.assertTrue(torch.equal(result, expected))
+
+    def test__attention_mask__None(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+        source_sequence_length = config.target_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        attention_mask = None
+
+        masked_softmax_weights = (
+            m._AttentionProcessor__compute_masked_attention_weights(
+                query, key, attention_mask
+            )
+        )
+
+        self.assertIsInstance(masked_softmax_weights, torch.Tensor)
+        self.assertEqual(
+            masked_softmax_weights.shape,
+            (batch_size * num_heads, target_sequence_length, source_sequence_length),
+        )
+
+    def test__all_inputs(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+        source_sequence_length = config.target_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        attention_mask = torch.randn(1, target_sequence_length, source_sequence_length)
+        attention_mask = torch.where(
+            attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+        )
+        attention_mask = attention_mask.repeat(batch_size * num_heads, 1, 1)
+
+        masked_softmax_weights = (
+            m._AttentionProcessor__compute_masked_attention_weights(
+                query, key, attention_mask
+            )
+        )
+
+        self.assertIsInstance(masked_softmax_weights, torch.Tensor)
+        self.assertEqual(
+            masked_softmax_weights.shape,
+            (batch_size * num_heads, target_sequence_length, source_sequence_length),
+        )
+
+        self.assertTrue(
+            torch.all((masked_softmax_weights >= 0) & (masked_softmax_weights <= 1))
+        )
