@@ -184,7 +184,7 @@ class MultiHeadAttention(Module):
             self.key_model,
             self.value_model,
         )
-        self.processor = AttentionProcessor(self.cfg)
+        self.processor = AttentionProcessor(self.cfg, self.output_model)
         self.utils = AttentionUtils(
             self.cfg,
             self.validator,
@@ -294,7 +294,6 @@ class MultiHeadAttention(Module):
                 need_weights,
             )
         )
-        nn.MultiheadAttention
         query, key, value = self.projector.compute_qkv_projections(query, key, value)
         (
             key,
@@ -314,9 +313,12 @@ class MultiHeadAttention(Module):
             key, value, attention_mask, key_padding_mask
         )
 
-        updated_source_sequence_length = key.size(1)
-        merged_mask = self.masks.merge_masks(attention_mask, key_padding_mask)
-        attention_output, attention_weights = self.attention_computation.compute_(
+        self.update_source_sequence_length(key)
+        merged_mask = self.utils.merge_masks(attention_mask, key_padding_mask)
+        attention_output, attention_weights = self.processor.compute_attetnion(
             query, key, value, merged_mask
         )
         return attention_output, attention_weights
+
+    def update_source_sequence_length(self, key: Tensor) -> None:
+        self.source_sequence_length = key.size(1)

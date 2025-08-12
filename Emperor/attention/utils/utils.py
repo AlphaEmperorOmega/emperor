@@ -20,11 +20,14 @@ class AttentionUtils:
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
         self.validator = validator
-        self.batch_first_flag = self.cfg.batch_first_flag
         self.num_heads = self.cfg.num_heads
         self.embedding_dim = self.cfg.embedding_dim
-        self.head_dim = self.embedding_dim // self.num_heads
+        self.batch_first_flag = self.cfg.batch_first_flag
         self.zero_attention_flag = self.cfg.zero_attention_flag
+        self.source_sequence_length = self.cfg.source_sequence_length
+        self.target_sequence_length = self.cfg.target_sequence_length
+
+        self.head_dim = self.embedding_dim // self.num_heads
 
         self.value_bias_vector = value_bias_vector
         self.key_bias_vector = key_bias_vector
@@ -160,14 +163,49 @@ class AttentionUtils:
         )
         return torch.cat([tensor, zeros_tensor], dim=1)
 
+    def merge_masks(
+        self,
+        key: Tensor,
+        key_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ) -> Tensor | None:
+        if key_padding_mask is None:
+            return attention_mask
+
+        source_sequence_length = key.size(1)
+
+        shape_view = (self.batch_size, 1, 1, self.source_sequence_length)
+        shape_expand = (-1, self.num_heads, -1, -1)
+        batch_size = self.batch_size * self.num_heads
+        shape_reshape = (batch_size, 1, source_sequence_length)
+
+        key_padding_mask = key_padding_mask.view(shape_view)
+        key_padding_mask = key_padding_mask.expand(shape_expand)
+        key_padding_mask = key_padding_mask.reshape(shape_reshape)
+
+        attention_mask = self.__merge_attention_and_padding_mask(
+            key_padding_mask, attention_mask
+        )
+        return attention_mask
+
+    def __merge_attention_and_padding_mask(
+        self,
+        key_padding_mask: Tensor,
+        attention_mask: Tensor | None = None,
+    ) -> Tensor | None:
+        if attention_mask is None:
+            return key_padding_mask
+        return attention_mask + key_padding_mask
+
 
 class AttentionProcessor:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
+        output_model: nn.Module,
     ):
         self.cfg = cfg
-        self.attention_output_model = nn.Linear(1, 1)
+        self.output_model = output_model
 
     def compute_attetnion(
         self,
@@ -190,30 +228,10 @@ class AttentionProcessor:
         attention_weights = self.__compute_attention_masked(query, key, attention_mask)
         weighted_value = self.__compute_weighted_values(attention_weights, value)
         attention_output = self.__compute_attention_output(weighted_value)
-        attention_output, attention_weights = self.__prepare_attention_output(
+        attention_output, attention_weights = self.__prepare_output(
             attention_output, attention_weights
         )
 
-        return attention_output, attention_weights
-
-    def __prepare_attention_output(
-        self,
-        attention_output: Tensor,
-        attention_weights: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        attention_weights_shape = (
-            self.batch_size,
-            self.num_heads,
-            self.target_sequence_length,
-            self.source_sequence_length,
-        )
-        attention_weights = attention_weights.view(attention_weights_shape)
-        if self.average_attn_weights:
-            attention_weights = attention_weights.mean(dim=1)
-
-        if not self.is_batched:
-            attention_output = attention_output.squeeze(1)
-            attention_weights = attention_weights.squeeze(0)
         return attention_output, attention_weights
 
     def __compute_attention_masked(
@@ -245,7 +263,7 @@ class AttentionProcessor:
         return weighted_values
 
     def __compute_attention_output(self, weighted_value: Tensor):
-        attention_output = self.attention_output_model(weighted_value)
+        attention_output = self.output_model(weighted_value)
         attention_output_shape = (
             self.target_sequence_length,
             self.batch_size,
@@ -253,6 +271,26 @@ class AttentionProcessor:
         )
         attention_output = attention_output.view(attention_output_shape)
         return attention_output
+
+    def __prepare_output(
+        self,
+        attention_output: Tensor,
+        attention_weights: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        attention_weights_shape = (
+            self.batch_size,
+            self.num_heads,
+            self.target_sequence_length,
+            self.source_sequence_length,
+        )
+        attention_weights = attention_weights.view(attention_weights_shape)
+        if self.average_attn_weights:
+            attention_weights = attention_weights.mean(dim=1)
+
+        if not self.is_batched:
+            attention_output = attention_output.squeeze(1)
+            attention_weights = attention_weights.squeeze(0)
+        return attention_output, attention_weights
 
     def __default_case(
         self,
@@ -412,34 +450,6 @@ class AttentionMask:
         self.validator = validator
         self.target_dtype = self.cfg.target_dtype
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
-
-    def merge_masks(
-        self,
-        attention_mask: Tensor | None,
-        key_padding_mask: Tensor | None,
-    ) -> Tensor | None:
-        if key_padding_mask is None:
-            return attention_mask
-
-        # if not torch.jit.is_scripting() and not torch.jit.is_tracing():
-        #     _check_key_padding_mask(key_padding_mask, src_len, bsz)
-
-        padding_shape = (self.batch_size, 1, 1, self.source_sequence_length)
-        reshape_padding_shape = (
-            self.batch_size * self.num_heads,
-            1,
-            self.source_sequence_length,
-        )
-        key_padding_mask = (
-            key_padding_mask.view(padding_shape)
-            .expand(-1, self.num_heads, -1, -1)
-            .reshape(reshape_padding_shape)
-        )
-        attention_mask = key_padding_mask
-        if attention_mask is not None:
-            attention_mask = attention_mask + key_padding_mask
-
-        return attention_mask
 
     def validate_padding_and_attention_masks(
         self,
