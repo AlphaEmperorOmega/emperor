@@ -2791,37 +2791,6 @@ class TestAttentionProcessor__init(TestAttention):
         self.assertIsInstance(m.output_model, LayerBlock)
 
 
-# class TestAttentionProcessor____compute_masked_attention_weights(TestAttention):
-#     def test__init(self):
-#         c = copy.deepcopy(self.cfg)
-#         config = c.multi_head_attention_model_config
-#         model = MultiHeadAttention(c)
-#         output_model = model.output_model
-#
-#         m = AttentionProcessor(config, output_model)
-#
-#         batch_size = config.batch_size
-#         embedding_dim = config.embedding_dim
-#         target_sequence_length = config.source_sequence_length
-#         source_sequence_length = config.source_sequence_length
-#         num_heads = config.num_heads
-#         head_dim = embedding_dim // num_heads
-#
-#         query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
-#         key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
-#         attention_mask = torch.randn(
-#             batch_size * num_heads, target_sequence_length, source_sequence_length
-#         )
-#
-#         attention_output_weights = m._AttentionProcessor__compute_attention_masked(
-#             query, key, attention_mask
-#         )
-#
-#         self.assertIsInstance(m, AttentionProcessor)
-#         self.assertIsInstance(m.output_model, LayerBlock)
-#
-
-
 class TestAttentionProcessor____scale_query(TestAttention):
     def test__method(self):
         c = copy.deepcopy(self.cfg)
@@ -3002,8 +2971,40 @@ class TestAttentionProcessor____compute_masked_attention_weights(TestAttention):
                 query, key, attention_mask
             )
         )
-
         self.assertIsInstance(masked_softmax_weights, torch.Tensor)
+        self.assertFalse((masked_softmax_weights == 0.0).any())
+        self.assertEqual(
+            masked_softmax_weights.shape,
+            (batch_size * num_heads, target_sequence_length, source_sequence_length),
+        )
+
+    def test__attention_mask__None__dropout_probability__50percent(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.dropout_probability = 0.5
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+        source_sequence_length = config.target_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
+        key = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+        attention_mask = None
+
+        masked_softmax_weights = (
+            m._AttentionProcessor__compute_masked_attention_weights(
+                query, key, attention_mask
+            )
+        )
+        self.assertIsInstance(masked_softmax_weights, torch.Tensor)
+        self.assertTrue((masked_softmax_weights == 0.0).any())
         self.assertEqual(
             masked_softmax_weights.shape,
             (batch_size * num_heads, target_sequence_length, source_sequence_length),
@@ -3043,7 +3044,98 @@ class TestAttentionProcessor____compute_masked_attention_weights(TestAttention):
             masked_softmax_weights.shape,
             (batch_size * num_heads, target_sequence_length, source_sequence_length),
         )
-
+        self.assertTrue((masked_softmax_weights == 0.0).any())
         self.assertTrue(
             torch.all((masked_softmax_weights >= 0) & (masked_softmax_weights <= 1))
         )
+
+
+class TestAttentionProcessor____compute_weighted_values(TestAttention):
+    def test__method(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.target_sequence_length = 32
+        config.source_sequence_length = 32
+
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+        source_sequence_length = config.target_sequence_length
+        num_heads = config.num_heads
+        head_dim = embedding_dim // num_heads
+
+        attention_weights = torch.randn(
+            batch_size * num_heads, target_sequence_length, source_sequence_length
+        )
+        values = torch.randn(batch_size * num_heads, source_sequence_length, head_dim)
+
+        weighted_values = m._AttentionProcessor__compute_weighted_values(
+            attention_weights, values
+        )
+
+        self.assertIsInstance(weighted_values, torch.Tensor)
+        self.assertEqual(
+            weighted_values.shape,
+            (batch_size * target_sequence_length, embedding_dim),
+        )
+
+
+class TestAttentionProcessor____compute_attention_output(TestAttention):
+    def test__method(self):
+        c = copy.deepcopy(self.cfg)
+        config = c.multi_head_attention_model_config
+        config.target_sequence_length = 32
+        config.source_sequence_length = 32
+        model = MultiHeadAttention(c)
+        output_model = model.output_model
+
+        m = AttentionProcessor(config, output_model)
+
+        batch_size = config.batch_size
+        embedding_dim = config.embedding_dim
+        target_sequence_length = config.source_sequence_length
+
+        weighted_values = torch.randn(
+            batch_size * target_sequence_length, embedding_dim
+        )
+
+        weighted_values = m._AttentionProcessor__compute_attention_output(
+            weighted_values
+        )
+
+        self.assertIsInstance(weighted_values, torch.Tensor)
+        self.assertEqual(
+            weighted_values.shape, (target_sequence_length, batch_size, embedding_dim)
+        )
+
+
+# class TestAttentionProcessor____prepare_output(TestAttention):
+#     def test__method(self):
+#         c = copy.deepcopy(self.cfg)
+#         config = c.multi_head_attention_model_config
+#         model = MultiHeadAttention(c)
+#         output_model = model.output_model
+#
+#         m = AttentionProcessor(config, output_model)
+#
+#         batch_size = config.batch_size
+#         embedding_dim = config.embedding_dim
+#         target_sequence_length = config.source_sequence_length
+#
+#         weighted_values = torch.randn(
+#             batch_size * target_sequence_length, embedding_dim
+#         )
+#
+#         weighted_values = m._AttentionProcessor__compute_attention_output(
+#             weighted_values
+#         )
+#
+#         self.assertIsInstance(weighted_values, torch.Tensor)
+#         self.assertEqual(
+#             weighted_values.shape, (target_sequence_length, batch_size, embedding_dim)
+#         )
