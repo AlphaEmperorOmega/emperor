@@ -121,6 +121,10 @@ class MultiHeadAttentionConfig(DataClassBase):
         default=None,
         metadata={"help": ""},
     )
+    average_attention_weights_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
 
 
 class MultiHeadAttention(Module):
@@ -149,6 +153,7 @@ class MultiHeadAttention(Module):
         self.zero_attention_flag = self.cfg.zero_attention_flag
         self.batch_first_flag = self.cfg.batch_first_flag
         self.model_type = self.cfg.model_type
+        self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.__resolve_kv_dimensions()
@@ -184,7 +189,7 @@ class MultiHeadAttention(Module):
             self.key_model,
             self.value_model,
         )
-        self.processor = AttentionProcessor(self.cfg, self.output_model)
+        self.processor = AttentionProcessor(self.cfg, self.validator, self.output_model)
         self.utils = AttentionUtils(
             self.cfg,
             self.validator,

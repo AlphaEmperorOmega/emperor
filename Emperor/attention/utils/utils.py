@@ -240,12 +240,10 @@ class AttentionProcessor:
     ) -> tuple[Tensor, Tensor]:
         weights = self.__compute_masked_attention_weights(query, key, attention_mask)
         weighted_value = self.__compute_weighted_values(weights, value)
-        attention_output = self.__compute_attention_output(weighted_value)
-        attention_output, raw_attention_weights = self.__prepare_output(
-            attention_output, raw_attention_weights
-        )
+        output = self.__compute_attention_output(weighted_value)
+        output, weights = self.__prepare_output(output, weights)
 
-        return attention_output, raw_attention_weights
+        return output, weights
 
     def __compute_masked_attention_weights(
         self,
@@ -325,13 +323,13 @@ class AttentionProcessor:
 
     def __maybe_average_attention_weights(self, attention_weights: Tensor) -> Tensor:
         if self.average_attention_weights_flag:
-            attention_weights = attention_weights.mean(dim=1)
+            return attention_weights.mean(dim=1)
         return attention_weights
 
     def __handle_batched_input(
         self, attention_output: Tensor, attention_weights: Tensor
     ) -> tuple[Tensor, Tensor]:
-        if not self.validator.is_tensor_batched(query):
+        if not self.validator.get_batched_input_flag():
             output_with_removed_batch_dim = attention_output.squeeze(1)
             weights_with_removed_batch_dim = attention_weights.squeeze(0)
             return output_with_removed_batch_dim, weights_with_removed_batch_dim
@@ -712,7 +710,11 @@ class AttentionValidator:
             )
 
     def is_tensor_batched(self, tensor: Tensor) -> bool:
-        return tensor.dim() == 3
+        self.batched_input_flag = tensor.dim() == 3
+        return self.batched_input_flag
+
+    def get_batched_input_flag(self) -> bool:
+        return self.batched_input_flag
 
     def is_input_batched(self, tensor: Tensor | None = None) -> bool:
         if self.batched_input_flag is None:
