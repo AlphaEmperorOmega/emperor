@@ -2,7 +2,7 @@ import torch
 import math
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, embedding
 
 from typing import TYPE_CHECKING
 
@@ -204,9 +204,18 @@ class AttentionProcessor:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
+        validator: "AttentionValidator",
         output_model: nn.Module,
     ):
         self.cfg = cfg
+        self.validator = validator
+        self.batch_size = self.cfg.batch_size
+        self.embedding_dim = self.cfg.embedding_dim
+        self.dropout_probability = self.cfg.dropout_probability
+        self.target_sequence_length = self.cfg.target_sequence_length
+        self.source_sequence_length = self.cfg.source_sequence_length
+        self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
+        self.num_heads = self.cfg.num_heads
         self.output_model = output_model
 
     def compute_attetnion(
@@ -214,27 +223,29 @@ class AttentionProcessor:
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        attention_mask: Tensor | None,
+        attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         if self.need_weights:
-            return self.__need_weights_case(query, key, value, attention_mask)
+            return self.__compute_attention_with_weights(
+                query, key, value, attention_mask
+            )
         return self.__default_case(query, key, value, attention_mask)
 
-    def __need_weights_case(
+    def __compute_attention_with_weights(
         self,
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        attention_mask: Tensor | None,
+        attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
         weights = self.__compute_masked_attention_weights(query, key, attention_mask)
         weighted_value = self.__compute_weighted_values(weights, value)
         attention_output = self.__compute_attention_output(weighted_value)
-        attention_output, attention_weights = self.__prepare_output(
-            attention_output, attention_weights
+        attention_output, raw_attention_weights = self.__prepare_output(
+            attention_output, raw_attention_weights
         )
 
-        return attention_output, attention_weights
+        return attention_output, raw_attention_weights
 
     def __compute_masked_attention_weights(
         self,
@@ -246,7 +257,10 @@ class AttentionProcessor:
         raw_weights = self.__compute_raw_masked_attention_weights(
             scaled_query, key, attention_mask
         )
-        return F.softmax(raw_weights, dim=-1)
+        weights = F.softmax(raw_weights, dim=-1)
+        if self.dropout_probability > 0.0:
+            weights = F.dropout(weights, p=self.dropout_probability)
+        return weights
 
     def __scale_query(self, query: Tensor) -> Tensor:
         head_dim = query.size(-1)
@@ -264,26 +278,34 @@ class AttentionProcessor:
             return torch.baddbmm(attention_mask, query, key)
         return torch.bmm(query, key)
 
-    def __compute_weighted_values(self, attention_weights: Tensor, values: Tensor):
-        weighted_values_shape = (
+    def __compute_weighted_values(
+        self,
+        attention_weights: Tensor,
+        values: Tensor,
+    ) -> Tensor:
+        assert self.target_sequence_length == self.source_sequence_length, (
+            f"At the moment different source and target sequence lengths are not supported so `target_sequence_length`: {self.target_sequence_length} must be equal to `source_sequence_length`:{self.source_sequence_length}. See if this can be fixed in the future."
+        )
+        # The reason this does not work is because `weighted_values` after torch.bmm(attention_weights, values)
+        # need to be reshaped into `weighted_values_output_shape`, if `source_sequence_length` and
+        # `target_sequence_length` are different then the reshaping will not work.
+        weighted_values_output_shape = (
             self.target_sequence_length * self.batch_size,
             self.embedding_dim,
         )
         weighted_values = torch.bmm(attention_weights, values)
         weighted_values = weighted_values.transpose(0, 1)
         weighted_values = weighted_values.contiguous()
-        weighted_values = weighted_values.view(weighted_values_shape)
-        return weighted_values
+        return weighted_values.view(weighted_values_output_shape)
 
-    def __compute_attention_output(self, weighted_value: Tensor):
+    def __compute_attention_output(self, weighted_value: Tensor) -> Tensor:
         attention_output = self.output_model(weighted_value)
-        attention_output_shape = (
+        embedding_dim = attention_output.size(-1)
+        return attention_output.view(
             self.target_sequence_length,
             self.batch_size,
-            attention_output.size(1),
+            embedding_dim,
         )
-        attention_output = attention_output.view(attention_output_shape)
-        return attention_output
 
     def __prepare_output(
         self,
@@ -297,12 +319,22 @@ class AttentionProcessor:
             self.source_sequence_length,
         )
         attention_weights = attention_weights.view(attention_weights_shape)
-        if self.average_attn_weights:
-            attention_weights = attention_weights.mean(dim=1)
+        attention_weights = self.__maybe_average_attention_weights(attention_weights)
 
-        if not self.is_batched:
-            attention_output = attention_output.squeeze(1)
-            attention_weights = attention_weights.squeeze(0)
+        return self.__handle_batched_input(attention_output, attention_weights)
+
+    def __maybe_average_attention_weights(self, attention_weights: Tensor) -> Tensor:
+        if self.average_attention_weights_flag:
+            attention_weights = attention_weights.mean(dim=1)
+        return attention_weights
+
+    def __handle_batched_input(
+        self, attention_output: Tensor, attention_weights: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        if not self.validator.is_tensor_batched(query):
+            output_with_removed_batch_dim = attention_output.squeeze(1)
+            weights_with_removed_batch_dim = attention_weights.squeeze(0)
+            return output_with_removed_batch_dim, weights_with_removed_batch_dim
         return attention_output, attention_weights
 
     def __default_case(
@@ -357,7 +389,7 @@ class AttentionProcessor:
         value = value.view(key_value_shape)
         return query, key, value
 
-    def __compute_weighted_values(
+    def __compute_weighted_values_default(
         self,
         query: Tensor,
         key: Tensor,
