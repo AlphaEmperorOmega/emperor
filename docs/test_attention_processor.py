@@ -17,43 +17,35 @@ from docs.utils import default_unittest_config
 class TestAttentionProcessor(unittest.TestCase):
     def setUp(self):
         self.cfg = default_unittest_config()
+        self.config = self.cfg.multi_head_attention_model_config
+
+        model = MultiHeadAttention(self.cfg)
+        output_model = model.output_model
+
+        validator = AttentionValidator(self.config)
+        self.model = AttentionProcessor(self.config, validator, output_model)
+
+        self.batch_size = self.config.batch_size
+        self.embedding_dim = self.config.embedding_dim
+        self.target_sequence_length = self.config.source_sequence_length
+        self.num_heads = self.config.num_heads
+        self.head_dim = self.embedding_dim // self.num_heads
 
 
 class Test__init(TestAttentionProcessor):
     def test__init(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        model = MultiHeadAttention(c)
-        output_model = model.output_model
-
-        validator = AttentionValidator(config)
-        m = AttentionProcessor(config, validator, output_model)
-
-        self.assertIsInstance(m, AttentionProcessor)
-        self.assertIsInstance(m.output_model, LayerBlock)
+        self.assertIsInstance(self.model, AttentionProcessor)
+        self.assertIsInstance(self.model.output_model, LayerBlock)
 
 
 class Test____scale_query(TestAttentionProcessor):
     def test__method(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        model = MultiHeadAttention(c)
-        output_model = model.output_model
+        query = torch.randn(
+            self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
+        )
+        scaled_query_tensor = self.model._AttentionProcessor__scale_query(query)
 
-        validator = AttentionValidator(config)
-        m = AttentionProcessor(config, validator, output_model)
-
-        batch_size = config.batch_size
-        embedding_dim = config.embedding_dim
-        target_sequence_length = config.source_sequence_length
-        num_heads = config.num_heads
-        head_dim = embedding_dim // num_heads
-
-        query = torch.randn(batch_size * num_heads, target_sequence_length, head_dim)
-
-        scaled_query_tensor = m._AttentionProcessor__scale_query(query)
-
-        expected_result = query * math.sqrt(1.0 / float(head_dim))
+        expected_result = query * math.sqrt(1.0 / float(self.head_dim))
         self.assertIsInstance(scaled_query_tensor, torch.Tensor)
         self.assertEqual(query.shape, scaled_query_tensor.shape)
         self.assertTrue(torch.equal(scaled_query_tensor, expected_result))
