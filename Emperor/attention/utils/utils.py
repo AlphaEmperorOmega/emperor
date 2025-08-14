@@ -27,7 +27,6 @@ class AttentionUtils:
         self.zero_attention_flag = self.cfg.zero_attention_flag
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
-
         self.head_dim = self.embedding_dim // self.num_heads
 
         self.value_bias_vector = value_bias_vector
@@ -209,13 +208,14 @@ class AttentionProcessor:
     ):
         self.cfg = cfg
         self.validator = validator
+        self.num_heads = self.cfg.num_heads
         self.batch_size = self.cfg.batch_size
         self.embedding_dim = self.cfg.embedding_dim
         self.dropout_probability = self.cfg.dropout_probability
         self.target_sequence_length = self.cfg.target_sequence_length
         self.source_sequence_length = self.cfg.source_sequence_length
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
-        self.num_heads = self.cfg.num_heads
+        self.head_dim = self.embedding_dim // self.num_heads
         self.output_model = output_model
 
     def compute_attetnion(
@@ -343,13 +343,12 @@ class AttentionProcessor:
         attention_mask: Tensor | None,
     ) -> tuple[Tensor, None]:
         attention_mask = self.__prepare_attnetion_mask(attention_mask)
-        query, key, value = self.__prepare_qkv_for_attention(query, key, value)
-        weighted_values = self.__compute_weighted_values(
+        query, key, value = self.__reshape_qkv_for_attention(query, key, value)
+        weighted_values = self.__compute_weighted_values_default(
             query,
             key,
             value,
             attention_mask,
-            dropout_probability,
             is_causal,
         )
         attention_output = self.__compute_attention_output(weighted_values)
@@ -374,17 +373,27 @@ class AttentionProcessor:
             self.source_sequence_length,
         )
 
-    def __prepare_qkv_for_attention(
+    def __reshape_qkv_for_attention(
         self,
         query: Tensor,
         key: Tensor,
         value: Tensor,
     ):
-        qery_shape = (self.bsz, self.num_heads, self.tgt_len, self.head_dim)
-        key_value_shape = (self.bsz, self.num_heads, self.src_len, self.head_dim)
-        query = query.view(qery_shape)
-        key = key.view(key_value_shape)
-        value = value.view(key_value_shape)
+        q_shape = (
+            self.batch_size,
+            self.num_heads,
+            self.target_sequence_length,
+            self.head_dim,
+        )
+        kv_shape = (
+            self.batch_size,
+            self.num_heads,
+            self.source_sequence_length,
+            self.head_dim,
+        )
+        query = query.view(q_shape)
+        key = key.view(kv_shape)
+        value = value.view(kv_shape)
         return query, key, value
 
     def __compute_weighted_values_default(
@@ -393,11 +402,10 @@ class AttentionProcessor:
         key: Tensor,
         value: Tensor,
         attention_mask: Tensor | None,
-        dropout_probability: float,
         is_causal: bool = False,
     ):
-        weighted_values = scaled_dot_product_attention(
-            query, key, value, attention_mask, dropout_probability, is_causal
+        weighted_values = F.scaled_dot_product_attention(
+            query, key, value, attention_mask, self.dropout_probability, is_causal
         )
 
         weighted_values = weighted_values.permute(2, 0, 1, 3)
