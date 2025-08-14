@@ -31,6 +31,16 @@ class TestAttentionProcessor(unittest.TestCase):
         self.num_heads = self.config.num_heads
         self.head_dim = self.embedding_dim // self.num_heads
 
+    def tearDown(self):
+        self.cfg = None
+        self.config = None
+        self.model = None
+        self.batch_size = None
+        self.embedding_dim = None
+        self.target_sequence_length = None
+        self.num_heads = None
+        self.head_dim = None
+
 
 class Test__init(TestAttentionProcessor):
     def test__init(self):
