@@ -358,21 +358,21 @@ class AttentionProcessor:
             return attention_output.squeeze(1), None
         return attention_output, None
 
-    def __prepare_attnetion_mask(self, attention_mask: Tensor | None) -> Tensor | None:
+    def __prepare_attnetion_mask(
+        self, attention_mask: Tensor | None = None
+    ) -> Tensor | None:
         if attention_mask is None:
             return None
-        is_attention_one_batch = attention_mask.size(0) == 1
-        is_attention_mask_3D = attention_mask.dim() == 3
-        if is_attention_one_batch and is_attention_mask_3D:
+        is_mask_single_batch = attention_mask.size(0) == 1
+        is_mask_batched = attention_mask.dim() == 3
+        if is_mask_single_batch and is_mask_batched:
             return attention_mask.unsqueeze(0)
-        attention_mask_shape = (
+        return attention_mask.view(
             self.batch_size,
             self.num_heads,
             -1,
             self.source_sequence_length,
         )
-        attention_mask = attention_mask.view(attention_mask_shape)
-        return attention_mask
 
     def __prepare_qkv_for_attention(
         self,
