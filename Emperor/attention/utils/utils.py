@@ -410,13 +410,10 @@ class AttentionProcessor:
 
         weighted_values = weighted_values.permute(2, 0, 1, 3)
         weighted_values = weighted_values.contiguous()
-        weighted_values_shape = (
+        return weighted_values.view(
             self.batch_size * self.target_sequence_length,
             self.embedding_dim,
         )
-        weighted_values = weighted_values.view(weighted_values_shape)
-
-        return weighted_values
 
 
 class AttentionProjector:
