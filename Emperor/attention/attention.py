@@ -317,13 +317,8 @@ class MultiHeadAttention(Module):
         key, value, attention_mask, key_padding_mask = self.utils.add_zero_attention(
             key, value, attention_mask, key_padding_mask
         )
-
-        self.update_source_sequence_length(key)
         merged_mask = self.utils.merge_masks(key_padding_mask, attention_mask)
         attention_output, attention_weights = self.processor.compute_attetnion(
             query, key, value, merged_mask
         )
         return attention_output, attention_weights
-
-    def update_source_sequence_length(self, key: Tensor) -> None:
-        self.source_sequence_length = key.size(1)
