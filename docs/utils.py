@@ -154,5 +154,6 @@ def default_unittest_config():
             causal_attention_mask_flag=False,
             add_key_value_bias_flag=False,
             average_attention_weights_flag=False,
+            return_attention_weights_flag=False,
         ),
     )
