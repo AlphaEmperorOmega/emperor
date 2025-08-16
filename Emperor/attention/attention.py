@@ -125,6 +125,10 @@ class MultiHeadAttentionConfig(DataClassBase):
         default=None,
         metadata={"help": ""},
     )
+    return_attention_weights_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
 
 
 class MultiHeadAttention(Module):
@@ -156,6 +160,7 @@ class MultiHeadAttention(Module):
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
+        self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
         self.__resolve_kv_dimensions()
         self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
 
