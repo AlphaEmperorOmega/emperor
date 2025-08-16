@@ -199,7 +199,7 @@ class AttentionUtils:
         return attention_mask + key_padding_mask
 
 
-class AttentionProcessor:
+class AttentionProcessorBase:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
@@ -208,6 +208,7 @@ class AttentionProcessor:
     ):
         self.cfg = cfg
         self.validator = validator
+        self.output_model = output_model
         self.num_heads = self.cfg.num_heads
         self.batch_size = self.cfg.batch_size
         self.embedding_dim = self.cfg.embedding_dim
@@ -216,22 +217,27 @@ class AttentionProcessor:
         self.source_sequence_length = self.cfg.source_sequence_length
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.head_dim = self.embedding_dim // self.num_heads
-        self.output_model = output_model
 
-    def compute_attetnion(
+    def _compute_attention_output(self, weighted_value: Tensor) -> Tensor:
+        attention_output = self.output_model(weighted_value)
+        embedding_dim = attention_output.size(-1)
+        return attention_output.view(
+            self.target_sequence_length,
+            self.batch_size,
+            embedding_dim,
+        )
+
+
+class AttentionProcessorWithReturnedWeights(AttentionProcessorBase):
+    def __init__(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        attention_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None]:
-        if self.need_weights:
-            return self.__compute_attention_with_weights(
-                query, key, value, attention_mask
-            )
-        return self.__default_case(query, key, value, attention_mask)
+        cfg: "MultiHeadAttentionConfig",
+        validator: "AttentionValidator",
+        output_model: nn.Module,
+    ):
+        super().__init__(cfg, validator, output_model)
 
-    def __compute_attention_with_weights(
+    def compute_attention_output(
         self,
         query: Tensor,
         key: Tensor,
@@ -240,8 +246,8 @@ class AttentionProcessor:
     ) -> tuple[Tensor, Tensor]:
         weights = self.__compute_masked_attention_weights(query, key, attention_mask)
         weighted_value = self.__compute_weighted_values(weights, value)
-        output = self.__compute_attention_output(weighted_value)
-        output, weights = self.__prepare_output(output, weights)
+        output = self._compute_attention_output(weighted_value)
+        output, weights = self.__ensure_correct_shape_output(output, weights)
 
         return output, weights
 
@@ -296,16 +302,7 @@ class AttentionProcessor:
         weighted_values = weighted_values.contiguous()
         return weighted_values.view(weighted_values_output_shape)
 
-    def __compute_attention_output(self, weighted_value: Tensor) -> Tensor:
-        attention_output = self.output_model(weighted_value)
-        embedding_dim = attention_output.size(-1)
-        return attention_output.view(
-            self.target_sequence_length,
-            self.batch_size,
-            embedding_dim,
-        )
-
-    def __prepare_output(
+    def __ensure_correct_shape_output(
         self,
         attention_output: Tensor,
         attention_weights: Tensor,
@@ -335,7 +332,17 @@ class AttentionProcessor:
             return output_with_removed_batch_dim, weights_with_removed_batch_dim
         return attention_output, attention_weights
 
-    def __default_case(
+
+class AttentionProcessorDefault(AttentionProcessorBase):
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig",
+        validator: "AttentionValidator",
+        output_model: nn.Module,
+    ):
+        super().__init__(cfg, validator, output_model)
+
+    def compute_attention_output(
         self,
         query: Tensor,
         key: Tensor,
@@ -344,17 +351,16 @@ class AttentionProcessor:
     ) -> tuple[Tensor, None]:
         attention_mask = self.__prepare_attnetion_mask(attention_mask)
         query, key, value = self.__reshape_qkv_for_attention(query, key, value)
-        weighted_values = self.__compute_weighted_values_default(
+        weighted_values = self.__compute_weighted_values(
             query,
             key,
             value,
             attention_mask,
-            is_causal,
+            self.causal_attention_mask_flag,
         )
-        attention_output = self.__compute_attention_output(weighted_values)
-
-        if not is_batched:
-            return attention_output.squeeze(1), None
+        attention_output = self._compute_attention_output(weighted_values)
+        if not self.validator.get_batched_input_flag():
+            attention_output = attention_output.unsqueeze(1)
         return attention_output, None
 
     def __prepare_attnetion_mask(
@@ -396,7 +402,7 @@ class AttentionProcessor:
         value = value.view(kv_shape)
         return query, key, value
 
-    def __compute_weighted_values_default(
+    def __compute_weighted_values(
         self,
         query: Tensor,
         key: Tensor,
@@ -424,14 +430,18 @@ class AttentionProcessor:
         output_model: nn.Module,
     ):
         self.cfg = cfg
+        self.validator = validator
+        self.output_model = output_model
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
+        self.processor = self.__create_processor()
 
+    def __create_processor(
+        self,
+    ) -> AttentionProcessorDefault | AttentionProcessorWithReturnedWeights:
+        processor_type = AttentionProcessorDefault
         if self.return_attention_weights_flag:
-            self.processor = AttentionProcessorWithReturnedWeights(
-                cfg, validator, output_model
-            )
-        else:
-            self.processor = AttentionProcessorDefault(cfg, validator, output_model)
+            processor_type = AttentionProcessorWithReturnedWeights
+        return processor_type(self.cfg, self.validator, self.output_model)
 
     def compute_attetnion(
         self,
@@ -440,7 +450,9 @@ class AttentionProcessor:
         value: Tensor,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
-        return self.processor.compute_attention(query, key, value, attention_mask)
+        return self.processor.compute_attention_output(
+            query, key, value, attention_mask
+        )
 
 
 class AttentionProjector:
