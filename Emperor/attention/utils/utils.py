@@ -416,6 +416,33 @@ class AttentionProcessor:
         )
 
 
+class AttentionProcessor:
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig",
+        validator: "AttentionValidator",
+        output_model: nn.Module,
+    ):
+        self.cfg = cfg
+        self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
+
+        if self.return_attention_weights_flag:
+            self.processor = AttentionProcessorWithReturnedWeights(
+                cfg, validator, output_model
+            )
+        else:
+            self.processor = AttentionProcessorDefault(cfg, validator, output_model)
+
+    def compute_attetnion(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
+        return self.processor.compute_attention(query, key, value, attention_mask)
+
+
 class AttentionProjector:
     def __init__(
         self,
