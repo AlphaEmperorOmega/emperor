@@ -2,7 +2,7 @@ import torch
 import math
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor, embedding
+from torch import Tensor
 
 from typing import TYPE_CHECKING
 
@@ -215,12 +215,13 @@ class AttentionProcessorBase:
         self.dropout_probability = self.cfg.dropout_probability
         self.target_sequence_length = self.cfg.target_sequence_length
         self.source_sequence_length = self.cfg.source_sequence_length
+        self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.head_dim = self.embedding_dim // self.num_heads
 
     def _compute_attention_output(self, weighted_value: Tensor) -> Tensor:
         attention_output = self.output_model(weighted_value)
-        embedding_dim = attention_output.size(-1)
+        embedding_dim = attention_output.size(1)
         return attention_output.view(
             self.target_sequence_length,
             self.batch_size,
@@ -237,7 +238,7 @@ class AttentionProcessorWithReturnedWeights(AttentionProcessorBase):
     ):
         super().__init__(cfg, validator, output_model)
 
-    def compute_attention_output(
+    def compute_attention(
         self,
         query: Tensor,
         key: Tensor,
@@ -342,7 +343,7 @@ class AttentionProcessorDefault(AttentionProcessorBase):
     ):
         super().__init__(cfg, validator, output_model)
 
-    def compute_attention_output(
+    def compute_attention(
         self,
         query: Tensor,
         key: Tensor,
@@ -360,7 +361,7 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         )
         attention_output = self._compute_attention_output(weighted_values)
         if not self.validator.get_batched_input_flag():
-            attention_output = attention_output.unsqueeze(1)
+            attention_output = attention_output.squeeze(1)
         return attention_output, None
 
     def __prepare_attnetion_mask(
@@ -450,9 +451,7 @@ class AttentionProcessor:
         value: Tensor,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
-        return self.processor.compute_attention_output(
-            query, key, value, attention_mask
-        )
+        return self.processor.compute_attention(query, key, value, attention_mask)
 
 
 class AttentionProjector:
