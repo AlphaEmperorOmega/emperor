@@ -414,7 +414,6 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         weighted_values = F.scaled_dot_product_attention(
             query, key, value, attention_mask, self.dropout_probability, is_causal
         )
-
         weighted_values = weighted_values.permute(2, 0, 1, 3)
         weighted_values = weighted_values.contiguous()
         return weighted_values.view(
@@ -444,7 +443,7 @@ class AttentionProcessor:
             processor_type = AttentionProcessorWithReturnedWeights
         return processor_type(self.cfg, self.validator, self.output_model)
 
-    def compute_attetnion(
+    def compute_attention(
         self,
         query: Tensor,
         key: Tensor,
