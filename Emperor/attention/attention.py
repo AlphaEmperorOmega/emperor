@@ -265,28 +265,28 @@ class MultiHeadAttention(Module):
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        embed_dim_to_check: int,
-        num_heads: int,
-        input_projection_weight: Tensor | None,
-        input_projection_bias: Tensor | None,
-        bias_key: Tensor | None,
-        bias_value: Tensor | None,
-        add_zero_attention: bool,
-        dropout_probability: float,
-        output_projection_weight: Tensor,
-        output_projection_bias: Tensor | None,
-        training: bool = True,
+        # embed_dim_to_check: int,
+        # num_heads: int,
+        # input_projection_weight: Tensor | None,
+        # input_projection_bias: Tensor | None,
+        # bias_key: Tensor | None,
+        # bias_value: Tensor | None,
+        # add_zero_attention: bool,
+        # dropout_probability: float,
+        # output_projection_weight: Tensor,
+        # output_projection_bias: Tensor | None,
+        # training: bool = True,
         key_padding_mask: Tensor | None = None,
         need_weights: bool = True,
         attention_mask: Tensor | None = None,
-        use_separate_projection_weight: bool = False,
-        query_projection_weight: Tensor | None = None,
-        key_projection_weight: Tensor | None = None,
-        value_projection_weight: Tensor | None = None,
+        # use_separate_projection_weight: bool = False,
+        # query_projection_weight: Tensor | None = None,
+        # key_projection_weight: Tensor | None = None,
+        # value_projection_weight: Tensor | None = None,
         static_key: Tensor | None = None,
         static_values: Tensor | None = None,
-        average_attention_weights: bool = True,
-        is_causal: bool = False,
+        # average_attention_weights: bool = True,
+        # is_causal: bool = False,
     ):
         query, key, value = self.utils.maybe_transpose_qkv(query, key, value)
         self.validator.multi_head_attention_input_shapes(
@@ -323,7 +323,7 @@ class MultiHeadAttention(Module):
             key, value, attention_mask, key_padding_mask
         )
         merged_mask = self.utils.merge_masks(key_padding_mask, attention_mask)
-        attention_output, attention_weights = self.processor.compute_attetnion(
+        attention_output, attention_weights = self.processor.compute_attention(
             query, key, value, merged_mask
         )
         return attention_output, attention_weights
