@@ -378,8 +378,8 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         config.use_separate_projection_weight = True
-        config.key_dim = 32
-        config.value_dim = 64
+        config.query_key_hidden_dim = 32
+        config.value_hidden_dim = 64
         config.model_type = LayerTypes.VECTOR
 
         model = MultiHeadAttention(c)
@@ -406,23 +406,23 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         )
         self.assertEqual(
             query_projections.shape,
-            (target_sequence_length, batch_size, config.key_dim),
+            (target_sequence_length, batch_size, config.query_key_hidden_dim),
         )
         self.assertEqual(
             key_projections.shape,
-            (source_sequence_length, batch_size, config.key_dim),
+            (source_sequence_length, batch_size, config.query_key_hidden_dim),
         )
         self.assertEqual(
             value_projections.shape,
-            (source_sequence_length, batch_size, config.value_dim),
+            (source_sequence_length, batch_size, config.value_hidden_dim),
         )
 
     def test__self_attention_projections__model_type__vector(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         config.use_separate_projection_weight = False
-        config.key_dim = config.embedding_dim
-        config.value_dim = config.embedding_dim
+        config.query_key_hidden_dim = config.embedding_dim
+        config.value_hidden_dim = config.embedding_dim
         config.model_type = LayerTypes.VECTOR
 
         model = MultiHeadAttention(c)
@@ -463,8 +463,8 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         config.use_separate_projection_weight = True
-        config.key_dim = 32
-        config.value_dim = 64
+        config.query_key_hidden_dim = 32
+        config.value_hidden_dim = 64
         config.model_type = LayerTypes.MATRIX
 
         model = MultiHeadAttention(c)
@@ -491,23 +491,23 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         )
         self.assertEqual(
             query_projections.shape,
-            (target_sequence_length, batch_size, config.key_dim),
+            (target_sequence_length, batch_size, config.query_key_hidden_dim),
         )
         self.assertEqual(
             key_projections.shape,
-            (source_sequence_length, batch_size, config.key_dim),
+            (source_sequence_length, batch_size, config.query_key_hidden_dim),
         )
         self.assertEqual(
             value_projections.shape,
-            (source_sequence_length, batch_size, config.value_dim),
+            (source_sequence_length, batch_size, config.value_hidden_dim),
         )
 
     def test__self_attention_projections__model_type__matrix(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         config.use_separate_projection_weight = False
-        config.key_dim = config.embedding_dim
-        config.value_dim = config.embedding_dim
+        config.query_key_hidden_dim = config.embedding_dim
+        config.value_hidden_dim = config.embedding_dim
         config.model_type = LayerTypes.MATRIX
 
         model = MultiHeadAttention(c)
@@ -548,8 +548,8 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         config.use_separate_projection_weight = True
-        config.key_dim = 32
-        config.value_dim = 64
+        config.query_key_hidden_dim = 32
+        config.value_hidden_dim = 64
         config.model_type = LayerTypes.GENERATOR
 
         model = MultiHeadAttention(c)
@@ -576,23 +576,23 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         )
         self.assertEqual(
             query_projections.shape,
-            (target_sequence_length, batch_size, config.key_dim),
+            (target_sequence_length, batch_size, config.query_key_hidden_dim),
         )
         self.assertEqual(
             key_projections.shape,
-            (source_sequence_length, batch_size, config.key_dim),
+            (source_sequence_length, batch_size, config.query_key_hidden_dim),
         )
         self.assertEqual(
             value_projections.shape,
-            (source_sequence_length, batch_size, config.value_dim),
+            (source_sequence_length, batch_size, config.value_hidden_dim),
         )
 
     def test__self_attention_projections__model_type__generator(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
         config.use_separate_projection_weight = False
-        config.key_dim = config.embedding_dim
-        config.value_dim = config.embedding_dim
+        config.query_key_hidden_dim = config.embedding_dim
+        config.value_hidden_dim = config.embedding_dim
         config.model_type = LayerTypes.GENERATOR
 
         model = MultiHeadAttention(c)
