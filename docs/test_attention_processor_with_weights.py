@@ -1,12 +1,10 @@
 from dataclasses import asdict
 import math
-import copy
 import unittest
 from unittest.mock import MagicMock
 import torch
 import torch.nn.functional as F
 from Emperor.attention.utils.utils import (
-    AttentionProcessor,
     AttentionProcessorWithReturnedWeights,
     AttentionValidator,
 )
