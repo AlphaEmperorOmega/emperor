@@ -120,138 +120,143 @@ class TestMultIHeadAttention____resolve_head_dim(TestAttention):
 
 class TestMultIHeadAttention____initialize_attention_components(TestAttention):
     def test__ensure_componets_are_initialzied(self):
-        c = copy.deepcopy(self.cfg)
-        m = MultiHeadAttention(c)
-
-        self.assertIsInstance(m.validator, AttentionValidator)
-        self.assertIsInstance(m.masks, AttentionMask)
-        self.assertIsInstance(m.projector, AttentionProjector)
-        self.assertIsInstance(m.processor, AttentionProcessor)
-        self.assertIsInstance(m.utils, AttentionUtils)
+        self.assertIsInstance(self.model.validator, AttentionValidator)
+        self.assertIsInstance(self.model.masks, AttentionMask)
+        self.assertIsInstance(self.model.projector, AttentionProjector)
+        self.assertIsInstance(self.model.processor, AttentionProcessor)
+        self.assertIsInstance(self.model.utils, AttentionUtils)
 
 
 class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttention):
     def test__different_embedding_dim(self):
-        c = copy.deepcopy(self.cfg)
-        c.multi_head_attention_model_config.embedding_dim = 64
-        c.multi_head_attention_model_config.key_dim = 32
-        c.multi_head_attention_model_config.value_dim = 32
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=64,
+            key_dim=32,
+            value_dim=32,
+        )
+        self.rebuild_presets(config)
 
-        output = m._MultiHeadAttention__are_qkv_dimensions_equal()
+        output = self.model._MultiHeadAttention__are_qkv_dimensions_equal()
         self.assertFalse(output)
 
     def test__different_key_dim(self):
-        c = copy.deepcopy(self.cfg)
-        c.multi_head_attention_model_config.embedding_dim = 32
-        c.multi_head_attention_model_config.key_dim = 64
-        c.multi_head_attention_model_config.value_dim = 32
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            key_dim=64,
+            value_dim=32,
+        )
+        self.rebuild_presets(config)
 
-        output = m._MultiHeadAttention__are_qkv_dimensions_equal()
+        output = self.model._MultiHeadAttention__are_qkv_dimensions_equal()
         self.assertFalse(output)
 
     def test__different_value_dim(self):
-        c = copy.deepcopy(self.cfg)
-        # This exists here to ensure because of `register_parameter` in the
-        # this method is allready called when `MultiHeadAttention` is initialized
-        c.multi_head_attention_model_config.embedding_dim = 32
-        c.multi_head_attention_model_config.key_dim = 32
-        c.multi_head_attention_model_config.value_dim = 64
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            key_dim=32,
+            value_dim=64,
+        )
+        self.rebuild_presets(config)
 
-        output = m._MultiHeadAttention__are_qkv_dimensions_equal()
+        output = self.model._MultiHeadAttention__are_qkv_dimensions_equal()
         self.assertFalse(output)
 
     def test__embd_key_value_same_dim(self):
-        c = copy.deepcopy(self.cfg)
-        # This exists here to ensure because of `register_parameter` in the
-        # this method is allready called when `MultiHeadAttention` is initialized
-        c.multi_head_attention_model_config.embedding_dim = 32
-        c.multi_head_attention_model_config.key_dim = 32
-        c.multi_head_attention_model_config.value_dim = 32
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            key_dim=32,
+            value_dim=32,
+        )
+        self.rebuild_presets(config)
 
-        output = m._MultiHeadAttention__are_qkv_dimensions_equal()
+        output = self.model._MultiHeadAttention__are_qkv_dimensions_equal()
         self.assertTrue(output)
 
 
 class TestMultIHeadAttention____build_shared_projection_models(TestAttention):
     def test__shared_model_inizialization(self):
-        c = copy.deepcopy(self.cfg)
-        # This exists here to ensure because of `register_parameter` in the
-        # this method is allready called when `MultiHeadAttention` is initialized
-        c.multi_head_attention_model_config.embedding_dim = 32
-        c.multi_head_attention_model_config.key_dim = 32
-        c.multi_head_attention_model_config.value_dim = 32
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            key_dim=32,
+            value_dim=32,
+        )
+        self.rebuild_presets(config)
+        del self.model.query_model  # Ensure model is not initialized
+        del self.model.key_model  # Ensure model is not initialized
+        del self.model.value_model  # Ensure model is not initialized
         qkv_model, output_model = (
-            m._MultiHeadAttention__build_shared_projection_models()
+            self.model._MultiHeadAttention__build_shared_projection_models()
         )
 
-        self.assertIsNone(m.query_model)
-        self.assertIsNone(m.key_model)
-        self.assertIsNone(m.value_model)
+        self.assertIsNone(self.model.query_model)
+        self.assertIsNone(self.model.key_model)
+        self.assertIsNone(self.model.value_model)
         self.assertIsInstance(qkv_model, LayerBlock)
         self.assertIsInstance(output_model, LayerBlock)
 
 
 class TestMultIHeadAttention____build_separate_projection_models(TestAttention):
     def test__separate_models_initializations(self):
-        c = copy.deepcopy(self.cfg)
-        c.multi_head_attention_model_config.embedding_dim = 32
-        c.multi_head_attention_model_config.key_dim = 64
-        c.multi_head_attention_model_config.value_dim = 32
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            key_dim=64,
+            value_dim=32,
+        )
+        self.rebuild_presets(config)
+        del self.model.qkv_model  # Ensure model is not initialized
         query_model, key_model, value_model, output_model = (
-            m._MultiHeadAttention__build_separate_projection_models()
+            self.model._MultiHeadAttention__build_separate_projection_models()
         )
 
         self.assertIsInstance(query_model, LayerBlock)
         self.assertIsInstance(key_model, LayerBlock)
         self.assertIsInstance(value_model, LayerBlock)
         self.assertIsInstance(output_model, LayerBlock)
-        self.assertIsNone(m.qkv_model)
+        self.assertIsNone(self.model.qkv_model)
 
 
 class TestMultIHeadAttention____build_projection_models(TestAttention):
     def test__same_qkv_dim__use_separate_projection_weight__False(self):
-        c = copy.deepcopy(self.cfg)
-        c.multi_head_attention_model_config.embedding_dim = 32
-        c.multi_head_attention_model_config.key_dim = 32
-        c.multi_head_attention_model_config.value_dim = 32
-        c.multi_head_attention_model_config.use_separate_projection_weight = False
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            key_dim=32,
+            value_dim=32,
+            use_separate_projection_weight=False,
+        )
+        self.rebuild_presets(config)
 
-        self.assertIsInstance(m.qkv_model, LayerBlock)
-        self.assertIsInstance(m.output_model, LayerBlock)
-        self.assertIsNone(m.query_model)
-        self.assertIsNone(m.key_model)
-        self.assertIsNone(m.value_model)
+        self.assertIsInstance(self.model.qkv_model, LayerBlock)
+        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsNone(self.model.query_model)
+        self.assertIsNone(self.model.key_model)
+        self.assertIsNone(self.model.value_model)
 
     def test__same_qkv_dim__use_separate_projection_weight__True(self):
-        c = copy.deepcopy(self.cfg)
-        c.multi_head_attention_model_config.embedding_dim = 32
-        c.multi_head_attention_model_config.key_dim = 32
-        c.multi_head_attention_model_config.value_dim = 32
-        c.multi_head_attention_model_config.use_separate_projection_weight = True
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            key_dim=32,
+            value_dim=32,
+            use_separate_projection_weight=True,
+        )
+        self.rebuild_presets(config)
 
-        self.assertIsInstance(m.query_model, LayerBlock)
-        self.assertIsInstance(m.key_model, LayerBlock)
-        self.assertIsInstance(m.value_model, LayerBlock)
-        self.assertIsInstance(m.output_model, LayerBlock)
-        self.assertIsNone(m.qkv_model)
+        self.assertIsInstance(self.model.query_model, LayerBlock)
+        self.assertIsInstance(self.model.key_model, LayerBlock)
+        self.assertIsInstance(self.model.value_model, LayerBlock)
+        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsNone(self.model.qkv_model)
 
     def test__different_qkv_dim(self):
-        c = copy.deepcopy(self.cfg)
-        c.multi_head_attention_model_config.embedding_dim = 32
-        c.multi_head_attention_model_config.key_dim = 64
-        c.multi_head_attention_model_config.value_dim = 32
-        m = MultiHeadAttention(c)
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            key_dim=64,
+            value_dim=32,
+            use_separate_projection_weight=True,
+        )
+        self.rebuild_presets(config)
 
-        self.assertIsInstance(m.query_model, LayerBlock)
-        self.assertIsInstance(m.key_model, LayerBlock)
-        self.assertIsInstance(m.value_model, LayerBlock)
-        self.assertIsInstance(m.output_model, LayerBlock)
-        self.assertIsNone(m.qkv_model)
+        self.assertIsInstance(self.model.query_model, LayerBlock)
+        self.assertIsInstance(self.model.key_model, LayerBlock)
+        self.assertIsInstance(self.model.value_model, LayerBlock)
+        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsNone(self.model.qkv_model)
