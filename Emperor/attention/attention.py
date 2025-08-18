@@ -1,7 +1,4 @@
-import torch
 import copy
-import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.attention.utils.utils import (
@@ -11,7 +8,7 @@ from Emperor.attention.utils.utils import (
     AttentionUtils,
     AttentionValidator,
 )
-from Emperor.base.utils import DataClassBase, Module, ParameterBank, device
+from Emperor.base.utils import DataClassBase, Module
 
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.enums import (
@@ -51,16 +48,16 @@ class MultiHeadAttentionConfig(DataClassBase):
             "help": "Dimension of the input embedding vector (input feature size)."
         },
     )
-    key_dim: int | None = field(
+    query_key_hidden_dim: int | None = field(
         default=None,
         metadata={
-            "help": "Dimension of the key vectors (defaults to embedding_dim if 0)."
+            "help": "Dimension of the key hidden vectors (defaults to embedding_dim if 0)."
         },
     )
-    value_dim: int | None = field(
+    value_hidden_dim: int | None = field(
         default=None,
         metadata={
-            "help": "Dimension of the value vectors (defaults to embedding_dim if 0)."
+            "help": "Dimension of the value hidden vectors (defaults to embedding_dim if 0)."
         },
     )
     target_sequence_length: int | None = field(
@@ -142,25 +139,24 @@ class MultiHeadAttention(Module):
         self.cfg: "MultiHeadAttentionConfig" = self._overwrite_config(config, overrides)
 
         self.main_cfg = cfg
+        self.num_heads = self.cfg.num_heads
         self.batch_size = self.cfg.batch_size
         self.model_type = self.cfg.model_type
-        self.num_heads = self.cfg.num_heads
-        self.embedding_dim = self.cfg.embedding_dim
-        self.key_dim = self.cfg.key_dim
-        self.value_dim = self.cfg.value_dim
         self.target_dtype = self.cfg.target_dtype
-        self.target_sequence_length = self.cfg.target_sequence_length
-        self.source_sequence_length = self.cfg.source_sequence_length
-        self.use_separate_projection_weight = self.cfg.use_separate_projection_weight
+        self.embedding_dim = self.cfg.embedding_dim
+        self.batch_first_flag = self.cfg.batch_first_flag
+        self.value_hidden_dim = self.cfg.value_hidden_dim
         self.dropout_probability = self.cfg.dropout_probability
         self.key_value_bias_flag = self.cfg.key_value_bias_flag
         self.zero_attention_flag = self.cfg.zero_attention_flag
-        self.batch_first_flag = self.cfg.batch_first_flag
-        self.model_type = self.cfg.model_type
-        self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
-        self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
+        self.query_key_hidden_dim = self.cfg.query_key_hidden_dim
+        self.target_sequence_length = self.cfg.target_sequence_length
+        self.source_sequence_length = self.cfg.source_sequence_length
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
+        self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
+        self.use_separate_projection_weight = self.cfg.use_separate_projection_weight
+        self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.__resolve_kv_dimensions()
         self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
 
@@ -180,8 +176,14 @@ class MultiHeadAttention(Module):
         return head_dim
 
     def __resolve_kv_dimensions(self):
-        self.key_dim = self.embedding_dim if self.key_dim == 0 else self.key_dim
-        self.value_dim = self.embedding_dim if self.value_dim == 0 else self.value_dim
+        self.query_key_hidden_dim = (
+            self.embedding_dim
+            if self.query_key_hidden_dim == 0
+            else self.query_key_hidden_dim
+        )
+        self.value_hidden_dim = (
+            self.embedding_dim if self.value_hidden_dim == 0 else self.value_hidden_dim
+        )
 
     def __initialize_attention_components(self):
         self.validator = AttentionValidator(self.cfg)
@@ -218,10 +220,10 @@ class MultiHeadAttention(Module):
         return None, None
 
     def __build_separate_projection_models(self) -> tuple:
-        query_model = self.__create_model(self.embedding_dim, self.key_dim)
-        key_model = self.__create_model(self.embedding_dim, self.key_dim)
-        value_model = self.__create_model(self.embedding_dim, self.value_dim)
-        output_model = self.__create_model(self.value_dim, self.embedding_dim)
+        query_model = self.__create_model(self.embedding_dim, self.query_key_hidden_dim)
+        key_model = self.__create_model(self.embedding_dim, self.query_key_hidden_dim)
+        value_model = self.__create_model(self.embedding_dim, self.value_hidden_dim)
+        output_model = self.__create_model(self.value_hidden_dim, self.embedding_dim)
         self.register_parameter("qkv_model", None)
         return query_model, key_model, value_model, output_model
 
@@ -256,8 +258,8 @@ class MultiHeadAttention(Module):
         return c
 
     def __are_qkv_dimensions_equal(self) -> bool:
-        are_qk_dims_same = self.embedding_dim == self.key_dim
-        are_qv_dims_same = self.embedding_dim == self.value_dim
+        are_qk_dims_same = self.embedding_dim == self.query_key_hidden_dim
+        are_qv_dims_same = self.embedding_dim == self.value_hidden_dim
         return are_qk_dims_same and are_qv_dims_same
 
     def forward(
@@ -265,29 +267,12 @@ class MultiHeadAttention(Module):
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        # embed_dim_to_check: int,
-        # num_heads: int,
-        # input_projection_weight: Tensor | None,
-        # input_projection_bias: Tensor | None,
-        # bias_key: Tensor | None,
-        # bias_value: Tensor | None,
-        # add_zero_attention: bool,
-        # dropout_probability: float,
-        # output_projection_weight: Tensor,
-        # output_projection_bias: Tensor | None,
-        # training: bool = True,
         key_padding_mask: Tensor | None = None,
-        need_weights: bool = True,
+        need_weights: bool = False,
         attention_mask: Tensor | None = None,
-        # use_separate_projection_weight: bool = False,
-        # query_projection_weight: Tensor | None = None,
-        # key_projection_weight: Tensor | None = None,
-        # value_projection_weight: Tensor | None = None,
         static_key: Tensor | None = None,
         static_values: Tensor | None = None,
-        # average_attention_weights: bool = True,
-        # is_causal: bool = False,
-    ):
+    ) -> tuple[Tensor, Tensor | None]:
         query, key, value = self.utils.maybe_transpose_qkv(query, key, value)
         self.validator.multi_head_attention_input_shapes(
             query, key, value, key_padding_mask, attention_mask
