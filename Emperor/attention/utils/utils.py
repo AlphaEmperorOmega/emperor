@@ -410,7 +410,10 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         value: Tensor,
         attention_mask: Tensor | None,
         is_causal: bool = False,
-    ):
+    ) -> Tensor:
+        assert self.target_sequence_length == self.source_sequence_length, (
+            f"At the moment different source and target sequence lengths are not supported so `target_sequence_length`: {self.target_sequence_length} must be equal to `source_sequence_length`:{self.source_sequence_length}. See if this can be fixed in the future."
+        )
         weighted_values = F.scaled_dot_product_attention(
             query, key, value, attention_mask, self.dropout_probability, is_causal
         )
