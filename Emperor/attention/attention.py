@@ -48,16 +48,16 @@ class MultiHeadAttentionConfig(DataClassBase):
             "help": "Dimension of the input embedding vector (input feature size)."
         },
     )
-    query_key_hidden_dim: int | None = field(
+    query_key_projection_dim: int | None = field(
         default=None,
         metadata={
-            "help": "Dimension of the key hidden vectors (defaults to embedding_dim if 0)."
+            "help": "Dimension of the query and key projected vectors (defaults to embedding_dim if 0)."
         },
     )
-    value_hidden_dim: int | None = field(
+    value_projection_dim: int | None = field(
         default=None,
         metadata={
-            "help": "Dimension of the value hidden vectors (defaults to embedding_dim if 0)."
+            "help": "Dimension of the value projected vectors (defaults to embedding_dim if 0)."
         },
     )
     target_sequence_length: int | None = field(
@@ -145,11 +145,11 @@ class MultiHeadAttention(Module):
         self.target_dtype = self.cfg.target_dtype
         self.embedding_dim = self.cfg.embedding_dim
         self.batch_first_flag = self.cfg.batch_first_flag
-        self.value_hidden_dim = self.cfg.value_hidden_dim
         self.dropout_probability = self.cfg.dropout_probability
         self.key_value_bias_flag = self.cfg.key_value_bias_flag
         self.zero_attention_flag = self.cfg.zero_attention_flag
-        self.query_key_hidden_dim = self.cfg.query_key_hidden_dim
+        self.value_projection_dim = self.cfg.value_projection_dim
+        self.query_key_projection_dim = self.cfg.query_key_projection_dim
         self.target_sequence_length = self.cfg.target_sequence_length
         self.source_sequence_length = self.cfg.source_sequence_length
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
@@ -176,13 +176,15 @@ class MultiHeadAttention(Module):
         return head_dim
 
     def __resolve_kv_dimensions(self):
-        self.query_key_hidden_dim = (
+        self.query_key_projection_dim = (
             self.embedding_dim
-            if self.query_key_hidden_dim == 0
-            else self.query_key_hidden_dim
+            if self.query_key_projection_dim == 0
+            else self.query_key_projection_dim
         )
-        self.value_hidden_dim = (
-            self.embedding_dim if self.value_hidden_dim == 0 else self.value_hidden_dim
+        self.value_projection_dim = (
+            self.embedding_dim
+            if self.value_projection_dim == 0
+            else self.value_projection_dim
         )
 
     def __initialize_attention_components(self):
@@ -220,10 +222,16 @@ class MultiHeadAttention(Module):
         return None, None
 
     def __build_separate_projection_models(self) -> tuple:
-        query_model = self.__create_model(self.embedding_dim, self.query_key_hidden_dim)
-        key_model = self.__create_model(self.embedding_dim, self.query_key_hidden_dim)
-        value_model = self.__create_model(self.embedding_dim, self.value_hidden_dim)
-        output_model = self.__create_model(self.value_hidden_dim, self.embedding_dim)
+        query_model = self.__create_model(
+            self.embedding_dim, self.query_key_projection_dim
+        )
+        key_model = self.__create_model(
+            self.embedding_dim, self.query_key_projection_dim
+        )
+        value_model = self.__create_model(self.embedding_dim, self.value_projection_dim)
+        output_model = self.__create_model(
+            self.value_projection_dim, self.embedding_dim
+        )
         self.register_parameter("qkv_model", None)
         return query_model, key_model, value_model, output_model
 
@@ -258,8 +266,8 @@ class MultiHeadAttention(Module):
         return c
 
     def __are_qkv_dimensions_equal(self) -> bool:
-        are_qk_dims_same = self.embedding_dim == self.query_key_hidden_dim
-        are_qv_dims_same = self.embedding_dim == self.value_hidden_dim
+        are_qk_dims_same = self.embedding_dim == self.query_key_projection_dim
+        are_qv_dims_same = self.embedding_dim == self.value_projection_dim
         return are_qk_dims_same and are_qv_dims_same
 
     def forward(
