@@ -6,6 +6,8 @@ from torch import Tensor
 
 from typing import TYPE_CHECKING
 
+from Emperor.base.utils import Module
+
 if TYPE_CHECKING:
     from Emperor.attention.attention import MultiHeadAttentionConfig
 
@@ -468,6 +470,7 @@ class AttentionProjector:
     ):
         self.cfg = cfg
         self.validator = validator
+        self.use_separate_projection_weight = self.cfg.use_separate_projection_weight
 
         self.query_model = query_model
         self.key_model = key_model
@@ -481,9 +484,18 @@ class AttentionProjector:
         value: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor]:
         are_qkv_same = key is value and query is key
-        if are_qkv_same:
+        should_perform_self_attention = (
+            are_qkv_same and not self.use_separate_projection_weight
+        )
+        if should_perform_self_attention:
             self.validator.check_self_attention_projection_inputs(key, value)
             return self.__compute_self_attention_projections(query)
+
+        self.validator.are_separate_projection_models_initialized(
+            self.query_model,
+            self.key_model,
+            self.value_model,
+        )
         self.validator.check_indepentent_projections_inputs(key, value)
         return self.__compute_indepentet_projections(query, key, value)
 
@@ -773,6 +785,19 @@ class AttentionValidator:
     def assert_correct_embedding_dim(self, expected_embedding_dim: int):
         assert self.embedding_dim == expected_embedding_dim, (
             f"Was expecting embedding dimension of {expected_embedding_dim}, but got {self.embedding_dim}"
+        )
+
+    def are_separate_projection_models_initialized(
+        self,
+        query_model: Module | None,
+        key_model: Module | None,
+        value_model: Module | None,
+    ) -> None:
+        ensure_qkv_models_exist = (
+            query_model is None or key_model is None or value_model is None,
+        )
+        assert ensure_qkv_models_exist, (
+            "When query, key, and value are not the same or self attention is not performed, ensure `use_separate_projection_weight` is `True`"
         )
 
     def check_indepentent_projections_inputs(self, key: Tensor, value: Tensor) -> None:
