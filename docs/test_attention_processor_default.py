@@ -155,6 +155,11 @@ class Test____reshape_qkv_for_attention(TestAttentionProcessorDefault):
 
 class Test____compute_weighted_values(TestAttentionProcessorDefault):
     def test__method(self):
+        config = MultiHeadAttentionConfig(
+            source_sequence_length=32,
+            target_sequence_length=32,
+        )
+        self.rebuild_presets(config)
         query = torch.randn(
             self.batch_size, self.num_heads, self.target_sequence_length, self.head_dim
         )
