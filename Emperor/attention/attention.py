@@ -1,5 +1,6 @@
 import copy
 from torch import Tensor
+import torch.nn as nn
 from dataclasses import dataclass, field
 from Emperor.attention.utils.utils import (
     AttentionMask,
@@ -292,8 +293,8 @@ class MultiHeadAttention(Module):
         )
         key_padding_mask, attention_mask = (
             self.masks.validate_padding_and_attention_masks(
-                attention_mask,
                 key_padding_mask,
+                attention_mask,
                 need_weights,
             )
         )
@@ -315,7 +316,7 @@ class MultiHeadAttention(Module):
         key, value, attention_mask, key_padding_mask = self.utils.add_zero_attention(
             key, value, attention_mask, key_padding_mask
         )
-        merged_mask = self.utils.merge_masks(key_padding_mask, attention_mask)
+        merged_mask = self.utils.merge_masks(key, key_padding_mask, attention_mask)
         attention_output, attention_weights = self.processor.compute_attention(
             query, key, value, merged_mask
         )
