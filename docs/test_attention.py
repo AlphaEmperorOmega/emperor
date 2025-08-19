@@ -363,7 +363,7 @@ class TestMultIHeadAttention_forward(TestAttention):
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
 
-        key_padding_mask = None
+        key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
         need_weights = False
         attention_mask = None
         static_key = None
