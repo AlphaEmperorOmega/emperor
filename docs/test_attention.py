@@ -73,33 +73,35 @@ class TestMultiHeadAttention__init(TestAttention):
             self.model.zero_attention_flag, self.config.zero_attention_flag
         )
         self.assertEqual(self.model.batch_first_flag, self.config.batch_first_flag)
-        self.assertEqual(self.model.query_key_hidden_dim, self.config.embedding_dim)
-        self.assertEqual(self.model.value_hidden_dim, self.config.embedding_dim)
+        self.assertEqual(self.model.query_key_projection_dim, self.config.embedding_dim)
+        self.assertEqual(self.model.value_projection_dim, self.config.embedding_dim)
 
 
 class TestMultIHeadAttention____resolve_kv_dimensions(TestAttention):
     def test__qkv_zero(self):
         config = MultiHeadAttentionConfig(
-            query_key_hidden_dim=0,
-            value_hidden_dim=0,
+            query_key_projection_dim=0,
+            value_projection_dim=0,
         )
         self.rebuild_presets(config)
 
-        self.assertEqual(self.model.query_key_hidden_dim, self.config.embedding_dim)
-        self.assertEqual(self.model.value_hidden_dim, self.config.embedding_dim)
+        self.assertEqual(self.model.query_key_projection_dim, self.config.embedding_dim)
+        self.assertEqual(self.model.value_projection_dim, self.config.embedding_dim)
 
     def test__kv_nonzero(self):
         config = MultiHeadAttentionConfig(
-            query_key_hidden_dim=128,
-            value_hidden_dim=256,
+            query_key_projection_dim=128,
+            value_projection_dim=256,
         )
         self.rebuild_presets(config)
 
         self.model._MultiHeadAttention__resolve_head_dim()
         self.assertEqual(
-            self.model.query_key_hidden_dim, self.config.query_key_hidden_dim
+            self.model.query_key_projection_dim, self.config.query_key_projection_dim
         )
-        self.assertEqual(self.model.value_hidden_dim, self.config.value_hidden_dim)
+        self.assertEqual(
+            self.model.value_projection_dim, self.config.value_projection_dim
+        )
 
 
 class TestMultIHeadAttention____resolve_head_dim(TestAttention):
@@ -128,30 +130,30 @@ class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttention):
     def test__different_embedding_dim(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=64,
-            query_key_hidden_dim=32,
-            value_hidden_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
         )
         self.rebuild_presets(config)
 
         output = self.model._MultiHeadAttention__are_qkv_dimensions_equal()
         self.assertFalse(output)
 
-    def test__different_query_key_hidden_dim(self):
+    def test__different_query_key_projection_dim(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
-            query_key_hidden_dim=64,
-            value_hidden_dim=32,
+            query_key_projection_dim=64,
+            value_projection_dim=32,
         )
         self.rebuild_presets(config)
 
         output = self.model._MultiHeadAttention__are_qkv_dimensions_equal()
         self.assertFalse(output)
 
-    def test__different_value_hidden_dim(self):
+    def test__different_value_projection_dim(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
-            query_key_hidden_dim=32,
-            value_hidden_dim=64,
+            query_key_projection_dim=32,
+            value_projection_dim=64,
         )
         self.rebuild_presets(config)
 
@@ -161,8 +163,8 @@ class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttention):
     def test__embd_key_value_same_dim(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
-            query_key_hidden_dim=32,
-            value_hidden_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
         )
         self.rebuild_presets(config)
 
@@ -174,8 +176,8 @@ class TestMultIHeadAttention____build_shared_projection_models(TestAttention):
     def test__shared_model_inizialization(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
-            query_key_hidden_dim=32,
-            value_hidden_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
         )
         self.rebuild_presets(config)
         del self.model.query_model  # Ensure model is not initialized
@@ -196,8 +198,8 @@ class TestMultIHeadAttention____build_separate_projection_models(TestAttention):
     def test__separate_models_initializations(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
-            query_key_hidden_dim=64,
-            value_hidden_dim=32,
+            query_key_projection_dim=64,
+            value_projection_dim=32,
         )
         self.rebuild_presets(config)
         del self.model.qkv_model  # Ensure model is not initialized
@@ -216,8 +218,8 @@ class TestMultIHeadAttention____build_projection_models(TestAttention):
     def test__same_qkv_dim__use_separate_projection_weight__False(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
-            query_key_hidden_dim=32,
-            value_hidden_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
             use_separate_projection_weight=False,
         )
         self.rebuild_presets(config)
@@ -231,8 +233,8 @@ class TestMultIHeadAttention____build_projection_models(TestAttention):
     def test__same_qkv_dim__use_separate_projection_weight__True(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
-            query_key_hidden_dim=32,
-            value_hidden_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
             use_separate_projection_weight=True,
         )
         self.rebuild_presets(config)
@@ -246,8 +248,8 @@ class TestMultIHeadAttention____build_projection_models(TestAttention):
     def test__different_qkv_dim(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
-            query_key_hidden_dim=64,
-            value_hidden_dim=32,
+            query_key_projection_dim=64,
+            value_projection_dim=32,
             use_separate_projection_weight=True,
         )
         self.rebuild_presets(config)
@@ -260,16 +262,63 @@ class TestMultIHeadAttention____build_projection_models(TestAttention):
 
 
 class TestMultIHeadAttention_forward(TestAttention):
-    def test__qkv__same_length(self):
+    def test__use_separate_projection_weight_flag_with_same_qkv_tensors(self):
+        tests = [
+            {"use_separate_projection_weight": False},
+            {"use_separate_projection_weight": True},
+        ]
+        for test in tests:
+            config = MultiHeadAttentionConfig(
+                target_sequence_length=32,
+                source_sequence_length=32,
+                **test,
+            )
+            self.rebuild_presets(config)
+
+            query = key = value = torch.randn(
+                self.target_sequence_length, self.batch_size, self.embedding_dim
+            )
+
+            key_padding_mask = None
+            need_weights = False
+            attention_mask = None
+            static_key = None
+            static_values = None
+
+            attention_output, attention_weights = self.model.forward(
+                query,
+                key,
+                value,
+                key_padding_mask,
+                need_weights,
+                attention_mask,
+                static_key,
+                static_values,
+            )
+
+            self.assertIsInstance(attention_output, torch.Tensor)
+            self.assertIsNone(attention_weights)
+            self.assertEqual(
+                attention_output.shape,
+                (self.target_sequence_length, self.batch_size, self.embedding_dim),
+            )
+
+    def test__use_separate_projection_weight_flag_with_different_qkv_tensors(self):
         config = MultiHeadAttentionConfig(
             target_sequence_length=32,
             source_sequence_length=32,
-            average_attention_weights_flag=False,
+            use_separate_projection_weight=True,
         )
         self.rebuild_presets(config)
 
-        query = key = value = torch.randn(
+        query = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
+        )
+        key = torch.randn(
+            self.source_sequence_length, self.batch_size, self.embedding_dim
+        )
+        value = torch.randn(
+            self.source_sequence_length, self.batch_size, self.embedding_dim
         )
 
         key_padding_mask = None
@@ -291,12 +340,16 @@ class TestMultIHeadAttention_forward(TestAttention):
 
         self.assertIsInstance(attention_output, torch.Tensor)
         self.assertIsNone(attention_weights)
+        self.assertEqual(
+            attention_output.shape,
+            (self.target_sequence_length, self.batch_size, self.embedding_dim),
+        )
 
-    def test__different_qkv_dims(self):
+    def test__qkv_tensors_and_key_padding_mask(self):
         config = MultiHeadAttentionConfig(
             target_sequence_length=32,
             source_sequence_length=32,
-            average_attention_weights_flag=False,
+            use_separate_projection_weight=True,
         )
         self.rebuild_presets(config)
 
@@ -304,10 +357,10 @@ class TestMultIHeadAttention_forward(TestAttention):
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
         key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
+            self.target_sequence_length, self.batch_size, self.embedding_dim
         )
         value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
+            self.target_sequence_length, self.batch_size, self.embedding_dim
         )
 
         key_padding_mask = None
