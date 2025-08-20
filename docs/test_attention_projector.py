@@ -65,7 +65,7 @@ class Test___compute_projection(TestAttentionProjector):
     def test_method(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=4,
-            use_separate_projection_weight=True,
+            use_separate_projection_weight_flag=True,
         )
         self.rebuild_presets(config)
 
@@ -89,7 +89,7 @@ class Test___compute_indepentet_projections(TestAttentionProjector):
     def test_method(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=12,
-            use_separate_projection_weight=True,
+            use_separate_projection_weight_flag=True,
         )
         self.rebuild_presets(config)
         query = torch.randn(
@@ -159,7 +159,7 @@ class Test___compute_self_attention_projections(TestAttentionProjector):
     def test_method(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=12,
-            use_separate_projection_weight=False,
+            use_separate_projection_weight_flag=False,
         )
         self.rebuild_presets(config)
 
@@ -201,7 +201,7 @@ class Test___compute_self_attention_projections(TestAttentionProjector):
 class Test_compute_qkv_projections(TestAttentionProjector):
     def test__indepented_projections__model_type__base(self):
         config = MultiHeadAttentionConfig(
-            use_separate_projection_weight=True,
+            use_separate_projection_weight_flag=True,
             model_type=LayerTypes.BASE,
         )
         self.rebuild_presets(config)
@@ -246,7 +246,7 @@ class Test_compute_qkv_projections(TestAttentionProjector):
 
     def test__self_attention_projections__model_type__base(self):
         config = MultiHeadAttentionConfig(
-            use_separate_projection_weight=False,
+            use_separate_projection_weight_flag=False,
             target_sequence_length=16,
             source_sequence_length=16,
             model_type=LayerTypes.BASE,
@@ -289,7 +289,7 @@ class Test_compute_qkv_projections(TestAttentionProjector):
 
     def test__indepented_projections__model_type__dynamic_base(self):
         config = MultiHeadAttentionConfig(
-            use_separate_projection_weight=True,
+            use_separate_projection_weight_flag=True,
             model_type=LayerTypes.DYNAMIC_BASE,
         )
         self.rebuild_presets(config)
@@ -377,7 +377,7 @@ class Test_compute_qkv_projections(TestAttentionProjector):
     def test__indepented_projections__model_type__vector(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        config.use_separate_projection_weight = True
+        config.use_separate_projection_weight_flag = True
         config.query_key_projection_dim = 32
         config.value_projection_dim = 64
         config.model_type = LayerTypes.VECTOR
@@ -420,7 +420,7 @@ class Test_compute_qkv_projections(TestAttentionProjector):
     def test__self_attention_projections__model_type__vector(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        config.use_separate_projection_weight = False
+        config.use_separate_projection_weight_flag = False
         config.query_key_projection_dim = config.embedding_dim
         config.value_projection_dim = config.embedding_dim
         config.model_type = LayerTypes.VECTOR
@@ -462,7 +462,7 @@ class Test_compute_qkv_projections(TestAttentionProjector):
     def test__indepented_projections__model_type__matrix(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        config.use_separate_projection_weight = True
+        config.use_separate_projection_weight_flag = True
         config.query_key_projection_dim = 32
         config.value_projection_dim = 64
         config.model_type = LayerTypes.MATRIX
@@ -505,7 +505,7 @@ class Test_compute_qkv_projections(TestAttentionProjector):
     def test__self_attention_projections__model_type__matrix(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        config.use_separate_projection_weight = False
+        config.use_separate_projection_weight_flag = False
         config.query_key_projection_dim = config.embedding_dim
         config.value_projection_dim = config.embedding_dim
         config.model_type = LayerTypes.MATRIX
@@ -547,7 +547,7 @@ class Test_compute_qkv_projections(TestAttentionProjector):
     def test__indepented_projections__model_type__generator(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        config.use_separate_projection_weight = True
+        config.use_separate_projection_weight_flag = True
         config.query_key_projection_dim = 32
         config.value_projection_dim = 64
         config.model_type = LayerTypes.GENERATOR
@@ -590,7 +590,7 @@ class Test_compute_qkv_projections(TestAttentionProjector):
     def test__self_attention_projections__model_type__generator(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        config.use_separate_projection_weight = False
+        config.use_separate_projection_weight_flag = False
         config.query_key_projection_dim = config.embedding_dim
         config.value_projection_dim = config.embedding_dim
         config.model_type = LayerTypes.GENERATOR

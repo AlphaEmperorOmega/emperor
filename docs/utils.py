@@ -144,7 +144,7 @@ def default_unittest_config():
             target_sequence_length=16,
             source_sequence_length=32,
             target_dtype=torch.float32,
-            use_separate_projection_weight=False,
+            use_separate_projection_weight_flag=False,
             dropout_probability=0.0,
             key_value_bias_flag=False,
             zero_attention_flag=False,
