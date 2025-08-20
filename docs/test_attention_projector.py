@@ -38,11 +38,18 @@ class TestAttentionProjector(unittest.TestCase):
                     setattr(self.config, k, getattr(config, k))
 
         main_model = MultiHeadAttention(self.cfg)
-        validator = AttentionValidator(self.config)
         self.query_model = main_model.query_model
         self.key_model = main_model.key_model
         self.value_model = main_model.value_model
         self.qkv_model = main_model.qkv_model
+
+        validator = AttentionValidator(
+            self.config,
+            self.query_model,
+            self.key_model,
+            self.value_model,
+            self.query_model,
+        )
 
         self.model = AttentionProjector(
             self.config,
@@ -289,6 +296,8 @@ class Test_compute_qkv_projections(TestAttentionProjector):
 
     def test__indepented_projections__model_type__dynamic_base(self):
         config = MultiHeadAttentionConfig(
+            target_sequence_length=16,
+            source_sequence_length=16,
             use_separate_projection_weight_flag=True,
             model_type=LayerTypes.DYNAMIC_BASE,
         )
@@ -383,11 +392,16 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         config.model_type = LayerTypes.VECTOR
 
         model = MultiHeadAttention(c)
-        validator = AttentionValidator(config)
-        qkv_model = None
         query_model = model.query_model
         key_model = model.key_model
         value_model = model.value_model
+        validator = AttentionValidator(
+            config,
+            query_model=query_model,
+            key_model=key_model,
+            value_model=value_model,
+        )
+        qkv_model = None
 
         m = AttentionProjector(
             config, validator, qkv_model, query_model, key_model, value_model
@@ -468,11 +482,16 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         config.model_type = LayerTypes.MATRIX
 
         model = MultiHeadAttention(c)
-        validator = AttentionValidator(config)
-        qkv_model = None
         query_model = model.query_model
         key_model = model.key_model
         value_model = model.value_model
+        validator = AttentionValidator(
+            config,
+            query_model=query_model,
+            key_model=key_model,
+            value_model=value_model,
+        )
+        qkv_model = None
 
         m = AttentionProjector(
             config, validator, qkv_model, query_model, key_model, value_model
@@ -553,11 +572,16 @@ class Test_compute_qkv_projections(TestAttentionProjector):
         config.model_type = LayerTypes.GENERATOR
 
         model = MultiHeadAttention(c)
-        validator = AttentionValidator(config)
-        qkv_model = None
         query_model = model.query_model
         key_model = model.key_model
         value_model = model.value_model
+        validator = AttentionValidator(
+            config,
+            query_model=query_model,
+            key_model=key_model,
+            value_model=value_model,
+        )
+        qkv_model = None
 
         m = AttentionProjector(
             config, validator, qkv_model, query_model, key_model, value_model
