@@ -310,11 +310,12 @@ class AttentionProcessorWithReturnedWeights(AttentionProcessorBase):
         attention_output: Tensor,
         attention_weights: Tensor,
     ) -> tuple[Tensor, Tensor]:
+        source_sequence_length = attention_weights.size(-1)
         attention_weights_shape = (
             self.batch_size,
             self.num_heads,
             self.target_sequence_length,
-            self.source_sequence_length,
+            source_sequence_length,
         )
         attention_weights = attention_weights.view(attention_weights_shape)
         attention_weights = self.__maybe_average_attention_weights(attention_weights)
@@ -498,11 +499,8 @@ class AttentionProjector:
         assert not self.return_attention_weights_flag, (
             "`attention_weights` can be returned only when self attention is performed, ensure that `use_separate_projection_weight_flag` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
         )
-        self.validator.are_separate_projection_models_initialized(
-            self.query_model,
-            self.key_model,
-            self.value_model,
-        )
+        self.validator.validate_attention_weights_flag_with_projection_type()
+        self.validator.are_separate_projection_models_initialized()
         self.validator.check_indepentent_projections_inputs(key, value)
         return self.__compute_indepentet_projections(query, key, value)
 
@@ -540,6 +538,8 @@ class AttentionProjector:
 
     def __compute_projection(self, tensor: Tensor, model: nn.Module) -> Tensor:
         sequence_length, batch_size, embedding_dim = tensor.shape
+        if not tensor.is_contiguous():
+            tensor = tensor.contiguous()
         tensor_reshaped = tensor.view(-1, embedding_dim)
         projections = model(tensor_reshaped)
         if isinstance(projections, tuple):
@@ -631,6 +631,10 @@ class AttentionValidator:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
+        qkv_model: nn.Module | None = None,
+        query_model: nn.Module | None = None,
+        key_model: nn.Module | None = None,
+        value_model: nn.Module | None = None,
     ):
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
@@ -641,6 +645,11 @@ class AttentionValidator:
         self.batched_input_flag = None
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
+        self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
+        self.qkv_model = qkv_model
+        self.query_model = query_model
+        self.key_model = key_model
+        self.value_model = value_model
 
     def assert_correct_head_dim(self, head_dim: int) -> None:
         assert (head_dim * self.num_heads) == self.embeding_dim, (
@@ -792,19 +801,19 @@ class AttentionValidator:
             f"Was expecting embedding dimension of {expected_embedding_dim}, but got {self.embedding_dim}"
         )
 
-    def are_separate_projection_models_initialized(
-        self,
-        query_model: Module | None,
-        key_model: Module | None,
-        value_model: Module | None,
-    ) -> None:
+    def are_separate_projection_models_initialized(self) -> None:
         ensure_qkv_models_exist = (
-            query_model is not None
-            and key_model is not None
-            and value_model is not None
+            self.query_model is not None
+            and self.key_model is not None
+            and self.value_model is not None
         )
         assert ensure_qkv_models_exist, (
             "When query, key, and value are not the same and self attention is not performed, ensure `use_separate_projection_weight_flag` is `True`"
+        )
+
+    def validate_attention_weights_flag_with_projection_type(self):
+        assert not self.return_attention_weights_flag, (
+            "`attention_weights` can be returned only when self attention is performed, ensure that `use_separate_projection_weight_flag` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
         )
 
     def check_indepentent_projections_inputs(self, key: Tensor, value: Tensor) -> None:
