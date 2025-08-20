@@ -79,7 +79,7 @@ class MultiHeadAttentionConfig(DataClassBase):
             "help": "Data type (dtype) for the attention outputs (e.g. torch.float32)."
         },
     )
-    use_separate_projection_weight: bool | None = field(
+    use_separate_projection_weight_flag: bool | None = field(
         default=None,
         metadata={
             "help": "If True, use separate projection weights for Q, K, V. If False, use shared projection weights (single QKV matrix)."
@@ -156,7 +156,7 @@ class MultiHeadAttention(Module):
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.use_separate_projection_weight = self.cfg.use_separate_projection_weight
+        self.use_separate_projection_weight_flag = self.cfg.use_separate_projection_weight_flag
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.__resolve_kv_dimensions()
         self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
@@ -209,7 +209,7 @@ class MultiHeadAttention(Module):
 
     def __build_projection_models(self) -> tuple:
         if (
-            not self.use_separate_projection_weight
+            not self.use_separate_projection_weight_flag
             and self.__are_qkv_dimensions_equal()
         ):
             return self.__build_shared_projection_models()
@@ -277,7 +277,6 @@ class MultiHeadAttention(Module):
         key: Tensor,
         value: Tensor,
         key_padding_mask: Tensor | None = None,
-        need_weights: bool = False,
         attention_mask: Tensor | None = None,
         static_key: Tensor | None = None,
         static_values: Tensor | None = None,
@@ -295,7 +294,6 @@ class MultiHeadAttention(Module):
             self.masks.validate_padding_and_attention_masks(
                 key_padding_mask,
                 attention_mask,
-                need_weights,
             )
         )
         query, key, value = self.projector.compute_qkv_projections(query, key, value)

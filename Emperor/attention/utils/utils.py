@@ -176,7 +176,7 @@ class AttentionUtils:
 
         source_sequence_length = key.size(1)
 
-        shape_view = (self.batch_size, 1, 1, self.source_sequence_length)
+        shape_view = (self.batch_size, 1, 1, source_sequence_length)
         key_padding_mask = key_padding_mask.view(shape_view)
 
         shape_expand = (-1, self.num_heads, -1, -1)
@@ -388,6 +388,7 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         key: Tensor,
         value: Tensor,
     ):
+        sourcce_sequence_length = key.size(1)
         q_shape = (
             self.batch_size,
             self.num_heads,
@@ -397,7 +398,7 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         kv_shape = (
             self.batch_size,
             self.num_heads,
-            self.source_sequence_length,
+            sourcce_sequence_length,
             self.head_dim,
         )
         query = query.view(q_shape)
@@ -470,7 +471,10 @@ class AttentionProjector:
     ):
         self.cfg = cfg
         self.validator = validator
-        self.use_separate_projection_weight = self.cfg.use_separate_projection_weight
+        self.use_separate_projection_weight_flag = (
+            self.cfg.use_separate_projection_weight_flag
+        )
+        self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
 
         self.query_model = query_model
         self.key_model = key_model
@@ -485,12 +489,15 @@ class AttentionProjector:
     ) -> tuple[Tensor, Tensor, Tensor]:
         are_qkv_same = key is value and query is key
         should_perform_self_attention = (
-            are_qkv_same and not self.use_separate_projection_weight
+            are_qkv_same and not self.use_separate_projection_weight_flag
         )
         if should_perform_self_attention:
             self.validator.check_self_attention_projection_inputs(key, value)
             return self.__compute_self_attention_projections(query)
 
+        assert not self.return_attention_weights_flag, (
+            "`attention_weights` can be returned only when self attention is performed, ensure that `use_separate_projection_weight_flag` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
+        )
         self.validator.are_separate_projection_models_initialized(
             self.query_model,
             self.key_model,
@@ -550,12 +557,12 @@ class AttentionMask:
         self.validator = validator
         self.target_dtype = self.cfg.target_dtype
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
+        self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
 
     def validate_padding_and_attention_masks(
         self,
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
-        need_weights: bool = False,
     ) -> tuple[Tensor | None, Tensor | None]:
         key_padding_mask = self.__canonical_mask(
             mask=key_padding_mask,
@@ -567,7 +574,6 @@ class AttentionMask:
         attention_mask = self.__validate_attention_mask(
             key_padding_mask,
             attention_mask,
-            need_weights,
         )
 
         return key_padding_mask, attention_mask
@@ -576,12 +582,11 @@ class AttentionMask:
         self,
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
-        need_weights: bool = False,
     ) -> Tensor | None:
         if (
             self.causal_attention_mask_flag
             and key_padding_mask is None
-            and not need_weights
+            and not self.return_attention_weights_flag
         ):
             return
 
@@ -794,10 +799,12 @@ class AttentionValidator:
         value_model: Module | None,
     ) -> None:
         ensure_qkv_models_exist = (
-            query_model is None or key_model is None or value_model is None,
+            query_model is not None
+            and key_model is not None
+            and value_model is not None
         )
         assert ensure_qkv_models_exist, (
-            "When query, key, and value are not the same or self attention is not performed, ensure `use_separate_projection_weight` is `True`"
+            "When query, key, and value are not the same and self attention is not performed, ensure `use_separate_projection_weight_flag` is `True`"
         )
 
     def check_indepentent_projections_inputs(self, key: Tensor, value: Tensor) -> None:
