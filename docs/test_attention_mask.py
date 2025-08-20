@@ -124,6 +124,7 @@ class Test_validate_attention_mask(TestAttentionMask):
     def test__key_padding_mask__None(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
+        config.return_attention_weights_flag = False
         validator = AttentionValidator(config)
         m = AttentionMask(config, validator)
         m.causal_attention_mask_flag = True
@@ -138,12 +139,10 @@ class Test_validate_attention_mask(TestAttentionMask):
             batch_size * num_heads, source_sequence_length, target_sequence_length
         )
         attention_mask = attention_mask > 0
-        need_weights = False
 
         output = m._AttentionMask__validate_attention_mask(
             key_padding_mask,
             attention_mask,
-            need_weights,
         )
 
         self.assertIsNone(output)
@@ -151,6 +150,7 @@ class Test_validate_attention_mask(TestAttentionMask):
     def test__boolean_attention_mask(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
+        config.return_attention_weights_flag = True
         validator = AttentionValidator(config)
         m = AttentionMask(config, validator)
         m.causal_attention_mask_flag = True
@@ -165,12 +165,10 @@ class Test_validate_attention_mask(TestAttentionMask):
             batch_size * num_heads, source_sequence_length, target_sequence_length
         )
         attention_mask = attention_mask > 0
-        need_weights = True
 
         output = m._AttentionMask__validate_attention_mask(
             key_padding_mask,
             attention_mask,
-            need_weights,
         )
 
         self.assertIsInstance(output, torch.Tensor)
@@ -181,6 +179,7 @@ class Test_validate_attention_mask(TestAttentionMask):
     def test__float_attention_mask(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
+        config.return_attention_weights_flag = True
         validator = AttentionValidator(config)
         m = AttentionMask(config, validator)
         m.causal_attention_mask_flag = True
@@ -194,12 +193,10 @@ class Test_validate_attention_mask(TestAttentionMask):
         attention_mask = torch.randn(
             batch_size * num_heads, source_sequence_length, target_sequence_length
         )
-        need_weights = True
 
         output = m._AttentionMask__validate_attention_mask(
             key_padding_mask,
             attention_mask,
-            need_weights,
         )
 
         self.assertIsInstance(output, torch.Tensor)
@@ -212,18 +209,17 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
     def test__inputs_as_None(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
+        config.return_attention_weights_flag = True
         validator = AttentionValidator(config)
         m = AttentionMask(config, validator)
         m.causal_attention_mask_flag = True
 
         key_padding_mask = None
         attention_mask = None
-        need_weights = True
 
         key_padding_mask, attention_mask = m.validate_padding_and_attention_masks(
             key_padding_mask,
             attention_mask,
-            need_weights,
         )
 
         self.assertIsNone(key_padding_mask)
@@ -232,6 +228,7 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
     def test__only_key_padding_mask_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
+        config.return_attention_weights_flag = True
         validator = AttentionValidator(config)
         m = AttentionMask(config, validator)
         m.causal_attention_mask_flag = True
@@ -241,13 +238,11 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
 
         key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length)) > 0
         attention_mask = None
-        need_weights = True
 
         output_key_padding_mask, output_attention_mask = (
             m.validate_padding_and_attention_masks(
                 key_padding_mask,
                 attention_mask,
-                need_weights,
             )
         )
 
@@ -258,6 +253,7 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
     def test__only_attention_mask_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
+        config.return_attention_weights_flag = True
         validator = AttentionValidator(config)
         m = AttentionMask(config, validator)
         m.causal_attention_mask_flag = True
@@ -274,12 +270,10 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
             )
             > 0
         )
-        need_weights = True
 
         key_padding_mask, attention_mask = m.validate_padding_and_attention_masks(
             key_padding_mask,
             attention_mask,
-            need_weights,
         )
 
         self.assertIsNone(key_padding_mask)
@@ -305,12 +299,10 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
             )
             > 0
         )
-        need_weights = True
 
         key_padding_mask, attention_mask = m.validate_padding_and_attention_masks(
             key_padding_mask,
             attention_mask,
-            need_weights,
         )
 
         self.assertIsInstance(key_padding_mask, torch.Tensor)
@@ -321,6 +313,7 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
     def test__key_padding_mask__and__attention_mask__as__float_inputs(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
+        config.return_attention_weights_flag = True
         validator = AttentionValidator(config)
         m = AttentionMask(config, validator)
         m.causal_attention_mask_flag = True
@@ -334,13 +327,11 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
         attention_mask = torch.randn(
             batch_size * num_heads, source_sequence_length, target_sequence_length
         )
-        need_weights = True
 
         output_key_padding_mask, output_attention_mask = (
             m.validate_padding_and_attention_masks(
                 key_padding_mask,
                 attention_mask,
-                need_weights,
             )
         )
 
