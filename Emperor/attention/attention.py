@@ -156,7 +156,9 @@ class MultiHeadAttention(Module):
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.use_separate_projection_weight_flag = self.cfg.use_separate_projection_weight_flag
+        self.use_separate_projection_weight_flag = (
+            self.cfg.use_separate_projection_weight_flag
+        )
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.__resolve_kv_dimensions()
         self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
@@ -189,7 +191,13 @@ class MultiHeadAttention(Module):
         )
 
     def __initialize_attention_components(self):
-        self.validator = AttentionValidator(self.cfg)
+        self.validator = AttentionValidator(
+            self.cfg,
+            self.qkv_model,
+            self.query_model,
+            self.key_model,
+            self.value_model,
+        )
         self.masks = AttentionMask(self.cfg, self.validator)
         self.projector = AttentionProjector(
             self.cfg,
