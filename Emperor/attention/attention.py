@@ -326,4 +326,6 @@ class MultiHeadAttention(Module):
         attention_output, attention_weights = self.processor.compute_attention(
             query, key, value, merged_mask
         )
+        if self.batch_first_flag and self.validator.is_input_batched():
+            attention_output = attention_output.transpose(1, 0)
         return attention_output, attention_weights
