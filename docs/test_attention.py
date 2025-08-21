@@ -9,8 +9,10 @@ from Emperor.attention.utils.utils import (
     AttentionUtils,
     AttentionValidator,
 )
+from Emperor.base.utils import use_svg_display
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
+from Emperor.layers.utils.enums import LayerTypes
 from docs.utils import default_unittest_config
 
 
@@ -933,6 +935,49 @@ class TestMultIHeadAttention_forward(TestAttention):
                 target_sequence_length=32,
                 source_sequence_length=32,
                 **test,
+            )
+            self.rebuild_presets(config)
+
+            query = torch.randn(
+                self.target_sequence_length, self.batch_size, self.embedding_dim
+            )
+            key = torch.randn(
+                self.target_sequence_length, self.batch_size, self.embedding_dim
+            )
+            value = torch.randn(
+                self.target_sequence_length, self.batch_size, self.embedding_dim
+            )
+            key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
+            attention_mask = torch.randn(
+                1, self.target_sequence_length, self.source_sequence_length
+            )
+            attention_mask = torch.where(
+                attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+            )
+            attention_mask = attention_mask.repeat(
+                self.batch_size * self.num_heads, 1, 1
+            )
+            static_key = None
+            static_value = None
+
+            attention_output, attention_weights = self.model.forward(
+                query,
+                key,
+                value,
+                key_padding_mask,
+                attention_mask,
+                static_key,
+                static_value,
+            )
+            self.assertIsInstance(attention_output, torch.Tensor)
+
+    def test__different_parameter_generator_models(self):
+        for model_type in LayerTypes:
+            config = MultiHeadAttentionConfig(
+                model_type=model_type,
+                target_sequence_length=32,
+                source_sequence_length=32,
+                use_separate_projection_weight_flag=True,
             )
             self.rebuild_presets(config)
 
