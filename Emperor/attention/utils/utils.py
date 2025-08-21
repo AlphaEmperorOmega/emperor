@@ -225,6 +225,8 @@ class AttentionProcessorBase:
 
     def _compute_attention_output(self, weighted_value: Tensor) -> Tensor:
         attention_output = self.output_model(weighted_value)
+        if isinstance(attention_output, tuple):
+            attention_output, _ = attention_output
         embedding_dim = attention_output.size(1)
         return attention_output.view(
             self.target_sequence_length,
@@ -767,10 +769,10 @@ class AttentionValidator:
         if attention_mask.dim() == 3:
             return (
                 self.batch_size * self.num_heads,
-                self.source_sequence_length,
                 self.target_sequence_length,
+                self.source_sequence_length,
             )
-        return (self.source_sequence_length, self.target_sequence_length)
+        return (self.target_sequence_length, self.source_sequence_length)
 
     def __ensure_attention_mask_if_causal(
         self,
