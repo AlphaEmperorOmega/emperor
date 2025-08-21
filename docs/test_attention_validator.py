@@ -100,9 +100,7 @@ class Test___check_query_dims(TestAttentionValidator):
         self.assertIsNone(output)
 
 
-class Test___check_query_key_value_dimensions(
-    TestAttentionValidator
-):
+class Test___check_query_key_value_dimensions(TestAttentionValidator):
     def test__batched_input_flag__False__incorrect_input_dim(
         self,
     ):
@@ -172,9 +170,7 @@ class Test___check_query_key_value_dimensions(
         self.assertIsNone(output)
 
 
-class Test___check_key_padding_mask_dimensions(
-    TestAttentionValidator
-):
+class Test___check_key_padding_mask_dimensions(TestAttentionValidator):
     def test__None_as_input(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -273,7 +269,7 @@ class Test___check_attention_mask(TestAttentionValidator):
         source_sequence_length = m.source_sequence_length
         target_sequence_length = m.target_sequence_length
 
-        attention_mask = torch.randn(source_sequence_length, target_sequence_length)
+        attention_mask = torch.randn(target_sequence_length, source_sequence_length)
 
         output = m._AttentionValidator__check_attention_mask(attention_mask)
         self.assertIsNone(output)
@@ -310,7 +306,9 @@ class Test___check_attention_mask(TestAttentionValidator):
         target_sequence_length = m.target_sequence_length
 
         attention_mask = torch.randn(
-            batch_size * num_heads, source_sequence_length, target_sequence_length
+            batch_size * num_heads,
+            target_sequence_length,
+            source_sequence_length,
         )
 
         output = m._AttentionValidator__check_attention_mask(attention_mask)
@@ -349,13 +347,13 @@ class Test___resolve_attention_mask_shape(TestAttentionValidator):
         target_sequence_length = m.target_sequence_length
 
         expected_attention_mask_shape = (
-            source_sequence_length,
             target_sequence_length,
+            source_sequence_length,
         )
 
         attention_mask = torch.randn(
-            source_sequence_length,
             target_sequence_length,
+            source_sequence_length,
         )
 
         output = m._AttentionValidator__resolve_attention_mask_shape(attention_mask)
@@ -374,14 +372,14 @@ class Test___resolve_attention_mask_shape(TestAttentionValidator):
 
         expected_attention_mask_shape = (
             batch_size * num_heads,
-            source_sequence_length,
             target_sequence_length,
+            source_sequence_length,
         )
 
         attention_mask = torch.randn(
             batch_size * num_heads,
-            source_sequence_length,
             target_sequence_length,
+            source_sequence_length,
         )
 
         output = m._AttentionValidator__resolve_attention_mask_shape(attention_mask)
@@ -445,7 +443,9 @@ class Test_multi_head_attention_input_shapes(TestAttentionValidator):
         value = torch.randn(source_sequence_length, batch_size, embedding_dim)
         key_padding_mask = torch.randint(0, 2, (batch_size, source_sequence_length))
         attention_mask = torch.randn(
-            batch_size * num_heads, source_sequence_length, target_sequence_length
+            batch_size * num_heads,
+            target_sequence_length,
+            source_sequence_length,
         )
 
         output = m.multi_head_attention_input_shapes(
@@ -467,7 +467,7 @@ class Test_multi_head_attention_input_shapes(TestAttentionValidator):
         key = torch.randn(source_sequence_length, embedding_dim)
         value = torch.randn(source_sequence_length, embedding_dim)
         key_padding_mask = torch.randint(0, 2, (source_sequence_length,))
-        attention_mask = torch.randn(source_sequence_length, target_sequence_length)
+        attention_mask = torch.randn(target_sequence_length, source_sequence_length)
 
         output = m.multi_head_attention_input_shapes(
             query, key, value, key_padding_mask, attention_mask
@@ -602,9 +602,7 @@ class Test_is_mask_correct_dtype(TestAttentionValidator):
         self.assertIsNone(output)
 
 
-class Test_check_self_attention_projection_inputs(
-    TestAttentionValidator
-):
+class Test_check_self_attention_projection_inputs(TestAttentionValidator):
     def test__method(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -638,9 +636,7 @@ class Test_check_self_attention_projection_inputs(
             m.check_self_attention_projection_inputs(key, value)
 
 
-class Test_check_indepentent_projections_inputs(
-    TestAttentionValidator
-):
+class Test_check_indepentent_projections_inputs(TestAttentionValidator):
     def test__method(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
