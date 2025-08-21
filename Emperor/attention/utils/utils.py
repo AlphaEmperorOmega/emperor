@@ -219,6 +219,8 @@ class AttentionProcessorBase:
         self.source_sequence_length = self.cfg.source_sequence_length
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
+        self.zero_attention_flag = self.cfg.zero_attention_flag
+        self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.head_dim = self.embedding_dim // self.num_heads
 
     def _compute_attention_output(self, weighted_value: Tensor) -> Tensor:
@@ -360,7 +362,6 @@ class AttentionProcessorDefault(AttentionProcessorBase):
             key,
             value,
             attention_mask,
-            self.causal_attention_mask_flag,
         )
         attention_output = self._compute_attention_output(weighted_values)
         if not self.validator.get_batched_input_flag():
@@ -379,8 +380,8 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         return attention_mask.view(
             self.batch_size,
             self.num_heads,
+            self.target_sequence_length,
             -1,
-            self.source_sequence_length,
         )
 
     def __reshape_qkv_for_attention(
@@ -389,7 +390,7 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         key: Tensor,
         value: Tensor,
     ):
-        sourcce_sequence_length = key.size(1)
+        source_sequence_length = key.size(1)
         q_shape = (
             self.batch_size,
             self.num_heads,
@@ -399,7 +400,7 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         kv_shape = (
             self.batch_size,
             self.num_heads,
-            sourcce_sequence_length,
+            source_sequence_length,
             self.head_dim,
         )
         query = query.view(q_shape)
@@ -413,14 +414,16 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         key: Tensor,
         value: Tensor,
         attention_mask: Tensor | None,
-        is_causal: bool = False,
     ) -> Tensor:
-        assert self.target_sequence_length == self.source_sequence_length, (
-            f"At the moment different source and target sequence lengths are not supported so `target_sequence_length`: {self.target_sequence_length} must be equal to `source_sequence_length`:{self.source_sequence_length}. See if this can be fixed in the future."
-        )
         weighted_values = F.scaled_dot_product_attention(
-            query, key, value, attention_mask, self.dropout_probability, is_causal
+            query,
+            key,
+            value,
+            attention_mask,
+            self.dropout_probability,
+            self.causal_attention_mask_flag,
         )
+
         weighted_values = weighted_values.permute(2, 0, 1, 3)
         weighted_values = weighted_values.contiguous()
         return weighted_values.view(
