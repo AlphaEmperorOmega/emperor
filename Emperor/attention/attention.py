@@ -213,6 +213,8 @@ class MultiHeadAttention(Module):
             self.validator,
             self.key_bias_vector,
             self.value_bias_vector,
+            self.query_key_projection_dim,
+            self.value_projection_dim,
         )
 
     def __build_projection_models(self) -> tuple:
