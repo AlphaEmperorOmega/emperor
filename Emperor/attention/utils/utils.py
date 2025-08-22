@@ -19,6 +19,8 @@ class AttentionUtils:
         validator: "AttentionValidator",
         key_bias_vector: Tensor | None = None,
         value_bias_vector: Tensor | None = None,
+        query_key_projection_dim: int | None = 0,
+        value_projection_dim: int | None = 0,
     ):
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
@@ -30,6 +32,16 @@ class AttentionUtils:
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
         self.head_dim = self.embedding_dim // self.num_heads
+        self.qk_head_dim = (
+            query_key_projection_dim // self.num_heads
+            if query_key_projection_dim is not None and query_key_projection_dim != 0
+            else self.head_dim
+        )
+        self.v_head_dim = (
+            value_projection_dim // self.num_heads
+            if value_projection_dim is not None and value_projection_dim != 0
+            else self.head_dim
+        )
 
         self.value_bias_vector = value_bias_vector
         self.key_bias_vector = key_bias_vector
@@ -120,9 +132,9 @@ class AttentionUtils:
     ) -> tuple[Tensor, Tensor, Tensor]:
         self.validator.check_static_projection_shapes(static_keys, static_values)
 
-        query = self.__reshape_projection_tesnor(query)
-        key = self.__reshape_projection_tesnor(key, static_keys)
-        value = self.__reshape_projection_tesnor(value, static_values)
+        query = self.__reshape_projection_tesnor(query, None, self.qk_head_dim)
+        key = self.__reshape_projection_tesnor(key, static_keys, self.qk_head_dim)
+        value = self.__reshape_projection_tesnor(value, static_values, self.v_head_dim)
 
         return query, key, value
 
@@ -130,12 +142,15 @@ class AttentionUtils:
         self,
         tensor: Tensor,
         static_tensor: Tensor | None = None,
+        head_dim: int | None = None,
     ) -> Tensor:
         if static_tensor is not None:
             return static_tensor
 
         sequence_length = tensor.shape[0]
-        shape = (sequence_length, self.batch_size * self.num_heads, self.head_dim)
+        # shape = (sequence_length, self.batch_size * self.num_heads, self.head_dim)
+        head_dim = head_dim or self.head_dim
+        shape = (sequence_length, self.batch_size * self.num_heads, head_dim)
         reshaped_tensor = tensor.view(shape)
         return reshaped_tensor.transpose(0, 1)
 
@@ -217,11 +232,24 @@ class AttentionProcessorBase:
         self.dropout_probability = self.cfg.dropout_probability
         self.target_sequence_length = self.cfg.target_sequence_length
         self.source_sequence_length = self.cfg.source_sequence_length
+        self.query_key_projection_dim = self.cfg.query_key_projection_dim
+        self.value_projection_dim = self.cfg.value_projection_dim
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.zero_attention_flag = self.cfg.zero_attention_flag
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.head_dim = self.embedding_dim // self.num_heads
+        self.qk_head_dim = (
+            self.query_key_projection_dim // self.num_heads
+            if self.query_key_projection_dim is not None
+            and self.query_key_projection_dim != 0
+            else self.head_dim
+        )
+        self.v_head_dim = (
+            self.value_projection_dim // self.num_heads
+            if self.value_projection_dim is not None and self.value_projection_dim != 0
+            else self.head_dim
+        )
 
     def _compute_attention_output(self, weighted_value: Tensor) -> Tensor:
         attention_output = self.output_model(weighted_value)
@@ -397,17 +425,23 @@ class AttentionProcessorDefault(AttentionProcessorBase):
             self.batch_size,
             self.num_heads,
             self.target_sequence_length,
-            self.head_dim,
+            self.qk_head_dim,
         )
-        kv_shape = (
+        k_shape = (
             self.batch_size,
             self.num_heads,
             source_sequence_length,
-            self.head_dim,
+            self.qk_head_dim,
+        )
+        v_shape = (
+            self.batch_size,
+            self.num_heads,
+            source_sequence_length,
+            self.v_head_dim,
         )
         query = query.view(q_shape)
-        key = key.view(kv_shape)
-        value = value.view(kv_shape)
+        key = key.view(k_shape)
+        value = value.view(v_shape)
         return query, key, value
 
     def __compute_weighted_values(
