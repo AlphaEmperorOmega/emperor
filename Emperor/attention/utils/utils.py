@@ -1,5 +1,6 @@
 import torch
 import math
+import copy
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
@@ -7,9 +8,61 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 from Emperor.base.utils import Module
+from Emperor.layers.utils.base import LayerBlock
+from Emperor.layers.utils.linears import LinearLayer
 
 if TYPE_CHECKING:
+    from Emperor.config import ModelConfig
     from Emperor.attention.attention import MultiHeadAttentionConfig
+
+
+class AttentionKeyValueBias(Module):
+    def __init__(self, cfg: "MultiHeadAttentionConfig"):
+        super().__init__()
+        self.cfg = cfg
+        self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
+        self.key_bias_vector, self.value_bias_vector = self.__build_kv_bias_vectors()
+
+    def __build_kv_bias_vectors(self):
+        if not self.add_key_value_bias_flag:
+            return None, None
+        bias_k = self._init_parameter_bank((1, 1, self.embedding_dim))
+        bias_v = self._init_parameter_bank((1, 1, self.embedding_dim))
+        return bias_k, bias_v
+
+    def add_kv_learnable_bias_vectors(
+        self,
+        key_projections: Tensor,
+        value_projections: Tensor,
+        key_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
+        if not self..add_key_value_bias_flag:
+            return (
+                key_projections,
+                value_projections,
+                key_padding_mask,
+                attention_mask,
+            )
+        repeated_key_bias = self.key_bias_vector.repeat(1, self.batch_size, 1)
+        key_projections_with_bias_vector = torch.cat(
+            [key_projections, repeated_key_bias]
+        )
+        repeated_value_bias = self.value_bias_vector.repeat(1, self.batch_size, 1)
+        value_projections_with_bias_vector = torch.cat(
+            [value_projections, repeated_value_bias]
+        )
+        if key_padding_mask is not None:
+            key_padding_mask = F.pad(key_padding_mask, (0, 1))
+        if attention_mask is not None:
+            attention_mask = F.pad(attention_mask, (0, 1))
+
+        return (
+            key_projections_with_bias_vector,
+            value_projections_with_bias_vector,
+            key_padding_mask,
+            attention_mask,
+        )
 
 
 class AttentionUtils:
@@ -221,11 +274,11 @@ class AttentionProcessorBase:
         self,
         cfg: "MultiHeadAttentionConfig",
         validator: "AttentionValidator",
-        output_model: nn.Module,
+        projector: "AttentionProjector",
     ):
         self.cfg = cfg
         self.validator = validator
-        self.output_model = output_model
+        self.projector = projector
         self.num_heads = self.cfg.num_heads
         self.batch_size = self.cfg.batch_size
         self.embedding_dim = self.cfg.embedding_dim
@@ -251,10 +304,8 @@ class AttentionProcessorBase:
             else self.head_dim
         )
 
-    def _compute_attention_output(self, weighted_value: Tensor) -> Tensor:
-        attention_output = self.output_model(weighted_value)
-        if isinstance(attention_output, tuple):
-            attention_output, _ = attention_output
+    def _compute_attention_output(self, weighted_values: Tensor) -> Tensor:
+        attention_output = self.projector.compute_output_projection(weighted_values)
         embedding_dim = attention_output.size(1)
         return attention_output.view(
             self.target_sequence_length,
@@ -499,27 +550,102 @@ class AttentionProcessor:
         return self.processor.compute_attention(query, key, value, attention_mask)
 
 
-class AttentionProjector:
+class AttentionProjectorBase(Module):
+    def __init__(self, cfg: "MultiHeadAttentionConfig"):
+        super().__init__()
+        self.cfg = cfg
+        self.value_projection_dim = self.cfg.value_projection_dim
+        self.query_key_projection_dim = self.cfg.query_key_projection_dim
+        self.__resolve_kv_dimensions()
+
+    def __resolve_kv_dimensions(self):
+        self.query_key_projection_dim = (
+            self.embedding_dim
+            if self.query_key_projection_dim == 0
+            else self.query_key_projection_dim
+        )
+        self.value_projection_dim = (
+            self.embedding_dim
+            if self.value_projection_dim == 0
+            else self.value_projection_dim
+        )
+
+    def _create_model(self, input_dim: int, output_dim: int) -> LayerBlock:
+        config = self.__resolve_model_type_overrides(
+            self.main_cfg, input_dim, output_dim
+        )
+        output_model = self.model_type.value(config)
+        return LayerBlock(model=output_model)
+
+    def __resolve_model_type_overrides(
+        self,
+        cfg: "ModelConfig",
+        input_dim: int,
+        output_dim: int,
+    ):
+        c = copy.deepcopy(cfg)
+        if issubclass(self.model_type.value, LinearLayer):
+            c.linear_layer_model_config.input_dim = input_dim
+            c.linear_layer_model_config.output_dim = output_dim
+            return c
+        c.mixture_model_config.input_dim = input_dim
+        c.mixture_model_config.output_dim = output_dim
+        return c
+
+
+class AttentionProjector(AttentionProjectorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
         validator: "AttentionValidator",
-        qkv_model: nn.Module | None = None,
-        query_model: nn.Module | None = None,
-        key_model: nn.Module | None = None,
-        value_model: nn.Module | None = None,
     ):
-        self.cfg = cfg
+        super().__init__(cfg)
         self.validator = validator
         self.use_separate_projection_weight_flag = (
             self.cfg.use_separate_projection_weight_flag
         )
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
 
-        self.query_model = query_model
-        self.key_model = key_model
-        self.value_model = value_model
-        self.qkv_model = qkv_model
+        m = self.__build_projection_models()
+        if len(m) == 3:
+            self.query_model, self.key_model, self.value_model = m
+        else:
+            self.qkv_model = m
+
+        self.output_model = self._create_model(
+            self.value_projection_dim, self.embedding_dim
+        )
+
+    def __build_projection_models(self) -> tuple:
+        if (
+            not self.use_separate_projection_weight_flag
+            and self.__are_qkv_dimensions_equal()
+        ):
+            return self.__build_shared_projection_models()
+        return self.__build_separate_projection_models()
+
+    def __build_separate_projection_models(self) -> tuple:
+        query_model = self._create_model(
+            self.embedding_dim, self.query_key_projection_dim
+        )
+        key_model = self._create_model(
+            self.embedding_dim, self.query_key_projection_dim
+        )
+        value_model = self._create_model(self.embedding_dim, self.value_projection_dim)
+        self.register_parameter("qkv_model", None)
+        return query_model, key_model, value_model
+
+    def __build_shared_projection_models(self) -> LayerBlock:
+        self.register_parameter("query_model", None)
+        self.register_parameter("key_model", None)
+        self.register_parameter("value_model", None)
+        qkv_model = self._create_model(self.embedding_dim, self.embedding_dim * 3)
+        return qkv_model
+
+    def __are_qkv_dimensions_equal(self) -> bool:
+        are_qk_dims_same = self.embedding_dim == self.query_key_projection_dim
+        are_qv_dims_same = self.embedding_dim == self.value_projection_dim
+        return are_qk_dims_same and are_qv_dims_same
 
     def compute_qkv_projections(
         self,
@@ -584,6 +710,12 @@ class AttentionProjector:
         if isinstance(projections, tuple):
             projections, _ = projections
         return projections.view(sequence_length, batch_size, -1)
+
+    def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
+        output = self.output_model(weighted_values)
+        if isinstance(output, tuple):
+            output, _ = output
+        return output
 
 
 class AttentionMask:
