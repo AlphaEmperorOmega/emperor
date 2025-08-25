@@ -128,7 +128,7 @@ class SamplerBase(Module):
         self.auxiliary_loss = self.default_loss
 
     def __validate_input_parameters(self):
-        self._valudate_fields(self.cfg, SamplerConfig)
+        self._validate_fields(self.cfg, SamplerConfig)
         assert self.top_k >= 0, f"top_k must be non-negative, got {self.top_k}"
         assert self.num_topk_samples <= self.top_k, (
             f"num_topk_samples ({self.num_topk_samples}) cannot exceed top_k ({self.top_k})"

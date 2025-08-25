@@ -168,7 +168,7 @@ class MixtureOfExperts(Module):
         self.model_type = self.cfg.model_type
         self.compute_expert_mixture_flag = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
-        self._valudate_fields(self.cfg, MixtureOfExpertsConfig)
+        self._validate_fields(self.cfg, MixtureOfExpertsConfig)
 
         self.expert_modules = self.__create_experts(cfg)
 

@@ -105,7 +105,7 @@ class RouterModel(Module):
             "diagonal_linear_model_flag must be a boolean"
         )
 
-        self._valudate_fields(self.cfg, RouterConfig)
+        self._validate_fields(self.cfg, RouterConfig)
         assert self.num_layers > 0, (
             f"Expected `num_layers` in `RouterModel` to be at least one, received {type(self.num_layers)}"
         )

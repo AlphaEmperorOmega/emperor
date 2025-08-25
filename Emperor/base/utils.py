@@ -323,7 +323,7 @@ class Module(nn.Module, HyperParameters):
                 setattr(cfg, field, getattr(overwrrides, field))
         return cfg
 
-    def _valudate_fields(
+    def _validate_fields(
         self, config: "DataClassBase", config_type: "DataClassBase"
     ) -> None:
         for config_field in fields(config_type):
