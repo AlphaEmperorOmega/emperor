@@ -45,11 +45,8 @@ class TestAttentionValidator(unittest.TestCase):
 
         self.model = AttentionProjector(
             self.config,
+            self.cfg,
             validator,
-            self.qkv_model,
-            self.query_model,
-            self.key_model,
-            self.value_model,
         )
 
         self.batch_size = self.config.batch_size

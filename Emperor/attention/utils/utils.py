@@ -37,7 +37,7 @@ class AttentionKeyValueBias(Module):
         key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
-        if not self..add_key_value_bias_flag:
+        if not self.add_key_value_bias_flag:
             return (
                 key_projections,
                 value_projections,
@@ -551,9 +551,17 @@ class AttentionProcessor:
 
 
 class AttentionProjectorBase(Module):
-    def __init__(self, cfg: "MultiHeadAttentionConfig"):
+    def __init__(self,
+        cfg: "MultiHeadAttentionConfig",
+        main_cfg: "ModelConfig",
+        validator: "AttentionValidator",
+    ):
         super().__init__()
         self.cfg = cfg
+        self.main_cfg = main_cfg
+        self.validator = validator
+        self.model_type = self.cfg.model_type
+        self.embedding_dim = self.cfg.embedding_dim
         self.value_projection_dim = self.cfg.value_projection_dim
         self.query_key_projection_dim = self.cfg.query_key_projection_dim
         self.__resolve_kv_dimensions()
@@ -597,9 +605,10 @@ class AttentionProjector(AttentionProjectorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
+        main_cfg: "ModelConfig",
         validator: "AttentionValidator",
     ):
-        super().__init__(cfg)
+        super().__init__(cfg, main_cfg, validator)
         self.validator = validator
         self.use_separate_projection_weight_flag = (
             self.cfg.use_separate_projection_weight_flag
@@ -607,7 +616,7 @@ class AttentionProjector(AttentionProjectorBase):
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
 
         m = self.__build_projection_models()
-        if len(m) == 3:
+        if isinstance(m, tuple):
             self.query_model, self.key_model, self.value_model = m
         else:
             self.qkv_model = m

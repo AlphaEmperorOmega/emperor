@@ -75,8 +75,8 @@ class TestMultiHeadAttention__init(TestAttention):
             self.model.zero_attention_flag, self.config.zero_attention_flag
         )
         self.assertEqual(self.model.batch_first_flag, self.config.batch_first_flag)
-        self.assertEqual(self.model.query_key_projection_dim, self.config.embedding_dim)
-        self.assertEqual(self.model.value_projection_dim, self.config.embedding_dim)
+        self.assertEqual(self.model.query_key_projection_dim, self.config.query_key_projection_dim)
+        self.assertEqual(self.model.value_projection_dim, self.config.value_projection_dim)
 
 
 class TestMultIHeadAttention____resolve_kv_dimensions(TestAttention):
