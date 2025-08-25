@@ -3,6 +3,7 @@ from torch import Tensor
 import torch.nn as nn
 from dataclasses import dataclass, field
 from Emperor.attention.utils.utils import (
+    AttentionKeyValueBias,
     AttentionMask,
     AttentionProcessor,
     AttentionProjector,
@@ -10,15 +11,9 @@ from Emperor.attention.utils.utils import (
     AttentionValidator,
 )
 from Emperor.base.utils import DataClassBase, Module
-
-from Emperor.layers.utils.base import LayerBlock
-from Emperor.layers.utils.enums import (
-    LayerTypes,
-)
+from Emperor.layers.utils.enums import LayerTypes
 
 from typing import TYPE_CHECKING
-
-from Emperor.layers.utils.linears import LinearLayer
 
 if TYPE_CHECKING:
     from torch.types import _dtype as DType
@@ -160,17 +155,11 @@ class MultiHeadAttention(Module):
             self.cfg.use_separate_projection_weight_flag
         )
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
-        self.__resolve_kv_dimensions()
-        self._valudate_fields(self.cfg, MultiHeadAttentionConfig)
+        self._validate_fields(self.cfg, MultiHeadAttentionConfig)
 
-        m = self.__build_projection_models()
-        if len(m) == 4:
-            self.query_model, self.key_model, self.value_model, self.output_model = m
-        else:
-            self.qkv_model, self.output_model = m
         self.key_bias_vector, self.value_bias_vector = self.__build_kv_bias_vectors()
 
-        self.__initialize_attention_components()
+        self.__create_attention_utilities()
         self.head_dim = self.__resolve_head_dim()
 
     def __resolve_head_dim(self):
@@ -178,36 +167,12 @@ class MultiHeadAttention(Module):
         self.validator.assert_correct_head_dim(head_dim)
         return head_dim
 
-    def __resolve_kv_dimensions(self):
-        self.query_key_projection_dim = (
-            self.embedding_dim
-            if self.query_key_projection_dim == 0
-            else self.query_key_projection_dim
-        )
-        self.value_projection_dim = (
-            self.embedding_dim
-            if self.value_projection_dim == 0
-            else self.value_projection_dim
-        )
-
-    def __initialize_attention_components(self):
-        self.validator = AttentionValidator(
-            self.cfg,
-            self.qkv_model,
-            self.query_model,
-            self.key_model,
-            self.value_model,
-        )
+    def __create_attention_utilities(self):
+        self.validator = AttentionValidator(self.cfg)
         self.masks = AttentionMask(self.cfg, self.validator)
-        self.projector = AttentionProjector(
-            self.cfg,
-            self.validator,
-            self.qkv_model,
-            self.query_model,
-            self.key_model,
-            self.value_model,
-        )
-        self.processor = AttentionProcessor(self.cfg, self.validator, self.output_model)
+        self.projector = AttentionProjector(self.cfg, self.validator)
+        self.processor = AttentionProcessor(self.cfg, self.validator, self.projector)
+        self.learnable_bias_handler = AttentionKeyValueBias(self.cfg)
         self.utils = AttentionUtils(
             self.cfg,
             self.validator,
@@ -216,70 +181,6 @@ class MultiHeadAttention(Module):
             self.query_key_projection_dim,
             self.value_projection_dim,
         )
-
-    def __build_projection_models(self) -> tuple:
-        if (
-            not self.use_separate_projection_weight_flag
-            and self.__are_qkv_dimensions_equal()
-        ):
-            return self.__build_shared_projection_models()
-        return self.__build_separate_projection_models()
-
-    def __build_kv_bias_vectors(self):
-        if self.add_key_value_bias_flag:
-            bias_k = self._init_parameter_bank((1, 1, self.embedding_dim))
-            bias_v = self._init_parameter_bank((1, 1, self.embedding_dim))
-            return bias_k, bias_v
-        return None, None
-
-    def __build_separate_projection_models(self) -> tuple:
-        query_model = self.__create_model(
-            self.embedding_dim, self.query_key_projection_dim
-        )
-        key_model = self.__create_model(
-            self.embedding_dim, self.query_key_projection_dim
-        )
-        value_model = self.__create_model(self.embedding_dim, self.value_projection_dim)
-        output_model = self.__create_model(
-            self.value_projection_dim, self.embedding_dim
-        )
-        self.register_parameter("qkv_model", None)
-        return query_model, key_model, value_model, output_model
-
-    def __build_shared_projection_models(self) -> tuple:
-        self.register_parameter("query_model", None)
-        self.register_parameter("key_model", None)
-        self.register_parameter("value_model", None)
-        output_model = self.__create_model(self.embedding_dim, self.embedding_dim)
-        qkv_model = self.__create_model(self.embedding_dim, self.embedding_dim * 3)
-        return qkv_model, output_model
-
-    def __create_model(self, input_dim: int, output_dim: int):
-        config = self.__resolve_model_type_overrides(
-            self.main_cfg, input_dim, output_dim
-        )
-        output_model = self.model_type.value(config)
-        return LayerBlock(model=output_model)
-
-    def __resolve_model_type_overrides(
-        self,
-        cfg: "ModelConfig",
-        input_dim: int,
-        output_dim: int,
-    ):
-        c = copy.deepcopy(cfg)
-        if issubclass(self.model_type.value, LinearLayer):
-            c.linear_layer_model_config.input_dim = input_dim
-            c.linear_layer_model_config.output_dim = output_dim
-            return c
-        c.mixture_model_config.input_dim = input_dim
-        c.mixture_model_config.output_dim = output_dim
-        return c
-
-    def __are_qkv_dimensions_equal(self) -> bool:
-        are_qk_dims_same = self.embedding_dim == self.query_key_projection_dim
-        are_qv_dims_same = self.embedding_dim == self.value_projection_dim
-        return are_qk_dims_same and are_qv_dims_same
 
     def forward(
         self,
@@ -312,7 +213,7 @@ class MultiHeadAttention(Module):
             value,
             key_padding_mask,
             attention_mask,
-        ) = self.utils.add_learnable_bias_vectors(
+        ) = self.learnable_bias_handler.add_kv_learnable_bias_vectors(
             key,
             value,
             key_padding_mask,
