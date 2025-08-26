@@ -20,6 +20,7 @@ class AttentionKeyValueBias(Module):
     def __init__(self, cfg: "MultiHeadAttentionConfig"):
         super().__init__()
         self.cfg = cfg
+        self.embedding_dim = self.cfg.embedding_dim
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.key_bias_vector, self.value_bias_vector = self.__build_kv_bias_vectors()
 
@@ -656,6 +657,7 @@ class AttentionProjector(AttentionProjectorBase):
         are_qv_dims_same = self.embedding_dim == self.value_projection_dim
         return are_qk_dims_same and are_qv_dims_same
 
+
     def compute_qkv_projections(
         self,
         query: Tensor,
@@ -673,9 +675,9 @@ class AttentionProjector(AttentionProjectorBase):
         assert not self.return_attention_weights_flag, (
             "`attention_weights` can be returned only when self attention is performed, ensure that `use_separate_projection_weight_flag` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
         )
-        self.validator.validate_attention_weights_flag_with_projection_type()
-        self.validator.are_separate_projection_models_initialized()
-        self.validator.check_indepentent_projections_inputs(key, value)
+        self.__validate_attention_weights_flag_with_projection_type()
+        self.__are_separate_projection_models_initialized()
+        self.__check_indepentent_projections_inputs(key, value)
         return self.__compute_indepentet_projections(query, key, value)
 
     def __compute_self_attention_projections(
@@ -725,6 +727,32 @@ class AttentionProjector(AttentionProjectorBase):
         if isinstance(output, tuple):
             output, _ = output
         return output
+
+    def __validate_attention_weights_flag_with_projection_type(self):
+        assert not self.return_attention_weights_flag, (
+            "`attention_weights` can be returned only when self attention is performed, ensure that `use_separate_projection_weight_flag` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
+        )
+
+    def __are_separate_projection_models_initialized(self) -> None:
+        ensure_qkv_models_exist = (
+            self.query_model is not None
+            and self.key_model is not None
+            and self.value_model is not None
+        )
+        assert ensure_qkv_models_exist, (
+            "When query, key, and value are not the same and self attention is not performed, ensure `use_separate_projection_weight_flag` is `True`"
+        )
+
+
+    def __check_indepentent_projections_inputs(self, key: Tensor, value: Tensor) -> None:
+        k_sequence_length, k_batch_size, _ = key.shape
+        v_sequence_length, v_batch_size, _ = value.shape
+        is_kv_sequence_length_same = k_sequence_length == v_sequence_length
+        is_kv_batch_size_same = k_batch_size == v_batch_size
+        if not (is_kv_sequence_length_same and is_kv_batch_size_same):
+            raise RuntimeError(
+                f"key shape {key.shape} does not match value shape {value.shape}"
+            )
 
 
 class AttentionMask:
