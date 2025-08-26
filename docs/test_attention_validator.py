@@ -38,10 +38,6 @@ class TestAttentionValidator(unittest.TestCase):
 
         main_model = MultiHeadAttention(self.cfg)
         validator = AttentionValidator(self.config)
-        self.query_model = main_model.query_model
-        self.key_model = main_model.key_model
-        self.value_model = main_model.value_model
-        self.qkv_model = main_model.qkv_model
 
         self.model = AttentionProjector(
             self.config,
