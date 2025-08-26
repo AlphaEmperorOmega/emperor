@@ -87,8 +87,8 @@ class TestMultIHeadAttention____resolve_kv_dimensions(TestAttention):
         )
         self.rebuild_presets(config)
 
-        self.assertEqual(self.model.query_key_projection_dim, self.config.embedding_dim)
-        self.assertEqual(self.model.value_projection_dim, self.config.embedding_dim)
+        self.assertEqual(self.model.query_key_projection_dim, self.config.query_key_projection_dim)
+        self.assertEqual(self.model.value_projection_dim, self.config.value_projection_dim)
 
     def test__kv_nonzero(self):
         config = MultiHeadAttentionConfig(
