@@ -37,12 +37,10 @@ class TestAttentionValidator(unittest.TestCase):
                     setattr(self.config, k, getattr(config, k))
 
         main_model = MultiHeadAttention(self.cfg)
-        validator = AttentionValidator(self.config)
 
         self.model = AttentionProjector(
             self.config,
             self.cfg,
-            validator,
         )
 
         self.batch_size = self.config.batch_size
