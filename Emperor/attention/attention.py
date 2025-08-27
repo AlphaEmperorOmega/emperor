@@ -167,11 +167,8 @@ class MultiHeadAttention(Module):
         self.masks = AttentionMask(self.cfg, self.validator)
         self.projector = AttentionProjector(self.cfg, self.main_cfg, self.validator)
         self.processor = AttentionProcessor(self.cfg, self.validator, self.projector)
-        self.learnable_bias_handler = AttentionKeyValueBias(self.cfg)
-        self.utils = AttentionUtils(
-            self.cfg,
-            self.validator,
-        )
+        self.bias = AttentionKeyValueBias(self.cfg)
+        self.utils = AttentionUtils(self.cfg, self.validator)
 
     def forward(
         self,
@@ -204,7 +201,7 @@ class MultiHeadAttention(Module):
             value,
             key_padding_mask,
             attention_mask,
-        ) = self.learnable_bias_handler.add_kv_learnable_bias_vectors(
+        ) = self.bias.add_kv_learnable_bias_vectors(
             key,
             value,
             key_padding_mask,
