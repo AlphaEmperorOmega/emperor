@@ -71,10 +71,6 @@ class AttentionUtils:
         self,
         cfg: "MultiHeadAttentionConfig",
         validator: "AttentionValidator",
-        key_bias_vector: Tensor | None = None,
-        value_bias_vector: Tensor | None = None,
-        query_key_projection_dim: int | None = 0,
-        value_projection_dim: int | None = 0,
     ):
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
@@ -83,22 +79,25 @@ class AttentionUtils:
         self.embedding_dim = self.cfg.embedding_dim
         self.batch_first_flag = self.cfg.batch_first_flag
         self.zero_attention_flag = self.cfg.zero_attention_flag
+        self.query_key_projection_dim = self.cfg.query_key_projection_dim
+        self.value_projection_dim = self.cfg.value_projection_dim
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
         self.head_dim = self.embedding_dim // self.num_heads
-        self.qk_head_dim = (
-            query_key_projection_dim // self.num_heads
-            if query_key_projection_dim is not None and query_key_projection_dim != 0
-            else self.head_dim
-        )
-        self.v_head_dim = (
-            value_projection_dim // self.num_heads
-            if value_projection_dim is not None and value_projection_dim != 0
-            else self.head_dim
-        )
+        self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
 
-        self.value_bias_vector = value_bias_vector
-        self.key_bias_vector = key_bias_vector
+    def __resolve_qkv_head_dim(self):
+        qk_head_dim = (
+            self.query_key_projection_dim // self.num_heads
+            if self.query_key_projection_dim != 0
+            else self.head_dim
+        )
+        v_head_dim = (
+            self.value_projection_dim // self.num_heads
+            if self.value_projection_dim != 0
+            else self.head_dim
+        )
+        return qk_head_dim, v_head_dim
 
     def maybe_transpose_qkv(
         self,
@@ -552,7 +551,8 @@ class AttentionProcessor:
 
 
 class AttentionProjectorBase(Module):
-    def __init__(self,
+    def __init__(
+        self,
         cfg: "MultiHeadAttentionConfig",
         main_cfg: "ModelConfig",
         validator: "AttentionValidator",
@@ -657,7 +657,6 @@ class AttentionProjector(AttentionProjectorBase):
         are_qv_dims_same = self.embedding_dim == self.value_projection_dim
         return are_qk_dims_same and are_qv_dims_same
 
-
     def compute_qkv_projections(
         self,
         query: Tensor,
@@ -743,8 +742,9 @@ class AttentionProjector(AttentionProjectorBase):
             "When query, key, and value are not the same and self attention is not performed, ensure `use_separate_projection_weight_flag` is `True`"
         )
 
-
-    def __check_indepentent_projections_inputs(self, key: Tensor, value: Tensor) -> None:
+    def __check_indepentent_projections_inputs(
+        self, key: Tensor, value: Tensor
+    ) -> None:
         k_sequence_length, k_batch_size, _ = key.shape
         v_sequence_length, v_batch_size, _ = value.shape
         is_kv_sequence_length_same = k_sequence_length == v_sequence_length
