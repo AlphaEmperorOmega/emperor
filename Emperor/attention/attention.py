@@ -165,7 +165,7 @@ class MultiHeadAttention(Module):
     def __create_attention_utilities(self):
         self.validator = AttentionValidator(self.cfg)
         self.masks = AttentionMask(self.cfg, self.validator)
-        self.projector = AttentionProjector(self.cfg, self.main_cfg, self.validator)
+        self.projector = AttentionProjector(self.cfg, self.main_cfg)
         self.processor = AttentionProcessor(self.cfg, self.validator, self.projector)
         self.bias = AttentionKeyValueBias(self.cfg)
         self.utils = AttentionUtils(self.cfg, self.validator)

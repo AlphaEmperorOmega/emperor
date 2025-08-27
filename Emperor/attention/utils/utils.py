@@ -555,12 +555,10 @@ class AttentionProjectorBase(Module):
         self,
         cfg: "MultiHeadAttentionConfig",
         main_cfg: "ModelConfig",
-        validator: "AttentionValidator",
     ):
         super().__init__()
         self.cfg = cfg
         self.main_cfg = main_cfg
-        self.validator = validator
         self.model_type = self.cfg.model_type
         self.embedding_dim = self.cfg.embedding_dim
         self.value_projection_dim = self.cfg.value_projection_dim
@@ -607,10 +605,8 @@ class AttentionProjector(AttentionProjectorBase):
         self,
         cfg: "MultiHeadAttentionConfig",
         main_cfg: "ModelConfig",
-        validator: "AttentionValidator",
     ):
-        super().__init__(cfg, main_cfg, validator)
-        self.validator = validator
+        super().__init__(cfg, main_cfg)
         self.use_separate_projection_weight_flag = (
             self.cfg.use_separate_projection_weight_flag
         )
@@ -668,7 +664,7 @@ class AttentionProjector(AttentionProjectorBase):
             are_qkv_same and not self.use_separate_projection_weight_flag
         )
         if should_perform_self_attention:
-            self.validator.check_self_attention_projection_inputs(key, value)
+            self.__check_self_attention_projection_inputs(key, value)
             return self.__compute_self_attention_projections(query)
 
         assert not self.return_attention_weights_flag, (
@@ -752,6 +748,15 @@ class AttentionProjector(AttentionProjectorBase):
         if not (is_kv_sequence_length_same and is_kv_batch_size_same):
             raise RuntimeError(
                 f"key shape {key.shape} does not match value shape {value.shape}"
+            )
+
+    def __check_self_attention_projection_inputs(
+        self, key: Tensor, value: Tensor
+    ) -> None:
+        are_kv_shapes_same = key.shape == value.shape
+        if not are_kv_shapes_same:
+            raise RuntimeError(
+                f"key's sequence and batch dims {key.shape[:2]} do not match value's {value.shape[:2]}"
             )
 
 
