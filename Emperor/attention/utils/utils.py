@@ -20,6 +20,7 @@ class AttentionKeyValueBias(Module):
     def __init__(self, cfg: "MultiHeadAttentionConfig"):
         super().__init__()
         self.cfg = cfg
+        self.batch_size = self.cfg.batch_size
         self.embedding_dim = self.cfg.embedding_dim
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.key_bias_vector, self.value_bias_vector = self.__build_kv_bias_vectors()
@@ -140,40 +141,6 @@ class AttentionUtils:
         if attention_mask is not None:
             attention_mask = attention_mask.unsqueeze(0)
         return query, key, value, key_padding_mask, attention_mask
-
-    def add_learnable_bias_vectors(
-        self,
-        key_projections: Tensor,
-        value_projections: Tensor,
-        key_padding_mask: Tensor | None = None,
-        attention_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None]:
-        if self.key_bias_vector is None or self.value_bias_vector is None:
-            return (
-                key_projections,
-                value_projections,
-                key_padding_mask,
-                attention_mask,
-            )
-        repeated_key_bias = self.key_bias_vector.repeat(1, self.batch_size, 1)
-        key_projections_with_bias_vector = torch.cat(
-            [key_projections, repeated_key_bias]
-        )
-        repeated_value_bias = self.value_bias_vector.repeat(1, self.batch_size, 1)
-        value_projections_with_bias_vector = torch.cat(
-            [value_projections, repeated_value_bias]
-        )
-        if key_padding_mask is not None:
-            key_padding_mask = F.pad(key_padding_mask, (0, 1))
-        if attention_mask is not None:
-            attention_mask = F.pad(attention_mask, (0, 1))
-
-        return (
-            key_projections_with_bias_vector,
-            value_projections_with_bias_vector,
-            key_padding_mask,
-            attention_mask,
-        )
 
     def prepare_qkv_projection_for_attention(
         self,
