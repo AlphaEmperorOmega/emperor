@@ -8,7 +8,8 @@ from Emperor.attention.utils.utils import (
     AttentionProcessorWithReturnedWeights,
     AttentionValidator,
 )
-from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
+from Emperor.attention.utils.utils import AttentionProjector
+from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
 
 
@@ -34,12 +35,10 @@ class TestAttentionProcessorWithReturnedWeights(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        model = MultiHeadAttention(self.cfg)
-        output_model = model.output_model
-
         validator = AttentionValidator(self.config)
+        projector = AttentionProjector(self.config, self.cfg)
         self.model = AttentionProcessorWithReturnedWeights(
-            self.config, validator, output_model
+            self.config, validator, projector
         )
 
         self.batch_size = self.config.batch_size
