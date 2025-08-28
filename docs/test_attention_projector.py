@@ -4,6 +4,7 @@ from dataclasses import asdict
 from Emperor.attention.utils.utils import AttentionProjector
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from Emperor.layers.utils.enums import LayerTypes
+from Emperor.layers.utils.base import LayerBlock
 from docs.utils import default_unittest_config
 
 
@@ -45,6 +46,139 @@ class TestAttentionProjector(unittest.TestCase):
         self.key_model = self.model.key_model
         self.value_model = self.model.value_model
         self.qkv_model = self.model.qkv_model
+
+
+class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttentionProjector):
+    def test__different_embedding_dim(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=64,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
+        )
+        self.rebuild_presets(config)
+
+        output = self.model._AttentionProjector__are_qkv_dimensions_equal()
+        self.assertFalse(output)
+
+    def test__different_query_key_projection_dim(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            query_key_projection_dim=64,
+            value_projection_dim=32,
+        )
+        self.rebuild_presets(config)
+
+        output = self.model._AttentionProjector__are_qkv_dimensions_equal()
+        self.assertFalse(output)
+
+    def test__different_value_projection_dim(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=64,
+        )
+        self.rebuild_presets(config)
+
+        output = self.model._AttentionProjector__are_qkv_dimensions_equal()
+        self.assertFalse(output)
+
+    def test__embd_key_value_same_dim(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
+        )
+        self.rebuild_presets(config)
+
+        output = self.model._AttentionProjector__are_qkv_dimensions_equal()
+        self.assertTrue(output)
+
+
+class TestMultIHeadAttention____build_shared_projection_models(TestAttentionProjector):
+    def test__shared_model_inizialization(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
+        )
+        self.rebuild_presets(config)
+        del self.model.query_model  # Ensure model is not initialized
+        del self.model.key_model  # Ensure model is not initialized
+        del self.model.value_model  # Ensure model is not initialized
+        qkv_model = self.model._AttentionProjector__build_shared_projection_models()
+
+        self.assertIsNone(self.model.query_model)
+        self.assertIsNone(self.model.key_model)
+        self.assertIsNone(self.model.value_model)
+        self.assertIsInstance(qkv_model, LayerBlock)
+
+
+class TestMultIHeadAttention____build_separate_projection_models(
+    TestAttentionProjector
+):
+    def test__separate_models_initializations(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            query_key_projection_dim=64,
+            value_projection_dim=32,
+        )
+        self.rebuild_presets(config)
+        del self.model.qkv_model  # Ensure model is not initialized
+        query_model, key_model, value_model = (
+            self.model._AttentionProjector__build_separate_projection_models()
+        )
+
+        self.assertIsInstance(query_model, LayerBlock)
+        self.assertIsInstance(key_model, LayerBlock)
+        self.assertIsInstance(value_model, LayerBlock)
+        self.assertIsNone(self.model.qkv_model)
+
+
+class TestMultIHeadAttention____build_projection_models(TestAttentionProjector):
+    def test__same_qkv_dim__use_separate_projection_weight_flag__False(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
+            use_separate_projection_weight_flag=False,
+        )
+        self.rebuild_presets(config)
+
+        self.assertIsInstance(self.model.qkv_model, LayerBlock)
+        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsNone(self.model.query_model)
+        self.assertIsNone(self.model.key_model)
+        self.assertIsNone(self.model.value_model)
+
+    def test__same_qkv_dim__use_separate_projection_weight_flag__True(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            query_key_projection_dim=32,
+            value_projection_dim=32,
+            use_separate_projection_weight_flag=True,
+        )
+        self.rebuild_presets(config)
+
+        self.assertIsInstance(self.model.query_model, LayerBlock)
+        self.assertIsInstance(self.model.key_model, LayerBlock)
+        self.assertIsInstance(self.model.value_model, LayerBlock)
+        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsNone(self.model.qkv_model)
+
+    def test__different_qkv_dim(self):
+        config = MultiHeadAttentionConfig(
+            embedding_dim=32,
+            query_key_projection_dim=64,
+            value_projection_dim=32,
+            use_separate_projection_weight_flag=True,
+        )
+        self.rebuild_presets(config)
+
+        self.assertIsInstance(self.model.query_model, LayerBlock)
+        self.assertIsInstance(self.model.key_model, LayerBlock)
+        self.assertIsInstance(self.model.value_model, LayerBlock)
+        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsNone(self.model.qkv_model)
 
 
 class Test___compute_projection(TestAttentionProjector):
