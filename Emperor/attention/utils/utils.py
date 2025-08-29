@@ -157,7 +157,7 @@ class AttentionUtils:
             attention_mask = attention_mask.unsqueeze(0)
         return query, key, value, key_padding_mask, attention_mask
 
-    def prepare_qkv_projection_for_attention(
+    def reshape_qkv_for_attention(
         self,
         query: Tensor,
         key: Tensor,

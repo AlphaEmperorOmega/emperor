@@ -131,7 +131,7 @@ class Test____reshape_projection_tesnor(TestAttentionUtils):
         self.assertEqual(output.shape, expected_output_shape)
 
 
-class Test__prepare_qkv_projection_for_attention(TestAttentionUtils):
+class Test__reshape_qkv_for_attention(TestAttentionUtils):
     def test__qkv_inputs_only(self):
         query = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
@@ -145,7 +145,7 @@ class Test__prepare_qkv_projection_for_attention(TestAttentionUtils):
         static_key = None
         static_value = None
 
-        query, key, value = self.model.prepare_qkv_projection_for_attention(
+        query, key, value = self.model.reshape_qkv_for_attention(
             query, key, value, static_key, static_value
         )
 
@@ -183,7 +183,7 @@ class Test__prepare_qkv_projection_for_attention(TestAttentionUtils):
             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
         )
 
-        query, key, value = self.model.prepare_qkv_projection_for_attention(
+        query, key, value = self.model.reshape_qkv_for_attention(
             query, key, value, static_key, static_value
         )
 

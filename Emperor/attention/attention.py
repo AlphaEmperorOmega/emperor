@@ -204,7 +204,7 @@ class MultiHeadAttention(Module):
             key_padding_mask,
             attention_mask,
         )
-        query, key, value = self.utils.prepare_qkv_projection_for_attention(
+        query, key, value = self.utils.reshape_qkv_for_attention(
             query, key, value, static_key, static_values
         )
         key, value, attention_mask, key_padding_mask = self.utils.add_zero_attention(
