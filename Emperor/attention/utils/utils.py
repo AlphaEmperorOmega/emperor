@@ -215,7 +215,7 @@ class AttentionUtils:
         )
         return torch.cat([tensor, zeros_tensor], dim=1)
 
-    def merge_masks(
+    def merge_padding_and_attention_mask(
         self,
         key: Tensor,
         key_padding_mask: Tensor | None = None,
