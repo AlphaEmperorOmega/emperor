@@ -67,6 +67,45 @@ class AttentionKeyValueBias(Module):
         )
 
 
+class AttentionBatchDimensionManager:
+    def __init__(self, cfg: "MultiHeadAttentionConfig"):
+        self.cfg = cfg
+        self.batch_size = self.cfg.batch_size
+        self.should_transpose_first_two_dims = False
+
+    def enforce_batch_as_second_dim(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        is_input_batched = query.dim() == 3
+        _, batch_size, _ = query.size()
+        is_expected_batch_size = batch_size != self.batch_size
+
+        self.should_transpose_first_two_dims = (
+            is_expected_batch_size and is_input_batched
+        )
+        if not self.should_transpose_first_two_dims:
+            return query, key, value
+        if key is value:
+            return self.__transpose_shared_qkv(query, key)
+        return (tensor.transpose(0, 1) for tensor in (query, key, value))
+
+    def __transpose_shared_qkv(self, query: Tensor, key: Tensor):
+        if query is key:
+            query = key = value = query.transpose(0, 1)
+            return query, key, value
+        query, key = (tensor.transpose(0, 1) for tensor in (query, key))
+        value = key
+        return query, key, value
+
+    def reverse_enforced_batch_as_second_dim(self, attention_output: Tensor) -> Tensor:
+        if not self.should_transpose_first_two_dims:
+            return attention_output
+        return attention_output.transpose(1, 0)
+
+
 class AttentionUtils:
     def __init__(
         self,
@@ -78,7 +117,6 @@ class AttentionUtils:
         self.validator = validator
         self.num_heads = self.cfg.num_heads
         self.embedding_dim = self.cfg.embedding_dim
-        self.batch_first_flag = self.cfg.batch_first_flag
         self.zero_attention_flag = self.cfg.zero_attention_flag
         self.query_key_projection_dim = self.cfg.query_key_projection_dim
         self.value_projection_dim = self.cfg.value_projection_dim
@@ -99,29 +137,6 @@ class AttentionUtils:
             else self.head_dim
         )
         return qk_head_dim, v_head_dim
-
-    def maybe_transpose_qkv(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-    ):
-        should_transpose_qkv = (
-            self.batch_first_flag and self.validator.is_tensor_batched(query)
-        )
-        if not should_transpose_qkv:
-            return query, key, value
-        if key is value:
-            return self.__transpose_shared_qkv(query, key)
-        return (tensor.transpose(0, 1) for tensor in (query, key, value))
-
-    def __transpose_shared_qkv(self, query: Tensor, key: Tensor):
-        if query is key:
-            query = key = value = query.transpose(0, 1)
-            return query, key, value
-        query, key = (tensor.transpose(0, 1) for tensor in (query, key))
-        value = key
-        return query, key, value
 
     def add_batch_dimension_if_missing(
         self,
