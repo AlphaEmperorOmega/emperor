@@ -148,7 +148,6 @@ def default_unittest_config():
             dropout_probability=0.0,
             key_value_bias_flag=False,
             zero_attention_flag=False,
-            batch_first_flag=False,
             query_key_projection_dim=0,
             value_projection_dim=0,
             causal_attention_mask_flag=False,

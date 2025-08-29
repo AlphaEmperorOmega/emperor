@@ -36,8 +36,6 @@ class TestAttentionValidator(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        main_model = MultiHeadAttention(self.cfg)
-
         self.model = AttentionProjector(
             self.config,
             self.cfg,

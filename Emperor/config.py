@@ -211,7 +211,6 @@ class ModelConfig(DataClassBase):
             dropout_probability=0.0,
             key_value_bias_flag=False,
             zero_attention_flag=False,
-            batch_first_flag=False,
             causal_attention_mask_flag=False,
             add_key_value_bias_flag=False,
         ),

@@ -1,6 +1,7 @@
 from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.attention.utils.utils import (
+    AttentionBatchDimensionManager,
     AttentionKeyValueBias,
     AttentionMask,
     AttentionProcessor,
@@ -96,12 +97,6 @@ class MultiHeadAttentionConfig(DataClassBase):
             "help": "If True, add zero vectors to attention keys/values to allow explicit non-attending positions."
         },
     )
-    batch_first_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "If True, input/output tensors are in (batch, seq, feature) format. If False, uses (seq, batch, feature)."
-        },
-    )
     causal_attention_mask_flag: bool | None = field(
         default=None,
         metadata={
@@ -138,7 +133,6 @@ class MultiHeadAttention(Module):
         self.model_type = self.cfg.model_type
         self.target_dtype = self.cfg.target_dtype
         self.embedding_dim = self.cfg.embedding_dim
-        self.batch_first_flag = self.cfg.batch_first_flag
         self.dropout_probability = self.cfg.dropout_probability
         self.key_value_bias_flag = self.cfg.key_value_bias_flag
         self.zero_attention_flag = self.cfg.zero_attention_flag
@@ -169,6 +163,7 @@ class MultiHeadAttention(Module):
         self.processor = AttentionProcessor(self.cfg, self.validator, self.projector)
         self.bias = AttentionKeyValueBias(self.cfg)
         self.utils = AttentionUtils(self.cfg, self.validator)
+        self.batch_utils = AttentionBatchDimensionManager(self.cfg)
 
     def forward(
         self,
@@ -180,7 +175,9 @@ class MultiHeadAttention(Module):
         static_key: Tensor | None = None,
         static_values: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
-        query, key, value = self.utils.maybe_transpose_qkv(query, key, value)
+        query, key, value = self.batch_utils.enforce_batch_as_second_dim(
+            query, key, value
+        )
         self.validator.multi_head_attention_input_shapes(
             query, key, value, key_padding_mask, attention_mask
         )
@@ -217,6 +214,7 @@ class MultiHeadAttention(Module):
         attention_output, attention_weights = self.processor.compute_attention(
             query, key, value, merged_mask
         )
-        if self.batch_first_flag and self.validator.is_input_batched():
-            attention_output = attention_output.transpose(1, 0)
+        attention_output = self.batch_utils.reverse_enforced_batch_as_second_dim(
+            attention_output
+        )
         return attention_output, attention_weights
