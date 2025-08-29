@@ -148,7 +148,7 @@ class MultiHeadAttention(Module):
         )
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self._validate_fields(self.cfg, MultiHeadAttentionConfig)
-        self.__create_attention_utilities()
+        self.__initialize_utilities()
         self.head_dim = self.__resolve_head_dim()
 
     def __resolve_head_dim(self):
@@ -156,7 +156,7 @@ class MultiHeadAttention(Module):
         self.validator.assert_correct_head_dim(head_dim)
         return head_dim
 
-    def __create_attention_utilities(self):
+    def __initialize_utilities(self):
         self.validator = AttentionValidator(self.cfg)
         self.masks = AttentionMask(self.cfg, self.validator)
         self.projector = AttentionProjector(self.cfg, self.main_cfg)
@@ -210,7 +210,9 @@ class MultiHeadAttention(Module):
         key, value, attention_mask, key_padding_mask = self.utils.add_zero_attention(
             key, value, attention_mask, key_padding_mask
         )
-        merged_mask = self.utils.merge_padding_and_attention_mask(key, key_padding_mask, attention_mask)
+        merged_mask = self.utils.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
         attention_output, attention_weights = self.processor.compute_attention(
             query, key, value, merged_mask
         )
