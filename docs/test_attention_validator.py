@@ -415,7 +415,7 @@ class Test___ensure_attention_mask_if_causal(TestAttentionValidator):
         self.assertIsNone(output)
 
 
-class Test_multi_head_attention_input_shapes(TestAttentionValidator):
+class Test_check_attention_input_shapes(TestAttentionValidator):
     def test__all_inputs_batched(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
@@ -437,7 +437,7 @@ class Test_multi_head_attention_input_shapes(TestAttentionValidator):
             source_sequence_length,
         )
 
-        output = m.multi_head_attention_input_shapes(
+        output = m.check_attention_input_shapes(
             query, key, value, key_padding_mask, attention_mask
         )
 
@@ -458,7 +458,7 @@ class Test_multi_head_attention_input_shapes(TestAttentionValidator):
         key_padding_mask = torch.randint(0, 2, (source_sequence_length,))
         attention_mask = torch.randn(target_sequence_length, source_sequence_length)
 
-        output = m.multi_head_attention_input_shapes(
+        output = m.check_attention_input_shapes(
             query, key, value, key_padding_mask, attention_mask
         )
 
@@ -478,7 +478,7 @@ class Test_multi_head_attention_input_shapes(TestAttentionValidator):
         key = torch.randn(source_sequence_length, batch_size, embedding_dim)
         value = torch.randn(source_sequence_length, batch_size, embedding_dim)
 
-        output = m.multi_head_attention_input_shapes(query, key, value)
+        output = m.check_attention_input_shapes(query, key, value)
 
         self.assertTrue(output)
 

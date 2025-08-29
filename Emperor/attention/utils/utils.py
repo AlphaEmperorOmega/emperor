@@ -882,7 +882,7 @@ class AttentionValidator:
                     "is deprecated. Use same type for both instead."
                 )
 
-    def multi_head_attention_input_shapes(
+    def check_attention_input_shapes(
         self,
         query: Tensor,
         key: Tensor,

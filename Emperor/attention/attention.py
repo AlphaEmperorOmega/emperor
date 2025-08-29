@@ -178,7 +178,7 @@ class MultiHeadAttention(Module):
         query, key, value = self.batch_utils.enforce_batch_as_second_dim(
             query, key, value
         )
-        self.validator.multi_head_attention_input_shapes(
+        self.validator.check_attention_input_shapes(
             query, key, value, key_padding_mask, attention_mask
         )
         query, key, value, key_padding_mask, attention_mask = (
