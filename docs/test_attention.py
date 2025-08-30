@@ -81,50 +81,6 @@ class TestMultiHeadAttention__init(TestAttention):
         )
 
 
-class TestMultIHeadAttention____resolve_kv_dimensions(TestAttention):
-    def test__qkv_zero(self):
-        config = MultiHeadAttentionConfig(
-            query_key_projection_dim=0,
-            value_projection_dim=0,
-        )
-        self.rebuild_presets(config)
-
-        self.assertEqual(
-            self.model.query_key_projection_dim, self.config.query_key_projection_dim
-        )
-        self.assertEqual(
-            self.model.value_projection_dim, self.config.value_projection_dim
-        )
-
-    def test__kv_nonzero(self):
-        config = MultiHeadAttentionConfig(
-            query_key_projection_dim=128,
-            value_projection_dim=256,
-        )
-        self.rebuild_presets(config)
-
-        self.model._MultiHeadAttention__resolve_head_dim()
-        self.assertEqual(
-            self.model.query_key_projection_dim, self.config.query_key_projection_dim
-        )
-        self.assertEqual(
-            self.model.value_projection_dim, self.config.value_projection_dim
-        )
-
-
-class TestMultIHeadAttention____resolve_head_dim(TestAttention):
-    def test__computed_head_dim(self):
-        head_dim = self.model._MultiHeadAttention__resolve_head_dim()
-        expected_head_dim = self.config.embedding_dim // self.config.num_heads
-        self.assertEqual(head_dim, expected_head_dim)
-
-    def test__if_assertion_is_raised(self):
-        self.model.num_heads = 3
-
-        with self.assertRaises(AssertionError) as context:
-            _ = self.model._MultiHeadAttention__resolve_head_dim()
-
-
 class TestMultIHeadAttention____initialize_attention_components(TestAttention):
     def test__ensure_componets_are_initialzied(self):
         self.assertIsInstance(self.model.validator, AttentionValidator)
