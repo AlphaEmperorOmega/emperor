@@ -149,12 +149,6 @@ class MultiHeadAttention(Module):
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self._validate_fields(self.cfg, MultiHeadAttentionConfig)
         self.__initialize_utilities()
-        self.head_dim = self.__resolve_head_dim()
-
-    def __resolve_head_dim(self):
-        head_dim = self.embedding_dim // self.num_heads
-        self.validator.assert_correct_head_dim(head_dim)
-        return head_dim
 
     def __initialize_utilities(self):
         self.validator = AttentionValidator(self.cfg)
@@ -167,54 +161,44 @@ class MultiHeadAttention(Module):
 
     def forward(
         self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        key_padding_mask: Tensor | None = None,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        k_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
-        static_key: Tensor | None = None,
-        static_values: Tensor | None = None,
+        static_k: Tensor | None = None,
+        static_v: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
-        query, key, value = self.batch_utils.enforce_batch_as_second_dim(
-            query, key, value
-        )
+        q, k, v = self.batch_utils.enforce_batch_as_second_dim(q, k, v)
         self.validator.check_attention_input_shapes(
-            query, key, value, key_padding_mask, attention_mask
+            q, k, v, k_padding_mask, attention_mask
         )
-        query, key, value, key_padding_mask, attention_mask = (
+        q, k, v, k_padding_mask, attention_mask = (
             self.utils.add_batch_dimension_if_missing(
-                query, key, value, key_padding_mask, attention_mask
+                q, k, v, k_padding_mask, attention_mask
             )
         )
-        key_padding_mask, attention_mask = (
+        k_padding_mask, attention_mask = (
             self.masks.validate_padding_and_attention_masks(
-                key_padding_mask,
+                k_padding_mask,
                 attention_mask,
             )
         )
-        query, key, value = self.projector.compute_qkv_projections(query, key, value)
-        (
-            key,
-            value,
-            key_padding_mask,
-            attention_mask,
-        ) = self.bias.add_kv_learnable_bias_vectors(
-            key,
-            value,
-            key_padding_mask,
-            attention_mask,
+        q, k, v = self.projector.compute_qkv_projections(q, k, v)
+        (k, v, k_padding_mask, attention_mask) = (
+            self.bias.add_kv_learnable_bias_vectors(
+                k, v, k_padding_mask, attention_mask
+            )
         )
-        query, key, value = self.utils.reshape_qkv_for_attention(
-            query, key, value, static_key, static_values
+        q, k, v = self.utils.reshape_qkv_for_attention(q, k, v, static_k, static_v)
+        k, v, attention_mask, k_padding_mask = self.utils.add_zero_attention(
+            k, v, attention_mask, k_padding_mask
         )
-        key, value, attention_mask, key_padding_mask = self.utils.add_zero_attention(
-            key, value, attention_mask, key_padding_mask
-        )
-        merged_mask = self.utils.merge_padding_and_attention_mask(
-            key, key_padding_mask, attention_mask
+        merged_masks = self.utils.merge_padding_and_attention_mask(
+            k, k_padding_mask, attention_mask
         )
         attention_output, attention_weights = self.processor.compute_attention(
-            query, key, value, merged_mask
+            q, k, v, merged_masks
         )
         attention_output = self.batch_utils.reverse_enforced_batch_as_second_dim(
             attention_output
