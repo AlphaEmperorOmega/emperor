@@ -754,7 +754,7 @@ class AttentionMask:
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
 
-    def validate_padding_and_attention_masks(
+    def check_padding_and_attention_masks(
         self,
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,

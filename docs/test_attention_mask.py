@@ -168,7 +168,7 @@ class Test_validate_attention_mask(TestAttentionMask):
         self.assertFalse(self.model.causal_attention_mask_flag)
 
 
-class Test_validate_padding_and_attention_masks(TestAttentionMask):
+class Test_check_padding_and_attention_masks(TestAttentionMask):
     def test__inputs_as_None(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=True,
@@ -180,7 +180,7 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
         attention_mask = None
 
         key_padding_mask, attention_mask = (
-            self.model.validate_padding_and_attention_masks(
+            self.model.check_padding_and_attention_masks(
                 key_padding_mask,
                 attention_mask,
             )
@@ -202,7 +202,7 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
         attention_mask = None
 
         output_key_padding_mask, output_attention_mask = (
-            self.model.validate_padding_and_attention_masks(
+            self.model.check_padding_and_attention_masks(
                 key_padding_mask,
                 attention_mask,
             )
@@ -230,7 +230,7 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
             > 0
         )
         key_padding_mask, attention_mask = (
-            self.model.validate_padding_and_attention_masks(
+            self.model.check_padding_and_attention_masks(
                 key_padding_mask,
                 attention_mask,
             )
@@ -260,7 +260,7 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
         )
 
         key_padding_mask, attention_mask = (
-            self.model.validate_padding_and_attention_masks(
+            self.model.check_padding_and_attention_masks(
                 key_padding_mask,
                 attention_mask,
             )
@@ -286,7 +286,7 @@ class Test_validate_padding_and_attention_masks(TestAttentionMask):
         )
 
         output_key_padding_mask, output_attention_mask = (
-            self.model.validate_padding_and_attention_masks(
+            self.model.check_padding_and_attention_masks(
                 key_padding_mask,
                 attention_mask,
             )
