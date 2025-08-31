@@ -828,10 +828,6 @@ class Validator:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        qkv_model: nn.Module | None = None,
-        query_model: nn.Module | None = None,
-        key_model: nn.Module | None = None,
-        value_model: nn.Module | None = None,
     ):
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
@@ -843,10 +839,6 @@ class Validator:
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.qkv_model = qkv_model
-        self.query_model = query_model
-        self.key_model = key_model
-        self.value_model = value_model
 
     def assert_correct_head_dim(self, head_dim: int) -> None:
         assert (head_dim * self.num_heads) == self.embeding_dim, (
@@ -895,9 +887,9 @@ class Validator:
         self.batched_input_flag = self.is_tensor_batched(query)
 
         self.__check_query_dims(query)
-        self.__check_query_key_value_dimensions(key, value)
-        self.__check_key_padding_mask_dimensions(key_padding_mask)
-        self.__check_attention_mask(attention_mask)
+        self.__check_query_key_value_dimension_count(key, value)
+        self.__check_key_padding_mask_dimension_count(key_padding_mask)
+        self.__check_attention_mask_dim_count_and_shape(attention_mask)
         self.__ensure_attention_mask_if_causal(attention_mask)
 
         return self.batched_input_flag
@@ -908,18 +900,20 @@ class Validator:
                 f"Query should be unbatched 2D or batched 3D tensor but received {query.dim()}-D tensor"
             )
 
-    def __check_query_key_value_dimensions(self, key: Tensor, value: Tensor) -> None:
+    def __check_query_key_value_dimension_count(
+        self, key: Tensor, value: Tensor
+    ) -> None:
         expected_dims = 3 if self.batched_input_flag else 2
-        qk_dimension_check = key.dim() == expected_dims
-        qv_dimension_check = value.dim() == expected_dims
-        are_qkv_dimensions_same = qk_dimension_check and qv_dimension_check
-        if not are_qkv_dimensions_same:
+        is_qk_dim_count_same = key.dim() == expected_dims
+        is_qv_dim_count_same = value.dim() == expected_dims
+        are_qkv_dim_counts_same = is_qk_dim_count_same and is_qv_dim_count_same
+        if not are_qkv_dim_counts_same:
             raise RuntimeError(
                 f"For {self.__format_dimension_context()} query, expected key and value to be {expected_dims}-D "
                 f"but found {key.dim()}-D and {value.dim()}-D tensors respectively"
             )
 
-    def __check_key_padding_mask_dimensions(
+    def __check_key_padding_mask_dimension_count(
         self,
         key_padding_mask: Tensor | None = None,
     ) -> None:
@@ -933,7 +927,7 @@ class Validator:
                 f"but found {key_padding_mask.dim()}-D tensor instead"
             )
 
-    def __check_attention_mask(
+    def __check_attention_mask_dim_count_and_shape(
         self,
         attention_mask: Tensor | None = None,
     ) -> None:
