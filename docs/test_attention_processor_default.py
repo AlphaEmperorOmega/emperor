@@ -2,15 +2,15 @@ from dataclasses import asdict
 import unittest
 import torch
 from Emperor.attention.utils.utils import (
-    AttentionProcessorDefault,
-    AttentionValidator,
+    ProcessorDefault,
+    Validator,
 )
-from Emperor.attention.utils.utils import AttentionProjector
+from Emperor.attention.utils.utils import Projector
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
 
 
-class TestAttentionProcessorDefault(unittest.TestCase):
+class TestProcessorDefault(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -32,9 +32,9 @@ class TestAttentionProcessorDefault(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        validator = AttentionValidator(self.config)
-        projector = AttentionProjector(self.config, self.cfg)
-        self.model = AttentionProcessorDefault(self.config, validator, projector)
+        validator = Validator(self.config)
+        projector = Projector(self.config, self.cfg)
+        self.model = ProcessorDefault(self.config, validator, projector)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -44,11 +44,11 @@ class TestAttentionProcessorDefault(unittest.TestCase):
         self.head_dim = self.embedding_dim // self.num_heads
 
 
-class Test____prepare_attnetion_mask(TestAttentionProcessorDefault):
+class Test____prepare_attnetion_mask(TestProcessorDefault):
     def test__attention_mask__None(self):
         attention_mask = None
         output_attention_mask = (
-            self.model._AttentionProcessorDefault__prepare_attnetion_mask(
+            self.model._ProcessorDefault__prepare_attnetion_mask(
                 attention_mask
             )
         )
@@ -64,7 +64,7 @@ class Test____prepare_attnetion_mask(TestAttentionProcessorDefault):
         )
         attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
         output_attention_mask = (
-            self.model._AttentionProcessorDefault__prepare_attnetion_mask(
+            self.model._ProcessorDefault__prepare_attnetion_mask(
                 attention_mask
             )
         )
@@ -90,7 +90,7 @@ class Test____prepare_attnetion_mask(TestAttentionProcessorDefault):
         )
 
         output_attention_mask = (
-            self.model._AttentionProcessorDefault__prepare_attnetion_mask(
+            self.model._ProcessorDefault__prepare_attnetion_mask(
                 attention_mask
             )
         )
@@ -102,7 +102,7 @@ class Test____prepare_attnetion_mask(TestAttentionProcessorDefault):
         )
 
 
-class Test____reshape_qkv_for_attention(TestAttentionProcessorDefault):
+class Test____reshape_qkv_for_attention(TestProcessorDefault):
     def test__method(self):
         query = torch.randn(
             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
@@ -115,7 +115,7 @@ class Test____reshape_qkv_for_attention(TestAttentionProcessorDefault):
         )
 
         query, key, value = (
-            self.model._AttentionProcessorDefault__reshape_qkv_for_attention(
+            self.model._ProcessorDefault__reshape_qkv_for_attention(
                 query, key, value
             )
         )
@@ -152,7 +152,7 @@ class Test____reshape_qkv_for_attention(TestAttentionProcessorDefault):
         )
 
 
-class Test____compute_weighted_values(TestAttentionProcessorDefault):
+class Test____compute_weighted_values(TestProcessorDefault):
     def test__method(self):
         config = MultiHeadAttentionConfig(
             source_sequence_length=32,
@@ -179,7 +179,7 @@ class Test____compute_weighted_values(TestAttentionProcessorDefault):
         )
 
         weighted_values = (
-            self.model._AttentionProcessorDefault__compute_weighted_values(
+            self.model._ProcessorDefault__compute_weighted_values(
                 query, key, value, attention_mask
             )
         )
@@ -194,7 +194,7 @@ class Test____compute_weighted_values(TestAttentionProcessorDefault):
         )
 
 
-class Test___compute_attention_output(TestAttentionProcessorDefault):
+class Test___compute_attention_output(TestProcessorDefault):
     def test__method(self):
         config = MultiHeadAttentionConfig(
             source_sequence_length=32,
@@ -215,7 +215,7 @@ class Test___compute_attention_output(TestAttentionProcessorDefault):
         )
 
 
-class Test__compute_attention(TestAttentionProcessorDefault):
+class Test__compute_attention(TestProcessorDefault):
     def test__method(self):
         config = MultiHeadAttentionConfig(
             source_sequence_length=32,

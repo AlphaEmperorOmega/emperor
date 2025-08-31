@@ -2,14 +2,14 @@ import torch
 import unittest
 from dataclasses import asdict
 from Emperor.attention.utils.utils import (
-    AttentionValidator,
-    AttentionMask,
+    Validator,
+    Mask,
 )
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
 
 
-class TestAttentionMask(unittest.TestCase):
+class TestMask(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -35,8 +35,8 @@ class TestAttentionMask(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        validator = AttentionValidator(self.config)
-        self.model = AttentionMask(self.config, validator)
+        validator = Validator(self.config)
+        self.model = Mask(self.config, validator)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -46,7 +46,7 @@ class TestAttentionMask(unittest.TestCase):
         self.head_dim = self.embedding_dim // self.num_heads
 
 
-class Test___canonical_mask(TestAttentionMask):
+class Test___canonical_mask(TestMask):
     def test__input_as_None(self):
         mask = None
         mask_name = ""
@@ -55,7 +55,7 @@ class Test___canonical_mask(TestAttentionMask):
         target_type = torch.float32
         check_other = False
 
-        output = self.model._AttentionMask__canonical_mask(
+        output = self.model._Mask__canonical_mask(
             mask, mask_name, other_type, other_name, target_type, check_other
         )
         self.assertIsNone(output)
@@ -68,7 +68,7 @@ class Test___canonical_mask(TestAttentionMask):
         target_type = torch.float32
         check_other = True
 
-        output = self.model._AttentionMask__canonical_mask(
+        output = self.model._Mask__canonical_mask(
             mask, mask_name, other_type, other_name, target_type, check_other
         )
 
@@ -83,14 +83,14 @@ class Test___canonical_mask(TestAttentionMask):
         target_type = torch.float32
         check_other = True
 
-        output = self.model._AttentionMask__canonical_mask(
+        output = self.model._Mask__canonical_mask(
             mask, mask_name, other_type, other_name, target_type, check_other
         )
 
         self.assertTrue(torch.equal(output, mask))
 
 
-class Test_validate_attention_mask(TestAttentionMask):
+class Test_validate_attention_mask(TestMask):
     def test__key_padding_mask__None(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=False,
@@ -105,7 +105,7 @@ class Test_validate_attention_mask(TestAttentionMask):
         )
         attention_mask = attention_mask > 0
 
-        output = self.model._AttentionMask__validate_attention_mask(
+        output = self.model._Mask__validate_attention_mask(
             key_padding_mask,
             attention_mask,
         )
@@ -127,7 +127,7 @@ class Test_validate_attention_mask(TestAttentionMask):
         )
         attention_mask = attention_mask > 0
 
-        output = self.model._AttentionMask__validate_attention_mask(
+        output = self.model._Mask__validate_attention_mask(
             key_padding_mask,
             attention_mask,
         )
@@ -157,7 +157,7 @@ class Test_validate_attention_mask(TestAttentionMask):
             self.target_sequence_length,
         )
 
-        output = self.model._AttentionMask__validate_attention_mask(
+        output = self.model._Mask__validate_attention_mask(
             key_padding_mask,
             attention_mask,
         )
@@ -168,7 +168,7 @@ class Test_validate_attention_mask(TestAttentionMask):
         self.assertFalse(self.model.causal_attention_mask_flag)
 
 
-class Test_check_padding_and_attention_masks(TestAttentionMask):
+class Test_check_padding_and_attention_masks(TestMask):
     def test__inputs_as_None(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=True,

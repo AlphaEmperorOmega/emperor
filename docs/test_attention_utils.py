@@ -3,11 +3,11 @@ import torch
 import unittest
 from dataclasses import asdict
 from docs.utils import default_unittest_config
-from Emperor.attention.utils.utils import AttentionUtils, AttentionValidator
+from Emperor.attention.utils.utils import Utils, Validator
 from Emperor.attention.attention import MultiHeadAttentionConfig
 
 
-class TestAttentionUtils(unittest.TestCase):
+class TestUtils(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -29,8 +29,8 @@ class TestAttentionUtils(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.validator = AttentionValidator(self.config)
-        self.model = AttentionUtils(self.config, self.validator)
+        self.validator = Validator(self.config)
+        self.model = Utils(self.config, self.validator)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -42,7 +42,7 @@ class TestAttentionUtils(unittest.TestCase):
         self.head_dim = self.embedding_dim // self.num_heads
 
 
-class Test__add_batch_dimension_if_missing(TestAttentionUtils):
+class Test__add_batch_dimension_if_missing(TestUtils):
     def test__batched_input(self):
         query = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
@@ -101,7 +101,7 @@ class Test__add_batch_dimension_if_missing(TestAttentionUtils):
         )
 
 
-class Test____reshape_projection_tesnor(TestAttentionUtils):
+class Test____reshape_projection_tesnor(TestUtils):
     def test__input_as_tensor_and_static_tensor(self):
         tensor = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
@@ -109,7 +109,7 @@ class Test____reshape_projection_tesnor(TestAttentionUtils):
         static_tensor = torch.randn(
             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
         )
-        output = self.model._AttentionUtils__reshape_projection_tesnor(
+        output = self.model._Utils__reshape_projection_tesnor(
             tensor, static_tensor
         )
 
@@ -120,7 +120,7 @@ class Test____reshape_projection_tesnor(TestAttentionUtils):
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
         static_tensor = None
-        output = self.model._AttentionUtils__reshape_projection_tesnor(
+        output = self.model._Utils__reshape_projection_tesnor(
             tensor, static_tensor
         )
         expected_output_shape = (
@@ -131,7 +131,7 @@ class Test____reshape_projection_tesnor(TestAttentionUtils):
         self.assertEqual(output.shape, expected_output_shape)
 
 
-class Test__reshape_qkv_for_attention(TestAttentionUtils):
+class Test__reshape_qkv_for_attention(TestUtils):
     def test__qkv_inputs_only(self):
         query = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
@@ -207,12 +207,12 @@ class Test__reshape_qkv_for_attention(TestAttentionUtils):
         self.assertTrue(torch.equal(value, static_value))
 
 
-class Test____concatenate_zeros_tensor(TestAttentionUtils):
+class Test____concatenate_zeros_tensor(TestUtils):
     def test__method(self):
         tensor = torch.randn(
             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
         )
-        output = self.model._AttentionUtils__concatenate_zeros_tensor(tensor)
+        output = self.model._Utils__concatenate_zeros_tensor(tensor)
 
         expected_sequence_length = self.source_sequence_length + 1
         expected_shape = (
@@ -224,7 +224,7 @@ class Test____concatenate_zeros_tensor(TestAttentionUtils):
         self.assertEqual(output.shape, expected_shape)
 
 
-class Test__add_zero_attention(TestAttentionUtils):
+class Test__add_zero_attention(TestUtils):
     def test__all_inputs__zero_attention_flag__False(self):
         config = MultiHeadAttentionConfig(
             zero_attention_flag=False,
@@ -331,12 +331,12 @@ class Test__add_zero_attention(TestAttentionUtils):
         self.assertEqual(attention_mask.shape, expected_attention_mask_shape)
 
 
-class Test____merge_attention_and_padding_mask(TestAttentionUtils):
+class Test____merge_attention_and_padding_mask(TestUtils):
     def test__inputs_as_None(self):
         key_padding_mask = None
         attention_mask = None
 
-        output = self.model._AttentionUtils__merge_attention_and_padding_mask(
+        output = self.model._Utils__merge_attention_and_padding_mask(
             key_padding_mask, attention_mask
         )
         self.assertIsNone(output)
@@ -347,7 +347,7 @@ class Test____merge_attention_and_padding_mask(TestAttentionUtils):
         )
         attention_mask = None
 
-        output = self.model._AttentionUtils__merge_attention_and_padding_mask(
+        output = self.model._Utils__merge_attention_and_padding_mask(
             key_padding_mask, attention_mask
         )
 
@@ -364,7 +364,7 @@ class Test____merge_attention_and_padding_mask(TestAttentionUtils):
             self.source_sequence_length,
         )
 
-        output = self.model._AttentionUtils__merge_attention_and_padding_mask(
+        output = self.model._Utils__merge_attention_and_padding_mask(
             key_padding_mask, attention_mask
         )
 
@@ -373,7 +373,7 @@ class Test____merge_attention_and_padding_mask(TestAttentionUtils):
         self.assertTrue(torch.equal(output, expected_output))
 
 
-class Test__merge_padding_and_attention_mask(TestAttentionUtils):
+class Test__merge_padding_and_attention_mask(TestUtils):
     def test__inputs_as_None(self):
         key = torch.randn(
             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim

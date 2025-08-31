@@ -2,17 +2,17 @@ from dataclasses import asdict
 import unittest
 import torch
 from Emperor.attention.utils.utils import (
-    AttentionProcessor,
-    AttentionProcessorDefault,
-    AttentionProcessorWithReturnedWeights,
-    AttentionValidator,
+    Processor,
+    ProcessorDefault,
+    ProcessorWithReturnedWeights,
+    Validator,
 )
-from Emperor.attention.utils.utils import AttentionProjector
+from Emperor.attention.utils.utils import Projector
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
 
 
-class TestAttentionProcessor(unittest.TestCase):
+class TestProcessor(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -34,10 +34,10 @@ class TestAttentionProcessor(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        validator = AttentionValidator(self.config)
-        projector = AttentionProjector(self.config, self.cfg)
+        validator = Validator(self.config)
+        projector = Projector(self.config, self.cfg)
 
-        self.model = AttentionProcessor(self.config, validator, projector)
+        self.model = Processor(self.config, validator, projector)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -47,22 +47,22 @@ class TestAttentionProcessor(unittest.TestCase):
         self.head_dim = self.embedding_dim // self.num_heads
 
 
-class Test__init(TestAttentionProcessor):
+class Test__init(TestProcessor):
     def test__init(self):
-        self.assertIsInstance(self.model, AttentionProcessor)
+        self.assertIsInstance(self.model, Processor)
         self.assertIsInstance(
             self.model.processor,
-            (AttentionProcessorDefault, AttentionProcessorWithReturnedWeights),
+            (ProcessorDefault, ProcessorWithReturnedWeights),
         )
 
 
-class Test____create_processor(TestAttentionProcessor):
+class Test____create_processor(TestProcessor):
     def test__return_attention_weights_flag__False(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=False,
         )
         self.rebuild_presets(config)
-        self.assertIsInstance(self.model.processor, AttentionProcessorDefault)
+        self.assertIsInstance(self.model.processor, ProcessorDefault)
 
     def test__return_attention_weights_flag__True(self):
         config = MultiHeadAttentionConfig(
@@ -70,11 +70,11 @@ class Test____create_processor(TestAttentionProcessor):
         )
         self.rebuild_presets(config)
         self.assertIsInstance(
-            self.model.processor, AttentionProcessorWithReturnedWeights
+            self.model.processor, ProcessorWithReturnedWeights
         )
 
 
-class Test____compute_weighted_values_default(TestAttentionProcessor):
+class Test____compute_weighted_values_default(TestProcessor):
     def test__return_attention_weights_flag__True(self):
         config = MultiHeadAttentionConfig(
             source_sequence_length=32,

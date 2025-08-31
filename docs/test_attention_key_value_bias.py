@@ -3,11 +3,11 @@ import torch
 import unittest
 from dataclasses import asdict
 from docs.utils import default_unittest_config
-from Emperor.attention.utils.utils import AttentionUtils, AttentionValidator
+from Emperor.attention.utils.utils import Utils, Validator
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 
 
-class TestAttentionKeyValueBias(unittest.TestCase):
+class TestKeyValueBias(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -29,8 +29,8 @@ class TestAttentionKeyValueBias(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.validator = AttentionValidator(self.config)
-        self.model = AttentionUtils(self.config, self.validator)
+        self.validator = Validator(self.config)
+        self.model = Utils(self.config, self.validator)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -42,7 +42,7 @@ class TestAttentionKeyValueBias(unittest.TestCase):
         self.head_dim = self.embedding_dim // self.num_heads
 
 
-# class Test__add_learnable_bias_vectors(TestAttentionKeyValueBias):
+# class Test__add_learnable_bias_vectors(TestKeyValueBias):
 #     def test__kv_input_tensor_only__no_kv_biases(self):
 #         key_projections = torch.randn(
 #             self.source_sequence_length, self.batch_size, self.embedding_dim

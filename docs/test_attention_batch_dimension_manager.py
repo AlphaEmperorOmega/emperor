@@ -2,11 +2,11 @@ import torch
 import unittest
 from dataclasses import asdict
 from docs.utils import default_unittest_config
-from Emperor.attention.utils.utils import AttentionBatchDimensionManager
+from Emperor.attention.utils.utils import BatchDimensionManager
 from Emperor.attention.attention import MultiHeadAttentionConfig
 
 
-class TestAttentionBatchDimensionManager(unittest.TestCase):
+class TestBatchDimensionManager(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -26,7 +26,7 @@ class TestAttentionBatchDimensionManager(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.model = AttentionBatchDimensionManager(self.config)
+        self.model = BatchDimensionManager(self.config)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -34,7 +34,7 @@ class TestAttentionBatchDimensionManager(unittest.TestCase):
         self.source_sequence_length = self.config.source_sequence_length
 
 
-class Test_enforce_batch_as_second_dim(TestAttentionBatchDimensionManager):
+class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
     def test_qkv_is_correct_input_shape(self):
         query = key = value = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
@@ -139,7 +139,7 @@ class Test_enforce_batch_as_second_dim(TestAttentionBatchDimensionManager):
         self.assertTrue(torch.all(output_q != output_v))
 
 
-class Test___transpose_shared_qkv(TestAttentionBatchDimensionManager):
+class Test___transpose_shared_qkv(TestBatchDimensionManager):
     def test__same_tensor_for_kv(self):
         query = key = torch.randn(
             self.batch_size,
@@ -147,7 +147,7 @@ class Test___transpose_shared_qkv(TestAttentionBatchDimensionManager):
             self.embedding_dim,
         )
         output_q, output_k, output_v = (
-            self.model._AttentionBatchDimensionManager__transpose_shared_qkv(query, key)
+            self.model._BatchDimensionManager__transpose_shared_qkv(query, key)
         )
 
         expected_output_shape = (
@@ -174,7 +174,7 @@ class Test___transpose_shared_qkv(TestAttentionBatchDimensionManager):
         )
 
         output_q, output_k, output_v = (
-            self.model._AttentionBatchDimensionManager__transpose_shared_qkv(query, key)
+            self.model._BatchDimensionManager__transpose_shared_qkv(query, key)
         )
 
         expected_q_shape = (
@@ -196,7 +196,7 @@ class Test___transpose_shared_qkv(TestAttentionBatchDimensionManager):
         self.assertTrue(torch.equal(output_k, output_v))
 
 
-class Test_reverse_enforced_batch_as_second_dim(TestAttentionBatchDimensionManager):
+class Test_reverse_enforced_batch_as_second_dim(TestBatchDimensionManager):
     def test_where_qkv_batch_dim_was_correct_second_dim(self):
         input_tensor = torch.randn(
             self.target_sequence_length,

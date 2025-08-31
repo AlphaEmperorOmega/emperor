@@ -3,11 +3,11 @@ import itertools
 from dataclasses import asdict
 import torch
 from Emperor.attention.utils.utils import (
-    AttentionMask,
-    AttentionProcessor,
-    AttentionProjector,
-    AttentionUtils,
-    AttentionValidator,
+    Mask,
+    Processor,
+    Projector,
+    Utils,
+    Validator,
 )
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.layers.utils.enums import LayerTypes
@@ -83,11 +83,11 @@ class TestMultiHeadAttention__init(TestAttention):
 
 class TestMultIHeadAttention____initialize_attention_components(TestAttention):
     def test__ensure_componets_are_initialzied(self):
-        self.assertIsInstance(self.model.validator, AttentionValidator)
-        self.assertIsInstance(self.model.masks, AttentionMask)
-        self.assertIsInstance(self.model.projector, AttentionProjector)
-        self.assertIsInstance(self.model.processor, AttentionProcessor)
-        self.assertIsInstance(self.model.utils, AttentionUtils)
+        self.assertIsInstance(self.model.validator, Validator)
+        self.assertIsInstance(self.model.masks, Mask)
+        self.assertIsInstance(self.model.projector, Projector)
+        self.assertIsInstance(self.model.processor, Processor)
+        self.assertIsInstance(self.model.utils, Utils)
 
 
 class TestMultIHeadAttention_forward(TestAttention):

@@ -1,14 +1,14 @@
 import torch
 import unittest
 from dataclasses import asdict
-from Emperor.attention.utils.utils import AttentionProjector
+from Emperor.attention.utils.utils import Projector
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from Emperor.layers.utils.enums import LayerTypes
 from Emperor.layers.utils.base import LayerBlock
 from docs.utils import default_unittest_config
 
 
-class TestAttentionProjector(unittest.TestCase):
+class TestProjector(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -34,7 +34,7 @@ class TestAttentionProjector(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.model = AttentionProjector(self.config, self.cfg)
+        self.model = Projector(self.config, self.cfg)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -48,7 +48,7 @@ class TestAttentionProjector(unittest.TestCase):
         self.qkv_model = self.model.qkv_model
 
 
-class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttentionProjector):
+class TestMultIHeadAttention____are_qkv_dimensions_equal(TestProjector):
     def test__different_embedding_dim(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=64,
@@ -57,7 +57,7 @@ class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttentionProjector)
         )
         self.rebuild_presets(config)
 
-        output = self.model._AttentionProjector__are_qkv_dimensions_equal()
+        output = self.model._Projector__are_qkv_dimensions_equal()
         self.assertFalse(output)
 
     def test__different_query_key_projection_dim(self):
@@ -68,7 +68,7 @@ class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttentionProjector)
         )
         self.rebuild_presets(config)
 
-        output = self.model._AttentionProjector__are_qkv_dimensions_equal()
+        output = self.model._Projector__are_qkv_dimensions_equal()
         self.assertFalse(output)
 
     def test__different_value_projection_dim(self):
@@ -79,7 +79,7 @@ class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttentionProjector)
         )
         self.rebuild_presets(config)
 
-        output = self.model._AttentionProjector__are_qkv_dimensions_equal()
+        output = self.model._Projector__are_qkv_dimensions_equal()
         self.assertFalse(output)
 
     def test__embd_key_value_same_dim(self):
@@ -90,11 +90,11 @@ class TestMultIHeadAttention____are_qkv_dimensions_equal(TestAttentionProjector)
         )
         self.rebuild_presets(config)
 
-        output = self.model._AttentionProjector__are_qkv_dimensions_equal()
+        output = self.model._Projector__are_qkv_dimensions_equal()
         self.assertTrue(output)
 
 
-class TestMultIHeadAttention____build_shared_projection_models(TestAttentionProjector):
+class TestMultIHeadAttention____build_shared_projection_models(TestProjector):
     def test__shared_model_inizialization(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
@@ -105,7 +105,7 @@ class TestMultIHeadAttention____build_shared_projection_models(TestAttentionProj
         del self.model.query_model  # Ensure model is not initialized
         del self.model.key_model  # Ensure model is not initialized
         del self.model.value_model  # Ensure model is not initialized
-        qkv_model = self.model._AttentionProjector__build_shared_projection_models()
+        qkv_model = self.model._Projector__build_shared_projection_models()
 
         self.assertIsNone(self.model.query_model)
         self.assertIsNone(self.model.key_model)
@@ -114,7 +114,7 @@ class TestMultIHeadAttention____build_shared_projection_models(TestAttentionProj
 
 
 class TestMultIHeadAttention____build_separate_projection_models(
-    TestAttentionProjector
+    TestProjector
 ):
     def test__separate_models_initializations(self):
         config = MultiHeadAttentionConfig(
@@ -125,7 +125,7 @@ class TestMultIHeadAttention____build_separate_projection_models(
         self.rebuild_presets(config)
         del self.model.qkv_model  # Ensure model is not initialized
         query_model, key_model, value_model = (
-            self.model._AttentionProjector__build_separate_projection_models()
+            self.model._Projector__build_separate_projection_models()
         )
 
         self.assertIsInstance(query_model, LayerBlock)
@@ -134,7 +134,7 @@ class TestMultIHeadAttention____build_separate_projection_models(
         self.assertIsNone(self.model.qkv_model)
 
 
-class TestMultIHeadAttention____build_projection_models(TestAttentionProjector):
+class TestMultIHeadAttention____build_projection_models(TestProjector):
     def test__same_qkv_dim__use_separate_projection_weight_flag__False(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
@@ -181,7 +181,7 @@ class TestMultIHeadAttention____build_projection_models(TestAttentionProjector):
         self.assertIsNone(self.model.qkv_model)
 
 
-class Test___compute_projection(TestAttentionProjector):
+class Test___compute_projection(TestProjector):
     def test_method(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=4,
@@ -193,7 +193,7 @@ class Test___compute_projection(TestAttentionProjector):
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
 
-        projected_tensor = self.model._AttentionProjector__compute_projection(
+        projected_tensor = self.model._Projector__compute_projection(
             tensor, self.query_model
         )
 
@@ -205,7 +205,7 @@ class Test___compute_projection(TestAttentionProjector):
         )
 
 
-class Test___compute_indepentet_projections(TestAttentionProjector):
+class Test___compute_indepentet_projections(TestProjector):
     def test_method(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=12,
@@ -223,7 +223,7 @@ class Test___compute_indepentet_projections(TestAttentionProjector):
         )
 
         query_projections, key_projections, value_projections = (
-            self.model._AttentionProjector__compute_indepentet_projections(
+            self.model._Projector__compute_indepentet_projections(
                 query, key, value
             )
         )
@@ -246,7 +246,7 @@ class Test___compute_indepentet_projections(TestAttentionProjector):
         )
 
 
-class Test___split_self_attention_projection(TestAttentionProjector):
+class Test___split_self_attention_projection(TestProjector):
     def test_method(self):
         embeding_dim = 12
         shared_projection_embeding_dim = embeding_dim * 3
@@ -257,7 +257,7 @@ class Test___split_self_attention_projection(TestAttentionProjector):
         )
 
         query_projections, key_projections, value_projections = (
-            self.model._AttentionProjector__split_self_attention_projection(
+            self.model._Projector__split_self_attention_projection(
                 shared_projections
             )
         )
@@ -275,7 +275,7 @@ class Test___split_self_attention_projection(TestAttentionProjector):
         )
 
 
-class Test___compute_self_attention_projections(TestAttentionProjector):
+class Test___compute_self_attention_projections(TestProjector):
     def test_method(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=12,
@@ -290,7 +290,7 @@ class Test___compute_self_attention_projections(TestAttentionProjector):
         )
 
         query_projections, key_projections, value_projections = (
-            self.model._AttentionProjector__compute_self_attention_projections(query)
+            self.model._Projector__compute_self_attention_projections(query)
         )
         self.assertEqual(
             query_projections.shape,
@@ -318,7 +318,7 @@ class Test___compute_self_attention_projections(TestAttentionProjector):
         )
 
 
-class Test_compute_qkv_projections(TestAttentionProjector):
+class Test_compute_qkv_projections(TestProjector):
     def test__indepented_projections__model_type__base(self):
         config = MultiHeadAttentionConfig(
             target_sequence_length=16,
