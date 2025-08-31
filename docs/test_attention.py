@@ -1,14 +1,8 @@
+import torch
 import unittest
 import itertools
 from dataclasses import asdict
-import torch
-from Emperor.attention.utils.utils import (
-    Mask,
-    Processor,
-    Projector,
-    Utils,
-    Validator,
-)
+from Emperor.attention.utils.utils import Mask, Processor, Projector, Utils, Validator
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.layers.utils.enums import LayerTypes
 from docs.utils import default_unittest_config

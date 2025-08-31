@@ -35,7 +35,7 @@ class TestBatchDimensionManager(unittest.TestCase):
 
 
 class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
-    def test_qkv_is_correct_input_shape(self):
+    def test_qkv_input_tensors_with_batch_as_second_dimension(self):
         query = key = value = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
@@ -48,7 +48,7 @@ class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
         self.assertTrue(torch.equal(output_k, key))
         self.assertTrue(torch.equal(output_v, value))
 
-    def test_same_qkv_inputs_and_input_batch_first(self):
+    def test_same_qkv_input_tensors_with_batch_as_first_dimension(self):
         query = key = value = torch.randn(
             self.batch_size, self.target_sequence_length, self.embedding_dim
         )
@@ -68,7 +68,7 @@ class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
         self.assertTrue(torch.equal(output_k, output_v))
         self.assertTrue(torch.equal(output_q, output_v))
 
-    def test_same_kv_inputs_and_input_batch_first(self):
+    def test_same_kv_input_tensors_with_batch_as_first_dim(self):
         config = MultiHeadAttentionConfig(
             target_sequence_length=16,
             source_sequence_length=16,
@@ -101,7 +101,7 @@ class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
         self.assertTrue(torch.all(output_q != output_k))
         self.assertTrue(torch.all(output_q != output_v))
 
-    def test_different_qkv_inputs_and_input_batch_first(self):
+    def test_indepentend_qkv_input_tensors_with_batch_as_first_dimension(self):
         config = MultiHeadAttentionConfig(
             target_sequence_length=16,
             source_sequence_length=16,
@@ -139,15 +139,15 @@ class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
         self.assertTrue(torch.all(output_q != output_v))
 
 
-class Test___transpose_shared_qkv(TestBatchDimensionManager):
-    def test__same_tensor_for_kv(self):
+class Test___transpose_shared_tensors(TestBatchDimensionManager):
+    def test__same_qk_input_tensors(self):
         query = key = torch.randn(
             self.batch_size,
             self.target_sequence_length,
             self.embedding_dim,
         )
         output_q, output_k, output_v = (
-            self.model._BatchDimensionManager__transpose_shared_qkv(query, key)
+            self.model._BatchDimensionManager__transpose_shared_tensors(query, key)
         )
 
         expected_output_shape = (
@@ -161,7 +161,7 @@ class Test___transpose_shared_qkv(TestBatchDimensionManager):
         self.assertTrue(torch.equal(output_q, output_k))
         self.assertTrue(torch.equal(output_k, output_v))
 
-    def test__different_tensors_for_kv(self):
+    def test__independent_qk_input_tensors(self):
         query = torch.randn(
             self.batch_size,
             self.target_sequence_length,
@@ -174,7 +174,7 @@ class Test___transpose_shared_qkv(TestBatchDimensionManager):
         )
 
         output_q, output_k, output_v = (
-            self.model._BatchDimensionManager__transpose_shared_qkv(query, key)
+            self.model._BatchDimensionManager__transpose_shared_tensors(query, key)
         )
 
         expected_q_shape = (
