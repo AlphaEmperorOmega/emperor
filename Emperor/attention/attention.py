@@ -1,13 +1,13 @@
 from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.attention.utils.utils import (
-    AttentionBatchDimensionManager,
-    AttentionKeyValueBias,
-    AttentionMask,
-    AttentionProcessor,
-    AttentionProjector,
-    AttentionUtils,
-    AttentionValidator,
+    BatchDimensionManager,
+    KeyValueBias,
+    Mask,
+    Processor,
+    Projector,
+    Utils,
+    Validator,
 )
 from Emperor.base.utils import DataClassBase, Module
 from Emperor.layers.utils.enums import LayerTypes
@@ -151,13 +151,13 @@ class MultiHeadAttention(Module):
         self.__initialize_utilities()
 
     def __initialize_utilities(self):
-        self.validator = AttentionValidator(self.cfg)
-        self.masks = AttentionMask(self.cfg, self.validator)
-        self.projector = AttentionProjector(self.cfg, self.main_cfg)
-        self.processor = AttentionProcessor(self.cfg, self.validator, self.projector)
-        self.bias = AttentionKeyValueBias(self.cfg)
-        self.utils = AttentionUtils(self.cfg, self.validator)
-        self.batch_utils = AttentionBatchDimensionManager(self.cfg)
+        self.validator = Validator(self.cfg)
+        self.masks = Mask(self.cfg, self.validator)
+        self.projector = Projector(self.cfg, self.main_cfg)
+        self.processor = Processor(self.cfg, self.validator, self.projector)
+        self.bias = KeyValueBias(self.cfg)
+        self.utils = Utils(self.cfg, self.validator)
+        self.batch_utils = BatchDimensionManager(self.cfg)
 
     def forward(
         self,
@@ -182,10 +182,8 @@ class MultiHeadAttention(Module):
             k_padding_mask, attention_mask
         )
         q, k, v = self.projector.compute_qkv_projections(q, k, v)
-        (k, v, k_padding_mask, attention_mask) = (
-            self.bias.add_kv_learnable_bias_vectors(
-                k, v, k_padding_mask, attention_mask
-            )
+        k, v, k_padding_mask, attention_mask = self.bias.add_kv_learnable_bias_vectors(
+            k, v, k_padding_mask, attention_mask
         )
         q, k, v = self.utils.reshape_qkv_for_attention(q, k, v, static_k, static_v)
         k, v, attention_mask, k_padding_mask = self.utils.add_zero_attention(

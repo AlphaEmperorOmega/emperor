@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from Emperor.attention.attention import MultiHeadAttentionConfig
 
 
-class AttentionKeyValueBias(Module):
+class KeyValueBias(Module):
     def __init__(self, cfg: "MultiHeadAttentionConfig"):
         super().__init__()
         self.cfg = cfg
@@ -67,7 +67,7 @@ class AttentionKeyValueBias(Module):
         )
 
 
-class AttentionBatchDimensionManager:
+class BatchDimensionManager:
     def __init__(self, cfg: "MultiHeadAttentionConfig"):
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
@@ -106,11 +106,11 @@ class AttentionBatchDimensionManager:
         return attention_output.transpose(1, 0)
 
 
-class AttentionUtils:
+class Utils:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "AttentionValidator",
+        validator: "Validator",
     ):
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
@@ -251,12 +251,12 @@ class AttentionUtils:
         return attention_mask + key_padding_mask
 
 
-class AttentionProcessorBase:
+class ProcessorBase:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "AttentionValidator",
-        projector: "AttentionProjector",
+        validator: "Validator",
+        projector: "Projector",
     ):
         self.cfg = cfg
         self.validator = validator
@@ -296,11 +296,11 @@ class AttentionProcessorBase:
         )
 
 
-class AttentionProcessorWithReturnedWeights(AttentionProcessorBase):
+class ProcessorWithReturnedWeights(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "AttentionValidator",
+        validator: "Validator",
         output_model: nn.Module,
     ):
         super().__init__(cfg, validator, output_model)
@@ -402,11 +402,11 @@ class AttentionProcessorWithReturnedWeights(AttentionProcessorBase):
         return attention_output, attention_weights
 
 
-class AttentionProcessorDefault(AttentionProcessorBase):
+class ProcessorDefault(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "AttentionValidator",
+        validator: "Validator",
         output_model: nn.Module,
     ):
         super().__init__(cfg, validator, output_model)
@@ -501,11 +501,11 @@ class AttentionProcessorDefault(AttentionProcessorBase):
         )
 
 
-class AttentionProcessor:
+class Processor:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "AttentionValidator",
+        validator: "Validator",
         output_model: nn.Module,
     ):
         self.cfg = cfg
@@ -516,10 +516,10 @@ class AttentionProcessor:
 
     def __create_processor(
         self,
-    ) -> AttentionProcessorDefault | AttentionProcessorWithReturnedWeights:
-        processor_type = AttentionProcessorDefault
+    ) -> ProcessorDefault | ProcessorWithReturnedWeights:
+        processor_type = ProcessorDefault
         if self.return_attention_weights_flag:
-            processor_type = AttentionProcessorWithReturnedWeights
+            processor_type = ProcessorWithReturnedWeights
         return processor_type(self.cfg, self.validator, self.output_model)
 
     def compute_attention(
@@ -532,7 +532,7 @@ class AttentionProcessor:
         return self.processor.compute_attention(query, key, value, attention_mask)
 
 
-class AttentionProjectorBase(Module):
+class ProjectorBase(Module):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
@@ -582,7 +582,7 @@ class AttentionProjectorBase(Module):
         return c
 
 
-class AttentionProjector(AttentionProjectorBase):
+class Projector(ProjectorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
@@ -742,11 +742,11 @@ class AttentionProjector(AttentionProjectorBase):
             )
 
 
-class AttentionMask:
+class Mask:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "AttentionValidator",
+        validator: "Validator",
     ):
         self.cfg = cfg
         self.validator = validator
@@ -822,7 +822,7 @@ class AttentionMask:
         return mask
 
 
-class AttentionValidator:
+class Validator:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
