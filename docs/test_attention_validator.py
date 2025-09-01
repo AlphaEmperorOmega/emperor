@@ -78,7 +78,7 @@ class Test___check_query_dims(TestValidator):
 
 
 class Test___check_query_key_value_dimension_count(TestValidator):
-    def test_check_incorrect_input_dim_count_with_batched_input_flag_false(
+    def test_check_incorrect_input_dim_count_with_batched_input_flag_set_to_False(
         self,
     ):
         self.model.batched_input_flag = False
@@ -101,7 +101,7 @@ class Test___check_query_key_value_dimension_count(TestValidator):
         with self.assertRaises(RuntimeError) as context:
             self.model._Validator__check_query_key_value_dimension_count(key, value)
 
-    def test_check_correct_input_dim_count_with_batched_input_flag_False(
+    def test_check_correct_input_dim_count_with_batched_input_flag_set_to_False(
         self,
     ):
         self.model.batched_input_flag = False
@@ -113,7 +113,7 @@ class Test___check_query_key_value_dimension_count(TestValidator):
         )
         self.assertIsNone(output)
 
-    def test_check_correct_input_dim_count_with_batched_input_flag_True(
+    def test_check_correct_input_dim_count_with_batched_input_flag_set_to_True(
         self,
     ):
         self.model.batched_input_flag = True
@@ -131,11 +131,11 @@ class Test___check_query_key_value_dimension_count(TestValidator):
 
 
 class Test___check_key_padding_mask_dimension_count(TestValidator):
-    def test_no_input_mask(self):
+    def test_no_padding_mask_input(self):
         output = self.model._Validator__check_key_padding_mask_dimension_count()
         self.assertIsNone(output)
 
-    def test_incorrect_3D_padding_mask_input(self):
+    def test_incorrect_3D_input_padding_mask(self):
         key_padding_mask = torch.randn(
             self.source_sequence_length, self.batch_size, self.embedding_dim
         )
@@ -144,7 +144,7 @@ class Test___check_key_padding_mask_dimension_count(TestValidator):
                 key_padding_mask
             )
 
-    def test_correct_2D_padding_mask_input_with_batched_input_flag_True(self):
+    def test_correct_2D_padding_mask_input_with_batched_input_flag_set_to_True(self):
         self.model.batched_input_flag = True
         key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
         output = self.model._Validator__check_key_padding_mask_dimension_count(
@@ -152,7 +152,7 @@ class Test___check_key_padding_mask_dimension_count(TestValidator):
         )
         self.assertIsNone(output)
 
-    def test_correct_1D_padding_mask_input_with_batched_input_flag_False(self):
+    def test_correct_1D_padding_mask_input_with_batched_input_flag_set_to_False(self):
         self.model.batched_input_flag = False
         key_padding_mask = torch.randn(self.source_sequence_length)
         output = self.model._Validator__check_key_padding_mask_dimension_count(
