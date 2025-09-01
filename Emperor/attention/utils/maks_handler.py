@@ -1,11 +1,10 @@
 import torch
 import torch.nn.functional as F
-from torch import Tensor
 
+from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
     from Emperor.attention.attention import MultiHeadAttentionConfig
 
 

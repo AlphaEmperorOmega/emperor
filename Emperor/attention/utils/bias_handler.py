@@ -3,7 +3,6 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from Emperor.base.utils import Module
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

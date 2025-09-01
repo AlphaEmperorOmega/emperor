@@ -2,8 +2,8 @@ import torch
 import math
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
 
+from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
