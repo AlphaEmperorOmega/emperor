@@ -162,112 +162,78 @@ class Test___check_key_padding_mask_dimension_count(TestValidator):
 
 
 class Test___check_attention_mask_dim_count_and_shape(TestValidator):
-    def test__None_as_input(self):
-        m.batched_input_flag = True
-
-        output = m._Validator__check_attention_mask_dim_count_and_shape(None)
+    def test_no_attention_mask_input(self):
+        output = self.model._Validator__check_attention_mask_dim_count_and_shape()
         self.assertIsNone(output)
 
-    def test__1D_incorrect_input_dims(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.batched_input_flag = True
-
-        source_sequence_length = m.source_sequence_length
-
-        attention_mask = torch.randn(source_sequence_length)
+    def test_incorrect_1D_input(self):
+        attention_mask = torch.randn(self.source_sequence_length)
         with self.assertRaises(RuntimeError) as context:
-            m._Validator__check_attention_mask_dim_count_and_shape(attention_mask)
+            self.model._Validator__check_attention_mask_dim_count_and_shape(
+                attention_mask
+            )
 
-    def test__2D__incorrect_mask_shape__correct_input_dims(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.batched_input_flag = True
-
-        source_sequence_length = 12
-        target_sequence_length = m.target_sequence_length
-
-        attention_mask = torch.randn(source_sequence_length, target_sequence_length)
-
-        with self.assertRaises(RuntimeError) as context:
-            m._Validator__check_attention_mask_dim_count_and_shape(attention_mask)
-
-    def test__2D__correct_mask_shape__correct_input_dims(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.batched_input_flag = True
-
-        source_sequence_length = m.source_sequence_length
-        target_sequence_length = m.target_sequence_length
-
-        attention_mask = torch.randn(target_sequence_length, source_sequence_length)
-
-        output = m._Validator__check_attention_mask_dim_count_and_shape(attention_mask)
-        self.assertIsNone(output)
-
-    def test__3D__incorrect_mask_shape__correct_input_dims(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.batched_input_flag = True
-
-        batch_size = 2
-        num_heads = 3
-        source_sequence_length = 12
-        target_sequence_length = m.target_sequence_length
-
+    def test_input_with_correct_2D_dim_count_but_incorrect_shape(self):
+        wrong_source_sequence_length = 12
         attention_mask = torch.randn(
-            batch_size * num_heads, source_sequence_length, target_sequence_length
+            self.target_sequence_length, wrong_source_sequence_length
         )
 
         with self.assertRaises(RuntimeError) as context:
-            m._Validator__check_attention_mask_dim_count_and_shape(attention_mask)
+            self.model._Validator__check_attention_mask_dim_count_and_shape(
+                attention_mask
+            )
 
-    def test__3D__correct_mask_shape__correct_input_dims(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.batched_input_flag = True
+    def test_input_with_correct_2D_dim_count_correct_shape(self):
+        attention_mask = torch.randn(
+            self.target_sequence_length, self.source_sequence_length
+        )
 
-        batch_size = m.batch_size
-        num_heads = m.num_heads
-        source_sequence_length = m.source_sequence_length
-        target_sequence_length = m.target_sequence_length
+        output = self.model._Validator__check_attention_mask_dim_count_and_shape(
+            attention_mask
+        )
+        self.assertIsNone(output)
+
+    def test_input_with_correct_3D_dim_count_but_incorrect_shape(self):
+        self.model.batched_input_flag = True
+
+        source_sequence_length = 12
 
         attention_mask = torch.randn(
-            batch_size * num_heads,
-            target_sequence_length,
+            self.batch_size * self.num_heads,
+            self.target_sequence_length,
             source_sequence_length,
         )
 
-        output = m._Validator__check_attention_mask_dim_count_and_shape(attention_mask)
+        with self.assertRaises(RuntimeError) as context:
+            self.model._Validator__check_attention_mask_dim_count_and_shape(
+                attention_mask
+            )
+
+    def test_input_with_correct_3D_dim_count_but_correct_shape(self):
+        attention_mask = torch.randn(
+            self.batch_size * self.num_heads,
+            self.target_sequence_length,
+            self.source_sequence_length,
+        )
+
+        output = self.model._Validator__check_attention_mask_dim_count_and_shape(
+            attention_mask
+        )
         self.assertIsNone(output)
 
-    def test__4D_incorrect_input_dims(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.batched_input_flag = True
-
-        batch_size = 2
-        num_heads = 3
-        source_sequence_length = 12
-        target_sequence_length = m.target_sequence_length
-
+    def test_incorrect_4D_input(self):
         attention_mask = torch.randn(
-            num_heads,
-            batch_size,
-            source_sequence_length,
-            target_sequence_length,
+            self.num_heads,
+            self.batch_size,
+            self.source_sequence_length,
+            self.target_sequence_length,
         )
 
         with self.assertRaises(RuntimeError) as context:
-            m._Validator__check_attention_mask_dim_count_and_shape(attention_mask)
+            self.model._Validator__check_attention_mask_dim_count_and_shape(
+                attention_mask
+            )
 
 
 class Test___resolve_attention_mask_shape(TestValidator):
