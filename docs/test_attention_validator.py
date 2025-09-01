@@ -620,106 +620,67 @@ class Test___resolve_static_projection_type(TestValidator):
 
 
 class Test___resolve_static_projection_shape(TestValidator):
-    def test__static_tensor__None__value_tensor_flag__False(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-
+    def test_no_input_tensor(self):
         static_tensor = None
-        value_tensor_flag = False
-        output = m._Validator__resolve_static_projection_shape(
-            static_tensor, value_tensor_flag
-        )
+        output = self.model._Validator__resolve_static_projection_shape(static_tensor)
 
         self.assertIsNone(output)
 
-    def test__value_tensor_flag__False(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-
-        batch_size = m.batch_size
-        num_heads = m.num_heads
-        embedding_dim = config.embedding_dim
-        head_dim = embedding_dim // num_heads
-        sequence_length = m.source_sequence_length
-
-        static_tensor = torch.randn(batch_size * num_heads, sequence_length, head_dim)
-        value_tensor_flag = False
-        output = m._Validator__resolve_static_projection_shape(
-            static_tensor, value_tensor_flag
+    def test_correct_input_tensor(self):
+        static_tensor = torch.randn(
+            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
         )
+        output = self.model._Validator__resolve_static_projection_shape(static_tensor)
 
         self.assertIsNone(output)
 
-    def test__is_assertion_raised(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-
-        batch_size = m.batch_size
-        num_heads = m.num_heads
-        embedding_dim = config.embedding_dim
-        head_dim = embedding_dim // num_heads
-        sequence_length = m.source_sequence_length
-
-        wrong_static_tensor = torch.randn(batch_size, sequence_length, head_dim)
-        value_tensor_flag = False
+    def test_input_tensor_with_incorrect_shape(self):
+        wrong_static_tensor = torch.randn(
+            self.batch_size, self.source_sequence_length, self.head_dim
+        )
         with self.assertRaises(AssertionError) as context:
-            m._Validator__resolve_static_projection_shape(
-                wrong_static_tensor, value_tensor_flag
-            )
+            self.model._Validator__resolve_static_projection_shape(wrong_static_tensor)
 
 
 class Test_check_static_projection_shapes(TestValidator):
-    def test__no_inputs(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-
+    def test_no_inputs(self):
         static_keys = None
         static_values = None
 
-        output = m.check_static_projection_shapes(static_keys, static_values)
+        output = self.model.check_static_projection_shapes(static_keys, static_values)
 
         self.assertIsNone(output)
 
-    def test__check_static_projection_shapes(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-
-        batch_size = m.batch_size
-        num_heads = m.num_heads
-        embedding_dim = config.embedding_dim
-        head_dim = embedding_dim // num_heads
-        sequence_length = m.source_sequence_length
-
+    def test_check_correct_static_projection_inputs(self):
         static_keys = torch.randn(
-            batch_size * num_heads, sequence_length, head_dim, embedding_dim
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.head_dim,
+            self.embedding_dim,
         )
         static_values = torch.randn(
-            batch_size * num_heads, sequence_length, head_dim, embedding_dim
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.head_dim,
+            self.embedding_dim,
         )
 
-        output = m.check_static_projection_shapes(static_keys, static_values)
+        output = self.model.check_static_projection_shapes(static_keys, static_values)
         self.assertIsNone(output)
 
-    def test__is_assertion_raised(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-
-        batch_size = m.batch_size
-        num_heads = m.num_heads
-        embedding_dim = config.embedding_dim
-        head_dim = embedding_dim // num_heads
-        sequence_length = m.source_sequence_length
-
-        static_keys = torch.randn(batch_size, sequence_length, head_dim, embedding_dim)
+    def test_check_wrong_static_projection_inputs(self):
+        static_keys = torch.randn(
+            self.batch_size,
+            self.source_sequence_length,
+            self.head_dim,
+            self.embedding_dim,
+        )
         static_values = torch.randn(
-            batch_size * num_heads, sequence_length, head_dim, embedding_dim
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.head_dim,
+            self.embedding_dim,
         )
 
         with self.assertRaises(AssertionError) as context:
-            m.check_static_projection_shapes(static_keys, static_values)
+            self.model.check_static_projection_shapes(static_keys, static_values)
