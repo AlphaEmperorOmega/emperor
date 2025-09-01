@@ -1,7 +1,10 @@
+import copy
 import torch.nn as nn
+
 from torch import Tensor
 from Emperor.base.utils import Module
-
+from Emperor.layers.utils.base import LayerBlock
+from Emperor.layers.utils.linears import LinearLayer
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

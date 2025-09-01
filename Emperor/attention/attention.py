@@ -1,11 +1,11 @@
 from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.attention.utils.batch_handler import BatchDimensionManager
-from Emperor.attention.utils.bias_handler import KeyValueBias
+from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.maks_handler import Mask
+from Emperor.attention.utils.bias_handler import KeyValueBias
 from Emperor.attention.utils.processor_handler import Processor
 from Emperor.attention.utils.projection_handler import Projector
-from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.validation_handler import Validator
 from Emperor.base.utils import DataClassBase, Module
 from Emperor.layers.utils.enums import LayerTypes
