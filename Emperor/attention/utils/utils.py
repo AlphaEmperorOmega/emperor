@@ -890,7 +890,7 @@ class Validator:
         self.__check_query_key_value_dimension_count(key, value)
         self.__check_key_padding_mask_dimension_count(key_padding_mask)
         self.__check_attention_mask_dim_count_and_shape(attention_mask)
-        self.__ensure_attention_mask_if_causal(attention_mask)
+        self.__ensure_attention_mask_for_required_causal_mask(attention_mask)
 
         return self.batched_input_flag
 
@@ -960,7 +960,7 @@ class Validator:
             )
         return (self.target_sequence_length, self.source_sequence_length)
 
-    def __ensure_attention_mask_if_causal(
+    def __ensure_attention_mask_for_required_causal_mask(
         self,
         attention_mask: Tensor | None = None,
     ) -> None:
