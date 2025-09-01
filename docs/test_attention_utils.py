@@ -43,8 +43,8 @@ class TestUtils(unittest.TestCase):
         self.head_dim = self.embedding_dim // self.num_heads
 
 
-class Test__add_batch_dimension_if_missing(TestUtils):
-    def test__batched_input(self):
+class Test_add_batch_dimension_if_missing(TestUtils):
+    def test_batched_input_with_correct_padding_and_attention_mask(self):
         query = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
@@ -75,7 +75,28 @@ class Test__add_batch_dimension_if_missing(TestUtils):
         self.assertEqual(key_padding_mask.shape, output_padding.shape)
         self.assertEqual(attention_mask.shape, output_attention_mask.shape)
 
-    def test__non_batched_input(self):
+    def test_unbatched_input_with_no_masks(self):
+        query = torch.randn(
+            self.target_sequence_length, self.batch_size, self.embedding_dim
+        )
+        key = torch.randn(
+            self.source_sequence_length, self.batch_size, self.embedding_dim
+        )
+        value = torch.randn(
+            self.source_sequence_length, self.batch_size, self.embedding_dim
+        )
+
+        output_q, output_k, output_v, output_padding, output_attention_mask = (
+            self.model.add_batch_dimension_if_missing(query, key, value)
+        )
+
+        self.assertEqual(query.shape, output_q.shape)
+        self.assertEqual(key.shape, output_k.shape)
+        self.assertEqual(value.shape, output_v.shape)
+        self.assertIsNone(output_padding)
+        self.assertIsNone(output_attention_mask)
+
+    def test_unbatched_input_with_correct_padding_and_attention_mask(self):
         query = torch.randn(self.target_sequence_length, self.embedding_dim)
         key = torch.randn(self.source_sequence_length, self.embedding_dim)
         value = torch.randn(self.source_sequence_length, self.embedding_dim)
