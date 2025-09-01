@@ -286,43 +286,57 @@ class Test___resolve_attention_mask_shape(TestValidator):
         self.assertEqual(output, expected_attention_mask_shape)
 
 
-class Test___ensure_attention_mask_if_causal(TestValidator):
-    def test__None_as_input(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.causal_attention_mask_flag = True
+class Test___ensure_attention_mask_for_required_causal_mask(TestValidator):
+    def test_no_input_with_causal_mask_flag_set_to_True(self):
+        config = MultiHeadAttentionConfig(
+            causal_attention_mask_flag=True,
+        )
+        self.rebuild_presets(config)
 
         with self.assertRaises(RuntimeError) as context:
-            m._Validator__ensure_attention_mask_if_causal(None)
+            self.model._Validator__ensure_attention_mask_for_required_causal_mask()
 
-    def test__causal_attention_mask_flag__True__and__None_as_input(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.causal_attention_mask_flag = True
+    def test_no_input_with_causal_mask_flag_set_to_False(self):
+        config = MultiHeadAttentionConfig(
+            causal_attention_mask_flag=False,
+        )
+        self.rebuild_presets(config)
 
-        with self.assertRaises(RuntimeError) as context:
-            m._Validator__ensure_attention_mask_if_causal(None)
+        output = self.model._Validator__ensure_attention_mask_for_required_causal_mask()
+        self.assertIsNone(output)
 
-    def test__causal_attention_mask_flag__False__and__attention_mask(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.causal_attention_mask_flag = False
-
-        batch_size = m.batch_size
-        num_heads = m.num_heads
-        source_sequence_length = m.source_sequence_length
-        target_sequence_length = m.target_sequence_length
+    def test_attention_mask_input_with_causal_mask_flag_set_to_False(self):
+        config = MultiHeadAttentionConfig(
+            causal_attention_mask_flag=False,
+        )
+        self.rebuild_presets(config)
 
         attention_mask = torch.randn(
-            batch_size * num_heads,
-            source_sequence_length,
-            target_sequence_length,
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
         )
 
-        output = m._Validator__ensure_attention_mask_if_causal(attention_mask)
+        output = self.model._Validator__ensure_attention_mask_for_required_causal_mask(
+            attention_mask
+        )
+        self.assertIsNone(output)
+
+    def test_attention_mask_input_with_causal_mask_flag_set_to_True(self):
+        config = MultiHeadAttentionConfig(
+            causal_attention_mask_flag=True,
+        )
+        self.rebuild_presets(config)
+
+        attention_mask = torch.randn(
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+
+        output = self.model._Validator__ensure_attention_mask_for_required_causal_mask(
+            attention_mask
+        )
         self.assertIsNone(output)
 
 
