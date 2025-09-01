@@ -85,7 +85,6 @@ class Utils:
             return static_tensor
 
         sequence_length = tensor.shape[0]
-        # shape = (sequence_length, self.batch_size * self.num_heads, self.head_dim)
         head_dim = head_dim or self.head_dim
         shape = (sequence_length, self.batch_size * self.num_heads, head_dim)
         reshaped_tensor = tensor.view(shape)
