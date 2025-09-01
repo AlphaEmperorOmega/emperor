@@ -1,13 +1,15 @@
 from dataclasses import asdict
 import unittest
 import torch
-from Emperor.attention.utils.utils import (
+
+from Emperor.attention.utils.projection_handler import Projector
+from Emperor.attention.utils.validation_handler import Validator
+from Emperor.attention.utils.processor_handler import (
     Processor,
     ProcessorDefault,
     ProcessorWithReturnedWeights,
-    Validator,
 )
-from Emperor.attention.utils.utils import Projector
+
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
 
@@ -69,9 +71,7 @@ class Test____create_processor(TestProcessor):
             return_attention_weights_flag=True,
         )
         self.rebuild_presets(config)
-        self.assertIsInstance(
-            self.model.processor, ProcessorWithReturnedWeights
-        )
+        self.assertIsInstance(self.model.processor, ProcessorWithReturnedWeights)
 
 
 class Test____compute_weighted_values_default(TestProcessor):

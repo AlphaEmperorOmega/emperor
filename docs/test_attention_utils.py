@@ -1,9 +1,10 @@
-import copy
 import torch
 import unittest
+
 from dataclasses import asdict
 from docs.utils import default_unittest_config
-from Emperor.attention.utils.utils import Utils, Validator
+from Emperor.attention.utils.utils import Utils
+from Emperor.attention.utils.validation_handler import Validator
 from Emperor.attention.attention import MultiHeadAttentionConfig
 
 
@@ -109,9 +110,7 @@ class Test____reshape_projection_tesnor(TestUtils):
         static_tensor = torch.randn(
             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
         )
-        output = self.model._Utils__reshape_projection_tesnor(
-            tensor, static_tensor
-        )
+        output = self.model._Utils__reshape_projection_tesnor(tensor, static_tensor)
 
         self.assertTrue(torch.equal(output, static_tensor))
 
@@ -120,9 +119,7 @@ class Test____reshape_projection_tesnor(TestUtils):
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
         static_tensor = None
-        output = self.model._Utils__reshape_projection_tesnor(
-            tensor, static_tensor
-        )
+        output = self.model._Utils__reshape_projection_tesnor(tensor, static_tensor)
         expected_output_shape = (
             self.batch_size * self.num_heads,
             self.target_sequence_length,
@@ -381,7 +378,9 @@ class Test__merge_padding_and_attention_mask(TestUtils):
         key_padding_mask = None
         attention_mask = None
 
-        output = self.model.merge_padding_and_attention_mask(key, key_padding_mask, attention_mask)
+        output = self.model.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
 
         self.assertIsNone(output)
 
@@ -394,7 +393,9 @@ class Test__merge_padding_and_attention_mask(TestUtils):
         )
         attention_mask = None
 
-        output = self.model.merge_padding_and_attention_mask(key, key_padding_mask, attention_mask)
+        output = self.model.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
 
         self.assertIsInstance(output, torch.Tensor)
         self.assertEqual(
@@ -412,7 +413,9 @@ class Test__merge_padding_and_attention_mask(TestUtils):
             self.target_sequence_length,
             self.source_sequence_length,
         )
-        output = self.model.merge_padding_and_attention_mask(key, key_padding_mask, attention_mask)
+        output = self.model.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
 
         self.assertIsInstance(output, torch.Tensor)
         self.assertTrue(torch.equal(output, attention_mask))
@@ -430,7 +433,9 @@ class Test__merge_padding_and_attention_mask(TestUtils):
             self.source_sequence_length,
         )
 
-        output = self.model.merge_padding_and_attention_mask(key, key_padding_mask, attention_mask)
+        output = self.model.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
 
         self.assertIsInstance(output, torch.Tensor)
         self.assertEqual(

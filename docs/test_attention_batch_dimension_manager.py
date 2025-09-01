@@ -2,7 +2,7 @@ import torch
 import unittest
 from dataclasses import asdict
 from docs.utils import default_unittest_config
-from Emperor.attention.utils.utils import BatchDimensionManager
+from Emperor.attention.utils.batch_handler import BatchDimensionManager
 from Emperor.attention.attention import MultiHeadAttentionConfig
 
 

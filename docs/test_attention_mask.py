@@ -1,10 +1,9 @@
 import torch
 import unittest
+
 from dataclasses import asdict
-from Emperor.attention.utils.utils import (
-    Validator,
-    Mask,
-)
+from Emperor.attention.utils.maks_handler import Mask
+from Emperor.attention.utils.validation_handler import Validator
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
 
@@ -179,11 +178,9 @@ class Test_check_padding_and_attention_masks(TestMask):
         key_padding_mask = None
         attention_mask = None
 
-        key_padding_mask, attention_mask = (
-            self.model.check_padding_and_attention_masks(
-                key_padding_mask,
-                attention_mask,
-            )
+        key_padding_mask, attention_mask = self.model.check_padding_and_attention_masks(
+            key_padding_mask,
+            attention_mask,
         )
 
         self.assertIsNone(key_padding_mask)
@@ -229,11 +226,9 @@ class Test_check_padding_and_attention_masks(TestMask):
             )
             > 0
         )
-        key_padding_mask, attention_mask = (
-            self.model.check_padding_and_attention_masks(
-                key_padding_mask,
-                attention_mask,
-            )
+        key_padding_mask, attention_mask = self.model.check_padding_and_attention_masks(
+            key_padding_mask,
+            attention_mask,
         )
 
         self.assertIsNone(key_padding_mask)
@@ -259,11 +254,9 @@ class Test_check_padding_and_attention_masks(TestMask):
             > 0
         )
 
-        key_padding_mask, attention_mask = (
-            self.model.check_padding_and_attention_masks(
-                key_padding_mask,
-                attention_mask,
-            )
+        key_padding_mask, attention_mask = self.model.check_padding_and_attention_masks(
+            key_padding_mask,
+            attention_mask,
         )
 
         self.assertIsInstance(key_padding_mask, torch.Tensor)

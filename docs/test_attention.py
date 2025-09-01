@@ -2,7 +2,11 @@ import torch
 import unittest
 import itertools
 from dataclasses import asdict
-from Emperor.attention.utils.utils import Mask, Processor, Projector, Utils, Validator
+from Emperor.attention.utils.maks_handler import Mask
+from Emperor.attention.utils.processor_handler import Processor
+from Emperor.attention.utils.projection_handler import Projector
+from Emperor.attention.utils.utils import Utils
+from Emperor.attention.utils.validation_handler import Validator
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.layers.utils.enums import LayerTypes
 from docs.utils import default_unittest_config

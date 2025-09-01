@@ -1,13 +1,11 @@
 import copy
 import torch
 import unittest
+
 from dataclasses import asdict
-from Emperor.attention.utils.utils import (
-    Projector,
-    Validator,
-)
-from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
+from Emperor.attention.utils.validation_handler import Validator
+from Emperor.attention.attention import MultiHeadAttentionConfig
 
 
 class TestValidator(unittest.TestCase):

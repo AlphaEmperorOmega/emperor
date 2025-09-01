@@ -1,7 +1,8 @@
 import torch
 import unittest
+
 from dataclasses import asdict
-from Emperor.attention.utils.utils import Projector
+from Emperor.attention.utils.projection_handler import Projector
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from Emperor.layers.utils.enums import LayerTypes
 from Emperor.layers.utils.base import LayerBlock
@@ -113,9 +114,7 @@ class TestMultIHeadAttention____build_shared_projection_models(TestProjector):
         self.assertIsInstance(qkv_model, LayerBlock)
 
 
-class TestMultIHeadAttention____build_separate_projection_models(
-    TestProjector
-):
+class TestMultIHeadAttention____build_separate_projection_models(TestProjector):
     def test__separate_models_initializations(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
@@ -223,9 +222,7 @@ class Test___compute_indepentet_projections(TestProjector):
         )
 
         query_projections, key_projections, value_projections = (
-            self.model._Projector__compute_indepentet_projections(
-                query, key, value
-            )
+            self.model._Projector__compute_indepentet_projections(query, key, value)
         )
 
         self.assertIsInstance(query_projections, torch.Tensor)
@@ -257,9 +254,7 @@ class Test___split_self_attention_projection(TestProjector):
         )
 
         query_projections, key_projections, value_projections = (
-            self.model._Projector__split_self_attention_projection(
-                shared_projections
-            )
+            self.model._Projector__split_self_attention_projection(shared_projections)
         )
         self.assertEqual(
             query_projections.shape,

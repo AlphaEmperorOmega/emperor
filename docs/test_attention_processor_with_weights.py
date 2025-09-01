@@ -1,14 +1,13 @@
-from dataclasses import asdict
 import math
-import unittest
-from unittest.mock import MagicMock
 import torch
+import unittest
 import torch.nn.functional as F
-from Emperor.attention.utils.utils import (
-    ProcessorWithReturnedWeights,
-    Validator,
-)
-from Emperor.attention.utils.utils import Projector
+
+from unittest.mock import MagicMock
+from dataclasses import asdict
+from Emperor.attention.utils.projection_handler import Projector
+from Emperor.attention.utils.validation_handler import Validator
+from Emperor.attention.utils.processor_handler import ProcessorWithReturnedWeights
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
 
@@ -37,9 +36,7 @@ class TestProcessorWithReturnedWeights(unittest.TestCase):
 
         validator = Validator(self.config)
         projector = Projector(self.config, self.cfg)
-        self.model = ProcessorWithReturnedWeights(
-            self.config, validator, projector
-        )
+        self.model = ProcessorWithReturnedWeights(self.config, validator, projector)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -54,8 +51,8 @@ class Test____scale_query(TestProcessorWithReturnedWeights):
         query = torch.randn(
             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
         )
-        scaled_query_tensor = (
-            self.model._ProcessorWithReturnedWeights__scale_query(query)
+        scaled_query_tensor = self.model._ProcessorWithReturnedWeights__scale_query(
+            query
         )
 
         expected_result = query * math.sqrt(1.0 / float(self.head_dim))
@@ -64,9 +61,7 @@ class Test____scale_query(TestProcessorWithReturnedWeights):
         self.assertTrue(torch.equal(scaled_query_tensor, expected_result))
 
 
-class Test____compute_raw_masked_attention_weights(
-    TestProcessorWithReturnedWeights
-):
+class Test____compute_raw_masked_attention_weights(TestProcessorWithReturnedWeights):
     def test__attention_mask__None(self):
         query = torch.randn(
             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
@@ -139,9 +134,7 @@ class Test____compute_raw_masked_attention_weights(
             )
 
 
-class Test____compute_masked_attention_weights(
-    TestProcessorWithReturnedWeights
-):
+class Test____compute_masked_attention_weights(TestProcessorWithReturnedWeights):
     def test__method_using_mock(self):
         mock_scaled_query = torch.randn(
             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
@@ -167,8 +160,10 @@ class Test____compute_masked_attention_weights(
         )
         attention_mask = None
 
-        result = self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
-            query, key, attention_mask
+        result = (
+            self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
+                query, key, attention_mask
+            )
         )
 
         self.model._ProcessorWithReturnedWeights__scale_query.assert_called_once_with(
@@ -190,8 +185,10 @@ class Test____compute_masked_attention_weights(
         )
         attention_mask = None
 
-        masked_softmax_weights = self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
-            query, key, attention_mask
+        masked_softmax_weights = (
+            self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
+                query, key, attention_mask
+            )
         )
         self.assertIsInstance(masked_softmax_weights, torch.Tensor)
         self.assertFalse((masked_softmax_weights == 0.0).any())
@@ -217,8 +214,10 @@ class Test____compute_masked_attention_weights(
         )
         attention_mask = None
 
-        masked_softmax_weights = self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
-            query, key, attention_mask
+        masked_softmax_weights = (
+            self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
+                query, key, attention_mask
+            )
         )
         self.assertIsInstance(masked_softmax_weights, torch.Tensor)
         self.assertTrue((masked_softmax_weights == 0.0).any())
@@ -246,8 +245,10 @@ class Test____compute_masked_attention_weights(
         )
         attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
 
-        masked_softmax_weights = self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
-            query, key, attention_mask
+        masked_softmax_weights = (
+            self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
+                query, key, attention_mask
+            )
         )
 
         self.assertIsInstance(masked_softmax_weights, torch.Tensor)
@@ -315,9 +316,7 @@ class Test____compute_attention_output(TestProcessorWithReturnedWeights):
         )
 
 
-class Test____maybe_average_attention_weights(
-    TestProcessorWithReturnedWeights
-):
+class Test____maybe_average_attention_weights(TestProcessorWithReturnedWeights):
     def test__average_attention_weights_flag__False(self):
         config = MultiHeadAttentionConfig(average_attention_weights_flag=False)
         self.rebuild_presets(config)
@@ -328,8 +327,10 @@ class Test____maybe_average_attention_weights(
             self.source_sequence_length,
         )
 
-        output_attention_weights = self.model._ProcessorWithReturnedWeights__maybe_average_attention_weights(
-            attention_weights
+        output_attention_weights = (
+            self.model._ProcessorWithReturnedWeights__maybe_average_attention_weights(
+                attention_weights
+            )
         )
 
         self.assertIsInstance(output_attention_weights, torch.Tensor)
@@ -356,8 +357,10 @@ class Test____maybe_average_attention_weights(
             self.source_sequence_length,
         )
 
-        output_attention_weights = self.model._ProcessorWithReturnedWeights__maybe_average_attention_weights(
-            attention_weights
+        output_attention_weights = (
+            self.model._ProcessorWithReturnedWeights__maybe_average_attention_weights(
+                attention_weights
+            )
         )
 
         expected_output = attention_weights.mean(dim=1)

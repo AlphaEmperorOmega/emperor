@@ -1,11 +1,10 @@
 from dataclasses import asdict
 import unittest
 import torch
-from Emperor.attention.utils.utils import (
-    ProcessorDefault,
-    Validator,
-)
-from Emperor.attention.utils.utils import Projector
+
+from Emperor.attention.utils.projection_handler import Projector
+from Emperor.attention.utils.validation_handler import Validator
+from Emperor.attention.utils.processor_handler import ProcessorDefault
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.utils import default_unittest_config
 
@@ -47,10 +46,8 @@ class TestProcessorDefault(unittest.TestCase):
 class Test____prepare_attnetion_mask(TestProcessorDefault):
     def test__attention_mask__None(self):
         attention_mask = None
-        output_attention_mask = (
-            self.model._ProcessorDefault__prepare_attnetion_mask(
-                attention_mask
-            )
+        output_attention_mask = self.model._ProcessorDefault__prepare_attnetion_mask(
+            attention_mask
         )
 
         self.assertIsNone(output_attention_mask)
@@ -63,10 +60,8 @@ class Test____prepare_attnetion_mask(TestProcessorDefault):
             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
         )
         attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
-        output_attention_mask = (
-            self.model._ProcessorDefault__prepare_attnetion_mask(
-                attention_mask
-            )
+        output_attention_mask = self.model._ProcessorDefault__prepare_attnetion_mask(
+            attention_mask
         )
 
         self.assertIsInstance(output_attention_mask, torch.Tensor)
@@ -89,10 +84,8 @@ class Test____prepare_attnetion_mask(TestProcessorDefault):
             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
         )
 
-        output_attention_mask = (
-            self.model._ProcessorDefault__prepare_attnetion_mask(
-                attention_mask
-            )
+        output_attention_mask = self.model._ProcessorDefault__prepare_attnetion_mask(
+            attention_mask
         )
 
         self.assertIsInstance(output_attention_mask, torch.Tensor)
@@ -114,10 +107,8 @@ class Test____reshape_qkv_for_attention(TestProcessorDefault):
             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
         )
 
-        query, key, value = (
-            self.model._ProcessorDefault__reshape_qkv_for_attention(
-                query, key, value
-            )
+        query, key, value = self.model._ProcessorDefault__reshape_qkv_for_attention(
+            query, key, value
         )
 
         self.assertIsInstance(query, torch.Tensor)
@@ -178,10 +169,8 @@ class Test____compute_weighted_values(TestProcessorDefault):
             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
         )
 
-        weighted_values = (
-            self.model._ProcessorDefault__compute_weighted_values(
-                query, key, value, attention_mask
-            )
+        weighted_values = self.model._ProcessorDefault__compute_weighted_values(
+            query, key, value, attention_mask
         )
 
         self.assertIsInstance(weighted_values, torch.Tensor)
