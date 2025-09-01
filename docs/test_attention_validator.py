@@ -237,52 +237,34 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
 
 
 class Test___resolve_attention_mask_shape(TestValidator):
-    def test__ensure_correct_shape_for_2D_mask(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.batched_input_flag = True
-
-        source_sequence_length = m.source_sequence_length
-        target_sequence_length = m.target_sequence_length
-
+    def test_if_correct_shape_is_returned_for_2D_attention_mask(self):
         expected_attention_mask_shape = (
-            target_sequence_length,
-            source_sequence_length,
+            self.target_sequence_length,
+            self.source_sequence_length,
         )
 
         attention_mask = torch.randn(
-            target_sequence_length,
-            source_sequence_length,
+            self.target_sequence_length,
+            self.source_sequence_length,
         )
 
-        output = m._Validator__resolve_attention_mask_shape(attention_mask)
+        output = self.model._Validator__resolve_attention_mask_shape(attention_mask)
         self.assertEqual(output, expected_attention_mask_shape)
 
-    def test__ensure_correct_shape_for_3D_mask(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = Validator(config)
-        m.batched_input_flag = True
-
-        batch_size = m.batch_size
-        num_heads = m.num_heads
-        source_sequence_length = m.source_sequence_length
-        target_sequence_length = m.target_sequence_length
-
+    def test_if_correct_shape_is_returned_for_3D_attention_mask(self):
         expected_attention_mask_shape = (
-            batch_size * num_heads,
-            target_sequence_length,
-            source_sequence_length,
+            self.batch_size * self.num_heads,
+            self.target_sequence_length,
+            self.source_sequence_length,
         )
 
         attention_mask = torch.randn(
-            batch_size * num_heads,
-            target_sequence_length,
-            source_sequence_length,
+            self.batch_size * self.num_heads,
+            self.target_sequence_length,
+            self.source_sequence_length,
         )
 
-        output = m._Validator__resolve_attention_mask_shape(attention_mask)
+        output = self.model._Validator__resolve_attention_mask_shape(attention_mask)
         self.assertEqual(output, expected_attention_mask_shape)
 
 
