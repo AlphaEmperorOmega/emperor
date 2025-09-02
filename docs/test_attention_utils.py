@@ -18,6 +18,7 @@ class TestUtils(unittest.TestCase):
         self.model = None
         self.batch_size = None
         self.embedding_dim = None
+        self.query_key_projection_dim = None
         self.target_sequence_length = None
         self.num_heads = None
         self.head_dim = None
@@ -37,6 +38,7 @@ class TestUtils(unittest.TestCase):
         self.embedding_dim = self.config.embedding_dim
         self.target_sequence_length = self.config.target_sequence_length
         self.source_sequence_length = self.config.source_sequence_length
+        self.query_key_projection_dim = self.config.query_key_projection_dim
         self.qk_head_dim = self.model.qk_head_dim
         self.v_head_dim = self.model.v_head_dim
         self.num_heads = self.config.num_heads
@@ -123,8 +125,8 @@ class Test_add_batch_dimension_if_missing(TestUtils):
         )
 
 
-class Test____reshape_projection_tesnor(TestUtils):
-    def test__input_as_tensor_and_static_tensor(self):
+class Test___reshape_projection_tesnor(TestUtils):
+    def test_with_given_static_tensor(self):
         tensor = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
@@ -135,16 +137,35 @@ class Test____reshape_projection_tesnor(TestUtils):
 
         self.assertTrue(torch.equal(output, static_tensor))
 
-    def test__input_as_tensor_and_static_vensor__None(self):
+    def test_without_static_tensor(self):
         tensor = torch.randn(
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
-        static_tensor = None
-        output = self.model._Utils__reshape_projection_tesnor(tensor, static_tensor)
+        output = self.model._Utils__reshape_projection_tesnor(tensor)
         expected_output_shape = (
             self.batch_size * self.num_heads,
             self.target_sequence_length,
             self.head_dim,
+        )
+        self.assertEqual(output.shape, expected_output_shape)
+
+    def test_without_static_tensor_and_custom_projection_dim(self):
+        config = MultiHeadAttentionConfig(
+            query_key_projection_dim=64,
+        )
+        self.rebuild_presets(config)
+        tensor = torch.randn(
+            self.target_sequence_length, self.batch_size, self.query_key_projection_dim
+        )
+        static_tensor = None
+        head_dim = self.model.qk_head_dim
+        output = self.model._Utils__reshape_projection_tesnor(
+            tensor, static_tensor, head_dim
+        )
+        expected_output_shape = (
+            self.batch_size * self.num_heads,
+            self.target_sequence_length,
+            head_dim,
         )
         self.assertEqual(output.shape, expected_output_shape)
 
