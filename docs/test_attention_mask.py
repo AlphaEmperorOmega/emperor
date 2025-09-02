@@ -289,7 +289,7 @@ class Test_process_attention_masks(TestMask):
         self.assertTrue(torch.equal(output_attention_mask, attention_mask))
 
 
-class Test_is_mask_float_or_bool(TestMask):
+class Test___ensure_mask_is_float_or_bool(TestMask):
     def test_check_if_error_is_thrown_when_integer_mask_is_given(self):
         mask_shape = (
             self.batch_size * self.num_heads,
@@ -327,71 +327,80 @@ class Test_is_mask_float_or_bool(TestMask):
         self.assertIsNone(output)
 
 
-# class Test_is_mask_correct_dtype(TestMask):
-#     def test__incorrect__other_dtype__check_other__True(self):
-#         c = copy.deepcopy(self.cfg)
-#         config = c.multi_head_attention_model_config
-#         m = Validator(config)
-#         m.batched_input_flag = False
-#
-#         mask = torch.randn(10, 10, dtype=torch.float64)
-#         maks_name = "test_mask"
-#         other_type = torch.float32
-#         other_name = "real_maks_dtype"
-#         check_other = True
-#
-#         with self.assertRaises(RuntimeError) as context:
-#             m.is_mask_correct_dtype(
-#                 mask, maks_name, other_type, other_name, check_other
-#             )
-#
-#     def test__incorrect__other_dtype__check_other__False(self):
-#         c = copy.deepcopy(self.cfg)
-#         config = c.multi_head_attention_model_config
-#         m = Validator(config)
-#         m.batched_input_flag = False
-#
-#         mask = torch.randn(10, 10, dtype=torch.float64)
-#         maks_name = "test_mask"
-#         other_type = torch.float32
-#         other_name = "real_maks_dtype"
-#         check_other = False
-#
-#         output = m.is_mask_correct_dtype(
-#             mask, maks_name, other_type, other_name, check_other
-#         )
-#         self.assertIsNone(output)
-#
-#     def test__mask__and__other_type__same_dtype(self):
-#         c = copy.deepcopy(self.cfg)
-#         config = c.multi_head_attention_model_config
-#         m = Validator(config)
-#         m.batched_input_flag = False
-#
-#         mask = torch.randn(10, 10, dtype=torch.float32)
-#         maks_name = "test_mask"
-#         other_type = torch.float32
-#         other_name = "real_maks_dtype"
-#         check_other = True
-#
-#         output = m.is_mask_correct_dtype(
-#             mask, maks_name, other_type, other_name, check_other
-#         )
-#         self.assertIsNone(output)
-#
-#     def test__other_type__None__check_other__True(self):
-#         c = copy.deepcopy(self.cfg)
-#         config = c.multi_head_attention_model_config
-#         m = Validator(config)
-#         m.batched_input_flag = False
-#
-#         mask = torch.randn(10, 10, dtype=torch.float32)
-#         maks_name = "test_mask"
-#         other_type = None
-#         other_name = "real_maks_dtype"
-#         check_other = True
-#
-#         output = m.is_mask_correct_dtype(
-#             mask, maks_name, other_type, other_name, check_other
-#         )
-#         self.assertIsNone(output)
+class Test___ensure_mask_is_correct_dtype(TestMask):
+    def test_ensure_errror_is_thrown_when_incorrect_dtype_is_given_and_check_other_flag_is_set_to_True(
+        self,
+    ):
+        mask_shape = (
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+        mask = torch.randn(mask_shape, dtype=torch.float64)
+        maks_name = "test_mask"
+        other_type = torch.float32
+        other_name = "real_maks_dtype"
+        check_other = True
+
+        with self.assertRaises(RuntimeError) as context:
+            self.model._Mask__ensure_mask_is_correct_dtype(
+                mask, maks_name, other_type, other_name, check_other
+            )
+
+    def test_ensure_nothing_happends_when_incorrect_dtype_is_given_and_check_other_flag_is_set_to_False(
+        self,
+    ):
+        mask_shape = (
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+
+        mask = torch.randn(mask_shape, dtype=torch.float64)
+        maks_name = "test_mask"
+        other_type = torch.float32
+        other_name = "real_maks_dtype"
+        check_other = False
+
+        output = self.model._Mask__ensure_mask_is_correct_dtype(
+            mask, maks_name, other_type, other_name, check_other
+        )
+        self.assertIsNone(output)
+
+    def test_ensure_no_error_is_thrown_when_given_dtype_and_mask_dtype_match(self):
+        mask_shape = (
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+
+        mask = torch.randn(mask_shape, dtype=torch.float32)
+        maks_name = "test_mask"
+        other_type = torch.float32
+        other_name = "real_maks_dtype"
+        check_other = True
+
+        output = self.model._Mask__ensure_mask_is_correct_dtype(
+            mask, maks_name, other_type, other_name, check_other
+        )
+        self.assertIsNone(output)
+
+    def test_ensure_no_error_is_thrown_when_no_dtype_is_given_but_check_other_flag_is_set_to_True(
+        self,
+    ):
+        mask_shape = (
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+
+        mask = torch.randn(mask_shape, dtype=torch.float32)
+        maks_name = "test_mask"
+        other_type = None
+        other_name = "real_maks_dtype"
+        check_other = True
+
+        output = self.model._Mask__ensure_mask_is_correct_dtype(
+            mask, maks_name, other_type, other_name, check_other
+        )
+        self.assertIsNone(output)
