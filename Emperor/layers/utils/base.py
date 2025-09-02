@@ -120,6 +120,7 @@ class LayerBlock(Module):
         residual_connection_flag: bool = False,
         is_adaptive_computation: bool = False,
         dropout_probability: float = 0.0,
+        layer_form_first_flag: bool | None = None,
     ):
         super().__init__()
 
@@ -129,6 +130,7 @@ class LayerBlock(Module):
         self.residual_connection_flag = residual_connection_flag
         self.is_adaptive_computation = is_adaptive_computation
         self.dropout_probability = dropout_probability
+        self.layer_form_first_flag = layer_form_first_flag
 
         self.has_activation = self.activation_function is not None
         self.has_dropout = self.dropout_probability > 0.0
@@ -152,28 +154,49 @@ class LayerBlock(Module):
 
     def forward(
         self,
-        input_batch: Tensor,
+        main_model_input: Tensor | tuple,
+        other_model_inputs: Tensor | tuple | None = None,
         skip_mask: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, Tensor]:
         # TODO: Ensure that the skip_maks will be used
         # in the future.
-        output = self.model(input_batch)
-        is_tuple = isinstance(output, tuple)
-        if is_tuple:
+        if self.__is_before_layer_norm():
+            main_model_input = self.layer_norm_module(main_model_input)
+        if isinstance(other_model_inputs, tuple):
+            output = self.model(main_model_input, **other_model_inputs)
+        else:
+            output = self.model(main_model_input)
+
+        is_model_output_tuple = isinstance(output, tuple)
+        if is_model_output_tuple:
             output, skip_mask, loss = output
 
-        if self.layer_norm_output_dim is not None:
+        if self.__is_normal_layer_norm():
             output = self.layer_norm_module(output)
         if self.has_activation:
             output = self.activation_function(output)
         if self.has_dropout:
             output = self.dropout_module(output)
         if self.residual_connection_flag:
-            output = output + input_batch
+            output = output + main_model_input
+        if self.__is_after_layer_norm():
+            output = self.layer_norm_module(output)
 
-        if is_tuple:
+        if is_model_output_tuple:
             return output, loss
         return output
+
+    def __is_normal_layer_norm(self) -> bool:
+        is_layer_norm_module = self.layer_norm_output_dim is not None
+        return is_layer_norm_module and self.layer_form_first_flag is None
+
+    def __is_before_layer_norm(self) -> bool:
+        is_layer_norm_module = self.layer_norm_output_dim is not None
+        return is_layer_norm_module and self.layer_form_first_flag is True
+
+    def __is_after_layer_norm(self) -> bool:
+        is_layer_norm_module = self.layer_norm_output_dim is not None
+        return is_layer_norm_module and self.layer_form_first_flag is False
 
     # TODO: In the future instead multiple function inputs
     # use a dataset class to encapsulate the inputs and outputs
