@@ -177,7 +177,7 @@ class MultiHeadAttention(Module):
                 q, k, v, k_padding_mask, attention_mask
             )
         )
-        k_padding_mask, attention_mask = self.masks.check_padding_and_attention_masks(
+        k_padding_mask, attention_mask = self.masks.process_attention_masks(
             k_padding_mask, attention_mask
         )
         q, k, v = self.projector.compute_qkv_projections(q, k, v)
