@@ -4,12 +4,8 @@ from dataclasses import dataclass, field
 
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from Emperor.base.utils import DataClassBase
-
-
-from Emperor.experts.experts import (
-    MixtureOfExpertsFeedForwardConfig,
-    MixtureOfExpertsConfig,
-)
+from Emperor.feedForward.feed_forward import MixtureOfExpertsFeedForwardConfig
+from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
 from Emperor.layers.utils.linears import LinearLayerConfig
