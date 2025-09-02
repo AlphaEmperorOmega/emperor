@@ -8,19 +8,19 @@ from Emperor.attention.utils.processor_handler import Processor
 from Emperor.attention.utils.projection_handler import Projector
 from Emperor.attention.utils.validation_handler import Validator
 from Emperor.base.utils import DataClassBase, Module
-from Emperor.layers.utils.enums import LayerTypes
 
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from torch.types import _dtype as DType
+    from Emperor.layers.utils.enums import LayerTypes
     from Emperor.config import ModelConfig
 
 
 @dataclass
 class MultiHeadAttentionConfig(DataClassBase):
-    model_type: LayerTypes | None = field(
+    model_type: "LayerTypes | None" = field(
         default=None,
         metadata={
             "help": "Type of model used to generate parameters query, key, and value projections"
