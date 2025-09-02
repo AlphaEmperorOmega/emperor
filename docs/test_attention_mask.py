@@ -167,7 +167,7 @@ class Test_validate_attention_mask(TestMask):
         self.assertFalse(self.model.causal_attention_mask_flag)
 
 
-class Test_check_padding_and_attention_masks(TestMask):
+class Test_process_attention_masks(TestMask):
     def test__inputs_as_None(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=True,
@@ -178,7 +178,7 @@ class Test_check_padding_and_attention_masks(TestMask):
         key_padding_mask = None
         attention_mask = None
 
-        key_padding_mask, attention_mask = self.model.check_padding_and_attention_masks(
+        key_padding_mask, attention_mask = self.model.process_attention_masks(
             key_padding_mask,
             attention_mask,
         )
@@ -199,7 +199,7 @@ class Test_check_padding_and_attention_masks(TestMask):
         attention_mask = None
 
         output_key_padding_mask, output_attention_mask = (
-            self.model.check_padding_and_attention_masks(
+            self.model.process_attention_masks(
                 key_padding_mask,
                 attention_mask,
             )
@@ -226,7 +226,7 @@ class Test_check_padding_and_attention_masks(TestMask):
             )
             > 0
         )
-        key_padding_mask, attention_mask = self.model.check_padding_and_attention_masks(
+        key_padding_mask, attention_mask = self.model.process_attention_masks(
             key_padding_mask,
             attention_mask,
         )
@@ -254,7 +254,7 @@ class Test_check_padding_and_attention_masks(TestMask):
             > 0
         )
 
-        key_padding_mask, attention_mask = self.model.check_padding_and_attention_masks(
+        key_padding_mask, attention_mask = self.model.process_attention_masks(
             key_padding_mask,
             attention_mask,
         )
@@ -279,7 +279,7 @@ class Test_check_padding_and_attention_masks(TestMask):
         )
 
         output_key_padding_mask, output_attention_mask = (
-            self.model.check_padding_and_attention_masks(
+            self.model.process_attention_masks(
                 key_padding_mask,
                 attention_mask,
             )
@@ -287,3 +287,111 @@ class Test_check_padding_and_attention_masks(TestMask):
 
         self.assertTrue(torch.equal(output_key_padding_mask, key_padding_mask))
         self.assertTrue(torch.equal(output_attention_mask, attention_mask))
+
+
+class Test_is_mask_float_or_bool(TestMask):
+    def test_check_if_error_is_thrown_when_integer_mask_is_given(self):
+        mask_shape = (
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+        integer_mask = torch.randint(0, 20, mask_shape)
+        maks_name = "test_mask"
+
+        with self.assertRaises(RuntimeError) as context:
+            self.model._Mask__ensure_mask_is_float_or_bool(integer_mask, maks_name)
+
+    def test_ensure_no_error_is_thrown_when_float_mask_is_given(self):
+        mask_shape = (
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+        float_mask = torch.randn(mask_shape)
+        maks_name = "test_mask"
+
+        output = self.model._Mask__ensure_mask_is_float_or_bool(float_mask, maks_name)
+        self.assertIsNone(output)
+
+    def test_ensure_no_error_is_thrown_when_boolean_mask_is_given(self):
+        mask_shape = (
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+        boolean_mask = torch.randn(mask_shape) > 0
+        maks_name = "test_mask"
+
+        output = self.model._Mask__ensure_mask_is_float_or_bool(boolean_mask, maks_name)
+        self.assertIsNone(output)
+
+
+# class Test_is_mask_correct_dtype(TestMask):
+#     def test__incorrect__other_dtype__check_other__True(self):
+#         c = copy.deepcopy(self.cfg)
+#         config = c.multi_head_attention_model_config
+#         m = Validator(config)
+#         m.batched_input_flag = False
+#
+#         mask = torch.randn(10, 10, dtype=torch.float64)
+#         maks_name = "test_mask"
+#         other_type = torch.float32
+#         other_name = "real_maks_dtype"
+#         check_other = True
+#
+#         with self.assertRaises(RuntimeError) as context:
+#             m.is_mask_correct_dtype(
+#                 mask, maks_name, other_type, other_name, check_other
+#             )
+#
+#     def test__incorrect__other_dtype__check_other__False(self):
+#         c = copy.deepcopy(self.cfg)
+#         config = c.multi_head_attention_model_config
+#         m = Validator(config)
+#         m.batched_input_flag = False
+#
+#         mask = torch.randn(10, 10, dtype=torch.float64)
+#         maks_name = "test_mask"
+#         other_type = torch.float32
+#         other_name = "real_maks_dtype"
+#         check_other = False
+#
+#         output = m.is_mask_correct_dtype(
+#             mask, maks_name, other_type, other_name, check_other
+#         )
+#         self.assertIsNone(output)
+#
+#     def test__mask__and__other_type__same_dtype(self):
+#         c = copy.deepcopy(self.cfg)
+#         config = c.multi_head_attention_model_config
+#         m = Validator(config)
+#         m.batched_input_flag = False
+#
+#         mask = torch.randn(10, 10, dtype=torch.float32)
+#         maks_name = "test_mask"
+#         other_type = torch.float32
+#         other_name = "real_maks_dtype"
+#         check_other = True
+#
+#         output = m.is_mask_correct_dtype(
+#             mask, maks_name, other_type, other_name, check_other
+#         )
+#         self.assertIsNone(output)
+#
+#     def test__other_type__None__check_other__True(self):
+#         c = copy.deepcopy(self.cfg)
+#         config = c.multi_head_attention_model_config
+#         m = Validator(config)
+#         m.batched_input_flag = False
+#
+#         mask = torch.randn(10, 10, dtype=torch.float32)
+#         maks_name = "test_mask"
+#         other_type = None
+#         other_name = "real_maks_dtype"
+#         check_other = True
+#
+#         output = m.is_mask_correct_dtype(
+#             mask, maks_name, other_type, other_name, check_other
+#         )
+#         self.assertIsNone(output)
