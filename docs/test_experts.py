@@ -6,8 +6,10 @@ from Emperor.config import ModelConfig
 from Emperor.experts.experts import (
     MixtureOfExperts,
     MixtureOfExpertsConfig,
-    MixtureOfExpertsFeedForwardConfig,
+)
+from Emperor.feedForward.feed_forward import (
     MixtureOfExpertsFeedForward,
+    MixtureOfExpertsFeedForwardConfig,
 )
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.base import LayerBlock

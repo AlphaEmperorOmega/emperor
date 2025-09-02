@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
 from Emperor.config import ModelConfig
-from Emperor.experts.experts import (
-    MixtureOfExpertsConfig,
-    MixtureOfExpertsFeedForwardConfig,
-)
+from Emperor.experts.experts import MixtureOfExpertsConfig
+from Emperor.feedForward.feed_forward import MixtureOfExpertsFeedForwardConfig
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
