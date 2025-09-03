@@ -45,7 +45,7 @@ class TestMask(unittest.TestCase):
 
 
 class Test___canonical_mask(TestMask):
-    def test__input_as_None(self):
+    def test_mask_set_as_none_tensor(self):
         mask = None
         mask_name = ""
         other_type = None
@@ -58,8 +58,15 @@ class Test___canonical_mask(TestMask):
         )
         self.assertIsNone(output)
 
-    def test__boolean_mask_input(self):
-        mask = torch.randn(10, 10, dtype=torch.float32) > 0
+    def test_check_if_boolean_mask_is_converted_to_mask_filled_with_zero_and_negative_infinity(
+        self,
+    ):
+        mask = torch.randn(
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+        mask = mask > 0
         mask_name = "maks_to_test"
         other_type = torch.bool
         other_name = "required_mask_dtype"
@@ -73,8 +80,12 @@ class Test___canonical_mask(TestMask):
         self.assertTrue(output.dtype == torch.float32)
         self.assertFalse(output.dtype == mask.dtype)
 
-    def test__float_mask_input(self):
-        mask = torch.randn(10, 10, dtype=torch.float32)
+    def test_if_same_mask_is_returned_when_type_is_floating_point(self):
+        mask = torch.randn(
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
         mask_name = "maks_to_test"
         other_type = torch.float32
         other_name = "required_mask_dtype"
@@ -88,7 +99,7 @@ class Test___canonical_mask(TestMask):
         self.assertTrue(torch.equal(output, mask))
 
 
-class Test_validate_attention_mask(TestMask):
+class Test___validate_attention_mask(TestMask):
     def test__key_padding_mask__None(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=False,
@@ -170,7 +181,7 @@ class Test_process_attention_masks(TestMask):
     def test__inputs_as_None(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=True,
-            causal_attention_mask_flag=True,
+            causal_attention_mask_flag=False,
         )
         self.rebuild_presets(config)
 
@@ -188,7 +199,7 @@ class Test_process_attention_masks(TestMask):
     def test__only_key_padding_mask_input(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=True,
-            causal_attention_mask_flag=True,
+            causal_attention_mask_flag=False,
         )
         self.rebuild_presets(config)
 
@@ -211,7 +222,7 @@ class Test_process_attention_masks(TestMask):
     def test__only_attention_mask_input(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=True,
-            causal_attention_mask_flag=True,
+            causal_attention_mask_flag=False,
             target_dtype=torch.float64,
         )
         self.rebuild_presets(config)
