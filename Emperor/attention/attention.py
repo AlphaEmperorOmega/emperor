@@ -151,7 +151,7 @@ class MultiHeadAttention(Module):
 
     def __initialize_utilities(self):
         self.validator = Validator(self.cfg)
-        self.masks = Mask(self.cfg, self.validator)
+        self.masks = Mask(self.cfg)
         self.projector = Projector(self.cfg, self.main_cfg)
         self.processor = Processor(self.cfg, self.validator, self.projector)
         self.bias = KeyValueBias(self.cfg)
