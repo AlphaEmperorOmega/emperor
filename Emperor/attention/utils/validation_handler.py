@@ -42,7 +42,6 @@ class Validator:
         self.__check_query_key_value_dimension_count(key, value)
         self.__check_key_padding_mask_dimension_count(key_padding_mask)
         self.__check_attention_mask_dim_count_and_shape(attention_mask)
-        self.__ensure_attention_mask_for_required_causal_mask(attention_mask)
 
         return self.batched_input_flag
 
@@ -111,17 +110,6 @@ class Validator:
                 self.source_sequence_length,
             )
         return (self.target_sequence_length, self.source_sequence_length)
-
-    def __ensure_attention_mask_for_required_causal_mask(
-        self,
-        attention_mask: Tensor | None = None,
-    ) -> None:
-        if self.causal_attention_mask_flag and attention_mask is None:
-            raise RuntimeError(
-                "Need `attention_mask` if specifying the `causal_attention_mask_flag` hint. "
-                "You may use the Transformer module method "
-                "`generate_square_subsequent_mask` to create this mask."
-            )
 
     def is_tensor_batched(self, tensor: Tensor) -> bool:
         self.batched_input_flag = tensor.dim() == 3

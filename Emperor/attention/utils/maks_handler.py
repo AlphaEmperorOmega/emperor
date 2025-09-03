@@ -40,6 +40,18 @@ class MaskValidator:
                     "is deprecated. Use same type for both instead."
                 )
 
+    @staticmethod
+    def ensure_attention_mask_for_required_causal_mask(
+        attention_mask: Tensor | None = None,
+        causal_attention_mask_flag: bool = False,
+    ) -> None:
+        if causal_attention_mask_flag and attention_mask is None:
+            raise RuntimeError(
+                "Need `attention_mask` if specifying the `causal_attention_mask_flag` hint. "
+                "You may use the Transformer module method "
+                "`generate_square_subsequent_mask` to create this mask."
+            )
+
 
 class Mask:
     def __init__(
@@ -75,12 +87,12 @@ class Mask:
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
     ) -> Tensor | None:
-        if (
-            self.causal_attention_mask_flag
-            and key_padding_mask is None
-            and not self.return_attention_weights_flag
-        ):
+        if self.__should_skip_attention_mask(key_padding_mask):
             return
+
+        MaskValidator.ensure_attention_mask_for_required_causal_mask(
+            attention_mask, self.causal_attention_mask_flag
+        )
 
         if key_padding_mask is not None:
             self.causal_attention_mask_flag = False
@@ -95,6 +107,17 @@ class Mask:
         )
 
         return attention_mask
+
+    def __should_skip_attention_mask(
+        self,
+        key_padding_mask: Tensor | None,
+    ) -> bool:
+        is_causal_mask_no_padding_no_returned_weights = (
+            self.causal_attention_mask_flag
+            and key_padding_mask is None
+            and not self.return_attention_weights_flag
+        )
+        return is_causal_mask_no_padding_no_returned_weights
 
     def __canonical_mask(
         self,
