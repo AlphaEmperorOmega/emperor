@@ -158,3 +158,45 @@ class Test_ensure_mask_is_correct_dtype(TestMaskValidator):
             mask, maks_name, other_type, other_name, check_other
         )
         self.assertIsNone(output)
+
+
+class Test_ensure_attention_mask_for_required_causal_mask(TestMaskValidator):
+    def test_no_input_with_causal_mask_flag_set_to_True(self):
+        attention_mask = None
+        causal_attention_mask_flag = True
+        with self.assertRaises(RuntimeError) as context:
+            self.model.ensure_attention_mask_for_required_causal_mask(
+                attention_mask, causal_attention_mask_flag
+            )
+
+    def test_no_input_with_causal_mask_flag_set_to_False(self):
+        attention_mask = None
+        causal_attention_mask_flag = False
+        output = self.model.ensure_attention_mask_for_required_causal_mask(
+            attention_mask, causal_attention_mask_flag
+        )
+        self.assertIsNone(output)
+
+    def test_attention_mask_input_with_causal_mask_flag_set_to_False(self):
+        attention_mask = torch.randn(
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+
+        output = self.model.ensure_attention_mask_for_required_causal_mask(
+            attention_mask, False
+        )
+        self.assertIsNone(output)
+
+    def test_attention_mask_input_with_causal_mask_flag_set_to_True(self):
+        attention_mask = torch.randn(
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.target_sequence_length,
+        )
+
+        output = self.model.ensure_attention_mask_for_required_causal_mask(
+            attention_mask, True
+        )
+        self.assertIsNone(output)

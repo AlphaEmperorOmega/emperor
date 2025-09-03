@@ -266,60 +266,6 @@ class Test___resolve_attention_mask_shape(TestValidator):
         self.assertEqual(output, expected_attention_mask_shape)
 
 
-class Test___ensure_attention_mask_for_required_causal_mask(TestValidator):
-    def test_no_input_with_causal_mask_flag_set_to_True(self):
-        config = MultiHeadAttentionConfig(
-            causal_attention_mask_flag=True,
-        )
-        self.rebuild_presets(config)
-
-        with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__ensure_attention_mask_for_required_causal_mask()
-
-    def test_no_input_with_causal_mask_flag_set_to_False(self):
-        config = MultiHeadAttentionConfig(
-            causal_attention_mask_flag=False,
-        )
-        self.rebuild_presets(config)
-
-        output = self.model._Validator__ensure_attention_mask_for_required_causal_mask()
-        self.assertIsNone(output)
-
-    def test_attention_mask_input_with_causal_mask_flag_set_to_False(self):
-        config = MultiHeadAttentionConfig(
-            causal_attention_mask_flag=False,
-        )
-        self.rebuild_presets(config)
-
-        attention_mask = torch.randn(
-            self.batch_size * self.num_heads,
-            self.source_sequence_length,
-            self.target_sequence_length,
-        )
-
-        output = self.model._Validator__ensure_attention_mask_for_required_causal_mask(
-            attention_mask
-        )
-        self.assertIsNone(output)
-
-    def test_attention_mask_input_with_causal_mask_flag_set_to_True(self):
-        config = MultiHeadAttentionConfig(
-            causal_attention_mask_flag=True,
-        )
-        self.rebuild_presets(config)
-
-        attention_mask = torch.randn(
-            self.batch_size * self.num_heads,
-            self.source_sequence_length,
-            self.target_sequence_length,
-        )
-
-        output = self.model._Validator__ensure_attention_mask_for_required_causal_mask(
-            attention_mask
-        )
-        self.assertIsNone(output)
-
-
 class Test_check_attention_input_shapes(TestValidator):
     def test_all_inputs_batched(self):
         q_input_shape = (
