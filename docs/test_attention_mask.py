@@ -100,10 +100,10 @@ class Test___canonical_mask(TestMask):
 
 
 class Test___validate_attention_mask(TestMask):
-    def test__key_padding_mask__None(self):
+    def test_only_attention_mask_as_input(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=False,
-            causal_attention_mask_flag=True,
+            causal_attention_mask_flag=False,
         )
         self.rebuild_presets(config)
         key_padding_mask = None
@@ -118,9 +118,30 @@ class Test___validate_attention_mask(TestMask):
             key_padding_mask,
             attention_mask,
         )
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertNotEqual(output.dtype, torch.bool)
+        self.assertEqual(output.dtype, self.config.target_dtype)
+        self.assertFalse(self.model.causal_attention_mask_flag)
+
+    def test_only_key_padding_mask(self):
+        config = MultiHeadAttentionConfig(
+            return_attention_weights_flag=False,
+            causal_attention_mask_flag=False,
+        )
+        self.rebuild_presets(config)
+        key_padding_mask = torch.randint(
+            0, 2, (self.batch_size, self.source_sequence_length)
+        )
+        attention_mask = None
+
+        output = self.model._Mask__validate_attention_mask(
+            key_padding_mask,
+            attention_mask,
+        )
         self.assertIsNone(output)
 
-    def test__boolean_attention_mask(self):
+    def test_attention_and_padding_mask_as_input_with_all_flags_true(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=True,
             causal_attention_mask_flag=True,
@@ -146,7 +167,43 @@ class Test___validate_attention_mask(TestMask):
         self.assertEqual(output.dtype, self.config.target_dtype)
         self.assertFalse(self.model.causal_attention_mask_flag)
 
-    def test__float_attention_mask(self):
+
+class Test___should_skip_attention_mask(TestMask):
+    def test_if_attention_is_skipped_when_flags_are_false_and_no_padding_mask_is_given(
+        self,
+    ):
+        config = MultiHeadAttentionConfig(
+            return_attention_weights_flag=False,
+            causal_attention_mask_flag=False,
+        )
+        self.rebuild_presets(config)
+
+        key_padding_mask = None
+        output = self.model._Mask__should_skip_attention_mask(
+            key_padding_mask,
+        )
+
+        self.assertFalse(output)
+
+    def test_if_attention_is_skipped_when_padding_mask_is_given(self):
+        config = MultiHeadAttentionConfig(
+            return_attention_weights_flag=False,
+            causal_attention_mask_flag=False,
+        )
+        self.rebuild_presets(config)
+
+        key_padding_mask = torch.randint(
+            0, 2, (self.batch_size, self.source_sequence_length)
+        )
+        output = self.model._Mask__should_skip_attention_mask(
+            key_padding_mask,
+        )
+
+        self.assertFalse(output)
+
+    def test_if_attention_is_skipped_when_padding_mask_is_given_and_flags_are_true(
+        self,
+    ):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=True,
             causal_attention_mask_flag=True,
@@ -156,25 +213,25 @@ class Test___validate_attention_mask(TestMask):
         key_padding_mask = torch.randint(
             0, 2, (self.batch_size, self.source_sequence_length)
         )
-
-        key_padding_mask = torch.randint(
-            0, 2, (self.batch_size, self.source_sequence_length)
-        )
-        attention_mask = torch.randn(
-            self.batch_size * self.num_heads,
-            self.source_sequence_length,
-            self.target_sequence_length,
-        )
-
-        output = self.model._Mask__validate_attention_mask(
+        output = self.model._Mask__should_skip_attention_mask(
             key_padding_mask,
-            attention_mask,
         )
 
-        self.assertIsInstance(output, torch.Tensor)
-        self.assertEqual(output.dtype, attention_mask.dtype)
-        self.assertTrue(torch.equal(output, attention_mask))
-        self.assertFalse(self.model.causal_attention_mask_flag)
+        self.assertFalse(output)
+
+    def test_only_case_attention_is_skipped(self):
+        config = MultiHeadAttentionConfig(
+            return_attention_weights_flag=False,
+            causal_attention_mask_flag=True,
+        )
+        self.rebuild_presets(config)
+
+        key_padding_mask = None
+        output = self.model._Mask__should_skip_attention_mask(
+            key_padding_mask,
+        )
+
+        self.assertTrue(output)
 
 
 class Test_process_attention_masks(TestMask):
