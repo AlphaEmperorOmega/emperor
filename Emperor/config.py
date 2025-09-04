@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from Emperor.base.utils import DataClassBase
-from Emperor.feedForward.feed_forward import MixtureOfExpertsFeedForwardConfig
+from Emperor.feedForward.feed_forward import (
+    FeedForwardConfig,
+    MixtureOfExpertsFeedForwardConfig,
+)
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
@@ -209,6 +212,18 @@ class ModelConfig(DataClassBase):
             zero_attention_flag=False,
             causal_attention_mask_flag=False,
             add_key_value_bias_flag=False,
+        ),
+        metadata={"help": "`MultiHeadAttention` configuration"},
+    )
+    transformer_feed_forward_config: FeedForwardConfig = field(
+        default_factory=lambda: FeedForwardConfig(
+            input_dim=INPUT_DIM,
+            hidden_dim=HIDDEN_DIM,
+            output_dim=OUTPUT_DIM,
+            num_layers=2,
+            activation=nn.ReLU,
+            layer_norm_flag=False,
+            linear_model=LayerTypes.DYNAMIC_BASE,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
