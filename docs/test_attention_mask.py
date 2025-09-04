@@ -124,7 +124,7 @@ class Test___validate_attention_mask(TestMask):
         self.assertEqual(output.dtype, self.config.target_dtype)
         self.assertFalse(self.model.causal_attention_mask_flag)
 
-    def test_only_key_padding_mask(self):
+    def test_only_key_padding_mask_as_input(self):
         config = MultiHeadAttentionConfig(
             return_attention_weights_flag=False,
             causal_attention_mask_flag=False,

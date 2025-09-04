@@ -2,7 +2,10 @@ import torch
 import torch.nn as nn
 from Emperor.config import ModelConfig
 from Emperor.experts.experts import MixtureOfExpertsConfig
-from Emperor.feedForward.feed_forward import MixtureOfExpertsFeedForwardConfig
+from Emperor.feedForward.feed_forward import (
+    FeedForwardConfig,
+    MixtureOfExpertsFeedForwardConfig,
+)
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
@@ -152,5 +155,14 @@ def default_unittest_config():
             add_key_value_bias_flag=False,
             average_attention_weights_flag=False,
             return_attention_weights_flag=False,
+        ),
+        transformer_feed_forward_config=FeedForwardConfig(
+            input_dim=INPUT_DIM,
+            hidden_dim=HIDDEN_DIM,
+            output_dim=OUTPUT_DIM,
+            num_layers=2,
+            activation=nn.ReLU,
+            layer_norm_flag=False,
+            linear_model=LayerTypes.DYNAMIC_BASE.value,
         ),
     )
