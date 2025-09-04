@@ -1,5 +1,4 @@
 from torch import Tensor
-from torch import nn
 from torch.nn import Linear, Sequential
 from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase, Module
@@ -15,35 +14,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class FeedForwardConfig(DataClassBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input dimension of the first `Linear` layer"},
-    )
-    hidden_dim: int | None = field(
-        default=None,
-        metadata={"help": "Dimension of the hidden `Linear` layers"},
-    )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output dimension of the output `Linear` layer"},
-    )
-    num_layers: int | None = field(
-        default=None,
-        metadata={"help": "Number of layers in the model"},
-    )
-    activation: nn.Linear | None = field(
-        default=None,
-        metadata={"help": "Activation function or layer to use"},
-    )
-    layer_norm_flag: int | None = field(
-        default=None,
-        metadata={"help": "Flag indicating whether to apply layer normalization"},
-    )
-    linear_model: nn.Module | None = field(
-        default=None,
-        metadata={"help": "Linear model module used for output transformation"},
-    )
+class FeedForwardConfig(LinearBlockStackConfig):
     weighted_parameters_flag: bool | None = field(
         default=None,
         metadata={
@@ -59,16 +30,9 @@ class FeedForward(Module):
         overrides: "FeedForwardConfig | None" = None,
     ) -> None:
         super().__init__()
-        config = getattr(cfg, "mixture_of_experts_config", cfg)
+        config = getattr(cfg, "transformer_feed_forward_config", cfg)
         self.cfg: FeedForwardConfig = self._overwrite_config(config, overrides)
 
-        self.input_dim = self.cfg.input_dim
-        self.hidden_dim = self.cfg.hidden_dim
-        self.output_dim = self.cfg.output_dim
-        self.num_layers = self.cfg.num_layers
-        self.activation = self.cfg.activation()
-        self.layer_norm_flag = self.cfg.layer_norm_flag
-        self.linear_model = self.cfg.linear_model
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
 
         self.model = self._create_model(cfg)
@@ -77,33 +41,26 @@ class FeedForward(Module):
         )
         self._store_shape_attributes()
 
+    def _create_model(self, config: "ModelConfig") -> Linear | Sequential:
+        return LinearBlockStack(config).build_model()
+
     def _store_shape_attributes(self):
         self.batch_size = None
         self.sequence_length = None
         self.output_shape = None
-
-    def _create_multi_layer_model(self) -> Linear | Sequential:
-        cfg = LinearBlockStackConfig(
-            input_dim=self.input_dim,
-            hidden_dim=self.hidden_dim,
-            output_dim=self.output_dim,
-            num_layers=self.num_layers,
-            activation=self.activation,
-            layer_norm_flag=self.layer_norm_flag,
-            linear_model=self.linear_model,
-        )
-        return LinearBlockStack(cfg).build_model()
 
     def forward(
         self,
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor]:
-        input_batch_matrix, skip_mask = self._prepare_inputs(input_batch, skip_mask)
+        input_batch_matrix, skip_mask = self._ensure_correct_shape(
+            input_batch, skip_mask
+        )
         output_projection = self.model(input_batch_matrix)
-        return output_projection.view(self.output_shape)
+        return self._revert_to_original_shape(output_projection)
 
-    def _prepare_inputs(
+    def _ensure_correct_shape(
         self,
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
@@ -126,6 +83,9 @@ class FeedForward(Module):
         self.batch_size, _ = input_shape
         self.output_shape = [self.batch_size, -1]
 
+    def _revert_to_original_shape(self, output_projection: Tensor):
+        return output_projection.view(self.output_shape)
+
 
 @dataclass
 class MixtureOfExpertsFeedForwardConfig(DataClassBase):
@@ -137,7 +97,7 @@ class MixtureOfExpertsFeedForwardConfig(DataClassBase):
     )
 
 
-class MixtureOfExpertsFeedForward(FeedForward):
+class MixtureOfExpertsFeedForward(Module):
     def __init__(
         self,
         cfg: "MixtureOfExpertsFeedForwardConfig | ModelConfig",
