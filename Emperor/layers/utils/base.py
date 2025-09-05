@@ -111,6 +111,116 @@ class LinearBlockStack(Module):
         )
 
 
+@dataclass
+class LayerBlockStackConfig(DataClassBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": "Input dimension of the first `Linear` layer"},
+    )
+    hidden_dim: int | None = field(
+        default=None,
+        metadata={"help": "Dimension of the hidden `Linear` layers"},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Output dimension of the output `Linear` layer"},
+    )
+    num_layers: int | None = field(
+        default=None,
+        metadata={"help": "Number of layers in the model"},
+    )
+    activation: "ActivationFunctionOptions | None" = field(
+        default=None,
+        metadata={"help": "Activation function or layer to use"},
+    )
+    layer_norm_flag: int | None = field(
+        default=None,
+        metadata={"help": "Flag indicating whether to apply layer normalization"},
+    )
+    layer_type: "LayerTypes | None" = field(
+        default=None,
+        metadata={"help": "Linear model module used for output transformation"},
+    )
+
+
+class LayerBlockStack(Module):
+    def __init__(
+        self,
+        cfg: "LayerBlockStackConfig | ModelConfig",
+        overrides: "LayerBlockStackConfig | None" = None,
+    ):
+        super().__init__()
+        self.main_cfg = cfg
+        config = getattr(cfg, "linear_block_stack_config", cfg)
+        self.cfg: "LayerBlockStackConfig" = self._overwrite_config(config, overrides)
+
+        self.input_dim = self.cfg.input_dim
+        self.hidden_dim = self.cfg.hidden_dim
+        self.output_dim = self.cfg.output_dim
+        self.num_layers = self.cfg.num_layers
+        self.activation = self.cfg.activation
+        self.layer_norm_flag = self.cfg.layer_norm_flag
+        self.layer_type = self.cfg.layer_type.value
+
+    def build_model(self) -> Linear | Sequential:
+        layers = []
+
+        layer_adjustment = self.__add_initial_layer(layers)
+        self.__add_hidden_layers(layers, layer_adjustment)
+        self.__add_output_layer(layers)
+
+        model = layers[0]
+        if self.num_layers > 1:
+            model = Sequential(*layers)
+
+        self._initialize_parameters(model)
+        return model
+
+    def __add_initial_layer(self, layers: list) -> int:
+        if self.input_dim != self.hidden_dim and self.num_layers > 1:
+            layer = self.__create_layer(self.input_dim, self.hidden_dim, False)
+            layers.append(layer)
+            return 2
+        return 1
+
+    def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
+        for _ in range(self.num_layers - layer_adjustment):
+            layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
+            layers.append(layer)
+
+    def __add_output_layer(self, layers: list) -> None:
+        input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
+        output_model = self.__create_layer(input_dim, self.output_dim)
+        layers.append(output_model)
+
+    def __create_layer(
+        self,
+        input_dim: int,
+        output_dim: int,
+        residual_connection_flag: bool = True,
+    ):
+        layer_norm_output_dim = None
+        if self.layer_norm_flag:
+            layer_norm_output_dim = output_dim
+        updated_config = self.__resolve_model_type_overrides(input_dim, output_dim)
+        return LayerBlock(
+            model=self.layer_type(updated_config),
+            activation_function=self.activation,
+            layer_norm_output_dim=layer_norm_output_dim,
+            residual_connection_flag=residual_connection_flag,
+        )
+
+    def __resolve_model_type_overrides(self, input_dim: int, output_dim: int):
+        c = copy.deepcopy(self.main_cfg)
+        if issubclass(self.model_type.value, LinearLayer):
+            c.linear_layer_model_config.input_dim = input_dim
+            c.linear_layer_model_config.output_dim = output_dim
+            return c
+        c.mixture_model_config.input_dim = input_dim
+        c.mixture_model_config.output_dim = output_dim
+        return c
+
+
 class LayerBlock(Module):
     def __init__(
         self,
