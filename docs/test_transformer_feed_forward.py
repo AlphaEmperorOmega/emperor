@@ -31,14 +31,14 @@ class TestFeedForward(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.model = FeedForward(self.config)
+        self.model = FeedForward(self.cfg)
 
-        self.batch_size = self.config.batch_size
-        self.embedding_dim = self.config.embedding_dim
-        self.target_sequence_length = self.config.target_sequence_length
-        self.source_sequence_length = self.config.source_sequence_length
-        self.num_heads = self.config.num_heads
-        self.head_dim = self.embedding_dim // self.num_heads
+        self.batch_size = self.cfg.batch_size
+        # self.embedding_dim = self.cfg.embedding_dim
+        # self.target_sequence_length = self.cfg.target_sequence_length
+        # self.source_sequence_length = self.cfg.source_sequence_length
+        # self.num_heads = self.cfg.num_heads
+        # self.head_dim = self.embedding_dim // self.num_heads
 
 
 class TestFeedForward__init(TestFeedForward):

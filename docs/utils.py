@@ -157,12 +157,7 @@ def default_unittest_config():
             return_attention_weights_flag=False,
         ),
         transformer_feed_forward_config=FeedForwardConfig(
-            input_dim=INPUT_DIM,
-            hidden_dim=HIDDEN_DIM,
-            output_dim=OUTPUT_DIM,
+            weighted_parameters_flag=True,
             num_layers=2,
-            activation=nn.ReLU,
-            layer_norm_flag=False,
-            linear_model=LayerTypes.DYNAMIC_BASE.value,
         ),
     )
