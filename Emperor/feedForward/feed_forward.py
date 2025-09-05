@@ -14,12 +14,16 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class FeedForwardConfig(LinearBlockStackConfig):
+class FeedForwardConfig(DataClassBase):
     weighted_parameters_flag: bool | None = field(
         default=None,
         metadata={
             "help": "When `True` the sepected parameters will be multiplied by their probs."
         },
+    )
+    num_layers: int | None = field(
+        default=None,
+        metadata={"help": "Number of layers in the model"},
     )
 
 
@@ -34,11 +38,14 @@ class FeedForward(Module):
         self.cfg: FeedForwardConfig = self._overwrite_config(config, overrides)
 
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
+        self.num_layers = self.cfg.num_layers
+        assert (
+            self.num_layers is not None
+            and self.num_layers >= 2
+            and self.num_layers % 2 == 0
+        ), "The number of layers should be at least 2"
 
         self.model = self._create_model(cfg)
-        assert self.num_layers is not None and self.num_layers >= 2, (
-            "The number of layers should be at least 2"
-        )
         self._store_shape_attributes()
 
     def _create_model(self, config: "ModelConfig") -> Linear | Sequential:
