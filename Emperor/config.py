@@ -10,6 +10,7 @@ from Emperor.feedForward.feed_forward import (
 )
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.base import LayerBlock, LinearBlockStackConfig
 from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
@@ -215,15 +216,22 @@ class ModelConfig(DataClassBase):
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
-    transformer_feed_forward_config: FeedForwardConfig = field(
-        default_factory=lambda: FeedForwardConfig(
+    linear_block_stack_config: LinearBlockStackConfig = field(
+        default_factory=lambda: LinearBlockStackConfig(
             input_dim=INPUT_DIM,
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
             num_layers=2,
             activation=nn.ReLU,
             layer_norm_flag=False,
-            linear_model=LayerTypes.DYNAMIC_BASE,
+            linear_model=nn.Linear,
+        ),
+        metadata={"help": "`MultiHeadAttention` configuration"},
+    )
+    transformer_feed_forward_config: FeedForwardConfig = field(
+        default_factory=lambda: FeedForwardConfig(
+            weighted_parameters_flag=False,
+            num_layers=2,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
