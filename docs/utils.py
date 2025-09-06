@@ -73,7 +73,7 @@ def default_unittest_config():
             noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
             activation=ROUTER_ACTIVATION_FUNCTION,
             num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
-            diagonal_linear_model_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
+            diagonal_model_type_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
             residual_flag=False,
         ),
         sampler_model_config=SamplerConfig(
@@ -167,7 +167,7 @@ def default_unittest_config():
             output_dim=OUTPUT_DIM,
             num_layers=2,
             activation=ActivationOptions.RELU,
-            layer_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LayerTypes.DYNAMIC_BASE,
             layer_norm_flag=False,
             layer_form_first_flag=False,
             residual_flag=False,

@@ -82,7 +82,7 @@ class TestLinearLayers(unittest.TestCase):
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
-                diagonal_linear_model_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
+                diagonal_model_type_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
             ),
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,
@@ -218,7 +218,7 @@ class TestDynamicDiagonalLinearLayer(unittest.TestCase):
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
-                diagonal_linear_model_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
+                diagonal_model_type_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
             ),
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,

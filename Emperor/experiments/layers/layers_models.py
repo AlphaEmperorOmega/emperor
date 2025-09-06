@@ -72,7 +72,7 @@ class MultiLayerClassifierModel(ClassifierExperiment):
             num_layers=5,
             activation=nn.ReLU,
             layer_norm_flag=False,
-            linear_model=nn.Linear,
+            model_type=nn.Linear,
         )
         return LinearBlockStack(cfg).build_model()
 

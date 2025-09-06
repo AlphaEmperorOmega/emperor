@@ -50,7 +50,7 @@ class TestFeedForward__init(TestLayerBlockStack):
         self.assertEqual(self.model.output_dim, self.config.output_dim)
         self.assertEqual(self.model.num_layers, self.config.num_layers)
         self.assertEqual(self.model.activation, self.config.activation)
-        self.assertEqual(self.model.layer_type, self.config.layer_type.value)
+        self.assertEqual(self.model.model_type, self.config.model_type.value)
         self.assertEqual(self.model.layer_norm_flag, self.config.layer_norm_flag)
         self.assertEqual(
             self.model.layer_form_first_flag, self.config.layer_form_first_flag

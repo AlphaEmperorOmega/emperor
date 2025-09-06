@@ -53,7 +53,7 @@ class RouterConfig(DataClassBase):
         default=None,
         metadata={"help": "Number of layers added to the router"},
     )
-    diagonal_linear_model_flag: bool | None = field(
+    diagonal_model_type_flag: bool | None = field(
         default=None,
         metadata={
             "help": "When `True` a `DynamicDiagonalLinearLayer` will be used instead of `nn.Linear`"
@@ -78,7 +78,7 @@ class RouterModel(Module):
         self.noisy_topk_flag = self.cfg.noisy_topk_flag
         self.activation = self.cfg.activation
         self.num_layers = self.cfg.num_layers
-        self.diagonal_linear_model_flag = self.cfg.diagonal_linear_model_flag
+        self.diagonal_model_type_flag = self.cfg.diagonal_model_type_flag
 
         self.num_experts = (
             2 * self.output_dim if self.noisy_topk_flag else self.output_dim
@@ -101,8 +101,8 @@ class RouterModel(Module):
             "noisy_topk_flag must be a boolean"
         )
         assert self.num_layers > 0, "num_layers must be a positive integer"
-        assert isinstance(self.diagonal_linear_model_flag, bool), (
-            "diagonal_linear_model_flag must be a boolean"
+        assert isinstance(self.diagonal_model_type_flag, bool), (
+            "diagonal_model_type_flag must be a boolean"
         )
 
         self._validate_fields(self.cfg, RouterConfig)
@@ -164,7 +164,7 @@ class RouterModel(Module):
             bias_flag=True,
             anti_diagonal_flag=True,
         )
-        if self.diagonal_linear_model_flag:
+        if self.diagonal_model_type_flag:
             return DynamicDiagonalLinearLayer(cfg)
         return LinearLayer(cfg)
 

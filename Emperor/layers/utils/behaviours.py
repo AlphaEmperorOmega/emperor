@@ -57,7 +57,7 @@ class DynamicDiagonalParametersBehaviour(Module):
             num_layers=2,
             activation=nn.ReLU,
             layer_norm_flag=False,
-            linear_model=nn.Linear,
+            model_type=nn.Linear,
         )
         diagonal_model = LinearBlockStack(cfg).build_model()
         anti_diagonal_model = None

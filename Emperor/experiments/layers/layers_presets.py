@@ -309,7 +309,7 @@ class ModelTrainerBase:
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION,
                 num_layers=ROUTER_NUM_LAYERS,
-                diagonal_linear_model_flag=ROUTER_DIAGONAL_LINEAR_MODEL_FLAG,
+                diagonal_model_type_flag=ROUTER_DIAGONAL_LINEAR_MODEL_FLAG,
             ),
             sampler_model_config=SamplerConfig(
                 top_k=SAMPLER_TOP_K,

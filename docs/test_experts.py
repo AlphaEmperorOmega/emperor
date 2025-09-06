@@ -77,7 +77,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
-                diagonal_linear_model_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
+                diagonal_model_type_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
                 residual_flag=False,
             ),
             sampler_model_config=SamplerConfig(
@@ -579,7 +579,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
-                diagonal_linear_model_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
+                diagonal_model_type_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
                 residual_flag=False,
             ),
             sampler_model_config=SamplerConfig(

@@ -25,7 +25,7 @@ class TestRouterModel(unittest.TestCase):
             residual_flag=False,
             activation=nn.Sigmoid(),
             num_layers=3,
-            diagonal_linear_model_flag=False,
+            diagonal_model_type_flag=False,
         )
 
     def test__init_with_invalid_num_layers(self):
@@ -56,7 +56,7 @@ class TestRouterModel(unittest.TestCase):
             noisy_topk_flag=True,
             output_dim=512,
             num_layers=40,
-            diagonal_linear_model_flag=True,
+            diagonal_model_type_flag=True,
         )
 
         m = RouterModel(c, overrides)
@@ -65,7 +65,7 @@ class TestRouterModel(unittest.TestCase):
         self.assertEqual(m.num_layers, overrides.num_layers)
         self.assertEqual(m.noisy_topk_flag, overrides.noisy_topk_flag)
         self.assertEqual(
-            m.diagonal_linear_model_flag, overrides.diagonal_linear_model_flag
+            m.diagonal_model_type_flag, overrides.diagonal_model_type_flag
         )
 
     def test__init_with_main_config(self):
@@ -84,7 +84,7 @@ class TestRouterModel(unittest.TestCase):
             residual_flag=True,
             activation=nn.Sigmoid(),
             num_layers=3,
-            diagonal_linear_model_flag=True,
+            diagonal_model_type_flag=True,
         )
         m = RouterModel(config)
 
@@ -123,7 +123,7 @@ class TestRouterModel(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = RouterConfig(
             noisy_topk_flag=False,
-            diagonal_linear_model_flag=True,
+            diagonal_model_type_flag=True,
         )
         m = RouterModel(c, overrides)
 
@@ -137,7 +137,7 @@ class TestRouterModel(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = RouterConfig(
             noisy_topk_flag=True,
-            diagonal_linear_model_flag=True,
+            diagonal_model_type_flag=True,
         )
         m = RouterModel(c, overrides)
 
@@ -147,20 +147,20 @@ class TestRouterModel(unittest.TestCase):
 
         self.assertEqual(list(output.shape), [batch_size, m.output_dim * 2])
 
-    def test__create_router_layer_model__diagonal_linear_model_flag__False(self):
+    def test__create_router_layer_model__diagonal_model_type_flag__False(self):
         c = copy.deepcopy(self.cfg)
-        overrides = RouterConfig(noisy_topk_flag=True, diagonal_linear_model_flag=False)
+        overrides = RouterConfig(noisy_topk_flag=True, diagonal_model_type_flag=False)
         m = RouterModel(c, overrides)
 
         model = m._RouterModel__create_router_layer_model(c.input_dim, c.output_dim)
 
         self.assertIsInstance(model, LinearLayer)
 
-    def test__create_router_layer_model__diagonal_linear_model_flag__True(self):
+    def test__create_router_layer_model__diagonal_model_type_flag__True(self):
         c = copy.deepcopy(self.cfg)
         overrides = RouterConfig(
             noisy_topk_flag=True,
-            diagonal_linear_model_flag=True,
+            diagonal_model_type_flag=True,
         )
         m = RouterModel(c, overrides)
 
@@ -179,7 +179,7 @@ class TestVectorRouterModel(unittest.TestCase):
             residual_flag=False,
             activation=nn.Sigmoid(),
             num_layers=3,
-            diagonal_linear_model_flag=False,
+            diagonal_model_type_flag=False,
         )
 
     def test__generate_parameter_bank__bias_parameters_flag__False(self):
@@ -204,7 +204,7 @@ class TestVectorRouterModel(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = RouterConfig(
             noisy_topk_flag=False,
-            diagonal_linear_model_flag=True,
+            diagonal_model_type_flag=True,
         )
         m = VectorRouterModel(c)
 
@@ -218,7 +218,7 @@ class TestVectorRouterModel(unittest.TestCase):
         c = copy.deepcopy(self.cfg)
         overrides = RouterConfig(
             noisy_topk_flag=True,
-            diagonal_linear_model_flag=True,
+            diagonal_model_type_flag=True,
         )
         m = VectorRouterModel(c, overrides)
 
