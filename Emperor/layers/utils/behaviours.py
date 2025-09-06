@@ -6,6 +6,7 @@ from torch import Tensor
 from torch.nn import Linear, Sequential
 from Emperor.base.utils import Module
 from Emperor.layers.utils.base import (
+    LayerNormPositionOptions,
     LinearBlockStack,
     LinearBlockStackConfig,
 )
@@ -55,8 +56,8 @@ class DynamicDiagonalParametersBehaviour(Module):
             hidden_dim=self.input_dim,
             output_dim=output_dim,
             num_layers=2,
-            activation=nn.ReLU,
-            layer_norm_flag=False,
+            activation=F.relu,
+            layer_norm_position=LayerNormPositionOptions.DEFAULT,
             model_type=nn.Linear,
         )
         diagonal_model = LinearBlockStack(cfg).build_model()
