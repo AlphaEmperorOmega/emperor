@@ -7,7 +7,11 @@ from Emperor.feedForward.feed_forward import (
     MixtureOfExpertsFeedForwardConfig,
 )
 from Emperor.layers.layers import ParameterLayerConfig
-from Emperor.layers.utils.base import LayerBlockStackConfig
+from Emperor.layers.utils.base import (
+    LayerBlockStackConfig,
+    LinearBlockStackConfig,
+    LayerNormPositionOptions,
+)
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
@@ -161,15 +165,14 @@ def default_unittest_config():
             weighted_parameters_flag=True,
             num_layers=2,
         ),
-        linear_block_stack_config=LayerBlockStackConfig(
+        layer_block_stack_config=LayerBlockStackConfig(
             input_dim=INPUT_DIM,
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
             num_layers=2,
             activation=ActivationOptions.RELU,
             model_type=LayerTypes.DYNAMIC_BASE,
-            layer_norm_flag=False,
-            layer_form_first_flag=False,
+            layer_norm_position=LayerNormPositionOptions.NONE,
             residual_flag=False,
             adaptive_computation_flag=False,
         ),
