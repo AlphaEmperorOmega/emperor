@@ -21,6 +21,17 @@ class LayerTypes(Enum):
     GENERATOR = GeneratorParameterLayer
 
 
+class LinearLayerTypes(Enum):
+    BASE = LinearLayer
+    DYNAMIC_BASE = DynamicDiagonalLinearLayer
+
+
+class ParameterGeneratorTypes(Enum):
+    VECTOR = VectorParameterLayer
+    MATRIX = MatrixParameterLayer
+    GENERATOR = GeneratorParameterLayer
+
+
 class FeedForwardTypes(Enum):
     BASE = "TO BE IMPLEMENTED"
 
@@ -29,7 +40,7 @@ class AttentionTypes(Enum):
     BASE = MultiHeadAttention
 
 
-class ActivationFunctionOptions(Enum):
+class ActivationOptions(Enum):
     RELU = F.relu
     GELU = F.gelu
     SIGMOID = F.sigmoid

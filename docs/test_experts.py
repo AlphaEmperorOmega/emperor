@@ -13,7 +13,7 @@ from Emperor.feedForward.feed_forward import (
 )
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.base import LayerBlock
-from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
+from Emperor.layers.utils.enums import ActivationOptions, LayerTypes
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
 from Emperor.layers.utils.samplers import SamplerConfig
@@ -117,7 +117,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 top_k=MIXTURE_TOP_K,
                 dropout_probability=0.1,
                 layer_norm_flag=True,
-                activation=ActivationFunctionOptions.GELU,
+                activation=ActivationOptions.GELU,
                 model_type=LayerTypes.DYNAMIC_BASE,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=False,
@@ -129,7 +129,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 top_k=MIXTURE_TOP_K,
                 dropout_probability=0.1,
                 layer_norm_flag=True,
-                activation=ActivationFunctionOptions.GELU,
+                activation=ActivationOptions.GELU,
                 model_type=LayerTypes.DYNAMIC_BASE,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=True,
@@ -619,7 +619,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
                 top_k=MIXTURE_TOP_K,
                 dropout_probability=0.1,
                 layer_norm_flag=True,
-                activation=ActivationFunctionOptions.GELU,
+                activation=ActivationOptions.GELU,
                 model_type=LayerTypes.DYNAMIC_BASE,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=False,
@@ -631,7 +631,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
                 top_k=MIXTURE_TOP_K,
                 dropout_probability=0.1,
                 layer_norm_flag=True,
-                activation=ActivationFunctionOptions.GELU,
+                activation=ActivationOptions.GELU,
                 model_type=LayerTypes.DYNAMIC_BASE,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=True,

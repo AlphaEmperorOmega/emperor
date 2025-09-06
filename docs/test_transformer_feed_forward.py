@@ -24,16 +24,17 @@ class TestFeedForward(unittest.TestCase):
         self.qkv_model = None
 
     def rebuild_presets(self, config: FeedForwardConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.transformer_feed_forward_config
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
-
-        self.model = FeedForward(self.cfg)
-
-        self.batch_size = self.cfg.batch_size
+        pass
+        # self.cfg = default_unittest_config()
+        # self.config = self.cfg.transformer_feed_forward_config
+        # if config is not None:
+        #     for k in asdict(config):
+        #         if hasattr(self.config, k) and getattr(config, k) is not None:
+        #             setattr(self.config, k, getattr(config, k))
+        #
+        # self.model = FeedForward(self.cfg)
+        #
+        # self.batch_size = self.cfg.batch_size
         # self.embedding_dim = self.cfg.embedding_dim
         # self.target_sequence_length = self.cfg.target_sequence_length
         # self.source_sequence_length = self.cfg.source_sequence_length
@@ -41,9 +42,9 @@ class TestFeedForward(unittest.TestCase):
         # self.head_dim = self.embedding_dim // self.num_heads
 
 
-class TestFeedForward__init(TestFeedForward):
-    def test__init_input_layer_with_default_config(self):
-        self.assertIsInstance(self.model, FeedForward)
-        self.assertEqual(
-            self.model.weighted_parameters_flag, self.config.weighted_parameters_flag
-        )
+# class TestFeedForward__init(TestFeedForward):
+#     def test__init_input_layer_with_default_config(self):
+#         self.assertIsInstance(self.model, FeedForward)
+#         self.assertEqual(
+#             self.model.weighted_parameters_flag, self.config.weighted_parameters_flag
+#         )

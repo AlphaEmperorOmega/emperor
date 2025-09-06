@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase, Module, device
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.linears import LinearLayer
-from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
+from Emperor.layers.utils.enums import ActivationOptions, LayerTypes
 
 from typing import TYPE_CHECKING
 
@@ -45,7 +45,7 @@ class MixtureOfExpertsConfig(DataClassBase):
         default=None,
         metadata={"help": "Type of layer used for the experts."},
     )
-    activation: ActivationFunctionOptions | None = field(
+    activation: ActivationOptions | None = field(
         default=None,
         metadata={"help": "Activation function for the experts."},
     )
