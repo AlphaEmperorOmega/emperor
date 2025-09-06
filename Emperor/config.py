@@ -10,8 +10,13 @@ from Emperor.feedForward.feed_forward import (
 )
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.layers.layers import ParameterLayerConfig
-from Emperor.layers.utils.base import LayerBlock, LinearBlockStackConfig
-from Emperor.layers.utils.enums import ActivationFunctionOptions, LayerTypes
+from Emperor.layers.utils.base import (
+    LayerBlock,
+    LayerBlockStackConfig,
+    LinearBlockStackConfig,
+    LayerNormPositionOptions,
+)
+from Emperor.layers.utils.enums import ActivationOptions, LayerTypes
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.samplers import SamplerConfig
@@ -109,7 +114,7 @@ class ModelConfig(DataClassBase):
             noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
             activation=ROUTER_ACTIVATION,
             num_layers=ROUTER_NUM_LAYERS,
-            diagonal_linear_model_flag=ROUTER_DIAGONAL_LINEAR_MODEL_FLAG,
+            diagonal_model_type_flag=ROUTER_DIAGONAL_LINEAR_MODEL_FLAG,
         ),
         metadata={"help": "`RouterModel` configuration"},
     )
@@ -173,7 +178,7 @@ class ModelConfig(DataClassBase):
             top_k=MIXTURE_TOP_K,
             dropout_probability=0.1,
             layer_norm_flag=True,
-            activation=ActivationFunctionOptions.GELU,
+            activation=ActivationOptions.GELU,
             model_type=LayerTypes.DYNAMIC_BASE,
             num_experts=12,
             compute_expert_mixture_flag=False,
@@ -188,7 +193,7 @@ class ModelConfig(DataClassBase):
             top_k=MIXTURE_TOP_K,
             dropout_probability=0.1,
             layer_norm_flag=True,
-            activation=ActivationFunctionOptions.GELU,
+            activation=ActivationOptions.GELU,
             model_type=LayerTypes.DYNAMIC_BASE,
             num_experts=12,
             compute_expert_mixture_flag=True,
@@ -216,15 +221,17 @@ class ModelConfig(DataClassBase):
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
-    linear_block_stack_config: LinearBlockStackConfig = field(
-        default_factory=lambda: LinearBlockStackConfig(
+    layer_block_stack_config: LayerBlockStackConfig = field(
+        default_factory=lambda: LayerBlockStackConfig(
             input_dim=INPUT_DIM,
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
             num_layers=2,
             activation=nn.ReLU,
-            layer_norm_flag=False,
-            linear_model=nn.Linear,
+            model_type=nn.Linear,
+            layer_norm_position=LayerNormPositionOptions.NONE,
+            residual_flag=False,
+            adaptive_computation_flag=False,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
