@@ -3,6 +3,7 @@ import torch.nn as nn
 from dataclasses import dataclass, field
 
 from Emperor.attention.attention import MultiHeadAttentionConfig
+from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.utils import DataClassBase
 from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
@@ -10,19 +11,17 @@ from Emperor.feedForward.feed_forward import (
 )
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.layers.layers import ParameterLayerConfig
-from Emperor.layers.utils.base import (
-    LayerBlock,
-    LayerBlockStackConfig,
-    LinearBlockStackConfig,
-    LayerNormPositionOptions,
+from Emperor.layers.utils.base import LayerBlockStackConfig
+from Emperor.layers.utils.enums import (
+    LayerTypes,
 )
-from Emperor.layers.utils.enums import ActivationOptions, LayerTypes
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.layers.utils.routers import (
     RouterConfig,
 )
+
 
 # MODEL WISE CONFI
 BATCH_SIZE = 10
@@ -227,7 +226,7 @@ class ModelConfig(DataClassBase):
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
             num_layers=2,
-            activation=nn.ReLU,
+            activation=ActivationOptions.RELU,
             model_type=nn.Linear,
             layer_norm_position=LayerNormPositionOptions.NONE,
             residual_flag=False,

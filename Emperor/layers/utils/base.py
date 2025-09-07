@@ -1,21 +1,152 @@
-import torch
+import copy
 import torch.nn as nn
+
 from dataclasses import dataclass, field
 from torch.nn import Linear, Sequential
-from torch.nn.modules import loss
 from torch.types import Tensor
+from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.utils import Module
 from Emperor.base.utils import DataClassBase
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.layers.utils.enums import ActivationFunctionOptions
+    from Emperor.layers.utils.enums import LayerTypes
     from Emperor.config import ModelConfig
 
 
 @dataclass
-class LinearBlockStackConfig(DataClassBase):
+class LayerBlockConfig(DataClassBase):
+    model_type: "LayerTypes | None" = field(
+        default=None,
+        metadata={"help": "Linear model module used for output transformation"},
+    )
+    activation: "ActivationOptions | None" = field(
+        default=None,
+        metadata={"help": "Activation function or layer to use"},
+    )
+    layer_norm_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    residual_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    adaptive_computation_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    dropout_probability: float | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    layer_norm_position: "LayerNormPositionOptions | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+
+
+class LayerBlock(Module):
+    def __init__(
+        self,
+        model: "Module",
+        activation_function: "ActivationOptions | None" = None,
+        layer_norm_output_dim: int | None = None,
+        residual_connection_flag: bool = False,
+        is_adaptive_computation: bool = False,
+        dropout_probability: float = 0.0,
+        layer_norm_position: "LayerNormPositionOptions | None" = None,
+    ):
+        super().__init__()
+
+        self.model = model
+        self.activation_function = activation_function
+        self.layer_norm_output_dim = layer_norm_output_dim
+        self.residual_connection_flag = residual_connection_flag
+        self.is_adaptive_computation = is_adaptive_computation
+        self.dropout_probability = dropout_probability
+        self.layer_norm_position = layer_norm_position
+
+        self.has_activation = self.activation_function is not None
+        self.has_dropout = self.dropout_probability > 0.0
+
+        self.dropout_module = self.__init_dropout_module()
+        self.layer_norm_module = self.__init_layer_norm_module()
+
+    def __init_dropout_module(self) -> nn.Module | None:
+        if self.has_dropout:
+            return nn.Dropout(self.dropout_probability)
+        return None
+
+    def __init_layer_norm_module(self) -> nn.Module | None:
+        if self.layer_norm_output_dim is not None:
+            return nn.LayerNorm(self.layer_norm_output_dim)
+        return None
+
+    def create_adaptive_computation_module(self):
+        pass
+
+    def forward(
+        self,
+        main_model_input: Tensor | tuple,
+        other_model_inputs: Tensor | tuple | None = None,
+        skip_mask: Tensor | None = None,
+    ) -> Tensor | tuple[Tensor, Tensor]:
+        # TODO: Ensure that the skip_maks will be used
+        # in the future.
+        if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
+            main_model_input = self.layer_norm_module(main_model_input)
+        if isinstance(other_model_inputs, tuple):
+            output = self.model(main_model_input, **other_model_inputs)
+        else:
+            output = self.model(main_model_input)
+
+        is_model_output_tuple = isinstance(output, tuple)
+        if is_model_output_tuple:
+            output, skip_mask, loss = output
+
+        if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
+            output = self.layer_norm_module(output)
+        if self.has_activation:
+            output = self.activation_function(output)
+        if self.has_dropout:
+            output = self.dropout_module(output)
+        if self.residual_connection_flag:
+            output = output + main_model_input
+        if self.layer_norm_position == LayerNormPositionOptions.AFTER:
+            output = self.layer_norm_module(output)
+
+        if is_model_output_tuple:
+            return output, loss
+        return output
+
+    # TODO: In the future instead multiple function inputs
+    # use a dataset class to encapsulate the inputs and outputs
+    # of the block
+    # def forward(
+    #     self,
+    #     data: LayerBlockData,
+    # ) -> LayerBlockData:
+    #     output = self.model(data.tensor)
+    #     is_tuple = isinstance(output, tuple)
+    #     if is_tuple:
+    #         output, _, loss = output
+    #         self.block_data.loss = loss
+    #     if self.layer_norm_output_dim is not None:
+    #         output = self.layer_norm_module(output)
+    #     if self.has_activation:
+    #         output = self.activation_function(output)
+    #     if self.has_dropout:
+    #         output = self.dropout_module(output)
+    #     if self.residual_connection_flag:
+    #         output = output + input_batch
+    #     self.block_data.tensor = output
+    #     return self.blcok_data
+
+
+@dataclass
+class LayerBlockStackConfig(LayerBlockConfig):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Input dimension of the first `Linear` layer"},
@@ -32,37 +163,30 @@ class LinearBlockStackConfig(DataClassBase):
         default=None,
         metadata={"help": "Number of layers in the model"},
     )
-    activation: nn.Linear | None = field(
-        default=None,
-        metadata={"help": "Activation function or layer to use"},
-    )
-    layer_norm_flag: int | None = field(
-        default=None,
-        metadata={"help": "Flag indicating whether to apply layer normalization"},
-    )
-    linear_model: nn.Module | None = field(
-        default=None,
-        metadata={"help": "Linear model module used for output transformation"},
-    )
 
 
-class LinearBlockStack(Module):
+class LayerBlockStack(Module):
     def __init__(
         self,
-        cfg: "LinearBlockStackConfig | ModelConfig",
-        overrides: "LinearBlockStackConfig | None" = None,
+        cfg: "LayerBlockStackConfig | ModelConfig",
+        overrides: "LayerBlockStackConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_model_config", cfg)
-        self.cfg: "LinearBlockStackConfig" = self._overwrite_config(config, overrides)
+        self.main_cfg = cfg
+        config = getattr(cfg, "layer_block_stack_config", cfg)
+        self.cfg: "LayerBlockStackConfig" = self._overwrite_config(config, overrides)
+
+        self.model_type = self.cfg.model_type
+        self.activation = self.cfg.activation
+        self.residual_flag = self.cfg.residual_flag
+        self.adaptive_computation_flag = self.cfg.adaptive_computation_flag
+        self.dropout_probability = self.cfg.dropout_probability
+        self.layer_norm_position = self.cfg.layer_norm_position
 
         self.input_dim = self.cfg.input_dim
         self.hidden_dim = self.cfg.hidden_dim
         self.output_dim = self.cfg.output_dim
         self.num_layers = self.cfg.num_layers
-        self.activation = self.cfg.activation()
-        self.layer_norm_flag = self.cfg.layer_norm_flag
-        self.linear_model = self.cfg.linear_model
 
     def build_model(self) -> Linear | Sequential:
         layers = []
@@ -89,30 +213,63 @@ class LinearBlockStack(Module):
 
     def __add_output_layer(self, layers: list) -> None:
         layer_input = self.hidden_dim if self.num_layers > 1 else self.input_dim
-        layers.append(Linear(layer_input, self.output_dim))
+        layers.append(self.model_type.value(layer_input, self.output_dim))
 
     def __create_layer(
         self,
         input_dim: int,
         output_dim: int,
-        residual_connection_flag: bool = True,
-    ):
+        residual_flag: bool = True,
+    ) -> LayerBlock:
         layer_norm_output_dim = None
-        if self.layer_norm_flag:
+        if self.layer_norm_position != LayerNormPositionOptions.NONE:
             layer_norm_output_dim = output_dim
+        config = self.__resolve_model_type_overrides(input_dim, output_dim)
+        model = self.model_type.value(config)
+
         return LayerBlock(
-            model=self.linear_model(
-                input_dim,
-                output_dim,
-            ),
-            activation_function=self.activation,
+            model=model,
+            activation_function=self.activation.value,
             layer_norm_output_dim=layer_norm_output_dim,
-            residual_connection_flag=residual_connection_flag,
+            residual_connection_flag=residual_flag,
+            dropout_probability=self.dropout_probability,
+            layer_norm_position=self.layer_norm_position,
         )
+
+    def __resolve_model_type_overrides(self, input_dim: int, output_dim: int):
+        # TODO: In the future find a way to get rid of this
+        # and somehow create a configuration similar to how
+        # in can write css in scss
+        c = copy.deepcopy(self.main_cfg)
+        linears = (
+            "LinearLayer",
+            "DynamicDiagonalLinearLayer",
+        )
+        if self.model_type.value.__name__ in linears:
+            c.linear_layer_model_config.input_dim = input_dim
+            c.linear_layer_model_config.output_dim = output_dim
+            return c
+
+        generators = (
+            "VectorParameterLayer",
+            "MatrixParameterLayer",
+            "GeneratorParameterLayer",
+        )
+
+        if self.model_type.value.__name__ in generators:
+            c.router_model_config.input_dim = input_dim
+            c.mixture_model_config.input_dim = input_dim
+            c.mixture_model_config.output_dim = output_dim
+
+            return c
 
 
 @dataclass
-class LayerBlockStackConfig(DataClassBase):
+class LinearBlockStackConfig(LayerBlockConfig):
+    model_type: nn.Linear | None = field(
+        default=None,
+        metadata={"help": "Linear model module used for output transformation"},
+    )
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Input dimension of the first `Linear` layer"},
@@ -129,38 +286,25 @@ class LayerBlockStackConfig(DataClassBase):
         default=None,
         metadata={"help": "Number of layers in the model"},
     )
-    activation: "ActivationFunctionOptions | None" = field(
-        default=None,
-        metadata={"help": "Activation function or layer to use"},
-    )
-    layer_norm_flag: int | None = field(
-        default=None,
-        metadata={"help": "Flag indicating whether to apply layer normalization"},
-    )
-    layer_type: "LayerTypes | None" = field(
-        default=None,
-        metadata={"help": "Linear model module used for output transformation"},
-    )
 
 
-class LayerBlockStack(Module):
+class LinearBlockStack(Module):
     def __init__(
         self,
-        cfg: "LayerBlockStackConfig | ModelConfig",
-        overrides: "LayerBlockStackConfig | None" = None,
+        cfg: "LinearBlockStackConfig | ModelConfig",
+        overrides: "LinearBlockStackConfig | None" = None,
     ):
         super().__init__()
-        self.main_cfg = cfg
-        config = getattr(cfg, "linear_block_stack_config", cfg)
-        self.cfg: "LayerBlockStackConfig" = self._overwrite_config(config, overrides)
+        config = getattr(cfg, "linear_layer_model_config", cfg)
+        self.cfg: "LinearBlockStackConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim
         self.hidden_dim = self.cfg.hidden_dim
         self.output_dim = self.cfg.output_dim
         self.num_layers = self.cfg.num_layers
         self.activation = self.cfg.activation
-        self.layer_norm_flag = self.cfg.layer_norm_flag
-        self.layer_type = self.cfg.layer_type.value
+        self.layer_norm_position = self.cfg.layer_norm_position
+        self.model_type = self.cfg.model_type
 
     def build_model(self) -> Linear | Sequential:
         layers = []
@@ -169,171 +313,41 @@ class LayerBlockStack(Module):
         self.__add_hidden_layers(layers, layer_adjustment)
         self.__add_output_layer(layers)
 
-        model = layers[0]
-        if self.num_layers > 1:
-            model = Sequential(*layers)
-
+        model = Sequential(*layers)
         self._initialize_parameters(model)
         return model
 
     def __add_initial_layer(self, layers: list) -> int:
         if self.input_dim != self.hidden_dim and self.num_layers > 1:
-            layer = self.__create_layer(self.input_dim, self.hidden_dim, False)
+            layer = self._create_layer(self.input_dim, self.hidden_dim, False)
             layers.append(layer)
             return 2
         return 1
 
     def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
         for _ in range(self.num_layers - layer_adjustment):
-            layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
+            layer = self._create_layer(self.hidden_dim, self.hidden_dim)
             layers.append(layer)
 
     def __add_output_layer(self, layers: list) -> None:
-        input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
-        output_model = self.__create_layer(input_dim, self.output_dim)
-        layers.append(output_model)
+        layer_input = self.hidden_dim if self.num_layers > 1 else self.input_dim
+        layers.append(self.model_type(layer_input, self.output_dim))
 
-    def __create_layer(
+    def _create_layer(
         self,
         input_dim: int,
         output_dim: int,
         residual_connection_flag: bool = True,
     ):
         layer_norm_output_dim = None
-        if self.layer_norm_flag:
+        if self.layer_norm_position != LayerNormPositionOptions.NONE:
             layer_norm_output_dim = output_dim
-        updated_config = self.__resolve_model_type_overrides(input_dim, output_dim)
         return LayerBlock(
-            model=self.layer_type(updated_config),
+            model=self.model_type(
+                input_dim,
+                output_dim,
+            ),
             activation_function=self.activation,
             layer_norm_output_dim=layer_norm_output_dim,
             residual_connection_flag=residual_connection_flag,
         )
-
-    def __resolve_model_type_overrides(self, input_dim: int, output_dim: int):
-        c = copy.deepcopy(self.main_cfg)
-        if issubclass(self.model_type.value, LinearLayer):
-            c.linear_layer_model_config.input_dim = input_dim
-            c.linear_layer_model_config.output_dim = output_dim
-            return c
-        c.mixture_model_config.input_dim = input_dim
-        c.mixture_model_config.output_dim = output_dim
-        return c
-
-
-class LayerBlock(Module):
-    def __init__(
-        self,
-        model: "Module",
-        activation_function: "ActivationFunctionOptions | None" = None,
-        layer_norm_output_dim: int | None = None,
-        residual_connection_flag: bool = False,
-        is_adaptive_computation: bool = False,
-        dropout_probability: float = 0.0,
-        layer_form_first_flag: bool | None = None,
-    ):
-        super().__init__()
-
-        self.model = model
-        self.activation_function = activation_function
-        self.layer_norm_output_dim = layer_norm_output_dim
-        self.residual_connection_flag = residual_connection_flag
-        self.is_adaptive_computation = is_adaptive_computation
-        self.dropout_probability = dropout_probability
-        self.layer_form_first_flag = layer_form_first_flag
-
-        self.has_activation = self.activation_function is not None
-        self.has_dropout = self.dropout_probability > 0.0
-
-        self.dropout_module = self.__init_dropout_module()
-        self.layer_norm_module = self.__init_layer_norm_module()
-        # self.block_data = LayerBlockOuputs()
-
-    def __init_dropout_module(self) -> nn.Module | None:
-        if self.has_dropout:
-            return nn.Dropout(self.dropout_probability)
-        return None
-
-    def __init_layer_norm_module(self) -> nn.Module | None:
-        if self.layer_norm_output_dim is not None:
-            return nn.LayerNorm(self.layer_norm_output_dim)
-        return None
-
-    def create_adaptive_computation_module(self):
-        pass
-
-    def forward(
-        self,
-        main_model_input: Tensor | tuple,
-        other_model_inputs: Tensor | tuple | None = None,
-        skip_mask: Tensor | None = None,
-    ) -> Tensor | tuple[Tensor, Tensor]:
-        # TODO: Ensure that the skip_maks will be used
-        # in the future.
-        if self.__is_before_layer_norm():
-            main_model_input = self.layer_norm_module(main_model_input)
-        if isinstance(other_model_inputs, tuple):
-            output = self.model(main_model_input, **other_model_inputs)
-        else:
-            output = self.model(main_model_input)
-
-        is_model_output_tuple = isinstance(output, tuple)
-        if is_model_output_tuple:
-            output, skip_mask, loss = output
-
-        if self.__is_normal_layer_norm():
-            output = self.layer_norm_module(output)
-        if self.has_activation:
-            output = self.activation_function(output)
-        if self.has_dropout:
-            output = self.dropout_module(output)
-        if self.residual_connection_flag:
-            output = output + main_model_input
-        if self.__is_after_layer_norm():
-            output = self.layer_norm_module(output)
-
-        if is_model_output_tuple:
-            return output, loss
-        return output
-
-    def __is_normal_layer_norm(self) -> bool:
-        is_layer_norm_module = self.layer_norm_output_dim is not None
-        return is_layer_norm_module and self.layer_form_first_flag is None
-
-    def __is_before_layer_norm(self) -> bool:
-        is_layer_norm_module = self.layer_norm_output_dim is not None
-        return is_layer_norm_module and self.layer_form_first_flag is True
-
-    def __is_after_layer_norm(self) -> bool:
-        is_layer_norm_module = self.layer_norm_output_dim is not None
-        return is_layer_norm_module and self.layer_form_first_flag is False
-
-    # TODO: In the future instead multiple function inputs
-    # use a dataset class to encapsulate the inputs and outputs
-    # of the block
-    # def forward(
-    #     self,
-    #     data: LayerBlockData,
-    # ) -> LayerBlockData:
-    #     output = self.model(data.tensor)
-    #     is_tuple = isinstance(output, tuple)
-    #     if is_tuple:
-    #         output, _, loss = output
-    #         self.block_data.loss = loss
-    #     if self.layer_norm_output_dim is not None:
-    #         output = self.layer_norm_module(output)
-    #     if self.has_activation:
-    #         output = self.activation_function(output)
-    #     if self.has_dropout:
-    #         output = self.dropout_module(output)
-    #     if self.residual_connection_flag:
-    #         output = output + input_batch
-    #     self.block_data.tensor = output
-    #     return self.blcok_data
-
-
-# @dataclass
-# class LayerBlockData:
-#     tensor: Tensor | None = None
-#     skip_mask: Tensor | None = None
-#     loss: Tensor | None = None
