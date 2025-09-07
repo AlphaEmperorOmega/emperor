@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.config import ModelConfig
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.feedForward.feed_forward import (
@@ -9,14 +10,14 @@ from Emperor.feedForward.feed_forward import (
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.base import (
     LayerBlockStackConfig,
-    LinearBlockStackConfig,
-    LayerNormPositionOptions,
 )
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
 from Emperor.layers.utils.samplers import SamplerConfig
-from Emperor.layers.utils.enums import ActivationOptions, LayerTypes
+from Emperor.layers.utils.enums import (
+    LayerTypes,
+)
 from Emperor.attention.attention import MultiHeadAttentionConfig
 
 
@@ -170,10 +171,12 @@ def default_unittest_config():
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
             num_layers=2,
-            activation=ActivationOptions.RELU,
             model_type=LayerTypes.DYNAMIC_BASE,
-            layer_norm_position=LayerNormPositionOptions.NONE,
+            activation=ActivationOptions.GELU,
+            layer_norm_dim=INPUT_DIM,
             residual_flag=False,
             adaptive_computation_flag=False,
+            dropout_probability=0.0,
+            layer_norm_position=LayerNormPositionOptions.NONE,
         ),
     )

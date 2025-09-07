@@ -4,10 +4,12 @@ import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass, field
 
+from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import DataClassBase, Module, device
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.linears import LinearLayer
-from Emperor.layers.utils.enums import ActivationOptions, LayerTypes
+from Emperor.layers.utils.enums import LayerTypes
+
 
 from typing import TYPE_CHECKING
 

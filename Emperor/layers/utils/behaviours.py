@@ -4,9 +4,9 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from torch.nn import Linear, Sequential
+from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.base.utils import Module
 from Emperor.layers.utils.base import (
-    LayerNormPositionOptions,
     LinearBlockStack,
     LinearBlockStackConfig,
 )

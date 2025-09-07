@@ -2,7 +2,15 @@ import copy
 import unittest
 import torch
 import torch.nn as nn
+
 from Emperor.config import ModelConfig
+from Emperor.base.enums import ActivationOptions
+from Emperor.layers.layers import ParameterLayerConfig
+from Emperor.layers.utils.base import LayerBlock
+from Emperor.layers.utils.enums import LayerTypes
+from Emperor.layers.utils.mixture import MixtureConfig
+from Emperor.layers.utils.routers import RouterConfig
+from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.experts.experts import (
     MixtureOfExperts,
     MixtureOfExpertsConfig,
@@ -11,12 +19,6 @@ from Emperor.feedForward.feed_forward import (
     MixtureOfExpertsFeedForward,
     MixtureOfExpertsFeedForwardConfig,
 )
-from Emperor.layers.layers import ParameterLayerConfig
-from Emperor.layers.utils.base import LayerBlock
-from Emperor.layers.utils.enums import ActivationOptions, LayerTypes
-from Emperor.layers.utils.mixture import MixtureConfig
-from Emperor.layers.utils.routers import RouterConfig
-from Emperor.layers.utils.samplers import SamplerConfig
 
 
 class TestMixtureOfExperts(unittest.TestCase):

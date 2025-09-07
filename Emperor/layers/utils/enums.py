@@ -1,5 +1,4 @@
 from enum import Enum
-import torch.nn.functional as F
 
 from Emperor.attention.attention import MultiHeadAttention
 from Emperor.layers.layers import (
@@ -38,15 +37,3 @@ class FeedForwardTypes(Enum):
 
 class AttentionTypes(Enum):
     BASE = MultiHeadAttention
-
-
-class ActivationOptions(Enum):
-    RELU = F.relu
-    GELU = F.gelu
-    SIGMOID = F.sigmoid
-    TANH = F.tanh
-    LEAKY_RELU = F.leaky_relu
-    ELU = F.elu
-    SELU = F.selu
-    SOFTPLUS = F.softplus
-    SOFTSIGN = F.softsign

@@ -64,9 +64,7 @@ class TestRouterModel(unittest.TestCase):
         self.assertEqual(m.output_dim, overrides.output_dim)
         self.assertEqual(m.num_layers, overrides.num_layers)
         self.assertEqual(m.noisy_topk_flag, overrides.noisy_topk_flag)
-        self.assertEqual(
-            m.diagonal_model_type_flag, overrides.diagonal_model_type_flag
-        )
+        self.assertEqual(m.diagonal_model_type_flag, overrides.diagonal_model_type_flag)
 
     def test__init_with_main_config(self):
         m = RouterModel(self.cfg)

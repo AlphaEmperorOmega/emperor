@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
-from enum import Enum
 import torch.nn.functional as F
+
+from enum import Enum
+from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase, Module
-from torch import Tensor
 from Emperor.layers.utils.behaviours import (
     DynamicDiagonalParametersBehaviour,
 )
