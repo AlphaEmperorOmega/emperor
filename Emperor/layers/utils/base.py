@@ -114,6 +114,8 @@ class LayerBlock(Module):
         if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
             output = self.layer_norm_module(output)
         if self.has_activation:
+            # TODO: Add the option to to redirect each sample in the
+            # input batch to use a different activation function
             output = self.activation_function(output)
         if self.has_dropout:
             output = self.dropout_module(output)
