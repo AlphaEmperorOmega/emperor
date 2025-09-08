@@ -1,4 +1,5 @@
 import copy
+from enum import Enum
 import torch.nn as nn
 
 from dataclasses import dataclass, field
@@ -95,6 +96,10 @@ class LayerBlock(Module):
     ) -> Tensor | tuple[Tensor, Tensor]:
         # TODO: Ensure that the skip_maks will be used
         # in the future.
+        previous_loss = 0.0
+        if isinstance(main_model_input, tuple):
+            main_model_input, previous_loss = main_model_input
+
         if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
             main_model_input = self.layer_norm_module(main_model_input)
         if isinstance(other_model_inputs, tuple):
@@ -118,7 +123,7 @@ class LayerBlock(Module):
             output = self.layer_norm_module(output)
 
         if is_model_output_tuple:
-            return output, loss
+            return output, loss + previous_loss
         return output
 
     # TODO: In the future instead multiple function inputs
@@ -165,6 +170,11 @@ class LayerBlockStackConfig(LayerBlockConfig):
     )
 
 
+class LayerStackAdjustments(Enum):
+    SHARED_INPUT_OUTPUT_DIM = 1
+    SEPARATE_INPUT_OUTPUT_DIM = 2
+
+
 class LayerBlockStack(Module):
     def __init__(
         self,
@@ -188,32 +198,40 @@ class LayerBlockStack(Module):
         self.output_dim = self.cfg.output_dim
         self.num_layers = self.cfg.num_layers
 
-    def build_model(self) -> Linear | Sequential:
+    def build_model(self) -> LayerBlock | Sequential:
         layers = []
 
         layer_adjustment = self.__add_initial_layer(layers)
         self.__add_hidden_layers(layers, layer_adjustment)
         self.__add_output_layer(layers)
 
+        if len(layers) == 1:
+            [model] = layers
+            self._initialize_parameters(model)
+            return model
         model = Sequential(*layers)
         self._initialize_parameters(model)
         return model
 
-    def __add_initial_layer(self, layers: list) -> int:
+    def __add_initial_layer(self, layers: list) -> LayerStackAdjustments:
         if self.input_dim != self.hidden_dim and self.num_layers > 1:
             layer = self.__create_layer(self.input_dim, self.hidden_dim, False)
             layers.append(layer)
-            return 2
-        return 1
+            return LayerStackAdjustments.SEPARATE_INPUT_OUTPUT_DIM
+        return LayerStackAdjustments.SHARED_INPUT_OUTPUT_DIM
 
-    def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
-        for _ in range(self.num_layers - layer_adjustment):
+    def __add_hidden_layers(
+        self, layers: list, layer_adjustment: LayerStackAdjustments
+    ) -> None:
+        for _ in range(self.num_layers - layer_adjustment.value):
             layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
             layers.append(layer)
 
     def __add_output_layer(self, layers: list) -> None:
-        layer_input = self.hidden_dim if self.num_layers > 1 else self.input_dim
-        layers.append(self.model_type.value(layer_input, self.output_dim))
+        layer_input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
+        config = self.__resolve_model_type_overrides(layer_input_dim, self.output_dim)
+        layer = LayerBlock(model=self.model_type.value(config))
+        layers.append(layer)
 
     def __create_layer(
         self,
@@ -229,9 +247,9 @@ class LayerBlockStack(Module):
 
         return LayerBlock(
             model=model,
-            activation_function=self.activation.value,
             layer_norm_output_dim=layer_norm_output_dim,
             residual_connection_flag=residual_flag,
+            activation_function=self.activation.value,
             dropout_probability=self.dropout_probability,
             layer_norm_position=self.layer_norm_position,
         )
