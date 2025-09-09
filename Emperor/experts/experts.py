@@ -13,6 +13,9 @@ from Emperor.layers.utils.enums import LayerTypes
 
 from typing import TYPE_CHECKING
 
+from Emperor.layers.utils.routers import RouterModel
+from Emperor.layers.utils.samplers import SamplerModel
+
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
@@ -65,6 +68,12 @@ class MixtureOfExpertsConfig(DataClassBase):
             "help": "When `True` the sepected parameters will be multiplied by their probs."
         },
     )
+    use_layer_scaling_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` the `RouterModel `and `SamplerModel` will be added to the current layer."
+        },
+    )
 
 
 class MixtureOfExperts(Module):
@@ -92,11 +101,19 @@ class MixtureOfExperts(Module):
         self._validate_fields(self.cfg, MixtureOfExpertsConfig)
 
         self.expert_modules = self.__create_experts(cfg)
+        self.router, self.sampler = self.__optionaly_create_router_and_samples(cfg)
 
     def __resolve_config_type(self) -> str:
         if self.is_output_layer_flag:
             return "output_moe_layer_config"
         return "input_moe_layer_config"
+
+    def __optionaly_create_router_and_samples(self, cfg: "ModelConfig"):
+        if not self.cfg.use_layer_scaling_flag:
+            return None, None
+        router = RouterModel(cfg)
+        sampler = SamplerModel(cfg)
+        return router, sampler
 
     def __create_experts(self, cfg: "ModelConfig") -> nn.ModuleList:
         expert_list = []
@@ -125,9 +142,19 @@ class MixtureOfExperts(Module):
     def compute_expert_outputs(
         self,
         input_batch: Tensor,
-        indices: Tensor,
+        indices: Tensor | None = None,
         probabilities: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
+        if indices is None:
+            if not self.cfg.use_layer_scaling_flag:
+                raise ValueError(
+                    "When `indices` are not provided the `RouterModel` and `SamplerModel` must be instantiated."
+                )
+            logits = self.router.compute_logit_scores(input_batch_matrix)
+            probabilities, indices, skip_mask, sampler_loss = (
+                self.sampler.sample_probabilities_and_indices(logits, skip_mask)
+            )
+
         expert_outputs = []
         experts_indices_list = []
         loss = torch.tensor(0.0)
