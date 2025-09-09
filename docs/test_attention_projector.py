@@ -49,7 +49,7 @@ class TestProjector(unittest.TestCase):
         self.qkv_model = self.model.qkv_model
 
 
-class TestMultIHeadAttention____are_qkv_dimensions_equal(TestProjector):
+class Test___are_qkv_dimensions_equal(TestProjector):
     def test__different_embedding_dim(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=64,
@@ -95,7 +95,7 @@ class TestMultIHeadAttention____are_qkv_dimensions_equal(TestProjector):
         self.assertTrue(output)
 
 
-class TestMultIHeadAttention____build_shared_projection_models(TestProjector):
+class Test___build_shared_projection_models(TestProjector):
     def test__shared_model_inizialization(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
@@ -114,7 +114,7 @@ class TestMultIHeadAttention____build_shared_projection_models(TestProjector):
         self.assertIsInstance(qkv_model, LayerBlock)
 
 
-class TestMultIHeadAttention____build_separate_projection_models(TestProjector):
+class Test___build_separate_projection_models(TestProjector):
     def test__separate_models_initializations(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
@@ -133,7 +133,7 @@ class TestMultIHeadAttention____build_separate_projection_models(TestProjector):
         self.assertIsNone(self.model.qkv_model)
 
 
-class TestMultIHeadAttention____build_projection_models(TestProjector):
+class Test___build_projection_models(TestProjector):
     def test__same_qkv_dim__use_separate_projection_weight_flag__False(self):
         config = MultiHeadAttentionConfig(
             embedding_dim=32,
