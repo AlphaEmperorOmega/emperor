@@ -1,5 +1,7 @@
+import copy
+import torch
 from torch import Tensor
-from torch.nn import Linear, Sequential
+from torch.nn import Sequential
 from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase, Module
 from Emperor.experts.experts import MixtureOfExperts
@@ -11,6 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+    from Emperor.layers.utils.enums import LayerTypes
 
 __all__ = ["FeedForward"]
 
@@ -26,6 +29,10 @@ class _Validator:
 
 @dataclass
 class FeedForwardConfig(DataClassBase):
+    model_type: "LayerTypes | None" = field(
+        default=None,
+        metadata={"help": "Linear model module used for output transformation"},
+    )
     num_layers: int | None = field(
         default=None,
         metadata={
@@ -44,8 +51,8 @@ class FeedForward(Module):
         config = getattr(cfg, "transformer_feed_forward_config", cfg)
         self.cfg: FeedForwardConfig = self._overwrite_config(config, overrides)
 
+        self.model_type = self.cfg.model_type
         self.num_layers = self.cfg.num_layers
-        print(self.num_layers)
         self._validate_fields(self.cfg, FeedForwardConfig)
         _Validator.ensure_valid_number_of_layers(self.num_layers)
 
@@ -53,7 +60,14 @@ class FeedForward(Module):
         self._store_shape_attributes()
 
     def _create_model(self, config: "ModelConfig") -> LayerBlock | Sequential:
+        config = self.__update_config(config)
         return LayerBlockStack(config).build_model()
+
+    def __update_config(self, confg: "ModelConfig"):
+        c = copy.deepcopy(confg)
+        c.layer_block_stack_config.num_layers = self.num_layers
+        c.layer_block_stack_config.model_type = self.model_type
+        return c
 
     def _store_shape_attributes(self):
         self.batch_size = None
@@ -64,10 +78,14 @@ class FeedForward(Module):
         self,
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None, Tensor]:
+    ) -> tuple[Tensor, Tensor | None]:
         input_batch, skip_mask = self._ensure_correct_shape(input_batch, skip_mask)
         projected_inputs = self.model(input_batch)
-        return self._revert_to_original_shape(projected_inputs)
+        if isinstance(projected_inputs, tuple):
+            output, loss = projected_inputs
+            output = self._revert_to_original_shape(output)
+            return output, loss
+        return self._revert_to_original_shape(projected_inputs), torch.tensor(0.0)
 
     def _ensure_correct_shape(
         self,
@@ -95,6 +113,8 @@ class FeedForward(Module):
         self.output_shape = [self.batch_size, -1]
 
     def _revert_to_original_shape(self, output_projection: Tensor):
+        if self.output_shape is None:
+            return output_projection
         return output_projection.view(self.output_shape)
 
 
