@@ -9,8 +9,13 @@ from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.enums import LayerTypes
 from Emperor.layers.utils.mixture import MixtureConfig
-from Emperor.layers.utils.routers import RouterConfig
-from Emperor.layers.utils.samplers import SamplerConfig
+from Emperor.layers.utils.routers import RouterConfig, RouterModel
+from Emperor.layers.utils.samplers import (
+    SamplerAuxiliaryLosses,
+    SamplerConfig,
+    SamplerModel,
+    SamplerTopk,
+)
 from Emperor.experts.experts import (
     MixtureOfExperts,
     MixtureOfExpertsConfig,
@@ -124,6 +129,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=False,
                 weighted_parameters_flag=False,
+                init_sampler_model_flag=False,
             ),
             output_moe_layer_config=MixtureOfExpertsConfig(
                 input_dim=64,
@@ -136,6 +142,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=True,
                 weighted_parameters_flag=True,
+                init_sampler_model_flag=False,
             ),
         )
 
@@ -300,6 +307,24 @@ class TestMixtureOfExperts(unittest.TestCase):
             self.assertEqual(input_dim, config.input_dim)
             self.assertEqual(output_dim, config.output_dim)
 
+    def test__optionaly_create_router_and_samples(self):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.init_sampler_model_flag = True
+        c.output_moe_layer_config.init_sampler_model_flag = True
+        rotuer_config = c.router_model_config
+        sampelr_config = c.sampler_model_config
+
+        m = MixtureOfExperts(c)
+        router, sampler = m._MixtureOfExperts__optionaly_create_router_and_samples(c)
+
+        self.assertIsInstance(router, RouterModel)
+        self.assertEqual(router.input_dim, rotuer_config.input_dim)
+        self.assertEqual(router.output_dim, rotuer_config.output_dim)
+        self.assertIsInstance(sampler, SamplerModel)
+        self.assertIsInstance(sampler.sampler_model, SamplerTopk)
+        self.assertEqual(sampler.sampler_model.top_k, sampelr_config.top_k)
+
     def test__get_expert_indices(self):
         c = copy.deepcopy(self.cfg)
         m = MixtureOfExperts(c)
@@ -427,6 +452,65 @@ class TestMixtureOfExperts(unittest.TestCase):
             self.assertEqual(
                 list(expert_outputs.shape), [batch_size * top_k, config.output_dim]
             )
+
+    def test__forward_ensure_error_is_triggered_when_indices_are_set_to_none(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.init_sampler_model_flag = False
+        config = c.input_moe_layer_config
+        m = MixtureOfExperts(c)
+
+        batch_size = 5
+        indices = None
+        input_batch = torch.randn(batch_size, config.input_dim)
+
+        with self.assertRaises(RuntimeError):
+            m.compute_expert_outputs(input_batch, indices)
+
+    def test__forward_error_is_triggered_when_init_sampler_model_is_true_and_indices_are_providied(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.init_sampler_model_flag = True
+        config = c.input_moe_layer_config
+        m = MixtureOfExperts(c)
+
+        top_k = c.sampler_model_config.top_k
+        batch_size = 5
+        indices = torch.stack(
+            [torch.randperm(m.num_experts)[:top_k] for _ in range(batch_size)]
+        )
+        input_batch = torch.randn(batch_size, config.input_dim)
+        with self.assertRaises(RuntimeError):
+            output = m.compute_expert_outputs(input_batch, indices)
+
+    def test__forward_layer_generates_indices_and_probabilities_when_no_indices_are_provided_init_sampler_model_flag_is_true(
+        self,
+    ):
+        c = copy.deepcopy(self.cfg)
+        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.init_sampler_model_flag = True
+        config = c.input_moe_layer_config
+        m = MixtureOfExperts(c)
+
+        top_k = c.sampler_model_config.top_k
+        batch_size = 5
+        top_k = c.sampler_model_config.top_k
+        indices = None
+        input_batch = torch.randn(batch_size, config.input_dim)
+        output = m.compute_expert_outputs(input_batch, indices)
+        expert_outputs, loss = output
+
+        self.assertIsInstance(output, tuple)
+        self.assertIsInstance(expert_outputs, torch.Tensor)
+        self.assertIsInstance(loss, torch.Tensor)
+        self.assertTrue(loss > 0)
+        self.assertEqual(
+            list(expert_outputs.shape), [batch_size * top_k, config.output_dim]
+        )
 
     def test__compute_expert_mixture__weighted_parameters_flag__False__compute_expert_mixture_flag__False(
         self,
@@ -626,6 +710,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=False,
                 weighted_parameters_flag=False,
+                init_sampler_model_flag=False,
             ),
             output_moe_layer_config=MixtureOfExpertsConfig(
                 input_dim=64,
@@ -638,6 +723,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=True,
                 weighted_parameters_flag=True,
+                init_sampler_model_flag=False,
             ),
         )
 
