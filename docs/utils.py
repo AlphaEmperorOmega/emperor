@@ -130,6 +130,7 @@ def default_unittest_config():
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
+            init_sampler_model_flag =False,
         ),
         output_moe_layer_config=MixtureOfExpertsConfig(
             input_dim=64,
@@ -142,6 +143,7 @@ def default_unittest_config():
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
+            init_sampler_model_flag =False,
         ),
         multi_head_attention_model_config=MultiHeadAttentionConfig(
             model_type=LayerTypes.DYNAMIC_BASE,
