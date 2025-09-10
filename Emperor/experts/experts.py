@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
-__all__ = ["_Validator"]
+__all__ = ["MixtureOfExpertsConfig", "MixtureOfExperts"]
 
 
 class _Validator:
