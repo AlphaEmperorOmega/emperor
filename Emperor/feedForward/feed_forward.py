@@ -3,7 +3,7 @@ from torch.nn import Linear, Sequential
 from dataclasses import dataclass, field
 from Emperor.base.utils import DataClassBase, Module
 from Emperor.experts.experts import MixtureOfExperts
-from Emperor.layers.utils.base import LinearBlockStack, LinearBlockStackConfig
+from Emperor.layers.utils.base import LayerBlock, LayerBlockStack
 from Emperor.layers.utils.routers import RouterModel
 from Emperor.layers.utils.samplers import SamplerModel
 
@@ -12,18 +12,25 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
+__all__ = ["FeedForward"]
+
+
+class _Validator:
+    @staticmethod
+    def ensure_valid_number_of_layers(num_layers: int) -> None:
+        if not (num_layers >= 2 and num_layers % 2 == 0):
+            raise RuntimeError(
+                "The Transformer FeedForward module requires at least 2 layers, and the number of layers is even."
+            )
+
 
 @dataclass
 class FeedForwardConfig(DataClassBase):
-    weighted_parameters_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When `True` the sepected parameters will be multiplied by their probs."
-        },
-    )
     num_layers: int | None = field(
         default=None,
-        metadata={"help": "Number of layers in the model"},
+        metadata={
+            "help": "Number of layers to be added to the transformer feed forward module, it requires at least 2 layers.",
+        },
     )
 
 
@@ -37,19 +44,16 @@ class FeedForward(Module):
         config = getattr(cfg, "transformer_feed_forward_config", cfg)
         self.cfg: FeedForwardConfig = self._overwrite_config(config, overrides)
 
-        self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
         self.num_layers = self.cfg.num_layers
-        assert (
-            self.num_layers is not None
-            and self.num_layers >= 2
-            and self.num_layers % 2 == 0
-        ), "The number of layers should be at least 2"
+        print(self.num_layers)
+        self._validate_fields(self.cfg, FeedForwardConfig)
+        _Validator.ensure_valid_number_of_layers(self.num_layers)
 
         self.model = self._create_model(cfg)
         self._store_shape_attributes()
 
-    def _create_model(self, config: "ModelConfig") -> Linear | Sequential:
-        return LinearBlockStack(config).build_model()
+    def _create_model(self, config: "ModelConfig") -> LayerBlock | Sequential:
+        return LayerBlockStack(config).build_model()
 
     def _store_shape_attributes(self):
         self.batch_size = None
@@ -61,17 +65,17 @@ class FeedForward(Module):
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor]:
-        input_batch_matrix, skip_mask = self._ensure_correct_shape(
-            input_batch, skip_mask
-        )
-        output_projection = self.model(input_batch_matrix)
-        return self._revert_to_original_shape(output_projection)
+        input_batch, skip_mask = self._ensure_correct_shape(input_batch, skip_mask)
+        projected_inputs = self.model(input_batch)
+        return self._revert_to_original_shape(projected_inputs)
 
     def _ensure_correct_shape(
         self,
         input_batch: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
+        if input_batch.dim() == 2:
+            return input_batch, skip_mask
         self.__resolve_output_shape(input_batch)
         input_batch = input_batch.reshape(self.batch_size * self.sequence_length, -1)
         if skip_mask is not None:
