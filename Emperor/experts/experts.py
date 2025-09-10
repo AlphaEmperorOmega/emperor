@@ -9,15 +9,38 @@ from Emperor.base.utils import DataClassBase, Module, device
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.linears import LinearLayer
 from Emperor.layers.utils.enums import LayerTypes
+from Emperor.layers.utils.routers import RouterModel
+from Emperor.layers.utils.samplers import SamplerModel
 
 
 from typing import TYPE_CHECKING
 
-from Emperor.layers.utils.routers import RouterModel
-from Emperor.layers.utils.samplers import SamplerModel
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+
+
+__all__ = ["_Validator"]
+
+
+class _Validator:
+    @staticmethod
+    def ensure_sampler_is_initialized(
+        init_sampler_model_flag: bool,
+    ) -> None:
+        if not init_sampler_model_flag:
+            raise RuntimeError(
+                "If no `indices` are provided the `init_sampler_model_flag` must be set to `True`. This creates a `RouterModel` and `SamplerModel` for the current layer."
+            )
+
+    @staticmethod
+    def ensure_no_sampler_with_indices(
+        init_sampler_model_flag: bool,
+    ) -> None:
+        if init_sampler_model_flag:
+            raise RuntimeError(
+                "If `indices` are provided the `init_sampler_model_flag` must be set to `False`. This avoids creating a `RouterModel` and `SamplerModel` for the current layer."
+            )
 
 
 @dataclass
@@ -68,7 +91,7 @@ class MixtureOfExpertsConfig(DataClassBase):
             "help": "When `True` the sepected parameters will be multiplied by their probs."
         },
     )
-    use_layer_scaling_flag: bool | None = field(
+    init_sampler_model_flag: bool | None = field(
         default=None,
         metadata={
             "help": "When `True` the `RouterModel `and `SamplerModel` will be added to the current layer."
@@ -98,18 +121,21 @@ class MixtureOfExperts(Module):
         self.model_type = self.cfg.model_type
         self.compute_expert_mixture_flag = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
+        self.init_sampler_model_flag = self.cfg.init_sampler_model_flag
         self._validate_fields(self.cfg, MixtureOfExpertsConfig)
 
-        self.expert_modules = self.__create_experts(cfg)
         self.router, self.sampler = self.__optionaly_create_router_and_samples(cfg)
+        self.expert_modules = self.__create_experts(cfg)
 
     def __resolve_config_type(self) -> str:
         if self.is_output_layer_flag:
             return "output_moe_layer_config"
         return "input_moe_layer_config"
 
-    def __optionaly_create_router_and_samples(self, cfg: "ModelConfig"):
-        if not self.cfg.use_layer_scaling_flag:
+    def __optionaly_create_router_and_samples(
+        self, cfg: "ModelConfig"
+    ) -> tuple[RouterModel | None, SamplerModel | None]:
+        if not self.cfg.init_sampler_model_flag:
             return None, None
         router = RouterModel(cfg)
         sampler = SamplerModel(cfg)
@@ -146,14 +172,14 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
         if indices is None:
-            if not self.cfg.use_layer_scaling_flag:
-                raise ValueError(
-                    "When `indices` are not provided the `RouterModel` and `SamplerModel` must be instantiated."
-                )
-            logits = self.router.compute_logit_scores(input_batch_matrix)
+            _Validator.ensure_sampler_is_initialized(self.init_sampler_model_flag)
+            logits = self.router.compute_logit_scores(input_batch)
+            skip_mask = None
             probabilities, indices, skip_mask, sampler_loss = (
                 self.sampler.sample_probabilities_and_indices(logits, skip_mask)
             )
+        else:
+            _Validator.ensure_no_sampler_with_indices(self.init_sampler_model_flag)
 
         expert_outputs = []
         experts_indices_list = []
