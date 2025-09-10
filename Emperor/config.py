@@ -182,6 +182,7 @@ class ModelConfig(DataClassBase):
             num_experts=12,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
+            init_sampler_model_flag =False,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
@@ -197,6 +198,7 @@ class ModelConfig(DataClassBase):
             num_experts=12,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
+            init_sampler_model_flag =False,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
