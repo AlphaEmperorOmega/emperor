@@ -238,6 +238,7 @@ class ModelConfig(DataClassBase):
     )
     transformer_feed_forward_config: FeedForwardConfig = field(
         default_factory=lambda: FeedForwardConfig(
+            model_type=LayerTypes.DYNAMIC_BASE,
             num_layers=1,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},

@@ -166,6 +166,7 @@ def default_unittest_config():
         ),
         transformer_feed_forward_config=FeedForwardConfig(
             num_layers=2,
+            model_type=LayerTypes.DYNAMIC_BASE,
         ),
         layer_block_stack_config=LayerBlockStackConfig(
             input_dim=INPUT_DIM,
