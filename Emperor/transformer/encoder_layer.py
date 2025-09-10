@@ -4,7 +4,9 @@
 from torch import Tensor
 from dataclasses import dataclass, field
 
-from Emperor.layers.utils.base import LayerBlock
+
+from Emperor.attention.attention import MultiHeadAttention
+from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.layers.utils.enums import (
     AttentionTypes,
     FeedForwardTypes,
@@ -81,18 +83,8 @@ class TransformerEncoderLayer(Module):
         self.dropout_probability = self.cfg.dropout_probability
         self.layer_norm_first_flag = self.cfg.layer_norm_first_flag
 
-        self.attention_model = self.__create_model(self.attention_type)
-        self.feed_forward_model = self.__create_model(self.feed_forward_type)
-
-    def __create_model(
-        self, model_type: AttentionTypes | FeedForwardTypes
-    ) -> LayerBlock:
-        return LayerBlock(
-            model_type.value(self.cfg),
-            residual_connection_flag=True,
-            dropout_probability=self.dropout_probability,
-            layer_form_first_flag=self.layer_norm_first_flag,
-        )
+        self.attention_model = MultiHeadAttention(cfg)
+        self.feed_forward_model = FeedForward(cfg)
 
     def forward(
         self,
