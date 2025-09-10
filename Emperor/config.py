@@ -182,7 +182,7 @@ class ModelConfig(DataClassBase):
             num_experts=12,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
-            init_sampler_model_flag =False,
+            init_sampler_model_flag=False,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
@@ -198,7 +198,7 @@ class ModelConfig(DataClassBase):
             num_experts=12,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
-            init_sampler_model_flag =False,
+            init_sampler_model_flag=False,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
@@ -238,8 +238,7 @@ class ModelConfig(DataClassBase):
     )
     transformer_feed_forward_config: FeedForwardConfig = field(
         default_factory=lambda: FeedForwardConfig(
-            weighted_parameters_flag=False,
-            num_layers=2,
+            num_layers=1,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
