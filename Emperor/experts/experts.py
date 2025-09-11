@@ -145,11 +145,11 @@ class MixtureOfExperts(Module):
         expert_list = []
         for _ in range(self.num_experts):
             model = self.model_type.value(self.__resolve_model_type_overrides(cfg))
-            layer_norm_output_dim = self.output_dim if self.layer_norm_flag else None
+            layer_norm_dim = self.output_dim if self.layer_norm_flag else None
             layer_block = LayerBlock(
                 model=model,
                 activation_function=self.activation.value,
-                layer_norm_output_dim=layer_norm_output_dim,
+                layer_norm_dim=layer_norm_dim,
                 dropout_probability=self.dropout_probability,
             )
             expert_list.append(layer_block)

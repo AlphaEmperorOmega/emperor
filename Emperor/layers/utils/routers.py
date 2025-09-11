@@ -149,7 +149,7 @@ class RouterModel(Module):
                 output_dim,
             ),
             activation_function=self.activation,
-            layer_norm_output_dim=output_dim,
+            layer_norm_dim=output_dim,
             residual_connection_flag=residual_connection_flag,
         )
 

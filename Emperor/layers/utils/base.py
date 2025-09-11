@@ -53,7 +53,7 @@ class LayerBlock(Module):
         self,
         model: "Module",
         activation_function: "ActivationOptions | None" = None,
-        layer_norm_output_dim: int | None = None,
+        layer_norm_dim: int | None = None,
         residual_connection_flag: bool = False,
         is_adaptive_computation: bool = False,
         dropout_probability: float = 0.0,
@@ -63,7 +63,7 @@ class LayerBlock(Module):
 
         self.model = model
         self.activation_function = activation_function
-        self.layer_norm_output_dim = layer_norm_output_dim
+        self.layer_norm_dim = layer_norm_dim
         self.residual_connection_flag = residual_connection_flag
         self.is_adaptive_computation = is_adaptive_computation
         self.dropout_probability = dropout_probability
@@ -81,8 +81,8 @@ class LayerBlock(Module):
         return None
 
     def __init_layer_norm_module(self) -> nn.Module | None:
-        if self.layer_norm_output_dim is not None:
-            return nn.LayerNorm(self.layer_norm_output_dim)
+        if self.layer_norm_dim is not None:
+            return nn.LayerNorm(self.layer_norm_dim)
         return None
 
     def create_adaptive_computation_module(self):
@@ -140,7 +140,7 @@ class LayerBlock(Module):
     #     if is_tuple:
     #         output, _, loss = output
     #         self.block_data.loss = loss
-    #     if self.layer_norm_output_dim is not None:
+    #     if self.layer_norm_dim is not None:
     #         output = self.layer_norm_module(output)
     #     if self.has_activation:
     #         output = self.activation_function(output)
@@ -241,15 +241,15 @@ class LayerBlockStack(Module):
         output_dim: int,
         residual_flag: bool = True,
     ) -> LayerBlock:
-        layer_norm_output_dim = None
+        layer_norm_dim = None
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
-            layer_norm_output_dim = output_dim
+            layer_norm_dim = output_dim
         config = self.__resolve_model_type_overrides(input_dim, output_dim)
         model = self.model_type.value(config)
 
         return LayerBlock(
             model=model,
-            layer_norm_output_dim=layer_norm_output_dim,
+            layer_norm_dim=layer_norm_dim,
             residual_connection_flag=residual_flag,
             activation_function=self.activation.value,
             dropout_probability=self.dropout_probability,
@@ -359,15 +359,15 @@ class LinearBlockStack(Module):
         output_dim: int,
         residual_connection_flag: bool = True,
     ):
-        layer_norm_output_dim = None
+        layer_norm_dim = None
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
-            layer_norm_output_dim = output_dim
+            layer_norm_dim = output_dim
         return LayerBlock(
             model=self.model_type(
                 input_dim,
                 output_dim,
             ),
             activation_function=self.activation,
-            layer_norm_output_dim=layer_norm_output_dim,
+            layer_norm_dim=layer_norm_dim,
             residual_connection_flag=residual_connection_flag,
         )

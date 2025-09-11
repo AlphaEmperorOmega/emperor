@@ -139,7 +139,7 @@ class Test___create_layer(TestLayerBlockStack):
             self.assertIsInstance(model, LayerBlock)
             self.assertIsInstance(model.model, layer_type.value)
             self.assertEqual(model.activation_function, ActivationOptions.GELU.value)
-            self.assertEqual(model.layer_norm_output_dim, None)
+            self.assertEqual(model.layer_norm_dim, None)
             self.assertEqual(model.residual_connection_flag, self.residual_flag)
             self.assertEqual(
                 model.is_adaptive_computation, self.adaptive_computation_flag
@@ -171,7 +171,7 @@ class Test___create_layer(TestLayerBlockStack):
             self.assertIsInstance(model, LayerBlock)
             self.assertIsInstance(model.model, layer_type.value)
             self.assertEqual(model.activation_function, ActivationOptions.GELU.value)
-            self.assertEqual(model.layer_norm_output_dim, None)
+            self.assertEqual(model.layer_norm_dim, None)
             self.assertEqual(model.residual_connection_flag, self.residual_flag)
             self.assertEqual(
                 model.is_adaptive_computation, self.adaptive_computation_flag
