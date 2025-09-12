@@ -42,7 +42,7 @@ class TransformerLayerConfig(DataClassBase):
         default=None,
         metadata={"help": ""},
     )
-    layer_norm_position: "LayerNormPositionOptions | None" = field(
+    layer_norm_dim: int | None = field(
         default=None,
         metadata={"help": ""},
     )
@@ -53,6 +53,19 @@ class TransformerLayerConfig(DataClassBase):
 
 
 class TransformerLayerBase(Module):
+    def __init__(
+        self,
+        cfg: "TransformerLayerConfig | ModelConfig",
+        overrides: "TransformerLayerConfig | None" = None,
+    ):
+        super().__init__()
+        nn.TransformerDecoderLayer
+        config = getattr(cfg, "multi_head_attention_model_config", cfg)
+        self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
+        self.layer_norm_dim = self.layer_norm_dim
+        self.layer_norm_position = self.cfg.layer_norm_position
+        self.dropout_probability = self.cfg.dropout_probability
+
     def _create_model(self, model: MultiHeadAttention | FeedForward) -> LayerBlock:
         return LayerBlock(
             model=model(cfg),
@@ -80,8 +93,10 @@ class TransformerEncoderLayer(TransformerLayerBase):
         self.layer_norm_dim = self.cfg.layer
         self.layer_norm_position = self.cfg.layer_norm_position
 
-        self.attention_model = self._create_model(MultiHeadAttention(cfg))
-        self.feed_forward_model = self._create_model(FeedForward(cfg))
+        attention = MultiHeadAttention(cfg)
+        self.attention_model = self._create_model(attention)
+        feed_forward = FeedForward(cfg)
+        self.feed_forward_model = self._create_model(feed_forward)
 
     def forward(
         self,
