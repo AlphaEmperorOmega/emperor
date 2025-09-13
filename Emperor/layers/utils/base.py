@@ -101,9 +101,6 @@ class LayerBlock(Module):
     ) -> Tensor | tuple[Tensor | None]:
         # TODO: Ensure that the skip_maks will be used
         # in the future.
-
-        # if isinstance(main_model_input, tuple):
-        #     main_model_input, previous_loss = main_model_input
         main_model_input = self._handle_model_input(main_model_input)
 
         if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
@@ -111,10 +108,6 @@ class LayerBlock(Module):
 
         model_output = self.model(main_model_input, **additional_model_inputs)
         output = self._handle_model_output(model_output)
-
-        # is_model_output_tuple = isinstance(output, tuple)
-        # if is_model_output_tuple:
-        #     output, skip_mask, loss = output
 
         if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
             output = self.layer_norm_module(output)
@@ -129,8 +122,6 @@ class LayerBlock(Module):
         if self.layer_norm_position == LayerNormPositionOptions.AFTER:
             output = self.layer_norm_module(output)
 
-        # if is_model_output_tuple:
-        #     return output, loss
         return self._handle_final_output(output)
 
     def _handle_model_input(self, main_model_input: Tensor):
