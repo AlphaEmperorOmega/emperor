@@ -59,7 +59,6 @@ class TransformerLayerBase(Module):
         overrides: "TransformerLayerConfig | None" = None,
     ):
         super().__init__()
-        nn.TransformerDecoderLayer
         config = getattr(cfg, "multi_head_attention_model_config", cfg)
         self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
         self.layer_norm_dim = self.layer_norm_dim
@@ -82,10 +81,8 @@ class TransformerEncoderLayer(TransformerLayerBase):
         cfg: "TransformerLayerConfig | ModelConfig",
         overrides: "TransformerLayerConfig | None" = None,
     ):
-        super().__init__()
-        nn.TransformerDecoderLayer
-        config = getattr(cfg, "multi_head_attention_model_config", cfg)
-        self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
+        super().__init__(cfg, overrides)
+
         self.main_cfg = cfg
         self.attention_type = self.cfg.attention_type
         self.feed_forward_type = self.cfg.feed_forward_type
@@ -94,8 +91,9 @@ class TransformerEncoderLayer(TransformerLayerBase):
         self.layer_norm_position = self.cfg.layer_norm_position
 
         attention = MultiHeadAttention(cfg)
-        self.attention_model = self._create_model(attention)
         feed_forward = FeedForward(cfg)
+
+        self.attention_model = self._create_model(attention)
         self.feed_forward_model = self._create_model(feed_forward)
 
     def forward(
@@ -104,8 +102,11 @@ class TransformerEncoderLayer(TransformerLayerBase):
         key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> Tensor:
-        other_attention_inputs = (key_padding_mask, attention_mask)
-        x = self.attention_model(input_tensor, other_attention_inputs)
+        additional_model_inputs = {
+            "key_padding_mask": key_padding_mask,
+            "attention_mask": attention_mask,
+        }
+        x = self.attention_model(input_tensor, additional_model_inputs)
         x = self.feed_forward_model(x)
         return x
 

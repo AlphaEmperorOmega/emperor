@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+    from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
     from Emperor.layers.utils.enums import LayerTypes
 
 __all__ = ["FeedForward"]
@@ -29,7 +30,7 @@ class _Validator:
 
 @dataclass
 class FeedForwardConfig(DataClassBase):
-    model_type: "LayerTypes | None" = field(
+    model_type: "LinearLayerTypes | ParameterGeneratorTypes | None" = field(
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
     )
