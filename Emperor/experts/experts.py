@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import DataClassBase, Module, device
-from Emperor.layers.utils.base import LayerBlock
+from Emperor.layers.utils.base import LayerBlock, ParameterGeneratorLayerBlock
 from Emperor.layers.utils.linears import LinearLayer
 from Emperor.layers.utils.enums import LayerTypes
 from Emperor.layers.utils.routers import RouterModel
@@ -124,8 +124,23 @@ class MixtureOfExperts(Module):
         self.init_sampler_model_flag = self.cfg.init_sampler_model_flag
         self._validate_fields(self.cfg, MixtureOfExpertsConfig)
 
+        self.layer_block_model = self.__resolve_layer_block_class()
         self.router, self.sampler = self.__optionaly_create_router_and_samples(cfg)
         self.expert_modules = self.__create_experts(cfg)
+
+    def __resolve_layer_block_class(self) -> type[LayerBlock]:
+        # TODO: move this somewhere else in the future since it is used in
+        # `LayerBlockStack` as well
+        from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+
+        if isinstance(self.model_type, LinearLayerTypes):
+            return LayerBlock
+        elif isinstance(self.model_type, ParameterGeneratorTypes):
+            return ParameterGeneratorLayerBlock
+        else:
+            raise RuntimeError(
+                f"Unsupported `model_type` {type(self.model_type)} for `LayerBlockStack`"
+            )
 
     def __resolve_config_type(self) -> str:
         if self.is_output_layer_flag:
@@ -146,7 +161,7 @@ class MixtureOfExperts(Module):
         for _ in range(self.num_experts):
             model = self.model_type.value(self.__resolve_model_type_overrides(cfg))
             layer_norm_dim = self.output_dim if self.layer_norm_flag else None
-            layer_block = LayerBlock(
+            layer_block = self.layer_block_model(
                 model=model,
                 activation_function=self.activation.value,
                 layer_norm_dim=layer_norm_dim,

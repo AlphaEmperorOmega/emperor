@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.layers.utils.base import LayerBlock
+from Emperor.layers.utils.base import LayerBlock, ParameterGeneratorLayerBlock
 from Emperor.layers.utils.linears import LinearLayer
 from typing import TYPE_CHECKING
 
@@ -26,6 +26,21 @@ class ProjectorBase(Module):
         self.value_projection_dim = self.cfg.value_projection_dim
         self.query_key_projection_dim = self.cfg.query_key_projection_dim
         self.__resolve_kv_dimensions()
+        self.layer_block_model = self.__resolve_layer_block_class()
+
+    def __resolve_layer_block_class(self) -> type[LayerBlock]:
+        # TODO: move this somewhere else in the future since it is used in
+        # `LayerBlockStack` as well
+        from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+
+        if isinstance(self.model_type, LinearLayerTypes):
+            return LayerBlock
+        elif isinstance(self.model_type, ParameterGeneratorTypes):
+            return ParameterGeneratorLayerBlock
+        else:
+            raise RuntimeError(
+                f"Unsupported `model_type` {type(self.model_type)} for `LayerBlockStack`"
+            )
 
     def __resolve_kv_dimensions(self):
         self.query_key_projection_dim = (
@@ -44,7 +59,7 @@ class ProjectorBase(Module):
             self.main_cfg, input_dim, output_dim
         )
         output_model = self.model_type.value(config)
-        return LayerBlock(model=output_model)
+        return self.layer_block_model(model=output_model)
 
     def __resolve_model_type_overrides(
         self,
