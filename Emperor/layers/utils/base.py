@@ -1,7 +1,8 @@
 import copy
-from enum import Enum
+import torch
 import torch.nn as nn
 
+from enum import Enum
 from dataclasses import dataclass, field
 from torch.nn import Linear, Sequential
 from torch.types import Tensor
@@ -12,13 +13,13 @@ from Emperor.base.utils import DataClassBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.layers.utils.enums import LayerTypes
+    from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
     from Emperor.config import ModelConfig
 
 
 @dataclass
 class LayerBlockConfig(DataClassBase):
-    model_type: "LayerTypes | None" = field(
+    model_type: "LinearLayerTypes | ParameterGeneratorTypes | None" = field(
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
     )
@@ -86,30 +87,34 @@ class LayerBlock(Module):
         return None
 
     def create_adaptive_computation_module(self):
+        # TODO: Create a wrapper that first decides
+        # if the current layer should be computed using the
+        # adaptive computation from sparse universal transformer
+        # paper
         pass
 
     def forward(
         self,
-        main_model_input: Tensor | tuple,
-        other_model_inputs: Tensor | tuple | None = None,
+        main_model_input: Tensor,
+        additional_model_inputs: dict = {},
         skip_mask: Tensor | None = None,
-    ) -> Tensor | tuple[Tensor, Tensor]:
+    ) -> Tensor | tuple[Tensor | None]:
         # TODO: Ensure that the skip_maks will be used
         # in the future.
-        previous_loss = 0.0
-        if isinstance(main_model_input, tuple):
-            main_model_input, previous_loss = main_model_input
+
+        # if isinstance(main_model_input, tuple):
+        #     main_model_input, previous_loss = main_model_input
+        main_model_input = self._handle_model_input(main_model_input)
 
         if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
             main_model_input = self.layer_norm_module(main_model_input)
-        if isinstance(other_model_inputs, tuple):
-            output = self.model(main_model_input, **other_model_inputs)
-        else:
-            output = self.model(main_model_input)
 
-        is_model_output_tuple = isinstance(output, tuple)
-        if is_model_output_tuple:
-            output, skip_mask, loss = output
+        model_output = self.model(main_model_input, **additional_model_inputs)
+        output = self._handle_model_output(model_output)
+
+        # is_model_output_tuple = isinstance(output, tuple)
+        # if is_model_output_tuple:
+        #     output, skip_mask, loss = output
 
         if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
             output = self.layer_norm_module(output)
@@ -124,8 +129,17 @@ class LayerBlock(Module):
         if self.layer_norm_position == LayerNormPositionOptions.AFTER:
             output = self.layer_norm_module(output)
 
-        if is_model_output_tuple:
-            return output, loss + previous_loss
+        # if is_model_output_tuple:
+        #     return output, loss
+        return self._handle_final_output(output)
+
+    def _handle_model_input(self, main_model_input: Tensor):
+        return main_model_input
+
+    def _handle_model_output(self, model_output: Tensor) -> Tensor:
+        return model_output
+
+    def _handle_final_output(self, output: Tensor) -> Tensor:
         return output
 
     # TODO: In the future instead multiple function inputs
@@ -136,20 +150,46 @@ class LayerBlock(Module):
     #     data: LayerBlockData,
     # ) -> LayerBlockData:
     #     output = self.model(data.tensor)
-    #     is_tuple = isinstance(output, tuple)
-    #     if is_tuple:
-    #         output, _, loss = output
-    #         self.block_data.loss = loss
-    #     if self.layer_norm_dim is not None:
-    #         output = self.layer_norm_module(output)
-    #     if self.has_activation:
-    #         output = self.activation_function(output)
-    #     if self.has_dropout:
-    #         output = self.dropout_module(output)
-    #     if self.residual_connection_flag:
-    #         output = output + input_batch
-    #     self.block_data.tensor = output
-    #     return self.blcok_data
+
+
+class ParameterGeneratorLayerBlock(LayerBlock):
+    def __init__(
+        self,
+        model: "Module",
+        activation_function: "ActivationOptions | None" = None,
+        layer_norm_dim: int | None = None,
+        residual_connection_flag: bool = False,
+        is_adaptive_computation: bool = False,
+        dropout_probability: float = 0.0,
+        layer_norm_position: "LayerNormPositionOptions | None" = None,
+    ):
+        super().__init__(
+            model,
+            activation_function,
+            layer_norm_dim,
+            residual_connection_flag,
+            is_adaptive_computation,
+            dropout_probability,
+            layer_norm_position,
+        )
+
+        self.loss = torch.tensor(0.0)
+
+    def _handle_model_input(
+        self, main_model_input: Tensor | tuple[Tensor, Tensor]
+    ) -> Tensor:
+        if isinstance(main_model_input, tuple):
+            main_model_input, previous_loss = main_model_input
+            self.loss = previous_loss
+        return main_model_input
+
+    def _handle_model_output(self, model_output: tuple) -> Tensor:
+        output, skip_mask, loss = model_output
+        self.loss = self.loss + loss
+        return output
+
+    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+        return output, self.loss
 
 
 @dataclass
@@ -200,6 +240,22 @@ class LayerBlockStack(Module):
         self.output_dim = self.cfg.output_dim
         self.num_layers = self.cfg.num_layers
 
+        self.layer_block_model = self.__resolve_layer_block_class()
+
+    def __resolve_layer_block_class(self) -> type[LayerBlock]:
+        # TODO: move this somewhere else in the future since it is used in
+        # `MixtureOfExperts` as well
+        from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+
+        if isinstance(self.model_type, LinearLayerTypes):
+            return LayerBlock
+        elif isinstance(self.model_type, ParameterGeneratorTypes):
+            return ParameterGeneratorLayerBlock
+        else:
+            raise RuntimeError(
+                f"Unsupported `model_type` {type(self.model_type)} for `LayerBlockStack`"
+            )
+
     def build_model(self) -> LayerBlock | Sequential:
         layers = []
 
@@ -232,7 +288,7 @@ class LayerBlockStack(Module):
     def __add_output_layer(self, layers: list) -> None:
         layer_input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
         config = self.__resolve_model_type_overrides(layer_input_dim, self.output_dim)
-        layer = LayerBlock(model=self.model_type.value(config))
+        layer = self.layer_block_model(model=self.model_type.value(config))
         layers.append(layer)
 
     def __create_layer(
@@ -247,7 +303,7 @@ class LayerBlockStack(Module):
         config = self.__resolve_model_type_overrides(input_dim, output_dim)
         model = self.model_type.value(config)
 
-        return LayerBlock(
+        return self.layer_block_model(
             model=model,
             layer_norm_dim=layer_norm_dim,
             residual_connection_flag=residual_flag,
