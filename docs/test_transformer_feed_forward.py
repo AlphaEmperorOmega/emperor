@@ -3,7 +3,7 @@ import unittest
 
 from dataclasses import asdict
 from Emperor.feedForward.feed_forward import FeedForward, FeedForwardConfig
-from Emperor.layers.utils.enums import LayerTypes
+from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
 from docs.utils import default_unittest_config
 
 
@@ -55,53 +55,64 @@ class Test___init(TestFeedForward):
 
     def test_differet_layer_types(self):
         num_layers_list = [2, 4, 6]
-        for layer_type in LayerTypes:
-            for num_layers in num_layers_list:
-                config = FeedForwardConfig(
-                    model_type=layer_type,
-                    num_layers=num_layers,
-                )
-                self.rebuild_presets(config)
-                self.assertIsInstance(self.model.model[0].model, layer_type.value)
+        types = (LinearLayerTypes, ParameterGeneratorTypes)
+        for type in types:
+            for layer_type in type:
+                for num_layers in num_layers_list:
+                    config = FeedForwardConfig(
+                        model_type=layer_type,
+                        num_layers=num_layers,
+                    )
+                    self.rebuild_presets(config)
+                    self.assertIsInstance(self.model.model[0].model, layer_type.value)
 
 
 class Test_forward(TestFeedForward):
     def test_ensure_the_feed_forward_model_processes_2D_input_batch(self):
         num_layers_list = [2, 4, 6]
-        for layer_type in LayerTypes:
-            for num_layers in num_layers_list:
-                config = FeedForwardConfig(
-                    model_type=layer_type,
-                    num_layers=num_layers,
-                )
-                self.rebuild_presets(config)
-                input = torch.randn(self.batch_size, self.input_dim)
-                output = self.model(input)
 
-                expected_output = (self.batch_size, self.output_dim)
+        types = (LinearLayerTypes, ParameterGeneratorTypes)
+        for type in types:
+            for layer_type in type:
+                for num_layers in num_layers_list:
+                    config = FeedForwardConfig(
+                        model_type=layer_type,
+                        num_layers=num_layers,
+                    )
+                    self.rebuild_presets(config)
+                    input = torch.randn(self.batch_size, self.input_dim)
+                    output = self.model(input)
 
-                if isinstance(output, tuple):
-                    output, _ = output
+                    expected_output = (self.batch_size, self.output_dim)
 
-                self.assertIsInstance(self.model.model[0].model, layer_type.value)
-                self.assertEqual(output.shape, expected_output)
+                    if isinstance(output, tuple):
+                        output, _ = output
+
+                    self.assertIsInstance(self.model.model[0].model, layer_type.value)
+                    self.assertEqual(output.shape, expected_output)
 
     def test_ensure_the_feed_forward_model_processes_3D_input_batch(self):
         num_layers_list = [2, 4, 6]
-        for layer_type in LayerTypes:
-            for num_layers in num_layers_list:
-                config = FeedForwardConfig(
-                    model_type=layer_type,
-                    num_layers=num_layers,
-                )
-                self.rebuild_presets(config)
-                sequence_length = 4
-                input = torch.randn(self.batch_size, sequence_length, self.input_dim)
-                output = self.model(input)
+        types = (LinearLayerTypes, ParameterGeneratorTypes)
+        for type in types:
+            for layer_type in type:
+                for num_layers in num_layers_list:
+                    config = FeedForwardConfig(
+                        model_type=layer_type,
+                        num_layers=num_layers,
+                    )
+                    self.rebuild_presets(config)
+                    sequence_length = 4
+                    input = torch.randn(
+                        self.batch_size, sequence_length, self.input_dim
+                    )
+                    output = self.model(input)
+                    output, _ = output
+                    expected_output = (
+                        self.batch_size,
+                        sequence_length,
+                        self.output_dim,
+                    )
 
-                output, _ = output
-
-                expected_output = (self.batch_size, sequence_length, self.output_dim)
-
-                self.assertIsInstance(self.model.model[0].model, layer_type.value)
-                self.assertEqual(output.shape, expected_output)
+                    self.assertIsInstance(self.model.model[0].model, layer_type.value)
+                    self.assertEqual(output.shape, expected_output)

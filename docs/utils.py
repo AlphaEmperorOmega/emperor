@@ -3,22 +3,18 @@ import torch.nn as nn
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.config import ModelConfig
 from Emperor.experts.experts import MixtureOfExpertsConfig
-from Emperor.feedForward.feed_forward import (
-    FeedForwardConfig,
-    MixtureOfExpertsFeedForwardConfig,
-)
+from Emperor.attention.attention import MultiHeadAttentionConfig
 from Emperor.layers.layers import ParameterLayerConfig
-from Emperor.layers.utils.base import (
-    LayerBlockStackConfig,
-)
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
 from Emperor.layers.utils.samplers import SamplerConfig
-from Emperor.layers.utils.enums import (
-    LayerTypes,
+from Emperor.layers.utils.enums import LayerTypes, LinearLayerTypes
+from Emperor.layers.utils.base import LayerBlockStackConfig
+from Emperor.feedForward.feed_forward import (
+    FeedForwardConfig,
+    MixtureOfExpertsFeedForwardConfig,
 )
-from Emperor.attention.attention import MultiHeadAttentionConfig
 
 
 def default_unittest_config():
@@ -126,7 +122,7 @@ def default_unittest_config():
             dropout_probability=0.1,
             layer_norm_flag=True,
             activation=ActivationOptions.GELU,
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerTypes.DYNAMIC,
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
@@ -139,14 +135,14 @@ def default_unittest_config():
             dropout_probability=0.1,
             layer_norm_flag=True,
             activation=ActivationOptions.GELU,
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerTypes.DYNAMIC,
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
             init_sampler_model_flag=False,
         ),
         multi_head_attention_model_config=MultiHeadAttentionConfig(
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerTypes.DYNAMIC,
             batch_size=BATCH_SIZE,
             num_heads=4,
             embedding_dim=HIDDEN_DIM,
@@ -166,14 +162,14 @@ def default_unittest_config():
         ),
         transformer_feed_forward_config=FeedForwardConfig(
             num_layers=2,
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerTypes.DYNAMIC,
         ),
         layer_block_stack_config=LayerBlockStackConfig(
             input_dim=INPUT_DIM,
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
             num_layers=2,
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerTypes.DYNAMIC,
             activation=ActivationOptions.GELU,
             layer_norm_dim=INPUT_DIM,
             residual_flag=False,

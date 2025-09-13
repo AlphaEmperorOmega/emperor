@@ -4,7 +4,11 @@ import unittest
 from dataclasses import asdict
 from Emperor.attention.utils.projection_handler import Projector
 from Emperor.attention.attention import MultiHeadAttentionConfig
-from Emperor.layers.utils.enums import LayerTypes
+from Emperor.layers.utils.enums import (
+    LayerTypes,
+    LinearLayerTypes,
+    ParameterGeneratorTypes,
+)
 from Emperor.layers.utils.base import LayerBlock
 from docs.utils import default_unittest_config
 
@@ -321,7 +325,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=True,
             query_key_projection_dim=32,
             value_projection_dim=64,
-            model_type=LayerTypes.BASE,
+            model_type=LinearLayerTypes.BASE,
         )
         self.rebuild_presets(config)
 
@@ -360,7 +364,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=False,
             query_key_projection_dim=self.config.embedding_dim,
             value_projection_dim=self.config.embedding_dim,
-            model_type=LayerTypes.BASE,
+            model_type=LinearLayerTypes.BASE,
         )
         self.rebuild_presets(config)
 
@@ -394,7 +398,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=True,
             query_key_projection_dim=32,
             value_projection_dim=64,
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerTypes.DYNAMIC,
         )
         self.rebuild_presets(config)
         query = torch.randn(
@@ -432,7 +436,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=False,
             query_key_projection_dim=self.config.embedding_dim,
             value_projection_dim=self.config.embedding_dim,
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerTypes.DYNAMIC,
         )
         self.rebuild_presets(config)
         tensor = torch.randn(
@@ -465,7 +469,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=False,
             query_key_projection_dim=32,
             value_projection_dim=64,
-            model_type=LayerTypes.VECTOR,
+            model_type=ParameterGeneratorTypes.VECTOR,
         )
         self.rebuild_presets(config)
 
@@ -503,7 +507,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=False,
             query_key_projection_dim=self.config.embedding_dim,
             value_projection_dim=self.config.embedding_dim,
-            model_type=LayerTypes.VECTOR,
+            model_type=ParameterGeneratorTypes.VECTOR,
         )
         self.rebuild_presets(config)
 
@@ -537,7 +541,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=True,
             query_key_projection_dim=32,
             value_projection_dim=64,
-            model_type=LayerTypes.MATRIX,
+            model_type=ParameterGeneratorTypes.MATRIX,
         )
         self.rebuild_presets(config)
 
@@ -576,7 +580,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=False,
             query_key_projection_dim=self.config.embedding_dim,
             value_projection_dim=self.config.embedding_dim,
-            model_type=LayerTypes.MATRIX,
+            model_type=ParameterGeneratorTypes.MATRIX,
         )
         self.rebuild_presets(config)
         tensor = torch.randn(
@@ -608,7 +612,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=True,
             query_key_projection_dim=32,
             value_projection_dim=64,
-            model_type=LayerTypes.GENERATOR,
+            model_type=ParameterGeneratorTypes.GENERATOR,
         )
         self.rebuild_presets(config)
 
@@ -647,7 +651,7 @@ class Test_compute_qkv_projections(TestProjector):
             use_separate_projection_weight_flag=False,
             query_key_projection_dim=self.config.embedding_dim,
             value_projection_dim=self.config.embedding_dim,
-            model_type=LayerTypes.GENERATOR,
+            model_type=ParameterGeneratorTypes.GENERATOR,
         )
         self.rebuild_presets(config)
 

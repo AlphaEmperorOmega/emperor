@@ -7,7 +7,11 @@ from Emperor.config import ModelConfig
 from Emperor.base.enums import ActivationOptions
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.base import LayerBlock
-from Emperor.layers.utils.enums import LayerTypes
+from Emperor.layers.utils.enums import (
+    LayerTypes,
+    LinearLayerTypes,
+    ParameterGeneratorTypes,
+)
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig, RouterModel
 from Emperor.layers.utils.samplers import (
@@ -125,7 +129,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 dropout_probability=0.1,
                 layer_norm_flag=True,
                 activation=ActivationOptions.GELU,
-                model_type=LayerTypes.DYNAMIC_BASE,
+                model_type=LinearLayerTypes.DYNAMIC,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=False,
                 weighted_parameters_flag=False,
@@ -138,7 +142,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 dropout_probability=0.1,
                 layer_norm_flag=True,
                 activation=ActivationOptions.GELU,
-                model_type=LayerTypes.DYNAMIC_BASE,
+                model_type=LinearLayerTypes.DYNAMIC,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=True,
                 weighted_parameters_flag=True,
@@ -222,7 +226,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__create_experts_with_different_dimensions__LinearLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.BASE
+        c.input_moe_layer_config.model_type = LinearLayerTypes.BASE
         config = c.input_moe_layer_config
 
         m = MixtureOfExperts(c)
@@ -245,7 +249,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         self,
     ):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.DYNAMIC_BASE
+        c.input_moe_layer_config.model_type = LinearLayerTypes.DYNAMIC
         config = c.input_moe_layer_config
 
         m = MixtureOfExperts(c)
@@ -266,7 +270,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__create_experts_with_different_dimensions__VectorParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.VECTOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.VECTOR
         config = c.input_moe_layer_config
 
         m = MixtureOfExperts(c)
@@ -280,7 +284,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__create_experts_with_different_dimensions__MatrixParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.MATRIX
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.MATRIX
         config = c.input_moe_layer_config
 
         m = MixtureOfExperts(c)
@@ -294,7 +298,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__create_experts_with_different_dimensions__GeneratorParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
         config = c.input_moe_layer_config
 
         m = MixtureOfExperts(c)
@@ -309,7 +313,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__optionaly_create_router_and_samples(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
         c.input_moe_layer_config.init_sampler_model_flag = True
         c.output_moe_layer_config.init_sampler_model_flag = True
         rotuer_config = c.router_model_config
@@ -358,7 +362,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__forward__DynamicDiagonalLinearLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.DYNAMIC_BASE
+        c.input_moe_layer_config.model_type = LinearLayerTypes.DYNAMIC
         config = c.input_moe_layer_config
         m = MixtureOfExperts(c)
 
@@ -380,7 +384,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__forward__VectorParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.VECTOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.VECTOR
         config = c.input_moe_layer_config
         m = MixtureOfExperts(c)
 
@@ -405,7 +409,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__forward__GeneratorParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.MATRIX
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.MATRIX
         config = c.input_moe_layer_config
         m = MixtureOfExperts(c)
 
@@ -430,7 +434,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__forward__MatrixParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
         config = c.input_moe_layer_config
         m = MixtureOfExperts(c)
 
@@ -457,7 +461,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         self,
     ):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
         c.input_moe_layer_config.init_sampler_model_flag = False
         config = c.input_moe_layer_config
         m = MixtureOfExperts(c)
@@ -473,7 +477,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         self,
     ):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
         c.input_moe_layer_config.init_sampler_model_flag = True
         config = c.input_moe_layer_config
         m = MixtureOfExperts(c)
@@ -491,7 +495,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         self,
     ):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
         c.input_moe_layer_config.init_sampler_model_flag = True
         config = c.input_moe_layer_config
         m = MixtureOfExperts(c)
@@ -706,7 +710,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
                 dropout_probability=0.1,
                 layer_norm_flag=True,
                 activation=ActivationOptions.GELU,
-                model_type=LayerTypes.DYNAMIC_BASE,
+                model_type=LinearLayerTypes.DYNAMIC,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=False,
                 weighted_parameters_flag=False,
@@ -719,7 +723,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
                 dropout_probability=0.1,
                 layer_norm_flag=True,
                 activation=ActivationOptions.GELU,
-                model_type=LayerTypes.DYNAMIC_BASE,
+                model_type=LinearLayerTypes.DYNAMIC,
                 num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
                 compute_expert_mixture_flag=True,
                 weighted_parameters_flag=True,
@@ -795,7 +799,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
 
     def test__forward__LinearLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.BASE
+        c.input_moe_layer_config.model_type = LinearLayerTypes.BASE
         m = MixtureOfExpertsFeedForward(c)
 
         batch_size = 7
@@ -813,7 +817,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
 
     def test__forward__DynamicDiagonalLinearLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.DYNAMIC_BASE
+        c.input_moe_layer_config.model_type = LinearLayerTypes.DYNAMIC
         m = MixtureOfExpertsFeedForward(c)
 
         batch_size = 7
@@ -831,7 +835,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
 
     def test__forward__VectorParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.VECTOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.VECTOR
         m = MixtureOfExpertsFeedForward(c)
 
         batch_size = 7
@@ -849,7 +853,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
 
     def test__forward__MatrixParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.MATRIX
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.MATRIX
         m = MixtureOfExpertsFeedForward(c)
 
         batch_size = 7
@@ -867,7 +871,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
 
     def test__forward__GeneratorParameterLayer(self):
         c = copy.deepcopy(self.cfg)
-        c.input_moe_layer_config.model_type = LayerTypes.GENERATOR
+        c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
         m = MixtureOfExpertsFeedForward(c)
 
         batch_size = 7
