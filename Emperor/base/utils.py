@@ -46,6 +46,7 @@ masked_fill = torch.masked_fill
 sigmoid = torch.sigmoid
 batch_matmul = torch.bmm
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = "cpu"
 
 numpy = lambda x, *args, **kwargs: x.detach().numpy(*args, **kwargs)
 size = lambda x, *args, **kwargs: x.numel(*args, **kwargs)
