@@ -9,12 +9,17 @@ from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
 from Emperor.layers.utils.routers import RouterConfig
 from Emperor.layers.utils.samplers import SamplerConfig
-from Emperor.layers.utils.enums import LayerTypes, LinearLayerTypes
+from Emperor.layers.utils.enums import (
+    # AttentionTypes,
+    # FeedForwardTypes,
+    LinearLayerTypes,
+)
 from Emperor.layers.utils.base import LayerBlockStackConfig
 from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
 )
+from Emperor.transformer.layer import TransformerLayerConfig
 
 
 def default_unittest_config():
@@ -176,5 +181,11 @@ def default_unittest_config():
             adaptive_computation_flag=False,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.NONE,
+        ),
+        transformer_layer_config=TransformerLayerConfig(
+            model_type=LinearLayerTypes.DYNAMIC,
+            layer_norm_position=LayerNormPositionOptions.DEFAULT,
+            dropout_probability=0.0,
+            layer_norm_dim=0,
         ),
     )
