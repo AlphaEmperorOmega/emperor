@@ -1,6 +1,4 @@
 from enum import Enum
-
-from Emperor.attention.attention import MultiHeadAttention
 from Emperor.layers.layers import (
     GeneratorParameterLayer,
     MatrixParameterLayer,
@@ -29,11 +27,3 @@ class LayerTypes(Enum):
     VECTOR = VectorParameterLayer
     MATRIX = MatrixParameterLayer
     GENERATOR = GeneratorParameterLayer
-
-
-class FeedForwardTypes(Enum):
-    BASE = "TO BE IMPLEMENTED"
-
-
-class AttentionTypes(Enum):
-    BASE = MultiHeadAttention
