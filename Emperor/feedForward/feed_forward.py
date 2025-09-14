@@ -14,9 +14,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
-    from Emperor.layers.utils.enums import LayerTypes
-
-__all__ = ["FeedForward"]
 
 
 class _Validator:
