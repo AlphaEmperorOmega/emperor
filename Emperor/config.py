@@ -13,7 +13,10 @@ from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.layers.layers import ParameterLayerConfig
 from Emperor.layers.utils.base import LayerBlockStackConfig
 from Emperor.layers.utils.enums import (
+    # AttentionTypes,
+    # FeedForwardTypes,
     LayerTypes,
+    LinearLayerTypes,
 )
 from Emperor.layers.utils.linears import LinearLayerConfig
 from Emperor.layers.utils.mixture import MixtureConfig
@@ -21,6 +24,7 @@ from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.layers.utils.routers import (
     RouterConfig,
 )
+from Emperor.transformer.layer import TransformerLayerConfig
 
 
 # MODEL WISE CONFI
@@ -240,6 +244,15 @@ class ModelConfig(DataClassBase):
         default_factory=lambda: FeedForwardConfig(
             model_type=LayerTypes.DYNAMIC_BASE,
             num_layers=1,
+        ),
+        metadata={"help": "`MultiHeadAttention` configuration"},
+    )
+    transformer_layer_config: TransformerLayerConfig = field(
+        default_factory=lambda: TransformerLayerConfig(
+            model_type=LinearLayerTypes.DYNAMIC,
+            layer_norm_position=LayerNormPositionOptions.DEFAULT,
+            dropout_probability=0.0,
+            layer_norm_dim=0,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
