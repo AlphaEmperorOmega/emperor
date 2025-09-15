@@ -255,3 +255,121 @@ class ModelConfig(DataClassBase):
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
+
+
+class LinearLayerConfigGenerator:
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        bias_flag: bool,
+        anti_diagonal_flag: bool,
+        dynamic_bias_flag: bool,
+    ):
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.bias_flag = bias_flag
+        self.anti_diagonal_flag = anti_diagonal_flag
+        self.dynamic_bias_flag = dynamic_bias_flag
+
+    def build(self) -> LinearLayerConfig:
+        return LinearLayerConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+            bias_flag=self.bias_flag,
+            anti_diagonal_flag=self.anti_diagonal_flag,
+            dynamic_bias_flag=self.dynamic_bias_flag,
+        )
+
+
+class ParameterLayerConfigGenerator(LinearLayerConfigGenerator):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        bias_flag: bool,
+        anti_diagonal_flag: bool,
+        dynamic_bias_flag: bool,
+        bias_parameters_flag: bool,
+        time_tracker_flag: bool,
+        dynamic_diagonal_params_flag: bool,
+        linear_layer_model_type: LinearLayerTypes,
+    ):
+        super().__init__(
+            input_dim,
+            output_dim,
+            bias_flag,
+            anti_diagonal_flag,
+            dynamic_bias_flag,
+        )
+        self.bias_parameters_flag = bias_parameters_flag
+        self.time_tracker_flag = time_tracker_flag
+        self.dynamic_diagonal_params_flag = dynamic_diagonal_params_flag
+        self.linear_layer_model_type = linear_layer_model_type
+
+    def build(self) -> ParameterLayerConfig:
+        return ParameterLayerConfig(
+            bias_parameters_flag=self.bias_parameters_flag,
+            time_tracker_flag=self.time_tracker_flag,
+            dynamic_diagonal_params_flag=self.dynamic_diagonal_params_flag,
+            linear_layer_model_type=self.linear_layer_model_type,
+            linear_layer_model_config=super().build(),
+        )
+
+
+class MixtureOfExpertsConfigGenerator(ParameterLayerConfigGenerator):
+    def __init__(
+        self,
+        # Lienar layer options
+        input_dim: int,
+        output_dim: int,
+        bias_flag: bool,
+        anti_diagonal_flag: bool,
+        dynamic_bias_flag: bool,
+        # Parameter layer options
+        bias_parameters_flag: bool,
+        time_tracker_flag: bool,
+        dynamic_diagonal_params_flag: bool,
+        linear_layer_model_type: LinearLayerTypes,
+        # Muxtire of epxerts layer
+        top_k: int,
+        dropout_probability: float,
+        layer_norm_flag: bool,
+        activation: ActivationOptions,
+        num_experts: int,
+        compute_expert_mixture_flag: bool,
+        weighted_parameters_flag: bool,
+        init_sampler_model_flag: bool,
+    ):
+        super().__init__(
+            input_dim,
+            output_dim,
+            bias_flag,
+            anti_diagonal_flag,
+            dynamic_bias_flag,
+            bias_parameters_flag,
+            time_tracker_flag,
+            dynamic_diagonal_params_flag,
+            linear_layer_model_type,
+        )
+        self.top_k = top_k
+        self.dropout_probability = dropout_probability
+        self.layer_norm_flag = layer_norm_flag
+        self.activation = activation
+        self.num_experts = num_experts
+        self.compute_expert_mixture_flag = compute_expert_mixture_flag
+        self.weighted_parameters_flag = weighted_parameters_flag
+        self.init_sampler_model_flag = init_sampler_model_flag
+
+    def build(self) -> MixtureOfExpertsConfig:
+        return MixtureOfExpertsConfig(
+            top_k=MIXTURE_TOP_K,
+            dropout_probability=self.dropout_probability,
+            layer_norm_flag=True,
+            activation=ActivationOptions.GELU,
+            model_type=LayerTypes.DYNAMIC_BASE,
+            num_experts=12,
+            compute_expert_mixture_flag=True,
+            weighted_parameters_flag=True,
+            init_sampler_model_flag=False,
+        )
