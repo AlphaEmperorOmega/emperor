@@ -81,7 +81,7 @@ class TestVectorParameterLayer(unittest.TestCase):
             router_model_config=RouterConfig(
                 input_dim=ROUTER_INPUT_DIM,
                 hidden_dim=ROUTER_HIDDEN_DIM,
-                output_dim=ROUTER_OUTPUT_DIM,
+                num_experts=ROUTER_OUTPUT_DIM,
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
@@ -167,7 +167,7 @@ class TestVectorParameterLayer(unittest.TestCase):
             [
                 c.router_model_config.input_dim,
                 batch_size,
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
             ],
         )
 
@@ -189,9 +189,9 @@ class TestVectorParameterLayer(unittest.TestCase):
         self.assertEqual(
             list(output.shape),
             [
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
                 batch_size,
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
             ],
         )
 
@@ -376,7 +376,7 @@ class TestVectorParameterLayer(unittest.TestCase):
         self.assertEqual(
             list(bias_probs.shape),
             [
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
                 batch_size,
                 c.sampler_model_config.top_k,
             ],
@@ -384,7 +384,7 @@ class TestVectorParameterLayer(unittest.TestCase):
         self.assertEqual(
             list(bias_indices.shape),
             [
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
                 batch_size,
                 c.sampler_model_config.top_k,
             ],
@@ -740,7 +740,7 @@ class TestMatrixParameterLayer(unittest.TestCase):
             router_model_config=RouterConfig(
                 input_dim=ROUTER_INPUT_DIM,
                 hidden_dim=ROUTER_HIDDEN_DIM,
-                output_dim=ROUTER_OUTPUT_DIM,
+                num_experts=ROUTER_OUTPUT_DIM,
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
@@ -823,7 +823,7 @@ class TestMatrixParameterLayer(unittest.TestCase):
             list(output.shape),
             [
                 batch_size,
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
             ],
         )
 
@@ -846,7 +846,7 @@ class TestMatrixParameterLayer(unittest.TestCase):
             list(output.shape),
             [
                 batch_size,
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
             ],
         )
 
@@ -1298,7 +1298,7 @@ class TestGeneratorParameterLayer(unittest.TestCase):
             router_model_config=RouterConfig(
                 input_dim=ROUTER_INPUT_DIM,
                 hidden_dim=ROUTER_HIDDEN_DIM,
-                output_dim=ROUTER_OUTPUT_DIM,
+                num_experts=ROUTER_OUTPUT_DIM,
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
@@ -1381,7 +1381,7 @@ class TestGeneratorParameterLayer(unittest.TestCase):
             list(output.shape),
             [
                 batch_size,
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
             ],
         )
 
@@ -1404,7 +1404,7 @@ class TestGeneratorParameterLayer(unittest.TestCase):
             list(output.shape),
             [
                 batch_size,
-                c.router_model_config.output_dim,
+                c.router_model_config.num_experts,
             ],
         )
 

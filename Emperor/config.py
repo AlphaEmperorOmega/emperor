@@ -418,10 +418,10 @@ class ParameterLayerMixtureConfigGenerator(SamplerConfigGenerator):
             zero_centred_loss_weight,
             mutual_information_loss_weight,
         )
-            self.output_dim = output_dim
-            self.weighted_parameters_flag = weighted_parameters_flag
-            self.bias_parameters_flag = bias_parameters_flag
-            self.dynamic_diagonal_params_flag = dynamic_diagonal_params_flag
+        self.output_dim = output_dim
+        self.weighted_parameters_flag = weighted_parameters_flag
+        self.bias_parameters_flag = bias_parameters_flag
+        self.dynamic_diagonal_params_flag = dynamic_diagonal_params_flag
 
     def build_mixture_config(self) -> MixtureConfig:
         return MixtureConfig(
@@ -496,6 +496,7 @@ class ParameterLayerConfigGenerator(ParameterLayerMixtureConfigGenerator):
             mixture_model_config=super().build_mixture_config(),
         )
 
+
 class MixtureOfExpertsConfigGenerator(ParameterLayerConfigGenerator):
     def __init__(
         self,
@@ -520,10 +521,10 @@ class MixtureOfExpertsConfigGenerator(ParameterLayerConfigGenerator):
         weighted_parameters_flag: bool,
         bias_parameters_flag: bool,
         dynamic_diagonal_params_flag: bool,
-        # Mixture of experts 
+        # Mixture of experts
         expert_top_k: int,
-        dropout_probability:float,
-        expert_layer_norm_flag=True,
+        dropout_probability: float,
+        expert_layer_norm_flag: bool,
         expert_activation: ActivationOptions,
         model_type: LayerTypes,
         expert_num_experts: int,
@@ -556,12 +557,12 @@ class MixtureOfExpertsConfigGenerator(ParameterLayerConfigGenerator):
 
         self.expert_top_k = expert_top_k
         self.dropout_probability = dropout_probability
-        self.expert_layer_norm_flag=expert_layer_norm_flag
+        self.expert_layer_norm_flag = expert_layer_norm_flag
         self.expert_activation = expert_activation
         self.model_type = model_type
         self.expert_num_experts = expert_num_experts
-        self.compute_expert_mixture_flag = expert_num_experts
-        self.init_sampler_model_flag = expert_num_experts
+        self.compute_expert_mixture_flag = compute_expert_mixture_flag
+        self.init_sampler_model_flag = init_sampler_model_flag
 
     def build(self) -> MixtureOfExpertsConfig:
         return MixtureOfExpertsConfig(
@@ -577,7 +578,7 @@ class MixtureOfExpertsConfigGenerator(ParameterLayerConfigGenerator):
             router_model_config=super().build_router_config(),
             sampler_model_config=super().build_sampler_config(),
             mixture_model_config=super().build_mixture_config(),
-            parameter_generator_model_config=super().build_parameter_generator_flag()
+            parameter_generator_model_config=super().build_parameter_generator_flag(),
         )
 
 

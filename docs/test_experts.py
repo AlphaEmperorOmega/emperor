@@ -84,7 +84,7 @@ class TestMixtureOfExperts(unittest.TestCase):
             router_model_config=RouterConfig(
                 input_dim=ROUTER_INPUT_DIM,
                 hidden_dim=ROUTER_HIDDEN_DIM,
-                output_dim=ROUTER_OUTPUT_DIM,
+                num_experts=ROUTER_OUTPUT_DIM,
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
@@ -324,7 +324,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
         self.assertIsInstance(router, RouterModel)
         self.assertEqual(router.input_dim, rotuer_config.input_dim)
-        self.assertEqual(router.output_dim, rotuer_config.output_dim)
+        self.assertEqual(router.num_experts, rotuer_config.num_experts)
         self.assertIsInstance(sampler, SamplerModel)
         self.assertIsInstance(sampler.sampler_model, SamplerTopk)
         self.assertEqual(sampler.sampler_model.top_k, sampelr_config.top_k)
@@ -665,7 +665,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
             router_model_config=RouterConfig(
                 input_dim=ROUTER_INPUT_DIM,
                 hidden_dim=ROUTER_HIDDEN_DIM,
-                output_dim=ROUTER_OUTPUT_DIM,
+                num_experts=ROUTER_OUTPUT_DIM,
                 noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
                 activation=ROUTER_ACTIVATION_FUNCTION,
                 num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,

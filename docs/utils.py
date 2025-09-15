@@ -75,7 +75,7 @@ def default_unittest_config():
         router_model_config=RouterConfig(
             input_dim=ROUTER_INPUT_DIM,
             hidden_dim=ROUTER_HIDDEN_DIM,
-            output_dim=ROUTER_OUTPUT_DIM,
+            num_experts=ROUTER_OUTPUT_DIM,
             noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
             activation=ROUTER_ACTIVATION_FUNCTION,
             num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
