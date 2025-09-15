@@ -4,7 +4,7 @@ from Emperor.attention.attention import MultiHeadAttention
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.base.utils import DataClassBase, Module
-from Emperor.layers.utils.base import LayerBlock, MultiHeadAttentionLayerBlock
+from Emperor.layers.utils.base import LayerBlock, MultiHeadAttentionSelfAttentionLayerBlock
 
 from typing import TYPE_CHECKING
 
@@ -42,7 +42,7 @@ class TransformerLayerBase(Module):
         self.dropout_probability = self.cfg.dropout_probability
 
     def _create_attn_model(self, model: MultiHeadAttention | FeedForward) -> LayerBlock:
-        return MultiHeadAttentionLayerBlock(
+        return MultiHeadAttentionSelfAttentionLayerBlock(
             model=model,
             residual_connection_flag=True,
             layer_norm_dim=self.layer_norm_dim,

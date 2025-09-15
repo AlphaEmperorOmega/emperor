@@ -194,7 +194,7 @@ class ParameterGeneratorLayerBlock(LayerBlock):
         return output, self.loss
 
 
-class MultiHeadAttentionLayerBlock(LayerBlock):
+class MultiHeadAttentionSelfAttentionLayerBlock(LayerBlock):
     def __init__(
         self,
         model: "Module",
