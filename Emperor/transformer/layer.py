@@ -4,7 +4,10 @@ from Emperor.attention.attention import MultiHeadAttention
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.base.utils import DataClassBase, Module
-from Emperor.layers.utils.base import LayerBlock, MultiHeadAttentionSelfAttentionLayerBlock
+from Emperor.layers.utils.base import (
+    LayerBlock,
+    MultiHeadAttentionSelfAttentionLayerBlock,
+)
 
 from typing import TYPE_CHECKING
 
@@ -85,7 +88,7 @@ class TransformerEncoderLayer(TransformerLayerBase):
         attention_mask: Tensor | None = None,
     ) -> Tensor:
         additional_model_inputs = {
-            "key_padding_mask": key_padding_mask,
+            "k_padding_mask": key_padding_mask,
             "attention_mask": attention_mask,
         }
         x = self.attention_model(input_tensor, additional_model_inputs)
