@@ -183,7 +183,6 @@ def default_unittest_config():
             layer_norm_position=LayerNormPositionOptions.NONE,
         ),
         transformer_layer_config=TransformerLayerConfig(
-            model_type=LinearLayerTypes.DYNAMIC,
             layer_norm_position=LayerNormPositionOptions.DEFAULT,
             dropout_probability=0.0,
             layer_norm_dim=0,

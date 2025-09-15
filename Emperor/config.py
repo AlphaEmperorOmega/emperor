@@ -249,7 +249,6 @@ class ModelConfig(DataClassBase):
     )
     transformer_layer_config: TransformerLayerConfig = field(
         default_factory=lambda: TransformerLayerConfig(
-            model_type=LinearLayerTypes.DYNAMIC,
             layer_norm_position=LayerNormPositionOptions.DEFAULT,
             dropout_probability=0.0,
             layer_norm_dim=0,

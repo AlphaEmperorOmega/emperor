@@ -10,18 +10,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.layers.utils.enums import (
-        LinearLayerTypes,
-        ParameterGeneratorTypes,
-    )
 
 
 @dataclass
 class TransformerLayerConfig(DataClassBase):
-    model_type: "LinearLayerTypes | ParameterGeneratorTypes | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
     layer_norm_position: "LayerNormPositionOptions | None" = field(
         default=None,
         metadata={"help": ""},
