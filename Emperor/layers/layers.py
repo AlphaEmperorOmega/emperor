@@ -21,6 +21,8 @@ from Emperor.layers.utils.routers import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from Emperor.layers.utils.enums import LinearLayerTypes
+    from Emperor.layers.utils.linears import LinearLayerConfig
     from Emperor.config import ModelConfig
 
 
@@ -43,6 +45,14 @@ class ParameterLayerConfig(DataClassBase):
         metadata={
             "help": "When `True` for weight parameters a set of `diagonal` and `anti_diagonal` parameters are added to the generated weight_parameters for each input sampele, for biases a set of parameters that scale the biases are generated and biases are added to the bias parameters that shift them for each sample."
         },
+    )
+    linear_layer_model_type: "LinearLayerTypes | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    linear_layer_model_config: "LinearLayerConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
     )
 
 
