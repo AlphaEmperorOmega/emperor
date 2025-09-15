@@ -10,7 +10,7 @@ from Emperor.transformer.layer import TransformerEncoderLayer, TransformerLayerC
 from docs.utils import default_unittest_config
 
 
-class TestTransformerLayer(unittest.TestCase):
+class TestTransformerEncoderLayer(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -32,17 +32,23 @@ class TestTransformerLayer(unittest.TestCase):
 
         self.model = TransformerEncoderLayer(self.cfg)
 
-        self.model_type = self.config.model_type
+        self.batch_size = self.cfg.batch_size
+        self.input_dim = self.cfg.input_dim
+        self.target_sequence_length = (
+            self.cfg.multi_head_attention_model_config.target_sequence_length
+        )
+        # self.cfg.multi_head_attention_model_config.embedding_dim
+        self.embedding_dim = self.cfg.input_dim
+
         self.layer_norm_position = self.config.layer_norm_position
         self.layer_norm_dim = self.config.layer_norm_dim
         self.dropout_probability = self.config.dropout_probability
 
 
-class Test___init(TestTransformerLayer):
+class Test___init(TestTransformerEncoderLayer):
     def test___init(self):
-        self.assertEqual(self.model.model_type, self.model_type)
         self.assertEqual(self.model.layer_norm_position, self.layer_norm_position)
-        self.assertEqual(self.model.layer_norm_dim, self.layer_norm_position)
+        self.assertEqual(self.model.layer_norm_dim, self.layer_norm_dim)
         self.assertEqual(self.model.dropout_probability, self.dropout_probability)
         self.assertIsInstance(self.model.attention_model, LayerBlock)
         self.assertIsInstance(self.model.feed_forward_model, LayerBlock)
@@ -50,15 +56,27 @@ class Test___init(TestTransformerLayer):
         self.assertIsInstance(self.model.feed_forward_model.model, FeedForward)
 
 
-# class Test_forward(TestTransformerLayer):
-#     def test_ensure_the_feed_forward_model_processes_2D_input_batch(self):
-#         input = torch.randn(self.batch_size, self.input_dim)
-#         output = self.model(input)
-#
-#         expected_output = (self.batch_size, self.output_dim)
-#
-#         if isinstance(output, tuple):
-#             output, _ = output
-#
-#         self.assertIsInstance(self.model.model[0].model, layer_type.value)
-#         self.assertEqual(output.shape, expected_output)
+class Test_forward(TestTransformerEncoderLayer):
+    def test_ensure_input_passes_through_the_encoder(self):
+        config = TransformerLayerConfig(
+            layer_norm_dim=self.embedding_dim,
+        )
+        self.rebuild_presets(config)
+        input = torch.randn(
+            self.target_sequence_length,
+            self.batch_size,
+            self.embedding_dim,
+        )
+        output = self.model(input)
+
+        expected_output = (
+            self.target_sequence_length,
+            self.batch_size,
+            self.embedding_dim,
+        )
+
+        if isinstance(output, tuple):
+            output, _ = output
+
+        self.assertIsInstance(self.model.model[0].model, layer_type.value)
+        self.assertEqual(output.shape, expected_output)
