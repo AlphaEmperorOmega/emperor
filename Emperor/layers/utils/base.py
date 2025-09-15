@@ -236,9 +236,9 @@ class MultiHeadAttentionSelfAttentionLayerBlock(LayerBlock):
             main_model_input,
             **additional_model_inputs,
         )
-        output, skip_mask, loss = model_output
-        self.loss = self.loss + loss
-        return output
+        attention_output, attention_weights = model_output
+        self.loss = self.loss
+        return attention_output
 
     def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss
