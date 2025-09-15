@@ -91,9 +91,9 @@ class TransformerEncoderLayer(TransformerLayerBase):
             "k_padding_mask": key_padding_mask,
             "attention_mask": attention_mask,
         }
-        x = self.attention_model(input_tensor, additional_model_inputs)
-        x = self.feed_forward_model(x)
-        return x
+        x, attn_loss = self.attention_model(input_tensor, additional_model_inputs)
+        x, ff_loss = self.feed_forward_model(x)
+        return x, attn_loss + ff_loss
 
 
 class TransformerDecoderLayer(TransformerLayerBase):
