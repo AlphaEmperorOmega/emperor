@@ -38,7 +38,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             self.cfg.multi_head_attention_model_config.target_sequence_length
         )
         # self.cfg.multi_head_attention_model_config.embedding_dim
-        self.embedding_dim = self.cfg.input_dim
+        self.embedding_dim = self.cfg.multi_head_attention_model_config.embedding_dim
 
         self.layer_norm_position = self.config.layer_norm_position
         self.layer_norm_dim = self.config.layer_norm_dim
@@ -56,27 +56,27 @@ class Test___init(TestTransformerEncoderLayer):
         self.assertIsInstance(self.model.feed_forward_model.model, FeedForward)
 
 
-# class Test_forward(TestTransformerEncoderLayer):
-#     def test_ensure_input_passes_through_the_encoder(self):
-#         config = TransformerLayerConfig(
-#             layer_norm_dim=self.embedding_dim,
-#         )
-#         self.rebuild_presets(config)
-#         input = torch.randn(
-#             self.target_sequence_length,
-#             self.batch_size,
-#             self.embedding_dim,
-#         )
-#         output = self.model(input)
-#
-#         expected_output = (
-#             self.target_sequence_length,
-#             self.batch_size,
-#             self.embedding_dim,
-#         )
-#
-#         if isinstance(output, tuple):
-#             output, _ = output
-#
-#         self.assertIsInstance(self.model.model[0].model, layer_type.value)
-#         self.assertEqual(output.shape, expected_output)
+class Test_forward(TestTransformerEncoderLayer):
+    def test_ensure_input_passes_through_the_encoder(self):
+        config = TransformerLayerConfig(
+            model_type=layer_type,
+            layer_norm_dim=self.embedding_dim,
+        )
+        self.rebuild_presets(config)
+        input = torch.randn(
+            self.target_sequence_length,
+            self.batch_size,
+            self.embedding_dim,
+        )
+        output = self.model(input)
+
+        expected_output = (
+            self.target_sequence_length,
+            self.batch_size,
+            self.embedding_dim,
+        )
+
+        if isinstance(output, tuple):
+            output, _ = output
+
+        self.assertEqual(output.shape, expected_output)
