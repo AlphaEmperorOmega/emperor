@@ -5,6 +5,7 @@ from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.base.utils import DataClassBase, Module
 from Emperor.layers.utils.base import (
+    FeedForwardLayerBlock,
     LayerBlock,
     MultiHeadAttentionSelfAttentionLayerBlock,
 )
@@ -40,6 +41,7 @@ class TransformerLayerBase(Module):
         super().__init__()
         config = getattr(cfg, "transformer_layer_config", cfg)
         self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
+        self.main_cfg = cfg
         self.layer_norm_dim = self.cfg.layer_norm_dim
         self.layer_norm_position = self.cfg.layer_norm_position
         self.dropout_probability = self.cfg.dropout_probability
@@ -54,7 +56,7 @@ class TransformerLayerBase(Module):
         )
 
     def _create_ff_model(self, model: MultiHeadAttention | FeedForward) -> LayerBlock:
-        return LayerBlock(
+        return FeedForwardLayerBlock(
             model=model,
             residual_connection_flag=True,
             layer_norm_dim=self.layer_norm_dim,
@@ -109,18 +111,31 @@ class TransformerDecoderLayer(TransformerLayerBase):
         self.attention_type = self.cfg.attention_type
         self.feed_forward_type = self.cfg.feed_forward_type
 
-        self.self_attention_model = self._create_model(MultiHeadAttention(cfg))
-        self.cross_attention_model = self._create_model(MultiHeadAttention(cfg))
-        self.feed_forward_model = self._create_model(FeedForward(cfg))
+        # import torch.nn as nn
+        # nn.TransformerDecoderLayer
+
+        self.self_attention_model = self._create_attn_model(MultiHeadAttention(cfg))
+        self.cross_attention_model = self._create_attn_model(MultiHeadAttention(cfg))
+        self.feed_forward_model = self._create_ff_model(FeedForward(cfg))
 
     def forward(
         self,
         input_tensor: Tensor,
+        memory_tensor: Tensor,
         key_padding_mask: Tensor | None = None,
+        memory_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
+        memory_attention_mask: Tensor | None = None,
     ) -> Tensor:
-        other_attention_inputs = (key_padding_mask, attention_mask)
-        x = self.self_attention_model(input_tensor, other_attention_inputs)
+        additional_model_inputs = {
+            "k_padding_mask": key_padding_mask,
+            "attention_mask": attention_mask,
+        }
+        x = self.self_attention_model(input_tensor, additional_model_inputs)
+        additional_model_inputs = {
+            "k_padding_mask": key_padding_mask,
+            "attention_mask": attention_mask,
+        }
         x = self.cross_attention_model(x, other_attention_inputs)
         x = self.feed_forward_model(x)
         return x
