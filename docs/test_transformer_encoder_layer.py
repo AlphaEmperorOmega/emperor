@@ -59,7 +59,6 @@ class Test___init(TestTransformerEncoderLayer):
 class Test_forward(TestTransformerEncoderLayer):
     def test_ensure_input_passes_through_the_encoder(self):
         config = TransformerLayerConfig(
-            model_type=layer_type,
             layer_norm_dim=self.embedding_dim,
         )
         self.rebuild_presets(config)
