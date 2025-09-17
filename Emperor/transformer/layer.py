@@ -42,7 +42,6 @@ class TransformerLayerBase(Module):
         super().__init__()
         config = getattr(cfg, "transformer_layer_config", cfg)
         self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
-        self.main_cfg = cfg
         self.layer_norm_dim = self.cfg.layer_norm_dim
         self.layer_norm_position = self.cfg.layer_norm_position
         self.dropout_probability = self.cfg.dropout_probability
@@ -87,11 +86,6 @@ class TransformerEncoderLayer(TransformerLayerBase):
     ):
         super().__init__(cfg, overrides)
 
-        self.main_cfg = cfg
-        self.dropout_probability = self.cfg.dropout_probability
-        self.layer_norm_dim = self.cfg.layer_norm_dim
-        self.layer_norm_position = self.cfg.layer_norm_position
-
         attention = MultiHeadAttention(cfg)
         self.attention_model = self._create_self_attn_model(attention)
         feed_forward = FeedForward(cfg)
@@ -118,16 +112,10 @@ class TransformerDecoderLayer(TransformerLayerBase):
         cfg: "TransformerLayerConfig | ModelConfig",
         overrides: "TransformerLayerConfig | None" = None,
     ):
-        super().__init__()
-        config = getattr(cfg, "multi_head_attention_model_config", cfg)
-        self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
-        self.main_cfg = cfg
-        self.attention_type = self.cfg.attention_type
-        self.feed_forward_type = self.cfg.feed_forward_type
+        super().__init__(cfg, overrides)
 
         # import torch.nn as nn
         # nn.TransformerDecoderLayer
-
         self.self_attention_model = self._create_self_attn_model(
             MultiHeadAttention(cfg)
         )
