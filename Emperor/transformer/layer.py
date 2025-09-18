@@ -93,7 +93,7 @@ class TransformerEncoderLayer(TransformerLayerBase):
 
     def forward(
         self,
-        input_tensor: Tensor,
+        source_token_embeddings: Tensor,
         key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> Tensor:
@@ -101,7 +101,7 @@ class TransformerEncoderLayer(TransformerLayerBase):
             "k_padding_mask": key_padding_mask,
             "attention_mask": attention_mask,
         }
-        x, attn_loss = self.attention_model(input_tensor, additional_model_inputs)
+        x, attn_loss = self.attention_model(source_token_embeddings, additional_model_inputs)
         x, ff_loss = self.feed_forward_model(x)
         return x, attn_loss + ff_loss
 
@@ -127,7 +127,7 @@ class TransformerDecoderLayer(TransformerLayerBase):
 
     def forward(
         self,
-        input_tensor: Tensor,
+        target_token_embeddings: Tensor,
         memory_tensor: Tensor,
         key_padding_mask: Tensor | None = None,
         memory_padding_mask: Tensor | None = None,
@@ -139,7 +139,7 @@ class TransformerDecoderLayer(TransformerLayerBase):
             "attention_mask": attention_mask,
         }
         x = self.self_attention_model(
-            input_tensor, additional_self_attention_model_inputs
+            target_token_embeddings, additional_self_attention_model_inputs
         )
         additional_model_inputs = {
             "k": memory_tensor,
@@ -150,3 +150,46 @@ class TransformerDecoderLayer(TransformerLayerBase):
         x = self.cross_attention_model(x, additional_model_inputs)
         x = self.feed_forward_model(x)
         return x
+
+
+# import torch.nn as nn
+#
+# nn.TransformerEncoder
+
+
+@dataclass
+class TransformerConfig(DataClassBase):
+    num_layers: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    norm: Module | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    enable_nested_tensor: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    mask_check: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+
+
+class TransformerEncoder(Module):
+    def __init__(
+        self,
+        cfg: "TransformerConfig | ModelConfig",
+        overrides: "TransformerConfig | None" = None,
+    ):
+        super().__init__()
+        config = getattr(cfg, "transformer_config", cfg)
+        self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
+
+        self.num_layers = self.cfg.num_layers
+
+    def forward(
+        self,
+        source
+    )
