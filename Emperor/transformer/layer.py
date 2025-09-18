@@ -1,6 +1,6 @@
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.attention.attention import MultiHeadAttention
+from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.base.utils import DataClassBase, Module
@@ -114,13 +114,14 @@ class TransformerDecoderLayer(TransformerLayerBase):
     ):
         super().__init__(cfg, overrides)
 
-        # import torch.nn as nn
-        # nn.TransformerDecoderLayer
         self.self_attention_model = self._create_self_attn_model(
             MultiHeadAttention(cfg)
         )
+        corss_attention_overrides = MultiHeadAttentionConfig(
+            use_separate_projection_weight_flag=True
+        )
         self.cross_attention_model = self._create_cross_attn_model(
-            MultiHeadAttention(cfg)
+            MultiHeadAttention(cfg, corss_attention_overrides)
         )
         self.feed_forward_model = self._create_ff_model(FeedForward(cfg))
 
