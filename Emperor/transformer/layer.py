@@ -1,4 +1,5 @@
 import copy
+import torch
 
 from torch import Tensor
 from torch.nn import ModuleList
@@ -202,10 +203,12 @@ class TransformerEncoder(Module):
 
         self.layers = self._create_layers(cfg)
 
-        # import torch.nn as nn
-        # nn.TransformerEncoder
+        import torch.nn as nn
 
-    def _create_layers(self, config: "ModelConfig") -> ModuleList:
+        nn.TransformerEncoder
+        nn.MultiheadAttention
+
+    def _create_layers(self, cfg: "ModelConfig") -> ModuleList:
         encoder_layer = TransformerEncoderLayer(cfg)
         return ModuleList(
             [copy.deepcopy(encoder_layer) for _ in range(self.num_layers)]
@@ -223,7 +226,7 @@ class TransformerEncoder(Module):
         for mod in self.layers:
             output = mod(
                 output,
-                src_mask=mask,
+                src_mask=attention_mask,
                 is_causal=is_causal,
                 src_key_padding_mask=src_key_padding_mask_for_layers,
             )
@@ -231,7 +234,23 @@ class TransformerEncoder(Module):
     def __detect_is_causal_mask(
         self,
         attention_mask: Tensor,
-        is_causal: bool,
-    ):
-        pass
-        # make_causal =
+    ) -> bool:
+        make_causal = self.causal_attention_mask_flag is True
+
+        if self.causal_attention_mask_flag and attention_mask is not None:
+            assert self.sequence_length is not None, (
+                "source_sequence_length must be set for causal attention"
+            )
+            causal_mask = self.__generate_causal_mask()
+
+    def __generate_causal_mask(
+        self,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> Tensor:
+        maks_shape = (self.source_sequence_length, self.source_sequence_length)
+        negative_infinity_tensor = torch.full(
+            maks_shape, float("-inf"), dtype=dtype, device=device
+        )
+
+        return torch.triu(negative_infinity_tensor, diagonal=1)
