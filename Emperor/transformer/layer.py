@@ -171,23 +171,23 @@ class TransformerConfig(DataClassBase):
     )
     source_sequence_length: bool | None = field(
         default=None,
-        metadata={
-            "help": "If True, use a causal mask to prevent attention to future positions (for decoding/generation)."
-        },
+        metadata={"help": ""},
+    )
+    target_sequence_length: bool | None = field(
+        default=None,
+        metadata={"help": ""},
     )
     layer_norm_dim: int | None = field(
         default=None,
-        metadata={"help": "Add transformer encoder "},
+        metadata={"help": ""},
     )
     causal_attention_mask_flag: bool | None = field(
         default=None,
-        metadata={
-            "help": "If True, use a causal mask to prevent attention to future positions (for decoding/generation)."
-        },
+        metadata={"help": ""},
     )
 
 
-class TransformerEncoder(Module):
+class TransformerModel(Module):
     def __init__(
         self,
         cfg: "TransformerConfig | ModelConfig",
@@ -201,13 +201,12 @@ class TransformerEncoder(Module):
         self.source_sequence_length = self.cfg.source_sequence_length
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.layer_norm_dim = self.cfg.layer_norm_dim
-
-        self.transformer_encoder_layers = self.__create_layers(cfg)
         self.layer_norm_module = self.__init_layer_norm_module()
+        self.layers = self.__create_layers()
 
-        # import torch.nn as nn
-        # nn.TransformerEncoder
-        # nn.MultiheadAttention
+        # WARNING: When you are done with the tranformer model
+        # come back and use LayerBlock and LayerBlockStack instead of
+        # the methods below
 
     def __init_layer_norm_module(self) -> nn.Module | None:
         if self.layer_norm_dim is not None:
@@ -215,41 +214,16 @@ class TransformerEncoder(Module):
             return nn.LayerNorm(self.layer_norm_dim)
         return None
 
-    def __create_layers(self, cfg: "ModelConfig") -> ModuleList:
-        encoder_layer = TransformerEncoderLayer(cfg)
-        return ModuleList(
-            [copy.deepcopy(encoder_layer) for _ in range(self.num_layers)]
+    def __create_layers(self) -> ModuleList:
+        model = self._create_model()
+        return ModuleList([copy.deepcopy(model) for _ in range(self.num_layers)])
+
+    def _create_model(self) -> "TransformerLayerBase":
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement the _create_model method."
         )
 
-    def forward(
-        self,
-        source_token_embeddings: Tensor,
-        attention_mask: Tensor | None = None,
-        source_key_padding_mask: bool | None = None,
-    ) -> Tensor:
-        # FIXME: At the moment this is not used because i tought that this
-        # can be used as a hyper parameter, but it a boolean that checks
-        # if the input `attention_mask` is causal or not
-        # this is used in MultiHeadAttention in `scaled_dot_product_attention` method
-        # to create an attention mask dinamically if one is not given
-        #
-        # is_causal = self.__is_attention_mask_causal(attention_mask, is_causal, seq_len)
-
-        output = source_token_embeddings
-        for transformer_encoder_layer in self.transformer_encoder_layers:
-            output = transformer_encoder_layer(
-                source_token_embeddings=output,
-                source_key_padding_mask=source_key_padding_mask,
-                attention_mask=attention_mask,
-                # is_causal=is_causal,
-            )
-
-        if self.layer_norm_module is not None:
-            output = self.layer_norm_module(output)
-
-        return output
-
-    def __is_attention_mask_causal(
+    def _is_attention_mask_causal(
         self,
         attention_mask: Tensor | None = None,
     ) -> bool:
@@ -275,3 +249,44 @@ class TransformerEncoder(Module):
         )
 
         return torch.triu(negative_infinity_tensor, diagonal=1)
+
+
+class TransformerEncoder(TransformerModel):
+    def __init__(
+        self,
+        cfg: "TransformerConfig | ModelConfig",
+        overrides: "TransformerConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.main_config = cfg
+
+    def _create_model(self) -> "TransformerLayerBase":
+        return TransformerEncoderLayer(self.main_config)
+
+    def forward(
+        self,
+        source_token_embeddings: Tensor,
+        attention_mask: Tensor | None = None,
+        source_key_padding_mask: bool | None = None,
+    ) -> Tensor:
+        # FIXME: At the moment this is not used because i tought that this
+        # can be used as a hyper parameter, but it a boolean that checks
+        # if the input `attention_mask` is causal or not
+        # this is used in MultiHeadAttention in `scaled_dot_product_attention` method
+        # to create an attention mask dinamically if one is not given
+        #
+        # is_causal = self.__is_attention_mask_causal(attention_mask, is_causal, seq_len)
+
+        output = source_token_embeddings
+        for encoder_layer in self.layers:
+            output = encoder_layer(
+                source_token_embeddings=output,
+                source_key_padding_mask=source_key_padding_mask,
+                attention_mask=attention_mask,
+                # is_causal=is_causal,
+            )
+
+        if self.layer_norm_module is not None:
+            output = self.layer_norm_module(output)
+
+        return output
