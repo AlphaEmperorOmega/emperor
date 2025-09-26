@@ -1,5 +1,6 @@
 import copy
 import torch
+import torch.nn as nn
 
 from torch import Tensor
 from torch.nn import ModuleList
@@ -164,10 +165,6 @@ class TransformerConfig(DataClassBase):
         default=None,
         metadata={"help": ""},
     )
-    layer_norm_flag: bool | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
     enable_nested_tensor: bool | None = field(
         default=None,
         metadata={"help": ""},
@@ -177,6 +174,10 @@ class TransformerConfig(DataClassBase):
         metadata={
             "help": "If True, use a causal mask to prevent attention to future positions (for decoding/generation)."
         },
+    )
+    layer_norm_dim: int | None = field(
+        default=None,
+        metadata={"help": "Add transformer encoder "},
     )
     causal_attention_mask_flag: bool | None = field(
         default=None,
@@ -199,16 +200,22 @@ class TransformerEncoder(Module):
         self.num_layers = self.cfg.num_layers
         self.source_sequence_length = self.cfg.source_sequence_length
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
-        self.layer_norm_flag = self.cfg.layer_norm_flag
+        self.layer_norm_dim = self.cfg.layer_norm_dim
 
-        self.layers = self._create_layers(cfg)
+        self.transformer_encoder_layers = self.__create_layers(cfg)
+        self.layer_norm_module = self.__init_layer_norm_module()
 
-        import torch.nn as nn
+        # import torch.nn as nn
+        # nn.TransformerEncoder
+        # nn.MultiheadAttention
 
-        nn.TransformerEncoder
-        nn.MultiheadAttention
+    def __init_layer_norm_module(self) -> nn.Module | None:
+        if self.layer_norm_dim is not None:
+            assert self.layer_norm_dim > 0, "layer_norm_dim must be greater than 0"
+            return nn.LayerNorm(self.layer_norm_dim)
+        return None
 
-    def _create_layers(self, cfg: "ModelConfig") -> ModuleList:
+    def __create_layers(self, cfg: "ModelConfig") -> ModuleList:
         encoder_layer = TransformerEncoderLayer(cfg)
         return ModuleList(
             [copy.deepcopy(encoder_layer) for _ in range(self.num_layers)]
@@ -225,16 +232,20 @@ class TransformerEncoder(Module):
         # if the input `attention_mask` is causal or not
         # this is used in MultiHeadAttention in `scaled_dot_product_attention` method
         # to create an attention mask dinamically if one is not given
-        is_causal = self.__is_attention_mask_causal(attention_mask, is_causal, seq_len)
+        #
+        # is_causal = self.__is_attention_mask_causal(attention_mask, is_causal, seq_len)
 
         output = source_token_embeddings
-        for mod in self.layers:
-            output = mod(
+        for transformer_encoder_layer in self.transformer_encoder_layers:
+            output = transformer_encoder_layer(
                 source_token_embeddings=output,
                 source_key_padding_mask=source_key_padding_mask,
                 attention_mask=attention_mask,
                 # is_causal=is_causal,
             )
+
+        if self.layer_norm_module is not None:
+            output = self.layer_norm_module(output)
 
         return output
 
