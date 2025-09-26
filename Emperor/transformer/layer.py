@@ -218,39 +218,49 @@ class TransformerEncoder(Module):
         self,
         source_token_embeddings: Tensor,
         attention_mask: Tensor | None = None,
-        key_padding_mask: bool | None = None,
+        source_key_padding_mask: bool | None = None,
     ) -> Tensor:
-        is_causal = self.__detect_is_causal_mask(attention_mask, is_causal, seq_len)
+        # FIXME: At the moment this is not used because i tought that this
+        # can be used as a hyper parameter, but it a boolean that checks
+        # if the input `attention_mask` is causal or not
+        # this is used in MultiHeadAttention in `scaled_dot_product_attention` method
+        # to create an attention mask dinamically if one is not given
+        is_causal = self.__is_attention_mask_causal(attention_mask, is_causal, seq_len)
 
         output = source_token_embeddings
         for mod in self.layers:
             output = mod(
-                output,
-                src_mask=attention_mask,
-                is_causal=is_causal,
-                src_key_padding_mask=src_key_padding_mask_for_layers,
+                source_token_embeddings=output,
+                source_key_padding_mask=source_key_padding_mask,
+                attention_mask=attention_mask,
+                # is_causal=is_causal,
             )
 
-    def __detect_is_causal_mask(
+        return output
+
+    def __is_attention_mask_causal(
         self,
-        attention_mask: Tensor,
+        attention_mask: Tensor | None = None,
     ) -> bool:
-        make_causal = self.causal_attention_mask_flag is True
+        if self.causal_attention_mask_flag:
+            return True
 
-        if self.causal_attention_mask_flag and attention_mask is not None:
-            assert self.sequence_length is not None, (
-                "source_sequence_length must be set for causal attention"
+        if self.causal_attention_mask_flag is None and attention_mask is not None:
+            causal_mask = self.__generate_causal_mask(
+                attention_mask.device, attention_mask.dtype
             )
-            causal_mask = self.__generate_causal_mask()
+            if attention_mask.size() == causal_mask.size():
+                return bool((attention_mask == causal_mask).all())
+        return False
 
     def __generate_causal_mask(
         self,
         device: torch.device,
         dtype: torch.dtype,
     ) -> Tensor:
-        maks_shape = (self.source_sequence_length, self.source_sequence_length)
+        mask_shape = (self.source_sequence_length, self.source_sequence_length)
         negative_infinity_tensor = torch.full(
-            maks_shape, float("-inf"), dtype=dtype, device=device
+            mask_shape, float("-inf"), dtype=dtype, device=device
         )
 
         return torch.triu(negative_infinity_tensor, diagonal=1)
