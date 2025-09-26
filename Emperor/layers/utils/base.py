@@ -83,6 +83,7 @@ class LayerBlock(Module):
 
     def __init_layer_norm_module(self) -> nn.Module | None:
         if self.layer_norm_dim is not None:
+            assert self.layer_norm_dim > 0, "layer_norm_dim must be greater than 0"
             return nn.LayerNorm(self.layer_norm_dim)
         return None
 
