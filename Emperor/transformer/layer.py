@@ -5,6 +5,8 @@ import torch.nn as nn
 from torch import Tensor
 from torch.nn import ModuleList
 from dataclasses import dataclass, field
+
+from torch.nn.modules import transformer
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
@@ -160,7 +162,7 @@ class TransformerDecoderLayer(TransformerLayerBase):
 
 
 @dataclass
-class TransformerConfig(DataClassBase):
+class TransformerModelConfig(DataClassBase):
     num_layers: int | None = field(
         default=None,
         metadata={"help": ""},
@@ -189,15 +191,11 @@ class TransformerConfig(DataClassBase):
 
 class TransformerBase(Module):
     def __init__(
-        self,
-        cfg: "TransformerConfig | ModelConfig",
-        overrides: "TransformerConfig | None" = None,
+        self, cfg: "TransformerModelConfig | ModelConfig", main_config: "ModelConfig"
     ):
         super().__init__()
-        config = getattr(cfg, "transformer_config", cfg)
-        self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
-
-        self.main_config = cfg
+        self.cfg: "TransformerModelConfig" = cfg
+        self.main_config = main_config
         self.num_layers = self.cfg.num_layers
         self.source_sequence_length = self.cfg.source_sequence_length
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
@@ -258,7 +256,9 @@ class TransformerEncoder(TransformerBase):
         cfg: "TransformerConfig | ModelConfig",
         overrides: "TransformerConfig | None" = None,
     ):
-        super().__init__(cfg, overrides)
+        config = getattr(cfg, "transformer_encoder_config", cfg)
+        self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
+        super().__init__(self.cfg, cfg)
 
     def _create_model(self) -> "TransformerLayerBase":
         return TransformerEncoderLayer(self.main_config)
@@ -298,7 +298,9 @@ class TransformerDecoder(TransformerBase):
         cfg: "TransformerConfig | ModelConfig",
         overrides: "TransformerConfig | None" = None,
     ):
-        super().__init__(cfg, overrides)
+        config = getattr(cfg, "transformer_decoder_config", cfg)
+        self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
+        super().__init__(self.cfg, cfg)
 
     def _create_model(self) -> "TransformerLayerBase":
         return TransformerDecoderLayer(self.main_config)
@@ -339,3 +341,45 @@ class TransformerDecoder(TransformerBase):
             output = self.layer_norm_module(output)
 
         return output
+
+
+class TransformerConfig(DataClassBase):
+    transformer_encoder_config: TransformerModelConfig | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    transformer_decoder_config: TransformerModelConfig | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+
+
+class Transformer(Module):
+    def __init__(
+        self,
+        cfg: "TransformerConfig | ModelConfig",
+        overrides: "TransformerConfig | None" = None,
+    ):
+        super().__init__()
+        config = getattr(cfg, "transformer_config", cfg)
+        self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
+        self.transformer_encoder_config = self.cfg.transformer_encoder_config
+        self.transformer_decoder_config = self.cfg.transformer_decoder_config
+
+        self.encoder_model = self._create_encoder_model()
+        self.decoder_model = self._create_decoder_model()
+
+    def _create_encoder_model(self) -> "TransformerEncoder":
+        if self.transformer_encoder_config is not None:
+            return TransformerEncoder(self.transformer_encoder_config)
+        return None
+
+    def _create_decoder_model(self) -> "TransformerDecoder":
+        if self.transformer_decoder_config is not None:
+            return TransformerEncoder(self.transformer_encoder_config)
+        return None
+
+    def forward(
+        self,
+    ) -> Tensor:
+        encoder_output = self.encoder_model()
