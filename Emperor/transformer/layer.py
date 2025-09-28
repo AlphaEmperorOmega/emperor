@@ -135,11 +135,11 @@ class TransformerDecoderLayer(TransformerLayerBase):
     def forward(
         self,
         target_token_embeddings: Tensor,
-        memory_tensor: Tensor,
+        encoder_output: Tensor,
         key_padding_mask: Tensor | None = None,
-        memory_padding_mask: Tensor | None = None,
+        encoder_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
-        memory_attention_mask: Tensor | None = None,
+        encoder_attention_mask: Tensor | None = None,
     ) -> Tensor:
         additional_self_attention_model_inputs = {
             "k_padding_mask": key_padding_mask,
@@ -149,10 +149,10 @@ class TransformerDecoderLayer(TransformerLayerBase):
             target_token_embeddings, additional_self_attention_model_inputs
         )
         additional_model_inputs = {
-            "k": memory_tensor,
-            "v": memory_tensor,
-            "k_padding_mask": memory_padding_mask,
-            "attention_mask": memory_attention_mask,
+            "k": encoder_output,
+            "v": encoder_output,
+            "k_padding_mask": encoder_padding_mask,
+            "attention_mask": encoder_attention_mask,
         }
         x = self.cross_attention_model(x, additional_model_inputs)
         x = self.feed_forward_model(x)
