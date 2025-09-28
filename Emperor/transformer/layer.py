@@ -290,3 +290,52 @@ class TransformerEncoder(TransformerModel):
             output = self.layer_norm_module(output)
 
         return output
+
+
+class TransformerDecoder(TransformerModel):
+    def __init__(
+        self,
+        cfg: "TransformerConfig | ModelConfig",
+        overrides: "TransformerConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+
+    def _create_model(self) -> "TransformerLayerBase":
+        return TransformerDecoderLayer(self.main_config)
+
+    def forward(
+        self,
+        target_token_embeddings: Tensor,
+        encoder_output: Tensor,
+        attention_mask: Tensor | None = None,
+        encoder_attention_mask: Tensor | None = None,
+        target_key_padding_mask: Tensor | None = None,
+        encoder_key_padding_mask: Tensor | None = None,
+        # encoder_is_causal: bool | None = None,
+    ) -> Tensor:
+        # FIXME:
+        ## - At the moment this is not used because i tought that this
+        # can be used as a hyper parameter, but it a boolean that checks
+        # if the input `attention_mask` is causal or not
+        # this is used in MultiHeadAttention in `scaled_dot_product_attention` method
+        # to create an attention mask dinamically if one is not given
+        #
+        # is_causal = self._is_attention_mask_causal(attention_mask, is_causal, seq_len)
+
+        output = target_token_embeddings
+        for decoder_layer in self.layers:
+            output = decoder_layer(
+                target_token_embeddings=output,
+                memory_tensor=encoder_output,
+                key_padding_mask=target_key_padding_mask,
+                memory_padding_mask=encoder_key_padding_mask,
+                attention_mask=attention_mask,
+                memory_attention_mask=encoder_attention_mask,
+                # is_causal=is_causal,
+                # memory_is_causal=encoder_is_causal,
+            )
+
+        if self.layer_norm_module is not None:
+            output = self.layer_norm_module(output)
+
+        return output
