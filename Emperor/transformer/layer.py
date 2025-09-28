@@ -197,6 +197,7 @@ class TransformerModel(Module):
         config = getattr(cfg, "transformer_config", cfg)
         self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
 
+        self.main_config = cfg
         self.num_layers = self.cfg.num_layers
         self.source_sequence_length = self.cfg.source_sequence_length
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
@@ -258,7 +259,6 @@ class TransformerEncoder(TransformerModel):
         overrides: "TransformerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        self.main_config = cfg
 
     def _create_model(self) -> "TransformerLayerBase":
         return TransformerEncoderLayer(self.main_config)
