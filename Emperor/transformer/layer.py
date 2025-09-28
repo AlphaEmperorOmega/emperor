@@ -187,7 +187,7 @@ class TransformerConfig(DataClassBase):
     )
 
 
-class TransformerModel(Module):
+class TransformerBase(Module):
     def __init__(
         self,
         cfg: "TransformerConfig | ModelConfig",
@@ -252,7 +252,7 @@ class TransformerModel(Module):
         return torch.triu(negative_infinity_tensor, diagonal=1)
 
 
-class TransformerEncoder(TransformerModel):
+class TransformerEncoder(TransformerBase):
     def __init__(
         self,
         cfg: "TransformerConfig | ModelConfig",
@@ -292,7 +292,7 @@ class TransformerEncoder(TransformerModel):
         return output
 
 
-class TransformerDecoder(TransformerModel):
+class TransformerDecoder(TransformerBase):
     def __init__(
         self,
         cfg: "TransformerConfig | ModelConfig",
@@ -326,11 +326,11 @@ class TransformerDecoder(TransformerModel):
         for decoder_layer in self.layers:
             output = decoder_layer(
                 target_token_embeddings=output,
-                memory_tensor=encoder_output,
+                encoder_tensor=encoder_output,
                 key_padding_mask=target_key_padding_mask,
-                memory_padding_mask=encoder_key_padding_mask,
+                encoder_padding_mask=encoder_key_padding_mask,
                 attention_mask=attention_mask,
-                memory_attention_mask=encoder_attention_mask,
+                encoder_attention_mask=encoder_attention_mask,
                 # is_causal=is_causal,
                 # memory_is_causal=encoder_is_causal,
             )
