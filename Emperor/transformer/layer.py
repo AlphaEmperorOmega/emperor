@@ -146,16 +146,14 @@ class TransformerDecoderLayer(TransformerLayerBase):
             "k_padding_mask": key_padding_mask,
             "attention_mask": attention_mask,
         }
-        x = self.self_attention_model(
-            target_token_embeddings, additional_self_attention_model_inputs
-        )
+        x = self.self_attention_model(target_token_embeddings, self_attention_input)
         cross_attention_inputs = {
             "k": encoder_output,
             "v": encoder_output,
             "k_padding_mask": encoder_padding_mask,
             "attention_mask": encoder_attention_mask,
         }
-        x = self.cross_attention_model(x, additional_model_inputs)
+        x = self.cross_attention_model(x, cross_attention_inputs)
         x = self.feed_forward_model(x)
         return x
 
