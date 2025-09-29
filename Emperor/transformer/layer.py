@@ -6,7 +6,6 @@ from torch import Tensor
 from torch.nn import ModuleList
 from dataclasses import dataclass, field
 
-from torch.nn.modules import transformer
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
@@ -143,14 +142,14 @@ class TransformerDecoderLayer(TransformerLayerBase):
         attention_mask: Tensor | None = None,
         encoder_attention_mask: Tensor | None = None,
     ) -> Tensor:
-        additional_self_attention_model_inputs = {
+        self_attention_input = {
             "k_padding_mask": key_padding_mask,
             "attention_mask": attention_mask,
         }
         x = self.self_attention_model(
             target_token_embeddings, additional_self_attention_model_inputs
         )
-        additional_model_inputs = {
+        cross_attention_inputs = {
             "k": encoder_output,
             "v": encoder_output,
             "k_padding_mask": encoder_padding_mask,
@@ -366,20 +365,37 @@ class Transformer(Module):
         self.transformer_encoder_config = self.cfg.transformer_encoder_config
         self.transformer_decoder_config = self.cfg.transformer_decoder_config
 
-        self.encoder_model = self._create_encoder_model()
-        self.decoder_model = self._create_decoder_model()
-
-    def _create_encoder_model(self) -> "TransformerEncoder":
-        if self.transformer_encoder_config is not None:
-            return TransformerEncoder(self.transformer_encoder_config)
-        return None
-
-    def _create_decoder_model(self) -> "TransformerDecoder":
-        if self.transformer_decoder_config is not None:
-            return TransformerEncoder(self.transformer_encoder_config)
-        return None
+        self.encoder_model = TransformerEncoder(self.transformer_encoder_config)
+        self.decoder_model = TransformerDecoder(self.transformer_encoder_config)
 
     def forward(
         self,
+        source_token_embeddings: Tensor,
+        target_token_embeddings: Tensor,
+        source_attention_mask: Tensor | None = None,
+        target_attention_mask: Tensor | None = None,
+        memory_attention_mask: Tensor | None = None,
+        source_key_padding_mask: Tensor | None = None,
+        target_key_padding_mask: Tensor | None = None,
+        memory_key_padding_mask: Tensor | None = None,
+        # source_is_causal: bool | None = None,
+        # target_is_causal: bool | None = None,
+        # memory_is_causal: bool | None = None,
     ) -> Tensor:
-        encoder_output = self.encoder_model()
+        memory = self.encoder_model(
+            source_token_embeddings,
+            source_attention_mask,
+            source_key_padding_mask,
+            # soruce_is_causal,
+        )
+        output = self.encoder_model(
+            target_token_embeddings,
+            memory,
+            target_attention_mask,
+            memory_attention_mask,
+            target_key_padding_mask,
+            memory_key_padding_mask,
+            # target_is_causal,
+            # memory_is_causal,
+        )
+        return output
