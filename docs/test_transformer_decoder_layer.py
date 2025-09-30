@@ -62,10 +62,6 @@ class Test___init(TestTransformerDecoderLayer):
 
 class Test_forward(TestTransformerDecoderLayer):
     def test_ensure_input_passes_through_the_encoder(self):
-        config = TransformerLayerConfig(
-            layer_norm_dim=self.embedding_dim,
-        )
-        self.rebuild_presets(config)
         input = torch.randn(
             self.target_sequence_length,
             self.batch_size,
