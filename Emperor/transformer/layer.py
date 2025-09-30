@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from torch import Tensor
-from torch.nn import ModuleList
+from torch.nn import ModuleList, Sequential
 from dataclasses import dataclass, field
 
 from Emperor.base.enums import LayerNormPositionOptions
@@ -13,8 +13,9 @@ from Emperor.base.utils import DataClassBase, Module
 from Emperor.layers.utils.base import (
     LayerBlock,
     FeedForwardLayerBlock,
-    MultiHeadAttentionCrossAttentionLayerBlock,
-    MultiHeadAttentionSelfAttentionLayerBlock,
+    CrossAttentionLayerBlock,
+    LayerBlockStack,
+    SelfAttentionLayerBlock,
 )
 
 from typing import TYPE_CHECKING
@@ -48,34 +49,33 @@ class TransformerLayerBase(Module):
         super().__init__()
         config = getattr(cfg, "transformer_layer_config", cfg)
         self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
+        self.main_config = cfg
         self.layer_norm_dim = self.cfg.layer_norm_dim
         self.layer_norm_position = self.cfg.layer_norm_position
         self.dropout_probability = self.cfg.dropout_probability
 
-    def _create_self_attn_model(
-        self, model: MultiHeadAttention | FeedForward
-    ) -> LayerBlock:
-        return MultiHeadAttentionSelfAttentionLayerBlock(
-            model=model,
-            residual_connection_flag=True,
-            layer_norm_dim=self.layer_norm_dim,
-            layer_norm_position=self.layer_norm_position,
-            dropout_probability=self.dropout_probability,
-        )
+    def _create_self_attention_model(self) -> LayerBlock:
+        layerBlockType = SelfAttentionLayerBlock
+        model = MultiHeadAttention(self.main_config)
+        return self.__create_model(layerBlockType, model)
 
-    def _create_cross_attn_model(
-        self, model: MultiHeadAttention | FeedForward
-    ) -> LayerBlock:
-        return MultiHeadAttentionCrossAttentionLayerBlock(
-            model=model,
-            residual_connection_flag=True,
-            layer_norm_dim=self.layer_norm_dim,
-            layer_norm_position=self.layer_norm_position,
-            dropout_probability=self.dropout_probability,
-        )
+    def _create_cross_attention_model(self) -> LayerBlock:
+        className = CrossAttentionLayerBlock
+        overrides = MultiHeadAttentionConfig(use_separate_projection_weight_flag=True)
+        model = MultiHeadAttention(self.main_config, overrides)
+        return self.__create_model(className, model)
 
-    def _create_ff_model(self, model: MultiHeadAttention | FeedForward) -> LayerBlock:
-        return FeedForwardLayerBlock(
+    def _create_feed_forward_model(self) -> LayerBlock:
+        className = FeedForwardLayerBlock
+        model = FeedForward(self.main_config)
+        return self.__create_model(className, model)
+
+    def __create_model(
+        self,
+        className: type[LayerBlock],
+        model: MultiHeadAttention | FeedForward,
+    ) -> LayerBlock:
+        return className(
             model=model,
             residual_connection_flag=True,
             layer_norm_dim=self.layer_norm_dim,
@@ -92,10 +92,8 @@ class TransformerEncoderLayer(TransformerLayerBase):
     ):
         super().__init__(cfg, overrides)
 
-        attention = MultiHeadAttention(cfg)
-        self.attention_model = self._create_self_attn_model(attention)
-        feed_forward = FeedForward(cfg)
-        self.feed_forward_model = self._create_ff_model(feed_forward)
+        self.attention_model = self._create_self_attention_model()
+        self.feed_forward_model = self._create_feed_forward_model()
 
     def forward(
         self,
@@ -122,16 +120,9 @@ class TransformerDecoderLayer(TransformerLayerBase):
     ):
         super().__init__(cfg, overrides)
 
-        self.self_attention_model = self._create_self_attn_model(
-            MultiHeadAttention(cfg)
-        )
-        corss_attention_overrides = MultiHeadAttentionConfig(
-            use_separate_projection_weight_flag=True
-        )
-        self.cross_attention_model = self._create_cross_attn_model(
-            MultiHeadAttention(cfg, corss_attention_overrides)
-        )
-        self.feed_forward_model = self._create_ff_model(FeedForward(cfg))
+        self.self_attention_model = self._create_self_attention_model()
+        self.cross_attention_model = self._create_cross_attention_model()
+        self.feed_forward_model = self._create_feed_forward_model()
 
     def forward(
         self,
@@ -204,20 +195,32 @@ class TransformerBase(Module):
         # come back and use LayerBlock and LayerBlockStack instead of
         # the methods below
 
-    def __init_layer_norm_module(self) -> nn.Module | None:
-        if self.layer_norm_dim is not None:
-            assert self.layer_norm_dim > 0, "layer_norm_dim must be greater than 0"
-            return nn.LayerNorm(self.layer_norm_dim)
-        return None
-
     def __create_layers(self) -> ModuleList:
         model = self._create_model()
         return ModuleList([copy.deepcopy(model) for _ in range(self.num_layers)])
 
-    def _create_model(self) -> "TransformerLayerBase":
+    def ___create_layers_model(self, config: "ModelConfig") -> LayerBlock | Sequential:
+        config = self.__update_config(config)
+        return LayerBlockStack(config).build_model()
+
+    def __update_config(self, confg: "ModelConfig"):
+        c = copy.deepcopy(confg)
+        c.layer_block_stack_config.num_layers = self.num_layers
+        c.layer_block_stack_config.model_type = self.model_type
+        return c
+
+    def _create_transformer_layer(self) -> "TransformerLayerBase":
         raise NotImplementedError(
             f"{self.__class__.__name__} must implement the _create_model method."
         )
+
+    def __init_layer_norm_module(self) -> nn.Module | None:
+        if self.layer_norm_dim is not None:
+            assert self.layer_norm_dim > 0, (
+                f"Expected layer_norm_dim must be greater than 0, received {self.layer_norm_dim}"
+            )
+            return nn.LayerNorm(self.layer_norm_dim)
+        return None
 
     def _is_attention_mask_causal(
         self,
@@ -257,7 +260,7 @@ class TransformerEncoder(TransformerBase):
         self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
         super().__init__(self.cfg, cfg)
 
-    def _create_model(self) -> "TransformerLayerBase":
+    def _create_transformer_layer(self) -> "TransformerLayerBase":
         return TransformerEncoderLayer(self.main_config)
 
     def forward(
@@ -299,7 +302,7 @@ class TransformerDecoder(TransformerBase):
         self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
         super().__init__(self.cfg, cfg)
 
-    def _create_model(self) -> "TransformerLayerBase":
+    def _create_transformer_layer(self) -> "TransformerLayerBase":
         return TransformerDecoderLayer(self.main_config)
 
     def forward(
