@@ -82,10 +82,15 @@ class LayerBlock(Module):
         return None
 
     def __init_layer_norm_module(self) -> nn.Module | None:
-        if self.layer_norm_dim is not None:
-            assert self.layer_norm_dim > 0, "layer_norm_dim must be greater than 0"
-            return nn.LayerNorm(self.layer_norm_dim)
-        return None
+        if (
+            self.layer_norm_position == LayerNormPositionOptions.NONE
+            or self.layer_norm_dim is None
+        ):
+            return None
+        assert self.layer_norm_dim > 0, (
+            f"expected layer_norm_dim must be greater than 0, received {self.layer_norm_dim}"
+        )
+        return nn.LayerNorm(self.layer_norm_dim)
 
     def create_adaptive_computation_module(self):
         # TODO: Create a wrapper that first decides
@@ -195,7 +200,7 @@ class ParameterGeneratorLayerBlock(LayerBlock):
         return output, self.loss
 
 
-class MultiHeadAttentionSelfAttentionLayerBlock(LayerBlock):
+class SelfAttentionLayerBlock(LayerBlock):
     def __init__(
         self,
         model: "Module",
@@ -245,7 +250,7 @@ class MultiHeadAttentionSelfAttentionLayerBlock(LayerBlock):
         return output, self.loss
 
 
-class MultiHeadAttentionCrossAttentionLayerBlock(LayerBlock):
+class CrossAttentionLayerBlock(LayerBlock):
     def __init__(
         self,
         model: "Module",
