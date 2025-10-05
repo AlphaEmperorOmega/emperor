@@ -57,20 +57,20 @@ class TransformerLayerBase(Module):
     def _create_self_attention_model(self) -> LayerBlock:
         layerBlockType = SelfAttentionLayerBlock
         model = MultiHeadAttention(self.main_config)
-        return self.__create_model(layerBlockType, model)
+        return self.__create_layer_block(layerBlockType, model)
 
     def _create_cross_attention_model(self) -> LayerBlock:
         className = CrossAttentionLayerBlock
         overrides = MultiHeadAttentionConfig(use_separate_projection_weight_flag=True)
         model = MultiHeadAttention(self.main_config, overrides)
-        return self.__create_model(className, model)
+        return self.__create_layer_block(className, model)
 
     def _create_feed_forward_model(self) -> LayerBlock:
         className = FeedForwardLayerBlock
         model = FeedForward(self.main_config)
-        return self.__create_model(className, model)
+        return self.__create_layer_block(className, model)
 
-    def __create_model(
+    def __create_layer_block(
         self,
         className: type[LayerBlock],
         model: MultiHeadAttention | FeedForward,
