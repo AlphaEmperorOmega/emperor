@@ -243,7 +243,6 @@ class SelfAttentionLayerBlock(LayerBlock):
             **additional_model_inputs,
         )
         attention_output, attention_weights = model_output
-        self.loss = self.loss
         return attention_output
 
     def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
