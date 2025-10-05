@@ -72,10 +72,10 @@ class TransformerLayerBase(Module):
 
     def __create_layer_block(
         self,
-        className: type[LayerBlock],
+        class_name: type[LayerBlock],
         model: MultiHeadAttention | FeedForward,
     ) -> LayerBlock:
-        return className(
+        return class_name(
             model=model,
             residual_connection_flag=True,
             layer_norm_dim=self.layer_norm_dim,
@@ -92,7 +92,7 @@ class TransformerEncoderLayer(TransformerLayerBase):
     ):
         super().__init__(cfg, overrides)
 
-        self.attention_model = self._create_self_attention_model()
+        self.self_attention_model = self._create_self_attention_model()
         self.feed_forward_model = self._create_feed_forward_model()
 
     def forward(
@@ -100,12 +100,12 @@ class TransformerEncoderLayer(TransformerLayerBase):
         source_token_embeddings: Tensor,
         source_key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
         additional_model_inputs = {
             "k_padding_mask": source_key_padding_mask,
             "attention_mask": attention_mask,
         }
-        x, attn_loss = self.attention_model(
+        x, attn_loss = self.self_attention_model(
             source_token_embeddings, additional_model_inputs
         )
         x, ff_loss = self.feed_forward_model(x)
@@ -132,38 +132,39 @@ class TransformerDecoderLayer(TransformerLayerBase):
         encoder_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
         encoder_attention_mask: Tensor | None = None,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
+        # TODO: This will have to be replaced with an object for
+        # a clearner implementation
         self_attention_input = {
             "k_padding_mask": key_padding_mask,
             "attention_mask": attention_mask,
         }
-        x = self.self_attention_model(target_token_embeddings, self_attention_input)
+        x, self_attn_loss = self.self_attention_model(
+            target_token_embeddings, self_attention_input
+        )
         cross_attention_inputs = {
             "k": encoder_output,
             "v": encoder_output,
             "k_padding_mask": encoder_padding_mask,
             "attention_mask": encoder_attention_mask,
         }
-        x = self.cross_attention_model(x, cross_attention_inputs)
-        x = self.feed_forward_model(x)
-        return x
+        x, cross_cross_attn_loss = self.cross_attention_model(x, cross_attention_inputs)
+        x, ff_loss = self.feed_forward_model(x)
+        total_loss = self_attn_loss + cross_cross_attn_loss + ff_loss
+        return x, total_loss
 
 
 @dataclass
-class TransformerModelConfig(DataClassBase):
+class TransformerConfig(DataClassBase):
     num_layers: int | None = field(
         default=None,
         metadata={"help": ""},
     )
-    enable_nested_tensor: bool | None = field(
+    source_sequence_length: int | None = field(
         default=None,
         metadata={"help": ""},
     )
-    source_sequence_length: bool | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    target_sequence_length: bool | None = field(
+    target_sequence_length: int | None = field(
         default=None,
         metadata={"help": ""},
     )
@@ -179,35 +180,23 @@ class TransformerModelConfig(DataClassBase):
 
 class TransformerBase(Module):
     def __init__(
-        self, cfg: "TransformerModelConfig | ModelConfig", main_config: "ModelConfig"
+        self, cfg: "TransformerConfig | ModelConfig", main_config: "ModelConfig"
     ):
         super().__init__()
-        self.cfg: "TransformerModelConfig" = cfg
+        self.cfg: "TransformerConfig" = cfg
         self.main_config = main_config
         self.num_layers = self.cfg.num_layers
         self.source_sequence_length = self.cfg.source_sequence_length
+        self.target_sequence_length = self.cfg.target_sequence_length
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.layer_norm_dim = self.cfg.layer_norm_dim
+
         self.layer_norm_module = self.__init_layer_norm_module()
         self.layers = self.__create_layers()
 
-        # WARNING: When you are done with the tranformer model
-        # come back and use LayerBlock and LayerBlockStack instead of
-        # the methods below
-
     def __create_layers(self) -> ModuleList:
-        model = self._create_model()
+        model = self._create_transformer_layer()
         return ModuleList([copy.deepcopy(model) for _ in range(self.num_layers)])
-
-    def ___create_layers_model(self, config: "ModelConfig") -> LayerBlock | Sequential:
-        config = self.__update_config(config)
-        return LayerBlockStack(config).build_model()
-
-    def __update_config(self, confg: "ModelConfig"):
-        c = copy.deepcopy(confg)
-        c.layer_block_stack_config.num_layers = self.num_layers
-        c.layer_block_stack_config.model_type = self.model_type
-        return c
 
     def _create_transformer_layer(self) -> "TransformerLayerBase":
         raise NotImplementedError(
@@ -249,6 +238,20 @@ class TransformerBase(Module):
 
         return torch.triu(negative_infinity_tensor, diagonal=1)
 
+    # TODO: When you are done with the tranformer model
+    # come back and use LayerBlock and LayerBlockStack instead of
+    # the methods below
+    #
+    # def ___create_layers_model(self, config: "ModelConfig") -> LayerBlock | Sequential:
+    #     config = self.__update_config(config)
+    #     return LayerBlockStack(config).build_model()
+    #
+    # def __update_config(self, confg: "ModelConfig"):
+    #     c = copy.deepcopy(confg)
+    #     c.layer_block_stack_config.num_layers = self.num_layers
+    #     c.layer_block_stack_config.model_type = self.model_type
+    #     return c
+
 
 class TransformerEncoder(TransformerBase):
     def __init__(
@@ -256,7 +259,7 @@ class TransformerEncoder(TransformerBase):
         cfg: "TransformerConfig | ModelConfig",
         overrides: "TransformerConfig | None" = None,
     ):
-        config = getattr(cfg, "transformer_encoder_config", cfg)
+        config = getattr(cfg, "transformer_config", cfg)
         self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
         super().__init__(self.cfg, cfg)
 
@@ -268,7 +271,7 @@ class TransformerEncoder(TransformerBase):
         source_token_embeddings: Tensor,
         attention_mask: Tensor | None = None,
         source_key_padding_mask: bool | None = None,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
         # FIXME: At the moment this is not used because i tought that this
         # can be used as a hyper parameter, but it a boolean that checks
         # if the input `attention_mask` is causal or not
@@ -277,19 +280,21 @@ class TransformerEncoder(TransformerBase):
         #
         # is_causal = self.__is_attention_mask_causal(attention_mask, is_causal, seq_len)
 
+        total_loss = 0.0
         output = source_token_embeddings
         for encoder_layer in self.layers:
-            output = encoder_layer(
+            output, layer_loss = encoder_layer(
                 source_token_embeddings=output,
                 source_key_padding_mask=source_key_padding_mask,
                 attention_mask=attention_mask,
                 # is_causal=is_causal,
             )
+            total_loss += layer_loss
 
         if self.layer_norm_module is not None:
             output = self.layer_norm_module(output)
 
-        return output
+        return output, total_loss
 
 
 class TransformerDecoder(TransformerBase):
@@ -299,7 +304,7 @@ class TransformerDecoder(TransformerBase):
         overrides: "TransformerConfig | None" = None,
     ):
         config = getattr(cfg, "transformer_decoder_config", cfg)
-        self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
         super().__init__(self.cfg, cfg)
 
     def _create_transformer_layer(self) -> "TransformerLayerBase":
@@ -314,7 +319,7 @@ class TransformerDecoder(TransformerBase):
         target_key_padding_mask: Tensor | None = None,
         encoder_key_padding_mask: Tensor | None = None,
         # encoder_is_causal: bool | None = None,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
         # FIXME:
         ## - At the moment this is not used because i tought that this
         # can be used as a hyper parameter, but it a boolean that checks
@@ -324,9 +329,10 @@ class TransformerDecoder(TransformerBase):
         #
         # is_causal = self._is_attention_mask_causal(attention_mask, is_causal, seq_len)
 
+        total_loss = 0.0
         output = target_token_embeddings
         for decoder_layer in self.layers:
-            output = decoder_layer(
+            output, layer_loss = decoder_layer(
                 target_token_embeddings=output,
                 encoder_tensor=encoder_output,
                 key_padding_mask=target_key_padding_mask,
@@ -336,22 +342,12 @@ class TransformerDecoder(TransformerBase):
                 # is_causal=is_causal,
                 # memory_is_causal=encoder_is_causal,
             )
+            total_loss += layer_loss
 
         if self.layer_norm_module is not None:
             output = self.layer_norm_module(output)
 
-        return output
-
-
-class TransformerConfig(DataClassBase):
-    transformer_encoder_config: TransformerModelConfig | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    transformer_decoder_config: TransformerModelConfig | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
+        return output, total_loss
 
 
 class Transformer(Module):
