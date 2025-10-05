@@ -19,7 +19,7 @@ from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
 )
-from Emperor.transformer.layer import TransformerLayerConfig
+from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
 
 
 def default_unittest_config():
@@ -186,5 +186,12 @@ def default_unittest_config():
             layer_norm_position=LayerNormPositionOptions.DEFAULT,
             dropout_probability=0.0,
             layer_norm_dim=HIDDEN_DIM,
+        ),
+        transformer_config=TransformerConfig(
+            num_layers=6,
+            source_sequence_length=16,
+            target_sequence_length=32,
+            layer_norm_dim=HIDDEN_DIM,
+            causal_attention_mask_flag=False,
         ),
     )

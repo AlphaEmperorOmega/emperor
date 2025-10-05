@@ -24,7 +24,7 @@ from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.layers.utils.routers import (
     RouterConfig,
 )
-from Emperor.transformer.layer import TransformerLayerConfig
+from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
 
 
 # MODEL WISE CONFI
@@ -254,6 +254,18 @@ class ModelConfig(DataClassBase):
             layer_norm_dim=0,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
+    )
+    transformer_config: TransformerConfig | None = field(
+        default_factory=lambda: TransformerConfig(
+            num_layers=2,
+            source_sequence_length=0,
+            target_sequence_length=0,
+            layer_norm_dim=0,
+            causal_attention_mask_flag=False,
+        ),
+        metadata={
+            "help": "`TransformerEncoder` and `TransformerDecoder` configuration"
+        },
     )
 
 
