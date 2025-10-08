@@ -40,6 +40,10 @@ class TransformerLayerConfig(DataClassBase):
     )
 
 
+# TODO: Add the ability to freze old neurons or root neurons once
+# new ones are added this should apply to
+
+
 class TransformerLayerBase(Module):
     def __init__(
         self,
@@ -179,12 +183,9 @@ class TransformerConfig(DataClassBase):
 
 
 class TransformerBase(Module):
-    def __init__(
-        self, cfg: "TransformerConfig | ModelConfig", main_config: "ModelConfig"
-    ):
+    def __init__(self, cfg: "TransformerConfig | ModelConfig"):
         super().__init__()
         self.cfg: "TransformerConfig" = cfg
-        self.main_config = main_config
         self.num_layers = self.cfg.num_layers
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
@@ -260,8 +261,16 @@ class TransformerEncoder(TransformerBase):
         overrides: "TransformerConfig | None" = None,
     ):
         config = getattr(cfg, "transformer_config", cfg)
-        self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
-        super().__init__(self.cfg, cfg)
+        self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
+
+        self.main_config = cfg
+        super().__init__(self.cfg)
+        self.__perform_encoder_checks()
+
+    def __perform_encoder_checks(self):
+        assert self.source_sequence_length == self.target_sequence_length, (
+            "Source and target sequence length must be equal in TransformerEncoder"
+        )
 
     def _create_transformer_layer(self) -> "TransformerLayerBase":
         return TransformerEncoderLayer(self.main_config)
@@ -303,9 +312,10 @@ class TransformerDecoder(TransformerBase):
         cfg: "TransformerConfig | ModelConfig",
         overrides: "TransformerConfig | None" = None,
     ):
-        config = getattr(cfg, "transformer_decoder_config", cfg)
+        config = getattr(cfg, "transformer_config", cfg)
         self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
-        super().__init__(self.cfg, cfg)
+        self.main_config = cfg
+        super().__init__(self.cfg)
 
     def _create_transformer_layer(self) -> "TransformerLayerBase":
         return TransformerDecoderLayer(self.main_config)
