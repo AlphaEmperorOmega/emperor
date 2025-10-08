@@ -66,6 +66,9 @@ def default_unittest_config():
     # PARAMETER GENERATOR OPTIONS
     PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG = MIXTURE_WEIGHTED_PARAMETERS_FLAG
 
+    SOURCE_SEQUENCE_LENGTH = 16
+    TARGET_SEQUENCE_LENGTH = 32
+
     return ModelConfig(
         batch_size=BATCH_SIZE,
         input_dim=INPUT_DIM,
@@ -190,7 +193,7 @@ def default_unittest_config():
         transformer_config=TransformerConfig(
             num_layers=6,
             source_sequence_length=16,
-            target_sequence_length=32,
+            target_sequence_length=16,
             layer_norm_dim=HIDDEN_DIM,
             causal_attention_mask_flag=False,
         ),

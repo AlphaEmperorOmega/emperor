@@ -3,7 +3,11 @@ import unittest
 
 from dataclasses import asdict
 from torch.nn import LayerNorm, ModuleList
-from Emperor.transformer.layer import TransformerConfig, TransformerEncoder
+from Emperor.transformer.layer import (
+    TransformerConfig,
+    TransformerDecoder,
+    TransformerEncoder,
+)
 from docs.utils import default_unittest_config
 
 
@@ -31,7 +35,7 @@ class TestTransformerEncoder(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.model = TransformerEncoder(self.cfg)
+        self.model = TransformerDecoder(self.cfg)
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
@@ -81,67 +85,3 @@ class Test_forward(TestTransformerEncoder):
 
         self.assertEqual(output.shape, expected_output)
         self.assertIsInstance(loss, torch.Tensor)
-
-    def test_ensure_input_passes_through_the_encoder_with_key_padding_mask(self):
-        soruce_token_embeddings = torch.randn(
-            self.source_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-        )
-        attention_mask = None
-        source_key_padding_mask = torch.randn(
-            self.batch_size, self.source_sequence_length
-        )
-
-        output = self.model(
-            soruce_token_embeddings,
-            attention_mask,
-            source_key_padding_mask,
-        )
-
-        expected_output = (
-            self.source_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-        )
-
-        output, loss = output
-
-        self.assertEqual(output.shape, expected_output)
-        self.assertIsInstance(loss, torch.Tensor)
-
-    # def test_ensure_input_passes_through_the_encoder_with_all_input(self):
-    #     config = TransformerConfig(
-    #         source_sequence_length=8,
-    #         target_sequence_length=8,
-    #     )
-    #     self.rebuild_presets(config)
-    #
-    #     soruce_token_embeddings = torch.randn(
-    #         self.source_sequence_length,
-    #         self.batch_size,
-    #         self.embedding_dim,
-    #     )
-    #     attention_mask = torch.randn(
-    #         1, self.source_sequence_length, self.target_sequence_length
-    #     )
-    #     source_key_padding_mask = torch.randn(
-    #         self.batch_size, self.source_sequence_length
-    #     )
-    #
-    #     output = self.model(
-    #         soruce_token_embeddings,
-    #         attention_mask,
-    #         source_key_padding_mask,
-    #     )
-    #
-    #     expected_output = (
-    #         self.source_sequence_length,
-    #         self.batch_size,
-    #         self.embedding_dim,
-    #     )
-    #
-    #     output, loss = output
-    #
-    #     self.assertEqual(output.shape, expected_output)
-    #     self.assertIsInstance(loss, torch.Tensor)
