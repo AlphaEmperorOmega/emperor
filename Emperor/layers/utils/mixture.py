@@ -13,6 +13,14 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
+# TODO: Find out where the probabilities are computed and
+# see if you can multipy the probabilities by the
+# input_tensor or selected topk samples before they are
+# processed by the experts themselves. Just in case you
+# don't get the memo. Multiply the probabilities by
+# inputs before those inputs are sent into the experts.
+
+
 @dataclass
 class MixtureConfig(DataClassBase):
     input_dim: int | None = field(
