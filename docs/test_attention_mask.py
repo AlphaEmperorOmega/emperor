@@ -5,7 +5,7 @@ from dataclasses import asdict
 from Emperor.attention.utils.maks_handler import Mask
 from Emperor.attention.utils.validation_handler import Validator
 from Emperor.attention.attention import MultiHeadAttentionConfig
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 
 
 class TestMask(unittest.TestCase):

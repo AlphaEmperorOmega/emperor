@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from dataclasses import asdict
 from Emperor.base.enums import ActivationOptions
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 from Emperor.layers.utils.base import (
     LayerBlock,
     LayerBlockStack,

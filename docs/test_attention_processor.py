@@ -11,7 +11,7 @@ from Emperor.attention.utils.processor_handler import (
 )
 
 from Emperor.attention.attention import MultiHeadAttentionConfig
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 
 
 class TestProcessor(unittest.TestCase):

@@ -7,7 +7,7 @@ from Emperor.attention.attention import MultiHeadAttention
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.transformer.layer import TransformerDecoderLayer, TransformerLayerConfig
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 
 
 class TestTransformerDecoderLayer(unittest.TestCase):
@@ -19,6 +19,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         self.config = None
         self.model = None
         self.batch_size = None
+        self.num_heads = None
         self.input_dim = None
         self.output_dim = None
 
@@ -33,6 +34,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         self.model = TransformerDecoderLayer(self.cfg)
 
         self.batch_size = self.cfg.batch_size
+        self.num_heads = self.cfg.multi_head_attention_model_config.num_heads
         self.input_dim = self.cfg.input_dim
         self.target_sequence_length = (
             self.cfg.multi_head_attention_model_config.target_sequence_length

@@ -4,7 +4,7 @@ import unittest
 from dataclasses import asdict
 from Emperor.feedForward.feed_forward import FeedForward, FeedForwardConfig
 from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 
 
 class TestFeedForward(unittest.TestCase):

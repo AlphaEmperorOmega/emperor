@@ -2,7 +2,7 @@ import torch
 import unittest
 
 from dataclasses import asdict
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.validation_handler import Validator
 from Emperor.attention.attention import MultiHeadAttentionConfig

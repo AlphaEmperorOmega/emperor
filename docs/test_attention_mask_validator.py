@@ -4,7 +4,7 @@ import unittest
 from dataclasses import asdict
 from Emperor.attention.utils.maks_handler import MaskValidator
 from Emperor.attention.attention import MultiHeadAttentionConfig
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 
 
 class TestMaskValidator(unittest.TestCase):

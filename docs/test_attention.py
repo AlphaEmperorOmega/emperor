@@ -13,7 +13,7 @@ from Emperor.layers.utils.enums import (
     LinearLayerTypes,
     ParameterGeneratorTypes,
 )
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 
 
 class TestAttention(unittest.TestCase):

@@ -7,7 +7,7 @@ from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.enums import LinearLayerTypes
 from Emperor.transformer.layer import TransformerEncoderLayer, TransformerLayerConfig
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 
 
 class TestTransformerEncoderLayer(unittest.TestCase):
@@ -50,9 +50,9 @@ class Test___init(TestTransformerEncoderLayer):
         self.assertEqual(self.model.layer_norm_position, self.layer_norm_position)
         self.assertEqual(self.model.layer_norm_dim, self.layer_norm_dim)
         self.assertEqual(self.model.dropout_probability, self.dropout_probability)
-        self.assertIsInstance(self.model.attention_model, LayerBlock)
+        self.assertIsInstance(self.model.self_attention_model, LayerBlock)
         self.assertIsInstance(self.model.feed_forward_model, LayerBlock)
-        self.assertIsInstance(self.model.attention_model.model, MultiHeadAttention)
+        self.assertIsInstance(self.model.self_attention_model.model, MultiHeadAttention)
         self.assertIsInstance(self.model.feed_forward_model.model, FeedForward)
 
 

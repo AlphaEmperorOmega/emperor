@@ -10,7 +10,7 @@ from Emperor.layers.utils.enums import (
     ParameterGeneratorTypes,
 )
 from Emperor.layers.utils.base import LayerBlock
-from docs.utils import default_unittest_config
+from docs.config import default_unittest_config
 
 
 class TestProjector(unittest.TestCase):
