@@ -155,7 +155,7 @@ def default_unittest_config():
             num_heads=4,
             embedding_dim=HIDDEN_DIM,
             target_sequence_length=16,
-            source_sequence_length=32,
+            source_sequence_length=16,
             target_dtype=torch.float32,
             use_separate_projection_weight_flag=False,
             dropout_probability=0.0,
