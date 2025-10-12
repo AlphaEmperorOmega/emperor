@@ -14,7 +14,6 @@ from Emperor.layers.utils.base import (
     LayerBlock,
     FeedForwardLayerBlock,
     CrossAttentionLayerBlock,
-    LayerBlockStack,
     SelfAttentionLayerBlock,
 )
 
@@ -344,7 +343,7 @@ class TransformerDecoder(TransformerBase):
         for decoder_layer in self.layers:
             output, layer_loss = decoder_layer(
                 target_token_embeddings=output,
-                encoder_tensor=encoder_output,
+                encoder_output=encoder_output,
                 key_padding_mask=target_key_padding_mask,
                 encoder_padding_mask=encoder_key_padding_mask,
                 attention_mask=attention_mask,
