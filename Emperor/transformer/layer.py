@@ -323,10 +323,10 @@ class TransformerDecoder(TransformerBase):
         self,
         target_token_embeddings: Tensor,
         encoder_output: Tensor,
-        attention_mask: Tensor | None = None,
-        encoder_attention_mask: Tensor | None = None,
         target_key_padding_mask: Tensor | None = None,
         encoder_key_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        encoder_attention_mask: Tensor | None = None,
         # encoder_is_causal: bool | None = None,
     ) -> tuple[Tensor, Tensor]:
         # FIXME:
