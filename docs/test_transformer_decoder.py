@@ -125,8 +125,8 @@ class Test_forward(TestTransformerEncoder):
                 output = self.model(
                     target_token_embeddings=target_token_embeddings,
                     encoder_output=encoder_output,
-                    key_padding_mask=key_padding_mask,
-                    encoder_padding_mask=encoder_padding_mask,
+                    target_key_padding_mask=key_padding_mask,
+                    encoder_key_padding_mask=encoder_padding_mask,
                     attention_mask=attention_mask,
                     encoder_attention_mask=encoder_attention_mask,
                 )
