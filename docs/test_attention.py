@@ -813,57 +813,61 @@ class TestMultIHeadAttention_forward(TestAttention):
             for model_type in type:
                 for test in tests:
                     for batch_size in batch_sizes:
-                        config = MultiHeadAttentionConfig(
-                            model_type=model_type,
-                            batch_size=batch_size,
-                            target_sequence_length=32,
-                            source_sequence_length=32,
-                            use_separate_projection_weight_flag=True,
-                            **test,
-                        )
-                        self.rebuild_presets(config)
-                        query = torch.randn(
-                            self.target_sequence_length,
-                            self.batch_size,
-                            self.embedding_dim,
-                        )
-                        key = torch.randn(
-                            self.target_sequence_length,
-                            self.batch_size,
-                            self.embedding_dim,
-                        )
-                        value = torch.randn(
-                            self.target_sequence_length,
-                            self.batch_size,
-                            self.embedding_dim,
-                        )
-                        key_padding_mask = torch.randn(
-                            self.batch_size, self.source_sequence_length
-                        )
-                        attention_mask = torch.randn(
-                            1, self.target_sequence_length, self.source_sequence_length
-                        )
-                        attention_mask = torch.where(
-                            attention_mask > 0,
-                            torch.tensor(float("-inf")),
-                            torch.tensor(0.0),
-                        )
-                        attention_mask = attention_mask.repeat(
-                            self.batch_size * self.num_heads, 1, 1
-                        )
-                        static_key = None
-                        static_value = None
+                        message = f"Failed for model_type: {model_type}, batch_size: {batch_size}, test: {test}"
+                        with self.subTest(msg=message):
+                            config = MultiHeadAttentionConfig(
+                                model_type=model_type,
+                                batch_size=batch_size,
+                                target_sequence_length=32,
+                                source_sequence_length=32,
+                                use_separate_projection_weight_flag=True,
+                                **test,
+                            )
+                            self.rebuild_presets(config)
+                            query = torch.randn(
+                                self.target_sequence_length,
+                                self.batch_size,
+                                self.embedding_dim,
+                            )
+                            key = torch.randn(
+                                self.target_sequence_length,
+                                self.batch_size,
+                                self.embedding_dim,
+                            )
+                            value = torch.randn(
+                                self.target_sequence_length,
+                                self.batch_size,
+                                self.embedding_dim,
+                            )
+                            key_padding_mask = torch.randn(
+                                self.batch_size, self.source_sequence_length
+                            )
+                            attention_mask = torch.randn(
+                                1,
+                                self.target_sequence_length,
+                                self.source_sequence_length,
+                            )
+                            attention_mask = torch.where(
+                                attention_mask > 0,
+                                torch.tensor(float("-inf")),
+                                torch.tensor(0.0),
+                            )
+                            attention_mask = attention_mask.repeat(
+                                self.batch_size * self.num_heads, 1, 1
+                            )
+                            static_key = None
+                            static_value = None
 
-                        attention_output, attention_weights = self.model.forward(
-                            query,
-                            key,
-                            value,
-                            key_padding_mask,
-                            attention_mask,
-                            static_key,
-                            static_value,
-                        )
-                        self.assertIsInstance(attention_output, torch.Tensor)
+                            attention_output, attention_weights = self.model.forward(
+                                query,
+                                key,
+                                value,
+                                key_padding_mask,
+                                attention_mask,
+                                static_key,
+                                static_value,
+                            )
+                            self.assertIsInstance(attention_output, torch.Tensor)
 
     # FIX: In the case of this test embedding dimension is only updated in the
     # `MultiHeadAttentionConfig` and but not the `ModelConfig`.
