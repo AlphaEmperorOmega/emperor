@@ -277,8 +277,8 @@ class TransformerEncoder(TransformerBase):
     def forward(
         self,
         source_token_embeddings: Tensor,
+        source_key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
-        source_key_padding_mask: bool | None = None,
     ) -> tuple[Tensor, Tensor]:
         # FIXME: At the moment this is not used because i tought that this
         # can be used as a hyper parameter, but it a boolean that checks
@@ -367,7 +367,7 @@ class Transformer(Module):
     ):
         super().__init__()
         config = getattr(cfg, "transformer_config", cfg)
-        self.cfg: "TransformerModelConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
         self.transformer_encoder_config = self.cfg.transformer_encoder_config
         self.transformer_decoder_config = self.cfg.transformer_decoder_config
 
@@ -389,9 +389,9 @@ class Transformer(Module):
         # memory_is_causal: bool | None = None,
     ) -> Tensor:
         memory = self.encoder_model(
-            source_token_embeddings,
-            source_attention_mask,
-            source_key_padding_mask,
+            source_token_embeddings=source_token_embeddings,
+            source_key_padding_mask=source_key_padding_mask,
+            attention_mask=source_attention_mask,
             # soruce_is_causal,
         )
         output = self.encoder_model(
