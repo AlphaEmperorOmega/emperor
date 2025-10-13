@@ -39,16 +39,18 @@ class TestTransformerEncoder(unittest.TestCase):
 
         self.model = TransformerDecoder(self.cfg)
 
-        self.batch_size = self.cfg.batch_size
-        self.num_heads = self.cfg.multi_head_attention_model_config.num_heads
-        self.input_dim = self.cfg.input_dim
-        self.embedding_dim = self.cfg.multi_head_attention_model_config.embedding_dim
+        self.batch_size: int = self.cfg.batch_size
+        self.num_heads: int = self.cfg.multi_head_attention_model_config.num_heads
+        self.input_dim: int = self.cfg.input_dim
+        self.embedding_dim: int = (
+            self.cfg.multi_head_attention_model_config.embedding_dim
+        )
 
         # Model attributes
-        self.num_layers = self.config.num_layers
-        self.source_sequence_length = self.config.source_sequence_length
-        self.target_sequence_length = self.config.target_sequence_length
-        self.layer_norm_dim = self.config.layer_norm_dim
+        self.num_layers: int = self.config.num_layers
+        self.source_sequence_length: int = self.config.source_sequence_length
+        self.target_sequence_length: int = self.config.target_sequence_length
+        self.layer_norm_dim: int = self.config.layer_norm_dim
 
 
 class Test___init(TestTransformerEncoder):
@@ -139,75 +141,3 @@ class Test_forward(TestTransformerEncoder):
 
                 self.assertEqual(output.shape, expected_output)
                 self.assertIsInstance(loss, torch.Tensor)
-
-    # def test_inputs_with_key_padding_mask(self):
-    #     target_token_embeddings = torch.randn(
-    #         self.target_sequence_length,
-    #         self.batch_size,
-    #         self.embedding_dim,
-    #     )
-    #     encoder_output = torch.randn(
-    #         self.source_sequence_length,
-    #         self.batch_size,
-    #         self.embedding_dim,
-    #     )
-    #     attention_mask = None
-    #     encoder_attention_mask = None
-    #     key_padding_mask = torch.randn(self.batch_size, self.target_sequence_length)
-    #     encoder_padding_mask = None
-    #
-    #     output = self.model(
-    #         target_token_embeddings,
-    #         encoder_output,
-    #         attention_mask,
-    #         encoder_attention_mask,
-    #         key_padding_mask,
-    #         encoder_padding_mask,
-    #     )
-    #
-    #     expected_output = (
-    #         self.source_sequence_length,
-    #         self.batch_size,
-    #         self.embedding_dim,
-    #     )
-    #
-    #     output, loss = output
-    #
-    #     self.assertEqual(output.shape, expected_output)
-    #     self.assertIsInstance(loss, torch.Tensor)
-
-    # def test_inputs_with_key_padding_mask_and_encoder_padding_mask(self):
-    #     target_token_embeddings = torch.randn(
-    #         self.target_sequence_length,
-    #         self.batch_size,
-    #         self.embedding_dim,
-    #     )
-    #     encoder_output = torch.randn(
-    #         self.source_sequence_length,
-    #         self.batch_size,
-    #         self.embedding_dim,
-    #     )
-    #     attention_mask = None
-    #     encoder_attention_mask = None
-    #     key_padding_mask = torch.randn(self.batch_size, self.target_sequence_length)
-    #     encoder_padding_mask = None
-    #
-    #     output = self.model(
-    #         target_token_embeddings,
-    #         encoder_output,
-    #         attention_mask,
-    #         encoder_attention_mask,
-    #         key_padding_mask,
-    #         encoder_padding_mask,
-    #     )
-    #
-    #     expected_output = (
-    #         self.source_sequence_length,
-    #         self.batch_size,
-    #         self.embedding_dim,
-    #     )
-    #
-    #     output, loss = output
-    #
-    #     self.assertEqual(output.shape, expected_output)
-    #     self.assertIsInstance(loss, torch.Tensor)
