@@ -123,12 +123,12 @@ class Test_forward(TestTransformerEncoder):
             message = f"Test failed for the inputs: ".join(parts)
             with self.subTest(i=message):
                 output = self.model(
-                    target_token_embeddings,
-                    encoder_output,
-                    key_padding_mask,
-                    encoder_padding_mask,
-                    attention_mask,
-                    encoder_attention_mask,
+                    target_token_embeddings=target_token_embeddings,
+                    encoder_output=encoder_output,
+                    key_padding_mask=key_padding_mask,
+                    encoder_padding_mask=encoder_padding_mask,
+                    attention_mask=attention_mask,
+                    encoder_attention_mask=encoder_attention_mask,
                 )
 
                 expected_output = (
