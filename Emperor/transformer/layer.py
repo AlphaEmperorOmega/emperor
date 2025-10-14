@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from torch import Tensor
-from torch.nn import ModuleList, Sequential
+from torch.nn import ModuleList
 from dataclasses import dataclass, field
 
 from Emperor.base.enums import LayerNormPositionOptions
@@ -23,6 +23,18 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
+# TODO: Add the ability to freze old neurons or root neurons once
+# new ones are added this should apply to
+
+# TODO: When developing the transformer with recurence that is used
+# for 10 times ensure that you add the ability to increate dimensionality
+# across each iteration or decrease iteration across iterations just to make it clear
+# - add the ability to increate the dimensionality of the vectors degenerated
+# for each iterations
+# - remove dimensionality as a constraint of requiering more computation for
+# the current token
+
+
 @dataclass
 class TransformerLayerConfig(DataClassBase):
     layer_norm_position: "LayerNormPositionOptions | None" = field(
@@ -37,10 +49,6 @@ class TransformerLayerConfig(DataClassBase):
         default=None,
         metadata={"help": ""},
     )
-
-
-# TODO: Add the ability to freze old neurons or root neurons once
-# new ones are added this should apply to
 
 
 class TransformerLayerBase(Module):
@@ -204,12 +212,12 @@ class TransformerBase(Module):
         )
 
     def __init_layer_norm_module(self) -> nn.Module | None:
-        if self.layer_norm_dim is not None:
-            assert self.layer_norm_dim > 0, (
-                f"Expected layer_norm_dim must be greater than 0, received {self.layer_norm_dim}"
-            )
-            return nn.LayerNorm(self.layer_norm_dim)
-        return None
+        if self.layer_norm_dim is None:
+            return None
+        assert self.layer_norm_dim > 0, (
+            f"Expected layer_norm_dim must be greater than 0, received {self.layer_norm_dim}"
+        )
+        return nn.LayerNorm(self.layer_norm_dim)
 
     def _is_attention_mask_causal(
         self,
@@ -362,17 +370,11 @@ class TransformerDecoder(TransformerBase):
 class Transformer(Module):
     def __init__(
         self,
-        cfg: "TransformerConfig | ModelConfig",
-        overrides: "TransformerConfig | None" = None,
+        cfg: "ModelConfig",
     ):
         super().__init__()
-        config = getattr(cfg, "transformer_config", cfg)
-        self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
-        self.transformer_encoder_config = self.cfg.transformer_encoder_config
-        self.transformer_decoder_config = self.cfg.transformer_decoder_config
-
-        self.encoder_model = TransformerEncoder(self.transformer_encoder_config)
-        self.decoder_model = TransformerDecoder(self.transformer_encoder_config)
+        self.encoder_model = TransformerEncoder(cfg)
+        self.decoder_model = TransformerDecoder(cfg)
 
     def forward(
         self,
@@ -388,20 +390,23 @@ class Transformer(Module):
         # target_is_causal: bool | None = None,
         # memory_is_causal: bool | None = None,
     ) -> Tensor:
-        memory = self.encoder_model(
+        memory, memory_loss = self.encoder_model(
             source_token_embeddings=source_token_embeddings,
             source_key_padding_mask=source_key_padding_mask,
             attention_mask=source_attention_mask,
+            # TODO: Find out if this is necessary in the future
             # soruce_is_causal,
         )
-        output = self.encoder_model(
-            target_token_embeddings,
-            memory,
-            target_attention_mask,
-            memory_attention_mask,
-            target_key_padding_mask,
-            memory_key_padding_mask,
+        output, output_loss = self.decoder_model(
+            target_token_embeddings=target_token_embeddings,
+            encoder_output=memory,
+            target_key_padding_mask=target_key_padding_mask,
+            encoder_key_padding_mask=memory_key_padding_mask,
+            attention_mask=target_attention_mask,
+            encoder_attention_mask=memory_attention_mask,
+            # TODO: Find out if this is necessary in the future
             # target_is_causal,
             # memory_is_causal,
         )
-        return output
+
+        return output, memory_loss + output_loss
