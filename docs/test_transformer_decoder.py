@@ -7,7 +7,6 @@ from torch.nn import LayerNorm, ModuleList
 from Emperor.transformer.layer import (
     TransformerConfig,
     TransformerDecoder,
-    TransformerEncoder,
 )
 from docs.config import default_unittest_config
 
