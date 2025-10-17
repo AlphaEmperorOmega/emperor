@@ -3376,6 +3376,7 @@ class NeuronCluster(Module):
                                 direction
                             ].item()
                             selected_col = self.neuron_data["cols"][signal][
+
                                 direction
                             ].item()
                             selected_error = self.neuron_data["frequency_error"][
