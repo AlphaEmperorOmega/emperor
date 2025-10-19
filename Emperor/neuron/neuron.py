@@ -2,13 +2,71 @@ from dataclasses import dataclass, field
 
 from torch._prims_common import Tensor
 from torch.nn import ModuleDict
+from Emperor.attention.attention import MultiHeadAttention
 from Emperor.base.utils import DataClassBase, Module
 from Emperor.config import ModelConfig
 
 from typing import TYPE_CHECKING
 
+from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+from Emperor.transformer.layer import (
+    Transformer,
+    TransformerDecoder,
+    TransformerEncoder,
+)
+
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+
+# TODO: An idea is to create a residual router with the new
+# dynamic linear layer where you loop until only one
+# route remains. Just to make this clear:
+# - first iteration only the first top-k will pass
+# - second iteration from the remaining neurons you need to repeat the process from 1
+# until only a single neuron remains
+
+
+class Nucleus(Module):
+    def __init__(
+        self,
+        processing_unit: Transformer
+        | TransformerEncoder
+        | TransformerDecoder
+        | MultiHeadAttention
+        | ParameterGeneratorTypes
+        | LinearLayerTypes,
+    ):
+        super().__init__()
+        self.processor_unit = processing_unit
+
+    def forward(self, input: Tensor) -> Tensor:
+        output = self.processing_unit(input)
+        return output
+
+
+@dataclass
+class NeuronConfig(DataClassBase):
+    pass
+
+
+class Neuron(Module):
+    def __init__(
+        self,
+        cfg: "NeuronConfig | ModelConfig",
+        overrides: "NeuronConfig | None" = None,
+    ):
+        super().__init__()
+        config = getattr(cfg, "neuron_cluster_config", cfg)
+        self.cfg: "NeuronClusterConfig" = self._overwrite_config(config, overrides)
+        self.nucleus = Nucleus(cfg)
+        self.axons = Axons(cfg)
+        self.router = Terminal()
+
+    def forward(self, input: Tensor) -> tuple[Tensor, float]:
+        processed_signal = self.nucleus(input)
+        transmitted_signal = self.axons(processed_signal)
+        output, loss = self.router(transmitted_signal)
+        return output, loss
 
 
 @dataclass
