@@ -44,6 +44,32 @@ class Nucleus(Module):
         return output
 
 
+class Axons(Module):
+    def __init__(
+        self,
+        processing_unit,
+    ):
+        super().__init__()
+        self.processor_unit = processing_unit
+
+    def forward(self, input: Tensor) -> Tensor:
+        output = self.processing_unit(input)
+        return output
+
+
+class Terminal(Module):
+    def __init__(
+        self,
+        processing_unit,
+    ):
+        super().__init__()
+        self.processor_unit = processing_unit
+
+    def forward(self, input: Tensor) -> Tensor:
+        output = self.processing_unit(input)
+        return output
+
+
 @dataclass
 class NeuronConfig(DataClassBase):
     pass
