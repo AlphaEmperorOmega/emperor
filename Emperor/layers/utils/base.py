@@ -47,6 +47,10 @@ class LayerBlockConfig(DataClassBase):
         default=None,
         metadata={"help": ""},
     )
+    apply_gates_bool: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
 
 
 class LayerBlock(Module):
@@ -59,6 +63,7 @@ class LayerBlock(Module):
         is_adaptive_computation: bool = False,
         dropout_probability: float = 0.0,
         layer_norm_position: "LayerNormPositionOptions | None" = None,
+        apply_gates_bool: bool = False,
     ):
         super().__init__()
 
@@ -69,6 +74,7 @@ class LayerBlock(Module):
         self.is_adaptive_computation = is_adaptive_computation
         self.dropout_probability = dropout_probability
         self.layer_norm_position = layer_norm_position
+        self.apply_gates_bool = apply_gates_bool
 
         self.has_activation = self.activation_function is not None
         self.has_dropout = self.dropout_probability > 0.0
@@ -120,6 +126,10 @@ class LayerBlock(Module):
             # TODO: Add the option to to redirect each sample in the
             # input batch to use a different activation function
             output = self.activation_function(output)
+        if self.apply_gates_bool:
+            # TODO: Finish the implementation of the gates module
+            # output = self.gate_module(output) * output
+            pass
         if self.has_dropout:
             output = self.dropout_module(output)
         if self.residual_connection_flag:
