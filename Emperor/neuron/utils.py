@@ -610,30 +610,6 @@ test.testInput(16)
 
 
 class RouterGeneratorSquash(Module):
-    """
-    Router that uses `FeedForwardSquash` to generate `[total_axons, d_input]` vectors
-    the one with the highest length will be sent to one out of 4 groups of terminals where
-    again `FeedForwardSquash` will be used to generated `[total_terminals, d_input]` vectors
-    and the one with the highest length will be send further.
-
-    Process:
-    - use `FeedForwardSquash` to generate `[total_axons, d_input]` vectors for each axon
-    - store the length of each vector in `[total_axons, d_input]` into a vector `[total_axons, 1]`
-    - store the maximum value and its index of the vector `[total_axons, 1]`
-    - check i the maximum value is higher than the treshold if not stop and return the largest
-    vector in `[total_axons, d_input]`
-    - if the treshold is passed use `FeedForwardSquash` to generate `[total_terminals, d_input]`
-    vecotrs for each terminal
-    - store the length of each vector in `[total_terminals, d_input]` into a vector `[total_terminals, 1]`
-    - store the top `n_split` maximum values and it's indexes of the vector `[total_terminals, 1]`
-    - for each `n_split` signal
-        - check if the length is high enough otherwise skip the current signal
-        - store the row and column of the current signal
-        - check if the signal is in the alowed rand of columns or rows
-        - if all checks are passed you store the row, column and the vectors that will be passed further
-    - in the end of no signals were selected stop and send further only the vectors with the highest length
-    """
-
     def __init__(
         self,
         *,
@@ -645,17 +621,6 @@ class RouterGeneratorSquash(Module):
         total_cols: int,
         num_split_signals: int,
     ):
-        """
-        `d_input`: input dimension
-        `d_ff`: hidden state dimmension
-        `row_idx`: row index of the current neuron
-        `col_idx`: column index of the current neuron
-        `row_range`: row range the current euron has access to
-        `col_range`: column range the current neuron has access to
-        `total_rows`: total number of neurons allowed on a row
-        `total_cols`: total number of neurons allowed on a column
-        `n_split`: number of signals that can be selected from a group of terminals
-        """
         super().__init__()
         self.num_split_signals = torch.tensor(num_split_signals)
         self.row_range = row_range

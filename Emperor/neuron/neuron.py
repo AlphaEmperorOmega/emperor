@@ -57,13 +57,122 @@ class Axons(Module):
         return output
 
 
+@dataclass
+class TerminalConfig(DataClassBase):
+    x_axis_position: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    y_axis_position: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    z_axis_position: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    x_axis_range: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    y_axis_range: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    z_axis_range: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    use_multi_level_routing_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    router_type: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+
+
 class Terminal(Module):
     def __init__(
         self,
-        processing_unit,
     ):
         super().__init__()
-        self.processor_unit = processing_unit
+
+        self.x_axis_position = self.cfg.x_axis_position
+        self.y_axis_position = self.cfg.y_axis_position
+        self.z_axis_position = self.cfg.z_axis_position
+        self.x_axis_range = self.cfg.x_axis_range
+        self.y_axis_range = self.cfg.y_axis_range
+        self.z_axis_range = self.cfg.z_axis_range
+        self.use_multi_level_routing_flag = self.cfg.use_multi_level_routing_flag
+        self.router_type = self.cfg.router_type
+
+        self.num_split_signals = torch.tensor(num_split_signals)
+        self.row_range = row_range
+        self.col_range = col_range
+        self.total_rows = total_rows
+        self.total_cols = total_cols
+        self.total_root_routers = 4
+        self.terminals_per_axon = col_range * 2 + 1
+        self.total_col_range = col_range * 2 + 1
+
+        self.terminal_root_router = terminal_root_router
+        self.terminal_branch_routers = terminal_branch_routers
+
+        self.connections = self.__initialize_connections()
+
+    def __initialize_connections(self, row_idx, col_idx):
+        # Range of all layers the current neuron has access to, when
+        # row_range = 4 and row_idx = 0
+        # Ex: [-1, 0, 1, 2, 3]
+        # Negative numbers indicate connections do not exist and positive otherwise
+        row_range_indexes = torch.arange((row_idx - 1), (row_idx + self.row_range - 1))
+
+        # Range of all neuron connections the current neuron has access to when
+        # col_range = 3 and col_idx = 0
+        # Ex: [-3, -2, -1,  0,  1,  2,  3]
+        # Negative numbers indicate connections do not exist and positive otherwise
+        col_range_indexes = torch.arange(
+            (col_idx - self.col_range), (col_idx + self.col_range + 1)
+        )
+
+        # Get all coordinates accessible by the current neuron, accessible or not
+        # [[-1, -3], [-1, -2], [-1, -1], [-1,  0], [-1,  1], [-1,  2], [-1,  3],
+        #  [ 0, -3], [ 0, -2], [ 0, -1], [ 0,  0], [ 0,  1], [ 0,  2], [ 0,  3],
+        #  [ 1, -3], [ 1, -2], [ 1, -1], [ 1,  0], [ 1,  1], [ 1,  2], [ 1,  3],
+        #  [ 2, -3], [ 2, -2], [ 2, -1], [ 2,  0], [ 2,  1], [ 2,  2], [ 2,  3]]
+        curr_neuron_connections = torch.cartesian_prod(
+            row_range_indexes, col_range_indexes
+        )
+
+        # Generate terminal connections for each axon, Connections available for each 4 axons:
+        # - axon 1: [[-1, -3], [-1, -2], [-1, -1], [-1,  0], [ 0, -3], [ 0, -2], [ 0, -1]]
+        # - axon 2: [[-1,  1], [-1,  2], [-1,  3], [ 0,  0], [ 0,  1], [ 0,  2], [ 0,  3]]
+        # - axon 3: [[ 1, -3], [ 1, -2], [ 1, -1], [ 1,  0], [ 2, -3], [ 2, -2], [ 2, -1]]
+        # - axon 4: [[ 1,  1], [ 1,  2], [ 1,  3], [ 2,  0], [ 2,  1], [ 2,  2], [ 2,  3]]
+        terminal_connections = []
+
+        for axon in range(0, self.row_range, 2):
+            temp = torch.zeros(self.row_range, self.terminals_per_axon)
+            temp[axon : axon + 2, : self.col_range] = 1.0
+            temp[axon : axon + 1, self.col_range : (self.col_range + 1)] = 1.0
+            temp = temp.view(-1).bool()
+            temp = curr_neuron_connections[temp]
+            terminal_connections.append(temp)
+
+            temp = torch.zeros(self.row_range, self.terminals_per_axon)
+            temp[axon : axon + 2, (self.col_range + 1) :] = 1.0
+            temp[axon + 1 : axon + 2, self.col_range : self.col_range + 1] = 1.0
+            temp = temp.view(-1).bool()
+            temp = curr_neuron_connections[temp]
+            terminal_connections.append(temp)
+
+        setattr(self, "row_idx", row_idx)
+        setattr(self, "col_idx", col_idx)
+        setattr(self, "row_range_indexes", row_range_indexes)
+        setattr(self, "col_range_indexes", col_range_indexes)
+        setattr(self, "terminal_connections", terminal_connections)
 
     def forward(self, input: Tensor) -> Tensor:
         output = self.processing_unit(input)
