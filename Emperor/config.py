@@ -24,6 +24,7 @@ from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.layers.utils.routers import (
     RouterConfig,
 )
+from Emperor.neuron.neuron import NucleusConfig
 from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
 
 
@@ -266,6 +267,12 @@ class ModelConfig(DataClassBase):
         metadata={
             "help": "`TransformerEncoder` and `TransformerDecoder` configuration"
         },
+    )
+    neuron_nucleus_config: NucleusConfig | None = field(
+        default_factory=lambda: NucleusConfig(
+            model_type=LayerTypes.DYNAMIC_BASE,
+        ),
+        metadata={"help": "`Nucleus` configuration"},
     )
 
 
