@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 
 from torch.types import Tensor
 from Emperor.base.utils import DataClassBase, Module
-from Emperor.config import ModelConfig
 from Emperor.layers.utils.enums import LayerTypes
 from Emperor.layers.utils.routers import RouterModel
 from Emperor.layers.utils.samplers import SamplerModel
@@ -44,7 +43,7 @@ class Nucleus(Module):
         self.processing_unit = self.__create_model(cfg)
 
     def __create_model(self, cfg: "ModelConfig"):
-        return self.model_type(cfg)
+        return self.model_type.value(cfg)
 
     def forward(self, input: Tensor) -> Tensor:
         output = self.processing_unit(input)
