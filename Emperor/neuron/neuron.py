@@ -4,17 +4,11 @@ from torch.nn import ModuleDict
 from dataclasses import dataclass, field
 
 from torch.types import Tensor
-from Emperor.attention.attention import MultiHeadAttention
 from Emperor.base.utils import DataClassBase, Module
 from Emperor.config import ModelConfig
-from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+from Emperor.layers.utils.enums import LayerTypes
 from Emperor.layers.utils.routers import RouterModel
 from Emperor.layers.utils.samplers import SamplerModel
-from Emperor.transformer.layer import (
-    Transformer,
-    TransformerDecoder,
-    TransformerEncoder,
-)
 
 from typing import TYPE_CHECKING
 
@@ -29,35 +23,50 @@ if TYPE_CHECKING:
 # until only a single neuron remains
 
 
+@dataclass
+class NucleusConfig(DataClassBase):
+    model_type: LayerTypes | None = field(
+        default=None,
+        metadata={"help": "Type of layer used for the experts."},
+    )
+
+
 class Nucleus(Module):
     def __init__(
         self,
-        processing_unit: Transformer
-        | TransformerEncoder
-        | TransformerDecoder
-        | MultiHeadAttention
-        | ParameterGeneratorTypes
-        | LinearLayerTypes,
+        cfg: "NucleusConfig | ModelConfig",
+        overrides: "NucleusConfig | None" = None,
     ):
         super().__init__()
-        self.processor_unit = processing_unit
+        config = getattr(cfg, "neuron_nucleus_config", cfg)
+        self.cfg: "NucleusConfig" = self._overwrite_config(config, overrides)
+        self.model_type = self.cfg.model_type
+        self.processing_unit = self.__create_model(cfg)
+
+    def __create_model(self, cfg: "ModelConfig"):
+        return self.model_type(cfg)
 
     def forward(self, input: Tensor) -> Tensor:
         output = self.processing_unit(input)
         return output
+
+
+@dataclass
+class AxonsConfig(DataClassBase):
+    memory_type: LayerTypes | None = field(
+        default=None,
+        metadata={
+            "help": "Memory module used as axons, or additional modules that modify the output of nucleus"
+        },
+    )
 
 
 class Axons(Module):
-    def __init__(
-        self,
-        processing_unit,
-    ):
+    def __init__(self):
         super().__init__()
-        self.processor_unit = processing_unit
 
     def forward(self, input: Tensor) -> Tensor:
-        output = self.processing_unit(input)
-        return output
+        return input
 
 
 @dataclass
@@ -106,6 +115,17 @@ class Terminal(Module):
 
         self.router_model = RouterModel(cfg)
         self.sampler_model = SamplerModel(cfg)
+
+        # TODO: Later add ability to split connections into branches
+        # by that i mean:
+        # - think of the connections to a neuron as a tree structure, where
+        # each branch connects to smaller branches until reaching the final neuron
+        # - for each branch split you neeed to have a router and sampler model
+        # For example:
+        # - first router chooses the main branches where each branch has the same number
+        # of connections
+        # - the chosen branch has it's own router meaning with its connections to neuron
+        # this needs to be similar ot `RouterDecisionSquash` in the old version
 
         self.total_connections = self.__compute_total_connections()
         self.__initialize_connections()
