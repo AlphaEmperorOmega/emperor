@@ -28,7 +28,6 @@ class TestTransformerEncoder(unittest.TestCase):
         self.embedding_dim = None
         self.layer_norm_position = None
         self.layer_norm_dim = None
-        self.causalattention = None
 
     def rebuild_presets(self, config: TransformerConfig | None = None):
         self.cfg = default_unittest_config()

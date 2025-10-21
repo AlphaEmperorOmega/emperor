@@ -12,6 +12,7 @@ from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.layers.utils.enums import (
     # AttentionTypes,
     # FeedForwardTypes,
+    LayerTypes,
     LinearLayerTypes,
 )
 from Emperor.layers.utils.base import LayerBlockStackConfig
@@ -19,6 +20,7 @@ from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
 )
+from Emperor.neuron.neuron import NucleusConfig
 from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
 
 
@@ -55,7 +57,7 @@ def default_unittest_config():
 
     # PARAMETER GENRETOR MIXTURE OPITONS
     MIXTURE_INPUT_DIM = ROUTER_INPUT_DIM
-    MIXTURE_OUTPUT_DIM = ROUTER_OUTPUT_DIM
+    MIXTURE_OUTPUT_DIM = OUTPUT_DIM
     MIXTURE_DEPTH_DIM = ROUTER_OUTPUT_DIM
     MIXTURE_TOP_K = SAMPLER_TOP_K
     MIXTURE_WEIGHTED_PARAMETERS_FLAG = False
@@ -196,5 +198,8 @@ def default_unittest_config():
             target_sequence_length=16,
             layer_norm_dim=HIDDEN_DIM,
             causal_attention_mask_flag=False,
+        ),
+        neuron_nucleus_config=NucleusConfig(
+            model_type=LayerTypes.DYNAMIC_BASE,
         ),
     )
