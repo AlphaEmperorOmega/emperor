@@ -202,4 +202,5 @@ def default_unittest_config():
         neuron_nucleus_config=NucleusConfig(
             model_type=LayerTypes.DYNAMIC_BASE,
         ),
+        neuron_axon_config=AxonsConfig(),
     )
