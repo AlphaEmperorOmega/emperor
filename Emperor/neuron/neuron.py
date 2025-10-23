@@ -61,8 +61,15 @@ class AxonsConfig(DataClassBase):
 
 
 class Axons(Module):
-    def __init__(self):
+    def __init__(
+        self,
+        cfg: "AxonsConfig | ModelConfig",
+        overrides: "AxonsConfig | None" = None,
+    ):
         super().__init__()
+        config = getattr(cfg, "neuron_axon_config", cfg)
+        self.cfg: "AxonsConfig" = self._overwrite_config(config, overrides)
+        self.memory_type = self.cfg.memory_type
 
     def forward(self, input: Tensor) -> Tensor:
         return input
@@ -97,13 +104,23 @@ class TerminalConfig(DataClassBase):
 
 
 class Terminal(Module):
+    # TODO: Later add ability to split connections into branches
+    # by that i mean:
+    # - think of the connections to a neuron as a tree structure, where
+    # each branch connects to smaller branches until reaching the final neuron
+    # - for each branch split you neeed to have a router and sampler model
+    # For example:
+    # - first router chooses the main branches where each branch has the same number
+    # of connections
+    # - the chosen branch has it's own router meaning with its connections to neuron
+    # this needs to be similar ot `RouterDecisionSquash` in the old version
     def __init__(
         self,
         cfg: "TerminalConfig | ModelConfig",
         overrides: "TerminalConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "neuron_ternimal_config", cfg)
+        config = getattr(cfg, "neuron_terminal_config", cfg)
         self.cfg: "TerminalConfig" = self._overwrite_config(config, overrides)
         self.x_axis_position = self.cfg.x_axis_position
         self.y_axis_position = self.cfg.y_axis_position
@@ -115,17 +132,6 @@ class Terminal(Module):
         self.router_model = RouterModel(cfg)
         self.sampler_model = SamplerModel(cfg)
 
-        # TODO: Later add ability to split connections into branches
-        # by that i mean:
-        # - think of the connections to a neuron as a tree structure, where
-        # each branch connects to smaller branches until reaching the final neuron
-        # - for each branch split you neeed to have a router and sampler model
-        # For example:
-        # - first router chooses the main branches where each branch has the same number
-        # of connections
-        # - the chosen branch has it's own router meaning with its connections to neuron
-        # this needs to be similar ot `RouterDecisionSquash` in the old version
-
         self.total_connections = self.__compute_total_connections()
         self.__initialize_connections()
 
@@ -133,21 +139,22 @@ class Terminal(Module):
         return self.x_axis_range * self.y_axis_range * self.z_axis_range
 
     def __initialize_connections(self):
-        self.x_axis_range_indexes = self.__compute_x_axis_range()
-        self.y_axis_range_indexes = self.__compute_y_axis_range()
+        self.x_axis_range_indexes = self.__compute_xy_axis_range()
+        self.y_axis_range_indexes = self.__compute_xy_axis_range(False)
         self.z_axis_range_indexes = self.__compute_z_axis_range()
         self.neuron_connections = torch.cartesian_prod(
-            self.x_axis_range, self.y_axis_range, self.z_axis_range
+            torch.Tensor(self.x_axis_range),
+            torch.Tensor(self.y_axis_range),
+            torch.Tensor(self.z_axis_range),
         )
 
-    def __compute_x_axis_range(self) -> Tensor:
-        range_start = self.x_axis_position + self.x_axis_range
-        range_end = self.x_axis_position + self.x_axis_range + 1
-        return torch.arange(range_start, range_end)
-
-    def __compute_y_axis_range(self) -> Tensor:
-        range_start = self.y_axis_position + self.y_axis_range
-        range_end = self.y_axis_position + self.y_axis_range + 1
+    def __compute_xy_axis_range(self, x_axis_flag: bool = True) -> Tensor:
+        axis_position = self.x_axis_position if x_axis_flag else self.x_axis_position
+        axis_range = self.x_axis_range if x_axis_flag else self.y_axis_range
+        range_start = axis_position + axis_range
+        range_end = axis_position + axis_range + 1
+        print(range_start)
+        print(range_end)
         return torch.arange(range_start, range_end)
 
     def __compute_z_axis_range(self) -> Tensor:
@@ -179,12 +186,12 @@ class Neuron(Module):
         self.cfg: "NeuronClusterConfig" = self._overwrite_config(config, overrides)
         self.nucleus = Nucleus(cfg)
         self.axons = Axons(cfg)
-        self.router = Terminal(cfg)
+        self.terminal = Terminal(cfg)
 
     def forward(self, input: Tensor) -> tuple[Tensor, float]:
         processed_signal = self.nucleus(input)
         transmitted_signal = self.axons(processed_signal)
-        output, loss = self.router(transmitted_signal)
+        output, loss = self.terminal(transmitted_signal)
         return output, loss
 
 

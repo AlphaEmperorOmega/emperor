@@ -20,7 +20,7 @@ from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
 )
-from Emperor.neuron.neuron import AxonsConfig, NucleusConfig
+from Emperor.neuron.neuron import AxonsConfig, NucleusConfig, TerminalConfig
 from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
 
 
@@ -202,5 +202,15 @@ def default_unittest_config():
         neuron_nucleus_config=NucleusConfig(
             model_type=LayerTypes.DYNAMIC_BASE,
         ),
-        neuron_axon_config=AxonsConfig(memory_type=None),
+        neuron_axon_config=AxonsConfig(
+            memory_type=None,
+        ),
+        neuron_terminal_config=TerminalConfig(
+            x_axis_position=0,
+            y_axis_position=0,
+            z_axis_position=0,
+            x_axis_range=4,
+            y_axis_range=4,
+            z_axis_range=4,
+        ),
     )
