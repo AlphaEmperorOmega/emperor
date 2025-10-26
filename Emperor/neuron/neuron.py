@@ -1,5 +1,6 @@
 import torch
 
+from enum import Enum
 from torch.nn import ModuleDict
 from dataclasses import dataclass, field
 
@@ -75,6 +76,26 @@ class Axons(Module):
         return input
 
 
+class TerminalRangeOptions(Enum):
+    ONE = 1
+    TWO = 2
+    THREE = 3
+    FOUR = 4
+    FIVE = 5
+    SIX = 6
+    SEVEN = 7
+    EIGHT = 8
+
+
+class TerminalZAxisOffsetOptions(Enum):
+    ZERO = 0
+    ONE = 1
+    TWO = 2
+    THREE = 3
+    FOUR = 4
+    FIVE = 5
+
+
 @dataclass
 class TerminalConfig(DataClassBase):
     x_axis_position: int | None = field(
@@ -89,17 +110,23 @@ class TerminalConfig(DataClassBase):
         default=None,
         metadata={"help": ""},
     )
-    x_axis_range: int | None = field(
+    xy_axis_range: TerminalRangeOptions | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Defines the range for the xy axis surrounding the current neuron, with the neuron's position as the center. The total span is calculated as (xy_axis_range * 2 + 1), excluding the current neuron itself."
+        },
     )
-    y_axis_range: int | None = field(
+    z_axis_range: TerminalRangeOptions | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Defines the range for the z axis neighboring the current neuron. The actual span is (z_axis_range + 1), excluding the position of the current neuron itself."
+        },
     )
-    z_axis_range: int | None = field(
+    z_axis_offset: TerminalZAxisOffsetOptions | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Specifies the offset along the z axis for the current neuron. This determines how many rows of neurons behind the current z-axis position can be accessed, effectively shifting the accessible range and allowing the model to connect to neurons in previous rows."
+        },
     )
 
 
@@ -125,42 +152,63 @@ class Terminal(Module):
         self.x_axis_position = self.cfg.x_axis_position
         self.y_axis_position = self.cfg.y_axis_position
         self.z_axis_position = self.cfg.z_axis_position
-        self.x_axis_range = self.cfg.x_axis_range
-        self.y_axis_range = self.cfg.y_axis_range
-        self.z_axis_range = self.cfg.z_axis_range
+        self.xy_axis_range = self.cfg.xy_axis_range.value
+        self.z_axis_range = self.cfg.z_axis_range.value
+        self.z_axis_offset = self.cfg.z_axis_offset.value
 
         self.router_model = RouterModel(cfg)
         self.sampler_model = SamplerModel(cfg)
 
-        self.total_connections = self.__compute_total_connections()
-        self.__initialize_connections()
+        self.total_neuron_connections = self.__compute_total_neuron_connections()
+        self.neuron_connections = self.__initialize_connections()
 
-    def __compute_total_connections(self) -> int:
-        return self.x_axis_range * self.y_axis_range * self.z_axis_range
+    def __compute_total_neuron_connections(self) -> int:
+        positions_left_right = 2
+        current_neuron_offset = 1
+        single_axis_range = (
+            self.xy_axis_range * positions_left_right + current_neuron_offset
+        )
+        total_xy_axis_connections = single_axis_range**2
+        return total_xy_axis_connections * (self.z_axis_range + current_neuron_offset)
 
-    def __initialize_connections(self):
-        self.x_axis_range_indexes = self.__compute_xy_axis_range()
-        self.y_axis_range_indexes = self.__compute_xy_axis_range(False)
-        self.z_axis_range_indexes = self.__compute_z_axis_range()
-        self.neuron_connections = torch.cartesian_prod(
-            torch.Tensor(self.x_axis_range),
-            torch.Tensor(self.y_axis_range),
-            torch.Tensor(self.z_axis_range),
+    def __initialize_connections(self) -> Tensor:
+        is_y_axis_flag = True
+        x_axis_range_indexes = self.__compute_xy_axis_range()
+        y_axis_range_indexes = self.__compute_xy_axis_range(is_y_axis_flag)
+        z_axis_range_indexes = self.__compute_z_axis_range()
+        return torch.cartesian_prod(
+            x_axis_range_indexes,
+            y_axis_range_indexes,
+            z_axis_range_indexes,
         )
 
-    def __compute_xy_axis_range(self, x_axis_flag: bool = True) -> Tensor:
-        axis_position = self.x_axis_position if x_axis_flag else self.x_axis_position
-        axis_range = self.x_axis_range if x_axis_flag else self.y_axis_range
-        range_start = axis_position + axis_range
-        range_end = axis_position + axis_range + 1
-        print(range_start)
-        print(range_end)
+    def __compute_xy_axis_range(self, is_y_axis_flag: bool = False) -> Tensor:
+        position = self.y_axis_position if is_y_axis_flag else self.x_axis_position
+        range_start = position - self.xy_axis_range
+        range_end = position + self.xy_axis_range + 1
         return torch.arange(range_start, range_end)
 
     def __compute_z_axis_range(self) -> Tensor:
-        range_start = self.z_axis_position - 1
-        range_end = self.z_axis_position + self.z_axis_position - 1
+        self.__validate_z_axis_range_for_given_offset()
+        self.__validate_z_axis_neuron_connections()
+        current_neuron_offset = 1
+        position = self.z_axis_position
+        offset = self.z_axis_offset
+        range_start = position - offset
+        range_end = position + self.z_axis_range - offset + current_neuron_offset
         return torch.arange(range_start, range_end)
+
+    def __validate_z_axis_range_for_given_offset(self) -> None:
+        if self.z_axis_range <= 2 and self.z_axis_offset > 0:
+            raise ValueError(
+                f"Invalid configuration: z_axis_range ({self.z_axis_range}) must be greater than 2 when z_axis_offset ({self.z_axis_offset}) is positive."
+            )
+
+    def __validate_z_axis_neuron_connections(self) -> None:
+        if (self.z_axis_range - self.z_axis_offset) <= 0:
+            raise ValueError(
+                f"Invalid configuration: z_axis_range ({self.z_axis_range}) is too small relative to z_axis_offset ({self.z_axis_offset}). When z_axis_offset is positive, z_axis_range must be greater than z_axis_offset, this ensures the current neuron has access to forward neurons."
+            )
 
     def forward(self, input: Tensor) -> Tensor:
         logits = self.router_model(input)
