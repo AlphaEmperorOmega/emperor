@@ -20,7 +20,12 @@ from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
 )
-from Emperor.neuron.neuron import AxonsConfig, NucleusConfig, TerminalConfig
+from Emperor.neuron.neuron import (
+    AxonsConfig,
+    NucleusConfig,
+    TerminalConfig,
+    TerminalRangeOptions,
+)
 from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
 
 
@@ -209,8 +214,8 @@ def default_unittest_config():
             x_axis_position=0,
             y_axis_position=0,
             z_axis_position=0,
-            x_axis_range=4,
-            y_axis_range=4,
-            z_axis_range=4,
+            xy_axis_range=TerminalRangeOptions.TWO,
+            z_axis_range=TerminalRangeOptions.THREE,
+            z_axis_offset=TerminalRangeOptions.ONE,
         ),
     )

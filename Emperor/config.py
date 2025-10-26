@@ -24,7 +24,13 @@ from Emperor.layers.utils.samplers import SamplerConfig
 from Emperor.layers.utils.routers import (
     RouterConfig,
 )
-from Emperor.neuron.neuron import Axons, AxonsConfig, NucleusConfig, TerminalConfig
+from Emperor.neuron.neuron import (
+    Axons,
+    AxonsConfig,
+    NucleusConfig,
+    TerminalConfig,
+    TerminalRangeOptions,
+)
 from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
 
 
@@ -285,9 +291,9 @@ class ModelConfig(DataClassBase):
             x_axis_position=0,
             y_axis_position=0,
             z_axis_position=0,
-            x_axis_range=4,
-            y_axis_range=4,
-            z_axis_range=4,
+            xy_axis_range=TerminalRangeOptions.TWO,
+            z_axis_range=TerminalRangeOptions.TWO,
+            z_axis_offset=TerminalRangeOptions.ONE,
         ),
         metadata={"help": "Neuron `Axon` configuration"},
     )
