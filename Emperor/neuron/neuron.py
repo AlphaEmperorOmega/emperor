@@ -156,8 +156,8 @@ class Terminal(Module):
         self.z_axis_range = self.cfg.z_axis_range.value
         self.z_axis_offset = self.cfg.z_axis_offset.value
 
-        self.router_model = RouterModel(cfg)
-        self.sampler_model = SamplerModel(cfg)
+        self.router = RouterModel(cfg)
+        self.sampler = SamplerModel(cfg)
 
         self.total_neuron_connections = self.__compute_total_neuron_connections()
         self.neuron_connections = self.__initialize_connections()
@@ -192,10 +192,13 @@ class Terminal(Module):
         self.__validate_z_axis_range_for_given_offset()
         self.__validate_z_axis_neuron_connections()
         current_neuron_offset = 1
-        position = self.z_axis_position
-        offset = self.z_axis_offset
-        range_start = position - offset
-        range_end = position + self.z_axis_range - offset + current_neuron_offset
+        range_start = self.z_axis_position - self.z_axis_offset
+        range_end = (
+            self.z_axis_position
+            + self.z_axis_range
+            - self.z_axis_offset
+            + current_neuron_offset
+        )
         return torch.arange(range_start, range_end)
 
     def __validate_z_axis_range_for_given_offset(self) -> None:
@@ -211,8 +214,10 @@ class Terminal(Module):
             )
 
     def forward(self, input: Tensor) -> Tensor:
-        logits = self.router_model(input)
-        probabilities, indices, _, _ = self.sampler_model(logits)
+        logits = self.router.compute_logit_scores(input)
+        probabilities, indices, _, _ = self.sampler.sample_probabilities_and_indices(
+            logits
+        )
         selected_neurons = self.neuron_connections[indices]
 
         return input, probabilities, selected_neurons
@@ -238,9 +243,10 @@ class Neuron(Module):
 
     def forward(self, input: Tensor) -> tuple[Tensor, float]:
         processed_signal = self.nucleus(input)
-        transmitted_signal = self.axons(processed_signal)
-        output, loss = self.terminal(transmitted_signal)
-        return output, loss
+        augmented_signal = self.axons(processed_signal)
+        output, probabilities, selected_neurons = self.terminal(augmented_signal)
+
+        return output, probabilities, selected_neurons
 
 
 @dataclass
@@ -268,11 +274,13 @@ class NeuronCluster(Module):
         super().__init__()
         config = getattr(cfg, "neuron_cluster_config", cfg)
         self.cfg: "NeuronClusterConfig" = self._overwrite_config(config, overrides)
+        self.main_config = cfg
         self.x_axis_total_neurons = self.cfg.x_axis_total_neurons
         self.y_axis_total_neurons = self.cfg.y_axis_total_neurons
         self.z_axis_total_neurons = self.cfg.z_axis_total_neurons
 
         self.cluster = self.__initialize_cluster()
+        print(self.cluster)
 
     def __initialize_cluster(self) -> ModuleDict:
         cluster = ModuleDict()

@@ -22,9 +22,11 @@ from Emperor.feedForward.feed_forward import (
 )
 from Emperor.neuron.neuron import (
     AxonsConfig,
+    NeuronClusterConfig,
     NucleusConfig,
     TerminalConfig,
     TerminalRangeOptions,
+    TerminalZAxisOffsetOptions,
 )
 from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
 
@@ -216,6 +218,11 @@ def default_unittest_config():
             z_axis_position=0,
             xy_axis_range=TerminalRangeOptions.TWO,
             z_axis_range=TerminalRangeOptions.THREE,
-            z_axis_offset=TerminalRangeOptions.ONE,
+            z_axis_offset=TerminalZAxisOffsetOptions.ONE,
+        ),
+        neuron_cluster_config=NeuronClusterConfig(
+            x_axis_total_neurons=10,
+            y_axis_total_neurons=10,
+            z_axis_total_neurons=10,
         ),
     )

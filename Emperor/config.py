@@ -27,6 +27,7 @@ from Emperor.layers.utils.routers import (
 from Emperor.neuron.neuron import (
     Axons,
     AxonsConfig,
+    NeuronClusterConfig,
     NucleusConfig,
     TerminalConfig,
     TerminalRangeOptions,
@@ -296,6 +297,14 @@ class ModelConfig(DataClassBase):
             z_axis_offset=TerminalRangeOptions.ONE,
         ),
         metadata={"help": "Neuron `Axon` configuration"},
+    )
+    neuron_cluster_config: NeuronClusterConfig | None = field(
+        default_factory=lambda: NeuronClusterConfig(
+            x_axis_total_neurons=10,
+            y_axis_total_neurons=10,
+            z_axis_total_neurons=10,
+        ),
+        metadata={"help": "Neuron `Cluster` configuration"},
     )
 
 
