@@ -4,7 +4,7 @@ import unittest
 from Emperor.base.utils import randn
 from Emperor.layers.utils.base import LayerBlock
 from Emperor.layers.utils.linears import (
-    DynamicDiagonalLinearLayer,
+    DynamicLinearLayer,
     LinearLayer,
 )
 from Emperor.layers.utils.routers import (
@@ -164,7 +164,7 @@ class TestRouterModel(unittest.TestCase):
 
         model = m._RouterModel__create_router_layer_model(c.input_dim, c.num_experts)
 
-        self.assertIsInstance(model, DynamicDiagonalLinearLayer)
+        self.assertIsInstance(model, DynamicLinearLayer)
 
 
 class TestVectorRouterModel(unittest.TestCase):

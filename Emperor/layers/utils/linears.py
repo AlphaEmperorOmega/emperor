@@ -32,18 +32,6 @@ class LinearLayerConfig(DataClassBase):
             "help": "When true bias will be added to after the matrix multiplication between, the input and output"
         },
     )
-    anti_diagonal_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When `True` the `DynamicDiagonalLinearLayer` will add `anti_diagonal_matrix` after linear transformation"
-        },
-    )
-    dynamic_bias_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
-        },
-    )
 
 
 class LinearLayer(Module):
@@ -75,11 +63,27 @@ class LinearLayer(Module):
         return F.linear(input_batch, self.weight_params.T, self.bias_params)
 
 
-class DynamicDiagonalLinearLayer(LinearLayer):
+@dataclass
+class DynamicLinearLayerConfig(LinearLayerConfig):
+    anti_diagonal_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` the `DynamicLinearLayer` will add `anti_diagonal_matrix` after linear transformation"
+        },
+    )
+    dynamic_bias_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
+        },
+    )
+
+
+class DynamicLinearLayer(LinearLayer):
     def __init__(
         self,
-        cfg: "LinearLayerConfig | ModelConfig",
-        overrides: "LinearLayerConfig | None" = None,
+        cfg: "DynamicLinearLayerConfig | ModelConfig",
+        overrides: "DynamicLinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.anti_diagonal_flag = self.cfg.anti_diagonal_flag

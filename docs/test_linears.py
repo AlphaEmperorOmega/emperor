@@ -9,7 +9,7 @@ from Emperor.layers.utils.behaviours import (
     DynamicDiagonalParametersBehaviour,
 )
 from Emperor.layers.utils.linears import (
-    DynamicDiagonalLinearLayer,
+    DynamicLinearLayer,
     LinearLayer,
     LinearLayerConfig,
 )
@@ -155,7 +155,7 @@ class TestLinearLayers(unittest.TestCase):
         self.assertEqual(list(output.shape), [batch_size, m.output_dim])
 
 
-class TestDynamicDiagonalLinearLayer(unittest.TestCase):
+class TestDynamicLinearLayer(unittest.TestCase):
     def setUp(self):
         # MODEL WISE CONFI
         BATCH_SIZE = 2
@@ -256,7 +256,7 @@ class TestDynamicDiagonalLinearLayer(unittest.TestCase):
         self.parameter_generator_cfg = self.cfg.mixture_model_config
 
     def test__init_with_main_config(self):
-        m = DynamicDiagonalLinearLayer(self.cfg)
+        m = DynamicLinearLayer(self.cfg)
         self.assertIsInstance(
             m.dynamic_diagonal_params_model, DynamicDiagonalParametersBehaviour
         )
@@ -264,7 +264,7 @@ class TestDynamicDiagonalLinearLayer(unittest.TestCase):
     def test__forward__anti_diagonal_flag__False(self):
         c = copy.deepcopy(self.cfg)
         overrides = LinearLayerConfig(anti_diagonal_flag=False)
-        m = DynamicDiagonalLinearLayer(c, overrides)
+        m = DynamicLinearLayer(c, overrides)
         batch_size = 2
         input_batch_shape = (batch_size, self.cfg.input_dim)
         input_batch = (
@@ -278,7 +278,7 @@ class TestDynamicDiagonalLinearLayer(unittest.TestCase):
         overrides = LinearLayerConfig(
             anti_diagonal_flag=True,
         )
-        m = DynamicDiagonalLinearLayer(c, overrides)
+        m = DynamicLinearLayer(c, overrides)
         batch_size = 2
         input_batch_shape = (batch_size, self.cfg.input_dim)
         input_batch = (
@@ -293,7 +293,7 @@ class TestDynamicDiagonalLinearLayer(unittest.TestCase):
         overrides = LinearLayerConfig(
             dynamic_bias_flag=True,
         )
-        m = DynamicDiagonalLinearLayer(c, overrides)
+        m = DynamicLinearLayer(c, overrides)
         batch_size = 2
         input_batch_shape = (batch_size, self.cfg.input_dim)
         input_batch = (
@@ -310,7 +310,7 @@ class TestDynamicDiagonalLinearLayer(unittest.TestCase):
             bias_flag=True,
             anti_diagonal_flag=True,
         )
-        m = DynamicDiagonalLinearLayer(c, overrides)
+        m = DynamicLinearLayer(c, overrides)
         batch_size = 2
         input_batch_shape = (batch_size, self.cfg.input_dim)
         input_batch = (
@@ -323,13 +323,13 @@ class TestDynamicDiagonalLinearLayer(unittest.TestCase):
     def test__compute_linear_transformation(self):
         c = copy.deepcopy(self.cfg)
         overrides = LinearLayerConfig(anti_diagonal_flag=False)
-        m = DynamicDiagonalLinearLayer(c, overrides)
+        m = DynamicLinearLayer(c, overrides)
         batch_size = 2
         shape = (batch_size, self.cfg.input_dim)
         logits = torch.randn(shape)
         shape = (batch_size, self.cfg.input_dim, self.cfg.output_dim)
         dynamic_weight_params = torch.randn(shape)
-        output = m._DynamicDiagonalLinearLayer__compute_linear_transformation(
+        output = m._DynamicLinearLayer__compute_linear_transformation(
             logits, dynamic_weight_params
         )
         for i in range(batch_size):
@@ -344,13 +344,13 @@ class TestDynamicDiagonalLinearLayer(unittest.TestCase):
             anti_diagonal_flag=False,
             bias_flag=True,
         )
-        m = DynamicDiagonalLinearLayer(c, overrides)
+        m = DynamicLinearLayer(c, overrides)
         batch_size = 2
         shape = (batch_size, self.cfg.output_dim)
         linear_transform = torch.randn(shape)
         shape = (1, self.cfg.output_dim)
         bias_params = torch.randn(shape)
-        output = m._DynamicDiagonalLinearLayer__add_bias_parameters(
+        output = m._DynamicLinearLayer__add_bias_parameters(
             linear_transform, bias_params
         )
 

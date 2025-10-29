@@ -482,7 +482,7 @@ class LayerBlockStack(Module):
         c = copy.deepcopy(self.main_cfg)
         linears = (
             "LinearLayer",
-            "DynamicDiagonalLinearLayer",
+            "DynamicLinearLayer",
         )
         if self.model_type.value.__name__ in linears:
             c.linear_layer_model_config.input_dim = input_dim

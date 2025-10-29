@@ -1,7 +1,7 @@
 from enum import Enum
 import torch.nn as nn
 from Emperor.components.parameter_generators.utils.linears import (
-    DynamicDiagonalLinearLayer,
+    DynamicLinearLayer,
     LinearLayer,
 )
 
@@ -60,7 +60,7 @@ class PresetCollections:
     def get_layers_and_assigned_presets(self):
         return {
             LinearLayer: self.__get_linear_presets(),
-            DynamicDiagonalLinearLayer: self.__get_dynamic_diagonal_presets(),
+            DynamicLinearLayer: self.__get_dynamic_diagonal_presets(),
             VectorParameterLayer: self.__get_vector_presets(),
             MatrixParameterLayer: self.__get_matrix_presets(),
             GeneratorParameterLayer: self.__get_generator_presets(),
@@ -170,29 +170,7 @@ class TrainPresetsWrapper:
             FashionMNISTModelTrainer,
         ]
 
-    def test_all_preset_models(
-        self,
-        mini_datasetset_flag: bool = True,
-    ) -> None:
-        for learning_rate in self.learning_rates:
-            for layer_type, all_layer_type_presets in self.preset_collections.items():
-                for trainer_type in self.trainer_types:
-                    for model_type in self.model_types:
-                        for layer_preset in all_layer_type_presets:
-                            self.print_model_title(
-                                layer_type, layer_preset, learning_rate
-                            )
-                            trainer = ModelTrainer(
-                                layer_preset,
-                                model_type,
-                                layer_type,
-                                learning_rate,
-                                trainer_type,
-                                mini_datasetset_flag,
-                            )
-                            trainer.train()
-
-    def print_model_title(
+    def __print_model_title(
         self,
         layer_type,
         layer_preset,
@@ -204,3 +182,25 @@ class TrainPresetsWrapper:
         learning_rate_msg = f" Learning rate: {learning_rate} "
         message = "\n " + model_type_msg + model_preset_msg + learning_rate_msg + " \n"
         print(message)
+
+    def test_all_preset_models(
+        self,
+        mini_datasetset_flag: bool = True,
+    ) -> None:
+        for learning_rate in self.learning_rates:
+            for layer_type, all_layer_type_presets in self.preset_collections.items():
+                for trainer_type in self.trainer_types:
+                    for model_type in self.model_types:
+                        for layer_preset in all_layer_type_presets:
+                            self.__print_model_title(
+                                layer_type, layer_preset, learning_rate
+                            )
+                            trainer = ModelTrainer(
+                                layer_preset,
+                                model_type,
+                                layer_type,
+                                learning_rate,
+                                trainer_type,
+                                mini_datasetset_flag,
+                            )
+                            trainer.train()

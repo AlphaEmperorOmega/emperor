@@ -5,14 +5,14 @@ from Emperor.layers.layers import (
     VectorParameterLayer,
 )
 from Emperor.layers.utils.linears import (
-    DynamicDiagonalLinearLayer,
+    DynamicLinearLayer,
     LinearLayer,
 )
 
 
 class LinearLayerTypes(Enum):
     BASE = LinearLayer
-    DYNAMIC = DynamicDiagonalLinearLayer
+    DYNAMIC = DynamicLinearLayer
 
 
 class ParameterGeneratorTypes(Enum):
@@ -23,7 +23,7 @@ class ParameterGeneratorTypes(Enum):
 
 class LayerTypes(Enum):
     BASE = LinearLayer
-    DYNAMIC_BASE = DynamicDiagonalLinearLayer
+    DYNAMIC_BASE = DynamicLinearLayer
     VECTOR = VectorParameterLayer
     MATRIX = MatrixParameterLayer
     GENERATOR = GeneratorParameterLayer

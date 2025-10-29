@@ -5,14 +5,14 @@ from Emperor.layers.layers import (
     VectorParameterLayer,
 )
 from Emperor.layers.utils.linears import (
-    DynamicDiagonalLinearLayer,
+    DynamicLinearLayer,
     LinearLayer,
 )
 
 
 class LinearLayerOptions(BaseOptions):
     BASE = LinearLayer
-    DYNAMIC = DynamicDiagonalLinearLayer
+    DYNAMIC = DynamicLinearLayer
 
 
 class ParameterGeneratorOptions(BaseOptions):

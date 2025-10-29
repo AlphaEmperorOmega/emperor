@@ -10,7 +10,7 @@ from torch.nn import Linear, Sequential
 from typing import TYPE_CHECKING
 
 from Emperor.layers.utils.linears import (
-    DynamicDiagonalLinearLayer,
+    DynamicLinearLayer,
     LinearLayer,
     LinearLayerConfig,
 )
@@ -56,7 +56,7 @@ class RouterConfig(DataClassBase):
     diagonal_model_type_flag: bool | None = field(
         default=None,
         metadata={
-            "help": "When `True` a `DynamicDiagonalLinearLayer` will be used instead of `nn.Linear`"
+            "help": "When `True` a `DynamicLinearLayer` will be used instead of `nn.Linear`"
         },
     )
 
@@ -157,7 +157,7 @@ class RouterModel(Module):
         self,
         input_dim: int,
         num_experts: int,
-    ) -> DynamicDiagonalLinearLayer | LinearLayer:
+    ) -> DynamicLinearLayer | LinearLayer:
         cfg = LinearLayerConfig(
             input_dim=input_dim,
             output_dim=num_experts,
@@ -165,7 +165,7 @@ class RouterModel(Module):
             anti_diagonal_flag=True,
         )
         if self.diagonal_model_type_flag:
-            return DynamicDiagonalLinearLayer(cfg)
+            return DynamicLinearLayer(cfg)
         return LinearLayer(cfg)
 
     def compute_logit_scores(self, input_batch: Tensor) -> Tensor:
