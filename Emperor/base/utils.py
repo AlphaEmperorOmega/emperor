@@ -10,7 +10,6 @@ from torch.nn import Parameter, Linear, Sequential
 
 from typing import TYPE_CHECKING, Any, Optional, Union
 
-
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
@@ -314,9 +313,9 @@ class Module(nn.Module, HyperParameters):
 
     def _overwrite_config(
         self,
-        cfg: "DataClassBase | ModelConfig",
-        overwrrides: "DataClassBase | None" = None,
-    ) -> "DataClassBase":
+        cfg: "ConfigBase | ModelConfig",
+        overwrrides: "ConfigBase | None" = None,
+    ) -> "ConfigBase":
         if overwrrides is None:
             return cfg
         for field in cfg.__dataclass_fields__:
@@ -325,7 +324,7 @@ class Module(nn.Module, HyperParameters):
         return cfg
 
     def _validate_fields(
-        self, config: "DataClassBase", config_type: "DataClassBase"
+        self, config: "ConfigBase", config_type: "ConfigBase"
     ) -> None:
         for config_field in fields(config_type):
             field_value = getattr(config, config_field.name)
@@ -351,6 +350,17 @@ class Module(nn.Module, HyperParameters):
         )
         bank = ParameterBank(parameter_shape, initializer)
         return bank.get()
+
+    def construct(
+        self,
+        class_type: type | None,
+        cfg: "ConfigBase | None" = None,
+    ) -> object | None:
+        if class_type is None:
+            return None
+        if cfg is None:
+            return class_type()
+        return class_type(cfg)
 
 
 class ParameterBank:
@@ -434,41 +444,41 @@ class Trainer(HyperParameters):
         self.optim = model.configure_optimizers()
         self.epoch = 0
         self.train_batch_idx = 0
-        self.val_batch_idx = 0
         for self.epoch in range(self.max_epochs):
             self.fit_epoch()
 
     def fit_epoch(self):
         self.model.train()
-        for batch in self.train_dataloader:
+        for batch_idx, batch in enumerate(self.train_dataloader):
             loss, auxiliary_loss = self.model.training_step(self.prepare_batch(batch))
-            self.__print_batch_messages(loss, auxiliary_loss)
+            self.__print_batch_messages(loss, auxiliary_loss, batch_idx=batch_idx)
             self.optim.zero_grad()
             with torch.no_grad():
                 loss.backward()
                 if self.gradient_clip_val > 0:
                     self.clip_gradients(self.gradient_clip_val, self.model)
                 self.optim.step()
-            self.train_batch_idx += 1
-        self.train_batch_idx = 0
         if self.val_dataloader is None:
             return
         self.model.eval()
-        for batch in self.val_dataloader:
+        for batch_idx, batch in enumerate(self.val_dataloader):
             with torch.no_grad():
-                self.model.validation_step(self.prepare_batch(batch))
-            self.val_batch_idx += 1
+                loss, auxiliary_loss = self.model.validation_step(
+                    self.prepare_batch(batch)
+                )
+                self.__print_batch_messages(loss, auxiliary_loss, batch_idx=batch_idx)
 
     def __print_batch_messages(
         self,
         loss: torch.Tensor,
         auxiliary_loss: torch.Tensor,
         batch_rate: int = 1,
+        batch_idx: int = 0,
     ) -> None:
-        if self.print_loss_flag and self.train_batch_idx % batch_rate == 0:
+        if self.print_loss_flag and batch_idx % batch_rate == 0:
             message = [
                 f"Epoch: {self.epoch}",
-                f"Batch: {self.train_batch_idx}",
+                f"Batch: {batch_idx}",
                 f"Total loss: {round(loss.item(), 4)}",
                 f"Model loss: {round(loss.item() - auxiliary_loss.item(), 4)}",
                 f"Auxiliary loss: {round(auxiliary_loss.item(), 4)}",
@@ -496,7 +506,7 @@ class Trainer(HyperParameters):
 
 
 @dataclass
-class DataClassBase:
+class ConfigBase:
     def get(self, key: str, default=None) -> Any:
         if not hasattr(self, key):
             return None
