@@ -8,17 +8,17 @@ from torch.nn import Linear, Sequential
 from torch.types import Tensor
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.utils import Module
-from Emperor.base.utils import DataClassBase
+from Emperor.base.utils import ConfigBase
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+    from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
     from Emperor.config import ModelConfig
 
 
 @dataclass
-class LayerBlockConfig(DataClassBase):
+class LayerBlockConfig(ConfigBase):
     model_type: "LinearLayerTypes | ParameterGeneratorTypes | None" = field(
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
@@ -408,7 +408,7 @@ class LayerBlockStack(Module):
     def __resolve_layer_block_class(self) -> type[LayerBlock]:
         # TODO: move this somewhere else in the future since it is used in
         # `MixtureOfExperts` as well
-        from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+        from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
 
         if isinstance(self.model_type, LinearLayerTypes):
             return LayerBlock

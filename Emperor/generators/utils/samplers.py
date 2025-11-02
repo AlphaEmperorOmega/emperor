@@ -2,13 +2,13 @@ import torch
 from math import prod
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.layers.utils.losses import (
+from Emperor.generators.utils.losses import (
     CoefficientOfVariationLoss,
     MutualInformationLoss,
     SwitchLoss,
     ZeroCentredLoss,
 )
-from Emperor.base.utils import Module, DataClassBase
+from Emperor.base.utils import Module, ConfigBase
 from Emperor.base.utils import (
     sigmoid,
     randn_like,
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class SamplerConfig(DataClassBase):
+class SamplerConfig(ConfigBase):
     top_k: int | None = field(
         default=None,
         metadata={

@@ -2,18 +2,18 @@ from dataclasses import dataclass, field
 import torch
 from torch import Tensor
 from Emperor.base.decorators import timer
-from Emperor.base.utils import Module, DataClassBase
+from Emperor.base.utils import Module, ConfigBase
 
-from Emperor.layers.utils.behaviours import (
+from Emperor.generators.utils.behaviours import (
     DynamicDiagonalParametersBehaviour,
 )
-from Emperor.layers.utils.samplers import SamplerModel
-from Emperor.layers.utils.mixture import (
+from Emperor.generators.utils.samplers import SamplerModel
+from Emperor.generators.utils.mixture import (
     GeneratorMixture,
     MatrixMixture,
     VectorMixture,
 )
-from Emperor.layers.utils.routers import (
+from Emperor.generators.utils.routers import (
     RouterModel,
     VectorRouterModel,
 )
@@ -21,13 +21,13 @@ from Emperor.layers.utils.routers import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.layers.utils.enums import LinearLayerTypes
-    from Emperor.layers.utils.linears import LinearLayerConfig
+    from Emperor.generators.utils.enums import LinearLayerTypes
+    from Emperor.generators.utils.linears import LinearLayerConfig
     from Emperor.config import ModelConfig
 
 
 @dataclass
-class ParameterLayerConfig(DataClassBase):
+class ParameterLayerConfig(ConfigBase):
     bias_parameters_flag: bool | None = field(
         default=None,
         metadata={

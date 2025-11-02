@@ -4,7 +4,7 @@ from torch import Tensor
 from torch.nn import Parameter
 from enum import Enum
 import torch.nn.functional as F
-from Emperor.base.utils import Module, DataClassBase, arange, reshape
+from Emperor.base.utils import Module, ConfigBase, arange, reshape
 from dataclasses import dataclass, field
 
 from typing import TYPE_CHECKING
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class MixtureConfig(DataClassBase):
+class MixtureConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Mixture model input dimension"},

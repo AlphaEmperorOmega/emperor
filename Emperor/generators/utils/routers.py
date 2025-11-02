@@ -2,14 +2,14 @@ from torch import Tensor
 import torch.nn as nn
 from dataclasses import dataclass, field
 from Emperor.base.utils import randn, matmul
-from Emperor.layers.utils.base import LayerBlock
+from Emperor.generators.utils.base import LayerBlock
 from torch.nn.parameter import Parameter
-from Emperor.base.utils import Module, DataClassBase
+from Emperor.base.utils import Module, ConfigBase
 from torch.nn import Linear, Sequential
 
 from typing import TYPE_CHECKING
 
-from Emperor.layers.utils.linears import (
+from Emperor.generators.utils.linears import (
     DynamicLinearLayer,
     LinearLayer,
     LinearLayerConfig,
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class RouterConfig(DataClassBase):
+class RouterConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Router input dimension"},

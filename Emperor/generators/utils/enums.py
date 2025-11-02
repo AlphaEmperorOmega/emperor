@@ -1,10 +1,10 @@
 from enum import Enum
-from Emperor.layers.layers import (
+from Emperor.generators.utils.layers import (
     GeneratorParameterLayer,
     MatrixParameterLayer,
     VectorParameterLayer,
 )
-from Emperor.layers.utils.linears import (
+from Emperor.generators.utils.linears import (
     DynamicLinearLayer,
     LinearLayer,
 )

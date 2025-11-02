@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from enum import Enum
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.base.utils import DataClassBase, Module
-from Emperor.layers.utils.behaviours import (
+from Emperor.base.utils import ConfigBase, Module
+from Emperor.generators.utils.behaviours import (
     DynamicDiagonalParametersBehaviour,
 )
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class LinearLayerConfig(DataClassBase):
+class LinearLayerConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Input dimension of the linear layer"},
