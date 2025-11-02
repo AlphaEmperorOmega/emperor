@@ -5,10 +5,10 @@ from torch.nn import ModuleDict
 from dataclasses import dataclass, field
 
 from torch.types import Tensor
-from Emperor.base.utils import DataClassBase, Module
-from Emperor.layers.utils.enums import LayerTypes
-from Emperor.layers.utils.routers import RouterModel
-from Emperor.layers.utils.samplers import SamplerModel
+from Emperor.base.utils import ConfigBase, Module
+from Emperor.generators.utils.enums import LayerTypes
+from Emperor.generators.utils.routers import RouterModel
+from Emperor.generators.utils.samplers import SamplerModel
 
 from typing import TYPE_CHECKING
 
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class NucleusConfig(DataClassBase):
+class NucleusConfig(ConfigBase):
     model_type: LayerTypes | None = field(
         default=None,
         metadata={"help": "Type of layer used for the experts."},
@@ -52,7 +52,7 @@ class Nucleus(Module):
 
 
 @dataclass
-class AxonsConfig(DataClassBase):
+class AxonsConfig(ConfigBase):
     memory_type: LayerTypes | None = field(
         default=None,
         metadata={
@@ -97,7 +97,7 @@ class TerminalZAxisOffsetOptions(Enum):
 
 
 @dataclass
-class TerminalConfig(DataClassBase):
+class TerminalConfig(ConfigBase):
     x_axis_position: int | None = field(
         default=None,
         metadata={"help": ""},
@@ -224,7 +224,7 @@ class Terminal(Module):
 
 
 @dataclass
-class NeuronConfig(DataClassBase):
+class NeuronConfig(ConfigBase):
     pass
 
 
@@ -250,7 +250,7 @@ class Neuron(Module):
 
 
 @dataclass
-class NeuronClusterConfig(DataClassBase):
+class NeuronClusterConfig(ConfigBase):
     x_axis_total_neurons: int | None = field(
         default=None,
         metadata={"help": ""},

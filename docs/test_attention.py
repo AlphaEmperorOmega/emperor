@@ -8,7 +8,7 @@ from Emperor.attention.utils.projection_handler import Projector
 from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.validation_handler import Validator
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
-from Emperor.layers.utils.enums import (
+from Emperor.generators.utils.enums import (
     LayerTypes,
     LinearLayerTypes,
     ParameterGeneratorTypes,

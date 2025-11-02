@@ -3,17 +3,17 @@ import torch
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
-from Emperor.base.utils import DataClassBase, Module
+from Emperor.base.utils import ConfigBase, Module
 from Emperor.experts.experts import MixtureOfExperts
-from Emperor.layers.utils.base import LayerBlock, LayerBlockStack
-from Emperor.layers.utils.routers import RouterModel
-from Emperor.layers.utils.samplers import SamplerModel
+from Emperor.generators.utils.base import LayerBlock, LayerBlockStack
+from Emperor.generators.utils.routers import RouterModel
+from Emperor.generators.utils.samplers import SamplerModel
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+    from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
 
 
 class _Validator:
@@ -26,7 +26,7 @@ class _Validator:
 
 
 @dataclass
-class FeedForwardConfig(DataClassBase):
+class FeedForwardConfig(ConfigBase):
     model_type: "LinearLayerTypes | ParameterGeneratorTypes | None" = field(
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
@@ -117,7 +117,7 @@ class FeedForward(Module):
 
 
 @dataclass
-class MixtureOfExpertsFeedForwardConfig(DataClassBase):
+class MixtureOfExpertsFeedForwardConfig(ConfigBase):
     weighted_parameters_flag: bool | None = field(
         default=None,
         metadata={

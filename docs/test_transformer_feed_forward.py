@@ -3,7 +3,7 @@ import unittest
 
 from dataclasses import asdict
 from Emperor.feedForward.feed_forward import FeedForward, FeedForwardConfig
-from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
 from docs.config import default_unittest_config
 
 

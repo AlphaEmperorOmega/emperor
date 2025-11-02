@@ -6,7 +6,7 @@ from dataclasses import asdict
 
 from Emperor.attention.attention import MultiHeadAttention
 from Emperor.feedForward.feed_forward import FeedForward
-from Emperor.layers.utils.base import LayerBlock
+from Emperor.generators.utils.base import LayerBlock
 from Emperor.transformer.layer import TransformerDecoderLayer, TransformerLayerConfig
 from docs.config import default_unittest_config
 

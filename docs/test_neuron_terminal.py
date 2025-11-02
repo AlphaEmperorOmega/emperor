@@ -4,8 +4,8 @@ import unittest
 
 from torch import Tensor
 from dataclasses import asdict
-from Emperor.layers.utils.routers import RouterModel
-from Emperor.layers.utils.samplers import SamplerModel
+from Emperor.generators.utils.routers import RouterModel
+from Emperor.generators.utils.samplers import SamplerModel
 from Emperor.neuron.neuron import (
     Terminal,
     TerminalConfig,

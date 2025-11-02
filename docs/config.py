@@ -4,18 +4,18 @@ from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.config import ModelConfig
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.attention.attention import MultiHeadAttentionConfig
-from Emperor.layers.layers import ParameterLayerConfig
-from Emperor.layers.utils.linears import LinearLayerConfig
-from Emperor.layers.utils.mixture import MixtureConfig
-from Emperor.layers.utils.routers import RouterConfig
-from Emperor.layers.utils.samplers import SamplerConfig
-from Emperor.layers.utils.enums import (
+from Emperor.generators.layers import ParameterLayerConfig
+from Emperor.generators.utils.linears import LinearLayerConfig
+from Emperor.generators.utils.mixture import MixtureConfig
+from Emperor.generators.utils.routers import RouterConfig
+from Emperor.generators.utils.samplers import SamplerConfig
+from Emperor.generators.utils.enums import (
     # AttentionTypes,
     # FeedForwardTypes,
     LayerTypes,
     LinearLayerTypes,
 )
-from Emperor.layers.utils.base import LayerBlockStackConfig
+from Emperor.generators.utils.base import LayerBlockStackConfig
 from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,

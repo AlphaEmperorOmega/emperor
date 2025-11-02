@@ -3,7 +3,7 @@ import unittest
 
 from dataclasses import asdict
 
-from Emperor.layers.utils.enums import (
+from Emperor.generators.utils.enums import (
     LayerTypes,
     LinearLayerTypes,
     ParameterGeneratorTypes,

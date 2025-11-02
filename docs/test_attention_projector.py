@@ -4,12 +4,12 @@ import unittest
 from dataclasses import asdict
 from Emperor.attention.utils.projection_handler import Projector
 from Emperor.attention.attention import MultiHeadAttentionConfig
-from Emperor.layers.utils.enums import (
+from Emperor.generators.utils.enums import (
     LayerTypes,
     LinearLayerTypes,
     ParameterGeneratorTypes,
 )
-from Emperor.layers.utils.base import LayerBlock
+from Emperor.generators.utils.base import LayerBlock
 from docs.config import default_unittest_config
 
 

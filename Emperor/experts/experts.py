@@ -5,12 +5,12 @@ from torch import Tensor
 from dataclasses import dataclass, field
 
 from Emperor.base.enums import ActivationOptions
-from Emperor.base.utils import DataClassBase, Module, device
-from Emperor.layers.utils.base import LayerBlock, ParameterGeneratorLayerBlock
-from Emperor.layers.utils.linears import LinearLayer
-from Emperor.layers.utils.enums import LayerTypes
-from Emperor.layers.utils.routers import RouterModel
-from Emperor.layers.utils.samplers import SamplerModel
+from Emperor.base.utils import ConfigBase, Module, device
+from Emperor.generators.utils.base import LayerBlock, ParameterGeneratorLayerBlock
+from Emperor.generators.utils.linears import LinearLayer
+from Emperor.generators.utils.enums import LayerTypes
+from Emperor.generators.utils.routers import RouterModel
+from Emperor.generators.utils.samplers import SamplerModel
 
 
 from typing import TYPE_CHECKING
@@ -44,7 +44,7 @@ class _Validator:
 
 
 @dataclass
-class MixtureOfExpertsConfig(DataClassBase):
+class MixtureOfExpertsConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Expert input dimension"},
@@ -131,7 +131,7 @@ class MixtureOfExperts(Module):
     def __resolve_layer_block_class(self) -> type[LayerBlock]:
         # TODO: move this somewhere else in the future since it is used in
         # `LayerBlockStack` as well
-        from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+        from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
 
         if isinstance(self.model_type, LinearLayerTypes):
             return LayerBlock

@@ -7,19 +7,19 @@ from Emperor.attention.utils.bias_handler import KeyValueBias
 from Emperor.attention.utils.processor_handler import Processor
 from Emperor.attention.utils.projection_handler import Projector
 from Emperor.attention.utils.validation_handler import Validator
-from Emperor.base.utils import DataClassBase, Module
+from Emperor.base.utils import ConfigBase, Module
 
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from torch.types import _dtype as DType
-    from Emperor.layers.utils.enums import LayerTypes
+    from Emperor.generators.utils.enums import LayerTypes
     from Emperor.config import ModelConfig
 
 
 @dataclass
-class MultiHeadAttentionConfig(DataClassBase):
+class MultiHeadAttentionConfig(ConfigBase):
     model_type: "LayerTypes | None" = field(
         default=None,
         metadata={

@@ -2,12 +2,12 @@ import copy
 import torch.nn as nn
 import unittest
 from Emperor.base.utils import randn
-from Emperor.layers.utils.base import LayerBlock
-from Emperor.layers.utils.linears import (
+from Emperor.generators.utils.base import LayerBlock
+from Emperor.generators.utils.linears import (
     DynamicLinearLayer,
     LinearLayer,
 )
-from Emperor.layers.utils.routers import (
+from Emperor.generators.utils.routers import (
     RouterModel,
     RouterConfig,
     VectorRouterModel,

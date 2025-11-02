@@ -4,24 +4,25 @@ from dataclasses import dataclass, field
 
 from Emperor.attention.attention import MultiHeadAttentionConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.base.utils import DataClassBase
+from Emperor.base.utils import ConfigBase
 from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
 )
 from Emperor.experts.experts import MixtureOfExpertsConfig
-from Emperor.layers.layers import ParameterLayerConfig
-from Emperor.layers.utils.base import LayerBlockStackConfig
-from Emperor.layers.utils.enums import (
+from Emperor.generators.utils.layers import ParameterLayerConfig
+from Emperor.generators.utils.base import LayerBlockStackConfig
+from Emperor.generators.utils.enums import (
     # AttentionTypes,
     # FeedForwardTypes,
     LayerTypes,
     LinearLayerTypes,
 )
-from Emperor.layers.utils.linears import LinearLayerConfig
-from Emperor.layers.utils.mixture import MixtureConfig
-from Emperor.layers.utils.samplers import SamplerConfig
-from Emperor.layers.utils.routers import (
+from Emperor.linears.utils.layers import LinearLayerConfig
+
+from Emperor.generators.utils.mixture import MixtureConfig
+from Emperor.generators.utils.samplers import SamplerConfig
+from Emperor.generators.utils.routers import (
     RouterConfig,
 )
 from Emperor.neuron.neuron import (
@@ -89,7 +90,7 @@ PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG = True
 
 
 @dataclass
-class ModelConfig(DataClassBase):
+class ModelConfig(ConfigBase):
     batch_size: int = field(
         default=BATCH_SIZE,
         metadata={"help": "Batch size for training and inference"},
@@ -171,8 +172,6 @@ class ModelConfig(DataClassBase):
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM,
             bias_flag=True,
-            anti_diagonal_flag=True,
-            dynamic_bias_flag=True,
         ),
         metadata={"help": "`LinearLayerConfig` configuration"},
     )

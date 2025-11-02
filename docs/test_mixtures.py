@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from math import prod
 from torch.nn import Parameter
 from Emperor.base.utils import ParameterBank
-from Emperor.layers.utils.mixture import (
+from Emperor.generators.utils.mixture import (
     MixtureConfig,
     MixtureBase,
     VectorMixture,

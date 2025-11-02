@@ -3,8 +3,8 @@ import torch.nn as nn
 
 from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.layers.utils.base import LayerBlock, ParameterGeneratorLayerBlock
-from Emperor.layers.utils.linears import LinearLayer
+from Emperor.generators.utils.base import LayerBlock, ParameterGeneratorLayerBlock
+from Emperor.generators.utils.linears import LinearLayer
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ class ProjectorBase(Module):
     def __resolve_layer_block_class(self) -> type[LayerBlock]:
         # TODO: move this somewhere else in the future since it is used in
         # `LayerBlockStack` as well
-        from Emperor.layers.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+        from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
 
         if isinstance(self.model_type, LinearLayerTypes):
             return LayerBlock

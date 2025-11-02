@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from torch import Tensor
 from dataclasses import replace
 from dataclasses import dataclass, field
-from Emperor.base.utils import DataClassBase, Module
+from Emperor.base.utils import ConfigBase, Module
 from Emperor.library.choice import Library as L
 
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class MixtureOfExpertsConfig(DataClassBase):
+class MixtureOfExpertsConfig(ConfigBase):
     input_dim: Optional[int] = field(
         default=None,
         metadata={"help": "Expert input dimension"},

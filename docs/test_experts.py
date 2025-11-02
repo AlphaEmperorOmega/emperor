@@ -5,16 +5,16 @@ import torch.nn as nn
 
 from Emperor.config import ModelConfig
 from Emperor.base.enums import ActivationOptions
-from Emperor.layers.layers import ParameterLayerConfig
-from Emperor.layers.utils.base import LayerBlock
-from Emperor.layers.utils.enums import (
+from Emperor.generators.layers import ParameterLayerConfig
+from Emperor.generators.utils.base import LayerBlock
+from Emperor.generators.utils.enums import (
     LayerTypes,
     LinearLayerTypes,
     ParameterGeneratorTypes,
 )
-from Emperor.layers.utils.mixture import MixtureConfig
-from Emperor.layers.utils.routers import RouterConfig, RouterModel
-from Emperor.layers.utils.samplers import (
+from Emperor.generators.utils.mixture import MixtureConfig
+from Emperor.generators.utils.routers import RouterConfig, RouterModel
+from Emperor.generators.utils.samplers import (
     SamplerAuxiliaryLosses,
     SamplerConfig,
     SamplerModel,

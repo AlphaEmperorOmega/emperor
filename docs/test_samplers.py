@@ -2,13 +2,13 @@ import copy
 import unittest
 import torch
 from math import prod
-from Emperor.layers.utils.losses import (
+from Emperor.generators.utils.losses import (
     CoefficientOfVariationLoss,
     MutualInformationLoss,
     SwitchLoss,
     ZeroCentredLoss,
 )
-from Emperor.layers.utils.samplers import (
+from Emperor.generators.utils.samplers import (
     SamplerAuxiliaryLosses,
     SamplerBase,
     SamplerConfig,

@@ -5,8 +5,8 @@ import unittest
 from dataclasses import asdict
 from Emperor.attention.attention import MultiHeadAttention
 from Emperor.feedForward.feed_forward import FeedForward
-from Emperor.layers.utils.base import LayerBlock
-from Emperor.layers.utils.enums import LinearLayerTypes
+from Emperor.generators.utils.base import LayerBlock
+from Emperor.generators.utils.enums import LinearLayerTypes
 from Emperor.transformer.layer import TransformerEncoderLayer, TransformerLayerConfig
 from docs.config import default_unittest_config
 

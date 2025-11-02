@@ -9,8 +9,8 @@ from dataclasses import dataclass, field
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
-from Emperor.base.utils import DataClassBase, Module
-from Emperor.layers.utils.base import (
+from Emperor.base.utils import ConfigBase, Module
+from Emperor.generators.utils.base import (
     LayerBlock,
     FeedForwardLayerBlock,
     CrossAttentionLayerBlock,
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class TransformerLayerConfig(DataClassBase):
+class TransformerLayerConfig(ConfigBase):
     layer_norm_position: "LayerNormPositionOptions | None" = field(
         default=None,
         metadata={"help": ""},
@@ -166,7 +166,7 @@ class TransformerDecoderLayer(TransformerLayerBase):
 
 
 @dataclass
-class TransformerConfig(DataClassBase):
+class TransformerConfig(ConfigBase):
     num_layers: int | None = field(
         default=None,
         metadata={"help": ""},
