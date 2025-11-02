@@ -1,21 +1,18 @@
 import copy
 import torch
 import torch.nn as nn
-from typing import Callable, List
+
+from typing import Callable
 from torch import Tensor
 from Emperor.base.models import Classifier
+from Emperor.generators.utils.base import LinearBlockStackConfig, LinearBlockStack
 
 from typing import TYPE_CHECKING
 
-from Emperor.components.parameter_generators.utils.base import (
-    LinearBlockStack,
-    LinearBlockStackConfig,
-)
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.experiments.layers.layers_factories import ParameterLayerOptions
-    from Emperor.components.parameter_generators.layers import ParameterLayerBase
+    from Emperor.generators.utils.layers import ParameterLayerBase
 
 
 class ClassifierExperiment(Classifier):

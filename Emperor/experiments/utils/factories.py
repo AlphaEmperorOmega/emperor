@@ -1,22 +1,16 @@
+from abc import abstractmethod
 from enum import Enum
-import torch.nn as nn
-from Emperor.components.parameter_generators.utils.linears import (
-    DynamicLinearLayer,
-    LinearLayer,
-)
+from Emperor.base.enums import BaseOptions
+from Emperor.config import ModelConfig
+from Emperor.generators.utils.layers import GeneratorParameterLayer
+from Emperor.linears.options import LinearLayerOptions
 
-from Emperor.components.parameter_generators.layers import (
-    GeneratorParameterLayer,
-    MatrixParameterLayer,
-    ParameterLayerBase,
-    VectorParameterLayer,
-)
 
-from Emperor.experiments.layers.layers_models import (
+from Emperor.experiments.utils.models import (
     MultiLayerClassifierModel,
     SingleLayerClassifierModel,
 )
-from Emperor.experiments.layers.layers_presets import (
+from Emperor.experiments.utils.presets import (
     FashionMNISTModelTrainer,
     FullMixtureLayerDynamicMaskPreset,
     FullMixtureNoWeightSumDepthFivePreset,
@@ -38,7 +32,7 @@ from Emperor.experiments.layers.layers_presets import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.experiments.layers.layers_models import ClassifierExperiment
+    from Emperor.experiments.utils.models import ClassifierExperiment
 
 
 class ModelFactory(Enum):
@@ -59,11 +53,11 @@ class PresetCollections:
 
     def get_layers_and_assigned_presets(self):
         return {
-            LinearLayer: self.__get_linear_presets(),
-            DynamicLinearLayer: self.__get_dynamic_diagonal_presets(),
-            VectorParameterLayer: self.__get_vector_presets(),
-            MatrixParameterLayer: self.__get_matrix_presets(),
-            GeneratorParameterLayer: self.__get_generator_presets(),
+            # LinearLayer: self.__get_linear_presets(),
+            # DynamicLinearLayer: self.__get_dynamic_diagonal_presets(),
+            # VectorParameterLayer: self.__get_vector_presets(),
+            # MatrixParameterLayer: self.__get_matrix_presets(),
+            # GeneratorParameterLayer: self.__get_generator_presets(),
         }
 
     def __get_linear_presets(self) -> list:
@@ -125,14 +119,14 @@ class PresetCollections:
 class ModelTrainer:
     def __init__(
         self,
-        layer_preset,
+        model_config,
         model_type,
         layer_type,
         learning_rate,
         trainer_type,
         mini_datasetset_flag,
     ):
-        self.cfg = layer_preset.create().get_preset_config()
+        self.cfg = model_config
         self.model = model_type(self.cfg, layer_type, learning_rate)
         self.trainer = trainer_type(
             self.model,
@@ -144,9 +138,14 @@ class ModelTrainer:
         self.trainer.train()
 
 
-class TrainPresetsWrapper:
-    def __init__(self) -> None:
-        self.preset_collections = PresetCollections().get_layers_and_assigned_presets()
+class Experiments:
+    def __init__(
+        self,
+        mini_datasetset_flag: bool = True,
+    ) -> None:
+        self.mini_datasetset_flag = mini_datasetset_flag
+        self.model_config = None
+        # self.preset_collections = PresetCollections().get_layers_and_assigned_presets()
         self.learning_rates = [
             # 1e-5,
             # 3e-5,
@@ -170,29 +169,54 @@ class TrainPresetsWrapper:
             FashionMNISTModelTrainer,
         ]
 
-    def __print_model_title(
+    def _print_model_title(
         self,
         layer_type,
         layer_preset,
         learning_rate: float,
     ) -> None:
         print("\n" * 2 + "-" * 50)
-        model_type_msg = f"Model type: {layer_type.__name__} "
-        model_preset_msg = f" Model preset: {layer_preset.__name__} "
+        model_type_msg = ""  # f"Model type: {layer_type.__name__} "
+        model_preset_msg = ""  # f" Model preset: {layer_preset.__name__} "
         learning_rate_msg = f" Learning rate: {learning_rate} "
         message = "\n " + model_type_msg + model_preset_msg + learning_rate_msg + " \n"
         print(message)
 
-    def test_all_preset_models(
-        self,
-        mini_datasetset_flag: bool = True,
-    ) -> None:
+    def _train_model(self, layer_type: BaseOptions) -> None:
+        layer_type = layer_type.value
+        for learning_rate in self.learning_rates:
+            for model_type in self.model_types:
+                for trainer_type in self.trainer_types:
+                    self._print_model_title(
+                        layer_type, self._get_model_config(), learning_rate
+                    )
+                    trainer = ModelTrainer(
+                        self._get_model_config(),
+                        model_type,
+                        layer_type,
+                        learning_rate,
+                        trainer_type,
+                        self.mini_datasetset_flag,
+                    )
+                    trainer.train()
+
+    def _get_model_config(self) -> None:
+        if self.model_config is None:
+            raise ValueError(
+                "self.model_config is None. It must be set before calling this method."
+            )
+        return self.model_config
+
+    def _set_model_config(self, model_config: "ModelConfig") -> None:
+        self.model_config = model_config
+
+    def test_all_preset_models(self) -> None:
         for learning_rate in self.learning_rates:
             for layer_type, all_layer_type_presets in self.preset_collections.items():
                 for trainer_type in self.trainer_types:
                     for model_type in self.model_types:
                         for layer_preset in all_layer_type_presets:
-                            self.__print_model_title(
+                            self._print_model_title(
                                 layer_type, layer_preset, learning_rate
                             )
                             trainer = ModelTrainer(
@@ -201,6 +225,6 @@ class TrainPresetsWrapper:
                                 layer_type,
                                 learning_rate,
                                 trainer_type,
-                                mini_datasetset_flag,
+                                self.mini_datasetset_flag,
                             )
                             trainer.train()

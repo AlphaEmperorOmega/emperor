@@ -1,17 +1,14 @@
+import os
 import copy
 import torch.nn as nn
 from Emperor.base.utils import Trainer
 from Emperor.base.datasets import FashionMNIST
-from Emperor.components.parameter_generators.layers import (
-    ParameterLayerConfig,
-)
-
-from Emperor.components.parameter_generators.utils.linears import (
-    LinearLayerConfig,
-)
-from Emperor.components.parameter_generators.utils.mixture import MixtureConfig
-from Emperor.components.parameter_generators.utils.routers import RouterConfig
-from Emperor.components.parameter_generators.utils.samplers import SamplerConfig
+from Emperor.config import BIAS_PARAMETER_FLAG
+from Emperor.generators.utils.layers import ParameterLayerConfig
+from Emperor.generators.utils.mixture import MixtureConfig
+from Emperor.generators.utils.routers import RouterConfig
+from Emperor.generators.utils.samplers import SamplerConfig
+from Emperor.linears.utils.layers import LinearLayerConfig, DynamicLinearLayerConfig
 
 from typing import TYPE_CHECKING
 
@@ -361,6 +358,8 @@ class FashionMNISTModelTrainer(ModelTrainerBase):
         self.cfg = cfg
         self.data = self.__create_dataset(test_dataset_flag)
         self.model = model
+        self.__initialize_monitor()
+
         if test_dataset_flag:
             assert cfg.batch_size < 64, (
                 "The entire mini dataset contains 64 samplers, ensure that the `batch_size` is smaller than 64"
@@ -375,3 +374,12 @@ class FashionMNISTModelTrainer(ModelTrainerBase):
 
     def train(self) -> None:
         self.trainer.fit(self.model, self.data, print_loss_flag=True)
+
+    def __initialize_monitor(self) -> None:
+        trainer_name = self.__class__.__name__
+        dataset_name = self.data.__class__.__name__
+        model_name = self.model.__class__.__name__
+        log_dir = os.path.join(
+            trainer_name, dataset_name, model_name, str(self.model.lr)
+        )
+        self.model.initialize_monitor(log_dir=log_dir)
