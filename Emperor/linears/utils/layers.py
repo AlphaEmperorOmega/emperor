@@ -1,3 +1,4 @@
+from inspect import Parameter
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,7 +9,10 @@ from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils.behaviours import (
     DiagonalParametersBehaviour,
+    DiagonalParametersOptions,
     DynamicBiasBehaviour,
+    DynamicBiasOptions,
+    DynamicParametersBehaviour,
 )
 from Emperor.linears.utils.monitors import (
     DataMonitor,
@@ -43,18 +47,6 @@ class LinearLayerConfig(ConfigBase):
             "help": "When `True` the `DynamicLinearLayer` will add `anti_diagonal_matrix` after linear transformation"
         },
     )
-    dynamic_bias_flag: bool = field(
-        default=False,
-        metadata={
-            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
-        },
-    )
-    dynamic_generators_depth: int = field(
-        default=1,
-        metadata={
-            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
-        },
-    )
     data_monitor: type[DataMonitor] | None = field(
         default=None,
         metadata={"help": ""},
@@ -68,8 +60,8 @@ class LinearLayerConfig(ConfigBase):
 class LinearBase(Module):
     def __init__(
         self,
-        cfg: "LinearLayerConfig | ModelConfig",
-        overrides: "LinearLayerConfig | None" = None,
+        cfg: "DynamicBiasBehaviour | LinearLayerConfig | ModelConfig",
+        overrides: "DynamicBiasBehaviour | LinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_model_config", cfg)
@@ -77,7 +69,7 @@ class LinearBase(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.bias_flag = self.cfg.bias_flag
-        self.dynamic_bias_flag = self.cfg.dynamic_bias_flag
+        self.dynamic_bias_options = self.cfg.dynamic_bias_options
         self.dynamic_generators_depth = self.cfg.dynamic_generators_depth
         self.anti_diagonal_flag = self.cfg.anti_diagonal_flag
         self.data_monitor: "DataMonitor" = self.construct(self.cfg.data_monitor)
@@ -85,14 +77,20 @@ class LinearBase(Module):
             self.cfg.parameter_monitor
         )
 
-    def _init_parameter_banks(self):
-        weight_shape = (self.input_dim, self.output_dim)
-        weight_params = self._init_parameter_bank(weight_shape)
-        bias_params = None
-        if self.bias_flag:
-            bias_shape = (self.output_dim,)
-            bias_params = self._init_parameter_bank(bias_shape, nn.init.zeros_)
+    def _init_parameters(self):
+        weight_params = self.__init_weight_parameters()
+        bias_params = self.__init_bias_parameters()
         return weight_params, bias_params
+
+    def __init_weight_parameters(self) -> Parameter:
+        weight_shape = (self.input_dim, self.output_dim)
+        return self._init_parameter_bank(weight_shape)
+
+    def __init_bias_parameters(self) -> Parameter | None:
+        if not self.bias_flag:
+            return None
+        bias_shape = (self.output_dim,)
+        return self._init_parameter_bank(bias_shape, nn.init.zeros_)
 
     def _update_data_monitor(self, input_batch: Tensor, output_batch: Tensor) -> None:
         self.data_monitor and self.data_monitor.update(input_batch, output_batch)
@@ -110,7 +108,7 @@ class LinearLayer(LinearBase):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        self.weight_params, self.bias_params = self._init_parameter_banks()
+        self.weight_params, self.bias_params = self._init_parameters()
 
     def forward(self, input_batch: Tensor) -> Tensor:
         output = F.linear(input_batch, self.weight_params.T, self.bias_params)
@@ -119,21 +117,27 @@ class LinearLayer(LinearBase):
         return output
 
 
-class DynamicLinearLayerConfig(ConfigBase):
+class DynamicLinearLayerConfig(LinearLayerConfig):
     anti_diagonal_flag: bool = field(
         default=False,
         metadata={
             "help": "When `True` the `DynamicLinearLayer` will add `anti_diagonal_matrix` after linear transformation"
         },
     )
-    dynamic_bias_flag: bool = field(
-        default=False,
+    dynamic_generators_depth: int = field(
+        default=1,
         metadata={
             "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
         },
     )
-    dynamic_generators_depth: int = field(
-        default=1,
+    dynamic_diagonal_options: DiagonalParametersOptions = field(
+        default=DiagonalParametersOptions.DEFAULT,
+        metadata={
+            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
+        },
+    )
+    dynamic_bias_options: DynamicBiasOptions = field(
+        default=DynamicBiasOptions.DEFAULT,
         metadata={
             "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
         },
@@ -147,29 +151,34 @@ class DynamicLinearLayer(LinearBase):
         overrides: "DynamicLinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        self.weight_params, self.bias_params = self._init_parameter_banks()
-        self.diagonal_params = DiagonalParametersBehaviour(self.cfg, self.weight_params)
-        self.dynamic_bias = DynamicBiasBehaviour(self.cfg, self.bias_params)
+        weight_params, bias_params = self._init_parameters()
+
+        self.generator_model = DynamicParametersBehaviour(self.cfg, weight_params)
+        self.diagonal_model = DiagonalParametersBehaviour(self.cfg, weight_params)
+        self.bias_model = (
+            DynamicBiasBehaviour(self.cfg, bias_params) if self.bias_flag else None
+        )
 
     def forward(self, input_batch: Tensor) -> Tensor:
-        diagonal_matrix = self.diagonal_params(input_batch)
-        bias_parameters = self.dynamic_bias(input_batch)
-        output = self.__compute_linear_transformation(input_batch, diagonal_matrix)
+        weight_params = self.generator_model(input_batch)
+        weight_params = self.diagonal_model(input_batch)
+        bias_parameters = self.bias_model(input_batch)
+        output = self.__compute_linear_transformation(input_batch, weight_params)
         return self.__add_bias_parameters(output, bias_parameters)
 
     def __compute_linear_transformation(
         self,
         logits: Tensor,
-        dynamic_weight_params: Tensor,
+        dynamic_diagonal_weights: Tensor,
     ) -> Tensor:
-        return torch.einsum("ij,ijk->ik", logits, dynamic_weight_params)
+        return torch.einsum("ij,ijk->ik", logits, dynamic_diagonal_weights)
 
     def __add_bias_parameters(
         self,
         linear_transform: Tensor,
         bias_params: Tensor | None,
     ) -> Tensor:
-        if bias_params and self.bias_flag:
+        if self.bias_flag and bias_params:
             return linear_transform + bias_params
         return linear_transform
 
@@ -178,6 +187,15 @@ class LinearLayerWithMemoryOptions(Enum):
     CONCATENATE_VECTORS = 1
     ADD_VECTORS = 2
     WEIGHTED_SUM = 3
+
+
+class MemoryLinearLayerConfig(LinearLayerConfig):
+    dynamic_bias_options: DynamicBiasOptions = field(
+        default=DynamicBiasOptions.DEFAULT,
+        metadata={
+            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
+        },
+    )
 
 
 class MemoryLinearLayer(LinearBase):
@@ -195,7 +213,6 @@ class MemoryLinearLayer(LinearBase):
         self.memory_dim = self.cfg.memory_dim
         # self.memory_linear_option = self.cfg.memory_linear_option
         self.bias_flag = self.cfg.bias_flag
-        self.dynamic_bias_flag = self.cfg.dynamic_bias_flag
         self.weight_params, self.bias_params = self.__init_parameter_banks(
             self.output_dim + self.memory_dim
         )
