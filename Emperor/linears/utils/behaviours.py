@@ -1,33 +1,44 @@
-from enum import Enum
-from inspect import Parameter
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from enum import Enum
 from torch import Tensor
 from torch.nn import Linear, Sequential
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.base.utils import Module
-from Emperor.generators.utils.base import (
-    LinearBlockStack,
-    LinearBlockStackConfig,
+from Emperor.base.layer import (
+    LayerStack,
+    LayerStackConfig,
+    LinearLayerStack,
+)
+
+
+from Emperor.linears.utils.enums import DynamicBiasOptions
+from Emperor.linears.utils.handlers.bias import (
+    BiasGeneratorHandler,
+    DefaultBiasHandler,
+    AffineBiasTransformHandler,
+    ElementwiseBiasHandler,
 )
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
+    from Emperor.config import ModelConfig
+    from Emperor.linears.utils.handlers.bias import DefaultBiasHandler
+    from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 
 
-def linear_stack_config(obj, output_dim: int) -> LinearBlockStackConfig:
-    return LinearBlockStackConfig(
+def linear_stack_config(obj, output_dim: int) -> LayerStackConfig:
+    return LayerStackConfig(
         input_dim=obj.input_dim,
         hidden_dim=obj.input_dim,
         output_dim=output_dim,
         num_layers=obj.dynamic_generators_depth,
         activation=F.relu,
         layer_norm_position=LayerNormPositionOptions.DEFAULT,
-        model_type=nn.Linear,
+        model_type=LinearLayer,
     )
 
 
@@ -38,13 +49,14 @@ class MemoryBehaviour(Module):
         weight_params: Tensor,
     ):
         super().__init__()
+        self.cfg = cfg
         self.weight_params = weight_params
         self.memory_model = self.__init_memory_model()
 
     def __init_memory_model(self) -> Linear | Sequential:
         scalar_and_offset = 2
         cfg = linear_stack_config(self, output_dim=scalar_and_offset)
-        return LinearBlockStack(cfg).build_model()
+        return LinearLayerStack(cfg).build_model()
 
     def forward(self, inputs: Tensor) -> Tensor:
         return inputs
@@ -55,6 +67,64 @@ class OuterProductNormOptions(Enum):
     TANH = 2
     SIGMOID = 3
     LAYER_NORM = 4
+
+
+class DepthMappingLayer(Module):
+    def __init__(self, cfg: "DynamicLinearLayerConfig"):
+        self.cfg = cfg
+        self.input_dim = cfg.input_dim
+        self.depth_dim = cfg.dynamic_generators_depth
+        self.is_initial_layer = False
+        self.weight_params, self.bias_params = self.__init_parameter_bank()
+
+    def __init_parameter_bank(self):
+        input_weight_shape = (self.depth_dim, self.input_dim, self.input_dim)
+        weight_bank = self._init_parameter_bank(input_weight_shape)
+        bias_shape = (self.depth_dim, self.input_dim)
+        bias_bank = self._init_parameter_bank(bias_shape)
+        return weight_bank, bias_bank
+
+    def set_initial_layer(self, is_initial_layer: bool) -> None:
+        self.is_initial_layer = bool(is_initial_layer)
+
+    def forward(
+        self,
+        input_batch: Tensor,
+    ) -> Tensor:
+        operation = self.__get_operation()
+        return (
+            torch.einsum(operation, input_batch, self.weight_params) + self.bias_params
+        )
+
+    def __get_operation(self) -> str:
+        if self.is_initial_layer:
+            return "bi,kij->bkj"
+        return "bik,kij->bkj"
+
+
+class DepthMappingLayerStack(Module):
+    def __init__(
+        self,
+        cfg: "LayerStackConfig | ModelConfig",
+        overrides: "LayerStackConfig | None" = None,
+    ):
+        super().__init__()
+        self.cfg = cfg
+        self.overrides = overrides
+
+        cfg = self.__update_config()
+        self.model = LayerStack(cfg)
+
+    def __update_config(self) -> LayerStackConfig:
+        config = getattr(self.cfg, "layer_block_stack_config", self.cfg)
+        updated_config = self._overwrite_config(config, self.overrides)
+        overrides = self.__override_config()
+        return self._overwrite_config(updated_config, overrides)
+
+    def __override_config(self) -> LayerStackConfig:
+        return LayerStackConfig(
+            model_type=DepthMappingLayer,
+        )
 
 
 class DynamicParametersBehaviour(Module):
@@ -69,10 +139,10 @@ class DynamicParametersBehaviour(Module):
         self.input_model = self.__init_generator_model()
         self.output_model = self.__init_generator_model()
 
-    def __init_generator_model(self) -> Linear | Sequential:
+    def __init_generator_model(self) -> DepthMappingLayerStack:
         scalar_and_offset = 2
         cfg = linear_stack_config(self, output_dim=scalar_and_offset)
-        return LinearBlockStack(cfg).build_model()
+        return DepthMappingLayerStack(cfg)
 
     def forward(self, inputs: Tensor) -> Tensor:
         input_vectors = self.input_model(inputs)
@@ -117,8 +187,6 @@ class DynamicDiagonalOptions(Enum):
 
 # TODO: Add option for a kernel to take the context
 # of every token into account when computing the dynamic parameters
-
-
 class DynamicDiagonalBehaviour(Module):
     def __init__(
         self,
@@ -146,123 +214,34 @@ class DynamicDiagonalBehaviour(Module):
                 )
 
 
-class DefaultDiagonalHandler(Module):
-    def __init__(
-        self,
-        cfg: "DynamicLinearLayerConfig",
-    ):
-        super().__init__()
-        self.cfg = cfg
-        self.padding_shape = self.__get_diagonal_padding_shape()
-
-    def __get_diagonal_padding_shape(self) -> tuple | None:
-        diagonal_padding_shape = None
-        if self.input_dim != self.output_dim:
-            padding_size = abs(self.input_dim - self.output_dim)
-            diagonal_padding_shape = (0, padding_size, 0, 0)
-            if self.input_dim > self.output_dim:
-                diagonal_padding_shape = (0, 0, 0, padding_size)
-        return diagonal_padding_shape
-
-    def _init_diagonal_model(
-        self,
-    ) -> Linear | Sequential:
-        output_dim = min(self.input_dim, self.output_dim)
-        cfg = linear_stack_config(self, output_dim=output_dim)
-        return LinearBlockStack(cfg).build_model()
-
-    def forward(self, weight_params: Tensor) -> Tensor:
-        return weight_params
-
-    def _convert_to_diagonal_matrix(
-        self,
-        vector_matrix: Tensor,
-    ) -> Tensor:
-        diagonal_matrix = torch.diag_embed(vector_matrix)
-        if self.padding_shape is not None:
-            diagonal_matrix = F.pad(diagonal_matrix, self.padding_shape)
-        return diagonal_matrix
-
-
-class DiagonalHandler(DefaultDiagonalHandler):
-    def __init__(
-        self,
-        cfg: "DynamicLinearLayerConfig",
-    ):
-        super().__init__(cfg)
-        self.input_dim = cfg.input_dim
-        self.output_dim = cfg.output_dim
-        self.diagonal_generator = self._init_diagonal_model()
-
-    def forward(self, logits: Tensor, weight_params: Tensor) -> Tensor:
-        diagonal_vectors = self.diagonal_generator(logits)
-        diagonal_matrix = self._convert_to_diagonal_matrix(diagonal_vectors)
-        return weight_params + diagonal_matrix
-
-
-class AntiDiagonalHandler(DefaultDiagonalHandler):
-    def __init__(
-        self,
-        cfg: "DynamicLinearLayerConfig",
-    ):
-        super().__init__(cfg)
-        self.cfg = cfg
-        self.input_dim = cfg.input_dim
-        self.output_dim = cfg.output_dim
-        self.diagonal_generator = self._init_diagonal_model()
-
-    def forward(self, logits: Tensor, weight_params: Tensor) -> Tensor:
-        dynamic_vectors = self.anti_diagonal_model(logits)
-        diagonal_matrix = self._convert_to_diagonal_matrix(dynamic_vectors)
-        anti_diagonal_matrix = diagonal_matrix.flip(dims=[2])
-        return weight_params + anti_diagonal_matrix
-
-
-class DiagonalAndAntiDiagonalHandler(DefaultDiagonalHandler):
-    def __init__(
-        self,
-        cfg: "DynamicLinearLayerConfig",
-    ):
-        super().__init__(cfg)
-        self.diagonal_generator = DiagonalHandler(cfg)
-        self.anti_diagonal_generator = AntiDiagonalHandler(cfg)
-
-    def forward(self, logits: Tensor, weight_params: Tensor) -> Tensor:
-        weight_params = self.diagonal_generator(logits, weight_params)
-        anti_diagonal_output = self.diagonal_generator(logits, weight_params)
-        return anti_diagonal_output
-
-
-class DynamicBiasOptions(Enum):
-    DEFAULT = 0
-    SCALE_AND_OFFSET = 1
-    DYNAMIC_PARAMETERS = 2
-
-
 class DynamicBiasBehaviour(Module):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "ModelConfig",
+        bias_params: Tensor | None = None,
     ):
         super().__init__()
-        self.cfg = cfg
-        self.dynamic_bias_option = cfg.dynamic_bias_option
+        config = getattr(cfg, "linear_layer_model_config", cfg)
+        self.cfg: "DynamicLinearLayerConfig" = config
+        self.main_config = cfg
+        self.bias_params = bias_params
+        self.bias_option = self.cfg.bias_option
         self.bias_model = self.__init_bias_model()
 
     def __init_bias_model(
         self,
     ) -> "DefaultBiasHandler":
-        match self.dynamic_bias_option:
+        match self.bias_option:
             case DynamicBiasOptions.DEFAULT:
-                return DefaultBiasHandler(self.cfg)
+                return DefaultBiasHandler(self.main_config, self.bias_params)
             case DynamicBiasOptions.SCALE_AND_OFFSET:
-                return AffineBiasTransformHandler(self.cfg)
+                return AffineBiasTransformHandler(self.main_config, self.bias_params)
+            case DynamicBiasOptions.ELEMENT_WISE_OFFSET:
+                return ElementwiseBiasHandler(self.main_config, self.bias_params)
             case DynamicBiasOptions.DYNAMIC_PARAMETERS:
-                return BiasGeneratorHandler(self.cfg)
+                return BiasGeneratorHandler(self.main_config)
             case _:
-                raise ValueError(
-                    f"Unsupported `dynamic_bias_option`: {self.dynamic_bias_option}"
-                )
+                raise ValueError(f"Unsupported `bias_option`: {self.bias_option}")
 
     def forward(
         self,
@@ -271,78 +250,7 @@ class DynamicBiasBehaviour(Module):
         return self.bias_model(logits)
 
 
-class DefaultBiasHandler(Module):
-    def __init__(
-        self,
-        cfg: "DynamicLinearLayerConfig",
-    ):
-        self.output_dim = cfg.output_dim
-        self.bias_params = self.__init_blas_parameters()
-
-    def __init_blas_parameters(self) -> Parameter:
-        bias_shape = (self.output_dim,)
-        return self._init_parameter_bank(bias_shape, nn.init.zeros_)
-
-    def forward(self, logits: Tensor) -> Tensor:
-        return self.bias_params
-
-
-class AffineBiasTransformHandler(DefaultBiasHandler):
-    def __init__(
-        self,
-        cfg: "DynamicLinearLayerConfig",
-    ):
-        super().__init__()
-        self.input_dim = cfg.input_dim
-        self.output_dim = cfg.output_dim
-        self.bias_flag = cfg.bias_flag
-        self.bias_params = self.__init_bias_parameters()
-        self.scalar_and_offset_generator = self.__init_scale_and_offset_model()
-
-    def __init_bias_parameters(self) -> Parameter:
-        bias_shape = (self.output_dim,)
-        return self._init_parameter_bank(bias_shape, nn.init.zeros_)
-
-    def __init_scale_and_offset_model(self) -> tuple[Linear | Sequential, Tensor]:
-        scalar_and_offset = 2
-        cfg = linear_stack_config(self, output_dim=scalar_and_offset)
-        generator = LinearBlockStack(cfg).build_model()
-        return generator
-
-    def forward(
-        self,
-        logits: Tensor,
-    ) -> Tensor:
-        bias_scalars = self.scalar_and_offset_generator(logits)
-        bias_scaling_factor, bias_offset = bias_scalars.chunk(2, dim=-1)
-        return bias_scaling_factor * self.bias_params + bias_offset
-
-
-class BiasGeneratorHandler(DefaultBiasHandler):
-    def __init__(
-        self,
-        cfg: "LinearLayerConfig",
-    ):
-        super().__init__()
-        self.input_dim = cfg.input_dim
-        self.output_dim = cfg.output_dim
-        self.dynamic_bias_flag = cfg.dynamic_bias_flag
-        self.dynamic_generators_depth = cfg.dynamic_generators_depth
-        self.bias_generator = self.__init_bias_model()
-
-    def __init_bias_model(
-        self,
-    ) -> Linear | Sequential | None:
-        cfg = linear_stack_config(self, output_dim=self.output_dim)
-        return LinearBlockStack(cfg).build_model()
-
-    def forward(
-        self,
-        logits: Tensor,
-    ) -> Tensor | None:
-        return self.bias_generator(logits)
-
-
+# Old implementation
 # class DiagonalParametersBehaviour(Module):
 #     def __init__(
 #         self,
@@ -370,10 +278,10 @@ class BiasGeneratorHandler(DefaultBiasHandler):
 #         output_dim = min(self.input_dim, self.output_dim)
 #         cfg = linear_stack_config(self, output_dim=output_dim)
 #
-#         diagonal_model = LinearBlockStack(cfg).build_model()
+#         diagonal_model = LinearLayerStack(cfg).build_model()
 #         anti_diagonal_model = None
 #         if self.anti_diagonal_flag:
-#             anti_diagonal_model = LinearBlockStack(cfg).build_model()
+#             anti_diagonal_model = LinearLayerStack(cfg).build_model()
 #         return diagonal_model, anti_diagonal_model
 #
 #     def __get_diagonal_padding_shape(self) -> tuple | None:
