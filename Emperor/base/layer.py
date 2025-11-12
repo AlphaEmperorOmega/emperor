@@ -7,17 +7,16 @@ from dataclasses import dataclass, field
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.utils import ConfigBase, Module
 
-
 from typing import TYPE_CHECKING
-
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+    from Emperor.linears.options import LinearLayerOptions
 
 
 @dataclass
 class LayerConfig(ConfigBase):
-    model_type: "Module | None" = field(
+    model_type: "LinearLayerOptions | None" = field(
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
     )
@@ -525,19 +524,22 @@ class LinearLayerStack(Module):
     ):
         super().__init__()
         self.cfg = cfg
-        self.overrides = overrides
-        # cfg = self.__update_config()
+        self.identifier = "layer_block_stack_config"
+        cfg = self.__update_config()
         self.model = LayerStack(cfg, overrides).build_model()
 
-    # def __update_config(self) -> LayerStackConfig:
-    #     identifier = "layer_block_stack_config"
-    #     config = getattr(self.cfg, identifier, self.cfg)
-    #     updated_config = self._overwrite_config(config, self.overrides)
-    #     overrides = self.__override_config()
-    #     updated_config = self._overwrite_config(updated_config, overrides)
-    #     c = copy.deepcopy(self.cfg)
-    #     c.layer_block_stack_config = updated_config
-    #     return c
+    def __update_config(self) -> "ModelConfig | LayerStackConfig":
+        config = getattr(self.cfg, self.identifier, self.cfg)
+        overrides = self.__override_config()
+        # TODO: Update the _overwrite_config to handle nested configs
+        # in order to remove the copy.deepcopy below
+        updated_config = self._overwrite_config(config, overrides)
+        if not hasattr(self.cfg, self.identifier):
+            return updated_config
+
+        c = copy.deepcopy(self.cfg)
+        c.layer_block_stack_config = updated_config
+        return c
 
     def __override_config(self) -> LayerStackConfig:
         from Emperor.linears.options import LinearLayerOptions
