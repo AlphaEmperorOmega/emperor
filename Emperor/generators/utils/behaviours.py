@@ -7,8 +7,7 @@ from torch.nn import Linear, Sequential
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.base.utils import Module
 from Emperor.generators.utils.base import (
-    LinearBlockStack,
-    LinearBlockStackConfig,
+    LinearStack,
 )
 
 
@@ -51,7 +50,7 @@ class DynamicDiagonalParametersBehaviour(Module):
         if self.input_dim is None and self.output_dim is None:
             return (None, None, None)
         output_dim = min(self.input_dim, self.output_dim)
-        cfg = LinearBlockStackConfig(
+        cfg = LinearLayerStackConfig(
             input_dim=self.input_dim,
             hidden_dim=self.input_dim,
             output_dim=output_dim,
@@ -60,16 +59,16 @@ class DynamicDiagonalParametersBehaviour(Module):
             layer_norm_position=LayerNormPositionOptions.DEFAULT,
             model_type=nn.Linear,
         )
-        diagonal_model = LinearBlockStack(cfg).build_model()
+        diagonal_model = LinearLayerStack(cfg).build_model()
         anti_diagonal_model = None
         if self.anti_diagonal_flag:
-            anti_diagonal_model = LinearBlockStack(cfg).build_model()
+            anti_diagonal_model = LinearLayerStack(cfg).build_model()
         bias_model = None
         if self.dynamic_bias_flag:
-            overrides = LinearBlockStackConfig(
+            overrides = LinearLayerStackConfig(
                 output_dim=2,
             )
-            bias_model = LinearBlockStack(cfg, overrides).build_model()
+            bias_model = LinearLayerStack(cfg, overrides).build_model()
         return diagonal_model, anti_diagonal_model, bias_model
 
     def __get_diagonal_padding_shape(self) -> tuple | None:

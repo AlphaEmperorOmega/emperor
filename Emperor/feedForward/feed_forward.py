@@ -5,7 +5,7 @@ from torch.nn import Sequential
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.experts.experts import MixtureOfExperts
-from Emperor.generators.utils.base import LayerBlock, LayerBlockStack
+from Emperor.generators.utils.base import Layer, LayerStack
 from Emperor.generators.utils.routers import RouterModel
 from Emperor.generators.utils.samplers import SamplerModel
 
@@ -57,9 +57,9 @@ class FeedForward(Module):
         self.model = self._create_model(cfg)
         self._store_shape_attributes()
 
-    def _create_model(self, config: "ModelConfig") -> LayerBlock | Sequential:
+    def _create_model(self, config: "ModelConfig") -> Layer | Sequential:
         config = self.__update_config(config)
-        return LayerBlockStack(config).build_model()
+        return LayerStack(config).build_model()
 
     def __update_config(self, confg: "ModelConfig"):
         c = copy.deepcopy(confg)

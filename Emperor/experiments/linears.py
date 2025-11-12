@@ -1,6 +1,6 @@
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.experiments.utils.factories import Experiments
-from Emperor.linears.utils.layers import LinearLayerConfig
+from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
 from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
 
 from typing import TYPE_CHECKING
@@ -77,7 +77,7 @@ class LinearsBasePreset:
 
         return ModelConfig(
             batch_size=batch_size,
-            linear_layer_model_config=LinearLayerConfig(
+            linear_layer_model_config=DynamicLinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
@@ -85,10 +85,3 @@ class LinearsBasePreset:
                 parameter_monitor=ParameterMonitor,
             ),
         )
-
-
-if __name__ == "__main__":
-    options = {
-        "mini_datasetset_flag": False,
-    }
-    LinearsExperiments(**options).train_base_model()

@@ -2,7 +2,7 @@ from torch import Tensor
 import torch.nn as nn
 from dataclasses import dataclass, field
 from Emperor.base.utils import randn, matmul
-from Emperor.generators.utils.base import LayerBlock
+from Emperor.generators.utils.base import Layer
 from torch.nn.parameter import Parameter
 from Emperor.base.utils import Module, ConfigBase
 from torch.nn import Linear, Sequential
@@ -87,7 +87,7 @@ class RouterModel(Module):
         self.compute_weight_flag = True
         self.__assert_input_requirements()
         # TODO: In the future replace the build model method with
-        # an instance of `LinearBlockStack`. The reason this is
+        # an instance of `LinearLayerStack`. The reason this is
         # not done right now is that i need to implement more
         # important features like the `Attention` mechanism
         self.model = self.__build_model()
@@ -143,7 +143,7 @@ class RouterModel(Module):
         num_experts: int,
         residual_connection_flag: bool = True,
     ):
-        return LayerBlock(
+        return Layer(
             model=self.__create_router_layer_model(
                 input_dim,
                 num_experts,

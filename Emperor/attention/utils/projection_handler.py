@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.generators.utils.base import LayerBlock, ParameterGeneratorLayerBlock
+from Emperor.generators.utils.base import Layer, ParameterGeneratorLayer
 from Emperor.generators.utils.linears import LinearLayer
 from typing import TYPE_CHECKING
 
@@ -28,18 +28,21 @@ class ProjectorBase(Module):
         self.__resolve_kv_dimensions()
         self.layer_block_model = self.__resolve_layer_block_class()
 
-    def __resolve_layer_block_class(self) -> type[LayerBlock]:
+    def __resolve_layer_block_class(self) -> type[Layer]:
         # TODO: move this somewhere else in the future since it is used in
-        # `LayerBlockStack` as well
-        from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+        # `LayerStack` as well
+        from Emperor.generators.utils.enums import (
+            LinearLayerTypes,
+            ParameterGeneratorTypes,
+        )
 
         if isinstance(self.model_type, LinearLayerTypes):
-            return LayerBlock
+            return Layer
         elif isinstance(self.model_type, ParameterGeneratorTypes):
-            return ParameterGeneratorLayerBlock
+            return ParameterGeneratorLayer
         else:
             raise RuntimeError(
-                f"Unsupported `model_type` {type(self.model_type)} for `LayerBlockStack`"
+                f"Unsupported `model_type` {type(self.model_type)} for `LayerStack`"
             )
 
     def __resolve_kv_dimensions(self):
@@ -54,7 +57,7 @@ class ProjectorBase(Module):
             else self.value_projection_dim
         )
 
-    def _create_model(self, input_dim: int, output_dim: int) -> LayerBlock:
+    def _create_model(self, input_dim: int, output_dim: int) -> Layer:
         config = self.__resolve_model_type_overrides(
             self.main_cfg, input_dim, output_dim
         )
@@ -118,7 +121,7 @@ class Projector(ProjectorBase):
         self.register_parameter("qkv_model", None)
         return query_model, key_model, value_model
 
-    def __build_shared_projection_models(self) -> LayerBlock:
+    def __build_shared_projection_models(self) -> Layer:
         self.register_parameter("query_model", None)
         self.register_parameter("key_model", None)
         self.register_parameter("value_model", None)

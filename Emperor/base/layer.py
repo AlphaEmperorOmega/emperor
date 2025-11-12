@@ -1,54 +1,52 @@
 import copy
-import torch
 import torch.nn as nn
 
-from enum import Enum
-from dataclasses import dataclass, field
-from torch.nn import Linear, Sequential
 from torch.types import Tensor
+from torch.nn import Linear, Sequential
+from dataclasses import dataclass, field
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.base.utils import Module
-from Emperor.base.utils import ConfigBase
+from Emperor.base.utils import ConfigBase, Module
+
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
-    from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
     from Emperor.config import ModelConfig
 
 
 @dataclass
 class LayerConfig(ConfigBase):
-    model_type: "LinearLayerTypes | ParameterGeneratorTypes | None" = field(
+    model_type: "Module | None" = field(
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
     )
-    activation: "ActivationOptions | None" = field(
-        default=None,
+    activation: ActivationOptions = field(
+        default=ActivationOptions.NONE,
         metadata={"help": "Activation function or layer to use"},
     )
-    layer_norm_dim: int | None = field(
-        default=None,
+    layer_norm_dim: int = field(
+        default=0,
         metadata={"help": ""},
     )
-    residual_flag: bool | None = field(
-        default=None,
+    residual_flag: bool = field(
+        default=False,
         metadata={"help": ""},
     )
-    adaptive_computation_flag: bool | None = field(
-        default=None,
+    adaptive_computation_flag: bool = field(
+        default=False,
         metadata={"help": ""},
     )
-    dropout_probability: float | None = field(
-        default=None,
+    dropout_probability: float = field(
+        default=0.0,
         metadata={"help": ""},
     )
-    layer_norm_position: "LayerNormPositionOptions | None" = field(
-        default=None,
+    layer_norm_position: LayerNormPositionOptions = field(
+        default=LayerNormPositionOptions.DEFAULT,
         metadata={"help": ""},
     )
-    apply_gates_bool: bool | None = field(
-        default=None,
+    apply_gates_bool: bool = field(
+        default=False,
         metadata={"help": ""},
     )
 
@@ -357,30 +355,28 @@ class FeedForwardLayer(Layer):
 
 @dataclass
 class LayerStackConfig(LayerConfig):
-    input_dim: int | None = field(
-        default=None,
+    input_dim: int = field(
+        default=0,
         metadata={"help": "Input dimension of the first `Linear` layer"},
     )
-    hidden_dim: int | None = field(
-        default=None,
+    hidden_dim: int = field(
+        default=0,
         metadata={"help": "Dimension of the hidden `Linear` layers"},
     )
-    output_dim: int | None = field(
-        default=None,
+    output_dim: int = field(
+        default=0,
         metadata={"help": "Output dimension of the output `Linear` layer"},
     )
-    num_layers: int | None = field(
-        default=None,
+    num_layers: int = field(
+        default=0,
         metadata={"help": "Number of layers in the model"},
     )
 
 
-class LayerStackAdjustments(Enum):
+class LayerStack(Module):
     SHARED_INPUT_OUTPUT_DIM = 1
     SEPARATE_INPUT_OUTPUT_DIM = 2
 
-
-class LayerStack(Module):
     def __init__(
         self,
         cfg: "LayerStackConfig | ModelConfig",
@@ -403,6 +399,15 @@ class LayerStack(Module):
         self.output_dim = self.cfg.output_dim
         self.num_layers = self.cfg.num_layers
 
+        for _name, _val in (
+            ("input_dim", self.input_dim),
+            ("hidden_dim", self.hidden_dim),
+            ("output_dim", self.output_dim),
+            ("num_layers", self.num_layers),
+        ):
+            if not isinstance(_val, int) or _val < 1:
+                raise ValueError(f"{_name} must be an integer >= 1, received {_val!r}")
+
         self.layer_block_model = self.__resolve_layer_block_class()
 
     def __resolve_layer_block_class(self) -> type[Layer]:
@@ -412,8 +417,13 @@ class LayerStack(Module):
             LinearLayerTypes,
             ParameterGeneratorTypes,
         )
+        from Emperor.linears.options import LinearLayerOptions
 
-        if isinstance(self.model_type, LinearLayerTypes):
+        if (
+            isinstance(self.model_type, LinearLayerTypes)
+            or isinstance(self.model_type, LinearLayerOptions)
+            or self.model_type == Linear
+        ):
             return Layer
         elif isinstance(self.model_type, ParameterGeneratorTypes):
             return ParameterGeneratorLayer
@@ -437,25 +447,26 @@ class LayerStack(Module):
         self._initialize_parameters(model)
         return model
 
-    def __add_initial_layer(self, layers: list) -> LayerStackAdjustments:
+    def __add_initial_layer(self, layers: list) -> int:
         if self.input_dim != self.hidden_dim and self.num_layers > 1:
             layer = self.__create_layer(self.input_dim, self.hidden_dim, False)
             layers.append(layer)
-            return LayerStackAdjustments.SEPARATE_INPUT_OUTPUT_DIM
-        return LayerStackAdjustments.SHARED_INPUT_OUTPUT_DIM
+            return self.SEPARATE_INPUT_OUTPUT_DIM
+        return self.SHARED_INPUT_OUTPUT_DIM
 
-    def __add_hidden_layers(
-        self, layers: list, layer_adjustment: LayerStackAdjustments
-    ) -> None:
-        for _ in range(self.num_layers - layer_adjustment.value):
+    def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
+        for _ in range(self.num_layers - layer_adjustment):
             layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
             layers.append(layer)
 
     def __add_output_layer(self, layers: list) -> None:
         layer_input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
         config = self.__resolve_model_type_overrides(layer_input_dim, self.output_dim)
-        layer = self.layer_block_model(model=self.model_type.value(config))
+        layer = self.layer_block_model(model=self.__get_model_type()(config))
         layers.append(layer)
+
+    def __get_model_type(self):
+        return self.model_type.value
 
     def __create_layer(
         self,
@@ -467,13 +478,13 @@ class LayerStack(Module):
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
             layer_norm_dim = output_dim
         config = self.__resolve_model_type_overrides(input_dim, output_dim)
-        model = self.model_type.value(config)
+        model = self.__get_model_type()(config)
 
         return self.layer_block_model(
             model=model,
             layer_norm_dim=layer_norm_dim,
             residual_connection_flag=residual_flag,
-            activation_function=self.activation.value,
+            activation_function=self.activation,
             dropout_probability=self.dropout_probability,
             layer_norm_position=self.layer_norm_position,
         )
@@ -487,7 +498,7 @@ class LayerStack(Module):
             "LinearLayer",
             "DynamicLinearLayer",
         )
-        if self.model_type.value.__name__ in linears:
+        if self.__get_model_type().__name__ in linears:
             c.linear_layer_model_config.input_dim = input_dim
             c.linear_layer_model_config.output_dim = output_dim
             return c
@@ -498,7 +509,7 @@ class LayerStack(Module):
             "GeneratorParameterLayer",
         )
 
-        if self.model_type.value.__name__ in generators:
+        if self.__get_model_type().__name__ in generators:
             c.router_model_config.input_dim = input_dim
             c.mixture_model_config.input_dim = input_dim
             c.mixture_model_config.output_dim = output_dim
@@ -506,90 +517,34 @@ class LayerStack(Module):
             return c
 
 
-@dataclass
-class LinearBlockStackConfig(LayerConfig):
-    model_type: nn.Linear | None = field(
-        default=None,
-        metadata={"help": "Linear model module used for output transformation"},
-    )
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input dimension of the first `Linear` layer"},
-    )
-    hidden_dim: int | None = field(
-        default=None,
-        metadata={"help": "Dimension of the hidden `Linear` layers"},
-    )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output dimension of the output `Linear` layer"},
-    )
-    num_layers: int | None = field(
-        default=None,
-        metadata={"help": "Number of layers in the model"},
-    )
-
-
-class LinearStack(Module):
+class LinearLayerStack(Module):
     def __init__(
         self,
-        cfg: "LinearBlockStackConfig | ModelConfig",
-        overrides: "LinearBlockStackConfig | None" = None,
+        cfg: "LayerStackConfig | ModelConfig",
+        overrides: "LayerStackConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_model_config", cfg)
-        self.cfg: "LinearBlockStackConfig" = self._overwrite_config(config, overrides)
+        self.cfg = cfg
+        self.overrides = overrides
+        # cfg = self.__update_config()
+        self.model = LayerStack(cfg, overrides).build_model()
 
-        self.input_dim = self.cfg.input_dim
-        self.hidden_dim = self.cfg.hidden_dim
-        self.output_dim = self.cfg.output_dim
-        self.num_layers = self.cfg.num_layers
-        self.activation = self.cfg.activation
-        self.layer_norm_position = self.cfg.layer_norm_position
-        self.model_type = self.cfg.model_type
+    # def __update_config(self) -> LayerStackConfig:
+    #     identifier = "layer_block_stack_config"
+    #     config = getattr(self.cfg, identifier, self.cfg)
+    #     updated_config = self._overwrite_config(config, self.overrides)
+    #     overrides = self.__override_config()
+    #     updated_config = self._overwrite_config(updated_config, overrides)
+    #     c = copy.deepcopy(self.cfg)
+    #     c.layer_block_stack_config = updated_config
+    #     return c
 
-    def build_model(self) -> Linear | Sequential:
-        layers = []
+    def __override_config(self) -> LayerStackConfig:
+        from Emperor.linears.options import LinearLayerOptions
 
-        layer_adjustment = self.__add_initial_layer(layers)
-        self.__add_hidden_layers(layers, layer_adjustment)
-        self.__add_output_layer(layers)
-
-        model = Sequential(*layers)
-        self._initialize_parameters(model)
-        return model
-
-    def __add_initial_layer(self, layers: list) -> int:
-        if self.input_dim != self.hidden_dim and self.num_layers > 1:
-            layer = self._create_layer(self.input_dim, self.hidden_dim, False)
-            layers.append(layer)
-            return 2
-        return 1
-
-    def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
-        for _ in range(self.num_layers - layer_adjustment):
-            layer = self._create_layer(self.hidden_dim, self.hidden_dim)
-            layers.append(layer)
-
-    def __add_output_layer(self, layers: list) -> None:
-        layer_input = self.hidden_dim if self.num_layers > 1 else self.input_dim
-        layers.append(self.model_type(layer_input, self.output_dim))
-
-    def _create_layer(
-        self,
-        input_dim: int,
-        output_dim: int,
-        residual_connection_flag: bool = True,
-    ):
-        layer_norm_dim = None
-        if self.layer_norm_position != LayerNormPositionOptions.NONE:
-            layer_norm_dim = output_dim
-        return Layer(
-            model=self.model_type(
-                input_dim,
-                output_dim,
-            ),
-            activation_function=self.activation,
-            layer_norm_dim=layer_norm_dim,
-            residual_connection_flag=residual_connection_flag,
+        return LayerStackConfig(
+            model_type=LinearLayerOptions.BASE,
         )
+
+    def forward(self, input_batch: Tensor) -> Tensor:
+        return self.model(input_batch)

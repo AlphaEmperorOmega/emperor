@@ -318,14 +318,27 @@ class Module(nn.Module, HyperParameters):
     ) -> "ConfigBase":
         if overwrrides is None:
             return cfg
+        # for field in cfg.__dataclass_fields__:
+        #     if hasattr(overwrrides, field) and getattr(overwrrides, field) is not None:
+        #         setattr(cfg, field, getattr(overwrrides, field))
+
         for field in cfg.__dataclass_fields__:
-            if hasattr(overwrrides, field) and getattr(overwrrides, field) is not None:
+            default = getattr(overwrrides.__dataclass_fields__[field], "default", None)
+            # getattr(
+            #     overwrrides.__dataclass_fields__[field], "default", None
+            # ) or getattr(
+            #     overwrrides.__dataclass_fields__[field], "default_factory", None
+            # )
+
+            if (
+                hasattr(overwrrides, field)
+                and getattr(overwrrides, field) is not default
+            ):
                 setattr(cfg, field, getattr(overwrrides, field))
+
         return cfg
 
-    def _validate_fields(
-        self, config: "ConfigBase", config_type: "ConfigBase"
-    ) -> None:
+    def _validate_fields(self, config: "ConfigBase", config_type: "ConfigBase") -> None:
         for config_field in fields(config_type):
             field_value = getattr(config, config_field.name)
             is_field_value_none = field_value is None

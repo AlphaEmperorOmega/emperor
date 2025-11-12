@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import ConfigBase, Module, device
-from Emperor.generators.utils.base import LayerBlock, ParameterGeneratorLayerBlock
+from Emperor.generators.utils.base import Layer, ParameterGeneratorLayer
 from Emperor.generators.utils.linears import LinearLayer
 from Emperor.generators.utils.enums import LayerTypes
 from Emperor.generators.utils.routers import RouterModel
@@ -128,18 +128,18 @@ class MixtureOfExperts(Module):
         self.router, self.sampler = self.__optionaly_create_router_and_samples(cfg)
         self.expert_modules = self.__create_experts(cfg)
 
-    def __resolve_layer_block_class(self) -> type[LayerBlock]:
+    def __resolve_layer_block_class(self) -> type[Layer]:
         # TODO: move this somewhere else in the future since it is used in
-        # `LayerBlockStack` as well
+        # `LayerStack` as well
         from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
 
         if isinstance(self.model_type, LinearLayerTypes):
-            return LayerBlock
+            return Layer
         elif isinstance(self.model_type, ParameterGeneratorTypes):
-            return ParameterGeneratorLayerBlock
+            return ParameterGeneratorLayer
         else:
             raise RuntimeError(
-                f"Unsupported `model_type` {type(self.model_type)} for `LayerBlockStack`"
+                f"Unsupported `model_type` {type(self.model_type)} for `LayerStack`"
             )
 
     def __resolve_config_type(self) -> str:

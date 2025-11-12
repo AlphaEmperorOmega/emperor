@@ -5,7 +5,7 @@ import torch.nn as nn
 from typing import Callable
 from torch import Tensor
 from Emperor.base.models import Classifier
-from Emperor.generators.utils.base import LinearBlockStackConfig, LinearBlockStack
+from Emperor.generators.utils.base import LinearLayerStackConfig, LinearLayerStack
 
 from typing import TYPE_CHECKING
 
@@ -62,7 +62,7 @@ class MultiLayerClassifierModel(ClassifierExperiment):
         self.model = self.__generate_model_layers()
 
     def __generate_model_layers(self) -> nn.Linear | nn.Sequential:
-        cfg = LinearBlockStackConfig(
+        cfg = LinearLayerStackConfig(
             input_dim=self.cfg.hidden_dim,
             hidden_dim=self.cfg.hidden_dim,
             output_dim=self.cfg.output_dim,
@@ -71,7 +71,7 @@ class MultiLayerClassifierModel(ClassifierExperiment):
             layer_norm_flag=False,
             model_type=nn.Linear,
         )
-        return LinearBlockStack(cfg).build_model()
+        return LinearLayerStack(cfg).build_model()
 
     def forward(self, input_batch: Tensor):
         output = self.model(input_batch)
@@ -105,6 +105,6 @@ class MultiLayerClassifierModel(ClassifierExperiment):
     #             nn.LayerNorm(output_dim) if is_inner_layer_flag else None,
     #             False if layer_idx == 0 else is_inner_layer_flag,
     #         )
-    #         layer = LayerBlock(*layer_block_inputs)
+    #         layer = Layer(*layer_block_inputs)
     #         layers.append(layer)
     #     return layers

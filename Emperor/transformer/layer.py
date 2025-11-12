@@ -11,10 +11,10 @@ from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.generators.utils.base import (
-    LayerBlock,
-    FeedForwardLayerBlock,
-    CrossAttentionLayerBlock,
-    SelfAttentionLayerBlock,
+    Layer,
+    FeedForwardLayer,
+    CrossAttentionLayer,
+    SelfAttentionLayer,
 )
 
 from typing import TYPE_CHECKING
@@ -65,27 +65,27 @@ class TransformerLayerBase(Module):
         self.layer_norm_position = self.cfg.layer_norm_position
         self.dropout_probability = self.cfg.dropout_probability
 
-    def _create_self_attention_model(self) -> LayerBlock:
-        layerBlockType = SelfAttentionLayerBlock
+    def _create_self_attention_model(self) -> Layer:
+        layerBlockType = SelfAttentionLayer
         model = MultiHeadAttention(self.main_config)
         return self.__create_layer_block(layerBlockType, model)
 
-    def _create_cross_attention_model(self) -> LayerBlock:
-        className = CrossAttentionLayerBlock
+    def _create_cross_attention_model(self) -> Layer:
+        className = CrossAttentionLayer
         overrides = MultiHeadAttentionConfig(use_separate_projection_weight_flag=True)
         model = MultiHeadAttention(self.main_config, overrides)
         return self.__create_layer_block(className, model)
 
-    def _create_feed_forward_model(self) -> LayerBlock:
-        className = FeedForwardLayerBlock
+    def _create_feed_forward_model(self) -> Layer:
+        className = FeedForwardLayer
         model = FeedForward(self.main_config)
         return self.__create_layer_block(className, model)
 
     def __create_layer_block(
         self,
-        class_name: type[LayerBlock],
+        class_name: type[Layer],
         model: MultiHeadAttention | FeedForward,
-    ) -> LayerBlock:
+    ) -> Layer:
         return class_name(
             model=model,
             residual_connection_flag=True,
@@ -247,12 +247,12 @@ class TransformerBase(Module):
         return torch.triu(negative_infinity_tensor, diagonal=1)
 
     # TODO: When you are done with the tranformer model
-    # come back and use LayerBlock and LayerBlockStack instead of
+    # come back and use Layer and LayerStack instead of
     # the methods below
     #
-    # def ___create_layers_model(self, config: "ModelConfig") -> LayerBlock | Sequential:
+    # def ___create_layers_model(self, config: "ModelConfig") -> Layer | Sequential:
     #     config = self.__update_config(config)
-    #     return LayerBlockStack(config).build_model()
+    #     return LayerStack(config).build_model()
     #
     # def __update_config(self, confg: "ModelConfig"):
     #     c = copy.deepcopy(confg)

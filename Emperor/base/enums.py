@@ -7,6 +7,7 @@ class BaseOptions(Enum):
 
 
 class ActivationOptions(BaseOptions):
+    NONE = "no_activation"
     RELU = F.relu
     GELU = F.gelu
     SIGMOID = F.sigmoid
