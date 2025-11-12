@@ -4,7 +4,7 @@ from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.config import ModelConfig
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.attention.attention import MultiHeadAttentionConfig
-from Emperor.generators.layers import ParameterLayerConfig
+from Emperor.generators.utils.layers import ParameterLayerConfig
 from Emperor.generators.utils.linears import LinearLayerConfig
 from Emperor.generators.utils.mixture import MixtureConfig
 from Emperor.generators.utils.routers import RouterConfig
@@ -15,7 +15,7 @@ from Emperor.generators.utils.enums import (
     LayerTypes,
     LinearLayerTypes,
 )
-from Emperor.generators.utils.base import LayerBlockStackConfig
+from Emperor.generators.utils.base import LayerStackConfig
 from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
@@ -126,8 +126,6 @@ def default_unittest_config():
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM,
             bias_flag=True,
-            anti_diagonal_flag=True,
-            dynamic_bias_flag=True,
         ),
         mixture_of_experts_config=MixtureOfExpertsFeedForwardConfig(
             weighted_parameters_flag=True,
@@ -181,7 +179,7 @@ def default_unittest_config():
             num_layers=2,
             model_type=LinearLayerTypes.DYNAMIC,
         ),
-        layer_block_stack_config=LayerBlockStackConfig(
+        layer_block_stack_config=LayerStackConfig(
             input_dim=HIDDEN_DIM,
             hidden_dim=HIDDEN_DIM,
             output_dim=HIDDEN_DIM,

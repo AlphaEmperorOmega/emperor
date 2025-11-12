@@ -2,7 +2,7 @@ import copy
 import torch.nn as nn
 import unittest
 from Emperor.base.utils import randn
-from Emperor.generators.utils.base import LayerBlock
+from Emperor.generators.utils.base import Layer
 from Emperor.generators.utils.linears import (
     DynamicLinearLayer,
     LinearLayer,
@@ -112,9 +112,9 @@ class TestRouterModel(unittest.TestCase):
         model = m._RouterModel__build_model()
 
         self.assertIsInstance(model, nn.Sequential)
-        self.assertIsInstance(model[0], LayerBlock)
+        self.assertIsInstance(model[0], Layer)
         for layer in model[:-1]:
-            self.assertIsInstance(layer, LayerBlock)
+            self.assertIsInstance(layer, Layer)
         self.assertIsInstance(model[-1], nn.Linear)
 
     def test__compute_logit_scores__noisy_topk__False(self):

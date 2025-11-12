@@ -9,7 +9,7 @@ from Emperor.generators.utils.enums import (
     LinearLayerTypes,
     ParameterGeneratorTypes,
 )
-from Emperor.generators.utils.base import LayerBlock
+from Emperor.generators.utils.base import Layer
 from docs.config import default_unittest_config
 
 
@@ -115,7 +115,7 @@ class Test___build_shared_projection_models(TestProjector):
         self.assertIsNone(self.model.query_model)
         self.assertIsNone(self.model.key_model)
         self.assertIsNone(self.model.value_model)
-        self.assertIsInstance(qkv_model, LayerBlock)
+        self.assertIsInstance(qkv_model, Layer)
 
 
 class Test___build_separate_projection_models(TestProjector):
@@ -131,9 +131,9 @@ class Test___build_separate_projection_models(TestProjector):
             self.model._Projector__build_separate_projection_models()
         )
 
-        self.assertIsInstance(query_model, LayerBlock)
-        self.assertIsInstance(key_model, LayerBlock)
-        self.assertIsInstance(value_model, LayerBlock)
+        self.assertIsInstance(query_model, Layer)
+        self.assertIsInstance(key_model, Layer)
+        self.assertIsInstance(value_model, Layer)
         self.assertIsNone(self.model.qkv_model)
 
 
@@ -147,8 +147,8 @@ class Test___build_projection_models(TestProjector):
         )
         self.rebuild_presets(config)
 
-        self.assertIsInstance(self.model.qkv_model, LayerBlock)
-        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsInstance(self.model.qkv_model, Layer)
+        self.assertIsInstance(self.model.output_model, Layer)
         self.assertIsNone(self.model.query_model)
         self.assertIsNone(self.model.key_model)
         self.assertIsNone(self.model.value_model)
@@ -162,10 +162,10 @@ class Test___build_projection_models(TestProjector):
         )
         self.rebuild_presets(config)
 
-        self.assertIsInstance(self.model.query_model, LayerBlock)
-        self.assertIsInstance(self.model.key_model, LayerBlock)
-        self.assertIsInstance(self.model.value_model, LayerBlock)
-        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsInstance(self.model.query_model, Layer)
+        self.assertIsInstance(self.model.key_model, Layer)
+        self.assertIsInstance(self.model.value_model, Layer)
+        self.assertIsInstance(self.model.output_model, Layer)
         self.assertIsNone(self.model.qkv_model)
 
     def test__different_qkv_dim(self):
@@ -177,10 +177,10 @@ class Test___build_projection_models(TestProjector):
         )
         self.rebuild_presets(config)
 
-        self.assertIsInstance(self.model.query_model, LayerBlock)
-        self.assertIsInstance(self.model.key_model, LayerBlock)
-        self.assertIsInstance(self.model.value_model, LayerBlock)
-        self.assertIsInstance(self.model.output_model, LayerBlock)
+        self.assertIsInstance(self.model.query_model, Layer)
+        self.assertIsInstance(self.model.key_model, Layer)
+        self.assertIsInstance(self.model.value_model, Layer)
+        self.assertIsInstance(self.model.output_model, Layer)
         self.assertIsNone(self.model.qkv_model)
 
 

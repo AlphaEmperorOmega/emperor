@@ -5,7 +5,7 @@ import unittest
 from dataclasses import asdict
 from Emperor.attention.attention import MultiHeadAttention
 from Emperor.feedForward.feed_forward import FeedForward
-from Emperor.generators.utils.base import LayerBlock
+from Emperor.generators.utils.base import Layer
 from Emperor.generators.utils.enums import LinearLayerTypes
 from Emperor.transformer.layer import TransformerEncoderLayer, TransformerLayerConfig
 from docs.config import default_unittest_config
@@ -56,8 +56,8 @@ class Test___init(TestTransformerEncoderLayer):
         self.assertEqual(self.model.layer_norm_position, self.layer_norm_position)
         self.assertEqual(self.model.layer_norm_dim, self.layer_norm_dim)
         self.assertEqual(self.model.dropout_probability, self.dropout_probability)
-        self.assertIsInstance(self.model.self_attention_model, LayerBlock)
-        self.assertIsInstance(self.model.feed_forward_model, LayerBlock)
+        self.assertIsInstance(self.model.self_attention_model, Layer)
+        self.assertIsInstance(self.model.feed_forward_model, Layer)
         self.assertIsInstance(self.model.self_attention_model.model, MultiHeadAttention)
         self.assertIsInstance(self.model.feed_forward_model.model, FeedForward)
 

@@ -6,7 +6,7 @@ import torch.nn as nn
 from Emperor.config import ModelConfig
 from Emperor.base.enums import ActivationOptions
 from Emperor.generators.layers import ParameterLayerConfig
-from Emperor.generators.utils.base import LayerBlock
+from Emperor.generators.utils.base import Layer
 from Emperor.generators.utils.enums import (
     LayerTypes,
     LinearLayerTypes,
@@ -199,7 +199,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
-            self.assertIsInstance(expert, LayerBlock)
+            self.assertIsInstance(expert, Layer)
 
     def test__create_experts_with_different_dimensions(self):
         c = copy.deepcopy(self.cfg)
@@ -218,7 +218,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 if expert.model.bias_params is not None
                 else None
             )
-            self.assertIsInstance(expert, LayerBlock)
+            self.assertIsInstance(expert, Layer)
             self.assertEqual(input_dim, config.input_dim)
             self.assertEqual(output_dim, config.output_dim)
             if expert.model.bias_params is not None:
@@ -239,7 +239,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 if expert.model.bias_params is not None
                 else None
             )
-            self.assertIsInstance(expert, LayerBlock)
+            self.assertIsInstance(expert, Layer)
             self.assertEqual(input_dim, config.input_dim)
             self.assertEqual(output_dim, config.output_dim)
             if expert.model.bias_params is not None:
@@ -262,7 +262,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 if expert.model.bias_params is not None
                 else None
             )
-            self.assertIsInstance(expert, LayerBlock)
+            self.assertIsInstance(expert, Layer)
             self.assertEqual(input_dim, config.input_dim)
             self.assertEqual(output_dim, config.output_dim)
             if expert.model.bias_params is not None:
@@ -278,7 +278,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
             input_dim, _, output_dim = expert.model.mixture.weight_bank.shape
-            self.assertIsInstance(expert, LayerBlock)
+            self.assertIsInstance(expert, Layer)
             self.assertEqual(input_dim, config.input_dim)
             self.assertEqual(output_dim, config.output_dim)
 
@@ -292,7 +292,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         self.assertEqual(len(m.expert_modules), m.num_experts)
         for expert in expert_models:
             _, input_dim, output_dim = expert.model.mixture.weight_bank.shape
-            self.assertIsInstance(expert, LayerBlock)
+            self.assertIsInstance(expert, Layer)
             self.assertEqual(input_dim, config.input_dim)
             self.assertEqual(output_dim, config.output_dim)
 
@@ -307,7 +307,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         for expert in expert_models:
             _, input_dim, _ = expert.model.mixture.input_weight_bank.shape
             _, _, output_dim = expert.model.mixture.output_weight_bank.shape
-            self.assertIsInstance(expert, LayerBlock)
+            self.assertIsInstance(expert, Layer)
             self.assertEqual(input_dim, config.input_dim)
             self.assertEqual(output_dim, config.output_dim)
 

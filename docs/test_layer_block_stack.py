@@ -6,9 +6,9 @@ from dataclasses import asdict
 from Emperor.base.enums import ActivationOptions
 from docs.config import default_unittest_config
 from Emperor.generators.utils.base import (
-    LayerBlock,
-    LayerBlockStack,
-    LayerBlockStackConfig,
+    Layer,
+    LayerStack,
+    LayerStackConfig,
     LayerStackAdjustments,
 )
 from Emperor.generators.utils.enums import (
@@ -17,7 +17,7 @@ from Emperor.generators.utils.enums import (
 )
 
 
-class TestLayerBlockStack(unittest.TestCase):
+class TestLayerStack(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -35,7 +35,7 @@ class TestLayerBlockStack(unittest.TestCase):
         self.value_model = None
         self.qkv_model = None
 
-    def rebuild_presets(self, config: LayerBlockStackConfig | None = None):
+    def rebuild_presets(self, config: LayerStackConfig | None = None):
         self.cfg = default_unittest_config()
         self.config = self.cfg.layer_block_stack_config
         if config is not None:
@@ -43,7 +43,7 @@ class TestLayerBlockStack(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.model = LayerBlockStack(self.cfg)
+        self.model = LayerStack(self.cfg)
 
         self.batch_size = self.cfg.batch_size
 
@@ -60,9 +60,9 @@ class TestLayerBlockStack(unittest.TestCase):
         self.layer_norm_position = self.config.layer_norm_position
 
 
-class Test__init(TestLayerBlockStack):
+class Test__init(TestLayerStack):
     def test_init_input_layer_with_default_config(self):
-        self.assertIsInstance(self.model, LayerBlockStack)
+        self.assertIsInstance(self.model, LayerStack)
 
         self.assertEqual(self.model.model_type, self.config.model_type)
         self.assertEqual(self.model.activation, self.config.activation)
@@ -83,9 +83,9 @@ class Test__init(TestLayerBlockStack):
         self.assertEqual(self.model.num_layers, self.config.num_layers)
 
 
-class Test___resolve_model_type_overrides(TestLayerBlockStack):
+class Test___resolve_model_type_overrides(TestLayerStack):
     def test_if_config_is_updated_for_linear_model(self):
-        config = LayerBlockStackConfig(
+        config = LayerStackConfig(
             model_type=LinearLayerTypes.DYNAMIC,
         )
         self.rebuild_presets(config)
@@ -93,7 +93,7 @@ class Test___resolve_model_type_overrides(TestLayerBlockStack):
         input_dim = 8
         output_dim = 16
 
-        updated_config = self.model._LayerBlockStack__resolve_model_type_overrides(
+        updated_config = self.model._LayerStack__resolve_model_type_overrides(
             input_dim, output_dim
         )
         self.assertEqual(updated_config.linear_layer_model_config.input_dim, input_dim)
@@ -102,7 +102,7 @@ class Test___resolve_model_type_overrides(TestLayerBlockStack):
         )
 
     def test_if_config_is_updated_for_parameter_generator_model(self):
-        config = LayerBlockStackConfig(
+        config = LayerStackConfig(
             model_type=ParameterGeneratorTypes.VECTOR,
         )
         self.rebuild_presets(config)
@@ -110,7 +110,7 @@ class Test___resolve_model_type_overrides(TestLayerBlockStack):
         input_dim = 8
         output_dim = 16
 
-        updated_config = self.model._LayerBlockStack__resolve_model_type_overrides(
+        updated_config = self.model._LayerStack__resolve_model_type_overrides(
             input_dim, output_dim
         )
 
@@ -119,17 +119,17 @@ class Test___resolve_model_type_overrides(TestLayerBlockStack):
         self.assertEqual(updated_config.mixture_model_config.output_dim, output_dim)
 
 
-class Test___create_layer(TestLayerBlockStack):
+class Test___create_layer(TestLayerStack):
     def test_if_all_model_types_are_computed(self):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     model_type=layer_type,
                 )
                 self.rebuild_presets(config)
 
-                model = self.model._LayerBlockStack__create_layer(
+                model = self.model._LayerStack__create_layer(
                     self.input_dim, self.output_dim, self.residual_flag
                 )
 
@@ -140,7 +140,7 @@ class Test___create_layer(TestLayerBlockStack):
 
                 expected_output = (self.batch_size, self.output_dim)
 
-                self.assertIsInstance(model, LayerBlock)
+                self.assertIsInstance(model, Layer)
                 self.assertIsInstance(model.model, layer_type.value)
                 self.assertEqual(
                     model.activation_function, ActivationOptions.GELU.value
@@ -157,7 +157,7 @@ class Test___create_layer(TestLayerBlockStack):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     input_dim=8,
                     output_dim=8,
                     residual_flag=True,
@@ -165,7 +165,7 @@ class Test___create_layer(TestLayerBlockStack):
                 )
                 self.rebuild_presets(config)
 
-                model = self.model._LayerBlockStack__create_layer(
+                model = self.model._LayerStack__create_layer(
                     self.input_dim, self.output_dim, residual_flag=True
                 )
 
@@ -176,7 +176,7 @@ class Test___create_layer(TestLayerBlockStack):
 
                 expected_output = (self.batch_size, self.output_dim)
 
-                self.assertIsInstance(model, LayerBlock)
+                self.assertIsInstance(model, Layer)
                 self.assertIsInstance(model.model, layer_type.value)
                 self.assertEqual(
                     model.activation_function, ActivationOptions.GELU.value
@@ -190,12 +190,12 @@ class Test___create_layer(TestLayerBlockStack):
                 self.assertEqual(output.shape, expected_output)
 
 
-class Test___add_initial_layer(TestLayerBlockStack):
+class Test___add_initial_layer(TestLayerStack):
     def test_no_layer_is_added_when_num_layers_is_one(self):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     input_dim=8,
                     output_dim=16,
                     num_layers=1,
@@ -204,7 +204,7 @@ class Test___add_initial_layer(TestLayerBlockStack):
                 self.rebuild_presets(config)
 
                 model_list = []
-                adjustment = self.model._LayerBlockStack__add_initial_layer(model_list)
+                adjustment = self.model._LayerStack__add_initial_layer(model_list)
 
                 self.assertEqual(len(model_list), 0)
                 self.assertEqual(
@@ -217,7 +217,7 @@ class Test___add_initial_layer(TestLayerBlockStack):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     input_dim=16,
                     output_dim=16,
                     num_layers=1,
@@ -226,7 +226,7 @@ class Test___add_initial_layer(TestLayerBlockStack):
                 self.rebuild_presets(config)
 
                 model_list = []
-                adjustment = self.model._LayerBlockStack__add_initial_layer(model_list)
+                adjustment = self.model._LayerStack__add_initial_layer(model_list)
 
                 self.assertEqual(len(model_list), 0)
                 self.assertEqual(
@@ -241,7 +241,7 @@ class Test___add_initial_layer(TestLayerBlockStack):
         for type in types:
             for layer_type in type:
                 for num_layer in num_layers_array:
-                    config = LayerBlockStackConfig(
+                    config = LayerStackConfig(
                         input_dim=8,
                         output_dim=16,
                         num_layers=num_layer,
@@ -250,7 +250,7 @@ class Test___add_initial_layer(TestLayerBlockStack):
                     self.rebuild_presets(config)
 
                     model_list = []
-                    adjustment = self.model._LayerBlockStack__add_initial_layer(
+                    adjustment = self.model._LayerStack__add_initial_layer(
                         model_list
                     )
                     model = nn.Sequential(*model_list)
@@ -269,12 +269,12 @@ class Test___add_initial_layer(TestLayerBlockStack):
                     self.assertEqual(output.shape, expected_output)
 
 
-class Test___add_hidden_layers(TestLayerBlockStack):
+class Test___add_hidden_layers(TestLayerStack):
     def test_no_layer_added_when_num_layers_is_one(self):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     input_dim=8,
                     output_dim=16,
                     num_layers=1,
@@ -284,7 +284,7 @@ class Test___add_hidden_layers(TestLayerBlockStack):
 
                 model_list = []
                 adjustment = LayerStackAdjustments.SHARED_INPUT_OUTPUT_DIM
-                self.model._LayerBlockStack__add_hidden_layers(model_list, adjustment)
+                self.model._LayerStack__add_hidden_layers(model_list, adjustment)
 
                 self.assertEqual(len(model_list), 0)
 
@@ -292,7 +292,7 @@ class Test___add_hidden_layers(TestLayerBlockStack):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     input_dim=8,
                     output_dim=16,
                     num_layers=2,
@@ -302,7 +302,7 @@ class Test___add_hidden_layers(TestLayerBlockStack):
 
                 model_list = []
                 adjustment = LayerStackAdjustments.SEPARATE_INPUT_OUTPUT_DIM
-                self.model._LayerBlockStack__add_hidden_layers(model_list, adjustment)
+                self.model._LayerStack__add_hidden_layers(model_list, adjustment)
 
                 self.assertEqual(len(model_list), 0)
 
@@ -312,7 +312,7 @@ class Test___add_hidden_layers(TestLayerBlockStack):
         for type in types:
             for layer_type in type:
                 for num_layer in num_layers_array:
-                    config = LayerBlockStackConfig(
+                    config = LayerStackConfig(
                         input_dim=8,
                         output_dim=16,
                         num_layers=num_layer,
@@ -323,7 +323,7 @@ class Test___add_hidden_layers(TestLayerBlockStack):
                     model_list = []
 
                     adjustment = LayerStackAdjustments.SHARED_INPUT_OUTPUT_DIM
-                    self.model._LayerBlockStack__add_hidden_layers(
+                    self.model._LayerStack__add_hidden_layers(
                         model_list, adjustment
                     )
                     model = nn.Sequential(*model_list)
@@ -339,12 +339,12 @@ class Test___add_hidden_layers(TestLayerBlockStack):
                     self.assertEqual(output.shape, expected_output)
 
 
-class Test___add_output_layer(TestLayerBlockStack):
+class Test___add_output_layer(TestLayerStack):
     def test_ensure_input_layer_is_returned_when_num_layers_is_one(self):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     input_dim=8,
                     output_dim=16,
                     num_layers=1,
@@ -353,7 +353,7 @@ class Test___add_output_layer(TestLayerBlockStack):
                 self.rebuild_presets(config)
 
                 model_list = []
-                self.model._LayerBlockStack__add_output_layer(model_list)
+                self.model._LayerStack__add_output_layer(model_list)
                 model = model_list[0]
 
                 input = torch.randn(self.batch_size, self.input_dim)
@@ -370,7 +370,7 @@ class Test___add_output_layer(TestLayerBlockStack):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     input_dim=8,
                     output_dim=16,
                     num_layers=2,
@@ -379,7 +379,7 @@ class Test___add_output_layer(TestLayerBlockStack):
                 self.rebuild_presets(config)
 
                 model_list = []
-                self.model._LayerBlockStack__add_output_layer(model_list)
+                self.model._LayerStack__add_output_layer(model_list)
                 model = model_list[0]
 
                 input = torch.randn(self.batch_size, self.hidden_dim)
@@ -393,12 +393,12 @@ class Test___add_output_layer(TestLayerBlockStack):
                 self.assertEqual(output.shape, expected_output)
 
 
-class Test_build_model(TestLayerBlockStack):
+class Test_build_model(TestLayerStack):
     def test_model_layer_block_returned_when_num_layers_is_one(self):
         types = (LinearLayerTypes, ParameterGeneratorTypes)
         for type in types:
             for layer_type in type:
-                config = LayerBlockStackConfig(
+                config = LayerStackConfig(
                     input_dim=8,
                     output_dim=16,
                     num_layers=1,
@@ -415,7 +415,7 @@ class Test_build_model(TestLayerBlockStack):
 
                 expected_output = (self.batch_size, self.output_dim)
 
-                self.assertIsInstance(model, LayerBlock)
+                self.assertIsInstance(model, Layer)
                 self.assertEqual(output.shape, expected_output)
 
     def test_sequential_is_returned_when_num_layers_is_greater_than_one(self):
@@ -425,7 +425,7 @@ class Test_build_model(TestLayerBlockStack):
         for type in types:
             for layer_type in type:
                 for num_layers in num_layers_array:
-                    config = LayerBlockStackConfig(
+                    config = LayerStackConfig(
                         input_dim=8,
                         output_dim=16,
                         num_layers=num_layers,
