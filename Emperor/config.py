@@ -11,14 +11,14 @@ from Emperor.feedForward.feed_forward import (
 )
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.generators.utils.layers import ParameterLayerConfig
-from Emperor.generators.utils.base import LayerBlockStackConfig
+from Emperor.base.layer import LayerStackConfig
 from Emperor.generators.utils.enums import (
     # AttentionTypes,
     # FeedForwardTypes,
     LayerTypes,
     LinearLayerTypes,
 )
-from Emperor.linears.utils.layers import LinearLayerConfig
+from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
 
 from Emperor.generators.utils.mixture import MixtureConfig
 from Emperor.generators.utils.samplers import SamplerConfig
@@ -167,7 +167,7 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
-    linear_layer_model_config: LinearLayerConfig = field(
+    linear_layer_model_config: LinearLayerConfig | DynamicLinearLayerConfig = field(
         default_factory=lambda: LinearLayerConfig(
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM,
@@ -233,8 +233,8 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
-    layer_block_stack_config: LayerBlockStackConfig = field(
-        default_factory=lambda: LayerBlockStackConfig(
+    layer_block_stack_config: LayerStackConfig = field(
+        default_factory=lambda: LayerStackConfig(
             input_dim=INPUT_DIM,
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
