@@ -1,10 +1,25 @@
+from torch import Tensor
+from Emperor.base.utils import Module
+from Emperor.base.layer import (
+    LayerStackConfig,
+    LinearLayerStack,
+)
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from Emperor.config import ModelConfig
+
+
 class DefaultDiagonalHandler(Module):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "ModelConfig",
     ):
         super().__init__()
         self.cfg = cfg
+        self.input_dim = cfg.input_dim
+        self.output_dim = cfg.output_dim
         self.padding_shape = self.__get_diagonal_padding_shape()
 
     def __get_diagonal_padding_shape(self) -> tuple | None:
@@ -18,10 +33,10 @@ class DefaultDiagonalHandler(Module):
 
     def _init_diagonal_model(
         self,
-    ) -> Linear | Sequential:
+    ) -> LinearLayerStack:
         output_dim = min(self.input_dim, self.output_dim)
-        cfg = linear_stack_config(self, output_dim=output_dim)
-        return LinearLayerStack(cfg).build_model()
+        overrides = LayerStackConfig(output_dim=output_dim)
+        return LinearLayerStack(self.cfg, overrides)
 
     def forward(self, weight_params: Tensor) -> Tensor:
         return weight_params
@@ -39,7 +54,7 @@ class DefaultDiagonalHandler(Module):
 class DiagonalHandler(DefaultDiagonalHandler):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "ModelConfig",
     ):
         super().__init__(cfg)
         self.input_dim = cfg.input_dim
@@ -58,7 +73,7 @@ class DiagonalHandler(DefaultDiagonalHandler):
 class AntiDiagonalHandler(DiagonalHandler):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "ModelConfig",
     ):
         super().__init__(cfg)
         self.cfg = cfg
@@ -75,7 +90,7 @@ class AntiDiagonalHandler(DiagonalHandler):
 class DiagonalAndAntiDiagonalHandler(DefaultDiagonalHandler):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "ModelConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = DiagonalHandler(cfg)
