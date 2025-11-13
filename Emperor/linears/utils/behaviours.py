@@ -4,9 +4,10 @@ import torch.nn.functional as F
 
 from enum import Enum
 from torch import Tensor
+from Emperor.base.utils import Module
 from torch.nn import Linear, Sequential
 from Emperor.base.enums import LayerNormPositionOptions
-from Emperor.base.utils import Module
+from Emperor.linears.utils.enums import DynamicBiasOptions, DynamicDiagonalOptions
 from Emperor.base.layer import (
     LayerStack,
     LayerStackConfig,
@@ -14,15 +15,23 @@ from Emperor.base.layer import (
 )
 
 
-from Emperor.linears.utils.enums import DynamicBiasOptions
 from Emperor.linears.utils.handlers.bias import (
     BiasGeneratorHandler,
+    BiasHandlerAbstract,
     DefaultBiasHandler,
     AffineBiasTransformHandler,
     ElementwiseBiasHandler,
 )
+from Emperor.linears.utils.handlers.diagonal import (
+    AntiDiagonalHandler,
+    DefaultDiagonalHandler,
+    DiagonalAndAntiDiagonalHandler,
+    DiagonalHandler,
+    DiagonalHandlerAbstract,
+)
 
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -178,66 +187,67 @@ class DynamicParametersBehaviour(Module):
                 return outer_product
 
 
-class DynamicDiagonalOptions(Enum):
-    DEFAULT = 0
-    DIAGONAL = 1
-    ANTI_DIAGONAL = 2
-    DIAGONAL_AND_ANTI_DIAGONAL = 3
-
-
 # TODO: Add option for a kernel to take the context
 # of every token into account when computing the dynamic parameters
 class DynamicDiagonalBehaviour(Module):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "ModelConfig",
     ):
         super().__init__()
-        self.cfg = cfg
+        config = getattr(cfg, "linear_layer_model_config", cfg)
+        self.cfg: "DynamicLinearLayerConfig" = config
+        self.main_config = cfg
+        self.diagonal_option = self.cfg.diagonal_option
         self.model = self.__init_bias_model()
 
     def __init_bias_model(
         self,
-    ) -> "DefaultDiagonalHandler":
-        match self.dynamic_bias_option:
+    ) -> DiagonalHandlerAbstract:
+        match self.diagonal_option:
             case DynamicDiagonalOptions.DEFAULT:
-                return DefaultDiagonalHandler(self.cfg)
+                return DefaultDiagonalHandler(self.main_config)
             case DynamicDiagonalOptions.DIAGONAL:
-                return DiagonalHandler(self.cfg)
+                return DiagonalHandler(self.main_config)
             case DynamicDiagonalOptions.ANTI_DIAGONAL:
-                return AntiDiagonalHandler(self.cfg)
+                return AntiDiagonalHandler(self.main_config)
             case DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL:
-                return DiagonalAndAntiDiagonalHandler(self.cfg)
+                return DiagonalAndAntiDiagonalHandler(self.main_config)
             case _:
                 raise ValueError(
                     f"Unsupported `dynamic_bias_option`: {self.dynamic_bias_option}"
                 )
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor | None:
+        return self.model(weight_params, logits)
 
 
 class DynamicBiasBehaviour(Module):
     def __init__(
         self,
         cfg: "ModelConfig",
-        bias_params: Tensor | None = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_model_config", cfg)
         self.cfg: "DynamicLinearLayerConfig" = config
         self.main_config = cfg
-        self.bias_params = bias_params
         self.bias_option = self.cfg.bias_option
-        self.bias_model = self.__init_bias_model()
+        self.model = self.__init_bias_model()
 
     def __init_bias_model(
         self,
-    ) -> "DefaultBiasHandler":
+    ) -> BiasHandlerAbstract:
         match self.bias_option:
             case DynamicBiasOptions.DEFAULT:
-                return DefaultBiasHandler(self.main_config, self.bias_params)
+                return DefaultBiasHandler(self.main_config)
             case DynamicBiasOptions.SCALE_AND_OFFSET:
-                return AffineBiasTransformHandler(self.main_config, self.bias_params)
+                return AffineBiasTransformHandler(self.main_config)
             case DynamicBiasOptions.ELEMENT_WISE_OFFSET:
-                return ElementwiseBiasHandler(self.main_config, self.bias_params)
+                return ElementwiseBiasHandler(self.main_config)
             case DynamicBiasOptions.DYNAMIC_PARAMETERS:
                 return BiasGeneratorHandler(self.main_config)
             case _:
@@ -245,9 +255,10 @@ class DynamicBiasBehaviour(Module):
 
     def forward(
         self,
+        bias_params: Tensor,
         logits: Tensor,
     ) -> Tensor | None:
-        return self.bias_model(logits)
+        return self.model(bias_params, logits)
 
 
 # Old implementation
