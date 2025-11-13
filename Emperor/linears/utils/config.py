@@ -10,9 +10,9 @@ from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 class LinearsConfigs:
     @staticmethod
     def base_preset(
-        batch_size=64,
-        input_dim=784,
-        output_dim=10,
+        batch_size=8,
+        input_dim=12,
+        output_dim=6,
         bias_flag=True,
     ) -> "ModelConfig":
         return ModelConfig(
@@ -29,11 +29,11 @@ class LinearsConfigs:
     @staticmethod
     def dynamic_preset(
         batch_size: int = 8,
-        input_dim: int = 16,
+        input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
         generators_depth: int = 0,
-        diagonal_options: DynamicDiagonalOptions = DynamicDiagonalOptions.DEFAULT,
+        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DEFAULT,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DEFAULT,
         stack_depth: int = 2,
         stack_hidden_dim: int = 0,
@@ -51,7 +51,7 @@ class LinearsConfigs:
                 data_monitor=None,
                 parameter_monitor=None,
                 generator_depth=generators_depth,
-                diagonal_options=diagonal_options,
+                diagonal_option=diagonal_option,
                 bias_option=bias_option,
             ),
             layer_block_stack_config=LayerStackConfig(
