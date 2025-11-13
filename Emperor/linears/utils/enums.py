@@ -20,3 +20,10 @@ class DynamicBiasOptions(Enum):
     SCALE_AND_OFFSET = 2
     ELEMENT_WISE_OFFSET = 3
     DYNAMIC_PARAMETERS = 4
+
+
+class DynamicParametersOptions(Enum):
+    DEFAULT = 0
+    ONE_OPINION = 1
+    TWO_OPINIONS = 2
+    THREE_OPINIONS = 3

@@ -11,10 +11,11 @@ from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils.behaviours import (
     DynamicBiasSelector,
     DynamicBiasOptions,
-    DynamicDiagonalSelector ,
+    DynamicDiagonalSelector,
     DynamicDiagonalOptions,
     DynamicParametersBehaviour,
 )
+from Emperor.linears.utils.enums import DynamicParametersOptions
 from Emperor.linears.utils.monitors import (
     DataMonitor,
     ParameterMonitor,
@@ -114,8 +115,8 @@ class LinearLayer(LinearBase):
 
 @dataclass
 class DynamicLinearLayerConfig(LinearLayerConfig):
-    generator_depth: int = field(
-        default=0,
+    generator_depth: DynamicParametersOptions = field(
+        default=DynamicParametersOptions.DEFAULT,
         metadata={
             "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
         },
@@ -150,8 +151,8 @@ class DynamicLinearLayer(LinearBase):
     def __init_generator_model(self) -> DynamicParametersBehaviour:
         return DynamicParametersBehaviour(self.cfg, self.weight_params)
 
-    def __init_diagonal_model(self) -> DynamicDiagonalSelector :
-        return DynamicDiagonalSelector (self.cfg, self.weight_params)
+    def __init_diagonal_model(self) -> DynamicDiagonalSelector:
+        return DynamicDiagonalSelector(self.cfg, self.weight_params)
 
     def __init_bias_model(self) -> DynamicBiasSelector | None:
         if self.bias_flag:
