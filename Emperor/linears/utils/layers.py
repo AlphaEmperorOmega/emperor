@@ -65,7 +65,7 @@ class LinearBase(Module):
         self.output_dim = self.cfg.output_dim
         self.bias_flag = self.cfg.bias_flag
         self.generator_depth = self.cfg.generator_depth
-        self.diagonal_options = self.cfg.diagonal_options
+        self.diagonal_option = self.cfg.diagonal_option
         self.bias_option = self.cfg.bias_option
         self.data_monitor: "DataMonitor" = self.construct(self.cfg.data_monitor)
         self.parameter_monitor: "ParameterMonitor" = self.construct(
@@ -120,7 +120,7 @@ class DynamicLinearLayerConfig(LinearLayerConfig):
             "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
         },
     )
-    diagonal_options: DynamicDiagonalOptions = field(
+    diagonal_option: DynamicDiagonalOptions = field(
         default=DynamicDiagonalOptions.DEFAULT,
         metadata={
             "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
