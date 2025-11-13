@@ -5,7 +5,7 @@ import torch.nn as nn
 from dataclasses import asdict
 from Emperor.base.utils import Module
 from Emperor.config import ModelConfig
-from Emperor.linears.utils.behaviours import DynamicBiasBehaviour
+from Emperor.linears.utils.behaviours import DynamicBiasSelector
 from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.linears.utils.enums import DynamicBiasOptions
 from Emperor.linears.utils.handlers.bias import (
@@ -103,9 +103,9 @@ class TestBiasGeneratorHandler(TestLinearsBiasBehaviour):
         self.assertFalse(torch.all(output == 0))
 
 
-class TestDynamicBiasBehaviour(TestLinearsBiasBehaviour):
+class TestDynamicBiasSelector(TestLinearsBiasBehaviour):
     def get_model(self):
-        return DynamicBiasBehaviour(self.cfg)
+        return DynamicBiasSelector(self.cfg)
 
     def test_forward(self):
         for option in DynamicBiasOptions:

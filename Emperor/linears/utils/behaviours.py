@@ -189,7 +189,7 @@ class DynamicParametersBehaviour(Module):
 
 # TODO: Add option for a kernel to take the context
 # of every token into account when computing the dynamic parameters
-class DynamicDiagonalBehaviour(Module):
+class DynamicDiagonalSelector(Module):
     def __init__(
         self,
         cfg: "ModelConfig",
@@ -226,7 +226,7 @@ class DynamicDiagonalBehaviour(Module):
         return self.model(weight_params, logits)
 
 
-class DynamicBiasBehaviour(Module):
+class DynamicBiasSelector(Module):
     def __init__(
         self,
         cfg: "ModelConfig",

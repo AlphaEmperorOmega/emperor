@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils.behaviours import (
-    DynamicBiasBehaviour,
+    DynamicBiasSelector,
     DynamicBiasOptions,
-    DynamicDiagonalBehaviour,
+    DynamicDiagonalSelector ,
     DynamicDiagonalOptions,
     DynamicParametersBehaviour,
 )
@@ -150,12 +150,12 @@ class DynamicLinearLayer(LinearBase):
     def __init_generator_model(self) -> DynamicParametersBehaviour:
         return DynamicParametersBehaviour(self.cfg, self.weight_params)
 
-    def __init_diagonal_model(self) -> DynamicDiagonalBehaviour:
-        return DynamicDiagonalBehaviour(self.cfg, self.weight_params)
+    def __init_diagonal_model(self) -> DynamicDiagonalSelector :
+        return DynamicDiagonalSelector (self.cfg, self.weight_params)
 
-    def __init_bias_model(self) -> DynamicBiasBehaviour | None:
+    def __init_bias_model(self) -> DynamicBiasSelector | None:
         if self.bias_flag:
-            return DynamicBiasBehaviour(self.cfg, self.bias_params)
+            return DynamicBiasSelector(self.cfg, self.bias_params)
         return None
 
     def forward(self, input_batch: Tensor) -> Tensor:
