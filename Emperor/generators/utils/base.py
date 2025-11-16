@@ -388,7 +388,7 @@ class LayerStack(Module):
     ):
         super().__init__()
         self.main_cfg = cfg
-        config = getattr(cfg, "layer_block_stack_config", cfg)
+        config = getattr(cfg, "layer_stack_config", cfg)
         self.cfg: "LayerStackConfig" = self._overwrite_config(config, overrides)
 
         self.model_type = self.cfg.model_type
@@ -488,8 +488,8 @@ class LayerStack(Module):
             "DynamicLinearLayer",
         )
         if self.model_type.value.__name__ in linears:
-            c.linear_layer_model_config.input_dim = input_dim
-            c.linear_layer_model_config.output_dim = output_dim
+            c.linear_layer_config.input_dim = input_dim
+            c.linear_layer_config.output_dim = output_dim
             return c
 
         generators = (
@@ -537,7 +537,7 @@ class LinearStack(Module):
         overrides: "LinearBlockStackConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_model_config", cfg)
+        config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearBlockStackConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim

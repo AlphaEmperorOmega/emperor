@@ -173,8 +173,8 @@ class MixtureOfExperts(Module):
     def __resolve_model_type_overrides(self, cfg: "ModelConfig"):
         c = copy.deepcopy(cfg)
         if issubclass(self.model_type.value, LinearLayer):
-            c.linear_layer_model_config.input_dim = self.input_dim
-            c.linear_layer_model_config.output_dim = self.output_dim
+            c.linear_layer_config.input_dim = self.input_dim
+            c.linear_layer_config.output_dim = self.output_dim
             return c
         c.mixture_model_config.input_dim = self.input_dim
         c.mixture_model_config.output_dim = self.output_dim

@@ -57,7 +57,7 @@ class LinearsBasePreset:
 
         return ModelConfig(
             batch_size=batch_size,
-            linear_layer_model_config=LinearLayerConfig(
+            linear_layer_config=LinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
@@ -77,7 +77,7 @@ class LinearsBasePreset:
 
         return ModelConfig(
             batch_size=batch_size,
-            linear_layer_model_config=DynamicLinearLayerConfig(
+            linear_layer_config=DynamicLinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,

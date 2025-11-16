@@ -1,4 +1,5 @@
 from enum import Enum
+from Emperor.linears.utils.handlers.parameter import DepthMappingLayer
 from Emperor.generators.utils.layers import (
     GeneratorParameterLayer,
     MatrixParameterLayer,
@@ -13,6 +14,7 @@ from Emperor.generators.utils.linears import (
 class LinearLayerTypes(Enum):
     BASE = LinearLayer
     DYNAMIC = DynamicLinearLayer
+    DYNAMIC_PARAMETERS = DepthMappingLayer
 
 
 class ParameterGeneratorTypes(Enum):

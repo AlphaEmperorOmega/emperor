@@ -167,7 +167,7 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
-    linear_layer_model_config: LinearLayerConfig | DynamicLinearLayerConfig = field(
+    linear_layer_config: LinearLayerConfig | DynamicLinearLayerConfig = field(
         default_factory=lambda: LinearLayerConfig(
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM,
@@ -233,7 +233,7 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
-    layer_block_stack_config: LayerStackConfig = field(
+    layer_stack_config: LayerStackConfig = field(
         default_factory=lambda: LayerStackConfig(
             input_dim=INPUT_DIM,
             hidden_dim=HIDDEN_DIM,
@@ -663,7 +663,7 @@ class MixtureOfExpertsConfigGenerator(ParameterLayerConfigGenerator):
 #             time_tracker_flag=self.time_tracker_flag,
 #             dynamic_diagonal_params_flag=self.dynamic_diagonal_params_flag,
 #             linear_layer_model_type=self.linear_layer_model_type,
-#             linear_layer_model_config=super().build(),
+#             linear_layer_config=super().build(),
 #         )
 
 

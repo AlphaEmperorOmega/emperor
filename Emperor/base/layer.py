@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch.types import Tensor
 from torch.nn import Linear, Sequential
 from dataclasses import dataclass, field
-from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from Emperor.base.enums import ActivationOptions, BaseOptions, LayerNormPositionOptions
 from Emperor.base.utils import ConfigBase, Module
 
 from typing import TYPE_CHECKING
@@ -383,7 +383,7 @@ class LayerStack(Module):
     ):
         super().__init__()
         self.main_cfg = cfg
-        config = getattr(cfg, "layer_block_stack_config", cfg)
+        config = getattr(cfg, "layer_stack_config", cfg)
         self.cfg: "LayerStackConfig" = self._overwrite_config(config, overrides)
 
         self.model_type = self.cfg.model_type
@@ -422,6 +422,7 @@ class LayerStack(Module):
             isinstance(self.model_type, LinearLayerTypes)
             or isinstance(self.model_type, LinearLayerOptions)
             or self.model_type == Linear
+            or isinstance(self.model_type, BaseOptions)
         ):
             return Layer
         elif isinstance(self.model_type, ParameterGeneratorTypes):
@@ -496,10 +497,11 @@ class LayerStack(Module):
         linears = (
             "LinearLayer",
             "DynamicLinearLayer",
+            "DepthMappingLayer",
         )
         if self.__get_model_type().__name__ in linears:
-            c.linear_layer_model_config.input_dim = input_dim
-            c.linear_layer_model_config.output_dim = output_dim
+            c.linear_layer_config.input_dim = input_dim
+            c.linear_layer_config.output_dim = output_dim
             return c
 
         generators = (
@@ -524,7 +526,7 @@ class LinearLayerStack(Module):
     ):
         super().__init__()
         self.cfg = cfg
-        self.identifier = "layer_block_stack_config"
+        self.identifier = "layer_stack_config"
         cfg = self.__update_config()
         self.model = LayerStack(cfg, overrides).build_model()
 
@@ -538,7 +540,7 @@ class LinearLayerStack(Module):
             return updated_config
 
         c = copy.deepcopy(self.cfg)
-        c.layer_block_stack_config = updated_config
+        c.layer_stack_config = updated_config
         return c
 
     def __override_config(self) -> LayerStackConfig:

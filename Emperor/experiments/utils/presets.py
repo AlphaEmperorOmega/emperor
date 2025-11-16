@@ -336,7 +336,7 @@ class ModelTrainerBase:
                 time_tracker_flag=PARAMETER_GENERATOR_TRACK_TIME_FLAG,
                 dynamic_diagonal_params_flag=PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG,
             ),
-            linear_layer_model_config=LinearLayerConfig(
+            linear_layer_config=LinearLayerConfig(
                 input_dim=INPUT_DIM,
                 output_dim=OUTPUT_DIM,
                 bias_flag=True,

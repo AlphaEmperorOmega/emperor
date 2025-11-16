@@ -63,8 +63,8 @@ class FeedForward(Module):
 
     def __update_config(self, confg: "ModelConfig"):
         c = copy.deepcopy(confg)
-        c.layer_block_stack_config.num_layers = self.num_layers
-        c.layer_block_stack_config.model_type = self.model_type
+        c.layer_stack_config.num_layers = self.num_layers
+        c.layer_stack_config.model_type = self.model_type
         return c
 
     def _store_shape_attributes(self):

@@ -50,7 +50,7 @@ class ParameterLayerConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    linear_layer_model_config: "LinearLayerConfig | None" = field(
+    linear_layer_config: "LinearLayerConfig | None" = field(
         default=None,
         metadata={"help": ""},
     )

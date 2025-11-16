@@ -41,7 +41,7 @@ class LinearLayer(Module):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_model_config", cfg)
+        config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim
@@ -133,7 +133,7 @@ class LinearLayerWithMemory(Module):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_model_config", cfg)
+        config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim

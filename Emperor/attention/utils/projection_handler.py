@@ -72,8 +72,8 @@ class ProjectorBase(Module):
     ):
         c = copy.deepcopy(cfg)
         if issubclass(self.model_type.value, LinearLayer):
-            c.linear_layer_model_config.input_dim = input_dim
-            c.linear_layer_model_config.output_dim = output_dim
+            c.linear_layer_config.input_dim = input_dim
+            c.linear_layer_config.output_dim = output_dim
             return c
         c.mixture_model_config.input_dim = input_dim
         c.mixture_model_config.output_dim = output_dim
