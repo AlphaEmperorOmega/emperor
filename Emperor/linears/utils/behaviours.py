@@ -4,17 +4,11 @@ import torch.nn.functional as F
 
 from enum import Enum
 from torch import Tensor
-from Emperor.base.utils import Module
 from torch.nn import Linear, Sequential
+from Emperor.base.utils import Module
 from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.linears.utils.enums import DynamicBiasOptions, DynamicDiagonalOptions
-from Emperor.base.layer import (
-    LayerStack,
-    LayerStackConfig,
-    LinearLayerStack,
-)
-
-
+from Emperor.linears.utils.handlers.parameter import DepthMappingLayerStack
 from Emperor.linears.utils.handlers.bias import (
     BiasGeneratorHandler,
     BiasHandlerAbstract,
@@ -28,6 +22,10 @@ from Emperor.linears.utils.handlers.diagonal import (
     DiagonalAndAntiDiagonalHandler,
     DiagonalHandler,
     DiagonalHandlerAbstract,
+)
+from Emperor.base.layer import (
+    LayerStackConfig,
+    LinearLayerStack,
 )
 
 from typing import TYPE_CHECKING
@@ -137,7 +135,7 @@ class DynamicDiagonalSelector(Module):
         cfg: "ModelConfig",
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_model_config", cfg)
+        config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "DynamicLinearLayerConfig" = config
         self.main_config = cfg
         self.diagonal_option = self.cfg.diagonal_option
@@ -174,7 +172,7 @@ class DynamicBiasSelector(Module):
         cfg: "ModelConfig",
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_model_config", cfg)
+        config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "DynamicLinearLayerConfig" = config
         self.main_config = cfg
         self.bias_option = self.cfg.bias_option

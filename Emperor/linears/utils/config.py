@@ -3,8 +3,11 @@ from Emperor.base.layer import LayerStackConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.behaviours import DynamicDiagonalOptions
-from Emperor.linears.utils.enums import DynamicBiasOptions
-from Emperor.linears.utils.layers import DynamicLinearLayerConfig
+from Emperor.linears.utils.layers import LinearLayerConfig, DynamicLinearLayerConfig
+from Emperor.linears.utils.enums import (
+    DynamicBiasOptions,
+    DynamicDepthOptions,
+)
 
 
 class LinearsConfigs:
@@ -17,7 +20,7 @@ class LinearsConfigs:
     ) -> "ModelConfig":
         return ModelConfig(
             batch_size=batch_size,
-            linear_layer_model_config=LinearLayerConfig(
+            linear_layer_config=LinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
@@ -32,7 +35,7 @@ class LinearsConfigs:
         input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
-        generators_depth: int = 0,
+        generators_depth: DynamicDepthOptions = DynamicDepthOptions.DEFAULT,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DEFAULT,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DEFAULT,
         stack_depth: int = 2,
@@ -44,7 +47,7 @@ class LinearsConfigs:
             input_dim=input_dim,
             output_dim=output_dim,
             batch_size=batch_size,
-            linear_layer_model_config=DynamicLinearLayerConfig(
+            linear_layer_config=DynamicLinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
@@ -54,7 +57,7 @@ class LinearsConfigs:
                 diagonal_option=diagonal_option,
                 bias_option=bias_option,
             ),
-            layer_block_stack_config=LayerStackConfig(
+            layer_stack_config=LayerStackConfig(
                 input_dim=input_dim,
                 hidden_dim=stack_hidden_dim,
                 output_dim=output_dim,

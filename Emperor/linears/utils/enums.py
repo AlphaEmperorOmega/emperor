@@ -22,8 +22,8 @@ class DynamicBiasOptions(Enum):
     DYNAMIC_PARAMETERS = 4
 
 
-class DynamicParametersOptions(Enum):
+class DynamicDepthOptions(Enum):
     DEFAULT = 0
-    ONE_OPINION = 1
-    TWO_OPINIONS = 2
-    THREE_OPINIONS = 3
+    DEPTH_OF_ONE = 1
+    DEPTH_OF_TWO = 2
+    DEPTH_OF_THREE = 3

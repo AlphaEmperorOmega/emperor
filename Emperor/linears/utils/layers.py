@@ -1,13 +1,13 @@
-from inspect import Parameter
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from enum import Enum
 from torch import Tensor
+from inspect import Parameter
 from dataclasses import dataclass, field
-from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import ConfigBase, Module
+from Emperor.linears.utils.enums import DynamicDepthOptions
 from Emperor.linears.utils.behaviours import (
     DynamicBiasSelector,
     DynamicBiasOptions,
@@ -15,7 +15,6 @@ from Emperor.linears.utils.behaviours import (
     DynamicDiagonalOptions,
     DynamicParametersBehaviour,
 )
-from Emperor.linears.utils.enums import DynamicParametersOptions
 from Emperor.linears.utils.monitors import (
     DataMonitor,
     ParameterMonitor,
@@ -60,7 +59,7 @@ class LinearBase(Module):
         overrides: "DynamicLinearLayerConfig | LinearLayerConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_model_config", cfg)
+        config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "DynamicLinearLayerConfig" = self._overwrite_config(config, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
@@ -115,8 +114,8 @@ class LinearLayer(LinearBase):
 
 @dataclass
 class DynamicLinearLayerConfig(LinearLayerConfig):
-    generator_depth: DynamicParametersOptions = field(
-        default=DynamicParametersOptions.DEFAULT,
+    generator_depth: DynamicDepthOptions = field(
+        default=DynamicDepthOptions.DEFAULT,
         metadata={
             "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
         },
@@ -205,7 +204,7 @@ class MemoryLinearLayer(LinearBase):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        config = getattr(cfg, "linear_layer_model_config", cfg)
+        config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim
