@@ -109,7 +109,7 @@ class TestLinearLayers(unittest.TestCase):
             parameter_generator_model_config=ParameterLayerConfig(
                 bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
             ),
-            linear_layer_model_config=LinearLayerConfig(
+            linear_layer_config=LinearLayerConfig(
                 input_dim=INPUT_DIM,
                 output_dim=OUTPUT_DIM,
                 bias_flag=True,
@@ -245,7 +245,7 @@ class TestDynamicLinearLayer(unittest.TestCase):
             parameter_generator_model_config=ParameterLayerConfig(
                 bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
             ),
-            linear_layer_model_config=LinearLayerConfig(
+            linear_layer_config=LinearLayerConfig(
                 input_dim=INPUT_DIM,
                 output_dim=OUTPUT_DIM,
                 bias_flag=True,

@@ -122,7 +122,7 @@ def default_unittest_config():
             time_tracker_flag=False,
             dynamic_diagonal_params_flag=False,
         ),
-        linear_layer_model_config=LinearLayerConfig(
+        linear_layer_config=LinearLayerConfig(
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM,
             bias_flag=True,
@@ -179,7 +179,7 @@ def default_unittest_config():
             num_layers=2,
             model_type=LinearLayerTypes.DYNAMIC,
         ),
-        layer_block_stack_config=LayerStackConfig(
+        layer_stack_config=LayerStackConfig(
             input_dim=HIDDEN_DIM,
             hidden_dim=HIDDEN_DIM,
             output_dim=HIDDEN_DIM,

@@ -37,7 +37,7 @@ class TestLayerStack(unittest.TestCase):
 
     def rebuild_presets(self, config: LayerStackConfig | None = None):
         self.cfg = default_unittest_config()
-        self.config = self.cfg.layer_block_stack_config
+        self.config = self.cfg.layer_stack_config
         if config is not None:
             for k in asdict(config):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
@@ -96,9 +96,9 @@ class Test___resolve_model_type_overrides(TestLayerStack):
         updated_config = self.model._LayerStack__resolve_model_type_overrides(
             input_dim, output_dim
         )
-        self.assertEqual(updated_config.linear_layer_model_config.input_dim, input_dim)
+        self.assertEqual(updated_config.linear_layer_config.input_dim, input_dim)
         self.assertEqual(
-            updated_config.linear_layer_model_config.output_dim, output_dim
+            updated_config.linear_layer_config.output_dim, output_dim
         )
 
     def test_if_config_is_updated_for_parameter_generator_model(self):

@@ -5,15 +5,15 @@ import unittest
 from dataclasses import asdict
 from Emperor.base.utils import Module
 from Emperor.config import ModelConfig
-from Emperor.linears.utils.behaviours import DynamicDiagonalSelector 
+from Emperor.linears.utils.behaviours import DynamicDiagonalSelector
 from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.linears.utils.enums import DynamicDiagonalOptions
 from Emperor.linears.utils.handlers.diagonal import (
+    DiagonalHandler,
     AntiDiagonalHandler,
+    DiagonalHandlerAbstract,
     DefaultDiagonalHandler,
     DiagonalAndAntiDiagonalHandler,
-    DiagonalHandler,
-    DiagonalHandlerAbstract,
 )
 
 
@@ -102,7 +102,7 @@ class TestDiagonalAndAntiDiagonalHandler(TestLinearsDiagonalBehaviour):
 
 class TestDynamicBiasSelector(TestLinearsDiagonalBehaviour):
     def get_model(self):
-        return DynamicDiagonalSelector (self.cfg)
+        return DynamicDiagonalSelector(self.cfg)
 
     def test_forward(self):
         for option in DynamicDiagonalOptions:
