@@ -79,7 +79,7 @@ class OuterProductNormOptions(Enum):
 class DynamicParametersBehaviour(Module):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "ModelConfig",
         weight_params: Tensor,
     ):
         super().__init__()

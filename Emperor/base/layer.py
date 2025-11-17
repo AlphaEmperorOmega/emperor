@@ -1,6 +1,7 @@
 import copy
 import torch.nn as nn
 
+from typing import Self
 from torch.types import Tensor
 from torch.nn import Linear, Sequential
 from dataclasses import dataclass, field
@@ -397,6 +398,7 @@ class LayerStack(Module):
         self.hidden_dim = self.cfg.hidden_dim
         self.output_dim = self.cfg.output_dim
         self.num_layers = self.cfg.num_layers
+        self.callback_function = None
 
         for _name, _val in (
             ("input_dim", self.input_dim),
@@ -408,6 +410,10 @@ class LayerStack(Module):
                 raise ValueError(f"{_name} must be an integer >= 1, received {_val!r}")
 
         self.layer_block_model = self.__resolve_layer_block_class()
+
+    def set_callback(self, callback) -> Self:
+        self.callback_function = callback
+        return self
 
     def __resolve_layer_block_class(self) -> type[Layer]:
         # TODO: move this somewhere else in the future since it is used in
@@ -457,6 +463,8 @@ class LayerStack(Module):
     def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
         for _ in range(self.num_layers - layer_adjustment):
             layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
+            if self.callback_function is not None:
+                layer = self.callback_function(layer)
             layers.append(layer)
 
     def __add_output_layer(self, layers: list) -> None:

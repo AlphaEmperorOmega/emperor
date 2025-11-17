@@ -1,62 +1,85 @@
+import copy
+import torch
+
 from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.linears.utils.enums import DynamicParametersOptions
-from Emperor.linears.utils.layers import DynamicLinearLayerConfig
+from Emperor.base.layer import LayerStack, LayerStackConfig
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from Emperor.config import ModelConfig
+    from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 
 
 class DepthMappingLayer(Module):
     def __init__(self, cfg: "DynamicLinearLayerConfig"):
-        self.cfg = cfg
-        self.input_dim = cfg.input_dim
-        self.depth_dim = cfg.dynamic_generators_depth
-        self.is_initial_layer = False
+        super().__init__()
+        self.cfg: "DynamicLinearLayerConfig" = getattr(cfg, "linear_layer_config", cfg)
+        self.input_dim = self.cfg.input_dim
+        self.generator_depth = self.cfg.generator_depth.value
         self.weight_params, self.bias_params = self.__init_parameter_bank()
+        self.__ensure_generator_depth_is_valid()
+
+    def __ensure_generator_depth_is_valid(self):
+        if self.generator_depth == 0:
+            raise ValueError("generator_depth cannot be 0")
 
     def __init_parameter_bank(self):
-        input_weight_shape = (self.depth_dim, self.input_dim, self.input_dim)
+        input_weight_shape = (self.generator_depth, self.input_dim, self.input_dim)
         weight_bank = self._init_parameter_bank(input_weight_shape)
-        bias_shape = (self.depth_dim, self.input_dim)
+        bias_shape = (self.generator_depth, self.input_dim)
         bias_bank = self._init_parameter_bank(bias_shape)
         return weight_bank, bias_bank
-
-    def set_initial_layer(self, is_initial_layer: bool) -> None:
-        self.is_initial_layer = bool(is_initial_layer)
 
     def forward(
         self,
         input_batch: Tensor,
     ) -> Tensor:
-        operation = self.__get_operation()
-        return (
-            torch.einsum(operation, input_batch, self.weight_params) + self.bias_params
-        )
-
-    def __get_operation(self) -> str:
-        if self.is_initial_layer:
-            return "bi,kij->bkj"
-        return "bik,kij->bkj"
+        operation = "bkj,kji->bki"
+        output = torch.einsum(operation, input_batch, self.weight_params)
+        return output + self.bias_params
 
 
 class DepthMappingLayerStack(Module):
     def __init__(
         self,
-        cfg: "LayerStackConfig | ModelConfig",
+        cfg: "ModelConfig",
         overrides: "LayerStackConfig | None" = None,
     ):
         super().__init__()
         self.cfg = cfg
-        self.overrides = overrides
-
+        self.identifier = "layer_stack_config"
         cfg = self.__update_config()
-        self.model = LayerStack(cfg)
+        self.generator_depth = self.cfg.linear_layer_config.generator_depth.value
+        self.model = LayerStack(cfg, overrides).build_model()
 
     def __update_config(self) -> LayerStackConfig:
-        config = getattr(self.cfg, "layer_block_stack_config", self.cfg)
-        updated_config = self._overwrite_config(config, self.overrides)
+        config = getattr(self.cfg, self.identifier, self.cfg)
         overrides = self.__override_config()
-        return self._overwrite_config(updated_config, overrides)
+        updated_config = self._overwrite_config(config, overrides)
+
+        if not hasattr(self.cfg, self.identifier):
+            return updated_config
+
+        # TODO: Update the _overwrite_config to handle nested configs
+        # in order to remove the copy.deepcopy below
+        c = copy.deepcopy(self.cfg)
+        c.layer_stack_config = updated_config
+        return c
 
     def __override_config(self) -> LayerStackConfig:
-        return LayerStackConfig(
-            model_type=DepthMappingLayer,
-        )
+        from Emperor.base.enums import BaseOptions
+
+        class UpdatedLinearLayerOptions(BaseOptions):
+            DEPTH_MAPPING = DepthMappingLayer
+
+        return LayerStackConfig(model_type=UpdatedLinearLayerOptions.DEPTH_MAPPING)
+
+    def forward(self, input_batch: Tensor) -> Tensor:
+        if not input_batch.dim() == 2:
+            raise ValueError("Input batch must be a 2D tensor")
+
+        input_batch = input_batch.unsqueeze(1)
+        input_batch = input_batch.repeat(1, self.generator_depth, 1)
+        return self.model(input_batch)
