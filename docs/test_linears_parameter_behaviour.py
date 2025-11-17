@@ -1,7 +1,9 @@
 import torch
 import unittest
+import torch.nn as nn
 
 from dataclasses import asdict
+from Emperor.base.utils import Module
 from Emperor.linears.utils.behaviours import DynamicParametersBehaviour
 from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.linears.utils.enums import DynamicDepthOptions
@@ -47,6 +49,8 @@ class TestDepthMappingBehaviour(unittest.TestCase):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
+        weight_shape = (self.input_dim, self.output_dim)
+        self.weight_params = Module()._init_parameter_bank(weight_shape, nn.init.zeros_)
         self.model = self.get_model()
 
     def get_model(self):
@@ -62,7 +66,7 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
             self.batch_size, self.generator_depth, self.input_dim
         )
         output = self.model(input_tensor)
-        expected_shape = (self.batch_size, self.generator_depth, self.input_dim)
+        expected_shape = (self.batch_size, self.generator_depth, self.output_dim)
         self.assertEqual(output.shape, expected_shape)
         for i in range(self.batch_size):
             for j in range(self.generator_depth):
@@ -91,7 +95,7 @@ class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         output = self.model(input_tensor)
-        expected_shape = (self.batch_size, self.generator_depth, self.input_dim)
+        expected_shape = (self.batch_size, self.generator_depth, self.output_dim)
         self.assertEqual(output.shape, expected_shape)
 
 
@@ -101,6 +105,6 @@ class TestDynamicParametersBehaviour(TestDepthMappingBehaviour):
 
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(input_tensor)
-        expected_shape = (self.batch_size, self.generator_depth, self.input_dim)
+        output = self.model(self.weight_params, input_tensor)
+        expected_shape = (self.batch_size, self.input_dim, self.output_dim)
         self.assertEqual(output.shape, expected_shape)
