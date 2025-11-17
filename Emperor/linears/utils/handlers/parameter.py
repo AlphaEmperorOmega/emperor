@@ -17,6 +17,7 @@ class DepthMappingLayer(Module):
         super().__init__()
         self.cfg: "DynamicLinearLayerConfig" = getattr(cfg, "linear_layer_config", cfg)
         self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
         self.generator_depth = self.cfg.generator_depth.value
         self.weight_params, self.bias_params = self.__init_parameter_bank()
         self.__ensure_generator_depth_is_valid()
@@ -26,9 +27,9 @@ class DepthMappingLayer(Module):
             raise ValueError("generator_depth cannot be 0")
 
     def __init_parameter_bank(self):
-        input_weight_shape = (self.generator_depth, self.input_dim, self.input_dim)
+        input_weight_shape = (self.generator_depth, self.input_dim, self.output_dim)
         weight_bank = self._init_parameter_bank(input_weight_shape)
-        bias_shape = (self.generator_depth, self.input_dim)
+        bias_shape = (self.generator_depth, self.output_dim)
         bias_bank = self._init_parameter_bank(bias_shape)
         return weight_bank, bias_bank
 

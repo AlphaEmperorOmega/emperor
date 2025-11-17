@@ -148,20 +148,20 @@ class DynamicLinearLayer(LinearBase):
         self.bias_model = self.__init_bias_model()
 
     def __init_generator_model(self) -> DynamicParametersBehaviour:
-        return DynamicParametersBehaviour(self.cfg, self.weight_params)
+        return DynamicParametersBehaviour(self.cfg)
 
     def __init_diagonal_model(self) -> DynamicDiagonalSelector:
-        return DynamicDiagonalSelector(self.cfg, self.weight_params)
+        return DynamicDiagonalSelector(self.cfg)
 
     def __init_bias_model(self) -> DynamicBiasSelector | None:
         if self.bias_flag:
-            return DynamicBiasSelector(self.cfg, self.bias_params)
+            return DynamicBiasSelector(self.cfg)
         return None
 
     def forward(self, input_batch: Tensor) -> Tensor:
-        weight_params = self.generator_model(input_batch)
-        weight_params = self.diagonal_model(input_batch)
-        bias_parameters = self.bias_model(input_batch)
+        weight_params = self.generator_model(self.weight_params, input_batch)
+        weight_params = self.diagonal_model(weight_params, input_batch)
+        bias_parameters = self.bias_model(self.bias_params, input_batch)
         output = self.__compute_linear_transformation(input_batch, weight_params)
         return self.__add_bias_parameters(output, bias_parameters)
 

@@ -80,24 +80,40 @@ class DynamicParametersBehaviour(Module):
     def __init__(
         self,
         cfg: "ModelConfig",
-        weight_params: Tensor,
     ):
         super().__init__()
-        self.cfg = cfg
-        self.weight_params = weight_params
-        self.input_model = self.__init_generator_model()
-        self.output_model = self.__init_generator_model()
+        config = getattr(cfg, "linear_layer_config", cfg)
+        self.cfg: "DynamicLinearLayerConfig" = config
+        self.main_config = cfg
+        self.input_model = self.__init_input_model()
+        self.output_model = self.__init_output_model()
 
-    def __init_generator_model(self) -> DepthMappingLayerStack:
-        scalar_and_offset = 2
-        cfg = linear_stack_config(self, output_dim=scalar_and_offset)
-        return DepthMappingLayerStack(cfg)
+    def __init_input_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(output_dim=self.cfg.input_dim)
+        return self.__init_generator_model(overrides)
 
-    def forward(self, inputs: Tensor) -> Tensor:
-        input_vectors = self.input_model(inputs)
-        output_vectors = self.output_model(inputs)
+    def __init_output_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(output_dim=self.cfg.output_dim)
+        return self.__init_generator_model(overrides)
+
+    def __init_generator_model(
+        self, overrides: "LayerStackConfig"
+    ) -> DepthMappingLayerStack:
+        return DepthMappingLayerStack(self.main_config, overrides)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        input_vectors = self.input_model(logits)
+        output_vectors = self.output_model(logits)
         outer_product = self.__compute_outer_product(input_vectors, output_vectors)
-        return self.weight_params + outer_product
+        dynamic_params = self.__compute_dynamic_weights(outer_product)
+        return weight_params + dynamic_params
+
+    def __compute_dynamic_weights(self, outer_product: Tensor) -> Tensor:
+        return outer_product.sum(dim=1)
 
     def __compute_outer_product(
         self,
@@ -108,23 +124,26 @@ class DynamicParametersBehaviour(Module):
         input_vectors = self.__normalize_vectors(input_vectors, test_norm_option)
         output_vectors = self.__normalize_vectors(output_vectors, test_norm_option)
         outer_product = torch.einsum("bij,bik->bijk", input_vectors, output_vectors)
-        return self.__normalize_vectors(outer_product)
+        return outer_product
+        # return self.__normalize_vectors(outer_product)
 
     def __normalize_vectors(
         self,
         outer_product: Tensor,
-        norm_option: OuterProductNormOptions | None,
+        norm_option: OuterProductNormOptions | None = None,
     ) -> Tensor:
+        # TODO: Add flag to normalize the the input before or after the outer product
         # TODO: Temporary nomralization just to check what's happening
-        match norm_option:
-            case OuterProductNormOptions.RELU:
-                return F.relu(outer_product)
-            case OuterProductNormOptions.TANH:
-                return F.tanh(outer_product)
-            case OuterProductNormOptions.SIGMOID:
-                return F.sigmoid(outer_product)
-            case _:
-                return outer_product
+        # match norm_option:
+        #     case OuterProductNormOptions.RELU:
+        #         return F.relu(outer_product)
+        #     case OuterProductNormOptions.TANH:
+        #         return F.tanh(outer_product)
+        #     case OuterProductNormOptions.SIGMOID:
+        #         return F.sigmoid(outer_product)
+        #     case _:
+        #         return outer_product
+        return F.sigmoid(outer_product)
 
 
 # TODO: Add option for a kernel to take the context
