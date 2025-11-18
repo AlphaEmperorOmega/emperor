@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class DepthMappingLayer(Module):
-    def __init__(self, cfg: "DynamicLinearLayerConfig"):
+    def __init__(self, cfg: "ModelConfig"):
         super().__init__()
         self.cfg: "DynamicLinearLayerConfig" = getattr(cfg, "linear_layer_config", cfg)
         self.input_dim = self.cfg.input_dim
@@ -50,12 +50,13 @@ class DepthMappingLayerStack(Module):
     ):
         super().__init__()
         self.cfg = cfg
+        print(self.cfg)
         self.identifier = "layer_stack_config"
-        cfg = self.__update_config()
+        updated_config = self.__update_config()
         self.generator_depth = self.cfg.linear_layer_config.generator_depth.value
-        self.model = LayerStack(cfg, overrides).build_model()
+        self.model = LayerStack(updated_config, overrides).build_model()
 
-    def __update_config(self) -> LayerStackConfig:
+    def __update_config(self) -> "ModelConfig | LayerStackConfig":
         config = getattr(self.cfg, self.identifier, self.cfg)
         overrides = self.__override_config()
         updated_config = self._overwrite_config(config, overrides)

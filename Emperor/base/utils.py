@@ -1,4 +1,6 @@
 from dataclasses import dataclass, field, fields
+from numpy import bool_
+from typing_extensions import Dict
 import torch
 import torch.nn as nn
 import inspect
@@ -318,22 +320,16 @@ class Module(nn.Module, HyperParameters):
     ) -> "ConfigBase":
         if overwrrides is None:
             return cfg
-        # for field in cfg.__dataclass_fields__:
-        #     if hasattr(overwrrides, field) and getattr(overwrrides, field) is not None:
-        #         setattr(cfg, field, getattr(overwrrides, field))
 
         for field in cfg.__dataclass_fields__:
             default = getattr(overwrrides.__dataclass_fields__[field], "default", None)
-            # getattr(
-            #     overwrrides.__dataclass_fields__[field], "default", None
-            # ) or getattr(
-            #     overwrrides.__dataclass_fields__[field], "default_factory", None
-            # )
+            current_cfg_value = getattr(cfg, field, default)
 
-            if (
-                hasattr(overwrrides, field)
-                and getattr(overwrrides, field) is not default
-            ):
+            is_default_value = getattr(overwrrides, field) is not default
+            if current_cfg_value != default and isinstance(current_cfg_value, bool):
+                is_default_value = True
+
+            if hasattr(overwrrides, field) and is_default_value:
                 setattr(cfg, field, getattr(overwrrides, field))
 
         return cfg

@@ -20,7 +20,7 @@ from Emperor.linears.utils.monitors import (
     ParameterMonitor,
 )
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -60,13 +60,10 @@ class LinearBase(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "DynamicLinearLayerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.bias_flag = self.cfg.bias_flag
-        self.generator_depth = self.cfg.generator_depth
-        self.diagonal_option = self.cfg.diagonal_option
-        self.bias_option = self.cfg.bias_option
         self.data_monitor: "DataMonitor" = self.construct(self.cfg.data_monitor)
         self.parameter_monitor: "ParameterMonitor" = self.construct(
             self.cfg.parameter_monitor
@@ -141,8 +138,11 @@ class DynamicLinearLayer(LinearBase):
         overrides: "DynamicLinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        self.weight_params, self.bias_params = self._init_parameters()
+        self.generator_depth = self.cfg.generator_depth
+        self.diagonal_option = self.cfg.diagonal_option
+        self.bias_option = self.cfg.bias_option
 
+        self.weight_params, self.bias_params = self._init_parameters()
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
         self.bias_model = self.__init_bias_model()
@@ -161,9 +161,14 @@ class DynamicLinearLayer(LinearBase):
     def forward(self, input_batch: Tensor) -> Tensor:
         weight_params = self.generator_model(self.weight_params, input_batch)
         weight_params = self.diagonal_model(weight_params, input_batch)
-        bias_parameters = self.bias_model(self.bias_params, input_batch)
+        bias_parameters = self.__compute_bias_parameters(input_batch)
         output = self.__compute_linear_transformation(input_batch, weight_params)
         return self.__add_bias_parameters(output, bias_parameters)
+
+    def __compute_bias_parameters(self, input_batch: Tensor) -> Tensor | None:
+        if self.bias_flag:
+            return self.bias_model(self.bias_params, input_batch)
+        return self.bias_params
 
     def __compute_linear_transformation(
         self,

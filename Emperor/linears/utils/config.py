@@ -17,15 +17,19 @@ class LinearsConfigs:
         input_dim=12,
         output_dim=6,
         bias_flag=True,
+        data_monitor=None,
+        parameter_monitor=None,
     ) -> "ModelConfig":
         return ModelConfig(
             batch_size=batch_size,
+            input_dim=input_dim,
+            output_dim=output_dim,
             linear_layer_config=LinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
-                data_monitor=DataMonitor,
-                parameter_monitor=ParameterMonitor,
+                data_monitor=data_monitor,
+                parameter_monitor=parameter_monitor,
             ),
         )
 
