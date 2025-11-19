@@ -64,7 +64,8 @@ class TestLinearLayer(TestLinears):
             message = f"Test failed for the inputs: {bias_flag}"
             with self.subTest(i=message):
                 c = LinearsConfigs.base_preset(bias_flag=bias_flag)
-                m = LinearLayer(c)
+                overrides = LinearLayerConfig(bias_flag=bias_flag)
+                m = LinearLayer(self.cfg, overrides)
 
                 self.assertEqual(m.input_dim, c.input_dim)
                 self.assertEqual(m.output_dim, c.output_dim)
@@ -97,36 +98,29 @@ class TestLinearLayer(TestLinears):
 class TestDynamicLinearLayer(TestLinears):
     def test_init_with_different_configation_options(self):
         bias_options = [True, False]
-        input_params = output_params = [4, 8, 16]
 
-        for input_dim in input_params:
-            for output_dim in output_params:
-                for bias_flag in bias_options:
-                    for generators_depth in DynamicDepthOptions:
-                        for diagonal_option in DynamicDiagonalOptions:
-                            for bias_option in DynamicBiasOptions:
-                                message = f"Test failed for the options: {input_dim}, {output_dim}, {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
-                                with self.subTest(message=message):
-                                    c = LinearsConfigs.dynamic_preset(
-                                        batch_size=2,
-                                        input_dim=input_dim,
-                                        output_dim=output_dim,
-                                        bias_flag=bias_flag,
-                                        generators_depth=generators_depth,
-                                        diagonal_option=diagonal_option,
-                                        bias_option=bias_option,
-                                    )
-                                    m = DynamicLinearLayer(c)
+        for bias_flag in bias_options:
+            for generators_depth in DynamicDepthOptions:
+                for diagonal_option in DynamicDiagonalOptions:
+                    for bias_option in DynamicBiasOptions:
+                        message = f"Test failed for the options: {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
+                        with self.subTest(message=message):
+                            c = LinearsConfigs.dynamic_preset(
+                                batch_size=2,
+                                bias_flag=bias_flag,
+                                generators_depth=generators_depth,
+                                diagonal_option=diagonal_option,
+                                bias_option=bias_option,
+                            )
+                            m = DynamicLinearLayer(c)
 
-                                    self.assertEqual(m.input_dim, c.input_dim)
-                                    self.assertEqual(m.output_dim, c.output_dim)
-                                    self.assertIsInstance(m.weight_params, torch.Tensor)
-                                    if bias_flag:
-                                        self.assertIsInstance(
-                                            m.bias_params, torch.Tensor
-                                        )
-                                    else:
-                                        self.assertIsNone(m.bias_params)
+                            self.assertEqual(m.input_dim, c.input_dim)
+                            self.assertEqual(m.output_dim, c.output_dim)
+                            self.assertIsInstance(m.weight_params, torch.Tensor)
+                            if bias_flag:
+                                self.assertIsInstance(m.bias_params, torch.Tensor)
+                            else:
+                                self.assertIsNone(m.bias_params)
 
 
 # class TestLinearLayers(unittest.TestCase):

@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from numpy import bool_
 from typing_extensions import Dict
 import torch
@@ -321,16 +321,39 @@ class Module(nn.Module, HyperParameters):
         if overwrrides is None:
             return cfg
 
-        for field in cfg.__dataclass_fields__:
-            default = getattr(overwrrides.__dataclass_fields__[field], "default", None)
-            current_cfg_value = getattr(cfg, field, default)
+        for value in cfg.__dataclass_fields__:
+            if (
+                hasattr(overwrrides, "__dataclass_fields__")
+                and value in overwrrides.__dataclass_fields__
+            ):
+                default = getattr(
+                    overwrrides.__dataclass_fields__[value], "default", None
+                )
+                is_default_value = getattr(overwrrides, value) is not default
+                should_update_field = hasattr(overwrrides, value) and is_default_value
+            else:
+                parent_classes = overwrrides.__class__.__mro__
+                for parent_class in parent_classes:
+                    if (
+                        hasattr(parent_class, "__dataclass_fields__")
+                        and value in parent_class.__dataclass_fields__
+                    ):
+                        default = getattr(
+                            parent_class.__dataclass_fields__[value], "default", None
+                        )
+                        is_default_value = getattr(parent_class, value) is not default
+                        should_update_field = (
+                            hasattr(parent_class, value) and is_default_value
+                        )
+                        break
 
-            is_default_value = getattr(overwrrides, field) is not default
+            current_cfg_value = getattr(cfg, value, default)
             if current_cfg_value != default and isinstance(current_cfg_value, bool):
                 is_default_value = True
 
-            if hasattr(overwrrides, field) and is_default_value:
-                setattr(cfg, field, getattr(overwrrides, field))
+            # if hasattr(overwrrides, field) and is_default_value:
+            if should_update_field:
+                setattr(cfg, value, getattr(overwrrides, value))
 
         return cfg
 

@@ -61,6 +61,7 @@ class LinearBase(Module):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
+        self.main_cfg: "ModelConfig" = cfg
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.bias_flag = self.cfg.bias_flag
@@ -147,19 +148,23 @@ class DynamicLinearLayer(LinearBase):
         self.diagonal_model = self.__init_diagonal_model()
         self.bias_model = self.__init_bias_model()
 
-    def __init_generator_model(self) -> DynamicParametersBehaviour:
-        return DynamicParametersBehaviour(self.cfg)
+    def __init_generator_model(self) -> DynamicParametersBehaviour | None:
+        if self.generator_depth != DynamicDepthOptions.DEFAULT:
+            return DynamicParametersBehaviour(self.main_cfg)
+        return None
 
     def __init_diagonal_model(self) -> DynamicDiagonalSelector:
-        return DynamicDiagonalSelector(self.cfg)
+        return DynamicDiagonalSelector(self.main_cfg)
 
     def __init_bias_model(self) -> DynamicBiasSelector | None:
         if self.bias_flag:
-            return DynamicBiasSelector(self.cfg)
+            return DynamicBiasSelector(self.main_cfg)
         return None
 
     def forward(self, input_batch: Tensor) -> Tensor:
-        weight_params = self.generator_model(self.weight_params, input_batch)
+        weight_params = self.weight_params
+        if self.generator_model is not None:
+            weight_params = self.generator_model(weight_params, input_batch)
         weight_params = self.diagonal_model(weight_params, input_batch)
         bias_parameters = self.__compute_bias_parameters(input_batch)
         output = self.__compute_linear_transformation(input_batch, weight_params)

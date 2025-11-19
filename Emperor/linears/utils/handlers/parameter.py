@@ -50,7 +50,6 @@ class DepthMappingLayerStack(Module):
     ):
         super().__init__()
         self.cfg = cfg
-        print(self.cfg)
         self.identifier = "layer_stack_config"
         updated_config = self.__update_config()
         self.generator_depth = self.cfg.linear_layer_config.generator_depth.value
