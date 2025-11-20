@@ -20,7 +20,7 @@ from Emperor.linears.utils.monitors import (
     ParameterMonitor,
 )
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -180,14 +180,16 @@ class DynamicLinearLayer(LinearBase):
         logits: Tensor,
         dynamic_diagonal_weights: Tensor,
     ) -> Tensor:
-        return torch.einsum("ij,ijk->ik", logits, dynamic_diagonal_weights)
+        if dynamic_diagonal_weights.dim() == 3:
+            return torch.einsum("ij,ijk->ik", logits, dynamic_diagonal_weights)
+        return torch.matmul(logits, dynamic_diagonal_weights)
 
     def __add_bias_parameters(
         self,
         linear_transform: Tensor,
-        bias_params: Tensor | None,
+        bias_params: Tensor | None = None,
     ) -> Tensor:
-        if self.bias_flag and bias_params:
+        if self.bias_flag and bias_params is not None:
             return linear_transform + bias_params
         return linear_transform
 

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, fields
+import copy
 from numpy import bool_
 from typing_extensions import Dict
 import torch
@@ -316,44 +317,17 @@ class Module(nn.Module, HyperParameters):
     def _overwrite_config(
         self,
         cfg: "ConfigBase | ModelConfig",
-        overwrrides: "ConfigBase | None" = None,
+        overrides: "ConfigBase | None" = None,
     ) -> "ConfigBase":
-        if overwrrides is None:
+        if overrides is None:
             return cfg
 
-        for value in cfg.__dataclass_fields__:
-            if (
-                hasattr(overwrrides, "__dataclass_fields__")
-                and value in overwrrides.__dataclass_fields__
-            ):
-                default = getattr(
-                    overwrrides.__dataclass_fields__[value], "default", None
-                )
-                is_default_value = getattr(overwrrides, value) is not default
-                should_update_field = hasattr(overwrrides, value) and is_default_value
-            else:
-                parent_classes = overwrrides.__class__.__mro__
-                for parent_class in parent_classes:
-                    if (
-                        hasattr(parent_class, "__dataclass_fields__")
-                        and value in parent_class.__dataclass_fields__
-                    ):
-                        default = getattr(
-                            parent_class.__dataclass_fields__[value], "default", None
-                        )
-                        is_default_value = getattr(parent_class, value) is not default
-                        should_update_field = (
-                            hasattr(parent_class, value) and is_default_value
-                        )
-                        break
+        cfg = copy.deepcopy(cfg)
 
-            current_cfg_value = getattr(cfg, value, default)
-            if current_cfg_value != default and isinstance(current_cfg_value, bool):
-                is_default_value = True
-
-            # if hasattr(overwrrides, field) and is_default_value:
-            if should_update_field:
-                setattr(cfg, value, getattr(overwrrides, value))
+        override_values_dict = overrides.get_custom_parameters()
+        if override_values_dict:
+            for key, value in override_values_dict.items():
+                setattr(cfg, key, value)
 
         return cfg
 
@@ -544,3 +518,17 @@ class ConfigBase:
             return None
 
         return getattr(self, key, default)
+
+    def __post_init__(self):
+        self._passed_args: Dict[str, Any] = {}
+        for f in fields(self):
+            if f.name == "passed_args":
+                continue
+            value = getattr(self, f.name)
+            if (f.default is not None and value != f.default) or isinstance(
+                value, bool
+            ):
+                self._passed_args[f.name] = value
+
+    def get_custom_parameters(self) -> Dict[str, Any]:
+        return self._passed_args

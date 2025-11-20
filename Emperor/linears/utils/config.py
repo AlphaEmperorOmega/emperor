@@ -39,7 +39,7 @@ class LinearsConfigs:
         input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
-        generators_depth: DynamicDepthOptions = DynamicDepthOptions.DEFAULT,
+        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEFAULT,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DEFAULT,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DEFAULT,
         stack_depth: int = 2,
@@ -57,9 +57,27 @@ class LinearsConfigs:
                 bias_flag=bias_flag,
                 data_monitor=None,
                 parameter_monitor=None,
-                generator_depth=generators_depth,
+                generator_depth=generator_depth,
                 diagonal_option=diagonal_option,
                 bias_option=bias_option,
+                # TODO: In the future modify the configuration to take the
+                # parameters that are recursively needed
+                # layer_stack_config=LayerStackConfig(
+                #     input_dim=input_dim,
+                #     hidden_dim=stack_hidden_dim,
+                #     output_dim=output_dim,
+                #     num_layers=stack_depth,
+                #     activation=ActivationOptions.RELU,
+                #     layer_norm_position=LayerNormPositionOptions.DEFAULT,
+                #     model_type=LinearLayerOptions.BASE,
+                #     linear_layer_config=LinearLayerConfig(
+                #         input_dim=input_dim,
+                #         output_dim=output_dim,
+                #         bias_flag=bias_flag,
+                #         data_monitor=data_monitor,
+                #         parameter_monitor=parameter_monitor,
+                #     ),
+                # ),
             ),
             layer_stack_config=LayerStackConfig(
                 input_dim=input_dim,

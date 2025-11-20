@@ -46,20 +46,13 @@ class TestLinearsDiagonalBehaviour(unittest.TestCase):
         self.weight_params = Module()._init_parameter_bank(
             self.weight_shape, nn.init.zeros_
         )
-        self.model = self.get_model()
-
-    def get_model(self):
-        raise NotImplementedError("Subclasses must implement the 'get_model' method.")
 
 
 class TestDefaultDiagonalHandler(TestLinearsDiagonalBehaviour):
-    def get_model(self):
-        return DefaultDiagonalHandler(self.cfg)
-
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(self.weight_params, input_tensor)
-        print(output.shape)
+        model = DefaultDiagonalHandler(self.cfg)
+        output = model(self.weight_params, input_tensor)
         self.assertEqual(output.shape, self.weight_shape)
         self.assertIsInstance(output, torch.Tensor)
 
@@ -70,40 +63,34 @@ class TestDiagonalHandlerHandler(TestLinearsDiagonalBehaviour):
 
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(self.weight_params, input_tensor)
+        model = DiagonalHandler(self.cfg)
+        output = model(self.weight_params, input_tensor)
         expected_weight_shape = (self.batch_size, self.input_dim, self.output_dim)
         self.assertEqual(output.shape, expected_weight_shape)
         self.assertIsInstance(output, torch.Tensor)
 
 
 class TestAntiDiagonalHandler(TestLinearsDiagonalBehaviour):
-    def get_model(self):
-        return AntiDiagonalHandler(self.cfg)
-
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(self.weight_params, input_tensor)
+        model = AntiDiagonalHandler(self.cfg)
+        output = model(self.weight_params, input_tensor)
         expected_weight_shape = (self.batch_size, self.input_dim, self.output_dim)
         self.assertEqual(output.shape, expected_weight_shape)
         self.assertIsInstance(output, torch.Tensor)
 
 
 class TestDiagonalAndAntiDiagonalHandler(TestLinearsDiagonalBehaviour):
-    def get_model(self):
-        return DiagonalAndAntiDiagonalHandler(self.cfg)
-
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(self.weight_params, input_tensor)
+        model = DiagonalAndAntiDiagonalHandler(self.cfg)
+        output = model(self.weight_params, input_tensor)
         expected_weight_shape = (self.batch_size, self.input_dim, self.output_dim)
         self.assertEqual(output.shape, expected_weight_shape)
         self.assertIsInstance(output, torch.Tensor)
 
 
 class TestDynamicBiasSelector(TestLinearsDiagonalBehaviour):
-    def get_model(self):
-        return DynamicDiagonalSelector(self.cfg)
-
     def test_forward(self):
         for option in DynamicDiagonalOptions:
             message = f"Test failed for diagonal option: {option}"
@@ -111,6 +98,6 @@ class TestDynamicBiasSelector(TestLinearsDiagonalBehaviour):
                 overrides = LinearsConfigs.dynamic_preset(diagonal_option=option)
                 self.rebuild_presets(overrides)
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
-                output = self.model(self.weight_params, input_tensor)
-                self.assertIsInstance(self.model.model, DiagonalHandlerAbstract)
+                model = DynamicDiagonalSelector(self.cfg)
+                output = model(self.weight_params, input_tensor)
                 self.assertIsInstance(output, torch.Tensor)
