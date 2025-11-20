@@ -1,7 +1,13 @@
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.experiments.utils.factories import Experiments
-from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
-from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
+from Emperor.linears.utils.config import LinearsConfigs
+from Emperor.linears.utils.enums import (
+    DynamicDepthOptions,
+    DynamicDiagonalOptions,
+    DynamicBiasOptions,
+)
+# from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
+# from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
 
 from typing import TYPE_CHECKING
 
@@ -42,46 +48,20 @@ class LinearsBasePreset:
     def get_config(self) -> "ModelConfig":
         match self.linear_layer_options:
             case LinearLayerOptions.BASE:
-                return self.base_preset()
+                return LinearsConfigs.base_preset(
+                    batch_size=64,
+                    input_dim=784,
+                    output_dim=10,
+                    bias_flag=True,
+                )
             case LinearLayerOptions.DYNAMIC:
-                return self.dynamic_preset()
-
-    def base_preset(
-        self,
-        batch_size=64,
-        input_dim=784,
-        output_dim=10,
-        bias_flag=True,
-    ) -> "ModelConfig":
-        from Emperor.config import ModelConfig
-
-        return ModelConfig(
-            batch_size=batch_size,
-            linear_layer_config=LinearLayerConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
-                bias_flag=bias_flag,
-                data_monitor=DataMonitor,
-                parameter_monitor=ParameterMonitor,
-            ),
-        )
-
-    def dynamic_preset(
-        self,
-        batch_size=64,
-        input_dim=784,
-        output_dim=10,
-        bias_flag=True,
-    ) -> "ModelConfig":
-        from Emperor.config import ModelConfig
-
-        return ModelConfig(
-            batch_size=batch_size,
-            linear_layer_config=DynamicLinearLayerConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
-                bias_flag=bias_flag,
-                data_monitor=DataMonitor,
-                parameter_monitor=ParameterMonitor,
-            ),
-        )
+                return LinearsConfigs.dynamic_preset(
+                    batch_size=128,
+                    input_dim=784,
+                    output_dim=10,
+                    bias_flag=True,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
+                    diagonal_option=DynamicDiagonalOptions.DIAGONAL,
+                    bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
+                    stack_depth=2,
+                )

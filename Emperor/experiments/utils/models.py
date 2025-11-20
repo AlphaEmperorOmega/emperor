@@ -4,8 +4,9 @@ import torch.nn as nn
 
 from typing import Callable
 from torch import Tensor
+from Emperor.base.layer import LinearLayerStack
 from Emperor.base.models import Classifier
-from Emperor.generators.utils.base import LinearLayerStackConfig, LinearLayerStack
+
 
 from typing import TYPE_CHECKING
 
@@ -62,7 +63,7 @@ class MultiLayerClassifierModel(ClassifierExperiment):
         self.model = self.__generate_model_layers()
 
     def __generate_model_layers(self) -> nn.Linear | nn.Sequential:
-        cfg = LinearLayerStackConfig(
+        cfg = ModelConfig(
             input_dim=self.cfg.hidden_dim,
             hidden_dim=self.cfg.hidden_dim,
             output_dim=self.cfg.output_dim,
@@ -81,30 +82,31 @@ class MultiLayerClassifierModel(ClassifierExperiment):
 
         return output, torch.tensor(0.0)
 
-    # def __create_layer_shapes(self) -> List:
-    #     layer_shape = []
-    #     layer_shape.append([self.cfg.input_dim, self.cfg.hidden_dim])
-    #     for _ in range(self.num_hidden_layers):
-    #         layer_shape.append([self.cfg.hidden_dim, self.cfg.hidden_dim])
-    #     layer_shape.append([self.cfg.hidden_dim, self.cfg.output_dim])
-    #
-    #     return layer_shape
-    #
-    # def __generate_model_layers(self) -> List:
-    #     cfg = copy.deepcopy(self.cfg)
-    #     layers = []
-    #     for layer_idx, layer_shape in enumerate(self.__create_layer_shapes()):
-    #         is_inner_layer_flag = layer_idx != (self.num_hidden_layers + 2 - 1)
-    #         # model_type = self.model_type.value
-    #         # if self.first_layer_preset is not None and layer_idx == 0:
-    #         #     model_type = self.first_layer_preset.value
-    #         _, output_dim = layer_shape
-    #         layer_block_inputs = (
-    #             self.hidden_layer_callback(cfg, layer_shape),
-    #             nn.ReLU() if is_inner_layer_flag else None,
-    #             nn.LayerNorm(output_dim) if is_inner_layer_flag else None,
-    #             False if layer_idx == 0 else is_inner_layer_flag,
-    #         )
-    #         layer = Layer(*layer_block_inputs)
-    #         layers.append(layer)
-    #     return layers
+
+# def __create_layer_shapes(self) -> List:
+#     layer_shape = []
+#     layer_shape.append([self.cfg.input_dim, self.cfg.hidden_dim])
+#     for _ in range(self.num_hidden_layers):
+#         layer_shape.append([self.cfg.hidden_dim, self.cfg.hidden_dim])
+#     layer_shape.append([self.cfg.hidden_dim, self.cfg.output_dim])
+#
+#     return layer_shape
+#
+# def __generate_model_layers(self) -> List:
+#     cfg = copy.deepcopy(self.cfg)
+#     layers = []
+#     for layer_idx, layer_shape in enumerate(self.__create_layer_shapes()):
+#         is_inner_layer_flag = layer_idx != (self.num_hidden_layers + 2 - 1)
+#         # model_type = self.model_type.value
+#         # if self.first_layer_preset is not None and layer_idx == 0:
+#         #     model_type = self.first_layer_preset.value
+#         _, output_dim = layer_shape
+#         layer_block_inputs = (
+#             self.hidden_layer_callback(cfg, layer_shape),
+#             nn.ReLU() if is_inner_layer_flag else None,
+#             nn.LayerNorm(output_dim) if is_inner_layer_flag else None,
+#             False if layer_idx == 0 else is_inner_layer_flag,
+#         )
+#         layer = Layer(*layer_block_inputs)
+#         layers.append(layer)
+#     return layers
