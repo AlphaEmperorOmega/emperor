@@ -22,6 +22,14 @@ class DynamicBiasOptions(Enum):
     DYNAMIC_PARAMETERS = 4
 
 
+class DynamicMemoryOptions(Enum):
+    DEFAULT = 0
+    DEPTH_OF_ONE = 4
+    DEPTH_OF_TWO = 8
+    DEPTH_OF_THREE = 16
+    DEPTH_OF_FOUR = 32
+
+
 class DynamicDepthOptions(Enum):
     DEFAULT = 0
     DEPTH_OF_ONE = 1

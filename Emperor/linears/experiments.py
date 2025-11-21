@@ -56,12 +56,12 @@ class LinearsBasePreset:
                 )
             case LinearLayerOptions.DYNAMIC:
                 return LinearsConfigs.dynamic_preset(
-                    batch_size=128,
+                    batch_size=64,
                     input_dim=784,
                     output_dim=10,
                     bias_flag=True,
                     generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
-                    diagonal_option=DynamicDiagonalOptions.DIAGONAL,
+                    diagonal_option=DynamicDiagonalOptions.DEFAULT,
                     bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
                     stack_depth=2,
                 )

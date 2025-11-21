@@ -478,7 +478,7 @@ class Trainer(HyperParameters):
         self,
         loss: torch.Tensor,
         auxiliary_loss: torch.Tensor,
-        batch_rate: int = 1,
+        batch_rate: int = 20,
         batch_idx: int = 0,
     ) -> None:
         if self.print_loss_flag and batch_idx % batch_rate == 0:

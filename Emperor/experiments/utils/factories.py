@@ -47,73 +47,73 @@ class ModelFactory(Enum):
         return self.value(model, learning_rate)
 
 
-class PresetCollections:
-    def __init__(self):
-        pass
-
-    def get_layers_and_assigned_presets(self):
-        return {
-            # LinearLayer: self.__get_linear_presets(),
-            # DynamicLinearLayer: self.__get_dynamic_diagonal_presets(),
-            # VectorParameterLayer: self.__get_vector_presets(),
-            # MatrixParameterLayer: self.__get_matrix_presets(),
-            # GeneratorParameterLayer: self.__get_generator_presets(),
-        }
-
-    def __get_linear_presets(self) -> list:
-        return [SparseWithAuxiliaryPreset]
-
-    def __get_dynamic_diagonal_presets(self) -> list:
-        return [SparseWithAuxiliaryPreset]
-
-    def __get_vector_presets(self) -> list:
-        return [
-            SparseWithAuxiliaryPreset,
-            TopkWithAuxiliaryPreset,
-            SparseNoAuxiliaryPreset,
-            TopKNoAuxiliaryPreset,
-            SparseAuxiliaryAndWeightedParametersPreset,
-            TopKAuxiliaryAndWeightedParametersPreset,
-            FullMixturePreset,
-            FullMixtureLayerDynamicMaskPreset,
-            SparseThresholdPreset,
-            TopKThresholdPreset,
-            FullMixtureThresholdPreset,
-        ]
-
-    def __get_matrix_presets(self) -> list:
-        return [
-            SparseWithAuxiliaryPreset,
-            TopkWithAuxiliaryPreset,
-            SparseNoAuxiliaryPreset,
-            TopKNoAuxiliaryPreset,
-            SparseAuxiliaryAndWeightedParametersPreset,
-            TopKAuxiliaryAndWeightedParametersPreset,
-            FullMixturePreset,
-            FullMixtureLayerDynamicMaskPreset,
-            SparseThresholdPreset,
-            TopKThresholdPreset,
-            FullMixtureThresholdPreset,
-        ]
-
-    def __get_generator_presets(self) -> list:
-        return [
-            SparseWithAuxiliaryPreset,
-            TopkWithAuxiliaryPreset,
-            SparseNoAuxiliaryPreset,
-            TopKNoAuxiliaryPreset,
-            SparseAuxiliaryAndWeightedParametersPreset,
-            TopKAuxiliaryAndWeightedParametersPreset,
-            FullMixturePreset,
-            FullMixtureLayerDynamicMaskPreset,
-            SparseThresholdPreset,
-            TopKThresholdPreset,
-            FullMixtureThresholdPreset,
-            FullMixtureNoWeightSumDepthTwoPreset,
-            FullMixtureNoWeightSumDepthThreePreset,
-            FullMixtureNoWeightSumDepthFourPreset,
-            FullMixtureNoWeightSumDepthFivePreset,
-        ]
+# class PresetCollections:
+#     def __init__(self):
+#         pass
+#
+#     def get_layers_and_assigned_presets(self):
+#         return {
+#             # LinearLayer: self.__get_linear_presets(),
+#             # DynamicLinearLayer: self.__get_dynamic_diagonal_presets(),
+#             # VectorParameterLayer: self.__get_vector_presets(),
+#             # MatrixParameterLayer: self.__get_matrix_presets(),
+#             # GeneratorParameterLayer: self.__get_generator_presets(),
+#         }
+#
+#     def __get_linear_presets(self) -> list:
+#         return [SparseWithAuxiliaryPreset]
+#
+#     def __get_dynamic_diagonal_presets(self) -> list:
+#         return [SparseWithAuxiliaryPreset]
+#
+#     def __get_vector_presets(self) -> list:
+#         return [
+#             SparseWithAuxiliaryPreset,
+#             TopkWithAuxiliaryPreset,
+#             SparseNoAuxiliaryPreset,
+#             TopKNoAuxiliaryPreset,
+#             SparseAuxiliaryAndWeightedParametersPreset,
+#             TopKAuxiliaryAndWeightedParametersPreset,
+#             FullMixturePreset,
+#             FullMixtureLayerDynamicMaskPreset,
+#             SparseThresholdPreset,
+#             TopKThresholdPreset,
+#             FullMixtureThresholdPreset,
+#         ]
+#
+#     def __get_matrix_presets(self) -> list:
+#         return [
+#             SparseWithAuxiliaryPreset,
+#             TopkWithAuxiliaryPreset,
+#             SparseNoAuxiliaryPreset,
+#             TopKNoAuxiliaryPreset,
+#             SparseAuxiliaryAndWeightedParametersPreset,
+#             TopKAuxiliaryAndWeightedParametersPreset,
+#             FullMixturePreset,
+#             FullMixtureLayerDynamicMaskPreset,
+#             SparseThresholdPreset,
+#             TopKThresholdPreset,
+#             FullMixtureThresholdPreset,
+#         ]
+#
+#     def __get_generator_presets(self) -> list:
+#         return [
+#             SparseWithAuxiliaryPreset,
+#             TopkWithAuxiliaryPreset,
+#             SparseNoAuxiliaryPreset,
+#             TopKNoAuxiliaryPreset,
+#             SparseAuxiliaryAndWeightedParametersPreset,
+#             TopKAuxiliaryAndWeightedParametersPreset,
+#             FullMixturePreset,
+#             FullMixtureLayerDynamicMaskPreset,
+#             SparseThresholdPreset,
+#             TopKThresholdPreset,
+#             FullMixtureThresholdPreset,
+#             FullMixtureNoWeightSumDepthTwoPreset,
+#             FullMixtureNoWeightSumDepthThreePreset,
+#             FullMixtureNoWeightSumDepthFourPreset,
+#             FullMixtureNoWeightSumDepthFivePreset,
+#         ]
 
 
 class ModelTrainer:
@@ -125,6 +125,7 @@ class ModelTrainer:
         learning_rate,
         trainer_type,
         mini_datasetset_flag,
+        num_epochs: int = 5,
     ):
         self.cfg = model_config
         self.model = model_type(self.cfg, layer_type, learning_rate)
@@ -132,6 +133,7 @@ class ModelTrainer:
             self.model,
             self.cfg,
             mini_datasetset_flag,
+            num_epochs=num_epochs,
         )
 
     def train(self):
@@ -147,18 +149,10 @@ class Experiments:
         self.model_config = None
         # self.preset_collections = PresetCollections().get_layers_and_assigned_presets()
         self.learning_rates = [
-            # 1e-5,
-            # 3e-5,
-            # 5e-5,
-            # 7e-5,
-            # 1e-4,
-            # 3e-4,
-            # 5e-4,
-            # 7e-4,
+            1e-5,
+            1e-4,
             1e-3,
-            # 3e-3,
             1e-2,
-            # 3e-2,
             1e-1,
         ]
 
@@ -197,6 +191,7 @@ class Experiments:
                         learning_rate,
                         trainer_type,
                         self.mini_datasetset_flag,
+                        num_epochs=20,
                     )
                     trainer.train()
 

@@ -143,7 +143,9 @@ class DynamicParametersBehaviour(Module):
         #         return F.sigmoid(outer_product)
         #     case _:
         #         return outer_product
-        return F.sigmoid(outer_product)
+        return torch.clamp(outer_product, -5.0, 5.0)
+        # return F.tanh(outer_product)
+        # return F.sigmoid(outer_product)
 
 
 # TODO: Add option for a kernel to take the context

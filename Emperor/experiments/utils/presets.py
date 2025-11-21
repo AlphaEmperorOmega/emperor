@@ -1,5 +1,6 @@
 import os
 import copy
+import datetime
 import torch.nn as nn
 from Emperor.base.utils import Trainer
 from Emperor.base.datasets import FashionMNIST
@@ -376,7 +377,11 @@ class FashionMNISTModelTrainer(ModelTrainerBase):
         self.trainer.fit(self.model, self.data, print_loss_flag=True)
 
     def __initialize_monitor(self) -> None:
-        trainer_name = self.__class__.__name__
+        trainer_name = (
+            self.__class__.__name__
+            + "_"
+            + datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        )
         dataset_name = self.data.__class__.__name__
         model_name = self.model.__class__.__name__
         log_dir = os.path.join(
