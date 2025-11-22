@@ -7,12 +7,15 @@ from torch import Tensor
 from inspect import Parameter
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.linears.utils.enums import DynamicDepthOptions
+from Emperor.linears.utils.enums import (
+    DynamicDepthOptions,
+    DynamicMemoryOptions,
+    DynamicBiasOptions,
+    DynamicDiagonalOptions,
+)
 from Emperor.linears.utils.behaviours import (
     DynamicBiasSelector,
-    DynamicBiasOptions,
     DynamicDiagonalSelector,
-    DynamicDiagonalOptions,
     DynamicParametersBehaviour,
 )
 from Emperor.linears.utils.monitors import (
@@ -113,21 +116,27 @@ class LinearLayer(LinearBase):
 @dataclass
 class DynamicLinearLayerConfig(LinearLayerConfig):
     generator_depth: DynamicDepthOptions = field(
-        default=DynamicDepthOptions.DEFAULT,
+        default=DynamicDepthOptions.DISABLED,
         metadata={
-            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
+            "help": "",
         },
     )
     diagonal_option: DynamicDiagonalOptions = field(
-        default=DynamicDiagonalOptions.DEFAULT,
+        default=DynamicDiagonalOptions.DISABLED,
         metadata={
-            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
+            "help": "",
         },
     )
     bias_option: DynamicBiasOptions = field(
-        default=DynamicBiasOptions.DEFAULT,
+        default=DynamicBiasOptions.DISABLED,
         metadata={
-            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
+            "help": "",
+        },
+    )
+    memory_option: DynamicMemoryOptions = field(
+        default=DynamicMemoryOptions.DISABLED,
+        metadata={
+            "help": "",
         },
     )
 
@@ -149,17 +158,19 @@ class DynamicLinearLayer(LinearBase):
         self.bias_model = self.__init_bias_model()
 
     def __init_generator_model(self) -> DynamicParametersBehaviour | None:
-        if self.generator_depth != DynamicDepthOptions.DEFAULT:
-            return DynamicParametersBehaviour(self.main_cfg)
-        return None
+        if self.generator_depth != DynamicDepthOptions.DISABLED:
+            return None
+        return DynamicParametersBehaviour(self.main_cfg)
 
-    def __init_diagonal_model(self) -> DynamicDiagonalSelector:
+    def __init_diagonal_model(self) -> DynamicDiagonalSelector | None:
+        if self.dynamical_option == DynamicDiagonalOptions.DISABLED:
+            return None
         return DynamicDiagonalSelector(self.main_cfg)
 
     def __init_bias_model(self) -> DynamicBiasSelector | None:
-        if self.bias_flag:
-            return DynamicBiasSelector(self.main_cfg)
-        return None
+        if not self.bias_flag or self.bias_option == DynamicBiasOptions.DISABLED:
+            return None
+        return DynamicBiasSelector(self.main_cfg)
 
     def forward(self, input_batch: Tensor) -> Tensor:
         weight_params = self.weight_params
@@ -202,7 +213,7 @@ class LinearLayerWithMemoryOptions(Enum):
 
 class MemoryLinearLayerConfig(LinearLayerConfig):
     dynamic_bias_option: DynamicBiasOptions = field(
-        default=DynamicBiasOptions.DEFAULT,
+        default=DynamicBiasOptions.DISABLED,
         metadata={
             "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
         },

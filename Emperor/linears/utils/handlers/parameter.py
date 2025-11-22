@@ -37,8 +37,7 @@ class DepthMappingLayer(Module):
         self,
         input_batch: Tensor,
     ) -> Tensor:
-        operation = "bkj,kji->bki"
-        output = torch.einsum(operation, input_batch, self.weight_params)
+        output = torch.einsum("bkj,kji->bki", input_batch, self.weight_params)
         return output + self.bias_params
 
 

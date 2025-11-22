@@ -1,37 +1,30 @@
 from enum import Enum
 
 
-class OuterProductNormOptions(Enum):
-    RELU = 1
-    TANH = 2
-    SIGMOID = 3
-    LAYER_NORM = 4
-
-
 class DynamicDiagonalOptions(Enum):
-    DEFAULT = 0
+    DISABLED = 0
     DIAGONAL = 1
     ANTI_DIAGONAL = 2
     DIAGONAL_AND_ANTI_DIAGONAL = 3
 
 
 class DynamicBiasOptions(Enum):
-    DEFAULT = 1
-    SCALE_AND_OFFSET = 2
-    ELEMENT_WISE_OFFSET = 3
-    DYNAMIC_PARAMETERS = 4
-
-
-class DynamicMemoryOptions(Enum):
-    DEFAULT = 0
-    DEPTH_OF_ONE = 4
-    DEPTH_OF_TWO = 8
-    DEPTH_OF_THREE = 16
-    DEPTH_OF_FOUR = 32
+    DISABLED = 0
+    SCALE_AND_OFFSET = 1
+    ELEMENT_WISE_OFFSET = 2
+    DYNAMIC_PARAMETERS = 3
 
 
 class DynamicDepthOptions(Enum):
-    DEFAULT = 0
+    DISABLED = 0
     DEPTH_OF_ONE = 1
     DEPTH_OF_TWO = 2
     DEPTH_OF_THREE = 3
+
+
+class DynamicMemoryOptions(Enum):
+    DISABLED = 0
+    SMALL = 4
+    MEDIUM = 8
+    LARGE = 16
+    EXTRA_LARGE = 32

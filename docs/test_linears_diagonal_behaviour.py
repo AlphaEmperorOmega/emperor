@@ -9,10 +9,9 @@ from Emperor.linears.utils.behaviours import DynamicDiagonalSelector
 from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.linears.utils.enums import DynamicDiagonalOptions
 from Emperor.linears.utils.handlers.diagonal import (
+    DiagonalAbstract,
     DiagonalHandler,
     AntiDiagonalHandler,
-    DiagonalHandlerAbstract,
-    DefaultDiagonalHandler,
     DiagonalAndAntiDiagonalHandler,
 )
 
@@ -48,19 +47,7 @@ class TestLinearsDiagonalBehaviour(unittest.TestCase):
         )
 
 
-class TestDefaultDiagonalHandler(TestLinearsDiagonalBehaviour):
-    def test_forward(self):
-        input_tensor = torch.randn(self.batch_size, self.input_dim)
-        model = DefaultDiagonalHandler(self.cfg)
-        output = model(self.weight_params, input_tensor)
-        self.assertEqual(output.shape, self.weight_shape)
-        self.assertIsInstance(output, torch.Tensor)
-
-
 class TestDiagonalHandlerHandler(TestLinearsDiagonalBehaviour):
-    def get_model(self):
-        return DiagonalHandler(self.cfg)
-
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         model = DiagonalHandler(self.cfg)
@@ -90,7 +77,7 @@ class TestDiagonalAndAntiDiagonalHandler(TestLinearsDiagonalBehaviour):
         self.assertIsInstance(output, torch.Tensor)
 
 
-class TestDynamicBiasSelector(TestLinearsDiagonalBehaviour):
+class TestDynamicDiagonalSelector(TestLinearsDiagonalBehaviour):
     def test_forward(self):
         for option in DynamicDiagonalOptions:
             message = f"Test failed for diagonal option: {option}"
@@ -98,6 +85,11 @@ class TestDynamicBiasSelector(TestLinearsDiagonalBehaviour):
                 overrides = LinearsConfigs.dynamic_preset(diagonal_option=option)
                 self.rebuild_presets(overrides)
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
-                model = DynamicDiagonalSelector(self.cfg)
-                output = model(self.weight_params, input_tensor)
-                self.assertIsInstance(output, torch.Tensor)
+                if option == DynamicDiagonalOptions.DISABLED:
+                    with self.assertRaises(ValueError):
+                        model = DynamicDiagonalSelector(self.cfg)
+                else:
+                    model = DynamicDiagonalSelector(self.cfg)
+                    output = model(self.weight_params, input_tensor)
+                    self.assertIsInstance(model.model, DiagonalAbstract)
+                    self.assertIsInstance(output, torch.Tensor)

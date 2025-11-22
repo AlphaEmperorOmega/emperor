@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
-class DiagonalHandlerAbstract(Module):
+class DiagonalAbstract(Module):
     def __init__(
         self,
         cfg: "ModelConfig",
@@ -59,18 +59,7 @@ class DiagonalHandlerAbstract(Module):
         return self.__convert_to_diagonal_matrix(vectors)
 
 
-class DefaultDiagonalHandler(DiagonalHandlerAbstract):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-    ):
-        super().__init__(cfg)
-
-    def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
-        return weight_params
-
-
-class DiagonalHandler(DiagonalHandlerAbstract):
+class DiagonalHandler(DiagonalAbstract):
     def __init__(
         self,
         cfg: "ModelConfig",
@@ -83,7 +72,7 @@ class DiagonalHandler(DiagonalHandlerAbstract):
         return weight_params + diagonal_matrices
 
 
-class AntiDiagonalHandler(DiagonalHandlerAbstract):
+class AntiDiagonalHandler(DiagonalAbstract):
     def __init__(
         self,
         cfg: "ModelConfig",
@@ -97,7 +86,7 @@ class AntiDiagonalHandler(DiagonalHandlerAbstract):
         return weight_params + anti_diagonal_matrix
 
 
-class DiagonalAndAntiDiagonalHandler(DiagonalHandlerAbstract):
+class DiagonalAndAntiDiagonalHandler(DiagonalAbstract):
     def __init__(
         self,
         cfg: "ModelConfig",

@@ -28,17 +28,6 @@ class BiasHandlerAbstract(Module):
         return LinearLayerStack(self.main_cfg, overrides=overrides)
 
 
-class DefaultBiasHandler(BiasHandlerAbstract):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-    ):
-        super().__init__(cfg)
-
-    def forward(self, bias_params: Tensor, logits: None = None) -> Tensor:
-        return bias_params
-
-
 class AffineBiasTransformHandler(BiasHandlerAbstract):
     def __init__(
         self,

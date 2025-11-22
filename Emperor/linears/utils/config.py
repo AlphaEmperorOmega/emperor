@@ -39,9 +39,9 @@ class LinearsConfigs:
         input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
-        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEFAULT,
-        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DEFAULT,
-        bias_option: DynamicBiasOptions = DynamicBiasOptions.DEFAULT,
+        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
+        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
         stack_depth: int = 2,
         stack_hidden_dim: int = 0,
     ) -> "ModelConfig":

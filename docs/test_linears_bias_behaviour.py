@@ -12,7 +12,6 @@ from Emperor.linears.utils.handlers.bias import (
     AffineBiasTransformHandler,
     BiasGeneratorHandler,
     BiasHandlerAbstract,
-    DefaultBiasHandler,
     ElementwiseBiasHandler,
 )
 
@@ -44,33 +43,13 @@ class TestLinearsBiasBehaviour(unittest.TestCase):
 
         bias_shape = (self.output_dim,)
         self.bias_params = Module()._init_parameter_bank(bias_shape, nn.init.zeros_)
-        self.model = self.get_model()
-
-    def get_model(self):
-        raise NotImplementedError("Subclasses must implement the 'get_model' method.")
-
-
-class TestDefaultBiasHandler(TestLinearsBiasBehaviour):
-    def get_model(self):
-        return DefaultBiasHandler(self.cfg)
-
-    def test_forward(self):
-        input_tensor = torch.randn(self.batch_size, self.output_dim)
-        output = self.model(self.bias_params, input_tensor)
-        bias_shape = (self.output_dim,)
-        self.assertEqual(output.shape, bias_shape)
-        self.assertIsInstance(output, torch.Tensor)
-        self.assertEqual(output.numel(), self.output_dim)
-        self.assertTrue(torch.all(output == 0))
 
 
 class TestAffineBiasTransformHandler(TestLinearsBiasBehaviour):
-    def get_model(self):
-        return AffineBiasTransformHandler(self.cfg)
-
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(self.bias_params, input_tensor)
+        model = AffineBiasTransformHandler(self.cfg)
+        output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
         self.assertIsInstance(output, torch.Tensor)
@@ -78,12 +57,10 @@ class TestAffineBiasTransformHandler(TestLinearsBiasBehaviour):
 
 
 class TestElementwiseBiasHandler(TestLinearsBiasBehaviour):
-    def get_model(self):
-        return ElementwiseBiasHandler(self.cfg)
-
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(self.bias_params, input_tensor)
+        model = ElementwiseBiasHandler(self.cfg)
+        output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
         self.assertIsInstance(output, torch.Tensor)
@@ -91,12 +68,10 @@ class TestElementwiseBiasHandler(TestLinearsBiasBehaviour):
 
 
 class TestBiasGeneratorHandler(TestLinearsBiasBehaviour):
-    def get_model(self):
-        return BiasGeneratorHandler(self.cfg)
-
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(self.bias_params, input_tensor)
+        model = BiasGeneratorHandler(self.cfg)
+        output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
         self.assertIsInstance(output, torch.Tensor)
@@ -104,9 +79,6 @@ class TestBiasGeneratorHandler(TestLinearsBiasBehaviour):
 
 
 class TestDynamicBiasSelector(TestLinearsBiasBehaviour):
-    def get_model(self):
-        return DynamicBiasSelector(self.cfg)
-
     def test_forward(self):
         for option in DynamicBiasOptions:
             message = f"Test failed for bias option: {option}"
@@ -114,6 +86,11 @@ class TestDynamicBiasSelector(TestLinearsBiasBehaviour):
                 overrides = LinearsConfigs.dynamic_preset(bias_option=option)
                 self.rebuild_presets(overrides)
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
-                output = self.model(self.bias_params, input_tensor)
-                self.assertIsInstance(self.model.model, BiasHandlerAbstract)
-                self.assertIsInstance(output, torch.Tensor)
+                if option == DynamicBiasOptions.DISABLED:
+                    with self.assertRaises(ValueError):
+                        model = DynamicBiasSelector(self.cfg)
+                else:
+                    model = DynamicBiasSelector(self.cfg)
+                    output = model(self.bias_params, input_tensor)
+                    self.assertIsInstance(model.model, BiasHandlerAbstract)
+                    self.assertIsInstance(output, torch.Tensor)

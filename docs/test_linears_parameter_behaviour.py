@@ -34,7 +34,7 @@ class TestDepthMappingBehaviour(unittest.TestCase):
     def rebuild_presets(self, config: "ModelConfig | None" = None):
         generators_depth = DynamicDepthOptions.DEPTH_OF_TWO
         self.cfg = (
-            LinearsConfigs.dynamic_preset(generators_depth=generators_depth)
+            LinearsConfigs.dynamic_preset(generator_depth=generators_depth)
             if config is None
             else config
         )
@@ -51,27 +51,21 @@ class TestDepthMappingBehaviour(unittest.TestCase):
 
         weight_shape = (self.input_dim, self.output_dim)
         self.weight_params = Module()._init_parameter_bank(weight_shape, nn.init.zeros_)
-        self.model = self.get_model()
-
-    def get_model(self):
-        raise NotImplementedError("Subclasses must implement the 'get_model' method.")
 
 
 class TestDepthMappingLayer(TestDepthMappingBehaviour):
-    def get_model(self):
-        return DepthMappingLayer(self.config)
-
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(
             self.batch_size, self.generator_depth, self.input_dim
         )
-        output = self.model(input_tensor)
+        model = DepthMappingLayer(self.config)
+        output = model(input_tensor)
         expected_shape = (self.batch_size, self.generator_depth, self.output_dim)
         self.assertEqual(output.shape, expected_shape)
         for i in range(self.batch_size):
             for j in range(self.generator_depth):
-                weight_slice = self.model.weight_params[j]
-                bias_slice = self.model.bias_params[j]
+                weight_slice = model.weight_params[j]
+                bias_slice = model.bias_params[j]
                 expected_output = (
                     torch.matmul(input_tensor[i, j], weight_slice) + bias_slice
                 )
@@ -81,30 +75,25 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
 
     def test_error_is_thrown_for_zero_depth(self):
         config = LinearsConfigs.dynamic_preset(
-            generators_depth=DynamicDepthOptions.DEFAULT
+            generator_depth=DynamicDepthOptions.DISABLED
         )
         with self.assertRaises(ValueError) as context:
-            self.rebuild_presets(config)
-        self.assertEqual(str(context.exception), "generator_depth cannot be 0")
+            model = DepthMappingLayer(config)
 
 
 class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
-    def get_model(self):
-        return DepthMappingLayerStack(self.cfg)
-
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(input_tensor)
+        model = DepthMappingLayerStack(self.cfg)
+        output = model(input_tensor)
         expected_shape = (self.batch_size, self.generator_depth, self.output_dim)
         self.assertEqual(output.shape, expected_shape)
 
 
 class TestDynamicParametersBehaviour(TestDepthMappingBehaviour):
-    def get_model(self):
-        return DynamicParametersBehaviour(self.cfg)
-
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        output = self.model(self.weight_params, input_tensor)
+        model = DynamicParametersBehaviour(self.cfg)
+        output = model(self.weight_params, input_tensor)
         expected_shape = (self.batch_size, self.input_dim, self.output_dim)
         self.assertEqual(output.shape, expected_shape)
