@@ -22,9 +22,20 @@ class DynamicDepthOptions(Enum):
     DEPTH_OF_THREE = 3
 
 
-class DynamicMemoryOptions(Enum):
+class LinearMemorySizeOptions(Enum):
     DISABLED = 0
     SMALL = 4
     MEDIUM = 8
     LARGE = 16
-    EXTRA_LARGE = 32
+    MAX = 32
+
+
+class LinearMemoryOptions(Enum):
+    DISABLED = 0
+    FUSION = 1
+    WEIGHTED = 2
+
+
+class LinearMemoryPositionOptions(Enum):
+    BEFORE_AFFINE = 1
+    AFTER_AFFINE = 2

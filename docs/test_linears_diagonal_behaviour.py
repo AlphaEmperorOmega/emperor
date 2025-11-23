@@ -9,7 +9,7 @@ from Emperor.linears.utils.behaviours import DynamicDiagonalSelector
 from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.linears.utils.enums import DynamicDiagonalOptions
 from Emperor.linears.utils.handlers.diagonal import (
-    DiagonalAbstract,
+    DiagonalHandlerAbstract,
     DiagonalHandler,
     AntiDiagonalHandler,
     DiagonalAndAntiDiagonalHandler,
@@ -91,5 +91,5 @@ class TestDynamicDiagonalSelector(TestLinearsDiagonalBehaviour):
                 else:
                     model = DynamicDiagonalSelector(self.cfg)
                     output = model(self.weight_params, input_tensor)
-                    self.assertIsInstance(model.model, DiagonalAbstract)
+                    self.assertIsInstance(model.model, DiagonalHandlerAbstract)
                     self.assertIsInstance(output, torch.Tensor)

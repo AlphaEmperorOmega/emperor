@@ -7,6 +7,9 @@ from Emperor.linears.utils.layers import LinearLayerConfig, DynamicLinearLayerCo
 from Emperor.linears.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
+    LinearMemoryOptions,
+    LinearMemoryPositionOptions,
+    LinearMemorySizeOptions,
 )
 
 
@@ -42,6 +45,9 @@ class LinearsConfigs:
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
+        memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
+        memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
         stack_depth: int = 2,
         stack_hidden_dim: int = 0,
     ) -> "ModelConfig":
@@ -60,6 +66,9 @@ class LinearsConfigs:
                 generator_depth=generator_depth,
                 diagonal_option=diagonal_option,
                 bias_option=bias_option,
+                memory_option=memory_option,
+                memory_size_option=memory_size_option,
+                memory_position_option=memory_position_option,
                 # TODO: In the future modify the configuration to take the
                 # parameters that are recursively needed
                 # layer_stack_config=LayerStackConfig(

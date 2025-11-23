@@ -5,7 +5,16 @@ from torch import Tensor
 from Emperor.base.utils import Module
 from torch.nn import Linear, Sequential
 from Emperor.linears.utils.handlers.parameter import DepthMappingLayerStack
-from Emperor.linears.utils.enums import DynamicBiasOptions, DynamicDiagonalOptions
+from Emperor.linears.utils.enums import (
+    DynamicBiasOptions,
+    DynamicDiagonalOptions,
+    LinearMemoryOptions,
+)
+from Emperor.linears.utils.handlers.memory import (
+    MemoryFusionHandler,
+    MemoryHandlerAbstract,
+    WeightedMemoryHandler,
+)
 from Emperor.linears.utils.handlers.bias import (
     BiasGeneratorHandler,
     BiasHandlerAbstract,
@@ -16,7 +25,7 @@ from Emperor.linears.utils.handlers.diagonal import (
     AntiDiagonalHandler,
     DiagonalAndAntiDiagonalHandler,
     DiagonalHandler,
-    DiagonalAbstract,
+    DiagonalHandlerAbstract,
 )
 from Emperor.base.layer import (
     LayerStackConfig,
@@ -119,8 +128,6 @@ class DynamicParametersBehaviour(Module):
         #     case _:
         #         return outer_product
         return torch.clamp(outer_product, -5.0, 5.0)
-        # return F.tanh(outer_product)
-        # return F.sigmoid(outer_product)
 
 
 # TODO: Add option for a kernel to take the context
@@ -137,9 +144,7 @@ class DynamicDiagonalSelector(Module):
         self.diagonal_option = self.cfg.diagonal_option
         self.model = self.__init_bias_model()
 
-    def __init_bias_model(
-        self,
-    ) -> DiagonalAbstract:
+    def __init_bias_model(self) -> DiagonalHandlerAbstract:
         match self.diagonal_option:
             case DynamicDiagonalOptions.DIAGONAL:
                 return DiagonalHandler(self.main_config)
@@ -172,9 +177,7 @@ class DynamicBiasSelector(Module):
         self.bias_option = self.cfg.bias_option
         self.model = self.__init_bias_model()
 
-    def __init_bias_model(
-        self,
-    ) -> BiasHandlerAbstract:
+    def __init_bias_model(self) -> BiasHandlerAbstract:
         match self.bias_option:
             case DynamicBiasOptions.SCALE_AND_OFFSET:
                 return AffineBiasTransformHandler(self.main_config)
@@ -185,6 +188,37 @@ class DynamicBiasSelector(Module):
             case DynamicBiasOptions.DISABLED:
                 raise ValueError(
                     "If the `bias_option` is set to `DISABLED`, this class should not be initialized"
+                )
+
+    def forward(
+        self,
+        bias_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor | None:
+        return self.model(bias_params, logits)
+
+
+class DynamicMemorySelector(Module):
+    def __init__(
+        self,
+        cfg: "ModelConfig",
+    ):
+        super().__init__()
+        config = getattr(cfg, "linear_layer_config", cfg)
+        self.cfg: "DynamicLinearLayerConfig" = config
+        self.main_config = cfg
+        self.memory_option = self.cfg.memory_option
+        self.model = self.__init_memory_model()
+
+    def __init_memory_model(self) -> MemoryHandlerAbstract:
+        match self.memory_option:
+            case LinearMemoryOptions.FUSION:
+                return MemoryFusionHandler(self.main_config)
+            case LinearMemoryOptions.WEIGHTED:
+                return WeightedMemoryHandler(self.main_config)
+            case LinearMemoryOptions.DISABLED:
+                raise ValueError(
+                    "If the `memory_option` is set to `DISABLED`, this class should not be initialized"
                 )
 
     def forward(

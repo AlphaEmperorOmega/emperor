@@ -1,6 +1,5 @@
-import unittest
-import sys
 import torch
+import unittest
 
 from dataclasses import asdict
 from Emperor.config import ModelConfig
@@ -12,7 +11,6 @@ from Emperor.linears.utils.enums import (
 )
 from Emperor.linears.utils.layers import (
     DynamicLinearLayer,
-    DynamicLinearLayerConfig,
     LinearLayer,
     LinearLayerConfig,
 )
@@ -95,14 +93,21 @@ class TestDynamicLinearLayer(TestLinears):
                     for bias_option in DynamicBiasOptions:
                         message = f"Test failed for the options: {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
                         with self.subTest(message=message):
-                            c = LinearsConfigs.dynamic_preset(batch_size=2)
-                            overrides = DynamicLinearLayerConfig(
+                            # c = LinearsConfigs.dynamic_preset(batch_size=2)
+                            # overrides = DynamicLinearLayerConfig(
+                            #     bias_flag=bias_flag,
+                            #     generator_depth=generators_depth,
+                            #     diagonal_option=diagonal_option,
+                            #     bias_option=bias_option,
+                            # )
+
+                            c = LinearsConfigs.dynamic_preset(
                                 bias_flag=bias_flag,
                                 generator_depth=generators_depth,
                                 diagonal_option=diagonal_option,
                                 bias_option=bias_option,
                             )
-                            m = DynamicLinearLayer(c, overrides)
+                            m = DynamicLinearLayer(c)
 
                             self.assertEqual(m.input_dim, c.input_dim)
                             self.assertEqual(m.output_dim, c.output_dim)

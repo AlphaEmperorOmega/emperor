@@ -2,20 +2,22 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from enum import Enum
 from torch import Tensor
 from inspect import Parameter
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils.enums import (
     DynamicDepthOptions,
-    DynamicMemoryOptions,
+    LinearMemoryOptions,
+    LinearMemoryPositionOptions,
+    LinearMemorySizeOptions,
     DynamicBiasOptions,
     DynamicDiagonalOptions,
 )
 from Emperor.linears.utils.behaviours import (
     DynamicBiasSelector,
     DynamicDiagonalSelector,
+    DynamicMemorySelector,
     DynamicParametersBehaviour,
 )
 from Emperor.linears.utils.monitors import (
@@ -133,8 +135,20 @@ class DynamicLinearLayerConfig(LinearLayerConfig):
             "help": "",
         },
     )
-    memory_option: DynamicMemoryOptions = field(
-        default=DynamicMemoryOptions.DISABLED,
+    memory_option: LinearMemoryOptions = field(
+        default=LinearMemoryOptions.DISABLED,
+        metadata={
+            "help": "",
+        },
+    )
+    memory_size_option: LinearMemorySizeOptions = field(
+        default=LinearMemorySizeOptions.DISABLED,
+        metadata={
+            "help": "",
+        },
+    )
+    memory_position_option: LinearMemoryPositionOptions = field(
+        default=LinearMemoryPositionOptions.BEFORE_AFFINE,
         metadata={
             "help": "",
         },
@@ -150,41 +164,71 @@ class DynamicLinearLayer(LinearBase):
         super().__init__(cfg, overrides)
         self.generator_depth = self.cfg.generator_depth
         self.diagonal_option = self.cfg.diagonal_option
+        self.memory_option = self.cfg.memory_option
+        self.memory_size_option = self.cfg.memory_size_option
+        self.memory_position_option = self.cfg.memory_position_option
         self.bias_option = self.cfg.bias_option
 
         self.weight_params, self.bias_params = self._init_parameters()
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
+        self.memory_model = self.__init_memory_model()
         self.bias_model = self.__init_bias_model()
 
     def __init_generator_model(self) -> DynamicParametersBehaviour | None:
-        if self.generator_depth != DynamicDepthOptions.DISABLED:
-            return None
-        return DynamicParametersBehaviour(self.main_cfg)
+        is_valid_flag = self.generator_depth != DynamicDepthOptions.DISABLED
+        return self.__init_model(is_valid_flag, DynamicParametersBehaviour)
 
     def __init_diagonal_model(self) -> DynamicDiagonalSelector | None:
-        if self.dynamical_option == DynamicDiagonalOptions.DISABLED:
-            return None
-        return DynamicDiagonalSelector(self.main_cfg)
+        is_valid_flag = self.diagonal_option != DynamicDiagonalOptions.DISABLED
+        return self.__init_model(is_valid_flag, DynamicDiagonalSelector)
+
+    def __init_memory_model(self) -> DynamicMemorySelector | None:
+        is_valid_flag = self.memory_option != LinearMemoryOptions.DISABLED
+        return self.__init_model(is_valid_flag, DynamicMemorySelector)
 
     def __init_bias_model(self) -> DynamicBiasSelector | None:
-        if not self.bias_flag or self.bias_option == DynamicBiasOptions.DISABLED:
-            return None
-        return DynamicBiasSelector(self.main_cfg)
+        is_disabled = self.bias_option != DynamicBiasOptions.DISABLED
+        is_valid_flag = is_disabled and self.bias_flag
+        return self.__init_model(is_valid_flag, DynamicBiasSelector)
 
-    def forward(self, input_batch: Tensor) -> Tensor:
-        weight_params = self.weight_params
-        if self.generator_model is not None:
-            weight_params = self.generator_model(weight_params, input_batch)
-        weight_params = self.diagonal_model(weight_params, input_batch)
-        bias_parameters = self.__compute_bias_parameters(input_batch)
-        output = self.__compute_linear_transformation(input_batch, weight_params)
-        return self.__add_bias_parameters(output, bias_parameters)
+    def __init_model(self, is_valid_flag: bool, model_class: object) -> object | None:
+        if is_valid_flag:
+            return model_class(self.main_cfg)
+        return None
 
-    def __compute_bias_parameters(self, input_batch: Tensor) -> Tensor | None:
-        if self.bias_flag:
-            return self.bias_model(self.bias_params, input_batch)
-        return self.bias_params
+    def forward(self, input: Tensor) -> Tensor:
+        input = self.__apply_memory(input, LinearMemoryPositionOptions.BEFORE_AFFINE)
+        output = self.__compute_dynamic_afine_transformation(input)
+        output = self.__apply_memory(output, LinearMemoryPositionOptions.BEFORE_AFFINE)
+        return output
+
+    def __apply_memory(
+        self,
+        input: Tensor,
+        position: LinearMemoryPositionOptions,
+    ) -> Tensor:
+        if self.memory_model and self.memory_position_option == position:
+            return self.__call_model(self.memory_model, None, input)
+        return input
+
+    def __compute_dynamic_afine_transformation(self, input_batch: Tensor) -> Tensor:
+        weights = self.__call_model(
+            self.generator_model, self.weight_params, input_batch
+        )
+        weights = self.__call_model(self.diagonal_model, weights, input_batch)
+        bias = self.__call_model(self.bias_model, self.bias_params, input_batch)
+        output = self.__compute_linear_transformation(input_batch, weights)
+        return self.__add_bias_parameters(output, bias)
+
+    def __call_model(
+        self, model, parameters: Tensor | None, input: Tensor
+    ) -> Tensor | None:
+        if model is None:
+            return parameters
+        if parameters is None:
+            return model(input)
+        return model(parameters, input)
 
     def __compute_linear_transformation(
         self,
@@ -203,100 +247,3 @@ class DynamicLinearLayer(LinearBase):
         if self.bias_flag and bias_params is not None:
             return linear_transform + bias_params
         return linear_transform
-
-
-class LinearLayerWithMemoryOptions(Enum):
-    CONCATENATE_VECTORS = 1
-    ADD_VECTORS = 2
-    WEIGHTED_SUM = 3
-
-
-class MemoryLinearLayerConfig(LinearLayerConfig):
-    dynamic_bias_option: DynamicBiasOptions = field(
-        default=DynamicBiasOptions.DISABLED,
-        metadata={
-            "help": "When `True` a generate a `scaler` and `offset` that will be used on the `bias_parameters` for each sampele in the batch"
-        },
-    )
-
-
-class MemoryLinearLayer(LinearBase):
-    def __init__(
-        self,
-        cfg: "LinearLayerConfig | ModelConfig",
-        overrides: "LinearLayerConfig | None" = None,
-    ):
-        super().__init__(cfg, overrides)
-        config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
-
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
-        self.memory_dim = self.cfg.memory_dim
-        # self.memory_linear_option = self.cfg.memory_linear_option
-        self.bias_flag = self.cfg.bias_flag
-        self.weight_params, self.bias_params = self.__init_parameter_banks(
-            self.output_dim + self.memory_dim
-        )
-        self.memory_weight_params, self.memory_bias_params = (
-            self.__init_parameter_banks(self.memory_dim)
-        )
-        self.memory_model = nn.Linear(self.input_dim, self.memory_dim)
-        self.attentional_memory_model = nn.Linear(self.batch_size * 2, self.batch_size)
-
-        # self.memory_weight_params = None
-        # if self.memory_linear_option == LinearLayerWithMemoryOptions.WEIGHTED_SUM:
-        #     self.memory_weight_params = nn.Linear(self.input_dim, 2)
-
-    def __init_parameter_banks(self, output_dim: int | None = None):
-        output_dim = output_dim or self.output_dim
-        weight_shape = (self.input_dim, self.output_dim)
-        weight_params = self._init_parameter_bank(weight_shape)
-        bias_params = None
-        if self.bias_flag:
-            bias_shape = (self.output_dim,)
-            bias_params = self._init_parameter_bank(bias_shape, nn.init.zeros_)
-        return weight_params, bias_params
-
-    def forward(self, input_batch: Tensor) -> Tensor:
-        # TODO: This most likely does not work in the current state
-        # this is implemented as an idea that can be later make to work
-        # this is to give you an idea of how this should work
-        # Basically:
-        # - create a memory tensor that is the same shape as the input
-        # - concatenate the memory with the input tensor this is goung to have, input_with_memory (batch_size * 2, input_dim)
-        # - then you generate a set of weights that compresses the memory with the input tensor of shape (batch_size * 2, batch_size)
-        # - you use softmax to normalize across the batch dimension
-        # - you multiply this by the input_with_memory tensor, basically take a weighted sum of all tokens in the batch with the memory cells combined
-        # - once you weighted the tokens across the batch_dim you shound end um with a tensor with the same shape as the original input (batch_size, input_dim)
-        memory = self.memory_model(input_batch)
-        input_with_memory = torch.cat((input_batch, memory), dim=0)
-        attentional_weight = self.attentional_memory_model(input_with_memory.T)
-        attentional_weight = F.softmax(attentional_weight, dim=-1)
-
-        associative_memory = torch.matmul()
-
-        return
-
-    # def forward(self, input_batch: Tensor) -> Tensor:
-    #     memory = self.memory_model(input_batch)
-    #
-    #     if (
-    #         self.memory_linear_option
-    #         == LinearLayerWithMemoryOptions.CONCATENATE_VECTORS
-    #     ):
-    #         inputs_with_memory = torch.cat((input_batch, memory), dim=-1)
-    #         return F.linear(inputs_with_memory, self.weight_params.T, self.bias_params)
-    #     elif self.memory_linear_option == LinearLayerWithMemoryOptions.ADD_VECTORS:
-    #         affine_transformation = F.linear(
-    #             input_batch, self.weight_params.T, self.bias_params
-    #         )
-    #         return affine_transformation + memory
-    #     elif self.memory_linear_option == LinearLayerWithMemoryOptions.WEIGHTED_SUM:
-    #         memery_weights = self.memory_weight_params(input_batch).flatten()
-    #         inputs_with_memory = torch.stack(input_batch, memory)
-    #         weighted_inputs = inputs_with_memory * memery_weights.unsqueeze(1)
-    #         summed_inputs = torch.sum(weighted_inputs, dim=0)
-    #         return summed_inputs
-    #
-    #     return F.linear(input_batch, self.weight_params.T, self.bias_params)
