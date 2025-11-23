@@ -223,7 +223,6 @@ class DynamicMemorySelector(Module):
 
     def forward(
         self,
-        bias_params: Tensor,
         logits: Tensor,
     ) -> Tensor | None:
-        return self.model(bias_params, logits)
+        return self.model(logits)

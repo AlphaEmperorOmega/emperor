@@ -12,6 +12,7 @@ from Emperor.linears.utils.enums import (
 )
 from Emperor.linears.utils.handlers.memory import (
     MemoryFusionHandler,
+    MemoryHandlerAbstract,
     WeightedMemoryHandler,
 )
 
@@ -62,12 +63,12 @@ class TestMemoryFusionHandler(TestLinearsMemoryBehaviour):
                         input_tensor = torch.ones(self.batch_size, dim)
                         model = MemoryFusionHandler(cfg)
                         output = model(input_tensor)
-                        expected_weight_shape = (self.batch_size, self.output_dim)
+                        expected_weight_shape = (self.batch_size, dim)
                         self.assertEqual(output.shape, expected_weight_shape)
                         self.assertIsInstance(output, torch.Tensor)
 
 
-class TestAntiDiagonalHandler(TestLinearsMemoryBehaviour):
+class TestWeightedMemoryHandler(TestLinearsMemoryBehaviour):
     def test_forward(self):
         for size_option in LinearMemorySizeOptions:
             for position_option in LinearMemoryPositionOptions:
@@ -93,18 +94,34 @@ class TestAntiDiagonalHandler(TestLinearsMemoryBehaviour):
                         self.assertIsInstance(output, torch.Tensor)
 
 
-# class TestDynamicDiagonalSelector(TestLinearsMemoryBehaviour):
-#     def test_forward(self):
-#         for option in LinearMemoryOptions:
-#             message = f"Test failed for diagonal option: {option}"
-#             with self.subTest(message):
-#                 cfg = LinearsConfigs.dynamic_preset(diagonal_option=option)
-#                 input_tensor = torch.randn(self.batch_size, self.input_dim)
-#                 if option == LinearMemoryOptions.DISABLED:
-#                     with self.assertRaises(ValueError):
-#                         model = DynamicMemorySelector(cfg)
-#                 else:
-#                     model = DynamicMemorySelector(self.cfg)
-#                     output = model(self.weight_params, input_tensor)
-#                     self.assertIsInstance(model.model, DiagonalHandlerAbstract)
-#                     self.assertIsInstance(output, torch.Tensor)
+class TestDynamicDiagonalSelector(TestLinearsMemoryBehaviour):
+    def test_forward(self):
+        for memory_option in LinearMemoryOptions:
+            for position_option in LinearMemoryPositionOptions:
+                for size_option in LinearMemorySizeOptions:
+                    message = f"Test failed for `memory option`: {memory_option}, `position option`: {position_option}, and `size option`: {size_option}."
+                    with self.subTest(message):
+                        dim = self.cfg.output_dim
+                        if position_option == LinearMemoryPositionOptions.BEFORE_AFFINE:
+                            dim = self.cfg.input_dim
+                        cfg = LinearsConfigs.dynamic_preset(
+                            batch_size=2,
+                            input_dim=dim,
+                            memory_option=memory_option,
+                            memory_position_option=position_option,
+                            memory_size_option=size_option,
+                        )
+                        if (
+                            memory_option == LinearMemoryOptions.DISABLED
+                            or size_option == LinearMemorySizeOptions.DISABLED
+                        ):
+                            with self.assertRaises(ValueError):
+                                model = DynamicMemorySelector(cfg)
+                        else:
+                            input_tensor = torch.randn(self.batch_size, dim)
+                            model = DynamicMemorySelector(cfg)
+                            output = model(input_tensor)
+                            expected_weight_shape = (self.batch_size, dim)
+                            self.assertEqual(output.shape, expected_weight_shape)
+                            self.assertIsInstance(model.model, MemoryHandlerAbstract)
+                            self.assertIsInstance(output, torch.Tensor)

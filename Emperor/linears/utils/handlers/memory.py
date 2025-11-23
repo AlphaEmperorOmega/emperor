@@ -58,8 +58,13 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
         return LinearLayerStack(self.cfg_main, overrides)
 
     def __init_compression_model(self) -> LinearLayerStack:
-        dim = self._get_memory_dim() + self.memory_size_option.value
-        overrides = LayerStackConfig(input_dim=dim, hidden_dim=dim)
+        dim = self._get_memory_dim()
+        compression_input_dim = dim + self.memory_size_option.value
+        overrides = LayerStackConfig(
+            input_dim=compression_input_dim,
+            hidden_dim=dim,
+            output_dim=dim,
+        )
         return LinearLayerStack(self.cfg_main, overrides)
 
     def forward(self, logits: Tensor) -> Tensor:
