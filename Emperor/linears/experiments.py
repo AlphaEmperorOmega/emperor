@@ -1,10 +1,14 @@
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.experiments.utils.factories import Experiments
+from Emperor.linears.utils.behaviours import DynamicMemorySelector
 from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.linears.utils.enums import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
     DynamicBiasOptions,
+    LinearMemoryOptions,
+    LinearMemoryPositionOptions,
+    LinearMemorySizeOptions,
 )
 # from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
 # from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
@@ -61,7 +65,10 @@ class LinearsBasePreset:
                     output_dim=10,
                     bias_flag=True,
                     generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
-                    diagonal_option=DynamicDiagonalOptions.DEFAULT,
+                    diagonal_option=DynamicDiagonalOptions.DISABLED,
                     bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
+                    memory_option=LinearMemoryOptions.FUSION,
+                    memory_size_option=LinearMemorySizeOptions.LARGE,
+                    memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
                     stack_depth=2,
                 )
