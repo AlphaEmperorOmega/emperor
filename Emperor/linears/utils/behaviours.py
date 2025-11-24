@@ -29,7 +29,6 @@ from Emperor.linears.utils.handlers.diagonal import (
 )
 from Emperor.base.layer import (
     LayerStackConfig,
-    LinearLayerStack,
 )
 
 from typing import TYPE_CHECKING
@@ -37,31 +36,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.linears.utils.layers import DynamicLinearLayerConfig
-
-
-class MemoryBehaviour(Module):
-    def __init__(
-        self,
-        cfg: "DynamicLinearLayerConfig",
-        weight_params: Tensor,
-    ):
-        super().__init__()
-        self.cfg = cfg
-        self.weight_params = weight_params
-        self.memory_model = self.__init_memory_model()
-
-    def __init_memory_model(self) -> Linear | Sequential:
-        return LinearLayerStack(self.cfg).build_model()
-
-    def forward(self, inputs: Tensor) -> Tensor:
-        return inputs
-
-
-class OuterProductNormOptions(Enum):
-    RELU = 1
-    TANH = 2
-    SIGMOID = 3
-    LAYER_NORM = 4
 
 
 class DynamicParametersBehaviour(Module):

@@ -5,10 +5,8 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Linear, Sequential
 from Emperor.base.enums import LayerNormPositionOptions
+from Emperor.base.layer import LayerStackConfig, LinearLayerStack
 from Emperor.base.utils import Module
-from Emperor.generators.utils.base import (
-    LinearStack,
-)
 
 
 class DynamicDiagonalParametersBehaviour(Module):
@@ -50,7 +48,7 @@ class DynamicDiagonalParametersBehaviour(Module):
         if self.input_dim is None and self.output_dim is None:
             return (None, None, None)
         output_dim = min(self.input_dim, self.output_dim)
-        cfg = LinearLayerStackConfig(
+        cfg = LayerStackConfig(
             input_dim=self.input_dim,
             hidden_dim=self.input_dim,
             output_dim=output_dim,

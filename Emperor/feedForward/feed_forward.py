@@ -3,9 +3,9 @@ import torch
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
+from Emperor.base.layer import Layer, LayerStack
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.experts.experts import MixtureOfExperts
-from Emperor.generators.utils.base import Layer, LayerStack
 from Emperor.generators.utils.routers import RouterModel
 from Emperor.generators.utils.samplers import SamplerModel
 

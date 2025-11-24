@@ -170,16 +170,3 @@ class TestDynamicLinearLayer(TestLinears):
                                                         output.shape,
                                                         expected_output_shape,
                                                     )
-
-                                                # c = LinearsConfigs.dynamic_preset(
-                                                #     batch_size=2,
-                                                # )
-                                                # overrides = DynamicLinearLayerConfig(
-                                                #     input_dim=input_dim,
-                                                #     output_dim=output_dim,
-                                                #     bias_flag=bias_flag,
-                                                #     generator_depth=generators_depth,
-                                                #     diagonal_option=diagonal_option,
-                                                #     bias_option=bias_option,
-                                                # )
-                                                # m = DynamicLinearLayer(c, overrides)

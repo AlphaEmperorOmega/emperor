@@ -4,9 +4,9 @@ import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass, field
 
+from Emperor.base.layer import Layer
 from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import ConfigBase, Module, device
-from Emperor.generators.utils.base import Layer, ParameterGeneratorLayer
 from Emperor.generators.utils.linears import LinearLayer
 from Emperor.generators.utils.enums import LayerTypes
 from Emperor.generators.utils.routers import RouterModel
@@ -131,7 +131,10 @@ class MixtureOfExperts(Module):
     def __resolve_layer_block_class(self) -> type[Layer]:
         # TODO: move this somewhere else in the future since it is used in
         # `LayerStack` as well
-        from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
+        from Emperor.generators.utils.enums import (
+            LinearLayerTypes,
+            ParameterGeneratorTypes,
+        )
 
         if isinstance(self.model_type, LinearLayerTypes):
             return Layer

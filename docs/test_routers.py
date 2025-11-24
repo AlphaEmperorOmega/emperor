@@ -1,8 +1,9 @@
 import copy
-import torch.nn as nn
 import unittest
+import torch.nn as nn
+from Emperor.base.layer import Layer
 from Emperor.base.utils import randn
-from Emperor.generators.utils.base import Layer
+
 from Emperor.generators.utils.linears import (
     DynamicLinearLayer,
     LinearLayer,
