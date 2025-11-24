@@ -24,8 +24,8 @@ class MemoryHandlerAbstract(Module):
         super().__init__()
         self.cfg_main = cfg
         self.cfg = getattr(cfg, "linear_layer_config", cfg)
-        self.input_dim = cfg.input_dim
-        self.output_dim = cfg.output_dim
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
         self.memory_size_option = self.cfg.memory_size_option
         self.memory_position_option = self.cfg.memory_position_option
 
@@ -86,7 +86,7 @@ class WeightedMemoryHandler(MemoryHandlerAbstract):
 
     def __init_memory_model(self) -> LinearLayerStack:
         dim = self._get_memory_dim()
-        overrides = LayerStackConfig(output_dim=dim)
+        overrides = LayerStackConfig(input_dim=dim, output_dim=dim)
         return LinearLayerStack(self.cfg_main, overrides)
 
     def __init_weight_model(self) -> LinearLayerStack:

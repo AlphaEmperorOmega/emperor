@@ -8,6 +8,9 @@ from Emperor.linears.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
+    LinearMemoryOptions,
+    LinearMemoryPositionOptions,
+    LinearMemorySizeOptions,
 )
 from Emperor.linears.utils.layers import (
     DynamicLinearLayer,
@@ -127,35 +130,56 @@ class TestDynamicLinearLayer(TestLinears):
                     for generators_depth in DynamicDepthOptions:
                         for diagonal_option in DynamicDiagonalOptions:
                             for bias_option in DynamicBiasOptions:
-                                message = f"Test failed for the options: {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
-                                with self.subTest(message=message):
-                                    c = LinearsConfigs.dynamic_preset(
-                                        batch_size=2,
-                                        input_dim=input_dim,
-                                        output_dim=output_dim,
-                                        bias_flag=bias_flag,
-                                        generator_depth=generators_depth,
-                                        diagonal_option=diagonal_option,
-                                        bias_option=bias_option,
-                                    )
-                                    m = DynamicLinearLayer(c)
+                                for memory_option in LinearMemoryOptions:
+                                    for position_option in LinearMemoryPositionOptions:
+                                        for size_option in LinearMemorySizeOptions:
+                                            message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Memory option: {memory_option}, Position option: {position_option}, Size option: {size_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
+                                            with self.subTest(message=message):
+                                                c = LinearsConfigs.dynamic_preset(
+                                                    batch_size=2,
+                                                    input_dim=input_dim,
+                                                    output_dim=output_dim,
+                                                    bias_flag=bias_flag,
+                                                    generator_depth=generators_depth,
+                                                    diagonal_option=diagonal_option,
+                                                    bias_option=bias_option,
+                                                    memory_option=memory_option,
+                                                    memory_position_option=position_option,
+                                                    memory_size_option=size_option,
+                                                )
 
-                                    # c = LinearsConfigs.dynamic_preset(
-                                    #     batch_size=2,
-                                    # )
-                                    # overrides = DynamicLinearLayerConfig(
-                                    #     input_dim=input_dim,
-                                    #     output_dim=output_dim,
-                                    #     bias_flag=bias_flag,
-                                    #     generator_depth=generators_depth,
-                                    #     diagonal_option=diagonal_option,
-                                    #     bias_option=bias_option,
-                                    # )
-                                    # m = DynamicLinearLayer(c, overrides)
+                                                if (
+                                                    memory_option
+                                                    != LinearMemoryOptions.DISABLED
+                                                    and size_option
+                                                    == LinearMemorySizeOptions.DISABLED
+                                                ):
+                                                    with self.assertRaises(ValueError):
+                                                        m = DynamicLinearLayer(c)
+                                                else:
+                                                    m = DynamicLinearLayer(c)
+                                                    input_batch = torch.randn(
+                                                        c.batch_size, c.input_dim
+                                                    )
+                                                    output = m.forward(input_batch)
+                                                    expected_output_shape = (
+                                                        c.batch_size,
+                                                        c.output_dim,
+                                                    )
+                                                    self.assertEqual(
+                                                        output.shape,
+                                                        expected_output_shape,
+                                                    )
 
-                                    input_batch = torch.randn(c.batch_size, c.input_dim)
-                                    output = m.forward(input_batch)
-                                    expected_output_shape = (c.batch_size, c.output_dim)
-                                    self.assertEqual(
-                                        output.shape, expected_output_shape
-                                    )
+                                                # c = LinearsConfigs.dynamic_preset(
+                                                #     batch_size=2,
+                                                # )
+                                                # overrides = DynamicLinearLayerConfig(
+                                                #     input_dim=input_dim,
+                                                #     output_dim=output_dim,
+                                                #     bias_flag=bias_flag,
+                                                #     generator_depth=generators_depth,
+                                                #     diagonal_option=diagonal_option,
+                                                #     bias_option=bias_option,
+                                                # )
+                                                # m = DynamicLinearLayer(c, overrides)

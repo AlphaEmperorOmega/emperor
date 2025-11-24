@@ -200,7 +200,7 @@ class DynamicLinearLayer(LinearBase):
     def forward(self, input: Tensor) -> Tensor:
         input = self.__apply_memory(input, LinearMemoryPositionOptions.BEFORE_AFFINE)
         output = self.__compute_dynamic_afine_transformation(input)
-        output = self.__apply_memory(output, LinearMemoryPositionOptions.BEFORE_AFFINE)
+        output = self.__apply_memory(output, LinearMemoryPositionOptions.AFTER_AFFINE)
         return output
 
     def __apply_memory(
