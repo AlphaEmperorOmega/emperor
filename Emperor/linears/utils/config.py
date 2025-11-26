@@ -50,6 +50,9 @@ class LinearsConfigs:
         memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
         stack_depth: int = 2,
         stack_hidden_dim: int = 0,
+        activation: ActivationOptions = ActivationOptions.RELU,
+        residual_flag: bool = False,
+        dropout_probability: float = 0.0,
     ) -> "ModelConfig":
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else input_dim
 
@@ -89,12 +92,15 @@ class LinearsConfigs:
                 # ),
             ),
             layer_stack_config=LayerStackConfig(
+                model_type=LinearLayerOptions.BASE,
                 input_dim=input_dim,
                 hidden_dim=stack_hidden_dim,
                 output_dim=output_dim,
                 num_layers=stack_depth,
-                activation=ActivationOptions.RELU,
-                layer_norm_position=LayerNormPositionOptions.DEFAULT,
-                model_type=LinearLayerOptions.BASE,
+                activation=activation,
+                layer_norm_position=LayerNormPositionOptions.NONE,
+                residual_flag=residual_flag,
+                adaptive_computation_flag=False,
+                dropout_probability=dropout_probability,
             ),
         )

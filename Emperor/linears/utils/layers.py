@@ -33,16 +33,16 @@ if TYPE_CHECKING:
 
 @dataclass
 class LinearLayerConfig(ConfigBase):
-    input_dim: int = field(
-        default=0,
+    input_dim: int | None = field(
+        default=None,
         metadata={"help": "Input dimension of the linear layer"},
     )
-    output_dim: int = field(
-        default=0,
+    output_dim: int | None = field(
+        default=None,
         metadata={"help": "Output dimension of the linera layer"},
     )
-    bias_flag: bool = field(
-        default=False,
+    bias_flag: bool | None = field(
+        default=None,
         metadata={
             "help": "When true bias will be added to after the matrix multiplication between, the input and output"
         },
@@ -117,38 +117,38 @@ class LinearLayer(LinearBase):
 
 @dataclass
 class DynamicLinearLayerConfig(LinearLayerConfig):
-    generator_depth: DynamicDepthOptions = field(
-        default=DynamicDepthOptions.DISABLED,
+    generator_depth: DynamicDepthOptions | None = field(
+        default=None,
         metadata={
             "help": "",
         },
     )
-    diagonal_option: DynamicDiagonalOptions = field(
-        default=DynamicDiagonalOptions.DISABLED,
+    diagonal_option: DynamicDiagonalOptions | None = field(
+        default=None,
         metadata={
             "help": "",
         },
     )
-    bias_option: DynamicBiasOptions = field(
-        default=DynamicBiasOptions.DISABLED,
+    bias_option: DynamicBiasOptions | None = field(
+        default=None,
         metadata={
             "help": "",
         },
     )
-    memory_option: LinearMemoryOptions = field(
-        default=LinearMemoryOptions.DISABLED,
+    memory_option: LinearMemoryOptions | None = field(
+        default=None,
         metadata={
             "help": "",
         },
     )
-    memory_size_option: LinearMemorySizeOptions = field(
-        default=LinearMemorySizeOptions.DISABLED,
+    memory_size_option: LinearMemorySizeOptions | None = field(
+        default=None,
         metadata={
             "help": "",
         },
     )
-    memory_position_option: LinearMemoryPositionOptions = field(
-        default=LinearMemoryPositionOptions.BEFORE_AFFINE,
+    memory_position_option: LinearMemoryPositionOptions | None = field(
+        default=None,
         metadata={
             "help": "",
         },

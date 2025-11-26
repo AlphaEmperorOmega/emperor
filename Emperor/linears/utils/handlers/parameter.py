@@ -50,31 +50,22 @@ class DepthMappingLayerStack(Module):
         super().__init__()
         self.cfg = cfg
         self.identifier = "layer_stack_config"
-        updated_config = self.__update_config()
+        updated_overrides = self.__override_config(overrides)
         self.generator_depth = self.cfg.linear_layer_config.generator_depth.value
-        self.model = LayerStack(updated_config, overrides).build_model()
+        self.model = LayerStack(cfg, updated_overrides).build_model()
 
-    def __update_config(self) -> "ModelConfig | LayerStackConfig":
-        config = getattr(self.cfg, self.identifier, self.cfg)
-        overrides = self.__override_config()
-        updated_config = self._overwrite_config(config, overrides)
-
-        if not hasattr(self.cfg, self.identifier):
-            return updated_config
-
-        # TODO: Update the _overwrite_config to handle nested configs
-        # in order to remove the copy.deepcopy below
-        c = copy.deepcopy(self.cfg)
-        c.layer_stack_config = updated_config
-        return c
-
-    def __override_config(self) -> LayerStackConfig:
+    def __override_config(
+        self, overrides: "LayerStackConfig | None" = None
+    ) -> LayerStackConfig:
         from Emperor.base.enums import BaseOptions
 
         class UpdatedLinearLayerOptions(BaseOptions):
             DEPTH_MAPPING = DepthMappingLayer
 
-        return LayerStackConfig(model_type=UpdatedLinearLayerOptions.DEPTH_MAPPING)
+        if overrides is None:
+            return LayerStackConfig(model_type=UpdatedLinearLayerOptions.DEPTH_MAPPING)
+        overrides.model_type = UpdatedLinearLayerOptions.DEPTH_MAPPING
+        return overrides
 
     def forward(self, input_batch: Tensor) -> Tensor:
         if not input_batch.dim() == 2:
