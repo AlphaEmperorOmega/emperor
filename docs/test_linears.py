@@ -26,9 +26,7 @@ class TestLinears(unittest.TestCase):
     def tearDown(self):
         self.cfg = None
         self.config = None
-        self.model = None
         self.batch_size = None
-        self.num_heads = None
         self.input_dim = None
         self.output_dim = None
 

@@ -1,4 +1,4 @@
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 import copy
 from numpy import bool_
 from typing_extensions import Dict
@@ -324,10 +324,13 @@ class Module(nn.Module, HyperParameters):
 
         cfg = copy.deepcopy(cfg)
 
-        override_values_dict = overrides.get_custom_parameters()
-        if override_values_dict:
-            for key, value in override_values_dict.items():
-                setattr(cfg, key, value)
+        for value in cfg.__dataclass_fields__:
+            if (
+                hasattr(overrides, "__dataclass_fields__")
+                and value in overrides.__dataclass_fields__
+            ):
+                if getattr(overrides, value) is not None:
+                    setattr(cfg, value, getattr(overrides, value))
 
         return cfg
 

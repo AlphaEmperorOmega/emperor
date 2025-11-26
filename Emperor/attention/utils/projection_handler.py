@@ -4,9 +4,8 @@ import torch.nn as nn
 from torch import Tensor
 from Emperor.base.layer import Layer
 from Emperor.base.utils import Module
+from Emperor.linears.utils.layers import LinearLayer
 
-# from Emperor.generators.utils.base import Layer, ParameterGeneratorLayer
-from Emperor.generators.utils.linears import LinearLayer
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

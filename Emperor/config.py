@@ -13,20 +13,13 @@ from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.generators.utils.layers import ParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.generators.utils.enums import (
-    # AttentionTypes,
-    # FeedForwardTypes,
     LayerTypes,
-    LinearLayerTypes,
 )
 from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
-
 from Emperor.generators.utils.mixture import MixtureConfig
 from Emperor.generators.utils.samplers import SamplerConfig
-from Emperor.generators.utils.routers import (
-    RouterConfig,
-)
+from Emperor.sampler.utils.routers import RouterConfig
 from Emperor.neuron.neuron import (
-    Axons,
     AxonsConfig,
     NeuronClusterConfig,
     NucleusConfig,
@@ -119,14 +112,8 @@ class ModelConfig(ConfigBase):
     )
     router_model_config: RouterConfig = field(
         default_factory=lambda: RouterConfig(
-            input_dim=ROUTER_INPUT_DIM,
-            hidden_dim=ROUTER_HIDDEN_DIM,
             num_experts=ROUTER_OUTPUT_DIM,
-            residual_flag=ROUTER_RESIDUAL_FLAG,
             noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
-            activation=ROUTER_ACTIVATION,
-            num_layers=ROUTER_NUM_LAYERS,
-            diagonal_model_type_flag=ROUTER_DIAGONAL_LINEAR_MODEL_FLAG,
         ),
         metadata={"help": "`RouterModel` configuration"},
     )

@@ -21,32 +21,32 @@ class LayerConfig(ConfigBase):
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
     )
-    activation: ActivationOptions = field(
-        default=ActivationOptions.NONE,
+    activation: ActivationOptions | None = field(
+        default=None,
         metadata={"help": "Activation function or layer to use"},
     )
-    layer_norm_dim: int = field(
-        default=0,
+    layer_norm_dim: int | None = field(
+        default=None,
         metadata={"help": ""},
     )
-    residual_flag: bool = field(
-        default=False,
+    residual_flag: bool | None = field(
+        default=None,
         metadata={"help": ""},
     )
-    adaptive_computation_flag: bool = field(
-        default=False,
+    adaptive_computation_flag: bool | None = field(
+        default=None,
         metadata={"help": ""},
     )
-    dropout_probability: float = field(
-        default=0.0,
+    dropout_probability: float | None = field(
+        default=None,
         metadata={"help": ""},
     )
-    layer_norm_position: LayerNormPositionOptions = field(
-        default=LayerNormPositionOptions.DEFAULT,
+    layer_norm_position: LayerNormPositionOptions | None = field(
+        default=None,
         metadata={"help": ""},
     )
-    apply_gates_bool: bool = field(
-        default=False,
+    apply_gates_bool: bool | None = field(
+        default=None,
         metadata={"help": ""},
     )
 
@@ -355,20 +355,20 @@ class FeedForwardLayer(Layer):
 
 @dataclass
 class LayerStackConfig(LayerConfig):
-    input_dim: int = field(
-        default=0,
+    input_dim: int | None = field(
+        default=None,
         metadata={"help": "Input dimension of the first `Linear` layer"},
     )
-    hidden_dim: int = field(
-        default=0,
+    hidden_dim: int | None = field(
+        default=None,
         metadata={"help": "Dimension of the hidden `Linear` layers"},
     )
-    output_dim: int = field(
-        default=0,
+    output_dim: int | None = field(
+        default=None,
         metadata={"help": "Output dimension of the output `Linear` layer"},
     )
-    num_layers: int = field(
-        default=0,
+    num_layers: int | None = field(
+        default=None,
         metadata={"help": "Number of layers in the model"},
     )
 
@@ -534,29 +534,20 @@ class LinearLayerStack(Module):
     ):
         super().__init__()
         self.cfg = cfg
+        self.overrides = overrides
         self.identifier = "layer_stack_config"
-        cfg = self.__update_config()
+        cfg = self.__override_config(overrides)
         self.model = LayerStack(cfg, overrides).build_model()
 
-    def __update_config(self) -> "ModelConfig | LayerStackConfig":
-        config = getattr(self.cfg, self.identifier, self.cfg)
-        overrides = self.__override_config()
-        # TODO: Update the _overwrite_config to handle nested configs
-        # in order to remove the copy.deepcopy below
-        updated_config = self._overwrite_config(config, overrides)
-        if not hasattr(self.cfg, self.identifier):
-            return updated_config
-
-        c = copy.deepcopy(self.cfg)
-        c.layer_stack_config = updated_config
-        return c
-
-    def __override_config(self) -> LayerStackConfig:
+    def __override_config(
+        self, overrides: "LayerStackConfig | None"
+    ) -> LayerStackConfig:
         from Emperor.linears.options import LinearLayerOptions
 
-        return LayerStackConfig(
-            model_type=LinearLayerOptions.BASE,
-        )
+        if overrides is None:
+            return LayerStackConfig(model_type=LinearLayerOptions.BASE)
+        overrides.model_type = LinearLayerOptions.BASE
+        return overrides
 
     def forward(self, input_batch: Tensor) -> Tensor:
         return self.model(input_batch)
