@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from Emperor.base.layer import Layer
 from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import ConfigBase, Module, device
-from Emperor.generators.utils.linears import LinearLayer
+from Emperor.linears.utils.layers import LinearLayer
 from Emperor.generators.utils.enums import LayerTypes
 from Emperor.generators.utils.routers import RouterModel
 from Emperor.generators.utils.samplers import SamplerModel

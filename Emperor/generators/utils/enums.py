@@ -5,16 +5,12 @@ from Emperor.generators.utils.layers import (
     MatrixParameterLayer,
     VectorParameterLayer,
 )
-from Emperor.generators.utils.linears import (
-    DynamicLinearLayer,
-    LinearLayer,
-)
 
 
 class LinearLayerTypes(Enum):
-    BASE = LinearLayer
-    DYNAMIC = DynamicLinearLayer
-    DYNAMIC_PARAMETERS = DepthMappingLayer
+    BASE = "LinearLayer"
+    DYNAMIC = "DynamicLinearLayer"
+    DYNAMIC_PARAMETERS = "DepthMappingLayer"
 
 
 class ParameterGeneratorTypes(Enum):
@@ -24,8 +20,8 @@ class ParameterGeneratorTypes(Enum):
 
 
 class LayerTypes(Enum):
-    BASE = LinearLayer
-    DYNAMIC_BASE = DynamicLinearLayer
+    BASE = "LinearLayer"
+    DYNAMIC_BASE = "DynamicLinearLayer"
     VECTOR = VectorParameterLayer
     MATRIX = MatrixParameterLayer
     GENERATOR = GeneratorParameterLayer
