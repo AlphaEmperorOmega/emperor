@@ -20,8 +20,8 @@ class DiagonalHandlerAbstract(Module):
         cfg: "ModelConfig",
     ):
         super().__init__()
-        self.cfg_main = cfg
         self.cfg = getattr(cfg, "linear_layer_config", cfg)
+        self.cfg_main = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = cfg.input_dim
         self.output_dim = cfg.output_dim
         self.padding_shape = self.__get_diagonal_padding_shape()

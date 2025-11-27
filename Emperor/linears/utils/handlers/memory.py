@@ -24,6 +24,7 @@ class MemoryHandlerAbstract(Module):
         super().__init__()
         self.cfg_main = cfg
         self.cfg = getattr(cfg, "linear_layer_config", cfg)
+        self.cfg_main = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.memory_size_option = self.cfg.memory_size_option

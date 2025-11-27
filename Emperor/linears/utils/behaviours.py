@@ -47,15 +47,17 @@ class DynamicParametersBehaviour(Module):
         config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "DynamicLinearLayerConfig" = config
         self.main_config = cfg
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
         self.input_model = self.__init_input_model()
         self.output_model = self.__init_output_model()
 
     def __init_input_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(output_dim=self.cfg.input_dim)
+        overrides = LayerStackConfig(output_dim=self.input_dim)
         return self.__init_generator_model(overrides)
 
     def __init_output_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(output_dim=self.cfg.output_dim)
+        overrides = LayerStackConfig(output_dim=self.output_dim)
         return self.__init_generator_model(overrides)
 
     def __init_generator_model(
@@ -113,8 +115,8 @@ class DynamicDiagonalSelector(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "DynamicLinearLayerConfig" = config
         self.main_config = cfg
+        self.cfg: "DynamicLinearLayerConfig" = config
         self.diagonal_option = self.cfg.diagonal_option
         self.model = self.__init_bias_model()
 

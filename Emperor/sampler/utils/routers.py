@@ -1,7 +1,7 @@
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.base.utils import Module, ConfigBase
 from Emperor.base.layer import LayerStack, LayerStackConfig
+from Emperor.base.utils import Module, ConfigBase
 from Emperor.linears.options import LinearLayerOptions
 
 from typing import TYPE_CHECKING
@@ -37,7 +37,7 @@ class RouterModel(Module):
         super().__init__()
         config = getattr(cfg, "router_model_config", cfg)
         self.cfg: "RouterConfig" = self._overwrite_config(config, overrides)
-        self.main_cfg = cfg
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.model_type = self.cfg.model_type
         self.num_experts = self.cfg.num_experts
@@ -47,7 +47,9 @@ class RouterModel(Module):
             2 * self.num_experts if self.noisy_topk_flag else self.num_experts
         )
         self.__assert_input_requirements()
-        self.model = LayerStack(cfg).build_model()
+        overrides_Test = LayerStackConfig(output_dim=self.num_experts)
+
+        self.model = LayerStack(self.main_cfg, overrides_Test).build_model()
 
     def __assert_input_requirements(self):
         assert self.num_experts > 0, (

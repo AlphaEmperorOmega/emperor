@@ -50,9 +50,10 @@ class DepthMappingLayerStack(Module):
         super().__init__()
         self.cfg = cfg
         self.identifier = "layer_stack_config"
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         updated_overrides = self.__override_config(overrides)
-        self.generator_depth = self.cfg.linear_layer_config.generator_depth.value
-        self.model = LayerStack(cfg, updated_overrides).build_model()
+        self.generator_depth = cfg.generator_depth.value
+        self.model = LayerStack(self.main_cfg, updated_overrides).build_model()
 
     def __override_config(
         self, overrides: "LayerStackConfig | None" = None

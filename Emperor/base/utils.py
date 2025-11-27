@@ -1,14 +1,14 @@
-from dataclasses import asdict, dataclass, fields
 import copy
-from numpy import bool_
-from typing_extensions import Dict
+import random
 import torch
 import torch.nn as nn
 import inspect
 import collections
 import IPython.display as display
 import matplotlib.pyplot as plt
-import random
+
+from typing_extensions import Dict
+from dataclasses import dataclass, fields, field
 from torch.nn import Parameter, Linear, Sequential
 
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -323,7 +323,6 @@ class Module(nn.Module, HyperParameters):
             return cfg
 
         cfg = copy.deepcopy(cfg)
-
         for value in cfg.__dataclass_fields__:
             if (
                 hasattr(overrides, "__dataclass_fields__")
@@ -346,6 +345,13 @@ class Module(nn.Module, HyperParameters):
                         )
                     return
                 raise ValueError(f"{config_field.name} is required but it was not set.")
+
+    def _resolve_main_config(
+        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
+    ) -> None:
+        if sub_config.override_config is not None:
+            return sub_config.override_config
+        return main_cfg
 
     def _init_parameter_bank(
         self,
@@ -516,6 +522,11 @@ class Trainer(HyperParameters):
 
 @dataclass
 class ConfigBase:
+    override_config: "ConfigBase | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+
     def get(self, key: str, default=None) -> Any:
         if not hasattr(self, key):
             return None

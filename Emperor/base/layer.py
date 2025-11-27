@@ -383,9 +383,9 @@ class LayerStack(Module):
         overrides: "LayerStackConfig | None" = None,
     ):
         super().__init__()
-        self.main_cfg = cfg
         config = getattr(cfg, "layer_stack_config", cfg)
         self.cfg: "LayerStackConfig" = self._overwrite_config(config, overrides)
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.model_type = self.cfg.model_type
         self.activation = self.cfg.activation
@@ -486,6 +486,9 @@ class LayerStack(Module):
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
             layer_norm_dim = output_dim
         config = self.__resolve_model_type_overrides(input_dim, output_dim)
+        print(self.__get_model_type())
+        print(input_dim, output_dim)
+        print(config)
         model = self.__get_model_type()(config)
 
         return self.layer_block_model(
@@ -502,28 +505,37 @@ class LayerStack(Module):
         # and somehow create a configuration similar to how
         # in can write css in scss
         c = copy.deepcopy(self.main_cfg)
-        linears = (
-            "LinearLayer",
-            "DynamicLinearLayer",
-            "DepthMappingLayer",
-        )
-        if self.__get_model_type().__name__ in linears:
-            c.linear_layer_config.input_dim = input_dim
-            c.linear_layer_config.output_dim = output_dim
-            return c
-
-        generators = (
-            "VectorParameterLayer",
-            "MatrixParameterLayer",
-            "GeneratorParameterLayer",
-        )
-
-        if self.__get_model_type().__name__ in generators:
-            c.router_model_config.input_dim = input_dim
-            c.mixture_model_config.input_dim = input_dim
-            c.mixture_model_config.output_dim = output_dim
-
-            return c
+        c.input_dim = input_dim
+        c.output_dim = output_dim
+        return c
+        # linears = (
+        #     "LinearLayer",
+        #     "DynamicLinearLayer",
+        #     "DepthMappingLayer",
+        # )
+        # if self.__get_model_type().__name__ in linears:
+        #     # if c.override_config is not None:
+        #     #     c.override_config.input_dim = input_dim
+        #     #     c.override_config.output_dim = output_dim
+        #     #     return c
+        #     c.input_dim = input_dim
+        #     c.output_dim = output_dim
+        #     # c.linear_layer_config.input_dim = input_dim
+        #     # c.linear_layer_config.output_dim = output_dim
+        #     return c
+        #
+        # generators = (
+        #     "VectorParameterLayer",
+        #     "MatrixParameterLayer",
+        #     "GeneratorParameterLayer",
+        # )
+        #
+        # if self.__get_model_type().__name__ in generators:
+        #     c.router_model_config.input_dim = input_dim
+        #     c.mixture_model_config.input_dim = input_dim
+        #     c.mixture_model_config.output_dim = output_dim
+        #
+        #     return c
 
 
 class LinearLayerStack(Module):
@@ -534,9 +546,8 @@ class LinearLayerStack(Module):
     ):
         super().__init__()
         self.cfg = cfg
-        self.overrides = overrides
         self.identifier = "layer_stack_config"
-        cfg = self.__override_config(overrides)
+        overrides = self.__override_config(overrides)
         self.model = LayerStack(cfg, overrides).build_model()
 
     def __override_config(

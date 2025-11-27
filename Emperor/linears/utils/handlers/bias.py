@@ -18,7 +18,7 @@ class BiasHandlerAbstract(Module):
     ):
         super().__init__()
         self.cfg = getattr(cfg, "linear_layer_config", cfg)
-        self.main_cfg = cfg
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
