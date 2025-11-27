@@ -2,7 +2,6 @@ import torch
 import unittest
 import torch.nn as nn
 
-from dataclasses import asdict
 from Emperor.base.utils import Module
 from Emperor.config import ModelConfig
 from Emperor.linears.utils.behaviours import DynamicBiasSelector
@@ -31,11 +30,6 @@ class TestLinearsBiasBehaviour(unittest.TestCase):
 
     def rebuild_presets(self, config: ModelConfig | None = None):
         self.cfg = LinearsConfigs.dynamic_preset() if config is None else config
-        self.config = self.cfg.transformer_layer_config
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
@@ -48,7 +42,9 @@ class TestLinearsBiasBehaviour(unittest.TestCase):
 class TestAffineBiasTransformHandler(TestLinearsBiasBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        model = AffineBiasTransformHandler(self.cfg)
+        cfg = LinearsConfigs.dynamic_preset()
+        cfg = cfg.linear_layer_config
+        model = AffineBiasTransformHandler(cfg)
         output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
@@ -59,7 +55,9 @@ class TestAffineBiasTransformHandler(TestLinearsBiasBehaviour):
 class TestElementwiseBiasHandler(TestLinearsBiasBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        model = ElementwiseBiasHandler(self.cfg)
+        cfg = LinearsConfigs.dynamic_preset()
+        cfg = cfg.linear_layer_config
+        model = ElementwiseBiasHandler(cfg)
         output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
@@ -70,7 +68,9 @@ class TestElementwiseBiasHandler(TestLinearsBiasBehaviour):
 class TestBiasGeneratorHandler(TestLinearsBiasBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        model = BiasGeneratorHandler(self.cfg)
+        cfg = LinearsConfigs.dynamic_preset()
+        cfg = cfg.linear_layer_config
+        model = BiasGeneratorHandler(cfg)
         output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
@@ -83,14 +83,14 @@ class TestDynamicBiasSelector(TestLinearsBiasBehaviour):
         for option in DynamicBiasOptions:
             message = f"Test failed for bias option: {option}"
             with self.subTest(message):
-                overrides = LinearsConfigs.dynamic_preset(bias_option=option)
-                self.rebuild_presets(overrides)
+                cfg = LinearsConfigs.dynamic_preset(bias_option=option)
+                cfg = cfg.linear_layer_config
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 if option == DynamicBiasOptions.DISABLED:
                     with self.assertRaises(ValueError):
-                        model = DynamicBiasSelector(self.cfg)
+                        model = DynamicBiasSelector(cfg)
                 else:
-                    model = DynamicBiasSelector(self.cfg)
+                    model = DynamicBiasSelector(cfg)
                     output = model(self.bias_params, input_tensor)
                     self.assertIsInstance(model.model, BiasHandlerAbstract)
                     self.assertIsInstance(output, torch.Tensor)

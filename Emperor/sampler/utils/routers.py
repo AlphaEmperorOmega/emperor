@@ -47,9 +47,8 @@ class RouterModel(Module):
             2 * self.num_experts if self.noisy_topk_flag else self.num_experts
         )
         self.__assert_input_requirements()
-        overrides_Test = LayerStackConfig(output_dim=self.num_experts)
-
-        self.model = LayerStack(self.main_cfg, overrides_Test).build_model()
+        model_overrides = LayerStackConfig(output_dim=self.num_experts)
+        self.model = LayerStack(self.main_cfg, model_overrides).build_model()
 
     def __assert_input_requirements(self):
         assert self.num_experts > 0, (

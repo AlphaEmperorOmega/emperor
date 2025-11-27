@@ -2,7 +2,6 @@ import torch
 import unittest
 import torch.nn as nn
 
-from dataclasses import asdict
 from Emperor.base.utils import Module
 from Emperor.linears.utils.behaviours import DynamicParametersBehaviour
 from Emperor.linears.utils.config import LinearsConfigs
@@ -38,14 +37,9 @@ class TestDepthMappingBehaviour(unittest.TestCase):
             if config is None
             else config
         )
-        self.config = self.cfg.linear_layer_config
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
 
         self.batch_size = self.cfg.batch_size
-        self.generator_depth = self.config.generator_depth.value
+        self.generator_depth = self.cfg.linear_layer_config.generator_depth.value
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
@@ -58,7 +52,11 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
         input_tensor = torch.randn(
             self.batch_size, self.generator_depth, self.input_dim
         )
-        model = DepthMappingLayer(self.config)
+        cfg = LinearsConfigs.dynamic_preset(
+            generator_depth=DynamicDepthOptions.DEPTH_OF_TWO
+        )
+        cfg = cfg.linear_layer_config
+        model = DepthMappingLayer(cfg)
         output = model(input_tensor)
         expected_shape = (self.batch_size, self.generator_depth, self.output_dim)
         self.assertEqual(output.shape, expected_shape)
@@ -74,17 +72,22 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
                 )
 
     def test_error_is_thrown_for_zero_depth(self):
-        config = LinearsConfigs.dynamic_preset(
+        cfg = LinearsConfigs.dynamic_preset(
             generator_depth=DynamicDepthOptions.DISABLED
         )
+        cfg = cfg.linear_layer_config
         with self.assertRaises(ValueError) as context:
-            model = DepthMappingLayer(config)
+            model = DepthMappingLayer(cfg)
 
 
 class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        model = DepthMappingLayerStack(self.cfg)
+        cfg = LinearsConfigs.dynamic_preset(
+            generator_depth=DynamicDepthOptions.DEPTH_OF_TWO
+        )
+        cfg = cfg.linear_layer_config
+        model = DepthMappingLayerStack(cfg)
         output = model(input_tensor)
         expected_shape = (self.batch_size, self.generator_depth, self.output_dim)
         self.assertEqual(output.shape, expected_shape)
@@ -92,8 +95,26 @@ class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
 
 class TestDynamicParametersBehaviour(TestDepthMappingBehaviour):
     def test_initial_layer_computation(self):
-        input_tensor = torch.randn(self.batch_size, self.input_dim)
-        model = DynamicParametersBehaviour(self.cfg)
-        output = model(self.weight_params, input_tensor)
-        expected_shape = (self.batch_size, self.input_dim, self.output_dim)
-        self.assertEqual(output.shape, expected_shape)
+        input_dims = [4, 8]
+        for input_dim in input_dims:
+            for output_dim in input_dims:
+                message = f"Test failed for input_dim={input_dim} and output_dim={output_dim}."
+                with self.subTest(message=message):
+                    batch_size = 2
+                    input_tensor = torch.randn(batch_size, input_dim)
+                    weight_shape = (input_dim, output_dim)
+                    self.weight_params = Module()._init_parameter_bank(
+                        weight_shape, nn.init.zeros_
+                    )
+                    generators_depth = DynamicDepthOptions.DEPTH_OF_TWO
+                    cfg = LinearsConfigs.dynamic_preset(
+                        batch_size=2,
+                        input_dim=input_dim,
+                        output_dim=output_dim,
+                        generator_depth=generators_depth,
+                    )
+                    cfg = cfg.linear_layer_config
+                    model = DynamicParametersBehaviour(cfg)
+                    output = model(self.weight_params, input_tensor)
+                    expected_shape = (batch_size, input_dim, output_dim)
+                    self.assertEqual(output.shape, expected_shape)

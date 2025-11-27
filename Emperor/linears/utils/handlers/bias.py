@@ -7,7 +7,6 @@ from Emperor.base.layer import (
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 

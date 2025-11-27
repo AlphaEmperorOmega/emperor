@@ -56,6 +56,7 @@ class TestMemoryFusionHandler(TestLinearsMemoryBehaviour):
                         memory_position_option=position_option,
                         memory_size_option=size_option,
                     )
+                    cfg = cfg.linear_layer_config
                     if size_option == LinearMemorySizeOptions.DISABLED:
                         with self.assertRaises(ValueError):
                             model = MemoryFusionHandler(cfg)
@@ -82,6 +83,7 @@ class TestWeightedMemoryHandler(TestLinearsMemoryBehaviour):
                         memory_size_option=size_option,
                         memory_position_option=position_option,
                     )
+                    cfg = cfg.linear_layer_config
                     if size_option == LinearMemorySizeOptions.DISABLED:
                         with self.assertRaises(ValueError):
                             model = WeightedMemoryHandler(cfg)
@@ -111,6 +113,7 @@ class TestDynamicDiagonalSelector(TestLinearsMemoryBehaviour):
                             memory_position_option=position_option,
                             memory_size_option=size_option,
                         )
+                        cfg = cfg.linear_layer_config
                         if (
                             memory_option == LinearMemoryOptions.DISABLED
                             or size_option == LinearMemorySizeOptions.DISABLED

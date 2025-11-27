@@ -67,9 +67,6 @@ class LinearBase(Module):
         config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
         self.main_cfg = cfg
-        print(self.main_cfg.input_dim, self.main_cfg.output_dim)
-        # self.main_cfg: "ModelConfig" = cfg
-        # self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.bias_flag = self.cfg.bias_flag
@@ -171,19 +168,6 @@ class DynamicLinearLayer(LinearBase):
         self.memory_size_option = self.cfg.memory_size_option
         self.memory_position_option = self.cfg.memory_position_option
         self.bias_option = self.cfg.bias_option
-
-        print("-" * 20)
-        print("Input Dimension:", self.input_dim)
-        print("Output Dimension:", self.output_dim)
-        print("Bias Flag:", self.bias_flag)
-        print("Generator Depth:", self.generator_depth)
-        print("Diagonal Option:", self.diagonal_option)
-        print("Memory Option:", self.memory_option)
-        print("Memory Size Option:", self.memory_size_option)
-        print("Memory Position Option:", self.memory_position_option)
-        print("Bias Option:", self.bias_option)
-        print("-" * 20)
-
         self.weight_params, self.bias_params = self._init_parameters()
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
@@ -209,10 +193,10 @@ class DynamicLinearLayer(LinearBase):
 
     def __init_model(self, is_valid_flag: bool, model_class: object) -> object | None:
         if is_valid_flag:
-            # overrides = DynamicLinearLayerConfig(
-            #     input_dim=self.input_dim, output_dim=self.output_dim
-            # )
-            return model_class(self.main_cfg)
+            overrides = DynamicLinearLayerConfig(
+                input_dim=self.input_dim, output_dim=self.output_dim
+            )
+            return model_class(self.main_cfg, overrides)
         return None
 
     def forward(self, input: Tensor) -> Tensor:

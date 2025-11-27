@@ -8,14 +8,13 @@ from Emperor.base.layer import LayerStack, LayerStackConfig
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
     from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 
 
 class DepthMappingLayer(Module):
-    def __init__(self, cfg: "ModelConfig"):
+    def __init__(self, cfg: "DynamicLinearLayerConfig"):
         super().__init__()
-        self.cfg: "DynamicLinearLayerConfig" = getattr(cfg, "linear_layer_config", cfg)
+        self.cfg = cfg
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.generator_depth = self.cfg.generator_depth.value
@@ -44,7 +43,7 @@ class DepthMappingLayer(Module):
 class DepthMappingLayerStack(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
         overrides: "LayerStackConfig | None" = None,
     ):
         super().__init__()

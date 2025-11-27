@@ -1,9 +1,7 @@
 import torch
 
-from enum import Enum
 from torch import Tensor
 from Emperor.base.utils import Module
-from torch.nn import Linear, Sequential
 from Emperor.linears.utils.handlers.parameter import DepthMappingLayerStack
 from Emperor.linears.utils.enums import (
     DynamicBiasOptions,
@@ -34,7 +32,6 @@ from Emperor.base.layer import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
     from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 
 
@@ -42,28 +39,34 @@ class DynamicParametersBehaviour(Module):
     def __init__(
         self,
         cfg: "DynamicLinearLayerConfig",
+        overrides: "DynamicLinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "DynamicLinearLayerConfig" = config
-        self.main_config = cfg
+        self.cfg: "DynamicLinearLayerConfig" = self._overwrite_config(config, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.input_model = self.__init_input_model()
         self.output_model = self.__init_output_model()
 
     def __init_input_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(output_dim=self.input_dim)
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.input_dim,
+        )
         return self.__init_generator_model(overrides)
 
     def __init_output_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(output_dim=self.output_dim)
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
         return self.__init_generator_model(overrides)
 
     def __init_generator_model(
         self, overrides: "LayerStackConfig"
     ) -> DepthMappingLayerStack:
-        return DepthMappingLayerStack(self.main_config, overrides)
+        return DepthMappingLayerStack(self.cfg, overrides)
 
     def forward(
         self,
@@ -112,24 +115,22 @@ class DynamicDiagonalSelector(Module):
     def __init__(
         self,
         cfg: "DynamicLinearLayerConfig",
+        overrides: "DynamicLinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.main_config = cfg
-        # print(config.input_dim, config.output_dim)
-        # print(self.main_config.input_dim, self.main_config.output_dim)
-        self.cfg: "DynamicLinearLayerConfig" = config
+        self.cfg: "DynamicLinearLayerConfig" = self._overwrite_config(config, overrides)
         self.diagonal_option = self.cfg.diagonal_option
         self.model = self.__init_bias_model()
 
     def __init_bias_model(self) -> DiagonalHandlerAbstract:
         match self.diagonal_option:
             case DynamicDiagonalOptions.DIAGONAL:
-                return DiagonalHandler(self.main_config)
+                return DiagonalHandler(self.cfg)
             case DynamicDiagonalOptions.ANTI_DIAGONAL:
-                return AntiDiagonalHandler(self.main_config)
+                return AntiDiagonalHandler(self.cfg)
             case DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL:
-                return DiagonalAndAntiDiagonalHandler(self.main_config)
+                return DiagonalAndAntiDiagonalHandler(self.cfg)
             case DynamicDiagonalOptions.DISABLED:
                 raise ValueError(
                     "If the `diagonal_option` is set to `DISABLED`, this class should not be initialized"
@@ -147,22 +148,22 @@ class DynamicBiasSelector(Module):
     def __init__(
         self,
         cfg: "DynamicLinearLayerConfig",
+        overrides: "DynamicLinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "DynamicLinearLayerConfig" = config
-        self.main_config = cfg
+        self.cfg: "DynamicLinearLayerConfig" = self._overwrite_config(config, overrides)
         self.bias_option = self.cfg.bias_option
         self.model = self.__init_bias_model()
 
     def __init_bias_model(self) -> BiasHandlerAbstract:
         match self.bias_option:
             case DynamicBiasOptions.SCALE_AND_OFFSET:
-                return AffineBiasTransformHandler(self.main_config)
+                return AffineBiasTransformHandler(self.cfg)
             case DynamicBiasOptions.ELEMENT_WISE_OFFSET:
-                return ElementwiseBiasHandler(self.main_config)
+                return ElementwiseBiasHandler(self.cfg)
             case DynamicBiasOptions.DYNAMIC_PARAMETERS:
-                return BiasGeneratorHandler(self.main_config)
+                return BiasGeneratorHandler(self.cfg)
             case DynamicBiasOptions.DISABLED:
                 raise ValueError(
                     "If the `bias_option` is set to `DISABLED`, this class should not be initialized"
@@ -180,20 +181,20 @@ class DynamicMemorySelector(Module):
     def __init__(
         self,
         cfg: "DynamicLinearLayerConfig",
+        overrides: "DynamicLinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "DynamicLinearLayerConfig" = config
-        self.main_config = cfg
+        self.cfg: "DynamicLinearLayerConfig" = self._overwrite_config(config, overrides)
         self.memory_option = self.cfg.memory_option
         self.model = self.__init_memory_model()
 
     def __init_memory_model(self) -> MemoryHandlerAbstract:
         match self.memory_option:
             case LinearMemoryOptions.FUSION:
-                return MemoryFusionHandler(self.main_config)
+                return MemoryFusionHandler(self.cfg)
             case LinearMemoryOptions.WEIGHTED:
-                return WeightedMemoryHandler(self.main_config)
+                return WeightedMemoryHandler(self.cfg)
             case LinearMemoryOptions.DISABLED:
                 raise ValueError(
                     "If the `memory_option` is set to `DISABLED`, this class should not be initialized"

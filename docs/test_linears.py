@@ -94,24 +94,17 @@ class TestDynamicLinearLayer(TestLinears):
                     for bias_option in DynamicBiasOptions:
                         message = f"Test failed for the options: {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
                         with self.subTest(message=message):
-                            # c = LinearsConfigs.dynamic_preset(batch_size=2)
-                            # overrides = DynamicLinearLayerConfig(
-                            #     bias_flag=bias_flag,
-                            #     generator_depth=generators_depth,
-                            #     diagonal_option=diagonal_option,
-                            #     bias_option=bias_option,
-                            # )
-
-                            c = LinearsConfigs.dynamic_preset(
+                            cfg = LinearsConfigs.dynamic_preset(
                                 bias_flag=bias_flag,
                                 generator_depth=generators_depth,
                                 diagonal_option=diagonal_option,
                                 bias_option=bias_option,
                             )
-                            m = DynamicLinearLayer(c)
+                            cfg = cfg.linear_layer_config
+                            m = DynamicLinearLayer(cfg)
 
-                            self.assertEqual(m.input_dim, c.input_dim)
-                            self.assertEqual(m.output_dim, c.output_dim)
+                            self.assertEqual(m.input_dim, cfg.input_dim)
+                            self.assertEqual(m.output_dim, cfg.output_dim)
                             self.assertIsInstance(m.weight_params, torch.Tensor)
                             if bias_flag:
                                 self.assertIsInstance(m.bias_params, torch.Tensor)
@@ -133,8 +126,9 @@ class TestDynamicLinearLayer(TestLinears):
                                         for size_option in LinearMemorySizeOptions:
                                             message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Memory option: {memory_option}, Position option: {position_option}, Size option: {size_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
                                             with self.subTest(message=message):
-                                                c = LinearsConfigs.dynamic_preset(
-                                                    batch_size=2,
+                                                batch_size = 2
+                                                cfg = LinearsConfigs.dynamic_preset(
+                                                    batch_size=batch_size,
                                                     input_dim=input_dim,
                                                     output_dim=output_dim,
                                                     bias_flag=bias_flag,
@@ -145,6 +139,7 @@ class TestDynamicLinearLayer(TestLinears):
                                                     memory_position_option=position_option,
                                                     memory_size_option=size_option,
                                                 )
+                                                cfg = cfg.linear_layer_config
 
                                                 if (
                                                     memory_option
@@ -153,16 +148,16 @@ class TestDynamicLinearLayer(TestLinears):
                                                     == LinearMemorySizeOptions.DISABLED
                                                 ):
                                                     with self.assertRaises(ValueError):
-                                                        m = DynamicLinearLayer(c)
+                                                        m = DynamicLinearLayer(cfg)
                                                 else:
-                                                    m = DynamicLinearLayer(c)
+                                                    m = DynamicLinearLayer(cfg)
                                                     input_batch = torch.randn(
-                                                        c.batch_size, c.input_dim
+                                                        batch_size, input_dim
                                                     )
                                                     output = m.forward(input_batch)
                                                     expected_output_shape = (
-                                                        c.batch_size,
-                                                        c.output_dim,
+                                                        batch_size,
+                                                        output_dim,
                                                     )
                                                     self.assertEqual(
                                                         output.shape,

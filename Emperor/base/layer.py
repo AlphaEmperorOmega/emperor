@@ -486,9 +486,6 @@ class LayerStack(Module):
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
             layer_norm_dim = output_dim
         config = self.__resolve_model_type_overrides(input_dim, output_dim)
-        print(self.__get_model_type())
-        print(input_dim, output_dim)
-        print(config)
         model = self.__get_model_type()(config)
 
         return self.layer_block_model(

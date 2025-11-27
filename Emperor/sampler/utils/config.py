@@ -2,7 +2,7 @@ from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.sampler.utils.routers import RouterConfig
-from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
+from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.linears.utils.enums import (
     DynamicBiasOptions,
@@ -25,7 +25,7 @@ class SamplerConfigs:
         noisy_topk_flag: bool = False,
         residual_flag: bool = False,
         dropout_probability: float = 0.0,
-        stack_depth: int = 2,
+        num_layers: int = 2,
         activation: ActivationOptions = ActivationOptions.RELU,
         model_type: LinearLayerOptions = LinearLayerOptions.BASE,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
@@ -48,7 +48,7 @@ class SamplerConfigs:
                     input_dim=input_dim,
                     hidden_dim=hidden_dim,
                     output_dim=num_experts,
-                    num_layers=stack_depth,
+                    num_layers=num_layers,
                     activation=activation,
                     layer_norm_position=LayerNormPositionOptions.NONE,
                     residual_flag=residual_flag,
@@ -71,7 +71,7 @@ class SamplerConfigs:
                             input_dim=input_dim,
                             hidden_dim=hidden_dim,
                             output_dim=hidden_dim,
-                            num_layers=stack_depth,
+                            num_layers=num_layers,
                             activation=activation,
                             layer_norm_position=LayerNormPositionOptions.NONE,
                             residual_flag=residual_flag,
@@ -89,29 +89,4 @@ class SamplerConfigs:
                     ),
                 ),
             ),
-            # layer_stack_config=LayerStackConfig(
-            #     model_type=model_type,
-            #     input_dim=input_dim,
-            #     hidden_dim=hidden_dim,
-            #     output_dim=hidden_dim,
-            #     num_layers=stack_depth,
-            #     activation=activation,
-            #     layer_norm_position=LayerNormPositionOptions.NONE,
-            #     residual_flag=residual_flag,
-            #     adaptive_computation_flag=False,
-            #     dropout_probability=dropout_probability,
-            # ),
-            # linear_layer_config=DynamicLinearLayerConfig(
-            #     input_dim=input_dim,
-            #     output_dim=hidden_dim,
-            #     bias_flag=bias_flag,
-            #     data_monitor=None,
-            #     parameter_monitor=None,
-            #     generator_depth=generator_depth,
-            #     diagonal_option=diagonal_option,
-            #     bias_option=bias_option,
-            #     memory_option=memory_option,
-            #     memory_size_option=memory_size_option,
-            #     memory_position_option=memory_position_option,
-            # ),
         )
