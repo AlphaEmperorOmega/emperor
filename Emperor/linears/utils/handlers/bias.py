@@ -7,14 +7,15 @@ from Emperor.base.layer import (
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
+    from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 
 
 class BiasHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__()
         self.cfg = getattr(cfg, "linear_layer_config", cfg)
@@ -31,10 +32,10 @@ class BiasHandlerAbstract(Module):
 class AffineBiasTransformHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__(cfg)
-        overrides = LayerStackConfig(output_dim=2)
+        overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=2)
         self.scalar_offset_generator = self._init_model(overrides)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
@@ -46,10 +47,13 @@ class AffineBiasTransformHandler(BiasHandlerAbstract):
 class ElementwiseBiasHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__(cfg)
-        self.generator_model = self._init_model()
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim, output_dim=self.output_dim
+        )
+        self.generator_model = self._init_model(overrides)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         parameters = self.generator_model(logits)
@@ -59,10 +63,13 @@ class ElementwiseBiasHandler(BiasHandlerAbstract):
 class BiasGeneratorHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__(cfg)
-        self.bias_generator = self._init_model()
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim, output_dim=self.output_dim
+        )
+        self.bias_generator = self._init_model(overrides)
 
     def forward(self, bias_params: None, logits: Tensor) -> Tensor | None:
         return self.bias_generator(logits)

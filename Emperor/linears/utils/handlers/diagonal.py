@@ -10,14 +10,15 @@ from Emperor.base.layer import (
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
+    from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 
 
 class DiagonalHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__()
         self.cfg = getattr(cfg, "linear_layer_config", cfg)
@@ -39,7 +40,7 @@ class DiagonalHandlerAbstract(Module):
         self,
     ) -> LinearLayerStack:
         output_dim = min(self.input_dim, self.output_dim)
-        overrides = LayerStackConfig(output_dim=output_dim)
+        overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=output_dim)
         return LinearLayerStack(self.cfg_main, overrides)
 
     def forward(self, weight_params: Tensor) -> Tensor:
@@ -62,7 +63,7 @@ class DiagonalHandlerAbstract(Module):
 class DiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = self._init_model()
@@ -75,7 +76,7 @@ class DiagonalHandler(DiagonalHandlerAbstract):
 class AntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = self._init_model()
@@ -89,7 +90,7 @@ class AntiDiagonalHandler(DiagonalHandlerAbstract):
 class DiagonalAndAntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = DiagonalHandler(cfg)

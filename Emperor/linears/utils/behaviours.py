@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 class DynamicParametersBehaviour(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
@@ -111,11 +111,13 @@ class DynamicParametersBehaviour(Module):
 class DynamicDiagonalSelector(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
         self.main_config = cfg
+        # print(config.input_dim, config.output_dim)
+        # print(self.main_config.input_dim, self.main_config.output_dim)
         self.cfg: "DynamicLinearLayerConfig" = config
         self.diagonal_option = self.cfg.diagonal_option
         self.model = self.__init_bias_model()
@@ -144,7 +146,7 @@ class DynamicDiagonalSelector(Module):
 class DynamicBiasSelector(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
@@ -177,7 +179,7 @@ class DynamicBiasSelector(Module):
 class DynamicMemorySelector(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)

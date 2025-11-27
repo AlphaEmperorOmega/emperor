@@ -66,7 +66,9 @@ class LinearBase(Module):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
-        self.main_cfg: "ModelConfig" = cfg
+        self.main_cfg = cfg
+        print(self.main_cfg.input_dim, self.main_cfg.output_dim)
+        # self.main_cfg: "ModelConfig" = cfg
         # self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
@@ -207,6 +209,9 @@ class DynamicLinearLayer(LinearBase):
 
     def __init_model(self, is_valid_flag: bool, model_class: object) -> object | None:
         if is_valid_flag:
+            # overrides = DynamicLinearLayerConfig(
+            #     input_dim=self.input_dim, output_dim=self.output_dim
+            # )
             return model_class(self.main_cfg)
         return None
 
