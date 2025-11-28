@@ -27,13 +27,25 @@ class LinearsConfigs:
             batch_size=batch_size,
             input_dim=input_dim,
             output_dim=output_dim,
-            linear_layer_config=LinearLayerConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
-                bias_flag=bias_flag,
-                data_monitor=data_monitor,
-                parameter_monitor=parameter_monitor,
-            ),
+            linear_layer_config=self.linear_layer_preset(*args, **kwargs),
+        )
+
+    @staticmethod
+    def linear_layer_preset(
+        input_dim=12,
+        output_dim=6,
+        bias_flag=True,
+        data_monitor=None,
+        parameter_monitor=None,
+        *args,
+        **kwargs,
+    ):
+        return LinearLayerConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            bias_flag=bias_flag,
+            data_monitor=data_monitor,
+            parameter_monitor=parameter_monitor,
         )
 
     @staticmethod
@@ -55,6 +67,19 @@ class LinearsConfigs:
         dropout_probability: float = 0.0,
     ) -> "ModelConfig":
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else input_dim
+
+        # later use inspect to store all inputs of this function directly into the
+        # linear
+        # def function_b(input_dim, output_dim, *args, bias_flag=True, **kwargs):
+        #     # Dynamically capture all arguments passed to function_b
+        #     current_frame = inspect.currentframe()
+        #     arg_values = inspect.getargvalues(current_frame)
+        #
+        #     # Extract arguments and their values
+        #     all_args = arg_values.locals
+        #
+        #     # Forward all arguments to function_a
+        #     function_a(**all_args)
 
         return ModelConfig(
             input_dim=input_dim,
@@ -105,4 +130,49 @@ class LinearsConfigs:
                 adaptive_computation_flag=False,
                 dropout_probability=dropout_probability,
             ),
+        )
+
+
+class LinearsConfigs:
+    @staticmethod
+    def base_preset(
+        batch_size=8,
+        input_dim=12,
+        output_dim=6,
+        bias_flag=True,
+        data_monitor=None,
+        parameter_monitor=None,
+    ) -> "ModelConfig":
+        # Dynamically capture all arguments passed to base_preset
+        current_frame = inspect.currentframe()
+        arg_values = inspect.getargvalues(current_frame)
+
+        # Extract arguments as a dictionary
+        all_args = dict(arg_values.locals)
+
+        # Remove arguments that are not accepted by linear_layer_preset if needed (optional)
+        # This step is only required if extra arguments not suitable for `linear_layer_preset` exist
+        return ModelConfig(
+            batch_size=all_args["batch_size"],
+            input_dim=all_args["input_dim"],
+            output_dim=all_args["output_dim"],
+            linear_layer_config=LinearsConfigs.linear_layer_preset(**all_args),
+        )
+
+    @staticmethod
+    def linear_layer_preset(
+        input_dim=12,
+        output_dim=6,
+        bias_flag=True,
+        data_monitor=None,
+        parameter_monitor=None,
+        *args,
+        **kwargs,
+    ):
+        return LinearLayerConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            bias_flag=bias_flag,
+            data_monitor=data_monitor,
+            parameter_monitor=parameter_monitor,
         )

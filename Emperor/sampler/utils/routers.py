@@ -47,15 +47,14 @@ class RouterModel(Module):
             2 * self.num_experts if self.noisy_topk_flag else self.num_experts
         )
         self.__assert_input_requirements()
-        model_overrides = LayerStackConfig(output_dim=self.num_experts)
+        model_overrides = LayerStackConfig(
+            model_type=self.model_type, output_dim=self.num_experts
+        )
         self.model = LayerStack(self.main_cfg, model_overrides).build_model()
 
     def __assert_input_requirements(self):
         assert self.num_experts > 0, (
             "The number of experts (num_experts) must be greater than zero."
-        )
-        assert self.model_type in LinearLayerOptions, (
-            "model_type must be a valid option from LinearLayerOptions"
         )
 
     def compute_logit_scores(self, input_batch: Tensor) -> Tensor:

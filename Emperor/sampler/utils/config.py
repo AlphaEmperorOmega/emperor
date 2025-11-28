@@ -45,7 +45,6 @@ class SamplerConfigs:
                 num_experts=num_experts,
                 noisy_topk_flag=noisy_topk_flag,
                 override_config=LayerStackConfig(
-                    model_type=model_type,
                     input_dim=input_dim,
                     hidden_dim=hidden_dim,
                     output_dim=num_experts,
