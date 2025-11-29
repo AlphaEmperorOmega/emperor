@@ -1,6 +1,6 @@
 from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.sampler.utils.types import (
+from Emperor.sampler.utils.samplers import (
     SamplerBase,
     SamplerConfig,
     SamplerFull,

@@ -3,17 +3,8 @@ from math import prod
 from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.base.utils import Module, ConfigBase
-from Emperor.base.utils import (
-    sigmoid,
-    randn_like,
-    masked_fill,
-    arange,
-    expand_dims,
-    concat,
-    device,
-    zeros,
-    tensor,
-)
+from Emperor.base.utils import expand_dims, device
+from Emperor.sampler.utils.losses import SamplerAuxiliaryLosses
 
 from typing import TYPE_CHECKING
 
@@ -100,6 +91,7 @@ class SamplerBase(Module):
         config = getattr(cfg, "sampler_model_config", cfg)
         self.cfg: "SamplerConfig" = self._overwrite_config(config, overrides)
 
+        self.router_type = self.cfg.router_type
         self.top_k = self.cfg.top_k
         self.threshold = self.cfg.threshold
         self.noisy_topk_flag = self.cfg.noisy_topk_flag
@@ -182,8 +174,8 @@ class SamplerBase(Module):
         logit_scores_matrix = logit_scores_matrix_chunk
 
         if self.training:
-            noise_std = sigmoid(raw_noise_std_matrix) + self.noise_epsilon
-            noise = randn_like(logit_scores_matrix)
+            noise_std = torch.sigmoid(raw_noise_std_matrix) + self.noise_epsilon
+            noise = torch.randn_like(logit_scores_matrix)
             # TODO: In the future maybe scale the noise by `raw_noise_std`
             # or scale `noise` by some `decaying_noise_amplifier` scalar
             noisy_logit_scores = logit_scores_matrix + noise * noise_std
@@ -200,8 +192,8 @@ class SamplerBase(Module):
         if self.threshold == 0.0 or skip_mask is None:
             return probabilities, router_logit_scores
         mask = skip_mask == 0
-        probabilities = masked_fill(probabilities, mask, 0)
-        router_logit_scores = masked_fill(router_logit_scores, mask, 0)
+        probabilities = torch.masked_fill(probabilities, mask, 0)
+        router_logit_scores = torch.masked_fill(router_logit_scores, mask, 0)
         return probabilities, router_logit_scores
 
     def __update_mask_given_threshold(
@@ -214,9 +206,9 @@ class SamplerBase(Module):
         threshold_mask = probabilities < self.threshold
         if self.filter_above_threshold:
             mask_update = (threshold_mask.all(dim=-1) == False).unsqueeze(-1)
-            return masked_fill(skip_mask, mask_update, 0)
+            return torch.masked_fill(skip_mask, mask_update, 0)
         mask_update = threshold_mask.all(dim=-1).unsqueeze(-1)
-        return masked_fill(skip_mask, mask_update, 0)
+        return torch.masked_fill(skip_mask, mask_update, 0)
 
     def _compute_loss(
         self,
@@ -289,8 +281,8 @@ class SamplerSparse(SamplerBase):
     def __prepare_loss_gates(
         self, sampled_probabilities: Tensor, indices: Tensor
     ) -> Tensor:
-        input_dim = prod(tensor(sampled_probabilities.shape))
-        gates_buffer = zeros(input_dim, self.num_experts).to(device)
+        input_dim = prod(torch.tensor(sampled_probabilities.shape))
+        gates_buffer = torch.zeros(input_dim, self.num_experts).to(device)
         gates = gates_buffer.scatter(
             1,
             indices.view(-1, self.top_k),
@@ -340,11 +332,11 @@ class SamplerTopk(SamplerBase):
         _, topk_deterministic_indices = probabilities.topk(num_deterministic, dim=-1)
 
         masked_probs = probabilities + 1e-6
-        batch_indices = expand_dims(arange(probabilities.size(0)), dim=1)
+        batch_indices = expand_dims(torch.arange(probabilities.size(0)), dim=1)
         masked_probs[batch_indices, topk_deterministic_indices] = 0
         topk_random_indices = torch.multinomial(masked_probs, self.num_topk_samples)
 
-        final_topk_indices = concat(
+        final_topk_indices = torch.concat(
             [topk_deterministic_indices, topk_random_indices], dim=-1
         )
 
@@ -372,8 +364,8 @@ class SamplerTopk(SamplerBase):
     def __prepare_loss_gates(
         self, sampled_probabilities: Tensor, indices: Tensor
     ) -> Tensor:
-        input_dim = prod(tensor(sampled_probabilities.shape))
-        gates_buffer = zeros(input_dim, self.num_experts).to(device)
+        input_dim = prod(torch.tensor(sampled_probabilities.shape))
+        gates_buffer = torch.zeros(input_dim, self.num_experts).to(device)
         gates = gates_buffer.scatter(
             1,
             indices.view(-1, self.top_k),
