@@ -1,16 +1,13 @@
+import torch
+
 from torch import Tensor
+from torch.nn import functional as F
 from Emperor.base.utils import Module
-from Emperor.sampler.utils.losses import (
-    CoefficientOfVariationLoss,
-    MutualInformationLoss,
-    SwitchLoss,
-    ZeroCentredLoss,
-)
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.sampler.utils.sampler_types import SamplerConfig
+    from Emperor.sampler.utils.samplers import SamplerConfig
 
 
 class AuxiliaryLossBase:

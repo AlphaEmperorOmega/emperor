@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.sampler.utils.samplers import SamplerConfig
 
 
 @dataclass

@@ -2,7 +2,7 @@ from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.sampler.utils.routers import RouterConfig
-from Emperor.sampler.utils.sampler_types import SamplerConfig
+from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.linears.utils.layers import DynamicLinearLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.linears.utils.enums import (
@@ -96,12 +96,12 @@ class SamplerConfigs:
         batch_size: int = 2,
         input_dim: int = 12,
         hidden_dim: int = 16,
+        num_experts: int = 6,
         bias_flag: bool = True,
         residual_flag: bool = False,
         dropout_probability: float = 0.0,
         num_layers: int = 2,
-        top_k: int = 5,
-        num_experts: int = 6,
+        top_k: int = 3,
         threshold: float = 0.0,
         filter_above_threshold: bool = False,
         num_topk_samples: int = 0,
@@ -124,6 +124,19 @@ class SamplerConfigs:
             batch_size=batch_size,
             input_dim=input_dim,
             output_dim=num_experts,
+            sampler_model_config=SamplerConfig(
+                top_k=top_k,
+                threshold=threshold,
+                filter_above_threshold=filter_above_threshold,
+                num_topk_samples=num_topk_samples,
+                normalize_probabilities_flag=normalize_probabilities_flag,
+                noisy_topk_flag=noisy_topk_flag,
+                num_experts=num_experts,
+                coefficient_of_variation_loss_weight=coefficient_of_variation_loss_weight,
+                switch_loss_weight=switch_loss_weight,
+                zero_centred_loss_weight=zero_centred_loss_weight,
+                mutual_information_loss_weight=mutual_information_loss_weight,
+            ),
             router_model_config=RouterConfig(
                 model_type=model_type,
                 num_experts=num_experts,
@@ -172,18 +185,5 @@ class SamplerConfigs:
                         ),
                     ),
                 ),
-            ),
-            sampler_model_config=SamplerConfig(
-                top_k=top_k,
-                threshold=threshold,
-                filter_above_threshold=filter_above_threshold,
-                num_topk_samples=num_topk_samples,
-                normalize_probabilities_flag=normalize_probabilities_flag,
-                noisy_topk_flag=noisy_topk_flag,
-                num_experts=num_experts,
-                coefficient_of_variation_loss_weight=coefficient_of_variation_loss_weight,
-                switch_loss_weight=switch_loss_weight,
-                zero_centred_loss_weight=zero_centred_loss_weight,
-                mutual_information_loss_weight=mutual_information_loss_weight,
             ),
         )

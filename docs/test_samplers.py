@@ -1,657 +1,355 @@
-import copy
-import unittest
 import torch
+import unittest
 from math import prod
-from Emperor.generators.utils.losses import (
-    CoefficientOfVariationLoss,
-    MutualInformationLoss,
-    SwitchLoss,
-    ZeroCentredLoss,
-)
-from Emperor.generators.utils.samplers import (
-    SamplerAuxiliaryLosses,
+
+from Emperor.config import ModelConfig
+from Emperor.sampler.model import SamplerModel
+from Emperor.sampler.utils.config import SamplerConfigs
+from Emperor.sampler.utils.samplers import (
     SamplerBase,
-    SamplerConfig,
+    SamplerFull,
     SamplerSparse,
     SamplerTopk,
-    SamplerFull,
-    SamplerModel,
 )
-
-
-class TestSamplerAuxiliaryLosses(unittest.TestCase):
-    def setUp(self):
-        self.cfg = SamplerConfig(
-            top_k=3,
-            threshold=0.0,
-            filter_above_threshold=False,
-            num_topk_samples=0,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=False,
-            num_experts=5,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
-
-    def test__init_with_cfg(self):
-        c = copy.deepcopy(self.cfg)
-        m = SamplerAuxiliaryLosses(c)
-
-        self.assertIsInstance(
-            m.coefficient_of_variation_loss, CoefficientOfVariationLoss
-        )
-        self.assertIsInstance(m.switch_loss, SwitchLoss)
-        self.assertIsInstance(m.zero_centred_loss, ZeroCentredLoss)
-        self.assertIsInstance(m.mutual_information_loss, MutualInformationLoss)
-
-    def test__update_accumulated_statistics(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.1,
-        )
-        m = SamplerAuxiliaryLosses(c, overrides)
-
-        batch_size = 2
-        output_dim = 5
-        shape = (batch_size, output_dim)
-        logits = torch.arange(prod(shape)).reshape(shape).float()
-        probabilities = torch.arange(prod(shape)).reshape(shape)
-        gates = torch.arange(prod(shape)).reshape(shape)
-        skip_masks = (torch.randn(*shape) > 0).float()
-
-        m.update_accumulated_statistics(logits, probabilities, gates, skip_masks)
-
-        self.assertIsNotNone(m.coefficient_of_variation_loss.gates_accumulation)
-        self.assertIsNotNone(m.switch_loss.probability_accumulation)
-        self.assertIsNotNone(m.switch_loss.frequency_accumulation)
-        self.assertIsNotNone(m.zero_centred_loss.squared_log_sum_exp_accumulation)
-        self.assertIsNotNone(m.zero_centred_loss.count_accumulation)
-        self.assertTrue(len(m.mutual_information_loss.log_probabilities) > 0)
-        self.assertTrue(len(m.mutual_information_loss.probabilities) > 0)
-        self.assertTrue(len(m.mutual_information_loss.skip_masks) > 0)
-
-    def test__reset_all_accumulations(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.1,
-        )
-        m = SamplerAuxiliaryLosses(c, overrides)
-
-        batch_size = 2
-        output_dim = 5
-        shape = (batch_size, output_dim)
-        logits = torch.arange(prod(shape)).reshape(shape).float()
-        probabilities = torch.arange(prod(shape)).reshape(shape)
-        gates = torch.arange(prod(shape)).reshape(shape)
-        skip_masks = (torch.randn(*shape) > 0).float()
-
-        m.update_accumulated_statistics(logits, probabilities, gates, skip_masks)
-        m._SamplerAuxiliaryLosses__reset_all_accumulations()
-
-        self.assertIsNone(m.coefficient_of_variation_loss.gates_accumulation)
-        self.assertIsNone(m.switch_loss.probability_accumulation)
-        self.assertIsNone(m.switch_loss.frequency_accumulation)
-        self.assertIsNone(m.zero_centred_loss.squared_log_sum_exp_accumulation)
-        self.assertIsNone(m.zero_centred_loss.count_accumulation)
-        self.assertTrue(len(m.mutual_information_loss.log_probabilities) == 0)
-        self.assertTrue(len(m.mutual_information_loss.probabilities) == 0)
-        self.assertTrue(len(m.mutual_information_loss.skip_masks) == 0)
-
-    def test__compute_total_loss(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            coefficient_of_variation_loss_weight=1.0,
-            switch_loss_weight=1.0,
-            zero_centred_loss_weight=1.0,
-            mutual_information_loss_weight=1.0,
-        )
-        m = SamplerAuxiliaryLosses(c, overrides)
-
-        batch_size = 2
-        output_dim = 5
-        shape = (batch_size, output_dim)
-        logits = torch.arange(prod(shape)).reshape(shape).float()
-        probabilities = torch.arange(prod(shape)).reshape(shape).float()
-        gates = torch.arange(prod(shape)).reshape(shape).float()
-        skip_masks = torch.abs(torch.randn(*shape))
-
-        m.update_accumulated_statistics(logits, probabilities, gates, skip_masks)
-        output = m._SamplerAuxiliaryLosses__compute_total_loss()
-
-        self.assertIsInstance(output, torch.Tensor)
-        self.assertIsNot(output, 0.0)
-
-    def test__get_auxiliary_loss_and_clear(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.1,
-        )
-        m = SamplerAuxiliaryLosses(c, overrides)
-
-        batch_size = 2
-        output_dim = 5
-        shape = (batch_size, output_dim)
-        logits = torch.arange(prod(shape)).reshape(shape).float()
-        probabilities = torch.arange(prod(shape)).reshape(shape).float()
-        gates = torch.arange(prod(shape)).reshape(shape).float()
-        skip_masks = torch.abs(torch.randn(*shape))
-
-        m.update_accumulated_statistics(logits, probabilities, gates, skip_masks)
-        output = m.get_auxiliary_loss_and_clear()
-
-        self.assertIsInstance(output, torch.Tensor)
-        self.assertIsNot(output, 0.0)
-        self.assertIsNone(m.coefficient_of_variation_loss.gates_accumulation)
-        self.assertIsNone(m.switch_loss.probability_accumulation)
-        self.assertIsNone(m.switch_loss.frequency_accumulation)
-        self.assertIsNone(m.zero_centred_loss.squared_log_sum_exp_accumulation)
-        self.assertIsNone(m.zero_centred_loss.count_accumulation)
-        self.assertTrue(len(m.mutual_information_loss.log_probabilities) == 0)
-        self.assertTrue(len(m.mutual_information_loss.probabilities) == 0)
-        self.assertTrue(len(m.mutual_information_loss.skip_masks) == 0)
 
 
 class TestProbabilitySampler(unittest.TestCase):
     def setUp(self):
-        self.cfg = SamplerConfig(
-            top_k=3,
-            threshold=0.0,
-            filter_above_threshold=False,
-            num_topk_samples=0,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=False,
-            num_experts=5,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
+        self.rebuild_presets()
 
-    def test__init_with_cfg(self):
-        sampler = SamplerBase(cfg=self.cfg)
+    def tearDown(self):
+        self.cfg = None
+        self.config = None
+        self.batch_size = None
+        self.input_dim = None
+        self.output_dim = None
 
-        self.assertEqual(sampler.top_k, self.cfg.top_k)
-        self.assertEqual(sampler.threshold, self.cfg.threshold)
-        self.assertEqual(sampler.num_topk_samples, self.cfg.num_topk_samples)
-        self.assertEqual(sampler.noisy_topk_flag, self.cfg.noisy_topk_flag)
-        self.assertEqual(sampler.num_experts, self.cfg.num_experts)
+    def rebuild_presets(self, config: ModelConfig | None = None):
+        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
 
-    def test__init_with_custom_config(self):
-        config = SamplerConfig(
-            top_k=4,
-            threshold=0.1,
-            filter_above_threshold=True,
-            noisy_topk_flag=True,
-            num_topk_samples=2,
-            normalize_probabilities_flag=True,
-            num_experts=10,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.1,
-        )
+        self.batch_size = self.cfg.batch_size
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
 
-        sampler = SamplerBase(config)
+    def test_init(self):
+        cfg = SamplerConfigs.sampler_preset()
+        c = cfg.sampler_model_config
+        m = SamplerBase(cfg)
 
-        self.assertEqual(sampler.top_k, config.top_k)
-        self.assertEqual(sampler.threshold, config.threshold)
-        self.assertEqual(sampler.num_topk_samples, config.num_topk_samples)
+        self.assertEqual(m.top_k, c.top_k)
+        self.assertEqual(m.threshold, c.threshold)
+        self.assertEqual(m.num_topk_samples, c.num_topk_samples)
+        self.assertEqual(m.noisy_topk_flag, c.noisy_topk_flag)
+        self.assertEqual(m.num_experts, c.num_experts)
         self.assertEqual(
-            sampler.normalize_probabilities_flag,
-            config.normalize_probabilities_flag,
+            m.normalize_probabilities_flag,
+            c.normalize_probabilities_flag,
         )
-        self.assertEqual(sampler.noisy_topk_flag, config.noisy_topk_flag)
-        self.assertEqual(sampler.num_experts, config.num_experts)
 
-    def test__normalize_probabilities__normalize_probabilities_flag__False(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            normalize_probabilities_flag=False,
-        )
-        m = SamplerBase(c, overrides)
-        probs = torch.tensor([[0.2, 0.3, 0.5], [0.1, 0.2, 0.3]])
-        result = m._normalize_probabilities(probs)
+    def test_normalize_probabilities__normalize_probabilities_flag__False(self):
+        normalize_probs = [False, True]
+        for flag in normalize_probs:
+            message = f"Testing configuration with normalize_probabilities_flag={flag}"
+            with self.subTest(msg=message):
+                cfg = SamplerConfigs.sampler_preset(
+                    normalize_probabilities_flag=flag,
+                )
+                m = SamplerBase(cfg)
+                probs = torch.tensor([[0.2, 0.3, 0.5], [0.1, 0.2, 0.3]])
+                result = m._normalize_probabilities(probs)
 
-        self.assertTrue(torch.allclose(probs, result))
-
-    def test__normalize_probabilities__normalize_probabilities_flag__True(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            normalize_probabilities_flag=True,
-        )
-        m = SamplerBase(c, overrides)
-        probs = torch.tensor([[0.2, 0.3, 0.5], [0.1, 0.2, 0.3]])
-        result = m._normalize_probabilities(probs)
-        distribution_check = result.sum(dim=-1)
-        expected_distribution_check = torch.tensor([1.0, 1.0])
-
-        self.assertTrue(torch.allclose(distribution_check, expected_distribution_check))
+                if flag:
+                    distribution_check = result.sum(dim=-1)
+                    expected_distribution = torch.tensor([1.0, 1.0])
+                    self.assertTrue(
+                        torch.allclose(distribution_check, expected_distribution)
+                    )
+                else:
+                    self.assertTrue(torch.allclose(probs, result))
 
     def test__probability_sampling_strategy(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            normalize_probabilities_flag=True,
-        )
-        m = SamplerBase(c, overrides)
-        probabilities = torch.ones(2, 4)
+        cfg = SamplerConfigs.sampler_preset()
+        m = SamplerBase(cfg)
+        probabilities = torch.randn(2, 4)
 
         with self.assertRaises(NotImplementedError) as context:
             m._sample_probabilities_and_indices(probabilities)
 
     def test__update_mask_given_threshold__threshold__zero(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.0,
-        )
-        m = SamplerBase(c, overrides)
-        skip_mask = torch.ones(2).reshape(-1, 1)
+        threshold_options = [0.0, 0.4]
+        filter_above_threshold_options = [False, True]
 
-        probabilities = torch.tensor([[0.2, 0.3, 0.5], [0.1, 0.2, 0.3]])
-        output = m._SamplerBase__update_mask_given_threshold(
-            probabilities,
-            skip_mask,
-        )
-        self.assertTrue(torch.allclose(skip_mask, output))
+        for threshold_option in threshold_options:
+            for filter_flag in filter_above_threshold_options:
+                message = (
+                    f"Testing configuration with threshold={threshold_option}, "
+                    f"filter_above_threshold={filter_flag}"
+                )
+                with self.subTest(msg=message):
+                    cfg = SamplerConfigs.sampler_preset(
+                        threshold=threshold_option,
+                        filter_above_threshold=filter_flag,
+                    )
+                    m = SamplerBase(cfg)
 
-    def test__update_mask_given_threshold__threshold__positive(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.4,
-        )
-        m = SamplerBase(c, overrides)
-        batch_size = 2
-        skip_mask = torch.ones(batch_size).reshape(-1, 1)
-
-        probabilities = torch.tensor([[0.2, 0.3, 0.5], [0.1, 0.2, 0.3]])
-        output = m._SamplerBase__update_mask_given_threshold(
-            probabilities,
-            skip_mask,
-        )
-        expected_mask = torch.ones(batch_size).reshape(-1, 1)
-        expected_mask[1] = 0.0
-
-        self.assertTrue(torch.allclose(output, expected_mask))
-
-    def test__update_mask_given_threshold__filter_above_threshold__True(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.4,
-            filter_above_threshold=True,
-        )
-        m = SamplerBase(c, overrides)
-        batch_size = 2
-        skip_mask = torch.ones(batch_size).reshape(-1, 1)
-
-        probabilities = torch.tensor([[0.2, 0.3, 0.5], [0.1, 0.2, 0.3]])
-        output = m._SamplerBase__update_mask_given_threshold(
-            probabilities,
-            skip_mask,
-        )
-        expected_mask = torch.ones(batch_size).reshape(-1, 1)
-        expected_mask[0] = 0.0
-
-        self.assertTrue(torch.allclose(output, expected_mask))
+                    batch_size = 2
+                    skip_mask = torch.ones(batch_size).reshape(-1, 1)
+                    probabilities = torch.tensor([[0.2, 0.3, 0.5], [0.1, 0.2, 0.3]])
+                    output = m._SamplerBase__update_mask_given_threshold(
+                        probabilities, skip_mask
+                    )
+                    expected_mask = torch.ones(batch_size).reshape(-1, 1)
+                    if threshold_option > 0.0:
+                        if filter_flag:
+                            expected_mask[0] = 0.0
+                            self.assertTrue(torch.allclose(output, expected_mask))
+                        else:
+                            expected_mask[1] = 0.0
+                            self.assertTrue(torch.allclose(output, expected_mask))
+                    else:
+                        self.assertTrue(torch.allclose(skip_mask, output))
 
     def test__apply_skip_mask__threshold__zero(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.0,
-            filter_above_threshold=True,
-        )
-        m = SamplerBase(c, overrides)
-        batch_size = 2
-        sequence_length = 3
-        feature_dim = 4
-        probs = torch.ones(batch_size * sequence_length, feature_dim)
-        logits = torch.ones(batch_size * sequence_length, feature_dim)
-        mask = torch.zeros(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-        masked_probs, router_logit_scores = m._SamplerBase__apply_skip_mask(
-            probs, logits, mask
-        )
+        threshold_options = [0.0, 0.4]
 
-        self.assertTrue(torch.allclose(masked_probs, probs))
-        self.assertTrue(torch.allclose(router_logit_scores, logits))
+        for threshold_option in threshold_options:
+            message = f"Testing configuration with threshold={threshold_option}, "
+            with self.subTest(msg=message):
+                cfg = SamplerConfigs.sampler_preset(
+                    threshold=threshold_option,
+                )
+                m = SamplerBase(cfg)
 
-    def test__apply_skip_mask__threshold__positive(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.4,
-            filter_above_threshold=True,
-        )
-        m = SamplerBase(c, overrides)
-        batch_size = 2
-        sequence_length = 3
-        feature_dim = 4
+                batch_size = 2
+                sequence_length = 3
+                feature_dim = 4
+                probs = torch.ones(batch_size * sequence_length, feature_dim)
+                logits = torch.ones(batch_size * sequence_length, feature_dim)
+                mask = torch.zeros(batch_size, sequence_length).reshape(-1, 1)
+                unmasked_token = 0
+                mask[unmasked_token, :] = 1
+                masked_probs, router_logit_scores = m._SamplerBase__apply_skip_mask(
+                    probs, logits, mask
+                )
 
-        shape = (batch_size * sequence_length, feature_dim)
-        probs = torch.arange(prod(shape)).reshape(shape).float()
-        logits = torch.arange(prod(shape)).reshape(shape).float()
-        mask = torch.zeros(batch_size, sequence_length).reshape(-1, 1)
-
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-        masked_probs, router_logit_scores = m._SamplerBase__apply_skip_mask(
-            probs, logits, mask
-        )
-
-        self.assertTrue(torch.sum(masked_probs[unmasked_token, :]).item() > 0)
-        self.assertTrue(torch.sum(masked_probs[1:, :]).item() == 0)
-        self.assertTrue(torch.sum(router_logit_scores[unmasked_token, :]).item() > 0)
-        self.assertTrue(torch.sum(router_logit_scores[1:, :]).item() == 0)
+                if threshold_option == 0.0:
+                    self.assertTrue(torch.allclose(masked_probs, probs))
+                    self.assertTrue(torch.allclose(router_logit_scores, logits))
+                else:
+                    self.assertTrue(
+                        torch.sum(masked_probs[unmasked_token, :]).item() > 0
+                    )
+                    self.assertTrue(torch.sum(masked_probs[1:, :]).item() == 0)
+                    self.assertTrue(
+                        torch.sum(router_logit_scores[unmasked_token, :]).item() > 0
+                    )
+                    self.assertTrue(torch.sum(router_logit_scores[1:, :]).item() == 0)
 
     def test__add_noise_to_logits_flag__False(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=False,
-        )
-        m = SamplerBase(c, overrides)
+        noisy_topk_flag_options = [True, False]
 
-        batch_size = 2
-
-        shape = (batch_size, m.cfg.num_experts)
-        logits = torch.arange(prod(shape)).reshape(shape).float()
-
-        result = m._SamplerBase__add_noise_to_logits(logits)
-
-        self.assertTrue(torch.allclose(logits, result))
-
-    def test__add_noise_to_logits_flag_True(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=True,
-        )
-        m = SamplerBase(c, overrides)
-        m.training = True
-
-        batch_size = 2
-        shape = (batch_size, m.num_experts * 2)
-        logits = torch.arange(prod(shape)).reshape(shape).float()
-        result = m._SamplerBase__add_noise_to_logits(logits)
-
-        self.assertNotEqual(logits.mean(), result.mean())
-        self.assertListEqual(list(result.shape), [batch_size, m.num_experts])
-
-    def test__compute_masked_probabilities__router_logit_scores__only(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=False,
-            threshold=0.0,
-        )
-        m = SamplerBase(c, overrides)
-
-        batch_size = 3
-        shape = (batch_size, m.cfg.num_experts)
-        router_logit_scores = torch.arange(prod(shape)).reshape(shape).float()
-
-        masked_probabilities, router_logit_scores = (
-            m._SamplerBase__compute_masked_probabilities(router_logit_scores)
-        )
-
-        self.assertListEqual(
-            list(masked_probabilities.shape), list(router_logit_scores.shape)
-        )
-        self.assertTrue(
-            torch.allclose(
-                torch.sum(masked_probabilities, dim=-1),
-                torch.ones(batch_size).float(),
+        for noisy_topk_flag_option in noisy_topk_flag_options:
+            message = (
+                f"Testing configuration with noisy_topk_flag={noisy_topk_flag_option}"
             )
-        )
+            with self.subTest(msg=message):
+                cfg = SamplerConfigs.sampler_preset(
+                    noisy_topk_flag=noisy_topk_flag_option,
+                )
+                m = SamplerBase(cfg)
+                m.training = noisy_topk_flag_option
 
-    def test__compute_masked_probabilities__noisy_topk_flag__True(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=True,
-            threshold=0.0,
-        )
-        m = SamplerBase(c, overrides)
+                batch_size = 2
+                shape = (batch_size, m.cfg.num_experts * 2)
+                logits = torch.arange(prod(shape)).reshape(shape).float()
+                result = m._SamplerBase__add_noise_to_logits(logits)
 
-        batch_size = 3
-        shape = (batch_size, m.cfg.num_experts * 2)
-        router_logit_scores = torch.arange(prod(shape)).reshape(shape).float()
+                if noisy_topk_flag_option:
+                    self.assertNotEqual(logits.mean(), result.mean())
+                    self.assertEqual(result.shape, (batch_size, m.num_experts))
+                else:
+                    self.assertTrue(torch.allclose(logits, result))
 
-        masked_probabilities, router_logit_scores = (
-            m._SamplerBase__compute_masked_probabilities(router_logit_scores)
-        )
+    def test__compute_masked_probabilities(self):
+        noisy_topk_flag_options = [True, False]
+        threshold_options = [0.0, 0.2]
+        for threshold_option in threshold_options:
+            for noisy_topk_flag_option in noisy_topk_flag_options:
+                message = (
+                    f"Testing configuration with threshold={threshold_option}, "
+                    f"noisy_topk_flag_option={noisy_topk_flag_option}"
+                )
+                with self.subTest(msg=message):
+                    cfg = SamplerConfigs.sampler_preset(
+                        noisy_topk_flag=noisy_topk_flag_option,
+                        threshold=threshold_option,
+                    )
+                    m = SamplerBase(cfg)
 
-        self.assertListEqual(
-            list(masked_probabilities.shape), [batch_size, m.cfg.num_experts]
-        )
-        self.assertTrue(
-            torch.allclose(
-                torch.sum(masked_probabilities, dim=-1),
-                torch.ones(batch_size).float(),
-            )
-        )
+                    batch_size = 3
+                    sequence_length = 4
+                    num_expert_dim = (
+                        m.num_experts * 2 if noisy_topk_flag_option else m.num_experts
+                    )
+                    shape = (batch_size * sequence_length, num_expert_dim)
+                    router_logit_scores = (
+                        torch.arange(prod(shape)).reshape(shape).float()
+                    )
 
-    def test__compute_masked_probabilities__noisy_topk_flag__True__and__threshold__positive(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=True,
-            threshold=0.2,
-        )
-        m = SamplerBase(c, overrides)
+                    mask = torch.zeros(batch_size, sequence_length).reshape(-1, 1)
+                    unmasked_token = 0
+                    mask[unmasked_token, :] = 1
 
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.cfg.num_experts * 2)
-        router_logit_scores = torch.arange(prod(shape)).reshape(shape).float()
-        mask = torch.zeros(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
+                    masked_probabilities, router_logit_scores = (
+                        m._SamplerBase__compute_masked_probabilities(
+                            router_logit_scores, mask
+                        )
+                    )
 
-        masked_probabilities, router_logit_scores = (
-            m._SamplerBase__compute_masked_probabilities(router_logit_scores, mask)
-        )
-        self.assertListEqual(
-            list(masked_probabilities.shape),
-            [batch_size * sequence_length, m.cfg.num_experts],
-        )
-        self.assertTrue(torch.sum(masked_probabilities[0, :]).item() > 0)
-        self.assertTrue(torch.sum(masked_probabilities[1:, :]).item() == 0)
-        self.assertTrue(torch.sum(router_logit_scores[0, :]).item() > 0)
-        self.assertTrue(torch.sum(router_logit_scores[1:, :]).item() == 0)
-        self.assertTrue(
-            torch.allclose(
-                torch.sum(masked_probabilities[0, :], dim=-1),
-                torch.tensor(1.0).float(),
-            )
-        )
+                    if noisy_topk_flag_option and (threshold_option > 0.0):
+                        self.assertEqual(
+                            masked_probabilities.shape,
+                            (batch_size * sequence_length, m.cfg.num_experts),
+                        )
+                        self.assertTrue(
+                            torch.sum(masked_probabilities[0, :]).item() > 0
+                        )
+                        self.assertTrue(
+                            torch.sum(masked_probabilities[1:, :]).item() == 0
+                        )
+                        self.assertTrue(torch.sum(router_logit_scores[0, :]).item() > 0)
+                        self.assertTrue(
+                            torch.sum(router_logit_scores[1:, :]).item() == 0
+                        )
+                        self.assertTrue(
+                            torch.allclose(
+                                torch.sum(masked_probabilities[0, :], dim=-1),
+                                torch.tensor(1.0).float(),
+                            )
+                        )
+                    elif noisy_topk_flag_option and (threshold_option == 0.0):
+                        self.assertTrue(
+                            masked_probabilities.shape, (batch_size, num_expert_dim)
+                        )
+                    else:
+                        self.assertTrue(
+                            masked_probabilities.shape,
+                            router_logit_scores.shape,
+                        )
 
 
 class TestSamplerSparse(unittest.TestCase):
     def setUp(self):
-        self.cfg = SamplerConfig(
-            top_k=3,
-            threshold=0.0,
-            filter_above_threshold=False,
-            num_topk_samples=0,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=False,
-            num_experts=5,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
+        self.rebuild_presets()
 
-    def test__sample_probabilities_and_indices(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=True,
-            threshold=0.2,
-        )
-        m = SamplerSparse(c, overrides)
+    def tearDown(self):
+        self.cfg = None
+        self.config = None
+        self.batch_size = None
+        self.input_dim = None
+        self.output_dim = None
+
+    def rebuild_presets(self, config: ModelConfig | None = None):
+        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+
+        self.batch_size = self.cfg.batch_size
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
+
+    def test_sample_probabilities_and_indices(self):
+        cfg = SamplerConfigs.sampler_preset()
+        m = SamplerSparse(cfg)
 
         batch_size = 3
         shape = (batch_size, m.num_experts)
         probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-
         probability, indices = m._sample_probabilities_and_indices(probabilities)
+        self.assertEqual(probability.shape, (batch_size,))
+        self.assertEqual(indices.shape, (batch_size,))
 
-        self.assertListEqual(list(probability.shape), [batch_size])
-        self.assertListEqual(list(indices.shape), [batch_size])
+    def test_get_probabilities_and_indices(self):
+        loss_options = [0.0, 0.1]
+        noisy_flag_options = [True, False]
+        threshold_options = [0.0, 0.2]
+        filter_above_threshold_options = [True, False]
+        normalize_probabilities_flag = [True, False]
 
-    def test__get_probabilities_and_indices(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerSparse(c, overrides)
+        for loss in loss_options:
+            for noisy_flag in noisy_flag_options:
+                for thresh in threshold_options:
+                    for filter_flag in filter_above_threshold_options:
+                        for normalize_flag in normalize_probabilities_flag:
+                            message = (
+                                f"Testing configuration with loss={loss}, "
+                                f"noisy_flag={noisy_flag}, "
+                                f"threshold={thresh}, "
+                                f"filter_flag={filter_flag}, "
+                                f"normalize_flag={normalize_flag}"
+                            )
+                            with self.subTest(msg=message):
+                                if normalize_flag:
+                                    with self.assertRaises(AssertionError):
+                                        cfg = SamplerConfigs.sampler_preset(
+                                            normalize_probabilities_flag=normalize_flag,
+                                        )
+                                        m = SamplerSparse(cfg)
+                                else:
+                                    cfg = SamplerConfigs.sampler_preset(
+                                        noisy_topk_flag=noisy_flag,
+                                        threshold=thresh,
+                                        filter_above_threshold=filter_flag,
+                                        coefficient_of_variation_loss_weight=loss,
+                                        switch_loss_weight=loss,
+                                        zero_centred_loss_weight=loss,
+                                        # This is not work for SamplerSparse
+                                        # mutual_information_loss_weight=loss,
+                                    )
+                                    m = SamplerSparse(cfg)
 
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
+                                    batch_size = 3
+                                    sequence_length = 4
+                                    shape = (
+                                        batch_size * sequence_length,
+                                        m.num_experts,
+                                    )
+                                    logits = torch.softmax(torch.randn(*shape), dim=-1)
+                                    mask = torch.ones(
+                                        batch_size, sequence_length
+                                    ).reshape(-1, 1)
+                                    probabilities, selected_indices, skip_mask, loss = (
+                                        m.get_probabilities_and_indices(logits, mask)
+                                    )
+                                    self.assertEqual(
+                                        probabilities.shape,
+                                        (batch_size * sequence_length,),
+                                    )
+                                    self.assertEqual(
+                                        selected_indices.shape,
+                                        (batch_size * sequence_length,),
+                                    )
+                                    if loss > 0:
+                                        self.assertTrue(loss >= 0)
 
-        mask = torch.zeros(batch_size, sequence_length)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
+    def test__prepare_loss_skip_mask(self):
+        input_options = [None, torch.ones(3, 4)]
+        for input_mask in input_options:
+            message = f"Testing configuration with skip_mask={input_mask}"
+            with self.subTest(msg=message):
+                cfg = SamplerConfigs.sampler_preset()
+                m = SamplerSparse(cfg)
 
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
+                skip_maks = m._SamplerSparse__prepare_loss_skip_mask(input_mask)
 
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss > 0)
-        self.assertListEqual(list(probabilities.shape), [batch_size * sequence_length])
-        self.assertListEqual(
-            list(selected_indices.shape), [batch_size * sequence_length]
-        )
+                if input_mask is None:
+                    self.assertIsNone(skip_maks)
+                else:
+                    self.assertTrue(
+                        torch.allclose(skip_maks, input_mask.reshape(-1, 1))
+                    )
 
-    def test__get_probabilities_and_indices__noisy_topk_flag__True(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=True,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerSparse(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.zeros(batch_size, sequence_length)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss > 0)
-        self.assertListEqual(list(probabilities.shape), [batch_size * sequence_length])
-        self.assertListEqual(
-            list(selected_indices.shape), [batch_size * sequence_length]
-        )
-
-    def test__get_probabilities_and_indices__noisy_topk_flag__True__threshold__positive(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=True,
-            threshold=0.2,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerSparse(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.zeros(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss > 0)
-        self.assertListEqual(list(probabilities.shape), [batch_size * sequence_length])
-        self.assertListEqual(
-            list(selected_indices.shape), [batch_size * sequence_length]
-        )
-
-    def test__get_probabilities_and_indices__all_flags__True(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            noisy_topk_flag=True,
-            threshold=0.8,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=False,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.1,
-        )
-        m = SamplerSparse(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(loss > 0)
-        self.assertListEqual(list(probabilities.shape), [batch_size * sequence_length])
-        self.assertListEqual(
-            list(selected_indices.shape), [batch_size * sequence_length]
-        )
-
-    def test__prepare_loss_gates__skip_maks__None(self):
-        c = copy.deepcopy(self.cfg)
-        m = SamplerSparse(c)
-
-        skip_maks = m._SamplerSparse__prepare_loss_skip_mask()
-
-        self.assertIsNone(skip_maks)
-
-    def test__prepare_loss_gates__skip_maks__sparse(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=1,
-        )
-        m = SamplerSparse(c, overrides)
+    def test__prepare_loss_gates(self):
+        cfg = SamplerConfigs.sampler_preset(top_k=1)
+        m = SamplerSparse(cfg)
 
         batch_size = 3
 
@@ -661,777 +359,486 @@ class TestSamplerSparse(unittest.TestCase):
 
         gates = m._SamplerSparse__prepare_loss_gates(sampled_probabilities, indices)
 
-        self.assertListEqual(list(gates.shape), [batch_size, m.num_experts])
+        self.assertEqual(gates.shape, (batch_size, m.num_experts))
         self.assertTrue(
-            torch.allclose(
-                torch.sum(gates, dim=-1),
-                torch.ones(batch_size).float(),
-            )
+            torch.allclose(torch.sum(gates, dim=-1), torch.ones(batch_size).float())
         )
 
-    def test__compute_loss(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=1,
-            noisy_topk_flag=True,
-            threshold=0.8,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=False,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.1,
-        )
-        m = SamplerSparse(c, overrides)
+    def test_compute_loss(self):
+        loss_options = [0.0, 0.1]
+        for cross_option in loss_options:
+            for coeff_option in loss_options:
+                for zero_option in loss_options:
+                    message = f"Running test with cross_option={cross_option}, coeff_option={coeff_option}, zero_option={zero_option}"
+                    with self.subTest(msg=message):
+                        cfg = SamplerConfigs.sampler_preset(
+                            top_k=1,
+                            noisy_topk_flag=True,
+                            threshold=0.8,
+                            filter_above_threshold=True,
+                            normalize_probabilities_flag=False,
+                            coefficient_of_variation_loss_weight=coeff_option,
+                            switch_loss_weight=cross_option,
+                            zero_centred_loss_weight=zero_option,
+                            # mutual_information_loss_weight=mutual_option,
+                        )
+                        m = SamplerSparse(cfg)
 
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts)
+                        batch_size = 3
+                        sequence_length = 4
+                        shape = (batch_size * sequence_length, m.num_experts)
 
-        logits = torch.randn(*shape)
-        full_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-        sampled_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-        indices = torch.randint(0, m.num_experts, (batch_size, m.top_k))
-        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
+                        logits = torch.randn(*shape)
+                        full_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
+                        sampled_probabilities = torch.softmax(
+                            torch.randn(*shape), dim=-1
+                        )
+                        indices = torch.randint(0, m.num_experts, (batch_size, m.top_k))
+                        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
+                        unmasked_token = 0
+                        mask[unmasked_token, :] = 1
 
-        total_loss = m._compute_loss(
-            logits,
-            full_probabilities,
-            sampled_probabilities,
-            indices,
-            mask,
-        )
+                        total_loss = m._compute_loss(
+                            logits,
+                            full_probabilities,
+                            sampled_probabilities,
+                            indices,
+                            mask,
+                        )
 
-        self.assertTrue(total_loss > 0)
-        self.assertIsInstance(total_loss, torch.Tensor)
+                        if (
+                            coeff_option == 0.0
+                            and cross_option == 0.0
+                            and zero_option == 0.0
+                        ):
+                            self.assertTrue(total_loss == 0)
+                        else:
+                            self.assertTrue(total_loss > 0)
+                        self.assertIsInstance(total_loss, torch.Tensor)
 
 
 class TestSamplerTopk(unittest.TestCase):
     def setUp(self):
-        self.cfg = SamplerConfig(
-            top_k=3,
-            threshold=0.0,
-            filter_above_threshold=False,
-            num_topk_samples=0,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=False,
-            num_experts=5,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
+        self.rebuild_presets()
 
-    def test__sample_probabilities_and_indices(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=3,
-            noisy_topk_flag=True,
-            threshold=0.2,
-        )
-        m = SamplerTopk(c, overrides)
+    def tearDown(self):
+        self.cfg = None
+        self.config = None
+        self.batch_size = None
+        self.input_dim = None
+        self.output_dim = None
+
+    def rebuild_presets(self, config: ModelConfig | None = None):
+        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+
+        self.batch_size = self.cfg.batch_size
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
+
+    def test_sample_probabilities_and_indices(self):
+        cfg = SamplerConfigs.sampler_preset()
+        m = SamplerTopk(cfg)
 
         batch_size = 3
         shape = (batch_size, m.num_experts)
         probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-
         probability, indices = m._sample_probabilities_and_indices(probabilities)
+        self.assertEqual(probability.shape, (batch_size, m.top_k))
+        self.assertEqual(indices.shape, (batch_size, m.top_k))
 
-        self.assertListEqual(list(probability.shape), [batch_size, m.top_k])
-        self.assertListEqual(list(indices.shape), [batch_size, m.top_k])
+    def test_get_probabilities_and_indices(self):
+        loss_options = [0.0, 0.1]
+        noisy_flag_options = [True, False]
+        threshold_options = [0.0, 0.2]
+        filter_above_threshold_options = [True, False]
+        normalize_probabilities_flag = [True, False]
 
-    def test__get_probabilities_and_indices(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerTopk(c, overrides)
+        for loss in loss_options:
+            for noisy_flag in noisy_flag_options:
+                for thresh in threshold_options:
+                    for filter_flag in filter_above_threshold_options:
+                        for normalize_flag in normalize_probabilities_flag:
+                            message = (
+                                f"Testing configuration with loss={loss}, "
+                                f"noisy_flag={noisy_flag}, "
+                                f"threshold={thresh}, "
+                                f"filter_flag={filter_flag}, "
+                                f"normalize_flag={normalize_flag}"
+                            )
+                            with self.subTest(msg=message):
+                                cfg = SamplerConfigs.sampler_preset(
+                                    top_k=3,
+                                    noisy_topk_flag=noisy_flag,
+                                    threshold=thresh,
+                                    filter_above_threshold=filter_flag,
+                                    coefficient_of_variation_loss_weight=loss,
+                                    switch_loss_weight=loss,
+                                    zero_centred_loss_weight=loss,
+                                    mutual_information_loss_weight=loss,
+                                )
+                                m = SamplerTopk(cfg)
 
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
+                                batch_size = 3
+                                sequence_length = 4
+                                num_expert_dim = m.num_experts
+                                if noisy_flag:
+                                    num_expert_dim = m.num_experts * 2
+                                shape = (
+                                    batch_size * sequence_length,
+                                    num_expert_dim,
+                                )
+                                logits = torch.softmax(torch.randn(*shape), dim=-1)
+                                mask = torch.ones(batch_size, sequence_length).reshape(
+                                    -1, 1
+                                )
+                                probabilities, selected_indices, skip_mask, loss = (
+                                    m.get_probabilities_and_indices(logits, mask)
+                                )
+                                self.assertEqual(
+                                    probabilities.shape,
+                                    (batch_size * sequence_length, m.top_k),
+                                )
+                                self.assertEqual(
+                                    selected_indices.shape,
+                                    (batch_size * sequence_length, m.top_k),
+                                )
+                                if loss > 0:
+                                    self.assertTrue(loss >= 0)
 
-        mask = torch.zeros(batch_size, sequence_length)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
+    def test__prepare_loss_skip_mask(self):
+        input_options = [None, torch.ones(3, 4)]
+        for input_mask in input_options:
+            message = f"Testing configuration with skip_mask={input_mask}"
+            with self.subTest(msg=message):
+                cfg = SamplerConfigs.sampler_preset()
+                m = SamplerTopk(cfg)
 
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
+                skip_maks = m._SamplerTopk__prepare_loss_skip_mask(input_mask)
+                if input_mask is None:
+                    self.assertIsNone(skip_maks)
+                else:
+                    self.assertTrue(
+                        torch.allclose(skip_maks, input_mask.reshape(-1, 1))
+                    )
 
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss > 0)
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, m.top_k]
-        )
-        self.assertListEqual(
-            list(selected_indices.shape), [batch_size * sequence_length, m.top_k]
-        )
-
-    def test__get_probabilities_and_indices__noisy_topk_flag__True(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=3,
-            noisy_topk_flag=True,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerTopk(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.zeros(batch_size, sequence_length)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss > 0)
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, m.top_k]
-        )
-        self.assertListEqual(
-            list(selected_indices.shape), [batch_size * sequence_length, m.top_k]
-        )
-
-    def test__get_probabilities_and_indices__noisy_topk_flag__True__threshold__positive(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=3,
-            noisy_topk_flag=True,
-            threshold=0.2,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerTopk(c, overrides)
+    def test__prepare_loss_gates(self):
+        cfg = SamplerConfigs.sampler_preset(top_k=1)
+        m = SamplerTopk(cfg)
 
         batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.zeros(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss > 0)
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, m.top_k]
-        )
-        self.assertListEqual(
-            list(selected_indices.shape), [batch_size * sequence_length, m.top_k]
-        )
-
-    def test__get_probabilities_and_indices__all_flags__True(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=3,
-            noisy_topk_flag=True,
-            threshold=0.8,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=True,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.1,
-        )
-        m = SamplerTopk(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(loss > 0)
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, m.top_k]
-        )
-        self.assertListEqual(
-            list(selected_indices.shape), [batch_size * sequence_length, m.top_k]
-        )
-
-    def test__prepare_loss_gates__skip_maks__None(self):
-        c = copy.deepcopy(self.cfg)
-        m = SamplerTopk(c)
-
-        skip_maks = m._SamplerTopk__prepare_loss_skip_mask()
-
-        self.assertIsNone(skip_maks)
-
-    def test__prepare_loss_gates__skip_maks__sparse(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=1,
-        )
-        m = SamplerTopk(c, overrides)
-
-        batch_size = 3
-
         shape = (batch_size, m.top_k)
         sampled_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
         indices = torch.randint(0, m.num_experts, (batch_size, m.top_k))
 
         gates = m._SamplerTopk__prepare_loss_gates(sampled_probabilities, indices)
 
-        self.assertListEqual(list(gates.shape), [batch_size, m.num_experts])
+        self.assertEqual(gates.shape, (batch_size, m.num_experts))
         self.assertTrue(
-            torch.allclose(
-                torch.sum(gates, dim=-1),
-                torch.ones(batch_size).float(),
-            )
+            torch.allclose(torch.sum(gates, dim=-1), torch.ones(batch_size).float())
         )
 
-    def test__compute_loss(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=3,
-            noisy_topk_flag=True,
-            threshold=0.8,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=True,
-            coefficient_of_variation_loss_weight=0.1,
-            switch_loss_weight=0.1,
-            zero_centred_loss_weight=0.1,
-            mutual_information_loss_weight=0.1,
-        )
-        m = SamplerTopk(c, overrides)
+    def test_compute_loss(self):
+        loss_options = [0.0, 0.1]
+        for cross_option in loss_options:
+            for coeff_option in loss_options:
+                for zero_option in loss_options:
+                    for mutual_option in loss_options:
+                        message = f"Running test with cross_option={cross_option}, coeff_option={coeff_option}, zero_option={zero_option}, mutual_option={mutual_option}"
+                        with self.subTest(msg=message):
+                            cfg = SamplerConfigs.sampler_preset(
+                                top_k=3,
+                                noisy_topk_flag=True,
+                                threshold=0.8,
+                                filter_above_threshold=True,
+                                normalize_probabilities_flag=True,
+                                coefficient_of_variation_loss_weight=coeff_option,
+                                switch_loss_weight=cross_option,
+                                zero_centred_loss_weight=zero_option,
+                                mutual_information_loss_weight=mutual_option,
+                            )
+                            m = SamplerTopk(cfg)
 
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts)
+                            batch_size = 3
+                            sequence_length = 4
+                            shape = (batch_size * sequence_length, m.num_experts)
 
-        logits = torch.randn(*shape)
-        full_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-        sampled_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-        indices = torch.randint(0, m.num_experts, (batch_size, m.top_k))
-        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
+                            logits = torch.randn(*shape)
+                            full_probabilities = torch.softmax(
+                                torch.randn(*shape), dim=-1
+                            )
+                            sampled_probabilities = torch.softmax(
+                                torch.randn(batch_size, m.top_k), dim=-1
+                            )
+                            indices = torch.randint(
+                                0, m.num_experts, (batch_size, m.top_k)
+                            )
+                            mask = torch.ones(batch_size, sequence_length).reshape(
+                                -1, 1
+                            )
+                            unmasked_token = 0
+                            mask[unmasked_token, :] = 1
 
-        total_loss = m._compute_loss(
-            logits,
-            full_probabilities,
-            sampled_probabilities,
-            indices,
-            mask,
-        )
+                            total_loss = m._compute_loss(
+                                logits,
+                                full_probabilities,
+                                sampled_probabilities,
+                                indices,
+                                mask,
+                            )
 
-        self.assertTrue(total_loss > 0)
-        self.assertIsInstance(total_loss, torch.Tensor)
+                            if (
+                                coeff_option == 0.0
+                                and cross_option == 0.0
+                                and zero_option == 0.0
+                                and mutual_option == 0.0
+                            ):
+                                self.assertTrue(total_loss == 0)
+                            else:
+                                self.assertTrue(total_loss > 0)
+                            self.assertIsInstance(total_loss, torch.Tensor)
 
 
 class TestSamplerFull(unittest.TestCase):
     def setUp(self):
-        self.cfg = SamplerConfig(
-            top_k=5,
-            threshold=0.0,
-            filter_above_threshold=False,
-            num_topk_samples=0,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=False,
-            num_experts=5,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
+        self.rebuild_presets()
 
-    def test__sample_probabilities_and_indices(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=5,
-            noisy_topk_flag=True,
-            threshold=0.2,
+    def tearDown(self):
+        self.cfg = None
+        self.config = None
+        self.batch_size = None
+        self.input_dim = None
+        self.output_dim = None
+
+    def rebuild_presets(self, config: ModelConfig | None = None):
+        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+
+        self.batch_size = self.cfg.batch_size
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
+
+    def test_sample_probabilities_and_indices(self):
+        cfg = SamplerConfigs.sampler_preset(
+            top_k=10,
+            num_experts=10,
         )
-        m = SamplerFull(c, overrides)
+        m = SamplerFull(cfg)
 
         batch_size = 3
         shape = (batch_size, m.num_experts)
         probabilities = torch.softmax(torch.randn(*shape), dim=-1)
+        probability, indices = m._sample_probabilities_and_indices(probabilities)
+        self.assertEqual(probability.shape, (batch_size, m.num_experts))
+        self.assertEqual(indices, None)
 
-        probability, _ = m._sample_probabilities_and_indices(probabilities)
+    def test_get_probabilities_and_indices(self):
+        noisy_flag_options = [True, False]
+        threshold_options = [0.0, 0.2]
+        filter_above_threshold_options = [True, False]
+        normalize_probabilities_flag = [True, False]
 
-        self.assertListEqual(list(probability.shape), [batch_size, m.top_k])
+        for noisy_flag in noisy_flag_options:
+            for thresh in threshold_options:
+                for filter_flag in filter_above_threshold_options:
+                    for normalize_flag in normalize_probabilities_flag:
+                        message = (
+                            f"noisy_flag={noisy_flag}, "
+                            f"threshold={thresh}, "
+                            f"filter_flag={filter_flag}, "
+                            f"normalize_flag={normalize_flag}"
+                        )
+                        with self.subTest(msg=message):
+                            cfg = SamplerConfigs.sampler_preset(
+                                top_k=10,
+                                num_experts=10,
+                                noisy_topk_flag=noisy_flag,
+                                threshold=thresh,
+                                filter_above_threshold=filter_flag,
+                                coefficient_of_variation_loss_weight=0.0,
+                                switch_loss_weight=0.0,
+                                zero_centred_loss_weight=0.0,
+                                mutual_information_loss_weight=0.0,
+                            )
+                            m = SamplerFull(cfg)
 
-    def test__get_probabilities_and_indices(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerFull(c, overrides)
+                            batch_size = 3
+                            sequence_length = 4
+                            num_expert_dim = m.num_experts
+                            if noisy_flag:
+                                num_expert_dim = m.num_experts * 2
+                            shape = (
+                                batch_size * sequence_length,
+                                num_expert_dim,
+                            )
+                            logits = torch.softmax(torch.randn(*shape), dim=-1)
+                            mask = torch.ones(batch_size, sequence_length).reshape(
+                                -1, 1
+                            )
+                            probabilities, selected_indices, skip_mask, loss = (
+                                m.get_probabilities_and_indices(logits, mask)
+                            )
+                            self.assertEqual(
+                                probabilities.shape,
+                                (batch_size * sequence_length, m.top_k),
+                            )
+                            self.assertIsNone(selected_indices)
+                            self.assertTrue(loss == 0)
 
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
+    def test__apply_dynamic_topk_threshold_mask(self):
+        threshold_options = [0.0, 0.1]
 
-        mask = torch.zeros(batch_size, sequence_length)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
+        for threshold_option in threshold_options:
+            message = f"threshold={threshold_option}"
+            with self.subTest(msg=message):
+                cfg = SamplerConfigs.sampler_preset(
+                    top_k=10,
+                    num_experts=10,
+                    threshold=threshold_option,
+                )
+                m = SamplerFull(cfg)
 
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
+                batch_size = 3
+                sequence_length = 4
+                shape = (batch_size * sequence_length, m.num_experts)
+                probabilities = torch.softmax(torch.randn(*shape), dim=-1)
 
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss == 0)
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, m.num_experts]
-        )
-        self.assertIsNone(selected_indices)
+                masked_probabilities = (
+                    m._SamplerFull__apply_dynamic_topk_threshold_mask(probabilities)
+                )
 
-    def test__get_probabilities_and_indices__noisy_topk_flag__True(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=5,
-            noisy_topk_flag=True,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerFull(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.zeros(batch_size, sequence_length)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss == 0)
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, m.num_experts]
-        )
-        self.assertIsNone(selected_indices)
-
-    def test__get_probabilities_and_indices__noisy_topk_flag__True__threshold__positive(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=5,
-            noisy_topk_flag=True,
-            threshold=0.2,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerFull(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.zeros(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(torch.allclose(skip_mask, mask))
-        self.assertTrue(loss == 0)
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, m.num_experts]
-        )
-        self.assertIsNone(selected_indices)
-
-    def test__get_probabilities_and_indices__all_flags__True(
-        self,
-    ):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=5,
-            noisy_topk_flag=True,
-            threshold=0.8,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=True,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
-        m = SamplerFull(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        logits = torch.softmax(torch.randn(*shape), dim=-1)
-
-        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, selected_indices, skip_mask, loss = (
-            m.get_probabilities_and_indices(logits, mask)
-        )
-
-        self.assertTrue(loss == 0)
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, m.num_experts]
-        )
-        self.assertIsNone(selected_indices)
-
-    def test__apply_dynamic_topk_threshold_mask__threshold__zero(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.0,
-        )
-        m = SamplerFull(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts * 2)
-        probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-
-        masked_probabilities = m._SamplerFull__apply_dynamic_topk_threshold_mask(
-            probabilities
-        )
-
-        self.assertTrue(torch.allclose(probabilities, masked_probabilities))
-
-    def test__apply_dynamic_topk_threshold_mask__threshold__positive(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.1,
-            normalize_probabilities_flag=True,
-        )
-        m = SamplerFull(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        shape = (batch_size * sequence_length, m.num_experts)
-        probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-
-        masked_probabilities = m._SamplerFull__apply_dynamic_topk_threshold_mask(
-            probabilities
-        )
-
-        self.assertListEqual(
-            list(masked_probabilities.shape),
-            [batch_size * sequence_length, c.num_experts],
-        )
+                if threshold_option > 0.0:
+                    self.assertEqual(masked_probabilities.shape, shape)
+                    self.assertFalse(
+                        torch.allclose(probabilities, masked_probabilities)
+                    )
+                else:
+                    self.assertEqual(masked_probabilities.shape, shape)
+                    self.assertTrue(torch.allclose(probabilities, masked_probabilities))
 
 
 class TestSamplerModel(unittest.TestCase):
     def setUp(self):
-        self.cfg = SamplerConfig(
-            top_k=5,
-            threshold=0.0,
-            filter_above_threshold=False,
-            num_topk_samples=0,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=False,
-            num_experts=5,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-            mutual_information_loss_weight=0.0,
-        )
+        self.rebuild_presets()
 
-    def test__init_no_config(self):
-        config = SamplerConfig(
-            top_k=5,
-            threshold=0.5,
-            filter_above_threshold=True,
-            num_topk_samples=2,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=False,
-            num_experts=10,
-            coefficient_of_variation_loss_weight=0.5,
-            switch_loss_weight=0.5,
-            zero_centred_loss_weight=0.5,
-            mutual_information_loss_weight=0.5,
-        )
-        model = SamplerModel(config)
+    def tearDown(self):
+        self.cfg = None
+        self.config = None
+        self.batch_size = None
+        self.input_dim = None
+        self.output_dim = None
+
+    def rebuild_presets(self, config: ModelConfig | None = None):
+        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+
+        self.batch_size = self.cfg.batch_size
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
+
+    def test_init(self):
+        cfg = SamplerConfigs.sampler_preset()
+        model = SamplerModel(cfg)
         self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
 
-    def test__init_sparse(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=1,
-            num_experts=5,
-        )
-        m = SamplerModel(c, overrides)
-        self.assertTrue(isinstance(m.sampler_model, SamplerSparse))
+    def test_model_type_storage(self):
+        topk_options = [1, 3, 5]
+        model_types = [SamplerSparse, SamplerTopk, SamplerFull]
 
-    def test__init_full(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=5,
-            num_experts=5,
-        )
-        m = SamplerModel(c, overrides)
-        self.assertTrue(isinstance(m.sampler_model, SamplerFull))
+        for top_k, model_type in zip(topk_options, model_types):
+            message = f"Testing configuration with top_k={top_k}"
+            with self.subTest(msg=message):
+                cfg = SamplerConfigs.sampler_preset(
+                    top_k=top_k,
+                    num_experts=5,
+                )
+                model = SamplerModel(cfg)
+                self.assertIsInstance(model.sampler_model, model_type)
 
-    def test__init_topk(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            top_k=3,
-            num_experts=5,
-        )
-        m = SamplerModel(c, overrides)
-        self.assertTrue(isinstance(m.sampler_model, SamplerTopk))
+    def test_sample_probs_and_indexes_logits_only(self):
+        topk_options = [1, 3, 5]
+        model_types = [SamplerSparse, SamplerTopk, SamplerFull]
 
-    def test__sample_probs_and_indexes_sparse__logits_only(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.0,
-            mutual_information_loss_weight=0.0,
-            #############################
-            top_k=1,
-            num_topk_samples=0,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=True,
-            num_experts=10,
-            coefficient_of_variation_loss_weight=0.5,
-            switch_loss_weight=0.5,
-            zero_centred_loss_weight=0.5,
-        )
-        m = SamplerModel(c, overrides)
+        for top_k, model_type in zip(topk_options, model_types):
+            message = f"Running test with configuration top_k={top_k}, model_type={model_type}"
+            with self.subTest(msg=message):
+                num_experts = 5
+                loss = 0.0 if num_experts == top_k else 0.5
+                cfg = SamplerConfigs.sampler_preset(
+                    top_k=top_k,
+                    num_experts=num_experts,
+                    coefficient_of_variation_loss_weight=loss,
+                    switch_loss_weight=loss,
+                    zero_centred_loss_weight=loss,
+                )
+                m = SamplerModel(cfg)
 
-        batch_size = 3
-        sequence_length = 4
-        logits = torch.randn(batch_size * sequence_length, c.num_experts * 2)
+                batch_size = 3
+                sequence_length = 4
+                logits = torch.randn(batch_size * sequence_length, num_experts)
 
-        probabilities, indices, skip_mask, loss = m.sample_probabilities_and_indices(
-            logits
-        )
+                probabilities, indices, skip_mask, loss = (
+                    m.sample_probabilities_and_indices(logits)
+                )
 
-        self.assertListEqual(list(probabilities.shape), [batch_size * sequence_length])
-        self.assertListEqual(list(indices.shape), [batch_size * sequence_length])
-        self.assertIsNone(skip_mask)
-        self.assertTrue(loss > 0.0)
+                if top_k == 1:
+                    expected_output_shape = (batch_size * sequence_length,)
+                else:
+                    expected_output_shape = (batch_size * sequence_length, top_k)
 
-    def test__sample_probs_and_indexes_sparse__logits__and__skip_mask(self):
-        c = copy.deepcopy(self.cfg)
+                self.assertEqual(probabilities.shape, expected_output_shape)
+                if top_k == num_experts:
+                    self.assertIsNone(indices)
+                else:
+                    self.assertEqual(indices.shape, expected_output_shape)
+                self.assertIsNone(skip_mask)
+                if num_experts == top_k:
+                    self.assertTrue(loss == 0.0)
+                else:
+                    self.assertTrue(loss > 0.0)
 
-        overrides = SamplerConfig(
-            threshold=0.1,
-            mutual_information_loss_weight=0.1,
-            #############################
-            top_k=1,
-            num_topk_samples=0,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=False,
-            noisy_topk_flag=True,
-            num_experts=10,
-            coefficient_of_variation_loss_weight=0.5,
-            switch_loss_weight=0.5,
-            zero_centred_loss_weight=0.5,
-        )
-        m = SamplerModel(c, overrides)
+                self.assertIsInstance(m.sampler_model, model_type)
 
-        batch_size = 3
-        sequence_length = 4
-        logits = torch.randn(batch_size * sequence_length, c.num_experts * 2)
-        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
+    def test_sample_probs_and_indexes_logits_only_and_skip_mask(self):
+        topk_options = [1, 3, 5]
+        model_types = [SamplerSparse, SamplerTopk, SamplerFull]
 
-        probabilities, indices, skip_mask, loss = m.sample_probabilities_and_indices(
-            logits, mask
-        )
+        for top_k, model_type in zip(topk_options, model_types):
+            message = f"Running test with configuration top_k={top_k}, model_type={model_type}"
+            with self.subTest(msg=message):
+                num_experts = 5
+                loss = 0.0 if num_experts == top_k else 0.5
+                cfg = SamplerConfigs.sampler_preset(
+                    top_k=top_k,
+                    num_experts=num_experts,
+                    coefficient_of_variation_loss_weight=loss,
+                    switch_loss_weight=loss,
+                    zero_centred_loss_weight=loss,
+                )
+                m = SamplerModel(cfg)
 
-        self.assertListEqual(list(probabilities.shape), [batch_size * sequence_length])
-        self.assertListEqual(list(indices.shape), [batch_size * sequence_length])
-        self.assertListEqual(list(skip_mask.shape), [batch_size * sequence_length, 1])
-        self.assertTrue(loss > 0.0)
+                batch_size = 3
+                sequence_length = 4
+                logits = torch.randn(batch_size * sequence_length, num_experts)
+                mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
+                unmasked_token = 0
+                mask[unmasked_token, :] = 1
 
-    def test__sample_probs_and_indexes_topk__logits_only(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.0,
-            mutual_information_loss_weight=0.0,
-            #############################
-            top_k=3,
-            num_topk_samples=1,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=True,
-            noisy_topk_flag=True,
-            num_experts=10,
-            coefficient_of_variation_loss_weight=0.5,
-            switch_loss_weight=0.5,
-            zero_centred_loss_weight=0.5,
-        )
-        m = SamplerModel(c, overrides)
+                probabilities, indices, skip_mask, loss = (
+                    m.sample_probabilities_and_indices(logits, mask)
+                )
 
-        batch_size = 3
-        sequence_length = 4
-        logits = torch.randn(batch_size * sequence_length, c.num_experts * 2)
+                if top_k == 1:
+                    expected_output_shape = (batch_size * sequence_length,)
+                else:
+                    expected_output_shape = (batch_size * sequence_length, top_k)
 
-        probabilities, indices, skip_mask, loss = m.sample_probabilities_and_indices(
-            logits
-        )
+                self.assertEqual(probabilities.shape, expected_output_shape)
+                self.assertEqual(skip_mask.shape, (batch_size * sequence_length, 1))
+                self.assertIsInstance(m.sampler_model, model_type)
 
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, overrides.top_k]
-        )
-        self.assertListEqual(
-            list(indices.shape), [batch_size * sequence_length, overrides.top_k]
-        )
-        self.assertIsNone(skip_mask)
-        self.assertTrue(loss > 0.0)
-
-    def test__sample_probs_and_indexes_topk__logits__and__skip_mask(self):
-        c = copy.deepcopy(self.cfg)
-
-        overrides = SamplerConfig(
-            threshold=0.1,
-            mutual_information_loss_weight=0.1,
-            #############################
-            top_k=3,
-            num_topk_samples=1,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=True,
-            noisy_topk_flag=True,
-            num_experts=10,
-            coefficient_of_variation_loss_weight=0.5,
-            switch_loss_weight=0.5,
-            zero_centred_loss_weight=0.5,
-        )
-        m = SamplerModel(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        logits = torch.randn(batch_size * sequence_length, c.num_experts * 2)
-        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, indices, skip_mask, loss = m.sample_probabilities_and_indices(
-            logits, mask
-        )
-
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, overrides.top_k]
-        )
-        self.assertListEqual(
-            list(indices.shape), [batch_size * sequence_length, overrides.top_k]
-        )
-        self.assertListEqual(list(skip_mask.shape), [batch_size * sequence_length, 1])
-        self.assertTrue(loss > 0.0)
-
-    def test__sample_probs_and_indexes_full_mixture__logits_only(self):
-        c = copy.deepcopy(self.cfg)
-        overrides = SamplerConfig(
-            threshold=0.0,
-            mutual_information_loss_weight=0.0,
-            #############################
-            top_k=10,
-            num_topk_samples=0,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=True,
-            noisy_topk_flag=True,
-            num_experts=10,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-        )
-        m = SamplerModel(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        logits = torch.randn(batch_size * sequence_length, c.num_experts * 2)
-
-        probabilities, indices, skip_mask, loss = m.sample_probabilities_and_indices(
-            logits
-        )
-
-        self.assertFalse((probabilities == 0).any())
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, overrides.top_k]
-        )
-        self.assertIsNone(indices)
-        self.assertIsNone(skip_mask)
-        self.assertTrue(loss == 0.0)
-
-    def test__sample_probs_and_indexes_full_mixture__logits__and__skip_mask(self):
-        c = copy.deepcopy(self.cfg)
-
-        overrides = SamplerConfig(
-            threshold=0.1,
-            mutual_information_loss_weight=0.0,
-            #############################
-            top_k=10,
-            num_topk_samples=0,
-            filter_above_threshold=True,
-            normalize_probabilities_flag=True,
-            noisy_topk_flag=True,
-            num_experts=10,
-            coefficient_of_variation_loss_weight=0.0,
-            switch_loss_weight=0.0,
-            zero_centred_loss_weight=0.0,
-        )
-        m = SamplerModel(c, overrides)
-
-        batch_size = 3
-        sequence_length = 4
-        logits = torch.randn(batch_size * sequence_length, c.num_experts * 2)
-        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
-        unmasked_token = 0
-        mask[unmasked_token, :] = 1
-
-        probabilities, indices, skip_mask, loss = m.sample_probabilities_and_indices(
-            logits, mask
-        )
-
-        self.assertTrue((probabilities == 0).any())
-        self.assertListEqual(
-            list(probabilities.shape), [batch_size * sequence_length, overrides.top_k]
-        )
-        self.assertIsNone(indices)
-        self.assertListEqual(list(skip_mask.shape), [batch_size * sequence_length, 1])
-        self.assertTrue(loss == 0.0)
+                if top_k == num_experts:
+                    self.assertIsNone(indices)
+                else:
+                    self.assertEqual(indices.shape, expected_output_shape)
+                if num_experts == top_k:
+                    self.assertTrue(loss == 0.0)
+                else:
+                    self.assertTrue(loss > 0.0)

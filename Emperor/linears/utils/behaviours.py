@@ -96,16 +96,6 @@ class DynamicParametersBehaviour(Module):
         outer_product: Tensor,
     ) -> Tensor:
         # TODO: Add flag to normalize the the input before or after the outer product
-        # TODO: Temporary nomralization just to check what's happening
-        # match norm_option:
-        #     case OuterProductNormOptions.RELU:
-        #         return F.relu(outer_product)
-        #     case OuterProductNormOptions.TANH:
-        #         return F.tanh(outer_product)
-        #     case OuterProductNormOptions.SIGMOID:
-        #         return F.sigmoid(outer_product)
-        #     case _:
-        #         return outer_product
         return torch.clamp(outer_product, -5.0, 5.0)
 
 

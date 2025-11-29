@@ -17,7 +17,7 @@ from Emperor.generators.utils.enums import (
 )
 from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
 from Emperor.generators.utils.mixture import MixtureConfig
-from Emperor.generators.utils.samplers import SamplerConfig
+from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig
 from Emperor.neuron.neuron import (
     AxonsConfig,

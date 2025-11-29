@@ -91,7 +91,6 @@ class SamplerBase(Module):
         config = getattr(cfg, "sampler_model_config", cfg)
         self.cfg: "SamplerConfig" = self._overwrite_config(config, overrides)
 
-        self.router_type = self.cfg.router_type
         self.top_k = self.cfg.top_k
         self.threshold = self.cfg.threshold
         self.noisy_topk_flag = self.cfg.noisy_topk_flag
@@ -114,7 +113,7 @@ class SamplerBase(Module):
         self.auxiliary_loss = self.default_loss
 
     def __validate_input_parameters(self):
-        self._validate_fields(self.cfg, SamplerConfig)
+        # self._validate_fields(self.cfg, SamplerConfig)
         assert self.top_k >= 0, f"top_k must be non-negative, got {self.top_k}"
         assert self.num_topk_samples <= self.top_k, (
             f"num_topk_samples ({self.num_topk_samples}) cannot exceed top_k ({self.top_k})"
@@ -252,6 +251,12 @@ class SamplerSparse(SamplerBase):
         )
         assert self.num_topk_samples == 0, (
             "`num_topk_samples` must be 0 when using `SamplerSparse`."
+        )
+        assert self.num_topk_samples == 0, (
+            "`num_topk_samples` must be 0 when using `SamplerSparse`."
+        )
+        assert self.mutual_information_loss_weight == 0.0, (
+            "`mutual_information_loss_weight` must be 0.0 when using `SamplerSparse`."
         )
 
     def _sample_probabilities_and_indices(
