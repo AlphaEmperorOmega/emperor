@@ -10,6 +10,7 @@ from Emperor.base.utils import ConfigBase, Module
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.linears.options import LinearLayerOptions
@@ -418,20 +419,21 @@ class LayerStack(Module):
     def __resolve_layer_block_class(self) -> type[Layer]:
         # TODO: move this somewhere else in the future since it is used in
         # `MixtureOfExperts` as well
-        from Emperor.generators.utils.enums import (
-            LinearLayerTypes,
-            ParameterGeneratorTypes,
-        )
+        # from Emperor.generators.utils.enums import (
+        #     LinearLayerTypes,
+        #     ParameterGeneratorTypes,
+        # )
         from Emperor.linears.options import LinearLayerOptions
+        from Emperor.generators.options import ParameterGeneratorOptions
 
         if (
-            isinstance(self.model_type, LinearLayerTypes)
+            isinstance(self.model_type, LinearLayerOptions)
             or isinstance(self.model_type, LinearLayerOptions)
             or self.model_type == Linear
             or isinstance(self.model_type, BaseOptions)
         ):
             return Layer
-        elif isinstance(self.model_type, ParameterGeneratorTypes):
+        elif isinstance(self.model_type, ParameterGeneratorOptions):
             return ParameterGeneratorLayer
         else:
             raise RuntimeError(
@@ -507,7 +509,7 @@ class LayerStack(Module):
         return c
         # linears = (
         #     "LinearLayer",
-        #     "DynamicLinearLayer",
+        #     "AdaptiveLinearLayer",
         #     "DepthMappingLayer",
         # )
         # if self.__get_model_type().__name__ in linears:

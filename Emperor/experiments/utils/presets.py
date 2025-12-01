@@ -8,8 +8,8 @@ from Emperor.config import BIAS_PARAMETER_FLAG
 from Emperor.generators.utils.layers import ParameterLayerConfig
 from Emperor.generators.utils.mixture import MixtureConfig
 from Emperor.generators.utils.routers import RouterConfig
-from Emperor.generators.utils.samplers import SamplerConfig
-from Emperor.linears.utils.layers import LinearLayerConfig, DynamicLinearLayerConfig
+from Emperor.sampler.utils.samplers import SamplerConfig
+from Emperor.linears.utils.layers import LinearLayerConfig, AdaptiveLinearLayerConfig
 
 from typing import TYPE_CHECKING
 

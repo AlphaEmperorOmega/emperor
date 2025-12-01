@@ -3,7 +3,7 @@ from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.sampler.utils.routers import RouterConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.linears.utils.layers import DynamicLinearLayerConfig
+from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.linears.utils.enums import (
     DynamicBiasOptions,
@@ -54,7 +54,7 @@ class SamplerConfigs:
                     residual_flag=residual_flag,
                     adaptive_computation_flag=False,
                     dropout_probability=dropout_probability,
-                    override_config=DynamicLinearLayerConfig(
+                    override_config=AdaptiveLinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=hidden_dim,
                         bias_flag=bias_flag,
@@ -77,7 +77,7 @@ class SamplerConfigs:
                             residual_flag=residual_flag,
                             adaptive_computation_flag=False,
                             dropout_probability=dropout_probability,
-                            override_config=DynamicLinearLayerConfig(
+                            override_config=AdaptiveLinearLayerConfig(
                                 input_dim=input_dim,
                                 output_dim=hidden_dim,
                                 bias_flag=bias_flag,
@@ -151,7 +151,7 @@ class SamplerConfigs:
                     residual_flag=residual_flag,
                     adaptive_computation_flag=False,
                     dropout_probability=dropout_probability,
-                    override_config=DynamicLinearLayerConfig(
+                    override_config=AdaptiveLinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=hidden_dim,
                         bias_flag=bias_flag,
@@ -174,7 +174,7 @@ class SamplerConfigs:
                             residual_flag=residual_flag,
                             adaptive_computation_flag=False,
                             dropout_probability=dropout_probability,
-                            override_config=DynamicLinearLayerConfig(
+                            override_config=AdaptiveLinearLayerConfig(
                                 input_dim=input_dim,
                                 output_dim=hidden_dim,
                                 bias_flag=bias_flag,

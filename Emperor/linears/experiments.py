@@ -10,8 +10,6 @@ from Emperor.linears.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-# from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
-# from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
 
 from typing import TYPE_CHECKING
 

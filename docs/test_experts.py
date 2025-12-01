@@ -245,7 +245,7 @@ class TestMixtureOfExperts(unittest.TestCase):
             if expert.model.bias_params is not None:
                 self.assertEqual(bias_dim, config.output_dim)
 
-    def test__create_experts_with_different_dimensions__DynamicLinearLayer(
+    def test__create_experts_with_different_dimensions__AdaptiveLinearLayer(
         self,
     ):
         c = copy.deepcopy(self.cfg)
@@ -360,7 +360,7 @@ class TestMixtureOfExperts(unittest.TestCase):
             )
             self.assertEqual(loss.item(), 0.0)
 
-    def test__forward__DynamicLinearLayer(self):
+    def test__forward__AdaptiveLinearLayer(self):
         c = copy.deepcopy(self.cfg)
         c.input_moe_layer_config.model_type = LinearLayerTypes.DYNAMIC
         config = c.input_moe_layer_config
@@ -815,7 +815,7 @@ class TestMixtureOfExpertsFeedForward(unittest.TestCase):
         self.assertIsNone(skip_mask)
         self.assertTrue(loss > 0.0)
 
-    def test__forward__DynamicLinearLayer(self):
+    def test__forward__AdaptiveLinearLayer(self):
         c = copy.deepcopy(self.cfg)
         c.input_moe_layer_config.model_type = LinearLayerTypes.DYNAMIC
         m = MixtureOfExpertsFeedForward(c)

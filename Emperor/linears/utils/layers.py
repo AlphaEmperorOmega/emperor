@@ -60,8 +60,8 @@ class LinearLayerConfig(ConfigBase):
 class LinearBase(Module):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig | LinearLayerConfig | ModelConfig",
-        overrides: "DynamicLinearLayerConfig | LinearLayerConfig | None" = None,
+        cfg: "AdaptiveLinearLayerConfig | LinearLayerConfig | ModelConfig",
+        overrides: "AdaptiveLinearLayerConfig | LinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
@@ -116,7 +116,7 @@ class LinearLayer(LinearBase):
 
 
 @dataclass
-class DynamicLinearLayerConfig(LinearLayerConfig):
+class AdaptiveLinearLayerConfig(LinearLayerConfig):
     generator_depth: DynamicDepthOptions | None = field(
         default=None,
         metadata={
@@ -155,11 +155,11 @@ class DynamicLinearLayerConfig(LinearLayerConfig):
     )
 
 
-class DynamicLinearLayer(LinearBase):
+class AdaptiveLinearLayer(LinearBase):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig | ModelConfig",
-        overrides: "DynamicLinearLayerConfig | None" = None,
+        cfg: "AdaptiveLinearLayerConfig | ModelConfig",
+        overrides: "AdaptiveLinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.weight_params, self.bias_params = self._init_parameters()
@@ -168,9 +168,9 @@ class DynamicLinearLayer(LinearBase):
     def forward(self, input: Tensor) -> Tensor:
         output = self.parameter_manager.compute_dynamic_parameters(
             self.compute_dynamic_afine_transformation,
-            input,
             self.weight_params,
             self.bias_params,
+            input,
         )
         return output
 
@@ -202,12 +202,13 @@ class DynamicLinearLayer(LinearBase):
 class DynamicParameterManager(Module):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "AdaptiveLinearLayerConfig",
     ):
         super().__init__()
         self.cfg = cfg
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
+        self.bias_flag = self.cfg.bias_flag
         self.generator_depth = self.cfg.generator_depth
         self.diagonal_option = self.cfg.diagonal_option
         self.memory_option = self.cfg.memory_option
@@ -238,22 +239,22 @@ class DynamicParameterManager(Module):
 
     def __init_model(self, is_valid_flag: bool, model_class: object) -> object | None:
         if is_valid_flag:
-            overrides = DynamicLinearLayerConfig(
+            overrides = AdaptiveLinearLayerConfig(
                 input_dim=self.input_dim, output_dim=self.output_dim
             )
-            return model_class(self.main_cfg, overrides)
+            return model_class(self.cfg, overrides)
         return None
 
     def compute_dynamic_parameters(
         self,
         affine_transform_callback: Callable,
-        input: Tensor,
         weight_params: Tensor,
         bias_params: Tensor | None,
+        input: Tensor,
     ) -> Tensor:
         input = self.__apply_memory(input, LinearMemoryPositionOptions.BEFORE_AFFINE)
         weights, bias = self.__update_parameters(weight_params, bias_params, input)
-        output = affine_transform_callback(input, weights, bias)
+        output = affine_transform_callback(weights, bias, input)
         output = self.__apply_memory(output, LinearMemoryPositionOptions.AFTER_AFFINE)
         return output
 

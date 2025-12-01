@@ -13,7 +13,7 @@ from Emperor.linears.utils.enums import (
     LinearMemorySizeOptions,
 )
 from Emperor.linears.utils.layers import (
-    DynamicLinearLayer,
+    AdaptiveLinearLayer,
     LinearLayer,
     LinearLayerConfig,
 )
@@ -84,7 +84,7 @@ class TestLinearLayer(TestLinears):
                         self.assertEqual(output.shape, expected_output_shape)
 
 
-class TestDynamicLinearLayer(TestLinears):
+class TestAdaptiveLinearLayer(TestLinears):
     def test_init_with_different_configation_options(self):
         bias_options = [True, False]
 
@@ -101,7 +101,7 @@ class TestDynamicLinearLayer(TestLinears):
                                 bias_option=bias_option,
                             )
                             cfg = cfg.linear_layer_config
-                            m = DynamicLinearLayer(cfg)
+                            m = AdaptiveLinearLayer(cfg)
 
                             self.assertEqual(m.input_dim, cfg.input_dim)
                             self.assertEqual(m.output_dim, cfg.output_dim)
@@ -148,9 +148,9 @@ class TestDynamicLinearLayer(TestLinears):
                                                     == LinearMemorySizeOptions.DISABLED
                                                 ):
                                                     with self.assertRaises(ValueError):
-                                                        m = DynamicLinearLayer(cfg)
+                                                        m = AdaptiveLinearLayer(cfg)
                                                 else:
-                                                    m = DynamicLinearLayer(cfg)
+                                                    m = AdaptiveLinearLayer(cfg)
                                                     input_batch = torch.randn(
                                                         batch_size, input_dim
                                                     )

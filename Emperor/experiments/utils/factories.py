@@ -54,7 +54,7 @@ class ModelFactory(Enum):
 #     def get_layers_and_assigned_presets(self):
 #         return {
 #             # LinearLayer: self.__get_linear_presets(),
-#             # DynamicLinearLayer: self.__get_dynamic_diagonal_presets(),
+#             # AdaptiveLinearLayer: self.__get_dynamic_diagonal_presets(),
 #             # VectorParameterLayer: self.__get_vector_presets(),
 #             # MatrixParameterLayer: self.__get_matrix_presets(),
 #             # GeneratorParameterLayer: self.__get_generator_presets(),

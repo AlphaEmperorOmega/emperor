@@ -1,10 +1,10 @@
 from Emperor.base.enums import BaseOptions
 from Emperor.linears.utils.layers import (
-    DynamicLinearLayer,
+    AdaptiveLinearLayer,
     LinearLayer,
 )
 
 
 class LinearLayerOptions(BaseOptions):
     BASE = LinearLayer
-    DYNAMIC = DynamicLinearLayer
+    DYNAMIC = AdaptiveLinearLayer

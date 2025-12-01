@@ -14,7 +14,7 @@ from Emperor.generators.utils.layers import ParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.generators.options import ParameterGeneratorOptions
-from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
+from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig, LinearLayerConfig
 from Emperor.generators.utils.mixture import MixtureConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig
@@ -153,7 +153,7 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
-    linear_layer_config: LinearLayerConfig | DynamicLinearLayerConfig = field(
+    linear_layer_config: LinearLayerConfig | AdaptiveLinearLayerConfig = field(
         default_factory=lambda: LinearLayerConfig(
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM,

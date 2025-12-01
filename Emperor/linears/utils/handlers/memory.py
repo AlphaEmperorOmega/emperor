@@ -13,13 +13,13 @@ from Emperor.linears.utils.enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.linears.utils.layers import DynamicLinearLayerConfig
+    from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig
 
 
 class MemoryHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "AdaptiveLinearLayerConfig",
     ):
         super().__init__()
         self.cfg_main = cfg
@@ -45,7 +45,7 @@ class MemoryHandlerAbstract(Module):
 class MemoryFusionHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "AdaptiveLinearLayerConfig",
     ):
         super().__init__(cfg)
         self.memory_model = self.__init_memory_model()
@@ -77,7 +77,7 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
 class WeightedMemoryHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig",
+        cfg: "AdaptiveLinearLayerConfig",
     ):
         super().__init__(cfg)
 
