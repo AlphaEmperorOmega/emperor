@@ -202,10 +202,12 @@ class DynamicLinearLayer(LinearBase):
 class DynamicParameterManager(Module):
     def __init__(
         self,
-        cfg: "DynamicLinearLayerConfig | ModelConfig",
-        overrides: "DynamicLinearLayerConfig | None" = None,
+        cfg: "DynamicLinearLayerConfig",
     ):
         super().__init__()
+        self.cfg = cfg
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
         self.generator_depth = self.cfg.generator_depth
         self.diagonal_option = self.cfg.diagonal_option
         self.memory_option = self.cfg.memory_option
@@ -265,11 +267,11 @@ class DynamicParameterManager(Module):
         return input
 
     def __update_parameters(
-        self, weights: Tensor, bias: Tensor | None, input_batch: Tensor
+        self, weights: Tensor, bias: Tensor | None, input: Tensor
     ) -> tuple[Tensor, Tensor | None]:
-        weights = self.__call_model(self.generator_model, weights, input_batch)
-        weights = self.__call_model(self.diagonal_model, weights, input_batch)
-        bias = self.__call_model(self.bias_model, bias, input_batch)
+        weights = self.__call_model(self.generator_model, weights, input)
+        weights = self.__call_model(self.diagonal_model, weights, input)
+        bias = self.__call_model(self.bias_model, bias, input)
         return weights, bias
 
     def __call_model(
