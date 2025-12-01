@@ -1,15 +1,9 @@
-import copy
-import torch.nn as nn
+import torch
 
-from torch import Tensor, overrides
-from torch.nn import Linear, Sequential
+from torch import Tensor
 from torch.nn.parameter import Parameter
-from dataclasses import dataclass, field
-from Emperor.base.layer import Layer, LayerStack, LayerStackConfig
-from Emperor.base.utils import randn, matmul
-from Emperor.base.utils import Module, ConfigBase
-from Emperor.linears.options import LinearLayerOptions
-from Emperor.sampler.utils.routers import RouterModel
+from Emperor.base.utils import matmul
+from Emperor.sampler.utils.routers import RouterConfig, RouterModel
 
 
 from typing import TYPE_CHECKING
@@ -37,7 +31,9 @@ class VectorRouterModel(RouterModel):
         feature_dim = (
             self.bias_num_experts if self.bias_parameters_flag else self.input_dim
         )
-        parameters = Parameter(randn(feature_dim, self.input_dim, self.num_experts))
+        parameters = Parameter(
+            torch.randn(feature_dim, self.input_dim, self.num_experts)
+        )
         self._initialize_parameters(parameters)
         return parameters
 

@@ -25,7 +25,7 @@ from Emperor.linears.utils.monitors import (
     ParameterMonitor,
 )
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -162,13 +162,56 @@ class DynamicLinearLayer(LinearBase):
         overrides: "DynamicLinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
+        self.weight_params, self.bias_params = self._init_parameters()
+        self.parameter_manager = DynamicParameterManager(self.cfg)
+
+    def forward(self, input: Tensor) -> Tensor:
+        output = self.parameter_manager.compute_dynamic_parameters(
+            self.compute_dynamic_afine_transformation,
+            input,
+            self.weight_params,
+            self.bias_params,
+        )
+        return output
+
+    def compute_dynamic_afine_transformation(
+        self, weights: Tensor, bias: Tensor | None, input: Tensor
+    ) -> Tensor:
+        output = self.__compute_linear_transformation(input, weights)
+        return self.__add_bias_parameters(output, bias)
+
+    def __compute_linear_transformation(
+        self,
+        logits: Tensor,
+        dynamic_diagonal_weights: Tensor,
+    ) -> Tensor:
+        if dynamic_diagonal_weights.dim() == 3:
+            return torch.einsum("ij,ijk->ik", logits, dynamic_diagonal_weights)
+        return torch.matmul(logits, dynamic_diagonal_weights)
+
+    def __add_bias_parameters(
+        self,
+        linear_transform: Tensor,
+        bias_params: Tensor | None = None,
+    ) -> Tensor:
+        if self.bias_flag and bias_params is not None:
+            return linear_transform + bias_params
+        return linear_transform
+
+
+class DynamicParameterManager(Module):
+    def __init__(
+        self,
+        cfg: "DynamicLinearLayerConfig | ModelConfig",
+        overrides: "DynamicLinearLayerConfig | None" = None,
+    ):
+        super().__init__()
         self.generator_depth = self.cfg.generator_depth
         self.diagonal_option = self.cfg.diagonal_option
         self.memory_option = self.cfg.memory_option
         self.memory_size_option = self.cfg.memory_size_option
         self.memory_position_option = self.cfg.memory_position_option
         self.bias_option = self.cfg.bias_option
-        self.weight_params, self.bias_params = self._init_parameters()
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
         self.memory_model = self.__init_memory_model()
@@ -199,9 +242,16 @@ class DynamicLinearLayer(LinearBase):
             return model_class(self.main_cfg, overrides)
         return None
 
-    def forward(self, input: Tensor) -> Tensor:
+    def compute_dynamic_parameters(
+        self,
+        affine_transform_callback: Callable,
+        input: Tensor,
+        weight_params: Tensor,
+        bias_params: Tensor | None,
+    ) -> Tensor:
         input = self.__apply_memory(input, LinearMemoryPositionOptions.BEFORE_AFFINE)
-        output = self.__compute_dynamic_afine_transformation(input)
+        weights, bias = self.__update_parameters(weight_params, bias_params, input)
+        output = affine_transform_callback(input, weights, bias)
         output = self.__apply_memory(output, LinearMemoryPositionOptions.AFTER_AFFINE)
         return output
 
@@ -214,14 +264,13 @@ class DynamicLinearLayer(LinearBase):
             return self.__call_model(self.memory_model, None, input)
         return input
 
-    def __compute_dynamic_afine_transformation(self, input_batch: Tensor) -> Tensor:
-        weights = self.__call_model(
-            self.generator_model, self.weight_params, input_batch
-        )
+    def __update_parameters(
+        self, weights: Tensor, bias: Tensor | None, input_batch: Tensor
+    ) -> tuple[Tensor, Tensor | None]:
+        weights = self.__call_model(self.generator_model, weights, input_batch)
         weights = self.__call_model(self.diagonal_model, weights, input_batch)
-        bias = self.__call_model(self.bias_model, self.bias_params, input_batch)
-        output = self.__compute_linear_transformation(input_batch, weights)
-        return self.__add_bias_parameters(output, bias)
+        bias = self.__call_model(self.bias_model, bias, input_batch)
+        return weights, bias
 
     def __call_model(
         self, model, parameters: Tensor | None, input: Tensor
@@ -231,21 +280,3 @@ class DynamicLinearLayer(LinearBase):
         if parameters is None:
             return model(input)
         return model(parameters, input)
-
-    def __compute_linear_transformation(
-        self,
-        logits: Tensor,
-        dynamic_diagonal_weights: Tensor,
-    ) -> Tensor:
-        if dynamic_diagonal_weights.dim() == 3:
-            return torch.einsum("ij,ijk->ik", logits, dynamic_diagonal_weights)
-        return torch.matmul(logits, dynamic_diagonal_weights)
-
-    def __add_bias_parameters(
-        self,
-        linear_transform: Tensor,
-        bias_params: Tensor | None = None,
-    ) -> Tensor:
-        if self.bias_flag and bias_params is not None:
-            return linear_transform + bias_params
-        return linear_transform

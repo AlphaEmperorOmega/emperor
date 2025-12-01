@@ -3,11 +3,11 @@ import torch
 from torch import Tensor
 from Emperor.base.decorators import timer
 from Emperor.base.utils import Module, ConfigBase
+from Emperor.sampler.model import SamplerModel
 
 from Emperor.generators.utils.behaviours import (
     DynamicDiagonalParametersBehaviour,
 )
-from Emperor.generators.utils.samplers import SamplerModel
 from Emperor.generators.utils.mixture import (
     GeneratorMixture,
     MatrixMixture,
@@ -21,8 +21,7 @@ from Emperor.generators.utils.routers import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.generators.utils.enums import LinearLayerTypes
-    from Emperor.generators.utils.linears import LinearLayerConfig
+    from Emperor.linears.options import LinearLayerOptions
     from Emperor.config import ModelConfig
 
 
@@ -46,7 +45,7 @@ class ParameterLayerConfig(ConfigBase):
             "help": "When `True` for weight parameters a set of `diagonal` and `anti_diagonal` parameters are added to the generated weight_parameters for each input sampele, for biases a set of parameters that scale the biases are generated and biases are added to the bias parameters that shift them for each sample."
         },
     )
-    linear_layer_model_type: "LinearLayerTypes | None" = field(
+    linear_layer_model_type: "LinearLayerOptions | None" = field(
         default=None,
         metadata={"help": ""},
     )

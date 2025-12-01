@@ -1,19 +1,9 @@
-import copy
 import torch
-import torch.nn as nn
 
-from enum import Enum
-from dataclasses import dataclass, field
-from torch.nn import Linear, Sequential
 from torch.types import Tensor
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.layer import Layer
 from Emperor.base.utils import Module
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
 
 
 class ParameterGeneratorLayer(Layer):

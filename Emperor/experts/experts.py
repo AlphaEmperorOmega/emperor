@@ -7,20 +7,29 @@ from dataclasses import dataclass, field
 from Emperor.base.layer import Layer
 from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import ConfigBase, Module, device
+from Emperor.linears.utils.enums import LinearMemoryOptions
+from Emperor.sampler.model import SamplerModel
 from Emperor.linears.utils.layers import LinearLayer
-from Emperor.generators.utils.enums import LayerTypes
-from Emperor.generators.utils.routers import RouterModel
-from Emperor.generators.utils.samplers import SamplerModel
+from Emperor.linears.options import LinearLayerOptions
+from Emperor.generators.options import ParameterGeneratorOptions
+from Emperor.sampler.utils.routers import RouterModel
 
 
 from typing import TYPE_CHECKING
-
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
 __all__ = ["MixtureOfExpertsConfig", "MixtureOfExperts"]
+
+
+# TODO: Find out where the probabilities are computed and
+# see if you can multipy the probabilities by the
+# input_tensor or selected topk samples before they are
+# processed by the experts themselves. Just in case you
+# don't get the memo. Multiply the probabilities by
+# inputs before those inputs are sent into the experts.
 
 
 class _Validator:
@@ -69,7 +78,7 @@ class MixtureOfExpertsConfig(ConfigBase):
         default=None,
         metadata={"help": "Type of layer used for the experts."},
     )
-    model_type: LayerTypes | None = field(
+    model_type: LinearMemoryOptions | ParameterGeneratorOptions | None = field(
         default=None,
         metadata={"help": "Type of layer used for the experts."},
     )

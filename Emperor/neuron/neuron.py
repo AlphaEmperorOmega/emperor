@@ -6,9 +6,10 @@ from dataclasses import dataclass, field
 
 from torch.types import Tensor
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.generators.utils.enums import LayerTypes
+from Emperor.generators.options import ParameterGeneratorOptions
 from Emperor.generators.utils.routers import RouterModel
-from Emperor.generators.utils.samplers import SamplerModel
+from Emperor.linears.options import LinearLayerOptions
+from Emperor.sampler.model import SamplerModel
 
 from typing import TYPE_CHECKING
 
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class NucleusConfig(ConfigBase):
-    model_type: LayerTypes | None = field(
+    model_type: LinearLayerOptions | None = field(
         default=None,
         metadata={"help": "Type of layer used for the experts."},
     )
@@ -53,7 +54,7 @@ class Nucleus(Module):
 
 @dataclass
 class AxonsConfig(ConfigBase):
-    memory_type: LayerTypes | None = field(
+    memory_type: LinearLayerOptions | ParameterGeneratorOptions | None = field(
         default=None,
         metadata={
             "help": "Memory module used as axons, or additional modules that modify the output of nucleus"

@@ -7,13 +7,14 @@ from Emperor.base.layer import Layer, LayerStack
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.experts.experts import MixtureOfExperts
 from Emperor.generators.utils.routers import RouterModel
-from Emperor.generators.utils.samplers import SamplerModel
+from Emperor.linears.options import LinearLayerOptions
+from Emperor.generators.options import ParameterGeneratorOptions
+from Emperor.sampler.model import SamplerModel
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.generators.utils.enums import LinearLayerTypes, ParameterGeneratorTypes
 
 
 class _Validator:
@@ -27,7 +28,7 @@ class _Validator:
 
 @dataclass
 class FeedForwardConfig(ConfigBase):
-    model_type: "LinearLayerTypes | ParameterGeneratorTypes | None" = field(
+    model_type: "LinearLayerOptions | ParameterGeneratorOptions | None" = field(
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
     )

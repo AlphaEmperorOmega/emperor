@@ -12,9 +12,8 @@ from Emperor.feedForward.feed_forward import (
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.generators.utils.layers import ParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
-from Emperor.generators.utils.enums import (
-    LayerTypes,
-)
+from Emperor.linears.options import LinearLayerOptions
+from Emperor.generators.options import ParameterGeneratorOptions
 from Emperor.linears.utils.layers import DynamicLinearLayerConfig, LinearLayerConfig
 from Emperor.generators.utils.mixture import MixtureConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
@@ -176,7 +175,7 @@ class ModelConfig(ConfigBase):
             dropout_probability=0.1,
             layer_norm_flag=True,
             activation=ActivationOptions.GELU,
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerOptions.DYNAMIC,
             num_experts=12,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
@@ -192,7 +191,7 @@ class ModelConfig(ConfigBase):
             dropout_probability=0.1,
             layer_norm_flag=True,
             activation=ActivationOptions.GELU,
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerOptions.DYNAMIC,
             num_experts=12,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
@@ -202,7 +201,7 @@ class ModelConfig(ConfigBase):
     )
     multi_head_attention_model_config: MultiHeadAttentionConfig = field(
         default_factory=lambda: MultiHeadAttentionConfig(
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerOptions.DYNAMIC,
             batch_size=BATCH_SIZE,
             num_heads=NUM_EXPERTS,
             query_key_projection_dim=16,
@@ -236,7 +235,7 @@ class ModelConfig(ConfigBase):
     )
     transformer_feed_forward_config: FeedForwardConfig = field(
         default_factory=lambda: FeedForwardConfig(
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerOptions.DYNAMIC,
             num_layers=1,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
@@ -263,7 +262,7 @@ class ModelConfig(ConfigBase):
     )
     neuron_nucleus_config: NucleusConfig | None = field(
         default_factory=lambda: NucleusConfig(
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerOptions.DYNAMIC,
         ),
         metadata={"help": "`Nucleus` configuration"},
     )
@@ -294,330 +293,330 @@ class ModelConfig(ConfigBase):
     )
 
 
-class LinearLayerConfigGenerator:
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        bias_flag: bool,
-        anti_diagonal_flag: bool,
-        dynamic_bias_flag: bool,
-    ):
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.bias_flag = bias_flag
-        self.anti_diagonal_flag = anti_diagonal_flag
-        self.dynamic_bias_flag = dynamic_bias_flag
-
-    def build(self) -> LinearLayerConfig:
-        return LinearLayerConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-            bias_flag=self.bias_flag,
-            anti_diagonal_flag=self.anti_diagonal_flag,
-            dynamic_bias_flag=self.dynamic_bias_flag,
-        )
-
-
-class RouterConfigGenerator:
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int,
-        num_experts: int,
-        residual_flag: bool,
-        noisy_topk_flag: int,
-        activation: nn.Module,
-        num_layers: int | None,
-        diagonal_model_type_flag: bool,
-    ):
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.num_experts = num_experts
-        self.residual_flag = residual_flag
-        self.noisy_topk_flag = noisy_topk_flag
-        self.activation = activation
-        self.num_layers = num_layers
-        self.diagonal_model_type_flag = diagonal_model_type_flag
-
-    def build_router_config(self) -> RouterConfig:
-        return RouterConfig(
-            input_dim=self.input_dim,
-            hidden_dim=self.hidden_dim,
-            num_experts=self.num_experts,
-            residual_flag=self.residual_flag,
-            noisy_topk_flag=self.noisy_topk_flag,
-            activation=self.activation,
-            num_layers=self.num_layers,
-            diagonal_model_type_flag=self.diagonal_model_type_flag,
-        )
-
-
-class SamplerConfigGenerator:
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int,
-        num_experts: int,
-        residual_flag: bool,
-        noisy_topk_flag: bool,
-        activation: nn.Module,
-        num_layers: int,
-        diagonal_model_type_flag: bool,
-        top_k: int,
-        threshold: float,
-        filter_above_threshold: bool,
-        num_topk_samples: int,
-        normalize_probabilities_flag: bool,
-        coefficient_of_variation_loss_weight: float,
-        switch_loss_weight: float,
-        zero_centred_loss_weight: float,
-        mutual_information_loss_weight: float,
-    ):
-        super().__init__(
-            input_dim,
-            hidden_dim,
-            num_experts,
-            residual_flag,
-            noisy_topk_flag,
-            activation,
-            num_layers,
-            diagonal_model_type_flag,
-        )
-        self.top_k = top_k
-        self.threshold = threshold
-        self.filter_above_threshold = filter_above_threshold
-        self.num_topk_samples = num_topk_samples
-        self.normalize_probabilities_flag = normalize_probabilities_flag
-        self.coefficient_of_variation_loss_weight = coefficient_of_variation_loss_weight
-        self.switch_loss_weight = switch_loss_weight
-        self.zero_centred_loss_weight = zero_centred_loss_weight
-        self.mutual_information_loss_weight = mutual_information_loss_weight
-
-    def build_sampler_config(self) -> SamplerConfig:
-        return SamplerConfig(
-            top_k=self.top_k,
-            threshold=self.threshold,
-            filter_above_threshold=self.filter_above_threshold,
-            num_topk_samples=self.num_topk_samples,
-            normalize_probabilities_flag=self.normalize_probabilities_flag,
-            noisy_topk_flag=self.noisy_topk_flag,
-            num_experts=self.num_experts,
-            coefficient_of_variation_loss_weight=self.coefficient_of_variation_loss_weight,
-            switch_loss_weight=self.switch_loss_weight,
-            zero_centred_loss_weight=self.zero_centred_loss_weight,
-            mutual_information_loss_weight=self.mutual_information_loss_weight,
-            router_model_config=super().build_router_config(),
-        )
-
-
-class ParameterLayerMixtureConfigGenerator(SamplerConfigGenerator):
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int,
-        num_experts: int,
-        residual_flag: bool,
-        noisy_topk_flag: bool,
-        activation: nn.Module,
-        num_layers: int,
-        diagonal_model_type_flag: bool,
-        top_k: int,
-        threshold: float,
-        filter_above_threshold: bool,
-        num_topk_samples: int,
-        normalize_probabilities_flag: bool,
-        coefficient_of_variation_loss_weight: float,
-        switch_loss_weight: float,
-        zero_centred_loss_weight: float,
-        mutual_information_loss_weight: float,
-        output_dim: int,
-        weighted_parameters_flag: bool,
-        bias_parameters_flag: bool,
-        dynamic_diagonal_params_flag: bool,
-    ):
-        super().__init__(
-            input_dim,
-            hidden_dim,
-            num_experts,
-            residual_flag,
-            noisy_topk_flag,
-            activation,
-            num_layers,
-            diagonal_model_type_flag,
-            top_k,
-            threshold,
-            filter_above_threshold,
-            num_topk_samples,
-            normalize_probabilities_flag,
-            coefficient_of_variation_loss_weight,
-            switch_loss_weight,
-            zero_centred_loss_weight,
-            mutual_information_loss_weight,
-        )
-        self.output_dim = output_dim
-        self.weighted_parameters_flag = weighted_parameters_flag
-        self.bias_parameters_flag = bias_parameters_flag
-        self.dynamic_diagonal_params_flag = dynamic_diagonal_params_flag
-
-    def build_mixture_config(self) -> MixtureConfig:
-        return MixtureConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-            depth_dim=self.num_experts,
-            top_k=self.top_k,
-            weighted_parameters_flag=self.weighted_parameters_flag,
-            bias_parameters_flag=self.bias_parameters_flag,
-            num_experts=self.num_experts,
-            dynamic_diagonal_params_flag=self.dynamic_diagonal_params_flag,
-            router_model_config=super().build_router_config(),
-            sampler_model_config=super().build_sampler_config(),
-        )
-
-
-class ParameterLayerConfigGenerator(ParameterLayerMixtureConfigGenerator):
-    def __init__(
-        input_dim: int,
-        hidden_dim: int,
-        num_experts: int,
-        residual_flag: bool,
-        noisy_topk_flag: bool,
-        activation: nn.Module,
-        num_layers: int,
-        diagonal_model_type_flag: bool,
-        top_k: int,
-        threshold: float,
-        filter_above_threshold: bool,
-        num_topk_samples: int,
-        normalize_probabilities_flag: bool,
-        coefficient_of_variation_loss_weight: float,
-        switch_loss_weight: float,
-        zero_centred_loss_weight: float,
-        mutual_information_loss_weight: float,
-        output_dim: int,
-        weighted_parameters_flag: bool,
-        bias_parameters_flag: bool,
-        dynamic_diagonal_params_flag: bool,
-    ):
-        super().__init__(
-            input_dim,
-            hidden_dim,
-            num_experts,
-            residual_flag,
-            noisy_topk_flag,
-            activation,
-            num_layers,
-            diagonal_model_type_flag,
-            top_k,
-            threshold,
-            filter_above_threshold,
-            num_topk_samples,
-            normalize_probabilities_flag,
-            coefficient_of_variation_loss_weight,
-            switch_loss_weight,
-            zero_centred_loss_weight,
-            mutual_information_loss_weight,
-            output_dim,
-            weighted_parameters_flag,
-            bias_parameters_flag,
-            dynamic_diagonal_params_flag,
-        )
-
-    def build_parameter_generator_flag(self) -> ParameterLayerConfig:
-        return ParameterLayerConfig(
-            bias_parameters_flag=self.bias_parameters_flag,
-            time_tracker_flag=self.time_tracker_flag,
-            dynamic_diagonal_params_flag=self.dynamic_diagonal_params_flag,
-            router_model_config=super().build_router_config(),
-            sampler_model_config=super().build_sampler_config(),
-            mixture_model_config=super().build_mixture_config(),
-        )
-
-
-class MixtureOfExpertsConfigGenerator(ParameterLayerConfigGenerator):
-    def __init__(
-        self,
-        input_dim: int,
-        hidden_dim: int,
-        num_experts: int,
-        residual_flag: bool,
-        noisy_topk_flag: bool,
-        activation: nn.Module,
-        num_layers: int,
-        diagonal_model_type_flag: bool,
-        top_k: int,
-        threshold: float,
-        filter_above_threshold: bool,
-        num_topk_samples: int,
-        normalize_probabilities_flag: bool,
-        coefficient_of_variation_loss_weight: float,
-        switch_loss_weight: float,
-        zero_centred_loss_weight: float,
-        mutual_information_loss_weight: float,
-        output_dim: int,
-        weighted_parameters_flag: bool,
-        bias_parameters_flag: bool,
-        dynamic_diagonal_params_flag: bool,
-        # Mixture of experts
-        expert_top_k: int,
-        dropout_probability: float,
-        expert_layer_norm_flag: bool,
-        expert_activation: ActivationOptions,
-        model_type: LayerTypes,
-        expert_num_experts: int,
-        compute_expert_mixture_flag: bool,
-        init_sampler_model_flag: bool,
-    ):
-        super().__init__(
-            input_dim,
-            hidden_dim,
-            num_experts,
-            residual_flag,
-            noisy_topk_flag,
-            activation,
-            num_layers,
-            diagonal_model_type_flag,
-            top_k,
-            threshold,
-            filter_above_threshold,
-            num_topk_samples,
-            normalize_probabilities_flag,
-            coefficient_of_variation_loss_weight,
-            switch_loss_weight,
-            zero_centred_loss_weight,
-            mutual_information_loss_weight,
-            output_dim,
-            weighted_parameters_flag,
-            bias_parameters_flag,
-            dynamic_diagonal_params_flag,
-        )
-
-        self.expert_top_k = expert_top_k
-        self.dropout_probability = dropout_probability
-        self.expert_layer_norm_flag = expert_layer_norm_flag
-        self.expert_activation = expert_activation
-        self.model_type = model_type
-        self.expert_num_experts = expert_num_experts
-        self.compute_expert_mixture_flag = compute_expert_mixture_flag
-        self.init_sampler_model_flag = init_sampler_model_flag
-
-    def build(self) -> MixtureOfExpertsConfig:
-        return MixtureOfExpertsConfig(
-            top_k=self.expert_top_k,
-            dropout_probability=self.dropout_probability,
-            layer_norm_flag=self.expert_layer_norm_flag,
-            activation=self.expert_activation,
-            model_type=self.model_type,
-            num_experts=self.expert_num_experts,
-            compute_expert_mixture_flag=self.compute_expert_mixture_flag,
-            weighted_parameters_flag=self.weighted_parameters_flag,
-            init_sampler_model_flag=self.init_sampler_model_flag,
-            router_model_config=super().build_router_config(),
-            sampler_model_config=super().build_sampler_config(),
-            mixture_model_config=super().build_mixture_config(),
-            parameter_generator_model_config=super().build_parameter_generator_flag(),
-        )
-
+# class LinearLayerConfigGenerator:
+#     def __init__(
+#         self,
+#         input_dim: int,
+#         output_dim: int,
+#         bias_flag: bool,
+#         anti_diagonal_flag: bool,
+#         dynamic_bias_flag: bool,
+#     ):
+#         self.input_dim = input_dim
+#         self.output_dim = output_dim
+#         self.bias_flag = bias_flag
+#         self.anti_diagonal_flag = anti_diagonal_flag
+#         self.dynamic_bias_flag = dynamic_bias_flag
+#
+#     def build(self) -> LinearLayerConfig:
+#         return LinearLayerConfig(
+#             input_dim=self.input_dim,
+#             output_dim=self.output_dim,
+#             bias_flag=self.bias_flag,
+#             anti_diagonal_flag=self.anti_diagonal_flag,
+#             dynamic_bias_flag=self.dynamic_bias_flag,
+#         )
+#
+#
+# class RouterConfigGenerator:
+#     def __init__(
+#         self,
+#         input_dim: int,
+#         hidden_dim: int,
+#         num_experts: int,
+#         residual_flag: bool,
+#         noisy_topk_flag: int,
+#         activation: nn.Module,
+#         num_layers: int | None,
+#         diagonal_model_type_flag: bool,
+#     ):
+#         self.input_dim = input_dim
+#         self.hidden_dim = hidden_dim
+#         self.num_experts = num_experts
+#         self.residual_flag = residual_flag
+#         self.noisy_topk_flag = noisy_topk_flag
+#         self.activation = activation
+#         self.num_layers = num_layers
+#         self.diagonal_model_type_flag = diagonal_model_type_flag
+#
+#     def build_router_config(self) -> RouterConfig:
+#         return RouterConfig(
+#             input_dim=self.input_dim,
+#             hidden_dim=self.hidden_dim,
+#             num_experts=self.num_experts,
+#             residual_flag=self.residual_flag,
+#             noisy_topk_flag=self.noisy_topk_flag,
+#             activation=self.activation,
+#             num_layers=self.num_layers,
+#             diagonal_model_type_flag=self.diagonal_model_type_flag,
+#         )
+#
+#
+# class SamplerConfigGenerator:
+#     def __init__(
+#         self,
+#         input_dim: int,
+#         hidden_dim: int,
+#         num_experts: int,
+#         residual_flag: bool,
+#         noisy_topk_flag: bool,
+#         activation: nn.Module,
+#         num_layers: int,
+#         diagonal_model_type_flag: bool,
+#         top_k: int,
+#         threshold: float,
+#         filter_above_threshold: bool,
+#         num_topk_samples: int,
+#         normalize_probabilities_flag: bool,
+#         coefficient_of_variation_loss_weight: float,
+#         switch_loss_weight: float,
+#         zero_centred_loss_weight: float,
+#         mutual_information_loss_weight: float,
+#     ):
+#         super().__init__(
+#             input_dim,
+#             hidden_dim,
+#             num_experts,
+#             residual_flag,
+#             noisy_topk_flag,
+#             activation,
+#             num_layers,
+#             diagonal_model_type_flag,
+#         )
+#         self.top_k = top_k
+#         self.threshold = threshold
+#         self.filter_above_threshold = filter_above_threshold
+#         self.num_topk_samples = num_topk_samples
+#         self.normalize_probabilities_flag = normalize_probabilities_flag
+#         self.coefficient_of_variation_loss_weight = coefficient_of_variation_loss_weight
+#         self.switch_loss_weight = switch_loss_weight
+#         self.zero_centred_loss_weight = zero_centred_loss_weight
+#         self.mutual_information_loss_weight = mutual_information_loss_weight
+#
+#     def build_sampler_config(self) -> SamplerConfig:
+#         return SamplerConfig(
+#             top_k=self.top_k,
+#             threshold=self.threshold,
+#             filter_above_threshold=self.filter_above_threshold,
+#             num_topk_samples=self.num_topk_samples,
+#             normalize_probabilities_flag=self.normalize_probabilities_flag,
+#             noisy_topk_flag=self.noisy_topk_flag,
+#             num_experts=self.num_experts,
+#             coefficient_of_variation_loss_weight=self.coefficient_of_variation_loss_weight,
+#             switch_loss_weight=self.switch_loss_weight,
+#             zero_centred_loss_weight=self.zero_centred_loss_weight,
+#             mutual_information_loss_weight=self.mutual_information_loss_weight,
+#             router_model_config=super().build_router_config(),
+#         )
+#
+#
+# class ParameterLayerMixtureConfigGenerator(SamplerConfigGenerator):
+#     def __init__(
+#         self,
+#         input_dim: int,
+#         hidden_dim: int,
+#         num_experts: int,
+#         residual_flag: bool,
+#         noisy_topk_flag: bool,
+#         activation: nn.Module,
+#         num_layers: int,
+#         diagonal_model_type_flag: bool,
+#         top_k: int,
+#         threshold: float,
+#         filter_above_threshold: bool,
+#         num_topk_samples: int,
+#         normalize_probabilities_flag: bool,
+#         coefficient_of_variation_loss_weight: float,
+#         switch_loss_weight: float,
+#         zero_centred_loss_weight: float,
+#         mutual_information_loss_weight: float,
+#         output_dim: int,
+#         weighted_parameters_flag: bool,
+#         bias_parameters_flag: bool,
+#         dynamic_diagonal_params_flag: bool,
+#     ):
+#         super().__init__(
+#             input_dim,
+#             hidden_dim,
+#             num_experts,
+#             residual_flag,
+#             noisy_topk_flag,
+#             activation,
+#             num_layers,
+#             diagonal_model_type_flag,
+#             top_k,
+#             threshold,
+#             filter_above_threshold,
+#             num_topk_samples,
+#             normalize_probabilities_flag,
+#             coefficient_of_variation_loss_weight,
+#             switch_loss_weight,
+#             zero_centred_loss_weight,
+#             mutual_information_loss_weight,
+#         )
+#         self.output_dim = output_dim
+#         self.weighted_parameters_flag = weighted_parameters_flag
+#         self.bias_parameters_flag = bias_parameters_flag
+#         self.dynamic_diagonal_params_flag = dynamic_diagonal_params_flag
+#
+#     def build_mixture_config(self) -> MixtureConfig:
+#         return MixtureConfig(
+#             input_dim=self.input_dim,
+#             output_dim=self.output_dim,
+#             depth_dim=self.num_experts,
+#             top_k=self.top_k,
+#             weighted_parameters_flag=self.weighted_parameters_flag,
+#             bias_parameters_flag=self.bias_parameters_flag,
+#             num_experts=self.num_experts,
+#             dynamic_diagonal_params_flag=self.dynamic_diagonal_params_flag,
+#             router_model_config=super().build_router_config(),
+#             sampler_model_config=super().build_sampler_config(),
+#         )
+#
+#
+# class ParameterLayerConfigGenerator(ParameterLayerMixtureConfigGenerator):
+#     def __init__(
+#         input_dim: int,
+#         hidden_dim: int,
+#         num_experts: int,
+#         residual_flag: bool,
+#         noisy_topk_flag: bool,
+#         activation: nn.Module,
+#         num_layers: int,
+#         diagonal_model_type_flag: bool,
+#         top_k: int,
+#         threshold: float,
+#         filter_above_threshold: bool,
+#         num_topk_samples: int,
+#         normalize_probabilities_flag: bool,
+#         coefficient_of_variation_loss_weight: float,
+#         switch_loss_weight: float,
+#         zero_centred_loss_weight: float,
+#         mutual_information_loss_weight: float,
+#         output_dim: int,
+#         weighted_parameters_flag: bool,
+#         bias_parameters_flag: bool,
+#         dynamic_diagonal_params_flag: bool,
+#     ):
+#         super().__init__(
+#             input_dim,
+#             hidden_dim,
+#             num_experts,
+#             residual_flag,
+#             noisy_topk_flag,
+#             activation,
+#             num_layers,
+#             diagonal_model_type_flag,
+#             top_k,
+#             threshold,
+#             filter_above_threshold,
+#             num_topk_samples,
+#             normalize_probabilities_flag,
+#             coefficient_of_variation_loss_weight,
+#             switch_loss_weight,
+#             zero_centred_loss_weight,
+#             mutual_information_loss_weight,
+#             output_dim,
+#             weighted_parameters_flag,
+#             bias_parameters_flag,
+#             dynamic_diagonal_params_flag,
+#         )
+#
+#     def build_parameter_generator_flag(self) -> ParameterLayerConfig:
+#         return ParameterLayerConfig(
+#             bias_parameters_flag=self.bias_parameters_flag,
+#             time_tracker_flag=self.time_tracker_flag,
+#             dynamic_diagonal_params_flag=self.dynamic_diagonal_params_flag,
+#             router_model_config=super().build_router_config(),
+#             sampler_model_config=super().build_sampler_config(),
+#             mixture_model_config=super().build_mixture_config(),
+#         )
+#
+#
+# class MixtureOfExpertsConfigGenerator(ParameterLayerConfigGenerator):
+#     def __init__(
+#         self,
+#         input_dim: int,
+#         hidden_dim: int,
+#         num_experts: int,
+#         residual_flag: bool,
+#         noisy_topk_flag: bool,
+#         activation: nn.Module,
+#         num_layers: int,
+#         diagonal_model_type_flag: bool,
+#         top_k: int,
+#         threshold: float,
+#         filter_above_threshold: bool,
+#         num_topk_samples: int,
+#         normalize_probabilities_flag: bool,
+#         coefficient_of_variation_loss_weight: float,
+#         switch_loss_weight: float,
+#         zero_centred_loss_weight: float,
+#         mutual_information_loss_weight: float,
+#         output_dim: int,
+#         weighted_parameters_flag: bool,
+#         bias_parameters_flag: bool,
+#         dynamic_diagonal_params_flag: bool,
+#         # Mixture of experts
+#         expert_top_k: int,
+#         dropout_probability: float,
+#         expert_layer_norm_flag: bool,
+#         expert_activation: ActivationOptions,
+#         model_type: LayerTypes,
+#         expert_num_experts: int,
+#         compute_expert_mixture_flag: bool,
+#         init_sampler_model_flag: bool,
+#     ):
+#         super().__init__(
+#             input_dim,
+#             hidden_dim,
+#             num_experts,
+#             residual_flag,
+#             noisy_topk_flag,
+#             activation,
+#             num_layers,
+#             diagonal_model_type_flag,
+#             top_k,
+#             threshold,
+#             filter_above_threshold,
+#             num_topk_samples,
+#             normalize_probabilities_flag,
+#             coefficient_of_variation_loss_weight,
+#             switch_loss_weight,
+#             zero_centred_loss_weight,
+#             mutual_information_loss_weight,
+#             output_dim,
+#             weighted_parameters_flag,
+#             bias_parameters_flag,
+#             dynamic_diagonal_params_flag,
+#         )
+#
+#         self.expert_top_k = expert_top_k
+#         self.dropout_probability = dropout_probability
+#         self.expert_layer_norm_flag = expert_layer_norm_flag
+#         self.expert_activation = expert_activation
+#         self.model_type = model_type
+#         self.expert_num_experts = expert_num_experts
+#         self.compute_expert_mixture_flag = compute_expert_mixture_flag
+#         self.init_sampler_model_flag = init_sampler_model_flag
+#
+#     def build(self) -> MixtureOfExpertsConfig:
+#         return MixtureOfExpertsConfig(
+#             top_k=self.expert_top_k,
+#             dropout_probability=self.dropout_probability,
+#             layer_norm_flag=self.expert_layer_norm_flag,
+#             activation=self.expert_activation,
+#             model_type=self.model_type,
+#             num_experts=self.expert_num_experts,
+#             compute_expert_mixture_flag=self.compute_expert_mixture_flag,
+#             weighted_parameters_flag=self.weighted_parameters_flag,
+#             init_sampler_model_flag=self.init_sampler_model_flag,
+#             router_model_config=super().build_router_config(),
+#             sampler_model_config=super().build_sampler_config(),
+#             mixture_model_config=super().build_mixture_config(),
+#             parameter_generator_model_config=super().build_parameter_generator_flag(),
+#         )
+#
 
 # class ParameterLayerConfigGenerator(LinearLayerConfigGenerator):
 #     def __init__(
