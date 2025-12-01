@@ -1,14 +1,15 @@
 import torch
 from torch import Tensor
+from Emperor.behaviours.utils.enums import (
+    LinearMemoryPositionOptions,
+    LinearMemorySizeOptions,
+)
 from Emperor.base.utils import Module
 from Emperor.base.layer import (
     LayerStackConfig,
     LinearLayerStack,
 )
-from Emperor.linears.utils.enums import (
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
-)
+
 
 from typing import TYPE_CHECKING
 

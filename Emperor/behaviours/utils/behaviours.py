@@ -2,32 +2,33 @@ import torch
 
 from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.linears.utils.handlers.parameter import DepthMappingLayerStack
-from Emperor.linears.utils.enums import (
+from Emperor.behaviours.utils.handlers.parameter import DepthMappingLayerStack
+from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDiagonalOptions,
     LinearMemoryOptions,
 )
-from Emperor.linears.utils.handlers.memory import (
-    MemoryFusionHandler,
-    MemoryHandlerAbstract,
-    WeightedMemoryHandler,
-)
-from Emperor.linears.utils.handlers.bias import (
+from Emperor.behaviours.utils.handlers.bias import (
+    AffineBiasTransformHandler,
     BiasGeneratorHandler,
     BiasHandlerAbstract,
-    AffineBiasTransformHandler,
     ElementwiseBiasHandler,
 )
-from Emperor.linears.utils.handlers.diagonal import (
+from Emperor.behaviours.utils.handlers.diagonal import (
     AntiDiagonalHandler,
     DiagonalAndAntiDiagonalHandler,
     DiagonalHandler,
     DiagonalHandlerAbstract,
 )
+from Emperor.behaviours.utils.handlers.memory import (
+    MemoryFusionHandler,
+    MemoryHandlerAbstract,
+    WeightedMemoryHandler,
+)
 from Emperor.base.layer import (
     LayerStackConfig,
 )
+
 
 from typing import TYPE_CHECKING
 
@@ -43,7 +44,9 @@ class DynamicParametersBehaviour(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(
+            config, overrides
+        )
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.input_model = self.__init_input_model()
@@ -109,7 +112,9 @@ class DynamicDiagonalSelector(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(
+            config, overrides
+        )
         self.diagonal_option = self.cfg.diagonal_option
         self.model = self.__init_bias_model()
 
@@ -142,7 +147,9 @@ class DynamicBiasSelector(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(
+            config, overrides
+        )
         self.bias_option = self.cfg.bias_option
         self.model = self.__init_bias_model()
 
@@ -175,7 +182,9 @@ class DynamicMemorySelector(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(
+            config, overrides
+        )
         self.memory_option = self.cfg.memory_option
         self.model = self.__init_memory_model()
 
