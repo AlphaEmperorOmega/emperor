@@ -14,7 +14,7 @@ from Emperor.base.layer import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.behaviours.utils.layers import LinearLayerConfig
+    from Emperor.linears.utils.layers import LinearLayerConfig
 
 
 class MemoryHandlerAbstract(Module):

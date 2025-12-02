@@ -1,7 +1,7 @@
 from Emperor.base.layer import LayerStackConfig
-from Emperor.behaviours.options import LinearLayerOptions
+from Emperor.linears.options import LinearLayerOptions
 from Emperor.generators.utils.routers import RouterConfig
-from Emperor.behaviours.utils.layers import LinearLayerConfig
+from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
-class GeneratorConfigs:
+class ParameterGeneratorConfigs:
     @staticmethod
     def router_preset(
         batch_size: int = 2,

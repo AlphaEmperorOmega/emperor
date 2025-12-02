@@ -1,6 +1,6 @@
-from typing import Callable
 from torch import Tensor
 from dataclasses import dataclass, field
+from typing import Callable, TypeVar
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.behaviours.utils.behaviours import (
     DynamicBiasSelector,
@@ -16,6 +16,8 @@ from Emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
+
+ModuleType = TypeVar("ModuleType", bound=Module)
 
 
 @dataclass
@@ -96,7 +98,9 @@ class AdaptiveParameterModel(Module):
         is_valid_flag = is_disabled and self.bias_flag
         return self.__init_model(is_valid_flag, DynamicBiasSelector)
 
-    def __init_model(self, is_valid_flag: bool, model_class: object) -> object | None:
+    def __init_model(
+        self, is_valid_flag: bool, model_class: type[ModuleType]
+    ) -> ModuleType | None:
         from Emperor.linears.utils.layers import LinearLayerConfig
 
         if is_valid_flag:
@@ -106,7 +110,7 @@ class AdaptiveParameterModel(Module):
             return model_class(self.cfg, overrides)
         return None
 
-    def compute_dynamic_parameters(
+    def compute_adaptive_parameters(
         self,
         affine_transform_callback: Callable,
         weight_params: Tensor,

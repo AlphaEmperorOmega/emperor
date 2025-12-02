@@ -111,18 +111,18 @@ class AdaptiveLinearLayer(LinearBase):
     ):
         super().__init__(cfg, overrides)
         self.weight_params, self.bias_params = self._init_parameters()
-        self.parameter_manager = AdaptiveParameterModel(self.cfg)
+        self.adaptive_behaviour = AdaptiveParameterModel(self.cfg)
 
     def forward(self, input: Tensor) -> Tensor:
-        output = self.parameter_manager.compute_dynamic_parameters(
-            self.compute_dynamic_afine_transformation,
+        output = self.adaptive_behaviour.compute_adaptive_parameters(
+            self._compute_affine_transformation_callback,
             self.weight_params,
             self.bias_params,
             input,
         )
         return output
 
-    def compute_dynamic_afine_transformation(
+    def _compute_affine_transformation_callback(
         self, weights: Tensor, bias: Tensor | None, input: Tensor
     ) -> Tensor:
         output = self.__compute_linear_transformation(input, weights)
