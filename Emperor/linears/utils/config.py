@@ -1,16 +1,16 @@
 from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.linears.options import LinearLayerOptions
-from Emperor.linears.utils.behaviours import DynamicDiagonalOptions
-from Emperor.linears.utils.layers import LinearLayerConfig, AdaptiveLinearLayerConfig
-from Emperor.linears.utils.enums import (
+from Emperor.behaviours.utils.behaviours import DynamicDiagonalOptions
+from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
+from Emperor.linears.options import LinearLayerOptions
+from Emperor.linears.utils.layers import LinearLayerConfig
 
 
 class LinearsConfigs:
@@ -91,7 +91,7 @@ class LinearsConfigs:
             input_dim=input_dim,
             output_dim=output_dim,
             batch_size=batch_size,
-            linear_layer_config=AdaptiveLinearLayerConfig(
+            linear_layer_config=LinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
@@ -114,7 +114,7 @@ class LinearsConfigs:
                     residual_flag=residual_flag,
                     adaptive_computation_flag=False,
                     dropout_probability=dropout_probability,
-                    override_config=AdaptiveLinearLayerConfig(
+                    override_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,

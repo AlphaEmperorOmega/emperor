@@ -3,14 +3,14 @@ import unittest
 
 from dataclasses import asdict
 from Emperor.config import ModelConfig
-from Emperor.linears.utils.behaviours import DynamicMemorySelector
-from Emperor.linears.utils.config import LinearsConfigs
-from Emperor.linears.utils.enums import (
+from Emperor.behaviours.utils.behaviours import DynamicMemorySelector
+from Emperor.behaviours.utils.config import LinearsConfigs
+from Emperor.behaviours.utils.enums import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from Emperor.linears.utils.handlers.memory import (
+from Emperor.behaviours.utils.handlers.memory import (
     MemoryFusionHandler,
     MemoryHandlerAbstract,
     WeightedMemoryHandler,

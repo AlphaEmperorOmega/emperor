@@ -14,13 +14,13 @@ from Emperor.base.layer import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig
+    from Emperor.behaviours.utils.layers import LinearLayerConfig
 
 
 class MemoryHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__()
         self.cfg_main = cfg
@@ -46,7 +46,7 @@ class MemoryHandlerAbstract(Module):
 class MemoryFusionHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__(cfg)
         self.memory_model = self.__init_memory_model()
@@ -78,7 +78,7 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
 class WeightedMemoryHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__(cfg)
 

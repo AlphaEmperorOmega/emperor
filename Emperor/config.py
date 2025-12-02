@@ -12,10 +12,10 @@ from Emperor.feedForward.feed_forward import (
 from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.generators.utils.layers import ParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
-from Emperor.linears.options import LinearLayerOptions
 from Emperor.generators.options import ParameterGeneratorOptions
-from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig, LinearLayerConfig
 from Emperor.generators.utils.mixture import MixtureConfig
+from Emperor.linears.options import LinearLayerOptions
+from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig
 from Emperor.neuron.neuron import (
@@ -153,7 +153,7 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
-    linear_layer_config: LinearLayerConfig | AdaptiveLinearLayerConfig = field(
+    linear_layer_config: LinearLayerConfig | LinearLayerConfig = field(
         default_factory=lambda: LinearLayerConfig(
             input_dim=INPUT_DIM,
             output_dim=OUTPUT_DIM,

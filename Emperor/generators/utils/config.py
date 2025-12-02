@@ -1,9 +1,9 @@
 from Emperor.base.layer import LayerStackConfig
-from Emperor.linears.options import LinearLayerOptions
+from Emperor.behaviours.options import LinearLayerOptions
 from Emperor.generators.utils.routers import RouterConfig
-from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig
+from Emperor.behaviours.utils.layers import LinearLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.linears.utils.enums import (
+from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -56,7 +56,7 @@ class GeneratorConfigs:
                 residual_flag=residual_flag,
                 adaptive_computation_flag=False,
             ),
-            linear_layer_config=AdaptiveLinearLayerConfig(
+            linear_layer_config=LinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=num_experts,
                 bias_flag=bias_flag,

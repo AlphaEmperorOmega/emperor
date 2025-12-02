@@ -8,13 +8,13 @@ from Emperor.base.layer import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig
+    from Emperor.behaviours.utils.layers import LinearLayerConfig
 
 
 class BiasHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__()
         self.cfg = getattr(cfg, "linear_layer_config", cfg)
@@ -31,7 +31,7 @@ class BiasHandlerAbstract(Module):
 class AffineBiasTransformHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__(cfg)
         overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=2)
@@ -46,7 +46,7 @@ class AffineBiasTransformHandler(BiasHandlerAbstract):
 class ElementwiseBiasHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__(cfg)
         overrides = LayerStackConfig(
@@ -62,7 +62,7 @@ class ElementwiseBiasHandler(BiasHandlerAbstract):
 class BiasGeneratorHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__(cfg)
         overrides = LayerStackConfig(

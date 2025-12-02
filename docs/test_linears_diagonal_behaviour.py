@@ -4,10 +4,10 @@ import unittest
 
 from Emperor.base.utils import Module
 from Emperor.config import ModelConfig
-from Emperor.linears.utils.behaviours import DynamicDiagonalSelector
-from Emperor.linears.utils.config import LinearsConfigs
-from Emperor.linears.utils.enums import DynamicDiagonalOptions
-from Emperor.linears.utils.handlers.diagonal import (
+from Emperor.behaviours.utils.behaviours import DynamicDiagonalSelector
+from Emperor.behaviours.utils.config import LinearsConfigs
+from Emperor.behaviours.utils.enums import DynamicDiagonalOptions
+from Emperor.behaviours.utils.handlers.diagonal import (
     DiagonalHandlerAbstract,
     DiagonalHandler,
     AntiDiagonalHandler,

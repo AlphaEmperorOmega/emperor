@@ -21,7 +21,7 @@ from Emperor.generators.utils.routers import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.linears.options import LinearLayerOptions
+    from Emperor.behaviours.options import LinearLayerOptions
     from Emperor.config import ModelConfig
 
 

@@ -4,10 +4,10 @@ import torch.nn as nn
 
 from Emperor.base.utils import Module
 from Emperor.config import ModelConfig
-from Emperor.linears.utils.behaviours import DynamicBiasSelector
+from Emperor.behaviours.utils.behaviours import DynamicBiasSelector
 from Emperor.linears.utils.config import LinearsConfigs
-from Emperor.linears.utils.enums import DynamicBiasOptions
-from Emperor.linears.utils.handlers.bias import (
+from Emperor.behaviours.utils.enums import DynamicBiasOptions
+from Emperor.behaviours.utils.handlers.bias import (
     AffineBiasTransformHandler,
     BiasGeneratorHandler,
     BiasHandlerAbstract,

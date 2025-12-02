@@ -4,12 +4,11 @@ import datetime
 import torch.nn as nn
 from Emperor.base.utils import Trainer
 from Emperor.base.datasets import FashionMNIST
-from Emperor.config import BIAS_PARAMETER_FLAG
-from Emperor.generators.utils.layers import ParameterLayerConfig
-from Emperor.generators.utils.mixture import MixtureConfig
-from Emperor.generators.utils.routers import RouterConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.linears.utils.layers import LinearLayerConfig, AdaptiveLinearLayerConfig
+from Emperor.generators.utils.routers import RouterConfig
+from Emperor.generators.utils.mixture import MixtureConfig
+from Emperor.linears.utils.layers import LinearLayerConfig
+from Emperor.generators.utils.layers import ParameterLayerConfig
 
 from typing import TYPE_CHECKING
 

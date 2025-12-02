@@ -7,8 +7,8 @@ from Emperor.base.layer import Layer, LayerStack
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.experts.experts import MixtureOfExperts
 from Emperor.generators.utils.routers import RouterModel
-from Emperor.linears.options import LinearLayerOptions
 from Emperor.generators.options import ParameterGeneratorOptions
+from Emperor.linears.options import LinearLayerOptions
 from Emperor.sampler.model import SamplerModel
 
 from typing import TYPE_CHECKING

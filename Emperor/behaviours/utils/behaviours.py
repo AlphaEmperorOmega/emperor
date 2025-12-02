@@ -33,18 +33,18 @@ from Emperor.base.layer import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig
+    from Emperor.behaviours.utils.layers import LinearLayerConfig
 
 
 class DynamicParametersBehaviour(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
-        overrides: "AdaptiveLinearLayerConfig | None" = None,
+        cfg: "LinearLayerConfig",
+        overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(
+        self.cfg: "LinearLayerConfig" = self._overwrite_config(
             config, overrides
         )
         self.input_dim = self.cfg.input_dim
@@ -107,12 +107,12 @@ class DynamicParametersBehaviour(Module):
 class DynamicDiagonalSelector(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
-        overrides: "AdaptiveLinearLayerConfig | None" = None,
+        cfg: "LinearLayerConfig",
+        overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(
+        self.cfg: "LinearLayerConfig" = self._overwrite_config(
             config, overrides
         )
         self.diagonal_option = self.cfg.diagonal_option
@@ -142,12 +142,12 @@ class DynamicDiagonalSelector(Module):
 class DynamicBiasSelector(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
-        overrides: "AdaptiveLinearLayerConfig | None" = None,
+        cfg: "LinearLayerConfig",
+        overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(
+        self.cfg: "LinearLayerConfig" = self._overwrite_config(
             config, overrides
         )
         self.bias_option = self.cfg.bias_option
@@ -177,12 +177,12 @@ class DynamicBiasSelector(Module):
 class DynamicMemorySelector(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
-        overrides: "AdaptiveLinearLayerConfig | None" = None,
+        cfg: "LinearLayerConfig",
+        overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveLinearLayerConfig" = self._overwrite_config(
+        self.cfg: "LinearLayerConfig" = self._overwrite_config(
             config, overrides
         )
         self.memory_option = self.cfg.memory_option

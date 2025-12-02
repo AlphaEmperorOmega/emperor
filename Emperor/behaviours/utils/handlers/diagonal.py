@@ -12,13 +12,13 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig
+    from Emperor.behaviours.utils.layers import LinearLayerConfig
 
 
 class DiagonalHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__()
         self.cfg = getattr(cfg, "linear_layer_config", cfg)
@@ -63,7 +63,7 @@ class DiagonalHandlerAbstract(Module):
 class DiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = self._init_model()
@@ -76,7 +76,7 @@ class DiagonalHandler(DiagonalHandlerAbstract):
 class AntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = self._init_model()
@@ -90,7 +90,7 @@ class AntiDiagonalHandler(DiagonalHandlerAbstract):
 class DiagonalAndAntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "LinearLayerConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = DiagonalHandler(cfg)

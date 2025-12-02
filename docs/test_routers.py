@@ -2,10 +2,10 @@ import torch
 import unittest
 
 from Emperor.config import ModelConfig
-from Emperor.linears.options import LinearLayerOptions
+from Emperor.behaviours.options import LinearLayerOptions
 from Emperor.sampler.utils.config import SamplerConfigs
 from Emperor.sampler.utils.routers import RouterModel
-from Emperor.linears.utils.enums import (
+from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

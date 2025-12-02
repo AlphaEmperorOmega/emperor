@@ -1,15 +1,15 @@
 import torch
 
 from enum import Enum
+from torch.types import Tensor
 from torch.nn import ModuleDict
 from dataclasses import dataclass, field
-
-from torch.types import Tensor
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.generators.options import ParameterGeneratorOptions
 from Emperor.generators.utils.routers import RouterModel
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.sampler.model import SamplerModel
+
 
 from typing import TYPE_CHECKING
 

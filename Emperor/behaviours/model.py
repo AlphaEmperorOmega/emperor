@@ -1,3 +1,7 @@
+from typing import Callable
+from torch import Tensor
+from dataclasses import dataclass, field
+from Emperor.base.utils import ConfigBase, Module
 from Emperor.behaviours.utils.behaviours import (
     DynamicBiasSelector,
     DynamicDiagonalSelector,
@@ -9,15 +13,55 @@ from Emperor.behaviours.utils.enums import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
     LinearMemoryOptions,
+    LinearMemoryPositionOptions,
+    LinearMemorySizeOptions,
 )
-from Emperor.base.utils import Module
-from Emperor.linears.utils.layers import AdaptiveLinearLayerConfig
+
+
+@dataclass
+class AdaptiveParameterModelConfig(ConfigBase):
+    generator_depth: DynamicDepthOptions | None = field(
+        default=None,
+        metadata={
+            "help": "",
+        },
+    )
+    diagonal_option: DynamicDiagonalOptions | None = field(
+        default=None,
+        metadata={
+            "help": "",
+        },
+    )
+    bias_option: DynamicBiasOptions | None = field(
+        default=None,
+        metadata={
+            "help": "",
+        },
+    )
+    memory_option: LinearMemoryOptions | None = field(
+        default=None,
+        metadata={
+            "help": "",
+        },
+    )
+    memory_size_option: LinearMemorySizeOptions | None = field(
+        default=None,
+        metadata={
+            "help": "",
+        },
+    )
+    memory_position_option: LinearMemoryPositionOptions | None = field(
+        default=None,
+        metadata={
+            "help": "",
+        },
+    )
 
 
 class AdaptiveParameterModel(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig",
+        cfg: "AdaptiveParameterModelConfig",
     ):
         super().__init__()
         self.cfg = cfg
@@ -53,8 +97,10 @@ class AdaptiveParameterModel(Module):
         return self.__init_model(is_valid_flag, DynamicBiasSelector)
 
     def __init_model(self, is_valid_flag: bool, model_class: object) -> object | None:
+        from Emperor.linears.utils.layers import LinearLayerConfig
+
         if is_valid_flag:
-            overrides = AdaptiveLinearLayerConfig(
+            overrides = LinearLayerConfig(
                 input_dim=self.input_dim, output_dim=self.output_dim
             )
             return model_class(self.cfg, overrides)

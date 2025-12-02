@@ -5,26 +5,13 @@ import torch.nn.functional as F
 from torch import Tensor
 from inspect import Parameter
 from dataclasses import dataclass, field
-from Emperor.base.utils import ConfigBase, Module
-# from Emperor.linears.utils.enums import (
-#     DynamicDepthOptions,
-#     LinearMemoryOptions,
-#     LinearMemoryPositionOptions,
-#     LinearMemorySizeOptions,
-#     DynamicBiasOptions,
-#     DynamicDiagonalOptions,
-# )
-
-# from Emperor.linears.utils.behaviours import (
-#     DynamicBiasSelector,
-#     DynamicDiagonalSelector,
-#     DynamicMemorySelector,
-#     DynamicParametersBehaviour,
-# )
-from Emperor.linears.utils.monitors import (
-    DataMonitor,
-    ParameterMonitor,
+from Emperor.base.utils import Module
+from Emperor.behaviours.model import (
+    AdaptiveParameterModel,
+    AdaptiveParameterModelConfig,
 )
+from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
+
 
 from typing import TYPE_CHECKING
 
@@ -33,7 +20,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class LinearLayerConfig(ConfigBase):
+class LinearLayerConfig(AdaptiveParameterModelConfig):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Input dimension of the linear layer"},
@@ -61,8 +48,8 @@ class LinearLayerConfig(ConfigBase):
 class LinearBase(Module):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig | LinearLayerConfig | ModelConfig",
-        overrides: "AdaptiveLinearLayerConfig | LinearLayerConfig | None" = None,
+        cfg: "LinearLayerConfig | LinearLayerConfig | ModelConfig",
+        overrides: "LinearLayerConfig | LinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
@@ -116,55 +103,15 @@ class LinearLayer(LinearBase):
         return output
 
 
-@dataclass
-class AdaptiveLinearLayerConfig(LinearLayerConfig):
-    generator_depth: DynamicDepthOptions | None = field(
-        default=None,
-        metadata={
-            "help": "",
-        },
-    )
-    diagonal_option: DynamicDiagonalOptions | None = field(
-        default=None,
-        metadata={
-            "help": "",
-        },
-    )
-    bias_option: DynamicBiasOptions | None = field(
-        default=None,
-        metadata={
-            "help": "",
-        },
-    )
-    memory_option: LinearMemoryOptions | None = field(
-        default=None,
-        metadata={
-            "help": "",
-        },
-    )
-    memory_size_option: LinearMemorySizeOptions | None = field(
-        default=None,
-        metadata={
-            "help": "",
-        },
-    )
-    memory_position_option: LinearMemoryPositionOptions | None = field(
-        default=None,
-        metadata={
-            "help": "",
-        },
-    )
-
-
 class AdaptiveLinearLayer(LinearBase):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig | ModelConfig",
-        overrides: "AdaptiveLinearLayerConfig | None" = None,
+        cfg: "LinearLayerConfig | ModelConfig",
+        overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.weight_params, self.bias_params = self._init_parameters()
-        self.parameter_manager = DynamicParameterManager(self.cfg)
+        self.parameter_manager = AdaptiveParameterModel(self.cfg)
 
     def forward(self, input: Tensor) -> Tensor:
         output = self.parameter_manager.compute_dynamic_parameters(

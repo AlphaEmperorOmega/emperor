@@ -10,7 +10,6 @@ from Emperor.base.utils import ConfigBase, Module
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.linears.options import LinearLayerOptions
@@ -507,34 +506,6 @@ class LayerStack(Module):
         c.input_dim = input_dim
         c.output_dim = output_dim
         return c
-        # linears = (
-        #     "LinearLayer",
-        #     "AdaptiveLinearLayer",
-        #     "DepthMappingLayer",
-        # )
-        # if self.__get_model_type().__name__ in linears:
-        #     # if c.override_config is not None:
-        #     #     c.override_config.input_dim = input_dim
-        #     #     c.override_config.output_dim = output_dim
-        #     #     return c
-        #     c.input_dim = input_dim
-        #     c.output_dim = output_dim
-        #     # c.linear_layer_config.input_dim = input_dim
-        #     # c.linear_layer_config.output_dim = output_dim
-        #     return c
-        #
-        # generators = (
-        #     "VectorParameterLayer",
-        #     "MatrixParameterLayer",
-        #     "GeneratorParameterLayer",
-        # )
-        #
-        # if self.__get_model_type().__name__ in generators:
-        #     c.router_model_config.input_dim = input_dim
-        #     c.mixture_model_config.input_dim = input_dim
-        #     c.mixture_model_config.output_dim = output_dim
-        #
-        #     return c
 
 
 class LinearLayerStack(Module):

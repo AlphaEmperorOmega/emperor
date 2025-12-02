@@ -1,8 +1,9 @@
-from Emperor.linears.options import LinearLayerOptions
 from Emperor.experiments.utils.factories import Experiments
-from Emperor.linears.utils.behaviours import DynamicMemorySelector
+from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.config import LinearsConfigs
-from Emperor.linears.utils.enums import (
+
+
+from Emperor.behaviours.utils.enums import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
     DynamicBiasOptions,

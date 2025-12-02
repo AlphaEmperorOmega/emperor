@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 from Emperor.base.layer import Layer
 from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import ConfigBase, Module, device
-from Emperor.linears.utils.enums import LinearMemoryOptions
-from Emperor.sampler.model import SamplerModel
-from Emperor.linears.utils.layers import LinearLayer
+from Emperor.behaviours.utils.enums import LinearMemoryOptions
 from Emperor.linears.options import LinearLayerOptions
+from Emperor.linears.utils.layers import LinearLayer
+from Emperor.sampler.model import SamplerModel
 from Emperor.generators.options import ParameterGeneratorOptions
 from Emperor.sampler.utils.routers import RouterModel
 

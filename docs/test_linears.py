@@ -4,7 +4,7 @@ import unittest
 from dataclasses import asdict
 from Emperor.config import ModelConfig
 from Emperor.linears.utils.config import LinearsConfigs
-from Emperor.linears.utils.enums import (
+from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
