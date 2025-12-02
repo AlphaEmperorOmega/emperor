@@ -5,7 +5,7 @@ import unittest
 from Emperor.base.utils import Module
 from Emperor.config import ModelConfig
 from Emperor.behaviours.utils.behaviours import DynamicDiagonalSelector
-from Emperor.behaviours.utils.config import LinearsConfigs
+from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.behaviours.utils.enums import DynamicDiagonalOptions
 from Emperor.behaviours.utils.handlers.diagonal import (
     DiagonalHandlerAbstract,

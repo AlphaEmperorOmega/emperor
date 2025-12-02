@@ -4,7 +4,7 @@ import unittest
 from dataclasses import asdict
 from Emperor.config import ModelConfig
 from Emperor.behaviours.utils.behaviours import DynamicMemorySelector
-from Emperor.behaviours.utils.config import LinearsConfigs
+from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.behaviours.utils.enums import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,

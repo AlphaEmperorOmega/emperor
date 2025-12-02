@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from Emperor.base.utils import Module
 from Emperor.behaviours.utils.behaviours import DynamicParametersBehaviour
-from Emperor.behaviours.utils.config import LinearsConfigs
+from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.behaviours.utils.enums import DynamicDepthOptions
 from Emperor.behaviours.utils.handlers.parameter import (
     DepthMappingLayer,
