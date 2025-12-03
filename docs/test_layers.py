@@ -3,8 +3,8 @@ import unittest
 import torch
 from math import prod
 import torch.nn as nn
-
-from Emperor.generators.layers import (
+from Emperor.sampler.utils.samplers import SamplerConfig
+from Emperor.generators.utils.layers import (
     GeneratorParameterLayer,
     ParameterLayerConfig,
     VectorParameterLayer,
@@ -20,9 +20,6 @@ from Emperor.generators.utils.routers import (
     RouterConfig,
     RouterModel,
     VectorRouterModel,
-)
-from Emperor.generators.utils.samplers import (
-    SamplerConfig,
 )
 from Emperor.config import ModelConfig
 

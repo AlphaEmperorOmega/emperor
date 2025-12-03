@@ -13,7 +13,7 @@ from Emperor.experts.experts import MixtureOfExpertsConfig
 from Emperor.generators.utils.layers import ParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.generators.options import ParameterGeneratorOptions
-from Emperor.generators.utils.mixture import MixtureConfig
+from Emperor.generators.utils.mixtures.base import MixtureConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
@@ -139,9 +139,7 @@ class ModelConfig(ConfigBase):
             depth_dim=MIXTURE_DEPTH_DIM,
             top_k=MIXTURE_TOP_K,
             weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
-            bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
             num_experts=MIXTURE_NUM_EXPERTS,
-            dynamic_diagonal_params_flag=MIXTURE_ANTI_DIAGONAL_FLAG,
         ),
         metadata={"help": "`MixtureConfig` configuration"},
     )

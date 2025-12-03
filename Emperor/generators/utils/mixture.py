@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
+from enum import Enum
 from torch import Tensor
 from torch.nn import Parameter
-from enum import Enum
-import torch.nn.functional as F
 from Emperor.base.utils import Module, ConfigBase, arange, reshape
 from dataclasses import dataclass, field
 
@@ -82,6 +83,9 @@ class MixtureBase(Module):
         self.bias_parameters_flag = self.cfg.bias_parameters_flag
         self.num_experts = self.cfg.num_experts
         self.dynamic_diagonal_params_flag = self.cfg.dynamic_diagonal_params_flag
+        self.__validate_inputs()
+
+    def __validate_inputs(self) -> None:
         assert self.depth_dim == self.num_experts, (
             "The `depth_dim` needs to be equal with `num_experts` since this is the dimension the router creates a distribution over."
         )
@@ -107,72 +111,15 @@ class ParameterMixture(MixtureBase):
         bias_indices: Tensor | None = None,
         *args,
     ) -> tuple[Tensor, Tensor | None]:
-        if self.top_k == 1:
-            return self._compute_mixture_sparse(
-                weight_probs,
-                weight_indices,
-                bias_probs,
-                bias_indices,
-                *args,
-            )
-        elif self.top_k == self.depth_dim:
-            return self._compute_mixture_full(
+        if self.__is_mixture_sparse() or self.__is_mixture_topk():
+            selected_params = self._select_parameters(weight_indices, bias_indices)
+            return self._compute_parameter_mixture(
+                *selected_params,
                 weight_probs,
                 bias_probs,
                 *args,
             )
-        else:
-            return self._compute_mixture_topk(
-                weight_probs,
-                weight_indices,
-                bias_probs,
-                bias_indices,
-                *args,
-            )
-
-    def _compute_mixture_sparse(
-        self,
-        weight_probs: Tensor,
-        weight_indices: Tensor,
-        bias_probs: Tensor | None = None,
-        bias_indices: Tensor | None = None,
-        *args,
-    ) -> tuple[Tensor, Tensor | None]:
-        selected_params = self._select_parameters(weight_indices, bias_indices)
-
-        weight_mixture, bias_mixture = self._compute_parameter_mixture(
-            *selected_params,
-            weight_probs,
-            bias_probs,
-            *args,
-        )
-
-        return weight_mixture, bias_mixture
-
-    def _compute_mixture_topk(
-        self,
-        weight_probs: Tensor,
-        weight_indices: Tensor,
-        bias_probs: Tensor | None = None,
-        bias_indices: Tensor | None = None,
-        *args,
-    ) -> tuple[Tensor, Tensor | None]:
-        selected_params = self._select_parameters(weight_indices, bias_indices)
-        weight_mixture, bias_mixture = self._compute_parameter_mixture(
-            *selected_params,
-            weight_probs,
-            bias_probs,
-            *args,
-        )
-        return weight_mixture, bias_mixture
-
-    def _compute_mixture_full(
-        self,
-        weight_probs: Tensor,
-        bias_probs: Tensor | None = None,
-        *args,
-    ) -> tuple[Tensor, Tensor | None]:
-        weight_mixture, bias_mixture = self._compute_parameter_mixture(
+        return self._compute_parameter_mixture(
             self.weight_bank,
             self.bias_bank,
             weight_probs,
@@ -180,7 +127,11 @@ class ParameterMixture(MixtureBase):
             *args,
         )
 
-        return weight_mixture, bias_mixture
+    def __is_mixture_sparse(self) -> bool:
+        return self.top_k == 1
+
+    def __is_mixture_topk(self) -> bool:
+        return 1 < self.top_k < self.depth_dim
 
     def _compute_parameter_mixture(
         self,
@@ -313,14 +264,6 @@ class MatrixMixture(ParameterMixture):
         if self.depth_dim == self.top_k:
             assert self.weighted_parameters_flag is True
 
-    def __generate_probability_shapes(self) -> tuple:
-        weight_probs_shape = (-1, self.top_k, 1)
-        bias_probs_shape = (-1, self.top_k)
-        if self.top_k > 1:
-            weight_probs_shape = (-1, self.top_k, 1, 1)
-            bias_probs_shape = (-1, self.top_k, 1)
-        return weight_probs_shape, bias_probs_shape
-
     def __init_parameter_banks(self) -> tuple[Parameter, Parameter | None]:
         weight_bank_shape = (self.depth_dim, self.input_dim, self.output_dim)
         weight_bank = self._init_parameter_bank(weight_bank_shape)
@@ -331,6 +274,14 @@ class MatrixMixture(ParameterMixture):
             bias_bank = self._init_parameter_bank(bias_bank_shape)
 
         return weight_bank, bias_bank
+
+    def __generate_probability_shapes(self) -> tuple:
+        weight_probs_shape = (-1, self.top_k, 1)
+        bias_probs_shape = (-1, self.top_k)
+        if self.top_k > 1:
+            weight_probs_shape = (-1, self.top_k, 1, 1)
+            bias_probs_shape = (-1, self.top_k, 1)
+        return weight_probs_shape, bias_probs_shape
 
     def _select_parameters(
         self,

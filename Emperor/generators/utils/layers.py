@@ -4,8 +4,12 @@ from torch import Tensor
 from Emperor.base.utils import Module
 from dataclasses import dataclass, field
 from Emperor.base.decorators import timer
-from Emperor.behaviours.utils.enums import DynamicDepthOptions, DynamicDiagonalOptions
+from Emperor.generators.utils.mixtures.vector import (
+    VectorBiasMixture,
+    VectorWeightsMixture,
+)
 from Emperor.sampler.model import SamplerModel
+from Emperor.behaviours.utils.enums import DynamicDepthOptions, DynamicDiagonalOptions
 from Emperor.behaviours.model import (
     AdaptiveParameterModel,
     AdaptiveParameterModelConfig,
@@ -75,6 +79,7 @@ class ParameterLayerBase(Module):
         self.generator_depth = self.cfg.generator_depth
         self.adaptive_behaviour = AdaptiveParameterModel(self.cfg)
         self.__validators()
+        self._validate_requiered_child_class_attributes()
 
     def __validators(self):
         assert self.generator_depth == DynamicDepthOptions.DISABLED, (
@@ -83,6 +88,17 @@ class ParameterLayerBase(Module):
         assert self.diagonal_option != DynamicDiagonalOptions.DISABLED, (
             "The diagonal option must not be set to 'DISABLED' for `ParameterLayer` models."
         )
+
+    def _validate_requiered_child_class_attributes(self) -> None:
+        required_attributes = [
+            "weight_mixture",
+            "bias_mixture",
+        ]
+        for required_attribute in required_attributes:
+            if not hasattr(self, required_attribute):
+                raise AttributeError(
+                    f"Required attribute is missing in the child class: {required_attribute}."
+                )
 
     def forward(
         self,
@@ -116,6 +132,44 @@ class ParameterLayerBase(Module):
 
         return output, updated_skip_mask, total_layer_loss
 
+    def _generate_weight_parameters(
+        self,
+        input: Tensor,
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
+        weight_probabilities, weight_indices = self._compute_probabilities_and_indices(
+            input, skip_mask=skip_mask
+        )
+        bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
+            input, skip_mask
+        )
+        weight_parameters = self.weight_mixture.compute_mixture(
+            weight_probabilities, weight_indices
+        )
+        bias_parameters = self.bias_mixture.compute_mixture(
+            bias_probabilities, bias_indices
+        )
+        return weight_parameters, bias_parameters
+
+    def _generate_bias_parameters(
+        self,
+        input: Tensor,
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
+        weight_probabilities, weight_indices = self._compute_probabilities_and_indices(
+            input, skip_mask=skip_mask
+        )
+        bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
+            input, skip_mask
+        )
+        weight_parameters = self.weight_mixture.compute_mixture(
+            weight_probabilities, weight_indices
+        )
+        bias_parameters = self.bias_mixture.compute_mixture(
+            bias_probabilities, bias_indices
+        )
+        return weight_parameters, bias_parameters
+
     def _generate_parameters(
         self,
         input: Tensor,
@@ -127,8 +181,11 @@ class ParameterLayerBase(Module):
         bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
             input, skip_mask
         )
-        weight_parameters, bias_parameters = self.mixture.compute_mixture(
-            weight_probabilities, weight_indices, bias_probabilities, bias_indices
+        weight_parameters = self.weight_mixture.compute_mixture(
+            weight_probabilities, weight_indices
+        )
+        bias_parameters = self.bias_mixture.compute_mixture(
+            bias_probabilities, bias_indices
         )
         return weight_parameters, bias_parameters
 
@@ -226,20 +283,26 @@ class VectorParameterLayer(ParameterLayerBase):
     ):
         super().__init__(cfg, overrides)
 
-        self.weight_router: VectorRouterModel = VectorRouterModel(cfg)
-        self.weight_sampler: SamplerModel = SamplerModel(cfg)
-        self.bias_sampler: SamplerModel = SamplerModel(cfg)
-        self.mixture: VectorMixture = VectorMixture(cfg)
+        self.weight_router = VectorRouterModel(cfg)
         self.bias_router = self._init_bias_router_model(cfg)
+        self.weight_sampler = SamplerModel(cfg)
+        self.bias_sampler = SamplerModel(cfg)
+        self.weight_mixture = VectorWeightsMixture(cfg)
+        self.bias_mixture = self._init_bias_mixture_model(cfg)
 
     def _init_bias_router_model(self, cfg: "ModelConfig") -> VectorRouterModel | None:
-        if self.bias_parameters_flag:
-            return VectorRouterModel(
-                cfg,
-                bias_parameters_flag=self.bias_parameters_flag,
-                bias_output_dim=self.mixture.output_dim,
-            )
-        return None
+        if not self.bias_parameters_flag:
+            return None
+        return VectorRouterModel(
+            cfg,
+            bias_parameters_flag=self.bias_parameters_flag,
+            bias_output_dim=self.mixture.output_dim,
+        )
+
+    def _init_bias_mixture_model(self, cfg: "ModelConfig") -> VectorBiasMixture | None:
+        if not self.bias_parameters_flag:
+            return None
+        return VectorBiasMixture(cfg)
 
     def _compute_probabilities_and_indices(
         self,
