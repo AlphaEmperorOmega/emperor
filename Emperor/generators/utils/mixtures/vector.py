@@ -42,12 +42,12 @@ class VectorMixtureBase(MixtureBase):
     def __compute_parameter_mixture(
         self,
         selected_parameters: Tensor,
-        probabilities: Tensor,
+        probs: Tensor,
     ) -> Tensor:
         weighted_parameters = selected_parameters
-        if self.__should_compute_weighted_parameters(probabilities):
+        if self.__should_compute_weighted_parameters(probs):
             weighted_parameters = self._compute_weighted_parameters(
-                selected_parameters, probabilities
+                selected_parameters, probs
             )
 
         if self.__is_topk_sparse():
@@ -57,14 +57,12 @@ class VectorMixtureBase(MixtureBase):
     def __is_topk_sparse(self) -> bool:
         return self.top_k == 1
 
-    def __should_compute_weighted_parameters(
-        self, probabilities: Tensor | None
-    ) -> bool | None:
-        if self.weighted_parameters_flag and probabilities is None:
+    def __should_compute_weighted_parameters(self, probs: Tensor | None) -> bool | None:
+        if self.weighted_parameters_flag and probs is None:
             raise ValueError(
                 "Probabilities must be provided when 'weighted_parameters_flag' is set to True."
             )
-        return self.weighted_parameters_flag and probabilities is not None
+        return self.weighted_parameters_flag and probs is not None
 
     def _compute_weighted_parameters(
         self,
