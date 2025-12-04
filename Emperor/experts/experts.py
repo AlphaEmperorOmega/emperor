@@ -8,7 +8,6 @@ from Emperor.base.layer import Layer
 from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import ConfigBase, Module, device
 from Emperor.behaviours.utils.enums import LinearMemoryOptions
-from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayer
 from Emperor.sampler.model import SamplerModel
 from Emperor.generators.options import ParameterGeneratorOptions
@@ -192,7 +191,7 @@ class MixtureOfExperts(Module):
         c.mixture_model_config.output_dim = self.output_dim
         return c
 
-    def compute_expert_outputs(
+    def forward(
         self,
         input_batch: Tensor,
         indices: Tensor | None = None,
