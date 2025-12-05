@@ -17,10 +17,10 @@ class MixtureConfig(ConfigBase):
         default=None,
         metadata={"help": "Mixture model output dimension"},
     )
-    depth_dim: int | None = field(
-        default=None,
-        metadata={"help": "Mixture model depth dimension"},
-    )
+    # depth_dim: int | None = field(
+    #     default=None,
+    #     metadata={"help": "Mixture model depth dimension"},
+    # )
     top_k: int | None = field(
         default=None,
         metadata={
@@ -51,17 +51,17 @@ class MixtureBase(Module):
 
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
-        self.depth_dim = self.cfg.depth_dim
+        # self.depth_dim = self.cfg.depth_dim
         self.top_k = self.cfg.top_k
         self.num_experts = self.cfg.num_experts
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
         self.__validate_inputs()
 
     def __validate_inputs(self) -> None:
-        assert self.depth_dim == self.num_experts, (
-            "The `depth_dim` needs to be equal with `num_experts` since this is the dimension the router creates a distribution over."
-        )
-        if self.depth_dim == self.top_k:
+        # assert self.depth_dim == self.num_experts, (
+        #     "The `depth_dim` needs to be equal with `num_experts` since this is the dimension the router creates a distribution over."
+        # )
+        if self.num_experts == self.top_k:
             assert self.weighted_parameters_flag is True, (
                 "If `full_mixture` is performed the `weighted_parameters_flag` must be True. Because the `weight_bank` or `bias_bank` needs to be broadcasted across the batch."
             )

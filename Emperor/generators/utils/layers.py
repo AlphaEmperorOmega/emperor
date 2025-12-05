@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.linears.options import LinearLayerOptions
+    from Emperor.linears.options import LinearLayerStackOptions
 
 
 @dataclass
@@ -45,17 +46,7 @@ class ParameterLayerConfig(AdaptiveParameterModelConfig):
             "help": "When `True` it will generate bias parameters for each input sample."
         },
     )
-    dynamic_diagonal_params_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When `True` for weight parameters a set of `diagonal` and `anti_diagonal` parameters are added to the generated weight_parameters for each input sampele, for biases a set of parameters that scale the biases are generated and biases are added to the bias parameters that shift them for each sample."
-        },
-    )
-    linear_layer_model_type: "LinearLayerOptions | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    linear_layer_config: "LinearLayerConfig | None" = field(
+    linear_layer_type: "LinearLayerOptions | LinearLayerStackOptions | None" = field(
         default=None,
         metadata={"help": ""},
     )

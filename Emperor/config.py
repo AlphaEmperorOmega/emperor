@@ -147,7 +147,7 @@ class ModelConfig(ConfigBase):
         default_factory=lambda: ParameterLayerConfig(
             bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
             time_tracker_flag=PARAMETER_GENERATOR_TRACK_TIME_FLAG,
-            dynamic_diagonal_params_flag=PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG,
+            # dynamic_diagonal_params_flag=PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG,
         ),
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
@@ -173,7 +173,7 @@ class ModelConfig(ConfigBase):
             dropout_probability=0.1,
             layer_norm_flag=True,
             activation=ActivationOptions.GELU,
-            model_type=LinearLayerOptions.DYNAMIC,
+            model_type=LinearLayerOptions.ADAPTIVE,
             num_experts=12,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
@@ -189,7 +189,7 @@ class ModelConfig(ConfigBase):
             dropout_probability=0.1,
             layer_norm_flag=True,
             activation=ActivationOptions.GELU,
-            model_type=LinearLayerOptions.DYNAMIC,
+            model_type=LinearLayerOptions.ADAPTIVE,
             num_experts=12,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
@@ -199,7 +199,7 @@ class ModelConfig(ConfigBase):
     )
     multi_head_attention_model_config: MultiHeadAttentionConfig = field(
         default_factory=lambda: MultiHeadAttentionConfig(
-            model_type=LinearLayerOptions.DYNAMIC,
+            model_type=LinearLayerOptions.ADAPTIVE,
             batch_size=BATCH_SIZE,
             num_heads=NUM_EXPERTS,
             query_key_projection_dim=16,
@@ -233,7 +233,7 @@ class ModelConfig(ConfigBase):
     )
     transformer_feed_forward_config: FeedForwardConfig = field(
         default_factory=lambda: FeedForwardConfig(
-            model_type=LinearLayerOptions.DYNAMIC,
+            model_type=LinearLayerOptions.ADAPTIVE,
             num_layers=1,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
@@ -260,7 +260,7 @@ class ModelConfig(ConfigBase):
     )
     neuron_nucleus_config: NucleusConfig | None = field(
         default_factory=lambda: NucleusConfig(
-            model_type=LinearLayerOptions.DYNAMIC,
+            model_type=LinearLayerOptions.ADAPTIVE,
         ),
         metadata={"help": "`Nucleus` configuration"},
     )

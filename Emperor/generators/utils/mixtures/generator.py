@@ -26,6 +26,8 @@ class GeneratorMixtureBase(MixtureBase):
         overrides: "MixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
+        config = getattr(cfg, "mixture_model_config", cfg)
+        self.mixture_config: "MixtureConfig" = self._overwrite_config(config, overrides)
         self.einsum_vector_operation = self.__decide_einsum_computation()
 
     def __decide_einsum_computation(self) -> str:
@@ -55,13 +57,8 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         self.range_dim = self.input_dim
         self.parameter_mixture_dim = -2
         self.probability_shape = (-1, self.top_k, 1, 1)
-        self.input_weight_shape = (self.depth_dim, self.input_dim, self.input_dim)
-        self.output_weight_shape = (self.depth_dim, self.input_dim, self.output_dim)
         self.input_weight_vector_generator = MixtureOfExperts(cfg)
         self.output_weight_vector_generator = MixtureOfExperts(cfg)
-
-        self.input_weight_bank = self._init_parameter_bank(self.input_weight_shape)
-        self.output_weight_bank = self._init_parameter_bank(self.output_weight_shape)
         self.register_buffer("select_range", self._init_parameter_select_range())
 
     def compute_mixture(
@@ -167,8 +164,7 @@ class GeneratorBiasMixture(GeneratorMixtureBase):
         self.range_dim = self.output_dim
         self.parameter_mixture_dim = -1
         self.probability_shape = (-1, self.top_k, 1)
-        self.parameter_bank_shape = (self.depth_dim, self.input_dim, self.output_dim)
-        self.parameter_bank = self._init_parameter_bank(self.parameter_bank_shape)
+        self.input_weight_vector_generator = MixtureOfExperts(cfg)
         self.register_buffer("select_range", self._init_parameter_select_range())
 
     def _select_parameters(self, indices: Tensor | None) -> tuple[Tensor, Tensor]:

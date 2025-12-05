@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass, field
 
-from Emperor.base.layer import Layer
+from Emperor.base.layer import Layer, LayerStackConfig
 from Emperor.base.enums import ActivationOptions
 from Emperor.base.utils import ConfigBase, Module, device
 from Emperor.behaviours.utils.enums import LinearMemoryOptions
@@ -118,6 +118,7 @@ class MixtureOfExperts(Module):
         self.is_output_layer_flag = is_output_layer_flag
         config = getattr(cfg, self.__resolve_config_type(), cfg)
         self.cfg: "MixtureOfExpertsConfig" = self._overwrite_config(config, overrides)
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
@@ -130,28 +131,28 @@ class MixtureOfExperts(Module):
         self.compute_expert_mixture_flag = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
         self.init_sampler_model_flag = self.cfg.init_sampler_model_flag
-        self._validate_fields(self.cfg, MixtureOfExpertsConfig)
+        self.layer_stack_model = self.cfg.layer_stack_model
 
-        self.layer_block_model = self.__resolve_layer_block_class()
         self.router, self.sampler = self.__optionaly_create_router_and_samples(cfg)
         self.expert_modules = self.__create_experts(cfg)
+        # self.layer_block_model = self.__resolve_layer_block_class()
 
-    def __resolve_layer_block_class(self) -> type[Layer]:
-        # TODO: move this somewhere else in the future since it is used in
-        # `LayerStack` as well
-        from Emperor.generators.utils.enums import (
-            LinearLayerTypes,
-            ParameterGeneratorTypes,
-        )
-
-        if isinstance(self.model_type, LinearLayerTypes):
-            return Layer
-        elif isinstance(self.model_type, ParameterGeneratorTypes):
-            return ParameterGeneratorLayer
-        else:
-            raise RuntimeError(
-                f"Unsupported `model_type` {type(self.model_type)} for `LayerStack`"
-            )
+    # def __resolve_layer_block_class(self) -> type[Layer]:
+    #     # TODO: move this somewhere else in the future since it is used in
+    #     # `LayerStack` as well
+    #     from Emperor.generators.utils.enums import (
+    #         LinearLayerTypes,
+    #         ParameterGeneratorTypes,
+    #     )
+    #
+    #     if isinstance(self.model_type, LinearLayerTypes):
+    #         return Layer
+    #     elif isinstance(self.model_type, ParameterGeneratorTypes):
+    #         return ParameterGeneratorLayer
+    #     else:
+    #         raise RuntimeError(
+    #             f"Unsupported `model_type` {type(self.model_type)} for `LayerStack`"
+    #         )
 
     def __resolve_config_type(self) -> str:
         if self.is_output_layer_flag:
@@ -170,26 +171,35 @@ class MixtureOfExperts(Module):
     def __create_experts(self, cfg: "ModelConfig") -> nn.ModuleList:
         expert_list = []
         for _ in range(self.num_experts):
-            model = self.model_type.value(self.__resolve_model_type_overrides(cfg))
-            layer_norm_dim = self.output_dim if self.layer_norm_flag else None
-            layer_block = self.layer_block_model(
-                model=model,
-                activation_function=self.activation.value,
-                layer_norm_dim=layer_norm_dim,
-                dropout_probability=self.dropout_probability,
-            )
-            expert_list.append(layer_block)
-        return nn.ModuleList(expert_list)
+            overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
+            model_stack = self.layer_stack_model(self.main_cfg, overrides)
 
-    def __resolve_model_type_overrides(self, cfg: "ModelConfig"):
-        c = copy.deepcopy(cfg)
-        if issubclass(self.model_type.value, LinearLayer):
-            c.linear_layer_config.input_dim = self.input_dim
-            c.linear_layer_config.output_dim = self.output_dim
-            return c
-        c.mixture_model_config.input_dim = self.input_dim
-        c.mixture_model_config.output_dim = self.output_dim
-        return c
+            expert_list.append(model_stack)
+        return nn.ModuleList()
+
+    # def __create_experts(self, cfg: "ModelConfig") -> nn.ModuleList:
+    #     expert_list = []
+    #     for _ in range(self.num_experts):
+    #         model = self.model_type.value(self.__resolve_model_type_overrides(cfg))
+    #         layer_norm_dim = self.output_dim if self.layer_norm_flag else None
+    #         self.layer_block_model(
+    #             model=model,
+    #             activation_function=self.activation.value,
+    #             layer_norm_dim=layer_norm_dim,
+    #             dropout_probability=self.dropout_probability,
+    #         )
+    #         expert_list.append(layer_block)
+    #     return nn.ModuleList(expert_list)
+
+    # def __resolve_model_type_overrides(self, cfg: "ModelConfig"):
+    #     c = copy.deepcopy(cfg)
+    #     if issubclass(self.model_type.value, LinearLayer):
+    #         c.linear_layer_config.input_dim = self.input_dim
+    #         c.linear_layer_config.output_dim = self.output_dim
+    #         return c
+    #     c.mixture_model_config.input_dim = self.input_dim
+    #     c.mixture_model_config.output_dim = self.output_dim
+    #     return c
 
     def forward(
         self,

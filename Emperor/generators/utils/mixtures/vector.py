@@ -96,24 +96,23 @@ class VectorWeightsMixture(VectorMixtureBase):
         return selected_parameters * probs
 
 
-# This version should not have a bias
-# class VectorBiasMixture(VectorMixtureBase):
-#     def __init__(
-#         self,
-#         cfg: "MixtureConfig | ModelConfig",
-#         overrides: "MixtureConfig | None" = None,
-#     ) -> None:
-#         super().__init__(cfg, overrides)
-#         self.range_dim = self.output_dim
-#         self.parameter_mixture_dim = -1
-#         self.parameter_bank_shape = (self.output_dim, self.depth_dim)
-#         self.parameter_bank = self._init_parameter_bank(self.parameter_bank_shape)
-#         self.register_buffer("select_range", self._init_parameter_select_range())
-#
-#     def _compute_weighted_parameters(
-#         self,
-#         selected_parameters: Tensor,
-#         probs: Tensor,
-#     ):
-#         probs = probs.transpose(1, 0)
-#         return selected_parameters * probs
+class VectorBiasMixture(VectorMixtureBase):
+    def __init__(
+        self,
+        cfg: "MixtureConfig | ModelConfig",
+        overrides: "MixtureConfig | None" = None,
+    ) -> None:
+        super().__init__(cfg, overrides)
+        self.range_dim = self.output_dim
+        self.parameter_mixture_dim = -1
+        self.parameter_bank_shape = (self.output_dim, self.depth_dim)
+        self.parameter_bank = self._init_parameter_bank(self.parameter_bank_shape)
+        self.register_buffer("select_range", self._init_parameter_select_range())
+
+    def _compute_weighted_parameters(
+        self,
+        selected_parameters: Tensor,
+        probs: Tensor,
+    ):
+        probs = probs.transpose(1, 0)
+        return selected_parameters * probs

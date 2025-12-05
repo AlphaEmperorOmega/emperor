@@ -1,6 +1,7 @@
 from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.behaviours.options import LinearLayerOptions
+from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.sampler.utils.routers import RouterConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.behaviours.utils.layers import LinearLayerConfig
@@ -28,7 +29,7 @@ class SamplerConfigs:
         dropout_probability: float = 0.0,
         num_layers: int = 2,
         activation: ActivationOptions = ActivationOptions.RELU,
-        model_type: LinearLayerOptions = LinearLayerOptions.BASE,
+        model_type: LinearLayerStackOptions = LinearLayerStackOptions.BASE,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
         memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
@@ -41,7 +42,7 @@ class SamplerConfigs:
             input_dim=input_dim,
             output_dim=num_experts,
             router_model_config=RouterConfig(
-                model_type=model_type,
+                layer_stack_option=model_type,
                 num_experts=num_experts,
                 noisy_topk_flag=noisy_topk_flag,
                 override_config=LayerStackConfig(

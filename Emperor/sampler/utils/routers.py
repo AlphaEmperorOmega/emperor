@@ -1,8 +1,8 @@
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.base.layer import LayerStack, LayerStackConfig
+from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import Module, ConfigBase
-from Emperor.linears.options import LinearLayerOptions
+from Emperor.linears.options import LinearLayerStackOptions
 
 from typing import TYPE_CHECKING
 
@@ -12,8 +12,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class RouterConfig(ConfigBase):
-    model_type: LinearLayerOptions = field(
-        default=LinearLayerOptions.BASE,
+    layer_stack_option: LinearLayerStackOptions = field(
+        default=LinearLayerStackOptions.BASE,
         metadata={"help": "Number of layers added to the router"},
     )
     num_experts: int = field(
@@ -39,7 +39,7 @@ class RouterModel(Module):
         self.cfg: "RouterConfig" = self._overwrite_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
-        self.model_type = self.cfg.model_type
+        self.layer_stack_option = self.cfg.layer_stack_option
         self.num_experts = self.cfg.num_experts
         self.noisy_topk_flag = self.cfg.noisy_topk_flag
 
@@ -47,10 +47,10 @@ class RouterModel(Module):
             2 * self.num_experts if self.noisy_topk_flag else self.num_experts
         )
         self.__assert_input_requirements()
-        model_overrides = LayerStackConfig(
-            model_type=self.model_type, output_dim=self.num_experts
-        )
-        self.model = LayerStack(self.main_cfg, model_overrides).build_model()
+        model_overrides = LayerStackConfig(output_dim=self.num_experts)
+        self.model = self.layer_stack_option(
+            self.main_cfg, model_overrides
+        ).build_model()
 
     def __assert_input_requirements(self):
         assert self.num_experts > 0, (

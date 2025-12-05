@@ -3,16 +3,13 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.base.layer import (
-    LayerStackConfig,
-    LinearLayerStack,
-)
+from Emperor.base.layer import LayerStackConfig
+from Emperor.linears.utils.stack import LinearLayerStack
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
-    from Emperor.behaviours.utils.layers import LinearLayerConfig
+    from Emperor.linears.utils.layers import LinearLayerConfig
 
 
 class DiagonalHandlerAbstract(Module):

@@ -5,13 +5,12 @@ from Emperor.behaviours.utils.enums import (
     LinearMemorySizeOptions,
 )
 from Emperor.base.utils import Module
-from Emperor.base.layer import (
-    LayerStackConfig,
-    LinearLayerStack,
-)
+from Emperor.base.layer import LayerStackConfig
+from Emperor.linears.utils.stack import LinearLayerStack
 
 
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from Emperor.linears.utils.layers import LinearLayerConfig

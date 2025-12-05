@@ -34,7 +34,7 @@ class LinearsExperiments(Experiments):
         self.train_model(LinearLayerOptions.BASE)
 
     def train_dynamic_model(self):
-        self.train_model(LinearLayerOptions.DYNAMIC)
+        self.train_model(LinearLayerOptions.ADAPTIVE)
 
     def test_all_linear_types(self):
         for layer_type in LinearLayerOptions:
@@ -57,7 +57,7 @@ class LinearsBasePreset:
                     output_dim=10,
                     bias_flag=True,
                 )
-            case LinearLayerOptions.DYNAMIC:
+            case LinearLayerOptions.ADAPTIVE:
                 return LinearsConfigs.dynamic_preset(
                     batch_size=64,
                     input_dim=784,

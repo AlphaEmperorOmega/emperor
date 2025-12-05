@@ -1,6 +1,9 @@
+from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
+from Emperor.experts.experts import MixtureOfExpertsConfig
+from Emperor.generators.utils.layers import ParameterLayerConfig
+from Emperor.generators.utils.mixtures.base import MixtureConfig
 from Emperor.linears.options import LinearLayerOptions
-from Emperor.generators.utils.routers import RouterConfig
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.behaviours.utils.enums import (
@@ -12,61 +15,190 @@ from Emperor.behaviours.utils.enums import (
     LinearMemorySizeOptions,
 )
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
-
 
 class ParameterGeneratorConfigs:
     @staticmethod
-    def router_preset(
-        batch_size: int = 2,
+    def generator_preset(
+        batch_size: int = 8,
         input_dim: int = 12,
-        hidden_dim: int = 16,
-        num_experts: int = 6,
+        output_dim: int = 6,
         bias_flag: bool = True,
-        noisy_topk_flag: bool = False,
-        residual_flag: bool = True,
-        activation: ActivationOptions = ActivationOptions.RELU,
-        model_type: LinearLayerOptions = LinearLayerOptions.BASE,
-        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
-        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
         memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
         memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+        stack_depth: int = 2,
+        stack_hidden_dim: int = 0,
+        activation: ActivationOptions = ActivationOptions.RELU,
+        residual_flag: bool = False,
+        dropout_probability: float = 0.0,
     ) -> "ModelConfig":
         return ModelConfig(
-            batch_size=batch_size,
             input_dim=input_dim,
-            output_dim=num_experts,
-            router_model_config=RouterConfig(
-                num_experts=num_experts,
-                noisy_topk_flag=noisy_topk_flag,
+            output_dim=output_dim,
+            batch_size=batch_size,
+            parameter_generator_model_config=ParameterLayerConfig(
+                time_tracker_flag=False,
+                bias_parameters_flag=True,
+                override_config=MixtureConfig(
+                    top_k=top_k,
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    depth_dim=depth_dim,
+                    num_experts=num_experts,
+                    weighted_parameters_flag=weighted_parameters_flag,
+                    bias_parameters_flag=bias_parameters_flag,
+                    override_config=MixtureOfExpertsConfig(
+                        input_dim=input_dim,
+                        output_dim=64,
+                        top_k=top_k,
+                        dropout_probability=0.1,
+                        layer_norm_flag=True,
+                        activation=ActivationOptions.GELU,
+                        model_type=LinearLayerTypes.DYNAMIC,
+                        num_experts=num_experts,
+                        compute_expert_mixture_flag=False,
+                        weighted_parameters_flag=False,
+                        init_sampler_model_flag=False,
+                        override_config=LinearLayerConfig(
+                            input_dim=input_dim,
+                            output_dim=output_dim,
+                            bias_flag=bias_flag,
+                            data_monitor=None,
+                            parameter_monitor=None,
+                            generator_depth=generator_depth,
+                            diagonal_option=diagonal_option,
+                            bias_option=bias_option,
+                            memory_option=memory_option,
+                            memory_size_option=memory_size_option,
+                            memory_position_option=memory_position_option,
+                            override_config=LayerStackConfig(
+                                model_type=LinearLayerOptions.BASE,
+                                input_dim=input_dim,
+                                hidden_dim=stack_hidden_dim,
+                                output_dim=output_dim,
+                                num_layers=stack_depth,
+                                activation=activation,
+                                layer_norm_position=LayerNormPositionOptions.NONE,
+                                residual_flag=residual_flag,
+                                adaptive_computation_flag=False,
+                                dropout_probability=dropout_probability,
+                                override_config=LinearLayerConfig(
+                                    input_dim=input_dim,
+                                    output_dim=output_dim,
+                                    bias_flag=bias_flag,
+                                    generator_depth=generator_depth,
+                                    data_monitor=None,
+                                    parameter_monitor=None,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
             ),
             layer_stack_config=LayerStackConfig(
-                model_type=model_type,
+                model_type=LinearLayerOptions.BASE,
                 input_dim=input_dim,
-                hidden_dim=hidden_dim,
-                output_dim=num_experts,
-                num_layers=2,
+                hidden_dim=stack_hidden_dim,
+                output_dim=output_dim,
+                num_layers=stack_depth,
                 activation=activation,
                 layer_norm_position=LayerNormPositionOptions.NONE,
                 residual_flag=residual_flag,
                 adaptive_computation_flag=False,
+                dropout_probability=dropout_probability,
             ),
-            linear_layer_config=LinearLayerConfig(
+        )
+
+    @staticmethod
+    def generator_mixture_for_test(
+        batch_size: int = 8,
+        input_dim: int = 12,
+        output_dim: int = 6,
+        bias_flag: bool = True,
+        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
+        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
+        memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
+        memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+        stack_depth: int = 2,
+        stack_hidden_dim: int = 0,
+        activation: ActivationOptions = ActivationOptions.RELU,
+        residual_flag: bool = False,
+        dropout_probability: float = 0.0,
+        num_experts: int = 8,
+        top_k: int = 4,
+    ) -> "ModelConfig":
+        return ModelConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            batch_size=batch_size,
+            mixture_model_config=MixtureConfig(
                 input_dim=input_dim,
-                output_dim=num_experts,
-                bias_flag=bias_flag,
-                data_monitor=None,
-                parameter_monitor=None,
-                generator_depth=generator_depth,
-                diagonal_option=diagonal_option,
-                bias_option=bias_option,
-                memory_option=memory_option,
-                memory_size_option=memory_size_option,
-                memory_position_option=memory_position_option,
+                output_dim=output_dim,
+                top_k=top_k,
+                num_experts=num_experts,
+                weighted_parameters_flag=weighted_parameters_flag,
+                override_config=MixtureOfExpertsConfig(
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    top_k=top_k,
+                    dropout_probability=dropout_probability,
+                    layer_norm_flag=True,
+                    activation=ActivationOptions.GELU,
+                    model_type=LinearLayerTypes.DYNAMIC,
+                    num_experts=num_experts,
+                    compute_expert_mixture_flag=False,
+                    weighted_parameters_flag=False,
+                    init_sampler_model_flag=False,
+                    override_config=LinearLayerConfig(
+                        input_dim=input_dim,
+                        output_dim=output_dim,
+                        bias_flag=bias_flag,
+                        data_monitor=None,
+                        parameter_monitor=None,
+                        generator_depth=generator_depth,
+                        diagonal_option=diagonal_option,
+                        bias_option=bias_option,
+                        memory_option=memory_option,
+                        memory_size_option=memory_size_option,
+                        memory_position_option=memory_position_option,
+                        override_config=LayerStackConfig(
+                            model_type=LinearLayerOptions.BASE,
+                            input_dim=input_dim,
+                            hidden_dim=stack_hidden_dim,
+                            output_dim=output_dim,
+                            num_layers=stack_depth,
+                            activation=activation,
+                            layer_norm_position=LayerNormPositionOptions.NONE,
+                            residual_flag=residual_flag,
+                            adaptive_computation_flag=False,
+                            dropout_probability=dropout_probability,
+                            override_config=LinearLayerConfig(
+                                input_dim=input_dim,
+                                output_dim=output_dim,
+                                bias_flag=bias_flag,
+                                generator_depth=generator_depth,
+                                data_monitor=None,
+                                parameter_monitor=None,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            layer_stack_config=LayerStackConfig(
+                model_type=LinearLayerOptions.BASE,
+                input_dim=input_dim,
+                hidden_dim=stack_hidden_dim,
+                output_dim=output_dim,
+                num_layers=stack_depth,
+                activation=activation,
+                layer_norm_position=LayerNormPositionOptions.NONE,
+                residual_flag=residual_flag,
+                adaptive_computation_flag=False,
+                dropout_probability=dropout_probability,
             ),
         )
