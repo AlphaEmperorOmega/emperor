@@ -10,7 +10,7 @@ from Emperor.base.utils import ConfigBase, Module, device
 from Emperor.behaviours.utils.enums import LinearMemoryOptions
 from Emperor.linears.utils.layers import LinearLayer
 from Emperor.sampler.model import SamplerModel
-from Emperor.generators.options import ParameterGeneratorOptions
+from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.sampler.utils.routers import RouterModel
 
 
@@ -53,6 +53,10 @@ class _Validator:
 
 @dataclass
 class MixtureOfExpertsConfig(ConfigBase):
+    model_type: LinearMemoryOptions | AdaptiveLayerOptions | None = field(
+        default=None,
+        metadata={"help": "Type of layer used for the experts."},
+    )
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Expert input dimension"},
@@ -74,10 +78,6 @@ class MixtureOfExpertsConfig(ConfigBase):
         },
     )
     layer_norm_flag: bool | None = field(
-        default=None,
-        metadata={"help": "Type of layer used for the experts."},
-    )
-    model_type: LinearMemoryOptions | ParameterGeneratorOptions | None = field(
         default=None,
         metadata={"help": "Type of layer used for the experts."},
     )

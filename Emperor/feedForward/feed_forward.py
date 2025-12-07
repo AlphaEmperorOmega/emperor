@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from Emperor.base.layer import Layer, LayerStack
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.experts.experts import MixtureOfExperts
-from Emperor.generators.utils.routers import RouterModel
-from Emperor.generators.options import ParameterGeneratorOptions
+from Emperor.adaptive.utils.routers import RouterModel
+from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.sampler.model import SamplerModel
 
@@ -28,7 +28,7 @@ class _Validator:
 
 @dataclass
 class FeedForwardConfig(ConfigBase):
-    model_type: "LinearLayerOptions | ParameterGeneratorOptions | None" = field(
+    model_type: "LinearLayerOptions | AdaptiveLayerOptions | None" = field(
         default=None,
         metadata={"help": "Linear model module used for output transformation"},
     )

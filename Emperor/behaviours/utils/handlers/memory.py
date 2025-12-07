@@ -1,16 +1,14 @@
 import torch
 from torch import Tensor
+from torch.nn import Sequential
+from Emperor.base.utils import Module
+from Emperor.base.layer import Layer, LayerStackConfig
 from Emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from Emperor.base.utils import Module
-from Emperor.base.layer import LayerStackConfig
-from Emperor.linears.utils.stack import LinearLayerStack
-
 
 from typing import TYPE_CHECKING
-
 
 if TYPE_CHECKING:
     from Emperor.linears.utils.layers import LinearLayerConfig
@@ -41,6 +39,11 @@ class MemoryHandlerAbstract(Module):
             return self.input_dim
         return self.output_dim
 
+    def _init_model(self, config, overrides) -> "Layer | Sequential":
+        from Emperor.linears.utils.stack import LinearLayerStack
+
+        return LinearLayerStack(config, overrides).build_model()
+
 
 class MemoryFusionHandler(MemoryHandlerAbstract):
     def __init__(
@@ -52,13 +55,13 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
         self.compression_model = self.__init_compression_model()
         self._validate_memory_option()
 
-    def __init_memory_model(self) -> LinearLayerStack:
+    def __init_memory_model(self) -> "Layer | Sequential":
         input_dim = self._get_memory_dim()
         output_dim = self.memory_size_option.value
         overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
-        return LinearLayerStack(self.cfg_main, overrides)
+        return self._init_model(self.cfg_main, overrides)
 
-    def __init_compression_model(self) -> LinearLayerStack:
+    def __init_compression_model(self) -> "Layer | Sequential":
         dim = self._get_memory_dim()
         compression_input_dim = dim + self.memory_size_option.value
         overrides = LayerStackConfig(
@@ -66,7 +69,7 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
             hidden_dim=dim,
             output_dim=dim,
         )
-        return LinearLayerStack(self.cfg_main, overrides)
+        return self._init_model(self.cfg_main, overrides)
 
     def forward(self, logits: Tensor) -> Tensor:
         memory = self.memory_model(logits)
@@ -85,15 +88,15 @@ class WeightedMemoryHandler(MemoryHandlerAbstract):
         self.memory_weight_model = self.__init_weight_model()
         self._validate_memory_option()
 
-    def __init_memory_model(self) -> LinearLayerStack:
+    def __init_memory_model(self) -> "Layer | Sequential":
         dim = self._get_memory_dim()
         overrides = LayerStackConfig(input_dim=dim, output_dim=dim)
-        return LinearLayerStack(self.cfg_main, overrides)
+        return self._init_model(self.cfg_main, overrides)
 
-    def __init_weight_model(self) -> LinearLayerStack:
+    def __init_weight_model(self) -> "Layer | Sequential":
         dim = self._get_memory_dim() * 2
         overrides = LayerStackConfig(input_dim=dim, hidden_dim=dim, output_dim=2)
-        return LinearLayerStack(self.cfg_main, overrides)
+        return self._init_model(self.cfg_main, overrides)
 
     def forward(self, logits: Tensor) -> Tensor:
         memory = self.memory_model(logits)

@@ -1,10 +1,9 @@
 from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
-from Emperor.behaviours.options import LinearLayerOptions
-from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
+from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.sampler.utils.routers import RouterConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.behaviours.utils.layers import LinearLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,

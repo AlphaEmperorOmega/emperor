@@ -10,7 +10,7 @@ from Emperor.base.enums import LayerNormPositionOptions
 from Emperor.feedForward.feed_forward import FeedForward
 from Emperor.attention.attention import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.generators.utils.base import (
+from Emperor.adaptive.utils.base import (
     Layer,
     FeedForwardLayer,
     CrossAttentionLayer,

@@ -1,7 +1,7 @@
 from torch import Tensor
+from torch.nn import Sequential
 from Emperor.base.utils import Module
-from Emperor.base.layer import LayerStackConfig
-from Emperor.linears.utils.stack import LinearLayerStack
+from Emperor.base.layer import Layer, LayerStackConfig
 
 from typing import TYPE_CHECKING
 
@@ -22,8 +22,10 @@ class BiasHandlerAbstract(Module):
 
     def _init_model(
         self, overrides: LayerStackConfig | None = None
-    ) -> LinearLayerStack:
-        return LinearLayerStack(self.main_cfg, overrides=overrides)
+    ) -> "Layer | Sequential":
+        from Emperor.linears.utils.stack import LinearLayerStack
+
+        return LinearLayerStack(self.main_cfg, overrides).build_model()
 
 
 class AffineBiasTransformHandler(BiasHandlerAbstract):

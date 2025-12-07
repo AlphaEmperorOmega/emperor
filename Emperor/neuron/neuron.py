@@ -5,8 +5,8 @@ from torch.types import Tensor
 from torch.nn import ModuleDict
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.generators.options import ParameterGeneratorOptions
-from Emperor.generators.utils.routers import RouterModel
+from Emperor.adaptive.options import AdaptiveLayerOptions
+from Emperor.adaptive.utils.routers import RouterModel
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.sampler.model import SamplerModel
 
@@ -54,7 +54,7 @@ class Nucleus(Module):
 
 @dataclass
 class AxonsConfig(ConfigBase):
-    memory_type: LinearLayerOptions | ParameterGeneratorOptions | None = field(
+    memory_type: LinearLayerOptions | AdaptiveLayerOptions | None = field(
         default=None,
         metadata={
             "help": "Memory module used as axons, or additional modules that modify the output of nucleus"

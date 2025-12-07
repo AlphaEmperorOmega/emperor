@@ -2,9 +2,9 @@ import torch
 import torch.nn.functional as F
 
 from torch import Tensor
+from torch.nn import Sequential
 from Emperor.base.utils import Module
 from Emperor.base.layer import LayerStackConfig
-from Emperor.linears.utils.stack import LinearLayerStack
 
 from typing import TYPE_CHECKING
 
@@ -33,12 +33,17 @@ class DiagonalHandlerAbstract(Module):
                 diagonal_padding_shape = (0, 0, 0, padding_size)
         return diagonal_padding_shape
 
+    def _create_stack(self, config, overrides) -> "Layer | Sequential":
+        from Emperor.linears.utils.stack import LinearLayerStack
+
+        return LinearLayerStack(config, overrides).build_model()
+
     def _init_model(
         self,
-    ) -> LinearLayerStack:
+    ) -> "Layer | Sequential":
         output_dim = min(self.input_dim, self.output_dim)
         overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=output_dim)
-        return LinearLayerStack(self.cfg_main, overrides)
+        return self._create_stack(self.cfg_main, overrides)
 
     def forward(self, weight_params: Tensor) -> Tensor:
         return weight_params

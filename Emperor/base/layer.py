@@ -423,7 +423,7 @@ class LayerStack(Module):
         #     ParameterGeneratorTypes,
         # )
         from Emperor.linears.options import LinearLayerOptions
-        from Emperor.generators.options import ParameterGeneratorOptions
+        from Emperor.adaptive.options import AdaptiveLayerOptions
 
         if (
             isinstance(self.model_type, LinearLayerOptions)
@@ -432,7 +432,7 @@ class LayerStack(Module):
             or isinstance(self.model_type, BaseOptions)
         ):
             return Layer
-        elif isinstance(self.model_type, ParameterGeneratorOptions):
+        elif isinstance(self.model_type, AdaptiveLayerOptions):
             return ParameterGeneratorLayer
         else:
             raise RuntimeError(

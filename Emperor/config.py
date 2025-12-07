@@ -10,10 +10,10 @@ from Emperor.feedForward.feed_forward import (
     MixtureOfExpertsFeedForwardConfig,
 )
 from Emperor.experts.experts import MixtureOfExpertsConfig
-from Emperor.generators.utils.layers import ParameterLayerConfig
+from Emperor.adaptive.utils.layers import ParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
-from Emperor.generators.options import ParameterGeneratorOptions
-from Emperor.generators.utils.mixtures.base import MixtureConfig
+from Emperor.adaptive.options import AdaptiveLayerOptions
+from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
@@ -132,11 +132,10 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`SamplerConfig` configuration"},
     )
-    mixture_model_config: MixtureConfig = field(
-        default_factory=lambda: MixtureConfig(
+    mixture_model_config: AdaptiveMixtureConfig = field(
+        default_factory=lambda: AdaptiveMixtureConfig(
             input_dim=MIXTURE_INPUT_DIM,
             output_dim=MIXTURE_OUTPUT_DIM,
-            depth_dim=MIXTURE_DEPTH_DIM,
             top_k=MIXTURE_TOP_K,
             weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
             num_experts=MIXTURE_NUM_EXPERTS,

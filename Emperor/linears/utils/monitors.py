@@ -1,5 +1,4 @@
 import os
-import random
 
 import torch
 from torch.types import Tensor
