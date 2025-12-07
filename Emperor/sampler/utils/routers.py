@@ -39,7 +39,7 @@ class RouterModel(Module):
         self.cfg: "RouterConfig" = self._overwrite_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
-        self.layer_stack_option = self.cfg.layer_stack_option
+        self.layer_stack_option = self.cfg.layer_stack_option.value
         self.num_experts = self.cfg.num_experts
         self.noisy_topk_flag = self.cfg.noisy_topk_flag
 

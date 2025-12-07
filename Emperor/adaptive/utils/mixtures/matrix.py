@@ -1,11 +1,11 @@
 from torch import Tensor
-from Emperor.generators.utils.mixtures.base import MixtureBase
+from Emperor.adaptive.utils.mixtures.base import MixtureBase
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.generators.utils.mixture import MixtureConfig
+    from Emperor.adaptive.utils.mixture import MixtureConfig
 
 
 class MatrixMixtureBase(MixtureBase):

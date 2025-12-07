@@ -415,6 +415,14 @@ class LayerStack(Module):
         self.callback_function = callback
         return self
 
+    def _override_model_type(
+        self, overrides: "LayerStackConfig | None", model_type: "BaseOptions | None"
+    ) -> LayerStackConfig:
+        if overrides is None:
+            return LayerStackConfig(model_type=model_type)
+        overrides.model_type = model_type
+        return overrides
+
     def __resolve_layer_block_class(self) -> type[Layer]:
         # TODO: move this somewhere else in the future since it is used in
         # `MixtureOfExperts` as well

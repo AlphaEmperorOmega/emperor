@@ -28,7 +28,7 @@ class SamplerConfigs:
         dropout_probability: float = 0.0,
         num_layers: int = 2,
         activation: ActivationOptions = ActivationOptions.RELU,
-        model_type: LinearLayerStackOptions = LinearLayerStackOptions.BASE,
+        layer_stack_option: LinearLayerStackOptions = LinearLayerStackOptions.BASE,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
         memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
@@ -41,7 +41,7 @@ class SamplerConfigs:
             input_dim=input_dim,
             output_dim=num_experts,
             router_model_config=RouterConfig(
-                layer_stack_option=model_type,
+                layer_stack_option=layer_stack_option,
                 num_experts=num_experts,
                 noisy_topk_flag=noisy_topk_flag,
                 override_config=LayerStackConfig(
@@ -67,7 +67,6 @@ class SamplerConfigs:
                         memory_size_option=memory_size_option,
                         memory_position_option=memory_position_option,
                         override_config=LayerStackConfig(
-                            model_type=LinearLayerOptions.BASE,
                             input_dim=input_dim,
                             hidden_dim=hidden_dim,
                             output_dim=hidden_dim,
@@ -138,10 +137,10 @@ class SamplerConfigs:
                 mutual_information_loss_weight=mutual_information_loss_weight,
             ),
             router_model_config=RouterConfig(
-                model_type=model_type,
                 num_experts=num_experts,
                 noisy_topk_flag=noisy_topk_flag,
                 override_config=LayerStackConfig(
+                    model_type=model_type,
                     input_dim=input_dim,
                     hidden_dim=hidden_dim,
                     output_dim=num_experts,

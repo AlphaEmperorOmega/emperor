@@ -2,7 +2,7 @@ import torch
 import unittest
 
 from Emperor.config import ModelConfig
-from Emperor.linears.options import LinearLayerOptions
+from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from Emperor.sampler.utils.config import SamplerConfigs
 from Emperor.sampler.utils.routers import RouterModel
 from Emperor.behaviours.utils.enums import (
@@ -66,15 +66,15 @@ class TestRouterModel(unittest.TestCase):
         noisy_flag_options = [True, False]
 
         for num_layers in num_layer_options:
-            for model_type in LinearLayerOptions:
+            for layer_stack_option in LinearLayerStackOptions:
                 for num_experts in num_experts_options:
                     for noisy_flag_option in noisy_flag_options:
                         message = f"Testing the configuration with num_experts={num_experts} and noisy_flag_option={noisy_flag_option}"
                         with self.subTest(msg=message):
                             cfg = SamplerConfigs.router_preset(
+                                layer_stack_option=layer_stack_option,
                                 num_experts=num_experts,
                                 noisy_topk_flag=noisy_flag_option,
-                                model_type=model_type,
                                 num_layers=num_layers,
                                 bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
                                 memory_option=LinearMemoryOptions.WEIGHTED,

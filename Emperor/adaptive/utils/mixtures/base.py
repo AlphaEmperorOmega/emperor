@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class AdaptiveMixtureConfig(ConfigBase):
+class MixtureConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Mixture model input dimension"},
@@ -39,7 +39,7 @@ class AdaptiveMixtureConfig(ConfigBase):
     )
 
 
-class AdaptiveMixtureBase(Module):
+class MixtureBase(Module):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",

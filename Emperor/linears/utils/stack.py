@@ -4,21 +4,22 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+    from Emperor.linears.options import LinearLayerOptions
 
 
 class LinearLayerStack(LayerStack):
     def __init__(
         self,
-        cfg: "LayerStackConfig | ModelConfig",
+        cfg: "LayerStackConfig",
         overrides: "LayerStackConfig | None" = None,
     ):
+        overrides = self.__get_model_type(overrides)
         super().__init__(cfg, overrides)
-        self.model_type = self.__get_model_type()
 
-    def __get_model_type(self):
+    def __get_model_type(self, overrides: "LayerStackConfig") -> "LinearLayerOptions":
         from Emperor.linears.options import LinearLayerOptions
 
-        return LinearLayerOptions.BASE
+        return super()._override_model_type(overrides, LinearLayerOptions.BASE)
 
 
 class AdaptiveLinearLayerStack(LayerStack):
@@ -27,10 +28,10 @@ class AdaptiveLinearLayerStack(LayerStack):
         cfg: "LayerStackConfig | ModelConfig",
         overrides: "LayerStackConfig | None" = None,
     ):
+        overrides = self.__get_model_type(overrides)
         super().__init__(cfg, overrides)
-        self.model_type = self.__get_model_type()
 
-    def __get_model_type(self):
+    def __get_model_type(self, overrides: "LayerStackConfig") -> "LinearLayerOptions":
         from Emperor.linears.options import LinearLayerOptions
 
-        return LinearLayerOptions.ADAPTIVE
+        return super()._override_model_type(overrides, LinearLayerOptions.ADAPTIVE)

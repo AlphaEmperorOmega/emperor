@@ -3,8 +3,8 @@ import unittest
 import torch.nn.functional as F
 
 from torch.nn import Parameter
-from Emperor.generators.utils.mixtures.base import MixtureBase, MixtureConfig
-from Emperor.generators.utils.mixtures.vector import (
+from Emperor.adaptive.utils.mixtures.base import MixtureBase, MixtureConfig
+from Emperor.adaptive.utils.mixtures.vector import (
     VectorBiasMixture,
     VectorMixtureBase,
     VectorWeightsMixture,
@@ -16,7 +16,6 @@ class TestVectorMixture(unittest.TestCase):
         self.cfg = MixtureConfig(
             input_dim=4,
             output_dim=5,
-            depth_dim=6,
             top_k=2,
             num_experts=6,
             weighted_parameters_flag=False,
@@ -76,7 +75,6 @@ class TestVectorMixture(unittest.TestCase):
             with self.subTest(msg=message):
                 overrides = MixtureConfig(
                     top_k=top_k,
-                    depth_dim=6,
                     num_experts=6,
                     weighted_parameters_flag=True,
                 )
@@ -111,7 +109,6 @@ class TestVectorMixture(unittest.TestCase):
             with self.subTest(msg=message):
                 overrides = MixtureConfig(
                     top_k=top_k,
-                    depth_dim=6,
                     num_experts=6,
                     weighted_parameters_flag=True,
                 )
@@ -146,7 +143,6 @@ class TestVectorMixture(unittest.TestCase):
             with self.subTest(msg=message):
                 overrides = MixtureConfig(
                     top_k=top_k,
-                    depth_dim=6,
                     num_experts=6,
                     weighted_parameters_flag=True,
                 )
@@ -195,7 +191,6 @@ class TestVectorMixture(unittest.TestCase):
                 with self.subTest(msg=message):
                     overrides = MixtureConfig(
                         top_k=top_k,
-                        depth_dim=6,
                         num_experts=6,
                         weighted_parameters_flag=True,
                     )
@@ -239,7 +234,6 @@ class TestVectorMixture(unittest.TestCase):
                 with self.subTest(msg=message):
                     overrides = MixtureConfig(
                         top_k=top_k,
-                        depth_dim=6,
                         num_experts=6,
                         weighted_parameters_flag=True,
                     )
@@ -279,7 +273,6 @@ class TestVectorMixture(unittest.TestCase):
             with self.subTest(msg=message):
                 overrides = MixtureConfig(
                     top_k=top_k,
-                    depth_dim=6,
                     num_experts=6,
                     weighted_parameters_flag=True,
                 )
@@ -319,7 +312,6 @@ class TestVectorMixture(unittest.TestCase):
             with self.subTest(msg=message):
                 overrides = MixtureConfig(
                     top_k=top_k,
-                    depth_dim=6,
                     num_experts=6,
                     weighted_parameters_flag=True,
                 )
@@ -356,7 +348,6 @@ class TestVectorMixture(unittest.TestCase):
             with self.subTest(msg=message):
                 overrides = MixtureConfig(
                     top_k=top_k,
-                    depth_dim=6,
                     num_experts=6,
                     weighted_parameters_flag=True,
                 )

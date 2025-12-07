@@ -2,14 +2,14 @@ import torch
 from enum import Enum
 from torch import Tensor
 from torch.nn import functional as F
+from Emperor.adaptive.utils.mixture import MixtureConfig
+from Emperor.adaptive.utils.mixtures.base import MixtureBase
 from Emperor.experts.experts import MixtureOfExperts
-# from Emperor.generators.utils.mixture import MixtureBase
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.generators.utils.mixture import MixtureConfig
 
 
 class OuterProductNormOptions(Enum):
@@ -19,7 +19,7 @@ class OuterProductNormOptions(Enum):
     LAYER_NORM = 4
 
 
-class AdaptiveMixtureBase(MixtureBase):
+class GeneratorMixtureBase(MixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
@@ -28,13 +28,6 @@ class AdaptiveMixtureBase(MixtureBase):
         super().__init__(cfg, overrides)
         config = getattr(cfg, "mixture_model_config", cfg)
         self.mixture_config: "MixtureConfig" = self._overwrite_config(config, overrides)
-
-    #     self.einsum_vector_operation = self.__decide_einsum_computation()
-    #
-    # def __decide_einsum_computation(self) -> str:
-    #     if self.top_k == self.num_experts:
-    #         return "bi,kij->bkj"
-    #     return "bi,bkij->bkj"
 
     def compute_mixture(
         self,
@@ -48,7 +41,7 @@ class AdaptiveMixtureBase(MixtureBase):
         return self.top_k == 1
 
 
-class AdaptiveWeightsMixture(AdaptiveMixtureBase):
+class AdaptiveWeightsMixture(MixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
@@ -155,7 +148,7 @@ class AdaptiveWeightsMixture(AdaptiveMixtureBase):
         return self.weighted_parameters_flag and probs is not None
 
 
-class AdaptiveBiasMixture(AdaptiveMixtureBase):
+class AdaptiveBiasMixture(MixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
