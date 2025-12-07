@@ -3,7 +3,7 @@ from enum import Enum
 from torch import Tensor
 from torch.nn import functional as F
 from Emperor.experts.experts import MixtureOfExperts
-from Emperor.generators.utils.mixtures.base import MixtureBase
+# from Emperor.generators.utils.mixture import MixtureBase
 
 from typing import TYPE_CHECKING
 
@@ -19,7 +19,7 @@ class OuterProductNormOptions(Enum):
     LAYER_NORM = 4
 
 
-class GeneratorMixtureBase(MixtureBase):
+class AdaptiveMixtureBase(MixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
@@ -28,12 +28,13 @@ class GeneratorMixtureBase(MixtureBase):
         super().__init__(cfg, overrides)
         config = getattr(cfg, "mixture_model_config", cfg)
         self.mixture_config: "MixtureConfig" = self._overwrite_config(config, overrides)
-        self.einsum_vector_operation = self.__decide_einsum_computation()
 
-    def __decide_einsum_computation(self) -> str:
-        if self.top_k == self.num_experts:
-            return "bi,kij->bkj"
-        return "bi,bkij->bkj"
+    #     self.einsum_vector_operation = self.__decide_einsum_computation()
+    #
+    # def __decide_einsum_computation(self) -> str:
+    #     if self.top_k == self.num_experts:
+    #         return "bi,kij->bkj"
+    #     return "bi,bkij->bkj"
 
     def compute_mixture(
         self,
@@ -47,7 +48,7 @@ class GeneratorMixtureBase(MixtureBase):
         return self.top_k == 1
 
 
-class GeneratorWeightsMixture(GeneratorMixtureBase):
+class AdaptiveWeightsMixture(AdaptiveMixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
@@ -74,21 +75,6 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         )
         return self.__compute_parameter_mixture(generated_parameters, probs)
 
-    def __compute_parameter_mixture(
-        self,
-        selected_parameters: Tensor,
-        probs: Tensor,
-    ) -> Tensor:
-        weighted_parameters = selected_parameters
-        if self.__should_compute_weighted_parameters(probs):
-            weighted_parameters = self.__apply_parameter_weighting(
-                selected_parameters, self.probability_shape, probs
-            )
-
-        if self.__is_topk_sparse():
-            return weighted_parameters.squeeze(1)
-        return torch.sum(weighted_parameters, dim=1)
-
     def __compute_outer_product(
         self,
         input_vectors: Tensor,
@@ -113,6 +99,21 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         return self.__normalize_outer_product_parameters(
             outer_product, OuterProductNormOptions.TANH
         )
+
+    def __compute_parameter_mixture(
+        self,
+        selected_parameters: Tensor,
+        probs: Tensor,
+    ) -> Tensor:
+        weighted_parameters = selected_parameters
+        if self.__should_compute_weighted_parameters(probs):
+            weighted_parameters = self.__apply_parameter_weighting(
+                selected_parameters, self.probability_shape, probs
+            )
+
+        if self.__is_topk_sparse():
+            return weighted_parameters.squeeze(1)
+        return torch.sum(weighted_parameters, dim=1)
 
     def __normalize_outer_product_parameters(
         self,
@@ -154,7 +155,7 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         return self.weighted_parameters_flag and probs is not None
 
 
-class GeneratorBiasMixture(GeneratorMixtureBase):
+class AdaptiveBiasMixture(AdaptiveMixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",

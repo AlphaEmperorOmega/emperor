@@ -1,6 +1,6 @@
 from Emperor.experiments.utils.factories import Experiments
-from Emperor.generators.options import ParameterGeneratorOptions
-from Emperor.generators.utils.config import ParameterGeneratorConfigs
+from Emperor.adaptive.options import AdaptiveLayerOptions
+from Emperor.adaptive.utils.config import ParameterGeneratorConfigs
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.behaviours.utils.enums import (
     DynamicDepthOptions,

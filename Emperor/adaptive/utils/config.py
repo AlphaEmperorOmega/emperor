@@ -1,8 +1,8 @@
 from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.experts.experts import MixtureOfExpertsConfig
-from Emperor.generators.utils.layers import ParameterLayerConfig
-from Emperor.generators.utils.mixtures.base import MixtureConfig
+from Emperor.adaptive.utils.layers import ParameterLayerConfig
+from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
@@ -42,7 +42,7 @@ class ParameterGeneratorConfigs:
             parameter_generator_model_config=ParameterLayerConfig(
                 time_tracker_flag=False,
                 bias_parameters_flag=True,
-                override_config=MixtureConfig(
+                override_config=AdaptiveMixtureConfig(
                     top_k=top_k,
                     input_dim=input_dim,
                     output_dim=output_dim,

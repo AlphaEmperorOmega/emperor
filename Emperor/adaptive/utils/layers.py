@@ -1,28 +1,27 @@
 import torch
 
 from torch import Tensor
+from Emperor.adaptive.utils.routers import VectorRouterModel
 from Emperor.base.utils import Module
 from dataclasses import dataclass, field
 from Emperor.base.decorators import timer
-from Emperor.generators.utils.mixtures.vector import (
+from Emperor.sampler.model import SamplerModel
+from Emperor.behaviours.utils.enums import DynamicDepthOptions, DynamicDiagonalOptions
+from Emperor.adaptive.utils.mixtures.vector import (
     VectorBiasMixture,
     VectorWeightsMixture,
 )
-from Emperor.sampler.model import SamplerModel
-from Emperor.behaviours.utils.enums import DynamicDepthOptions, DynamicDiagonalOptions
 from Emperor.behaviours.model import (
     AdaptiveParameterModel,
     AdaptiveParameterModelConfig,
 )
-from Emperor.generators.utils.mixture import (
+from Emperor.adaptive.utils.mixture import (
     GeneratorMixture,
     MatrixMixture,
     VectorMixture,
 )
-from Emperor.generators.utils.routers import (
-    RouterModel,
-    VectorRouterModel,
-)
+from Emperor.sampler.utils.routers import RouterModel
+
 
 from typing import TYPE_CHECKING
 

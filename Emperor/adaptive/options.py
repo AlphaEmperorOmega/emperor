@@ -1,12 +1,12 @@
 from Emperor.base.enums import BaseOptions
-from Emperor.generators.utils.layers import (
+from Emperor.adaptive.utils.layers import (
     GeneratorParameterLayer,
     MatrixParameterLayer,
     VectorParameterLayer,
 )
 
 
-class ParameterGeneratorOptions(BaseOptions):
+class AdaptiveLayerOptions(BaseOptions):
     VECTOR = VectorParameterLayer
     MATRIX = MatrixParameterLayer
     GENERATOR = GeneratorParameterLayer
