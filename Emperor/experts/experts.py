@@ -141,7 +141,7 @@ class MixtureOfExperts(Module):
         self.weighting_position_option = self.cfg.weighting_position_option
         self.layer_role_option = self.cfg.layer_role_option
         self.router_model_config = self.cfg.router_model_config
-        self.samper_model_config = self.cfg.sampler_model_config
+        self.sampler_model_config = self.cfg.sampler_model_config
 
         self.expert_modules = self.__create_experts()
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
@@ -152,7 +152,7 @@ class MixtureOfExperts(Module):
         if not self.cfg.init_sampler_model_flag:
             return None, None
         _Validator.ensure_router_config_exists(self.router_model_config)
-        _Validator.ensure_sampler_config_exists(self.samper_model_config)
+        _Validator.ensure_sampler_config_exists(self.sampler_model_config)
         router = RouterModel(self.router_model_config)
         sampler = SamplerModel(self.sampler_model_config)
         return router, sampler
