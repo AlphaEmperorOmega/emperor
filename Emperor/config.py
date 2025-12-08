@@ -14,7 +14,7 @@ from Emperor.adaptive.utils.layers import ParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.adaptive.utils.mixtures.base import MixtureConfig
-from Emperor.linears.options import LinearLayerOptions
+from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig
@@ -158,21 +158,15 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`LinearLayerConfig` configuration"},
     )
-    mixture_of_experts_config: MixtureOfExpertsFeedForwardConfig = field(
-        default_factory=lambda: MixtureOfExpertsFeedForwardConfig(
+    mixture_of_experts_config: MixtureOfExpertsConfig = field(
+        default_factory=lambda: MixtureOfExpertsConfig(
             weighted_parameters_flag=True,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
     input_moe_layer_config: MixtureOfExpertsConfig = field(
         default_factory=lambda: MixtureOfExpertsConfig(
-            input_dim=32,
-            output_dim=64,
             top_k=MIXTURE_TOP_K,
-            dropout_probability=0.1,
-            layer_norm_flag=True,
-            activation=ActivationOptions.GELU,
-            model_type=LinearLayerOptions.ADAPTIVE,
             num_experts=12,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
@@ -182,13 +176,8 @@ class ModelConfig(ConfigBase):
     )
     output_moe_layer_config: MixtureOfExpertsConfig = field(
         default_factory=lambda: MixtureOfExpertsConfig(
-            input_dim=32,
-            output_dim=64,
+            layer_stack_option=LinearLayerStackOptions.BASE,
             top_k=MIXTURE_TOP_K,
-            dropout_probability=0.1,
-            layer_norm_flag=True,
-            activation=ActivationOptions.GELU,
-            model_type=LinearLayerOptions.ADAPTIVE,
             num_experts=12,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,

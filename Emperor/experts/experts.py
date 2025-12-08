@@ -1,34 +1,27 @@
-import copy
 import torch
 import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass, field
 
-from Emperor.base.layer import Layer, LayerStackConfig
-from Emperor.base.enums import ActivationOptions
-from Emperor.base.utils import ConfigBase, Module, device
-from Emperor.behaviours.utils.enums import LinearMemoryOptions
-from Emperor.linears.utils.layers import LinearLayer
 from Emperor.sampler.model import SamplerModel
-from Emperor.adaptive.options import AdaptiveLayerOptions
-from Emperor.sampler.utils.routers import RouterModel
+from Emperor.sampler.utils.samplers import SamplerConfig
+from Emperor.sampler.utils.routers import RouterConfig, RouterModel
+from Emperor.base.utils import ConfigBase, Module, device
+from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    LayerRoleOptions,
+)
 
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
+
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
 __all__ = ["MixtureOfExpertsConfig", "MixtureOfExperts"]
-
-
-# TODO: Find out where the probabilities are computed and
-# see if you can multipy the probabilities by the
-# input_tensor or selected topk samples before they are
-# processed by the experts themselves. Just in case you
-# don't get the memo. Multiply the probabilities by
-# inputs before those inputs are sent into the experts.
 
 
 class _Validator:
@@ -50,40 +43,41 @@ class _Validator:
                 "If `indices` are provided the `init_sampler_model_flag` must be set to `False`. This avoids creating a `RouterModel` and `SamplerModel` for the current layer."
             )
 
+    @staticmethod
+    def ensure_probabilities_exist(probabilities: Tensor | None) -> None:
+        if probabilities is None:
+            raise RuntimeError(
+                "Probabilities must be provided when using indices to ensure proper weighting and processing of the inputs."
+            )
+
+    @staticmethod
+    def ensure_router_config_exists(router_model_config: "RouterConfig | None") -> None:
+        if router_model_config is None:
+            raise RuntimeError(
+                "Router configuration must be provided to properly initialize and use the router model in the mixture of experts layer."
+            )
+
+    @staticmethod
+    def ensure_sampler_config_exists(
+        sampler_model_config: "SamplerConfig | None",
+    ) -> None:
+        if sampler_model_config is None:
+            raise RuntimeError(
+                "Sampler configuration must be provided to properly initialize and use the sampler model in the mixture of experts layer."
+            )
+
 
 @dataclass
 class MixtureOfExpertsConfig(ConfigBase):
-    model_type: LinearMemoryOptions | AdaptiveLayerOptions | None = field(
-        default=None,
-        metadata={"help": "Type of layer used for the experts."},
-    )
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Expert input dimension"},
-    )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Expert output dimension"},
+    layer_stack_option: LinearLayerStackOptions = field(
+        default=LinearLayerStackOptions.BASE,
+        metadata={"help": "Number of layers added to the router"},
     )
     top_k: int | None = field(
         default=None,
         metadata={
             "help": "Top-k probabilities and indices to be selected from a distribution"
         },
-    )
-    dropout_probability: float | None = field(
-        default=None,
-        metadata={
-            "help": "Float between (0.0, 1.0), that indicates the percentage of features being dropped out."
-        },
-    )
-    layer_norm_flag: bool | None = field(
-        default=None,
-        metadata={"help": "Type of layer used for the experts."},
-    )
-    activation: ActivationOptions | None = field(
-        default=None,
-        metadata={"help": "Activation function for the experts."},
     )
     num_experts: int | None = field(
         default=None,
@@ -99,11 +93,31 @@ class MixtureOfExpertsConfig(ConfigBase):
             "help": "When `True` the sepected parameters will be multiplied by their probs."
         },
     )
+    weighting_position_option: ExpertWeightingPositionOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Dictates if the weights are applided before or after the experts."
+        },
+    )
     init_sampler_model_flag: bool | None = field(
         default=None,
         metadata={
             "help": "When `True` the `RouterModel `and `SamplerModel` will be added to the current layer."
         },
+    )
+    layer_role_option: LayerRoleOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Dictates if the layer is used as an normal, input or output MoE layer."
+        },
+    )
+    router_model_config: "RouterConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    sampler_model_config: "SamplerConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
     )
 
 
@@ -112,94 +126,44 @@ class MixtureOfExperts(Module):
         self,
         cfg: "MixtureOfExpertsConfig | ModelConfig",
         overrides: "MixtureOfExpertsConfig | None" = None,
-        is_output_layer_flag: bool = False,
     ):
         super().__init__()
-        self.is_output_layer_flag = is_output_layer_flag
-        config = getattr(cfg, self.__resolve_config_type(), cfg)
+        config = getattr(cfg, "mixture_of_experts_config", cfg)
         self.cfg: "MixtureOfExpertsConfig" = self._overwrite_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
+        self.layer_stack_model = self.cfg.layer_stack_option.value
         self.top_k = self.cfg.top_k
         self.num_experts = self.cfg.num_experts
-        self.layer_norm_flag = self.cfg.layer_norm_flag
-        self.dropout_probability = self.cfg.dropout_probability
-        self.activation = self.cfg.activation
-        self.model_type = self.cfg.model_type
         self.compute_expert_mixture_flag = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
         self.init_sampler_model_flag = self.cfg.init_sampler_model_flag
-        self.layer_stack_model = self.cfg.layer_stack_model
+        self.weighting_position_option = self.cfg.weighting_position_option
+        self.layer_role_option = self.cfg.layer_role_option
+        self.router_model_config = self.cfg.router_model_config
+        self.samper_model_config = self.cfg.sampler_model_config
 
-        self.router, self.sampler = self.__optionaly_create_router_and_samples(cfg)
-        self.expert_modules = self.__create_experts(cfg)
-        # self.layer_block_model = self.__resolve_layer_block_class()
+        self.expert_modules = self.__create_experts()
+        self.router, self.sampler = self.__maybe_create_router_and_sampler()
 
-    # def __resolve_layer_block_class(self) -> type[Layer]:
-    #     # TODO: move this somewhere else in the future since it is used in
-    #     # `LayerStack` as well
-    #     from Emperor.generators.utils.enums import (
-    #         LinearLayerTypes,
-    #         ParameterGeneratorTypes,
-    #     )
-    #
-    #     if isinstance(self.model_type, LinearLayerTypes):
-    #         return Layer
-    #     elif isinstance(self.model_type, ParameterGeneratorTypes):
-    #         return ParameterGeneratorLayer
-    #     else:
-    #         raise RuntimeError(
-    #             f"Unsupported `model_type` {type(self.model_type)} for `LayerStack`"
-    #         )
-
-    def __resolve_config_type(self) -> str:
-        if self.is_output_layer_flag:
-            return "output_moe_layer_config"
-        return "input_moe_layer_config"
-
-    def __optionaly_create_router_and_samples(
-        self, cfg: "ModelConfig"
+    def __maybe_create_router_and_sampler(
+        self,
     ) -> tuple[RouterModel | None, SamplerModel | None]:
         if not self.cfg.init_sampler_model_flag:
             return None, None
-        router = RouterModel(cfg)
-        sampler = SamplerModel(cfg)
+        _Validator.ensure_router_config_exists(self.router_model_config)
+        _Validator.ensure_sampler_config_exists(self.samper_model_config)
+        router = RouterModel(self.router_model_config)
+        sampler = SamplerModel(self.sampler_model_config)
         return router, sampler
 
-    def __create_experts(self, cfg: "ModelConfig") -> nn.ModuleList:
+    def __create_experts(self) -> nn.ModuleList:
         expert_list = []
         for _ in range(self.num_experts):
-            overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
-            model_stack = self.layer_stack_model(self.main_cfg, overrides)
+            model_stack = self.layer_stack_model(self.main_cfg).build_model()
 
             expert_list.append(model_stack)
-        return nn.ModuleList()
-
-    # def __create_experts(self, cfg: "ModelConfig") -> nn.ModuleList:
-    #     expert_list = []
-    #     for _ in range(self.num_experts):
-    #         model = self.model_type.value(self.__resolve_model_type_overrides(cfg))
-    #         layer_norm_dim = self.output_dim if self.layer_norm_flag else None
-    #         self.layer_block_model(
-    #             model=model,
-    #             activation_function=self.activation.value,
-    #             layer_norm_dim=layer_norm_dim,
-    #             dropout_probability=self.dropout_probability,
-    #         )
-    #         expert_list.append(layer_block)
-    #     return nn.ModuleList(expert_list)
-
-    # def __resolve_model_type_overrides(self, cfg: "ModelConfig"):
-    #     c = copy.deepcopy(cfg)
-    #     if issubclass(self.model_type.value, LinearLayer):
-    #         c.linear_layer_config.input_dim = self.input_dim
-    #         c.linear_layer_config.output_dim = self.output_dim
-    #         return c
-    #     c.mixture_model_config.input_dim = self.input_dim
-    #     c.mixture_model_config.output_dim = self.output_dim
-    #     return c
+        return nn.ModuleList(expert_list)
 
     def forward(
         self,
@@ -224,21 +188,59 @@ class MixtureOfExperts(Module):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
             if expert_sample_indices.numel() == 0:
                 continue
+            expert_output, loss = self.__compute_experts_output(
+                expert_model, input_batch, expert_sample_indices, probabilities
+            )
             experts_indices_list.append(expert_sample_indices)
-            expert_assigned_samples = input_batch[expert_sample_indices]
-            output = expert_model(expert_assigned_samples)
-            if isinstance(output, tuple):
-                output, expert_loss = output
-                expert_outputs.append(output)
-                loss += expert_loss
-                continue
-            expert_outputs.append(output)
+            expert_outputs.append(expert_output)
+            loss += loss
 
         experts_indices = torch.cat(experts_indices_list)
         output = torch.cat(expert_outputs, dim=0)
         output = self.__compute_expert_mixture(output, experts_indices, probabilities)
 
         return output, loss
+
+    def __compute_experts_output(
+        self,
+        expert_model: Callable,
+        input_batch: Tensor,
+        indices: Tensor,
+        probabilities: Tensor | None,
+    ) -> tuple[list[Tensor], Tensor]:
+        expert_samples = input_batch[indices]
+        expert_samples = self.__maybe_apply_probabilities(
+            expert_samples, probabilities, indices
+        )
+
+        output = expert_model(expert_samples)
+        if isinstance(output, tuple):
+            output, expert_loss = output
+            return output, expert_loss
+        return output, torch.tensor(0.0)
+
+    def __maybe_apply_probabilities(
+        self,
+        logits: Tensor,
+        probabilities: Tensor | None = None,
+        indices: Tensor | None = None,
+    ) -> Tensor:
+        if self.__should_apply_weights():
+            return logits
+
+        _Validator.ensure_probabilities_exist(probabilities)
+        if indices is not None:
+            probabilities = probabilities[indices]
+        probabilities = probabilities.view(-1, 1)
+        return logits * probabilities
+
+    def __should_apply_weights(self, before_flag=False) -> bool:
+        is_weighted = self.weighted_parameters_flag
+        position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
+        if before_flag:
+            position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
+        is_before = self.weighting_position_option == position_option
+        return is_weighted and is_before
 
     def __get_expert_indices(
         self,
@@ -259,9 +261,7 @@ class MixtureOfExperts(Module):
         if not self.compute_expert_mixture_flag:
             return experts_output
 
-        if self.weighted_parameters_flag:
-            probabilities = probabilities.view(-1, 1)
-            experts_output = experts_output * probabilities
+        experts_output = self.__maybe_apply_probabilities(experts_output, probabilities)
 
         input_dim, output_dim = experts_output.shape
         output_shape = (input_dim // self.top_k, output_dim)
