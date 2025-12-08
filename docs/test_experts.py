@@ -1,11 +1,17 @@
 import unittest
 
-from Emperor.base.utils import ConfigBase
+from torch import init_num_threads
+from torch.nn import Sequential
+
+from Emperor.base.layer import Layer
 from Emperor.config import ModelConfig
 from Emperor.experts.experts import MixtureOfExperts
 from Emperor.experts.utils.config import MixtureOfExpertsConfigs
 from Emperor.experts.utils.enums import LayerRoleOptions
 from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.sampler.model import SamplerModel
+from Emperor.sampler.utils.routers import RouterModel
+from Emperor.sampler.utils.samplers import SamplerFull, SamplerSparse, SamplerTopk
 
 
 class TestMixtureOfExperts(unittest.TestCase):
@@ -21,7 +27,9 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def rebuild_presets(self, config: ModelConfig | None = None):
         self.cfg = (
-            MixtureOfExpertsConfigs.linear_layer_preset() if config is None else config
+            MixtureOfExpertsConfigs.linear_adaptive_layer_preset()
+            if config is None
+            else config
         )
 
         self.batch_size = self.cfg.batch_size
@@ -39,7 +47,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     for init_sampler_model_flag in bool_flags:
                         message = f"Testing configuration with num_experts={num_experts}, top_k={top_k}, layer_stack_option={layer_stack_option}, layer_role_option={layer_role_option}, and init_sampler_model_flag={init_sampler_model_flag}"
                         with self.subTest(msg=message):
-                            c = MixtureOfExpertsConfigs.linear_layer_preset(
+                            c = MixtureOfExpertsConfigs.linear_adaptive_layer_preset(
                                 layer_stack_option=layer_stack_option,
                                 num_experts=num_experts,
                                 layer_role_option=layer_role_option,
@@ -48,191 +56,82 @@ class TestMixtureOfExperts(unittest.TestCase):
                             )
 
                             m = MixtureOfExperts(c)
+                            cfg = m.cfg
                             self.assertIsInstance(m, MixtureOfExperts)
-                            self.assertEqual(m.layer_stack_option, c.layer_stack_option)
-                            self.assertEqual(m.top_k, c.top_k)
-                            self.assertEqual(m.num_experts, c.num_experts)
+                            self.assertEqual(
+                                m.layer_stack_model, layer_stack_option.value
+                            )
+                            self.assertEqual(m.top_k, top_k)
+                            self.assertEqual(m.num_experts, num_experts)
                             self.assertEqual(
                                 m.compute_expert_mixture_flag,
-                                c.compute_expert_mixture_flag,
+                                cfg.compute_expert_mixture_flag,
                             )
                             self.assertEqual(
-                                m.weighted_parameters_flag, c.weighted_parameters_flag
+                                m.weighted_parameters_flag, cfg.weighted_parameters_flag
                             )
                             self.assertEqual(
-                                m.init_sampler_model_flag, c.init_sampler_model_flag
+                                m.init_sampler_model_flag, cfg.init_sampler_model_flag
                             )
                             self.assertEqual(
-                                m.weighting_position_option, c.weighting_position_option
+                                m.weighting_position_option,
+                                cfg.weighting_position_option,
                             )
-                            self.assertEqual(m.layer_type_option, c.layer_type_option)
+                            self.assertEqual(m.layer_role_option, cfg.layer_role_option)
+                            self.assertEqual(
+                                m.router_model_config, cfg.router_model_config
+                            )
+                            self.assertEqual(
+                                m.sampler_model_config, cfg.sampler_model_config
+                            )
+
+    def test__create_experts(self):
+        for layer_stack_option in LinearLayerStackOptions:
+            message = f"Testing configuration with layer_stack_option={layer_stack_option.name}"
+            with self.subTest(msg=message):
+                c = MixtureOfExpertsConfigs.linear_adaptive_layer_preset(
+                    layer_stack_option=layer_stack_option,
+                )
+
+                m = MixtureOfExperts(c)
+                expert_models = m._MixtureOfExperts__create_experts()
+
+                self.assertEqual(len(m.expert_modules), m.num_experts)
+                for expert in expert_models:
+                    self.assertIsInstance(expert, Sequential)
+                    for layer in expert:
+                        self.assertIsInstance(layer, Layer)
+
+    def test__optionaly_create_router_and_samples(self):
+        sampler_options = [SamplerSparse, SamplerTopk, SamplerFull]
+        expert_options = [1, 3, 6]
+        num_experts = 6
+        init_sampler_model_flag_options = [True, False]
+
+        for init_sampler_model_flag in init_sampler_model_flag_options:
+            for sampler_option, expert_option in zip(sampler_options, expert_options):
+                message = f"Testing configuration with sampler_option={sampler_option.__name__}, num_experts={num_experts}, top_k={expert_option}"
+                with self.subTest(msg=message):
+                    c = MixtureOfExpertsConfigs.linear_adaptive_layer_preset(
+                        init_sampler_model_flag=init_sampler_model_flag,
+                        num_experts=num_experts,
+                        top_k=expert_option,
+                    )
+
+                    m = MixtureOfExperts(c)
+                    router, sampler = (
+                        m._MixtureOfExperts__maybe_create_router_and_sampler()
+                    )
+                    if init_sampler_model_flag:
+                        self.assertIsInstance(router, RouterModel)
+                        self.assertIsInstance(sampler, SamplerModel)
+                        self.assertIsInstance(sampler.sampler_model, sampler_option)
+                        self.assertEqual(sampler.sampler_model.top_k, expert_option)
+                    else:
+                        self.assertIsNone(router)
+                        self.assertIsNone(sampler)
 
 
-#     def test__init_output_layer_with_default_config(self):
-#         c = copy.deepcopy(self.cfg)
-#         config = c.output_moe_layer_config
-#         m = MixtureOfExperts(c, is_output_layer_flag=True)
-#
-#         self.assertIsInstance(m, MixtureOfExperts)
-#         self.assertEqual(m.input_dim, config.input_dim)
-#         self.assertEqual(m.output_dim, config.output_dim)
-#         self.assertEqual(m.dropout_probability, config.dropout_probability)
-#         self.assertEqual(m.layer_norm_flag, config.layer_norm_flag)
-#         self.assertEqual(m.activation, config.activation)
-#         self.assertEqual(m.model_type, config.model_type)
-#         self.assertEqual(m.num_experts, config.num_experts)
-#
-#     def test__resolve_config_type(self):
-#         c = copy.deepcopy(self.cfg)
-#
-#         m_input = MixtureOfExperts(c)
-#         input_config_type = m_input._MixtureOfExperts__resolve_config_type()
-#         m_output = MixtureOfExperts(c, is_output_layer_flag=True)
-#         output_config_type = m_output._MixtureOfExperts__resolve_config_type()
-#
-#         self.assertEqual(m_input.cfg, c.input_moe_layer_config)
-#         self.assertEqual(m_output.cfg, c.output_moe_layer_config)
-#         self.assertEqual(input_config_type, "input_moe_layer_config")
-#         self.assertEqual(output_config_type, "output_moe_layer_config")
-#
-#     def test__create_experts(self):
-#         c = copy.deepcopy(self.cfg)
-#         m = MixtureOfExperts(c)
-#
-#         expert_models = m._MixtureOfExperts__create_experts(c)
-#
-#         self.assertEqual(len(m.expert_modules), m.num_experts)
-#         for expert in expert_models:
-#             self.assertIsInstance(expert, Layer)
-#
-#     def test__create_experts_with_different_dimensions(self):
-#         c = copy.deepcopy(self.cfg)
-#         c.input_moe_layer_config.input_dim = 64
-#         c.input_moe_layer_config.output_dim = 128
-#         c.input_moe_layer_config.num_experts = 8
-#         config = c.input_moe_layer_config
-#
-#         m = MixtureOfExperts(c)
-#         expert_models = m._MixtureOfExperts__create_experts(c)
-#         self.assertEqual(len(m.expert_modules), m.num_experts)
-#         for expert in expert_models:
-#             input_dim, output_dim = expert.model.weight_params.shape
-#             bias_dim = (
-#                 expert.model.bias_params.shape[0]
-#                 if expert.model.bias_params is not None
-#                 else None
-#             )
-#             self.assertIsInstance(expert, Layer)
-#             self.assertEqual(input_dim, config.input_dim)
-#             self.assertEqual(output_dim, config.output_dim)
-#             if expert.model.bias_params is not None:
-#                 self.assertEqual(bias_dim, config.output_dim)
-#
-#     def test__create_experts_with_different_dimensions__LinearLayer(self):
-#         c = copy.deepcopy(self.cfg)
-#         c.input_moe_layer_config.model_type = LinearLayerTypes.BASE
-#         config = c.input_moe_layer_config
-#
-#         m = MixtureOfExperts(c)
-#         expert_models = m._MixtureOfExperts__create_experts(c)
-#         self.assertEqual(len(m.expert_modules), m.num_experts)
-#         for expert in expert_models:
-#             input_dim, output_dim = expert.model.weight_params.shape
-#             bias_dim = (
-#                 expert.model.bias_params.shape[0]
-#                 if expert.model.bias_params is not None
-#                 else None
-#             )
-#             self.assertIsInstance(expert, Layer)
-#             self.assertEqual(input_dim, config.input_dim)
-#             self.assertEqual(output_dim, config.output_dim)
-#             if expert.model.bias_params is not None:
-#                 self.assertEqual(bias_dim, config.output_dim)
-#
-#     def test__create_experts_with_different_dimensions__AdaptiveLinearLayer(
-#         self,
-#     ):
-#         c = copy.deepcopy(self.cfg)
-#         c.input_moe_layer_config.model_type = LinearLayerTypes.DYNAMIC
-#         config = c.input_moe_layer_config
-#
-#         m = MixtureOfExperts(c)
-#         expert_models = m._MixtureOfExperts__create_experts(c)
-#         self.assertEqual(len(m.expert_modules), m.num_experts)
-#         for expert in expert_models:
-#             input_dim, output_dim = expert.model.weight_params.shape
-#             bias_dim = (
-#                 expert.model.bias_params.shape[0]
-#                 if expert.model.bias_params is not None
-#                 else None
-#             )
-#             self.assertIsInstance(expert, Layer)
-#             self.assertEqual(input_dim, config.input_dim)
-#             self.assertEqual(output_dim, config.output_dim)
-#             if expert.model.bias_params is not None:
-#                 self.assertEqual(bias_dim, config.output_dim)
-#
-#     def test__create_experts_with_different_dimensions__VectorParameterLayer(self):
-#         c = copy.deepcopy(self.cfg)
-#         c.input_moe_layer_config.model_type = ParameterGeneratorTypes.VECTOR
-#         config = c.input_moe_layer_config
-#
-#         m = MixtureOfExperts(c)
-#         expert_models = m._MixtureOfExperts__create_experts(c)
-#         self.assertEqual(len(m.expert_modules), m.num_experts)
-#         for expert in expert_models:
-#             input_dim, _, output_dim = expert.model.mixture.weight_bank.shape
-#             self.assertIsInstance(expert, Layer)
-#             self.assertEqual(input_dim, config.input_dim)
-#             self.assertEqual(output_dim, config.output_dim)
-#
-#     def test__create_experts_with_different_dimensions__MatrixParameterLayer(self):
-#         c = copy.deepcopy(self.cfg)
-#         c.input_moe_layer_config.model_type = ParameterGeneratorTypes.MATRIX
-#         config = c.input_moe_layer_config
-#
-#         m = MixtureOfExperts(c)
-#         expert_models = m._MixtureOfExperts__create_experts(c)
-#         self.assertEqual(len(m.expert_modules), m.num_experts)
-#         for expert in expert_models:
-#             _, input_dim, output_dim = expert.model.mixture.weight_bank.shape
-#             self.assertIsInstance(expert, Layer)
-#             self.assertEqual(input_dim, config.input_dim)
-#             self.assertEqual(output_dim, config.output_dim)
-#
-#     def test__create_experts_with_different_dimensions__GeneratorParameterLayer(self):
-#         c = copy.deepcopy(self.cfg)
-#         c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
-#         config = c.input_moe_layer_config
-#
-#         m = MixtureOfExperts(c)
-#         expert_models = m._MixtureOfExperts__create_experts(c)
-#         self.assertEqual(len(m.expert_modules), m.num_experts)
-#         for expert in expert_models:
-#             _, input_dim, _ = expert.model.mixture.input_weight_bank.shape
-#             _, _, output_dim = expert.model.mixture.output_weight_bank.shape
-#             self.assertIsInstance(expert, Layer)
-#             self.assertEqual(input_dim, config.input_dim)
-#             self.assertEqual(output_dim, config.output_dim)
-#
-#     def test__optionaly_create_router_and_samples(self):
-#         c = copy.deepcopy(self.cfg)
-#         c.input_moe_layer_config.model_type = ParameterGeneratorTypes.GENERATOR
-#         c.input_moe_layer_config.init_sampler_model_flag = True
-#         c.output_moe_layer_config.init_sampler_model_flag = True
-#         rotuer_config = c.router_model_config
-#         sampelr_config = c.sampler_model_config
-#
-#         m = MixtureOfExperts(c)
-#         router, sampler = m._MixtureOfExperts__optionaly_create_router_and_samples(c)
-#
-#         self.assertIsInstance(router, RouterModel)
-#         self.assertEqual(router.input_dim, rotuer_config.input_dim)
-#         self.assertEqual(router.num_experts, rotuer_config.num_experts)
-#         self.assertIsInstance(sampler, SamplerModel)
-#         self.assertIsInstance(sampler.sampler_model, SamplerTopk)
-#         self.assertEqual(sampler.sampler_model.top_k, sampelr_config.top_k)
-#
 #     def test__get_expert_indices(self):
 #         c = copy.deepcopy(self.cfg)
 #         m = MixtureOfExperts(c)
