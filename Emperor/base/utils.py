@@ -546,3 +546,20 @@ class ConfigBase:
 
     def get_custom_parameters(self) -> Dict[str, Any]:
         return self._passed_args
+
+
+class ConfigUtils:
+    @staticmethod
+    def get_method_arguments():
+        frame = inspect.currentframe()
+        parent_frame = frame.f_back
+        parent_arguments = inspect.getargvalues(parent_frame)
+        parent_inputs = {
+            key: parent_arguments.locals[key]
+            for key in parent_arguments.locals
+            if key in parent_arguments.args
+        }
+
+        del frame
+        del parent_frame
+        return parent_inputs

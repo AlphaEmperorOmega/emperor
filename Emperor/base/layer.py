@@ -514,29 +514,3 @@ class LayerStack(Module):
         c.input_dim = input_dim
         c.output_dim = output_dim
         return c
-
-
-# class LinearLayerStack(Module):
-#     def __init__(
-#         self,
-#         cfg: "LayerStackConfig | ModelConfig",
-#         overrides: "LayerStackConfig | None" = None,
-#     ):
-#         super().__init__()
-#         self.cfg = cfg
-#         self.identifier = "layer_stack_config"
-#         overrides = self.__override_config(overrides)
-#         self.model = LayerStack(cfg, overrides).build_model()
-#
-#     def __override_config(
-#         self, overrides: "LayerStackConfig | None"
-#     ) -> LayerStackConfig:
-#         from Emperor.linears.options import LinearLayerOptions
-#
-#         if overrides is None:
-#             return LayerStackConfig(model_type=LinearLayerOptions.BASE)
-#         overrides.model_type = LinearLayerOptions.BASE
-#         return overrides
-#
-#     def forward(self, input_batch: Tensor) -> Tensor:
-#         return self.model(input_batch)

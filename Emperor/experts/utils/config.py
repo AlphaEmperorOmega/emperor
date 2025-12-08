@@ -1,12 +1,10 @@
 from Emperor.config import ModelConfig
+from Emperor.base.utils import ConfigUtils
 from Emperor.base.layer import LayerStackConfig
-from Emperor.base.enums import ActivationOptions
-from Emperor.sampler.utils.routers import RouterConfig
-from Emperor.base.enums import LayerNormPositionOptions
-from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.linears.utils.layers import LinearLayerConfig
+from Emperor.linears.utils.config import LinearsConfigs
 from Emperor.experts.experts import MixtureOfExpertsConfig
-from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
+from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -16,11 +14,75 @@ from Emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
+from Emperor.sampler.utils.config import SamplerConfigs
 
 
 class MixtureOfExpertsConfigs:
     @staticmethod
-    def linear_layer_preset(
+    def experts_config(
+        input_dim=8,
+        hidden_dim=12,
+        output_dim=6,
+        layer_stack_option=LinearLayerStackOptions.ADAPTIVE,
+        router_layer_stack_option=LinearLayerStackOptions.BASE,
+        top_k=3,
+        num_experts=6,
+        compute_expert_mixture_flag=True,
+        weighted_parameters_flag=True,
+        weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
+        init_sampler_model_flag=True,
+        layer_role_option: LayerRoleOptions = LayerRoleOptions.GENERAL,
+        bias_flag: bool = True,
+        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
+        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
+        memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
+        memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+        activation: ActivationOptions = ActivationOptions.RELU,
+        residual_flag: bool = False,
+        dropout_probability: float = 0.0,
+        stack_num_layers: int = 2,
+        noisy_topk_flag: bool = False,
+        threshold=0.0,
+        filter_above_threshold=False,
+        num_topk_samples=0,
+        normalize_probabilities_flag=False,
+        switch_loss_weight=0.0,
+        zero_centred_loss_weight=0.0,
+        mutual_information_loss_weight=0.0,
+        coefficient_of_variation_loss_weight=0.0,
+    ):
+        arguments = ConfigUtils.get_method_arguments()
+        return MixtureOfExpertsConfig(
+            layer_stack_option=layer_stack_option,
+            top_k=top_k,
+            num_experts=num_experts,
+            compute_expert_mixture_flag=compute_expert_mixture_flag,
+            weighted_parameters_flag=weighted_parameters_flag,
+            weighting_position_option=weighting_position_option,
+            init_sampler_model_flag=init_sampler_model_flag,
+            layer_role_option=layer_role_option,
+            override_config=LayerStackConfig(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                output_dim=num_experts,
+                num_layers=stack_num_layers,
+                activation=activation,
+                layer_norm_position=LayerNormPositionOptions.NONE,
+                residual_flag=residual_flag,
+                adaptive_computation_flag=False,
+                dropout_probability=dropout_probability,
+                override_config=LinearsConfigs.adaptive_linear_layer_config(
+                    **arguments
+                ),
+            ),
+            router_model_config=SamplerConfigs.router_config(**arguments),
+            sampler_model_config=SamplerConfigs.sampler_config(**arguments),
+        )
+
+    @staticmethod
+    def linear_adaptive_layer_preset(
         batch_size=2,
         input_dim=8,
         hidden_dim=12,
@@ -45,7 +107,17 @@ class MixtureOfExpertsConfigs:
         residual_flag: bool = False,
         dropout_probability: float = 0.0,
         stack_num_layers: int = 2,
+        noisy_topk_flag: bool = False,
+        threshold=0.0,
+        filter_above_threshold=False,
+        num_topk_samples=0,
+        normalize_probabilities_flag=False,
+        switch_loss_weight=0.0,
+        zero_centred_loss_weight=0.0,
+        mutual_information_loss_weight=0.0,
+        coefficient_of_variation_loss_weight=0.0,
     ) -> "ModelConfig":
+        arguments = ConfigUtils.get_method_arguments()
         return ModelConfig(
             batch_size=batch_size,
             input_dim=input_dim,
@@ -69,99 +141,11 @@ class MixtureOfExpertsConfigs:
                     residual_flag=residual_flag,
                     adaptive_computation_flag=False,
                     dropout_probability=dropout_probability,
-                    override_config=LinearLayerConfig(
-                        input_dim=input_dim,
-                        output_dim=hidden_dim,
-                        bias_flag=bias_flag,
-                        data_monitor=None,
-                        parameter_monitor=None,
-                        generator_depth=generator_depth,
-                        diagonal_option=diagonal_option,
-                        bias_option=bias_option,
-                        memory_option=memory_option,
-                        memory_size_option=memory_size_option,
-                        memory_position_option=memory_position_option,
-                        override_config=LayerStackConfig(
-                            input_dim=input_dim,
-                            hidden_dim=hidden_dim,
-                            output_dim=hidden_dim,
-                            num_layers=stack_num_layers,
-                            activation=activation,
-                            layer_norm_position=LayerNormPositionOptions.NONE,
-                            residual_flag=residual_flag,
-                            adaptive_computation_flag=False,
-                            dropout_probability=dropout_probability,
-                            override_config=LinearLayerConfig(
-                                input_dim=input_dim,
-                                output_dim=hidden_dim,
-                                bias_flag=bias_flag,
-                                generator_depth=generator_depth,
-                                data_monitor=None,
-                                parameter_monitor=None,
-                            ),
-                        ),
+                    override_config=LinearsConfigs.adaptive_linear_layer_config(
+                        **arguments
                     ),
                 ),
-                router_model_config=RouterConfig(
-                    layer_stack_option=router_layer_stack_option,
-                    num_experts=num_experts,
-                    noisy_topk_flag=noisy_topk_flag,
-                    override_config=LayerStackConfig(
-                        input_dim=input_dim,
-                        hidden_dim=hidden_dim,
-                        output_dim=num_experts,
-                        num_layers=stack_num_layers,
-                        activation=activation,
-                        layer_norm_position=LayerNormPositionOptions.NONE,
-                        residual_flag=residual_flag,
-                        adaptive_computation_flag=False,
-                        dropout_probability=dropout_probability,
-                        override_config=LinearLayerConfig(
-                            input_dim=input_dim,
-                            output_dim=hidden_dim,
-                            bias_flag=bias_flag,
-                            data_monitor=None,
-                            parameter_monitor=None,
-                            generator_depth=generator_depth,
-                            diagonal_option=diagonal_option,
-                            bias_option=bias_option,
-                            memory_option=memory_option,
-                            memory_size_option=memory_size_option,
-                            memory_position_option=memory_position_option,
-                            override_config=LayerStackConfig(
-                                input_dim=input_dim,
-                                hidden_dim=hidden_dim,
-                                output_dim=hidden_dim,
-                                num_layers=stack_num_layers,
-                                activation=activation,
-                                layer_norm_position=LayerNormPositionOptions.NONE,
-                                residual_flag=residual_flag,
-                                adaptive_computation_flag=False,
-                                dropout_probability=dropout_probability,
-                                override_config=LinearLayerConfig(
-                                    input_dim=input_dim,
-                                    output_dim=hidden_dim,
-                                    bias_flag=bias_flag,
-                                    generator_depth=generator_depth,
-                                    data_monitor=None,
-                                    parameter_monitor=None,
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-                sampler_model_config=SamplerConfig(
-                    top_k=top_k,
-                    threshold=threshold,
-                    filter_above_threshold=filter_above_threshold,
-                    num_topk_samples=num_topk_samples,
-                    normalize_probabilities_flag=normalize_probabilities_flag,
-                    noisy_topk_flag=noisy_topk_flag,
-                    num_experts=num_experts,
-                    coefficient_of_variation_loss_weight=coefficient_of_variation_loss_weight,
-                    switch_loss_weight=switch_loss_weight,
-                    zero_centred_loss_weight=zero_centred_loss_weight,
-                    mutual_information_loss_weight=mutual_information_loss_weight,
-                ),
+                router_model_config=SamplerConfigs.router_config(**arguments),
+                sampler_model_config=SamplerConfigs.sampler_config(**arguments),
             ),
         )
