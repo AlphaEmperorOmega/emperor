@@ -192,7 +192,7 @@ class MixtureOfExperts(Module):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
             if expert_sample_indices.numel() == 0:
                 continue
-            expert_output, loss = self.__compute_experts_output(
+            expert_output, loss = self.__compute_expert_output(
                 expert_model, input_batch, expert_sample_indices, probabilities
             )
             experts_indices_list.append(expert_sample_indices)
@@ -204,6 +204,16 @@ class MixtureOfExperts(Module):
         output = self.__compute_expert_mixture(output, experts_indices, probabilities)
 
         return output, total_loss
+
+    def __get_expert_indices(
+        self,
+        indices: Tensor,
+        expert_index: int,
+    ) -> Tensor:
+        boolean_tensor = indices == expert_index
+        flattened_tensor = boolean_tensor.sum(dim=-1)
+        indices_for_expert = flattened_tensor.nonzero()
+        return indices_for_expert.squeeze(dim=-1)
 
     def __maybe_compute_expert_indices(
         self,
@@ -223,7 +233,7 @@ class MixtureOfExperts(Module):
         )
         return probabilities, indices, sampler_loss
 
-    def __compute_experts_output(
+    def __compute_expert_output(
         self,
         expert_model: Callable,
         input_batch: Tensor,
@@ -231,9 +241,10 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None,
     ) -> tuple[list[Tensor], Tensor]:
         expert_samples = input_batch[indices]
-        expert_samples = self.__maybe_apply_probabilities(
-            expert_samples, probabilities, indices
-        )
+        if self.__is_before():
+            expert_samples = self.__maybe_apply_probabilities(
+                expert_samples, probabilities
+            )
 
         output = expert_model(expert_samples)
         if isinstance(output, tuple):
@@ -245,34 +256,16 @@ class MixtureOfExperts(Module):
         self,
         logits: Tensor,
         probabilities: Tensor | None = None,
-        indices: Tensor | None = None,
     ) -> Tensor:
-        if self.__should_apply_weights():
+        if not self.weighted_parameters_flag:
             return logits
 
         _Validator.ensure_probabilities_exist(probabilities)
-        if indices is not None:
-            probabilities = probabilities[indices]
-        probabilities = probabilities.view(-1, 1)
-        return logits * probabilities
+        return logits * probabilities.view(-1, 1)
 
-    def __should_apply_weights(self, before_flag=False) -> bool:
-        is_weighted = self.weighted_parameters_flag
+    def __is_before(self) -> bool:
         position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
-        if before_flag:
-            position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
-        is_before = self.weighting_position_option == position_option
-        return is_weighted and is_before
-
-    def __get_expert_indices(
-        self,
-        indices: Tensor,
-        expert_index: int,
-    ) -> Tensor:
-        boolean_tensor = indices == expert_index
-        flattened_tensor = boolean_tensor.sum(dim=-1)
-        indices_for_expert = flattened_tensor.nonzero()
-        return indices_for_expert.squeeze(dim=-1)
+        return self.weighting_position_option == position_option
 
     def __compute_expert_mixture(
         self,
@@ -283,10 +276,17 @@ class MixtureOfExperts(Module):
         if not self.compute_expert_mixture_flag:
             return experts_output
 
-        experts_output = self.__maybe_apply_probabilities(experts_output, probabilities)
+        if self.__is_after():
+            experts_output = self.__maybe_apply_probabilities(
+                experts_output, probabilities
+            )
 
         input_dim, output_dim = experts_output.shape
         output_shape = (input_dim // self.top_k, output_dim)
         output = torch.zeros(output_shape, dtype=experts_output.dtype, device=device)
         output.index_add_(0, indices, experts_output)
         return output
+
+    def __is_after(self) -> bool:
+        position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
+        return self.weighting_position_option == position_option
