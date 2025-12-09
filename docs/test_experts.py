@@ -1,6 +1,7 @@
+import torch
 import unittest
 
-from torch import init_num_threads
+from torch import init_num_threads, tensor
 from torch.nn import Sequential
 
 from Emperor.base.layer import Layer
@@ -102,11 +103,11 @@ class TestMixtureOfExperts(unittest.TestCase):
                     for layer in expert:
                         self.assertIsInstance(layer, Layer)
 
-    def test__optionaly_create_router_and_samples(self):
-        sampler_options = [SamplerSparse, SamplerTopk, SamplerFull]
-        expert_options = [1, 3, 6]
+    def test__maybe_create_router_and_sampler(self):
         num_experts = 6
+        expert_options = [1, 3, 6]
         init_sampler_model_flag_options = [True, False]
+        sampler_options = [SamplerSparse, SamplerTopk, SamplerFull]
 
         for init_sampler_model_flag in init_sampler_model_flag_options:
             for sampler_option, expert_option in zip(sampler_options, expert_options):
@@ -127,22 +128,59 @@ class TestMixtureOfExperts(unittest.TestCase):
                         self.assertIsInstance(sampler, SamplerModel)
                         self.assertIsInstance(sampler.sampler_model, sampler_option)
                         self.assertEqual(sampler.sampler_model.top_k, expert_option)
-                    else:
-                        self.assertIsNone(router)
-                        self.assertIsNone(sampler)
+                        continue
+                    self.assertIsNone(router)
+                    self.assertIsNone(sampler)
+
+    def test__maybe_compute_expert_indices(self):
+        num_experts = 6
+        top_k_options = [1, 3, 6]
+        init_sampler_model_flag_options = [True, False]
+
+        for top_k in top_k_options:
+            for init_sampler_model_flag in init_sampler_model_flag_options:
+                message = f"Testing configuration with init_sampler_model_flag={init_sampler_model_flag}, top_k={top_k}"
+                with self.subTest(msg=message):
+                    c = MixtureOfExpertsConfigs.linear_adaptive_layer_preset(
+                        init_sampler_model_flag=init_sampler_model_flag,
+                        num_experts=num_experts,
+                        top_k=top_k,
+                    )
+
+                    m = MixtureOfExperts(c)
+                    if init_sampler_model_flag:
+                        inputs = torch.randn(5, c.input_dim)
+                        input_indices = None
+                        input_probabilities = None
+                        probabilities, indices, sampler_loss = (
+                            m._MixtureOfExperts__maybe_compute_expert_indices(
+                                inputs, input_probabilities, input_indices
+                            )
+                        )
+                        if top_k == num_experts:
+                            self.assertIsNone(indices)
+                        else:
+                            self.assertIsInstance(indices, torch.Tensor)
+                        self.assertIsInstance(probabilities, torch.Tensor)
+                        self.assertIsInstance(sampler_loss, torch.Tensor)
+                        self.assertEqual(sampler_loss.item(), 0.0)
+                        continue
+
+                    inputs = torch.randn(5, c.input_dim)
+                    indices_input = torch.randint(0, m.num_experts, (5, top_k))
+                    indices, probabilities, sampler_loss = (
+                        m._MixtureOfExperts__maybe_compute_expert_indices(
+                            inputs, indices_input
+                        )
+                    )
+                    self.assertTrue(torch.allclose(indices, indices_input))
+                    self.assertIsNone(probabilities)
+                    self.assertEqual(sampler_loss.item(), 0.0)
+
+    def test__compute_experts_output(self):
+        pass
 
 
-#     def test__get_expert_indices(self):
-#         c = copy.deepcopy(self.cfg)
-#         m = MixtureOfExperts(c)
-#
-#         top_k = c.sampler_model_config.top_k
-#         indices = torch.stack([torch.randperm(m.num_experts)[:top_k] for _ in range(5)])
-#
-#         for expert_index in range(m.num_experts):
-#             output = m._MixtureOfExperts__get_expert_indices(indices, expert_index)
-#             self.assertIsInstance(output, torch.Tensor)
-#
 #     def test__forward__LinearLayer(self):
 #         c = copy.deepcopy(self.cfg)
 #         config = c.input_moe_layer_config

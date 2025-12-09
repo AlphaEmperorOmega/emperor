@@ -30,8 +30,18 @@ class _Validator:
         init_sampler_model_flag: bool,
     ) -> None:
         if not init_sampler_model_flag:
-            raise RuntimeError(
-                "If no `indices` are provided the `init_sampler_model_flag` must be set to `True`. This creates a `RouterModel` and `SamplerModel` for the current layer."
+            raise ValueError(
+                "The `init_sampler_model_flag` must be set to `True` to initialize the `RouterModel` and `SamplerModel` when `indices` are not provided."
+            )
+
+    @staticmethod
+    def ensure_external_probabilities_are_not_given(
+        probabilities: Tensor | None,
+        indices: Tensor | None,
+    ) -> None:
+        if indices is not None or probabilities is not None:
+            raise ValueError(
+                "Indices must be None. Providing indices where they are not expected is not allowed."
             )
 
     @staticmethod
@@ -39,22 +49,22 @@ class _Validator:
         init_sampler_model_flag: bool,
     ) -> None:
         if init_sampler_model_flag:
-            raise RuntimeError(
-                "If `indices` are provided the `init_sampler_model_flag` must be set to `False`. This avoids creating a `RouterModel` and `SamplerModel` for the current layer."
+            raise ValueError(
+                "Invalid configuration: `init_sampler_model_flag` must be set to `False` when `indices` are provided. This prevents creating duplicate `RouterModel` and `SamplerModel` instances in the current layer."
             )
 
     @staticmethod
     def ensure_probabilities_exist(probabilities: Tensor | None) -> None:
         if probabilities is None:
-            raise RuntimeError(
-                "Probabilities must be provided when using indices to ensure proper weighting and processing of the inputs."
+            raise ValueError(
+                "Missing input: `probabilities` must be supplied when `indices` are used to ensure accurate weighting and processing of inputs."
             )
 
     @staticmethod
     def ensure_router_config_exists(router_model_config: "RouterConfig | None") -> None:
         if router_model_config is None:
-            raise RuntimeError(
-                "Router configuration must be provided to properly initialize and use the router model in the mixture of experts layer."
+            raise ValueError(
+                "Configuration Error: `router_model_config` must be defined to properly initialize and utilize the router model in the mixture of experts layer."
             )
 
     @staticmethod
@@ -62,8 +72,8 @@ class _Validator:
         sampler_model_config: "SamplerConfig | None",
     ) -> None:
         if sampler_model_config is None:
-            raise RuntimeError(
-                "Sampler configuration must be provided to properly initialize and use the sampler model in the mixture of experts layer."
+            raise ValueError(
+                "Configuration Error: `sampler_model_config` must be defined to properly initialize and utilize the sampler model in the mixture of experts layer."
             )
 
 
@@ -168,22 +178,16 @@ class MixtureOfExperts(Module):
     def forward(
         self,
         input_batch: Tensor,
-        indices: Tensor | None = None,
         probabilities: Tensor | None = None,
+        indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        if indices is None:
-            _Validator.ensure_sampler_is_initialized(self.init_sampler_model_flag)
-            logits = self.router.compute_logit_scores(input_batch)
-            skip_mask = None
-            probabilities, indices, skip_mask, sampler_loss = (
-                self.sampler.sample_probabilities_and_indices(logits, skip_mask)
-            )
-        else:
-            _Validator.ensure_no_sampler_with_indices(self.init_sampler_model_flag)
+        probabilities, indices, sampler_loss = self.__maybe_compute_expert_indices(
+            input_batch, probabilities, indices
+        )
 
         expert_outputs = []
         experts_indices_list = []
-        loss = torch.tensor(0.0)
+        total_loss = torch.tensor(0.0) + sampler_loss
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
             if expert_sample_indices.numel() == 0:
@@ -193,13 +197,31 @@ class MixtureOfExperts(Module):
             )
             experts_indices_list.append(expert_sample_indices)
             expert_outputs.append(expert_output)
-            loss += loss
+            total_loss += loss
 
         experts_indices = torch.cat(experts_indices_list)
         output = torch.cat(expert_outputs, dim=0)
         output = self.__compute_expert_mixture(output, experts_indices, probabilities)
 
-        return output, loss
+        return output, total_loss
+
+    def __maybe_compute_expert_indices(
+        self,
+        inputs: Tensor,
+        probabilities: Tensor | None = None,
+        indices: Tensor | None = None,
+    ) -> tuple[Tensor | None, Tensor | None, Tensor]:
+        if indices is not None or probabilities is not None:
+            _Validator.ensure_no_sampler_with_indices(self.init_sampler_model_flag)
+            return probabilities, indices, torch.tensor(0.0)
+        _Validator.ensure_sampler_is_initialized(self.init_sampler_model_flag)
+        _Validator.ensure_external_probabilities_are_not_given(probabilities, indices)
+        logits = self.router.compute_logit_scores(inputs)
+        skip_mask = None
+        probabilities, indices, skip_mask, sampler_loss = (
+            self.sampler.sample_probabilities_and_indices(logits, skip_mask)
+        )
+        return probabilities, indices, sampler_loss
 
     def __compute_experts_output(
         self,
