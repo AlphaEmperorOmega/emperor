@@ -8,73 +8,18 @@ from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig, RouterModel
 from Emperor.base.utils import ConfigBase, Module, device
 from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.experts.utils._validator import _Validator
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     LayerRoleOptions,
 )
 
-
 from typing import TYPE_CHECKING, Callable
-
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
-
 __all__ = ["MixtureOfExpertsConfig", "MixtureOfExperts"]
-
-
-class _Validator:
-    @staticmethod
-    def ensure_sampler_is_initialized(
-        init_sampler_model_flag: bool,
-    ) -> None:
-        if not init_sampler_model_flag:
-            raise ValueError(
-                "The `init_sampler_model_flag` must be set to `True` to initialize the `RouterModel` and `SamplerModel` when `indices` are not provided."
-            )
-
-    @staticmethod
-    def ensure_external_probabilities_are_not_given(
-        probabilities: Tensor | None,
-        indices: Tensor | None,
-    ) -> None:
-        if indices is not None or probabilities is not None:
-            raise ValueError(
-                "Indices must be None. Providing indices where they are not expected is not allowed."
-            )
-
-    @staticmethod
-    def ensure_no_sampler_with_indices(
-        init_sampler_model_flag: bool,
-    ) -> None:
-        if init_sampler_model_flag:
-            raise ValueError(
-                "Invalid configuration: `init_sampler_model_flag` must be set to `False` when `indices` are provided. This prevents creating duplicate `RouterModel` and `SamplerModel` instances in the current layer."
-            )
-
-    @staticmethod
-    def ensure_probabilities_exist(probabilities: Tensor | None) -> None:
-        if probabilities is None:
-            raise ValueError(
-                "Missing input: `probabilities` must be supplied when `indices` are used to ensure accurate weighting and processing of inputs."
-            )
-
-    @staticmethod
-    def ensure_router_config_exists(router_model_config: "RouterConfig | None") -> None:
-        if router_model_config is None:
-            raise ValueError(
-                "Configuration Error: `router_model_config` must be defined to properly initialize and utilize the router model in the mixture of experts layer."
-            )
-
-    @staticmethod
-    def ensure_sampler_config_exists(
-        sampler_model_config: "SamplerConfig | None",
-    ) -> None:
-        if sampler_model_config is None:
-            raise ValueError(
-                "Configuration Error: `sampler_model_config` must be defined to properly initialize and utilize the sampler model in the mixture of experts layer."
-            )
 
 
 @dataclass
@@ -142,7 +87,7 @@ class MixtureOfExperts(Module):
         self.cfg: "MixtureOfExpertsConfig" = self._overwrite_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
-        self.layer_stack_model = self.cfg.layer_stack_option.value
+        self.layer_stack_model = self.cfg.layer_stack_option
         self.top_k = self.cfg.top_k
         self.num_experts = self.cfg.num_experts
         self.compute_expert_mixture_flag = self.cfg.compute_expert_mixture_flag
@@ -153,6 +98,7 @@ class MixtureOfExperts(Module):
         self.router_model_config = self.cfg.router_model_config
         self.sampler_model_config = self.cfg.sampler_model_config
 
+        self.validator = _Validator(self)
         self.expert_modules = self.__create_experts()
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
 
@@ -161,8 +107,8 @@ class MixtureOfExperts(Module):
     ) -> tuple[RouterModel | None, SamplerModel | None]:
         if not self.cfg.init_sampler_model_flag:
             return None, None
-        _Validator.ensure_router_config_exists(self.router_model_config)
-        _Validator.ensure_sampler_config_exists(self.sampler_model_config)
+        self.validator.ensure_router_config_exists()
+        self.validator.ensure_sampler_config_exists()
         router = RouterModel(self.router_model_config)
         sampler = SamplerModel(self.sampler_model_config)
         return router, sampler
@@ -170,7 +116,7 @@ class MixtureOfExperts(Module):
     def __create_experts(self) -> nn.ModuleList:
         expert_list = []
         for _ in range(self.num_experts):
-            model_stack = self.layer_stack_model(self.main_cfg).build_model()
+            model_stack = self.layer_stack_model.value(self.main_cfg).build_model()
 
             expert_list.append(model_stack)
         return nn.ModuleList(expert_list)
@@ -188,12 +134,24 @@ class MixtureOfExperts(Module):
         expert_outputs = []
         experts_indices_list = []
         total_loss = torch.tensor(0.0) + sampler_loss
+        total_numel_indice = 0
         for expert_index, expert_model in enumerate(self.expert_modules):
-            expert_sample_indices = self.__get_expert_indices(indices, expert_index)
+            expert_sample_indices = self.__get_expert_indices(
+                indices, probabilities, expert_index
+            )
+            expert_sample_probabilities = self.__get_expert_probabilities(
+                indices, probabilities, expert_index
+            )
+
+            total_numel_indice += expert_sample_indices.numel()
+
             if expert_sample_indices.numel() == 0:
                 continue
             expert_output, loss = self.__compute_expert_output(
-                expert_model, input_batch, expert_sample_indices, probabilities
+                expert_model,
+                input_batch,
+                expert_sample_indices,
+                expert_sample_probabilities,
             )
             experts_indices_list.append(expert_sample_indices)
             expert_outputs.append(expert_output)
@@ -205,16 +163,6 @@ class MixtureOfExperts(Module):
 
         return output, total_loss
 
-    def __get_expert_indices(
-        self,
-        indices: Tensor,
-        expert_index: int,
-    ) -> Tensor:
-        boolean_tensor = indices == expert_index
-        flattened_tensor = boolean_tensor.sum(dim=-1)
-        indices_for_expert = flattened_tensor.nonzero()
-        return indices_for_expert.squeeze(dim=-1)
-
     def __maybe_compute_expert_indices(
         self,
         inputs: Tensor,
@@ -222,16 +170,56 @@ class MixtureOfExperts(Module):
         indices: Tensor | None = None,
     ) -> tuple[Tensor | None, Tensor | None, Tensor]:
         if indices is not None or probabilities is not None:
-            _Validator.ensure_no_sampler_with_indices(self.init_sampler_model_flag)
+            self.validator.ensure_no_sampler_with_indices()
             return probabilities, indices, torch.tensor(0.0)
-        _Validator.ensure_sampler_is_initialized(self.init_sampler_model_flag)
-        _Validator.ensure_external_probabilities_are_not_given(probabilities, indices)
+        self.validator.ensure_sampler_is_initialized()
+        self.validator.ensure_external_probabilities_are_not_given(
+            probabilities, indices
+        )
         logits = self.router.compute_logit_scores(inputs)
         skip_mask = None
         probabilities, indices, skip_mask, sampler_loss = (
             self.sampler.sample_probabilities_and_indices(logits, skip_mask)
         )
         return probabilities, indices, sampler_loss
+
+    def __get_expert_indices(
+        self,
+        indices: Tensor,
+        probabilities: Tensor,
+        expert_index: int,
+    ) -> Tensor:
+        if self.top_k == self.num_experts:
+            num_samples = probabilities.shape[0]
+            indices = torch.arange(num_samples)
+            return indices
+
+        boolean_tensor = indices == expert_index
+        samples_for_current_expert = boolean_tensor
+        if self.top_k > 1:
+            samples_for_current_expert = samples_for_current_expert.sum(dim=-1)
+        sample_indices_for_expert = samples_for_current_expert.nonzero()
+        sample_indices_for_expert = sample_indices_for_expert.squeeze(dim=-1)
+
+        return sample_indices_for_expert
+
+    def __get_expert_probabilities(
+        self,
+        indices: Tensor,
+        probabilities: Tensor,
+        expert_index: int,
+    ) -> Tensor:
+        if self.top_k == self.num_experts:
+            return probabilities[:, expert_index]
+
+        if self.__is_before():
+            boolean_tensor = indices == expert_index
+            probabilities = probabilities * boolean_tensor.float()
+            probabilities = probabilities.sum(dim=-1)
+            if self.top_k > 1:
+                probabilities = probabilities[probabilities.nonzero()].squeeze(dim=-1)
+
+        return probabilities
 
     def __compute_expert_output(
         self,
@@ -260,8 +248,8 @@ class MixtureOfExperts(Module):
         if not self.weighted_parameters_flag:
             return logits
 
-        _Validator.ensure_probabilities_exist(probabilities)
-        return logits * probabilities.view(-1, 1)
+        self.validator.ensure_probabilities_exist(probabilities)
+        return logits * probabilities.reshape(-1, 1)
 
     def __is_before(self) -> bool:
         position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
