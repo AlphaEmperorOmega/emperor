@@ -114,52 +114,58 @@ class TestAdaptiveLinearLayer(TestLinears):
     def test_forward(self):
         bias_options = [True, False]
         input_params = output_params = [4, 8, 16]
+        layer_stack_options = [1, 2, 3]
 
-        for bias_flag in bias_options:
-            for input_dim in input_params:
-                for output_dim in output_params:
-                    for generators_depth in DynamicDepthOptions:
-                        for diagonal_option in DynamicDiagonalOptions:
-                            for bias_option in DynamicBiasOptions:
-                                for memory_option in LinearMemoryOptions:
-                                    for position_option in LinearMemoryPositionOptions:
-                                        for size_option in LinearMemorySizeOptions:
-                                            message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Memory option: {memory_option}, Position option: {position_option}, Size option: {size_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
-                                            with self.subTest(message=message):
-                                                batch_size = 2
-                                                cfg = LinearsConfigs.dynamic_preset(
-                                                    batch_size=batch_size,
-                                                    input_dim=input_dim,
-                                                    output_dim=output_dim,
-                                                    bias_flag=bias_flag,
-                                                    generator_depth=generators_depth,
-                                                    diagonal_option=diagonal_option,
-                                                    bias_option=bias_option,
-                                                    memory_option=memory_option,
-                                                    memory_position_option=position_option,
-                                                    memory_size_option=size_option,
-                                                )
-                                                cfg = cfg.linear_layer_config
+        for linear_stack_option in layer_stack_options:
+            for bias_flag in bias_options:
+                for input_dim in input_params:
+                    for output_dim in output_params:
+                        for generators_depth in DynamicDepthOptions:
+                            for diagonal_option in DynamicDiagonalOptions:
+                                for bias_option in DynamicBiasOptions:
+                                    for memory_option in LinearMemoryOptions:
+                                        for (
+                                            position_option
+                                        ) in LinearMemoryPositionOptions:
+                                            for size_option in LinearMemorySizeOptions:
+                                                message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Memory option: {memory_option}, Position option: {position_option}, Size option: {size_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
+                                                with self.subTest(message=message):
+                                                    batch_size = 2
+                                                    cfg = LinearsConfigs.dynamic_preset(
+                                                        batch_size=batch_size,
+                                                        input_dim=input_dim,
+                                                        output_dim=output_dim,
+                                                        bias_flag=bias_flag,
+                                                        generator_depth=generators_depth,
+                                                        diagonal_option=diagonal_option,
+                                                        bias_option=bias_option,
+                                                        memory_option=memory_option,
+                                                        memory_position_option=position_option,
+                                                        memory_size_option=size_option,
+                                                    )
+                                                    cfg = cfg.linear_layer_config
 
-                                                if (
-                                                    memory_option
-                                                    != LinearMemoryOptions.DISABLED
-                                                    and size_option
-                                                    == LinearMemorySizeOptions.DISABLED
-                                                ):
-                                                    with self.assertRaises(ValueError):
+                                                    if (
+                                                        memory_option
+                                                        != LinearMemoryOptions.DISABLED
+                                                        and size_option
+                                                        == LinearMemorySizeOptions.DISABLED
+                                                    ):
+                                                        with self.assertRaises(
+                                                            ValueError
+                                                        ):
+                                                            m = AdaptiveLinearLayer(cfg)
+                                                    else:
                                                         m = AdaptiveLinearLayer(cfg)
-                                                else:
-                                                    m = AdaptiveLinearLayer(cfg)
-                                                    input_batch = torch.randn(
-                                                        batch_size, input_dim
-                                                    )
-                                                    output = m.forward(input_batch)
-                                                    expected_output_shape = (
-                                                        batch_size,
-                                                        output_dim,
-                                                    )
-                                                    self.assertEqual(
-                                                        output.shape,
-                                                        expected_output_shape,
-                                                    )
+                                                        input_batch = torch.randn(
+                                                            batch_size, input_dim
+                                                        )
+                                                        output = m.forward(input_batch)
+                                                        expected_output_shape = (
+                                                            batch_size,
+                                                            output_dim,
+                                                        )
+                                                        self.assertEqual(
+                                                            output.shape,
+                                                            expected_output_shape,
+                                                        )
