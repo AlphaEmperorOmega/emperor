@@ -1,0 +1,148 @@
+from torch import Tensor
+
+from Emperor.sampler.utils.samplers import SamplerConfig
+from Emperor.sampler.utils.routers import RouterConfig
+from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    LayerRoleOptions,
+)
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from Emperor.experts.experts import MixtureOfExperts
+
+
+class _Validator:
+    def __init__(self, model: "MixtureOfExperts"):
+        self.model = model
+        self.__ensure_values_are_not_none()
+        self.__ensure_values_have_correct_types()
+
+    def __ensure_values_are_not_none(self):
+        if self.model.layer_stack_model is None:
+            raise ValueError(
+                f"Configuration Error: 'layer_stack_option' must not be None, received {self.model.layer_stack_model}"
+            )
+        if self.model.top_k is None:
+            raise ValueError(
+                f"Configuration Error: 'top_k' must not be None, received {self.model.top_k}"
+            )
+        if self.model.num_experts is None:
+            raise ValueError(
+                f"Configuration Error: 'num_experts' must not be None, received {self.model.num_experts}"
+            )
+        if self.model.compute_expert_mixture_flag is None:
+            raise ValueError(
+                f"Configuration Error: 'compute_expert_mixture_flag' must not be None, received {self.model.compute_expert_mixture_flag}"
+            )
+        if self.model.weighted_parameters_flag is None:
+            raise ValueError(
+                f"Configuration Error: 'weighted_parameters_flag' must not be None, received {self.model.weighted_parameters_flag}"
+            )
+        if self.model.init_sampler_model_flag is None:
+            raise ValueError(
+                f"Configuration Error: 'init_sampler_model_flag' must not be None, received {self.model.init_sampler_model_flag}"
+            )
+        if self.model.weighting_position_option is None:
+            raise ValueError(
+                f"Configuration Error: 'weighting_position_option' must not be None, received {self.model.weighting_position_option}"
+            )
+        if self.model.layer_role_option is None:
+            raise ValueError(
+                f"Configuration Error: 'layer_role_option' must not be None, received {self.model.layer_role_option}"
+            )
+        if self.model.router_model_config is None:
+            raise ValueError(
+                f"Configuration Error: 'router_model_config' must not be None, received {self.model.router_model_config}"
+            )
+        if self.model.sampler_model_config is None:
+            raise ValueError(
+                f"Configuration Error: 'sampler_model_config' must not be None, received {self.model.sampler_model_config}"
+            )
+
+    def __ensure_values_have_correct_types(self):
+        if not isinstance(self.model.layer_stack_model, LinearLayerStackOptions):
+            raise TypeError(
+                f"Configuration Error: 'layer_stack_option' must be of type LinearLayerStackOptions, received type {type(self.model.layer_stack_model).__name__}"
+            )
+        if not isinstance(self.model.top_k, int):
+            raise TypeError(
+                f"Configuration Error: 'top_k' must be of type int, received type {type(self.model.top_k).__name__}"
+            )
+        if not isinstance(self.model.num_experts, int):
+            raise TypeError(
+                f"Configuration Error: 'num_experts' must be of type int, received type {type(self.model.num_experts).__name__}"
+            )
+        if not isinstance(self.model.compute_expert_mixture_flag, bool):
+            raise TypeError(
+                f"Configuration Error: 'compute_expert_mixture_flag' must be of type bool, received type {type(self.model.compute_expert_mixture_flag).__name__}"
+            )
+        if not isinstance(self.model.weighted_parameters_flag, bool):
+            raise TypeError(
+                f"Configuration Error: 'weighted_parameters_flag' must be of type bool, received type {type(self.model.weighted_parameters_flag).__name__}"
+            )
+        if not isinstance(
+            self.model.weighting_position_option,
+            ExpertWeightingPositionOptions,
+        ):
+            raise TypeError(
+                f"Configuration Error: 'weighting_position_option' must be of type ExpertWeightingPositionOptions, received type {type(self.model.weighting_position_option).__name__}"
+            )
+        if not isinstance(self.model.init_sampler_model_flag, bool):
+            raise TypeError(
+                f"Configuration Error: 'init_sampler_model_flag' must be of type bool, received type {type(self.model.init_sampler_model_flag).__name__}"
+            )
+        if not isinstance(self.model.layer_role_option, LayerRoleOptions):
+            raise TypeError(
+                f"Configuration Error: 'layer_role_option' must be of type LayerRoleOptions, received type {type(self.model.layer_role_option).__name__}"
+            )
+        if not isinstance(self.model.router_model_config, RouterConfig):
+            raise TypeError(
+                f"Configuration Error: 'router_model_config' must be of type RouterConfig, received type {type(self.model.router_model_config).__name__}"
+            )
+        if not isinstance(self.model.sampler_model_config, SamplerConfig):
+            raise TypeError(
+                f"Configuration Error: 'sampler_model_config' must be of type SamplerConfig, received type {type(self.model.sampler_model_config).__name__}"
+            )
+
+    def ensure_sampler_is_initialized(self) -> None:
+        if not self.model.init_sampler_model_flag:
+            raise ValueError(
+                "The `init_sampler_model_flag` must be set to `True` to initialize the `RouterModel` and `SamplerModel` when `indices` are not provided."
+            )
+
+    def ensure_external_probabilities_are_not_given(
+        self,
+        probabilities: Tensor | None,
+        indices: Tensor | None,
+    ) -> None:
+        if indices is not None or probabilities is not None:
+            raise ValueError(
+                "Indices must be None. Providing indices where they are not expected is not allowed."
+            )
+
+    def ensure_no_sampler_with_indices(self) -> None:
+        if self.model.init_sampler_model_flag:
+            raise ValueError(
+                "Invalid configuration: `init_sampler_model_flag` must be set to `False` when `indices` are provided. This prevents creating duplicate `RouterModel` and `SamplerModel` instances in the current layer."
+            )
+
+    def ensure_probabilities_exist(self, probabilities: Tensor | None) -> None:
+        if probabilities is None:
+            raise ValueError(
+                "Missing input: `probabilities` must be supplied when `indices` are used to ensure accurate weighting and processing of inputs."
+            )
+
+    def ensure_router_config_exists(self) -> None:
+        if self.model.router_model_config is None:
+            raise ValueError(
+                "Configuration Error: `router_model_config` must be defined to properly initialize and utilize the router model in the mixture of experts layer."
+            )
+
+    def ensure_sampler_config_exists(self) -> None:
+        if self.model.sampler_model_config is None:
+            raise ValueError(
+                "Configuration Error: `sampler_model_config` must be defined to properly initialize and utilize the sampler model in the mixture of experts layer."
+            )
