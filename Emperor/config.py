@@ -9,7 +9,7 @@ from Emperor.feedForward.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
 )
-from Emperor.experts.experts import MixtureOfExpertsConfig
+from Emperor.experts.utils.layers import MixtureOfExpertsConfig
 from Emperor.adaptive.utils.layers import ParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.adaptive.options import AdaptiveLayerOptions

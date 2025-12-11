@@ -5,7 +5,7 @@ from torch.nn import Sequential
 from dataclasses import dataclass, field
 from Emperor.base.layer import Layer, LayerStack
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.experts.experts import MixtureOfExperts
+from Emperor.experts.utils.layers import MixtureOfExperts
 from Emperor.adaptive.utils.routers import RouterModel
 from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.linears.options import LinearLayerOptions

@@ -143,8 +143,10 @@ class Layer(Module):
     def _handle_model_output(
         self,
         main_model_input: Tensor,
-        additional_model_inputs: dict,
+        additional_model_inputs: dict | None = {},
     ) -> Tensor:
+        if additional_model_inputs is None:
+            additional_model_inputs = {}
         return self.model(main_model_input, **additional_model_inputs)
 
     def _handle_final_output(self, output: Tensor) -> Tensor:

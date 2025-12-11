@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, overrides
 from dataclasses import dataclass, field
 
+from Emperor.base.layer import LayerStackConfig
 from Emperor.sampler.model import SamplerModel
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig, RouterModel
@@ -24,6 +25,14 @@ __all__ = ["MixtureOfExpertsConfig", "MixtureOfExperts"]
 
 @dataclass
 class MixtureOfExpertsConfig(ConfigBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
     layer_stack_option: LinearLayerStackOptions = field(
         default=LinearLayerStackOptions.BASE,
         metadata={"help": "Number of layers added to the router"},
@@ -87,6 +96,8 @@ class MixtureOfExperts(Module):
         self.cfg: "MixtureOfExpertsConfig" = self._overwrite_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
         self.layer_stack_model = self.cfg.layer_stack_option
         self.top_k = self.cfg.top_k
         self.num_experts = self.cfg.num_experts
@@ -109,14 +120,20 @@ class MixtureOfExperts(Module):
             return None, None
         self.validator.ensure_router_config_exists()
         self.validator.ensure_sampler_config_exists()
-        router = RouterModel(self.router_model_config)
+        router_overrides = RouterConfig(input_dim=self.input_dim)
+        router = RouterModel(self.router_model_config, router_overrides)
         sampler = SamplerModel(self.sampler_model_config)
         return router, sampler
 
     def __create_experts(self) -> nn.ModuleList:
         expert_list = []
         for _ in range(self.num_experts):
-            model_stack = self.layer_stack_model.value(self.main_cfg).build_model()
+            overrides = LayerStackConfig(
+                input_dim=self.input_dim, output_dim=self.output_dim
+            )
+            model_stack = self.layer_stack_model.value(
+                self.main_cfg, overrides
+            ).build_model()
 
             expert_list.append(model_stack)
         return nn.ModuleList(expert_list)
