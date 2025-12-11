@@ -426,9 +426,14 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
                                     message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, init_sampler_model_flag={init_sampler_model_flag}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
                                     with self.subTest(msg=message):
                                         c = MixtureOfExpertsConfigs.experts_stack_config(
-                                            stack_num_layers=num_layers,
+                                            layer_stack_option=layer_stack_option,
                                             top_k=top_k,
+                                            weighting_position_option=weighting_position_option,
+                                            init_sampler_model_flag=init_sampler_model_flag,
+                                            weighted_parameters_flag=weighted_parameters_flag,
+                                            compute_expert_mixture_flag=True,
                                             num_experts=num_experts,
+                                            stack_num_layers=num_layers,
                                         )
                                         m = MixtureOfExpertsStack(c).build_model()
 
@@ -453,21 +458,17 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
                                                 )
                                             )
 
-                                        output, total_loss = m(
-                                            input, probabilities, indices
+                                        loss = torch.tensor(0.0)
+                                        output, probabilities, indices, loss = m(
+                                            (input, probabilities, indices, loss)
                                         )
 
                                         expected_shape = (
-                                            batch_size * top_k,
+                                            batch_size,
                                             c.output_dim,
                                         )
-                                        if compute_expert_mixture_flag:
-                                            expected_shape = (
-                                                batch_size,
-                                                c.output_dim,
-                                            )
                                         self.assertEqual(output.shape, expected_shape)
-                                        self.assertEqual(total_loss.item(), 0.0)
+                                        self.assertEqual(loss.item(), 0.0)
 
 
 #  class TestMixtureOfExpertsFeedForward(unittest.TestCase):

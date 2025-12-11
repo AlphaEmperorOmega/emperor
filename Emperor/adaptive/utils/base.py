@@ -37,7 +37,7 @@ class ParameterGeneratorLayer(Layer):
             self.loss = previous_loss
         return main_model_input
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict,
@@ -50,7 +50,7 @@ class ParameterGeneratorLayer(Layer):
         self.loss = self.loss + loss
         return output
 
-    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+    def _handle_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss
 
 
@@ -85,7 +85,7 @@ class SelfAttentionLayer(Layer):
             self.loss = previous_loss
         return main_model_input
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict,
@@ -99,7 +99,7 @@ class SelfAttentionLayer(Layer):
         attention_output, attention_weights = model_output
         return attention_output
 
-    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+    def _handle_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss
 
 
@@ -134,7 +134,7 @@ class CrossAttentionLayer(Layer):
             self.loss = previous_loss
         return main_model_input
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict,
@@ -147,7 +147,7 @@ class CrossAttentionLayer(Layer):
         self.loss = self.loss
         return attention_output
 
-    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+    def _handle_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss
 
 
@@ -182,7 +182,7 @@ class FeedForwardLayer(Layer):
             self.loss = previous_loss
         return main_model_input
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict,
@@ -195,5 +195,5 @@ class FeedForwardLayer(Layer):
         self.loss = self.loss + loss
         return output
 
-    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+    def _handle_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss

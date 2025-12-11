@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
-from torch import Tensor, overrides
+from torch import Tensor
 from dataclasses import dataclass, field
 
-from Emperor.base.layer import LayerStackConfig
+from Emperor.base.layer import Layer, LayerStackConfig
 from Emperor.sampler.model import SamplerModel
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig, RouterModel
@@ -143,15 +143,23 @@ class MixtureOfExperts(Module):
         input_batch: Tensor,
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
         probabilities, indices, sampler_loss = self.__maybe_compute_expert_indices(
             input_batch, probabilities, indices
         )
+        output, expert_loss = self.__compute_experts(
+            input_batch, probabilities, indices
+        )
 
+        total_loss = sampler_loss + expert_loss
+        return output, total_loss
+
+    def __compute_experts(
+        self, input_batch: Tensor, probabilities: Tensor, indices: Tensor
+    ) -> tuple[Tensor, Tensor]:
         expert_outputs = []
         experts_indices_list = []
-        total_loss = torch.tensor(0.0) + sampler_loss
-        total_numel_indice = 0
+        total_loss = torch.tensor(0.0)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_sample_indices = self.__get_expert_indices(
                 indices, probabilities, expert_index
@@ -159,8 +167,6 @@ class MixtureOfExperts(Module):
             expert_sample_probabilities = self.__get_expert_probabilities(
                 indices, probabilities, expert_index
             )
-
-            total_numel_indice += expert_sample_indices.numel()
 
             if expert_sample_indices.numel() == 0:
                 continue

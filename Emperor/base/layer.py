@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from typing import Self
 from torch.types import Tensor
-from torch.nn import Linear, Sequential
+from torch.nn import Sequential
 from dataclasses import dataclass, field
 from Emperor.base.enums import ActivationOptions, BaseOptions, LayerNormPositionOptions
 from Emperor.base.utils import ConfigBase, Module
@@ -105,8 +105,7 @@ class Layer(Module):
 
     def forward(
         self,
-        main_model_input: Tensor,
-        additional_model_inputs: dict = {},
+        main_model_input: Tensor | tuple,
         skip_mask: Tensor | None = None,
     ) -> Tensor | tuple[Tensor | None]:
         # TODO: Ensure that the skip_maks will be used
@@ -116,7 +115,7 @@ class Layer(Module):
         if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
             main_model_input = self.layer_norm_module(main_model_input)
 
-        output = self._handle_model_output(main_model_input, additional_model_inputs)
+        output = self._handle_model_processing(main_model_input)
 
         if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
             output = self.layer_norm_module(output)
@@ -135,21 +134,19 @@ class Layer(Module):
         if self.layer_norm_position == LayerNormPositionOptions.AFTER:
             output = self.layer_norm_module(output)
 
-        return self._handle_final_output(output)
+        return self._handle_model_output(output)
 
-    def _handle_model_input(self, main_model_input: Tensor):
-        return main_model_input
+    def _handle_model_input(self, model_inputs: Tensor) -> Tensor:
+        return model_inputs
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
-        additional_model_inputs: dict | None = {},
+        additional_model_inputs: dict = {},
     ) -> Tensor:
-        if additional_model_inputs is None:
-            additional_model_inputs = {}
         return self.model(main_model_input, **additional_model_inputs)
 
-    def _handle_final_output(self, output: Tensor) -> Tensor:
+    def _handle_model_output(self, output: Tensor) -> Tensor:
         return output
 
     # TODO: In the future instead multiple function inputs
@@ -193,7 +190,7 @@ class ParameterGeneratorLayer(Layer):
             self.loss = previous_loss
         return main_model_input
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict,
@@ -206,7 +203,7 @@ class ParameterGeneratorLayer(Layer):
         self.loss = self.loss + loss
         return output
 
-    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+    def _handle_model_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss
 
 
@@ -241,7 +238,7 @@ class SelfAttentionLayer(Layer):
             self.loss = previous_loss
         return main_model_input
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict,
@@ -255,7 +252,7 @@ class SelfAttentionLayer(Layer):
         attention_output, attention_weights = model_output
         return attention_output
 
-    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+    def _handle_model_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss
 
 
@@ -290,7 +287,7 @@ class CrossAttentionLayer(Layer):
             self.loss = previous_loss
         return main_model_input
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict,
@@ -303,7 +300,7 @@ class CrossAttentionLayer(Layer):
         self.loss = self.loss
         return attention_output
 
-    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+    def _handle_model_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss
 
 
@@ -338,7 +335,7 @@ class FeedForwardLayer(Layer):
             self.loss = previous_loss
         return main_model_input
 
-    def _handle_model_output(
+    def _handle_model_processing(
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict,
@@ -351,7 +348,7 @@ class FeedForwardLayer(Layer):
         self.loss = self.loss + loss
         return output
 
-    def _handle_final_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
+    def _handle_model_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
         return output, self.loss
 
 
@@ -373,6 +370,10 @@ class LayerStackConfig(LayerConfig):
         default=None,
         metadata={"help": "Number of layers in the model"},
     )
+    layer_type: Layer | None = field(
+        default=None,
+        metadata={"help": "Number of layers in the model"},
+    )
 
 
 class LayerStack(Module):
@@ -389,65 +390,38 @@ class LayerStack(Module):
         self.cfg: "LayerStackConfig" = self._overwrite_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
+        self.input_dim = self.cfg.input_dim
+        self.hidden_dim = self.cfg.hidden_dim
+        self.output_dim = self.cfg.output_dim
+        self.num_layers = self.cfg.num_layers
         self.model_type = self.cfg.model_type
         self.activation = self.cfg.activation
         self.residual_flag = self.cfg.residual_flag
         self.adaptive_computation_flag = self.cfg.adaptive_computation_flag
         self.dropout_probability = self.cfg.dropout_probability
         self.layer_norm_position = self.cfg.layer_norm_position
-
-        self.input_dim = self.cfg.input_dim
-        self.hidden_dim = self.cfg.hidden_dim
-        self.output_dim = self.cfg.output_dim
-        self.num_layers = self.cfg.num_layers
+        self.layer_type = self.cfg.layer_type or Layer
         self.callback_function = None
 
-        for _name, _val in (
-            ("input_dim", self.input_dim),
-            ("hidden_dim", self.hidden_dim),
-            ("output_dim", self.output_dim),
-            ("num_layers", self.num_layers),
-        ):
-            if not isinstance(_val, int) or _val < 1:
-                raise ValueError(f"{_name} must be an integer >= 1, received {_val!r}")
-
-        self.layer_block_model = self.__resolve_layer_block_class()
+        self.layer_block_model = self.cfg.layer_type or Layer
 
     def set_callback(self, callback) -> Self:
         self.callback_function = callback
         return self
 
     def _override_model_type(
-        self, overrides: "LayerStackConfig | None", model_type: "BaseOptions | None"
+        self,
+        overrides: "LayerStackConfig | None",
+        model_type: "BaseOptions | None",
+        layer_type: "Layer | None" = None,
     ) -> LayerStackConfig:
         if overrides is None:
-            return LayerStackConfig(model_type=model_type)
+            return LayerStackConfig(
+                model_type=model_type,
+                layer_type=layer_type,
+            )
         overrides.model_type = model_type
         return overrides
-
-    def __resolve_layer_block_class(self) -> type[Layer]:
-        # TODO: move this somewhere else in the future since it is used in
-        # `MixtureOfExperts` as well
-        # from Emperor.generators.utils.enums import (
-        #     LinearLayerTypes,
-        #     ParameterGeneratorTypes,
-        # )
-        from Emperor.linears.options import LinearLayerOptions
-        from Emperor.adaptive.options import AdaptiveLayerOptions
-
-        if (
-            isinstance(self.model_type, LinearLayerOptions)
-            or isinstance(self.model_type, LinearLayerOptions)
-            or self.model_type == Linear
-            or isinstance(self.model_type, BaseOptions)
-        ):
-            return Layer
-        elif isinstance(self.model_type, AdaptiveLayerOptions):
-            return ParameterGeneratorLayer
-        else:
-            raise RuntimeError(
-                f"Unsupported `model_type` {type(self.model_type)} for `LayerStack`"
-            )
 
     def build_model(self) -> Layer | Sequential:
         layers = []
