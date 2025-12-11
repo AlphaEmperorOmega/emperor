@@ -199,9 +199,7 @@ class MixtureOfExperts(Module):
         if self.top_k > 1:
             samples_for_current_expert = samples_for_current_expert.sum(dim=-1)
         sample_indices_for_expert = samples_for_current_expert.nonzero()
-        sample_indices_for_expert = sample_indices_for_expert.squeeze(dim=-1)
-
-        return sample_indices_for_expert
+        return sample_indices_for_expert.squeeze(dim=-1)
 
     def __get_expert_probabilities(
         self,

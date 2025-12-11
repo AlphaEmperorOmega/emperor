@@ -211,11 +211,11 @@ class TestMixtureOfExperts(unittest.TestCase):
 
                 indices = torch.randint(0, m.num_experts, (10, top_k))
                 probabilities = torch.randn(10, top_k)
-                sample_indices_for_expert = m._MixtureOfExperts__get_expert_indices(
+                probabilities = m._MixtureOfExperts__get_expert_probabilities(
                     indices, probabilities, expert_index
                 )
 
-                self.assertIsInstance(sample_indices_for_expert, torch.Tensor)
+                self.assertIsInstance(probabilities, torch.Tensor)
 
     def test__compute_experts_output(self):
         num_experts = 6
