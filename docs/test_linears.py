@@ -132,6 +132,7 @@ class TestAdaptiveLinearLayer(TestLinears):
                                                 with self.subTest(message=message):
                                                     batch_size = 2
                                                     cfg = LinearsConfigs.dynamic_preset(
+                                                        stack_num_layers=linear_stack_option,
                                                         batch_size=batch_size,
                                                         input_dim=input_dim,
                                                         output_dim=output_dim,

@@ -79,6 +79,10 @@ class Layer(Module):
 
         self.dropout_module = self.__init_dropout_module()
         self.layer_norm_module = self.__init_layer_norm_module()
+        self.last_layer_flag = False
+
+    def mark_as_last_layer(self) -> None:
+        self.last_layer_flag = True
 
     def __init_dropout_module(self) -> nn.Module | None:
         if self.has_dropout:
@@ -400,7 +404,6 @@ class LayerStack(Module):
         self.adaptive_computation_flag = self.cfg.adaptive_computation_flag
         self.dropout_probability = self.cfg.dropout_probability
         self.layer_norm_position = self.cfg.layer_norm_position
-        self.layer_type = self.cfg.layer_type or Layer
         self.callback_function = None
 
         self.layer_block_model = self.cfg.layer_type or Layer
@@ -430,6 +433,8 @@ class LayerStack(Module):
         self.__add_hidden_layers(layers, layer_adjustment)
         self.__add_output_layer(layers)
 
+        self.mark_last_layer(layers)
+
         if len(layers) == 1:
             [model] = layers
             self._initialize_parameters(model)
@@ -437,6 +442,9 @@ class LayerStack(Module):
         model = Sequential(*layers)
         self._initialize_parameters(model)
         return model
+
+    def mark_last_layer(self, layers: list) -> None:
+        layers[-1].mark_as_last_layer()
 
     def __add_initial_layer(self, layers: list) -> int:
         if self.input_dim != self.hidden_dim and self.num_layers > 1:
@@ -473,7 +481,7 @@ class LayerStack(Module):
         config = self.__resolve_model_type_overrides(input_dim, output_dim)
         model = self.__get_model_type()(config)
 
-        return self.layer_block_model(
+        layer_block_model = self.layer_block_model(
             model=model,
             layer_norm_dim=layer_norm_dim,
             residual_connection_flag=residual_flag,
@@ -482,10 +490,9 @@ class LayerStack(Module):
             layer_norm_position=self.layer_norm_position,
         )
 
+        return layer_block_model
+
     def __resolve_model_type_overrides(self, input_dim: int, output_dim: int):
-        # TODO: In the future find a way to get rid of this
-        # and somehow create a configuration similar to how
-        # in can write css in scss
         c = copy.deepcopy(self.main_cfg)
         c.input_dim = input_dim
         c.output_dim = output_dim

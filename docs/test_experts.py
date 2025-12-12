@@ -459,9 +459,13 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
                                             )
 
                                         loss = torch.tensor(0.0)
-                                        output, probabilities, indices, loss = m(
-                                            (input, probabilities, indices, loss)
-                                        )
+                                        inputs = {
+                                            "input_batch": input,
+                                            "probabilities": probabilities,
+                                            "indices": indices,
+                                            "loss": loss,
+                                        }
+                                        output, loss = m(inputs)
 
                                         expected_shape = (
                                             batch_size,

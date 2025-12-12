@@ -45,23 +45,29 @@ class MixtureOfExpertsLayer(Layer):
             layer_norm_position,
         )
 
-        self.loss = None
+        self.total_loss = None
         self.probabilities = None
         self.indices = None
 
-    def _handle_model_input(self, model_inputs: tuple) -> Tensor:
-        main_model_input, probabilities, indices, previous_loss = model_inputs
-        self.probabilities = probabilities
-        self.indices = indices
-        self.loss = previous_loss
-        return main_model_input
+    def _handle_model_input(self, model_inputs: dict) -> Tensor:
+        self.probabilities = model_inputs["probabilities"]
+        self.indices = model_inputs["indices"]
+        self.total_loss = model_inputs["loss"]
+        return model_inputs["input_batch"]
 
     def _handle_model_processing(self, model_input: Tensor) -> Tensor:
         model_output, total_loss = self.model(
             model_input, self.probabilities, self.indices
         )
-        self.loss += total_loss
+        self.total_loss += total_loss
         return model_output
 
-    def _handle_model_output(self, output: Tensor) -> tuple:
-        return output, self.probabilities, self.indices, self.loss
+    def _handle_model_output(self, output: Tensor) -> tuple | dict:
+        if self.last_layer_flag:
+            return output, self.total_loss
+        return {
+            "input_batch": output,
+            "probabilities": self.probabilities,
+            "indices": self.indices,
+            "loss": self.total_loss,
+        }
