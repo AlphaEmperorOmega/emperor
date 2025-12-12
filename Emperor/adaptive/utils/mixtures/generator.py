@@ -4,7 +4,8 @@ from torch import Tensor
 from torch.nn import functional as F
 from Emperor.adaptive.utils.mixture import MixtureConfig
 from Emperor.adaptive.utils.mixtures.base import MixtureBase
-from Emperor.experts.experts import MixtureOfExperts
+from Emperor.experts.utils.layers import MixtureOfExperts
+
 
 from typing import TYPE_CHECKING
 
@@ -41,7 +42,7 @@ class GeneratorMixtureBase(MixtureBase):
         return self.top_k == 1
 
 
-class AdaptiveWeightsMixture(MixtureBase):
+class GeneratorWeightsMixture(MixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
@@ -51,22 +52,23 @@ class AdaptiveWeightsMixture(MixtureBase):
         self.range_dim = self.input_dim
         self.parameter_mixture_dim = -2
         self.probability_shape = (-1, self.top_k, 1, 1)
-        self.input_weight_vector_generator = MixtureOfExperts(cfg)
-        self.output_weight_vector_generator = MixtureOfExperts(cfg)
+        self.input_vector_generator = MixtureOfExperts(cfg)
+        self.output_vector_generator = MixtureOfExperts(cfg)
         self.register_buffer("select_range", self._init_parameter_select_range())
 
     def compute_mixture(
         self,
-        probs: Tensor,
+        input_batch: Tensor,
+        probabilities: Tensor,
         indices: Tensor | None = None,
-        *args,
     ) -> Tensor:
-        input_vectors = self.input_weight_vector_generator(*args, indices, probs)
-        output_vectors = self.output_weight_vector_generator(*args, indices, probs)
+        inputs = (input_batch, indices, probabilities)
+        input_vectors = self.input_vector_generator(*inputs)
+        output_vectors = self.output_vector_generator(*inputs)
         generated_parameters = self.__compute_outer_product(
             input_vectors, output_vectors
         )
-        return self.__compute_parameter_mixture(generated_parameters, probs)
+        return self.__compute_parameter_mixture(generated_parameters, probabilities)
 
     def __compute_outer_product(
         self,
@@ -148,7 +150,7 @@ class AdaptiveWeightsMixture(MixtureBase):
         return self.weighted_parameters_flag and probs is not None
 
 
-class AdaptiveBiasMixture(MixtureBase):
+class GeneratorBiasMixture(MixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",

@@ -1,6 +1,10 @@
 import torch
 
 from torch import Tensor
+from Emperor.adaptive.utils.mixtures.generator import (
+    GeneratorBiasMixture,
+    GeneratorWeightsMixture,
+)
 from Emperor.adaptive.utils.routers import VectorRouterModel
 from Emperor.base.utils import Module
 from dataclasses import dataclass, field
@@ -265,80 +269,80 @@ class ParameterLayerBase(Module):
         return weight_loss + bias_loss
 
 
-class VectorParameterLayer(ParameterLayerBase):
-    def __init__(
-        self,
-        cfg: "ParameterLayerConfig | ModelConfig",
-        overrides: "ParameterLayerConfig | None" = None,
-    ):
-        super().__init__(cfg, overrides)
-
-        self.weight_router = VectorRouterModel(cfg)
-        self.bias_router = self._init_bias_router_model(cfg)
-        self.weight_sampler = SamplerModel(cfg)
-        self.bias_sampler = SamplerModel(cfg)
-        self.weight_mixture = VectorWeightsMixture(cfg)
-        self.bias_mixture = self._init_bias_mixture_model(cfg)
-
-    def _init_bias_router_model(self, cfg: "ModelConfig") -> VectorRouterModel | None:
-        if not self.bias_parameters_flag:
-            return None
-        return VectorRouterModel(
-            cfg,
-            bias_parameters_flag=self.bias_parameters_flag,
-            bias_output_dim=self.mixture.output_dim,
-        )
-
-    def _init_bias_mixture_model(self, cfg: "ModelConfig") -> VectorBiasMixture | None:
-        if not self.bias_parameters_flag:
-            return None
-        return VectorBiasMixture(cfg)
-
-    def _compute_probabilities_and_indices(
-        self,
-        input_batch: Tensor,
-        compute_bias_flag: bool = False,
-        skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None]:
-        logits = self._compute_logits(input_batch, compute_bias_flag)
-        input_dim, batch_size, depth_dim = logits.shape
-        logits = logits.view(-1, depth_dim)
-
-        probabilities, indices = self._sample_probabilities_and_indices(
-            logits, skip_mask, compute_bias_flag
-        )
-
-        probabilities_shape = (input_dim, batch_size)
-        indices_shape = (input_dim, batch_size)
-        if self.mixture.top_k > 1:
-            probabilities_shape = (input_dim, batch_size, -1)
-            indices_shape = (input_dim, batch_size, -1)
-
-        probabilities = probabilities.reshape(probabilities_shape)
-        if indices is not None:
-            indices = indices.reshape(indices_shape)
-
-        return probabilities, indices
-
-
-class MatrixParameterLayer(ParameterLayerBase):
-    def __init__(
-        self,
-        cfg: "ParameterLayerConfig | ModelConfig",
-        overrides: "ParameterLayerConfig | None" = None,
-    ):
-        super().__init__(cfg, overrides)
-
-        self.weight_router: RouterModel = RouterModel(cfg)
-        self.bias_router = self._init_bias_router_model(cfg)
-        self.weight_sampler: SamplerModel = SamplerModel(cfg)
-        self.bias_sampler: SamplerModel = SamplerModel(cfg)
-        self.mixture: MatrixMixture = MatrixMixture(cfg)
-
-    def _init_bias_router_model(self, cfg: "ModelConfig") -> RouterModel | None:
-        if self.bias_parameters_flag:
-            return RouterModel(cfg)
-        return None
+# class VectorParameterLayer(ParameterLayerBase):
+#     def __init__(
+#         self,
+#         cfg: "ParameterLayerConfig | ModelConfig",
+#         overrides: "ParameterLayerConfig | None" = None,
+#     ):
+#         super().__init__(cfg, overrides)
+#
+#         self.weight_router = VectorRouterModel(cfg)
+#         self.bias_router = self._init_bias_router_model(cfg)
+#         self.weight_sampler = SamplerModel(cfg)
+#         self.bias_sampler = SamplerModel(cfg)
+#         self.weight_mixture = VectorWeightsMixture(cfg)
+#         self.bias_mixture = self._init_bias_mixture_model(cfg)
+#
+#     def _init_bias_router_model(self, cfg: "ModelConfig") -> VectorRouterModel | None:
+#         if not self.bias_parameters_flag:
+#             return None
+#         return VectorRouterModel(
+#             cfg,
+#             bias_parameters_flag=self.bias_parameters_flag,
+#             bias_output_dim=self.mixture.output_dim,
+#         )
+#
+#     def _init_bias_mixture_model(self, cfg: "ModelConfig") -> VectorBiasMixture | None:
+#         if not self.bias_parameters_flag:
+#             return None
+#         return VectorBiasMixture(cfg)
+#
+#     def _compute_probabilities_and_indices(
+#         self,
+#         input_batch: Tensor,
+#         compute_bias_flag: bool = False,
+#         skip_mask: Tensor | None = None,
+#     ) -> tuple[Tensor, Tensor | None]:
+#         logits = self._compute_logits(input_batch, compute_bias_flag)
+#         input_dim, batch_size, depth_dim = logits.shape
+#         logits = logits.view(-1, depth_dim)
+#
+#         probabilities, indices = self._sample_probabilities_and_indices(
+#             logits, skip_mask, compute_bias_flag
+#         )
+#
+#         probabilities_shape = (input_dim, batch_size)
+#         indices_shape = (input_dim, batch_size)
+#         if self.mixture.top_k > 1:
+#             probabilities_shape = (input_dim, batch_size, -1)
+#             indices_shape = (input_dim, batch_size, -1)
+#
+#         probabilities = probabilities.reshape(probabilities_shape)
+#         if indices is not None:
+#             indices = indices.reshape(indices_shape)
+#
+#         return probabilities, indices
+#
+#
+# class MatrixParameterLayer(ParameterLayerBase):
+#     def __init__(
+#         self,
+#         cfg: "ParameterLayerConfig | ModelConfig",
+#         overrides: "ParameterLayerConfig | None" = None,
+#     ):
+#         super().__init__(cfg, overrides)
+#
+#         self.weight_router: RouterModel = RouterModel(cfg)
+#         self.bias_router = self._init_bias_router_model(cfg)
+#         self.weight_sampler: SamplerModel = SamplerModel(cfg)
+#         self.bias_sampler: SamplerModel = SamplerModel(cfg)
+#         self.mixture: MatrixMixture = MatrixMixture(cfg)
+#
+#     def _init_bias_router_model(self, cfg: "ModelConfig") -> RouterModel | None:
+#         if self.bias_parameters_flag:
+#             return RouterModel(cfg)
+#         return None
 
 
 class GeneratorParameterLayer(ParameterLayerBase):
@@ -353,11 +357,17 @@ class GeneratorParameterLayer(ParameterLayerBase):
         self.bias_router = self._init_bias_router_model(cfg)
         self.weight_sampler: SamplerModel = SamplerModel(cfg)
         self.bias_sampler: SamplerModel = SamplerModel(cfg)
-        self.mixture: GeneratorMixture = GeneratorMixture(cfg)
+        self.weight_generator = GeneratorWeightsMixture(cfg)
+        self.bias_generator = self._init_bias_generator(cfg)
 
     def _init_bias_router_model(self, cfg: "ModelConfig") -> RouterModel | None:
         if self.bias_parameters_flag:
             return RouterModel(cfg)
+        return None
+
+    def _init_bias_generator(self, cfg: "ModelConfig") -> GeneratorBiasMixture | None:
+        if self.bias_parameters_flag:
+            return GeneratorBiasMixture(cfg)
         return None
 
     def _generate_parameters(
@@ -372,12 +382,11 @@ class GeneratorParameterLayer(ParameterLayerBase):
             input_batch
         )
 
-        weight_parameters, bias_parameters = self.mixture.compute_mixture(
+        weight_parameters = self.weight_generator.compute_mixture(
+            input_batch,
             weight_probabilities,
             weight_indices,
-            bias_probabilities,
-            bias_indices,
-            input_batch,
         )
+        bias_parameters = self.bias_generator.compute_mixture()
 
         return weight_parameters, bias_parameters
