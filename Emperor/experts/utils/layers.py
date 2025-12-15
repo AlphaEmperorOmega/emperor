@@ -33,8 +33,8 @@ class MixtureOfExpertsConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    layer_stack_option: LinearLayerStackOptions = field(
-        default=LinearLayerStackOptions.BASE,
+    layer_stack_option: LinearLayerStackOptions | None = field(
+        default=None,
         metadata={"help": "Number of layers added to the router"},
     )
     top_k: int | None = field(

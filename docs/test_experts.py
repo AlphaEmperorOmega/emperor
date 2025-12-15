@@ -27,7 +27,9 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def rebuild_presets(self, config: ModelConfig | None = None):
         self.cfg = (
-            MixtureOfExpertsPresets.linear_adaptive_layer_preset()
+            MixtureOfExpertsPresets.experts_preset(
+                return_model_config_flag=True,
+            )
             if config is None
             else config
         )
@@ -47,7 +49,8 @@ class TestMixtureOfExperts(unittest.TestCase):
                     for init_sampler_model_flag in bool_flags:
                         message = f"Testing configuration with num_experts={num_experts}, top_k={top_k}, layer_stack_option={layer_stack_option}, layer_role_option={layer_role_option}, and init_sampler_model_flag={init_sampler_model_flag}"
                         with self.subTest(msg=message):
-                            c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                            c = MixtureOfExpertsPresets.experts_preset(
+                                return_model_config_flag=True,
                                 layer_stack_option=layer_stack_option,
                                 num_experts=num_experts,
                                 layer_role_option=layer_role_option,
@@ -89,7 +92,8 @@ class TestMixtureOfExperts(unittest.TestCase):
         for layer_stack_option in LinearLayerStackOptions:
             message = f"Testing configuration with layer_stack_option={layer_stack_option.name}"
             with self.subTest(msg=message):
-                c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                c = MixtureOfExpertsPresets.experts_preset(
+                    return_model_config_flag=True,
                     layer_stack_option=layer_stack_option,
                 )
 
@@ -112,7 +116,8 @@ class TestMixtureOfExperts(unittest.TestCase):
             for sampler_option, expert_option in zip(sampler_options, expert_options):
                 message = f"Testing configuration with sampler_option={sampler_option.__name__}, num_experts={num_experts}, top_k={expert_option}"
                 with self.subTest(msg=message):
-                    c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                    c = MixtureOfExpertsPresets.experts_preset(
+                        return_model_config_flag=True,
                         init_sampler_model_flag=init_sampler_model_flag,
                         num_experts=num_experts,
                         top_k=expert_option,
@@ -140,7 +145,8 @@ class TestMixtureOfExperts(unittest.TestCase):
             for init_sampler_model_flag in init_sampler_model_flag_options:
                 message = f"Testing configuration with init_sampler_model_flag={init_sampler_model_flag}, top_k={top_k}"
                 with self.subTest(msg=message):
-                    c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                    c = MixtureOfExpertsPresets.experts_preset(
+                        return_model_config_flag=True,
                         init_sampler_model_flag=init_sampler_model_flag,
                         num_experts=num_experts,
                         top_k=top_k,
@@ -183,7 +189,8 @@ class TestMixtureOfExperts(unittest.TestCase):
         for expert_index in range(num_experts):
             message = f"Testing configuration with expert_index={expert_index}"
             with self.subTest(msg=message):
-                c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                c = MixtureOfExpertsPresets.experts_preset(
+                    return_model_config_flag=True,
                     num_experts=num_experts,
                 )
 
@@ -204,7 +211,8 @@ class TestMixtureOfExperts(unittest.TestCase):
         for expert_index in range(num_experts):
             message = f"Testing configuration with expert_index={expert_index}"
             with self.subTest(msg=message):
-                c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                c = MixtureOfExpertsPresets.experts_preset(
+                    return_model_config_flag=True,
                     num_experts=num_experts,
                 )
 
@@ -228,7 +236,8 @@ class TestMixtureOfExperts(unittest.TestCase):
                 for weighted_parameters_flag in weighted_parameters_flag_options:
                     message = f"Testing configuration with weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}"
                     with self.subTest(msg=message):
-                        c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                        c = MixtureOfExpertsPresets.experts_preset(
+                            return_model_config_flag=True,
                             weighted_parameters_flag=weighted_parameters_flag,
                             weighting_position_option=weighting_position_option,
                             num_experts=num_experts,
@@ -259,7 +268,8 @@ class TestMixtureOfExperts(unittest.TestCase):
             for weighted_parameters_flag in [True, False]:
                 message = f"Testing configuration with weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}"
                 with self.subTest(msg=message):
-                    c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                    c = MixtureOfExpertsPresets.experts_preset(
+                        return_model_config_flag=True,
                         weighted_parameters_flag=weighted_parameters_flag,
                         num_experts=num_experts,
                         top_k=top_k,
@@ -289,7 +299,8 @@ class TestMixtureOfExperts(unittest.TestCase):
                 for weighted_parameters_flag in [True, False]:
                     message = f"Testing configuration with weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}"
                     with self.subTest(msg=message):
-                        c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                        c = MixtureOfExpertsPresets.experts_preset(
+                            return_model_config_flag=True,
                             weighted_parameters_flag=weighted_parameters_flag,
                             compute_expert_mixture_flag=compute_expert_mixture_flag,
                             num_experts=num_experts,
@@ -327,7 +338,8 @@ class TestMixtureOfExperts(unittest.TestCase):
                                 for weighted_parameters_flag in flag_options:
                                     message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, init_sampler_model_flag={init_sampler_model_flag}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
                                     with self.subTest(msg=message):
-                                        c = MixtureOfExpertsPresets.linear_adaptive_layer_preset(
+                                        c = MixtureOfExpertsPresets.experts_preset(
+                                            return_model_config_flag=True,
                                             batch_size=10,
                                             layer_stack_option=layer_stack_option,
                                             top_k=top_k,
@@ -386,7 +398,9 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
 
     def rebuild_presets(self, config: ModelConfig | None = None):
         self.cfg = (
-            MixtureOfExpertsPresets.linear_adaptive_layer_preset()
+            MixtureOfExpertsPresets.experts_preset(
+                return_model_config_flag=True,
+            )
             if config is None
             else config
         )
@@ -401,7 +415,8 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
         for num_layers in num_layer_options:
             message = f"Testing configuration with num_layers={num_layers}"
             with self.subTest(msg=message):
-                c = MixtureOfExpertsPresets.experts_stack_config(
+                c = MixtureOfExpertsPresets.experts_stack_preset(
+                    return_model_config_flag=True,
                     stack_num_layers=num_layers,
                 )
                 m = MixtureOfExpertsStack(c).build_model()
@@ -425,7 +440,8 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
                                 for weighted_parameters_flag in flag_options:
                                     message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, init_sampler_model_flag={init_sampler_model_flag}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
                                     with self.subTest(msg=message):
-                                        c = MixtureOfExpertsPresets.experts_stack_config(
+                                        c = MixtureOfExpertsPresets.experts_stack_preset(
+                                            return_model_config_flag=True,
                                             layer_stack_option=layer_stack_option,
                                             top_k=top_k,
                                             weighting_position_option=weighting_position_option,
@@ -442,12 +458,8 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
                                         input = torch.randn(batch_size, c.input_dim)
                                         indices = probabilities = None
                                         if not init_sampler_model_flag:
-                                            router_cfg = (
-                                                c.override_config.router_model_config
-                                            )
-                                            sampler_cfg = (
-                                                c.override_config.sampler_model_config
-                                            )
+                                            router_cfg = c.layer_stack_config.override_config.router_model_config
+                                            sampler_cfg = c.layer_stack_config.override_config.sampler_model_config
                                             router = RouterModel(router_cfg)
                                             sampler = SamplerModel(sampler_cfg)
 

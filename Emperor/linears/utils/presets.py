@@ -16,7 +16,7 @@ from Emperor.behaviours.utils.enums import (
 class LinearPresets:
     @staticmethod
     def base_linear_layer_preset(
-        preset_model_config_flag: bool = False,
+        return_model_config_flag: bool = False,
         batch_size: int = 8,
         input_dim: int = 12,
         output_dim: int = 6,
@@ -31,7 +31,7 @@ class LinearPresets:
             data_monitor=data_monitor,
             parameter_monitor=parameter_monitor,
         )
-        if not preset_model_config_flag:
+        if not return_model_config_flag:
             return config
         return ModelConfig(
             batch_size=batch_size,
@@ -42,7 +42,7 @@ class LinearPresets:
 
     @staticmethod
     def adaptive_linear_layer_preset(
-        preset_model_config_flag: bool = False,
+        return_model_config_flag: bool = False,
         batch_size: int = 8,
         input_dim: int = 12,
         output_dim: int = 6,
@@ -96,7 +96,7 @@ class LinearPresets:
             ),
         )
 
-        if not preset_model_config_flag:
+        if not return_model_config_flag:
             return config
         return ModelConfig(
             batch_size=batch_size,
@@ -107,7 +107,7 @@ class LinearPresets:
 
     @staticmethod
     def base_linear_layer_stack_preset(
-        preset_model_config_flag: bool = False,
+        return_model_config_flag: bool = False,
         batch_size: int = 8,
         input_dim: int = 12,
         output_dim: int = 6,
@@ -143,7 +143,7 @@ class LinearPresets:
             ),
         )
 
-        if not preset_model_config_flag:
+        if not return_model_config_flag:
             return config
         return ModelConfig(
             batch_size=batch_size,
@@ -154,7 +154,7 @@ class LinearPresets:
 
     @staticmethod
     def adaptive_linear_layer_stack_preset(
-        preset_model_config_flag: bool = False,
+        return_model_config_flag: bool = False,
         batch_size: int = 8,
         input_dim: int = 12,
         output_dim: int = 6,
@@ -203,7 +203,7 @@ class LinearPresets:
             ),
         )
 
-        if not preset_model_config_flag:
+        if not return_model_config_flag:
             return config
         return ModelConfig(
             batch_size=batch_size,

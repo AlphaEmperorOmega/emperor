@@ -26,7 +26,13 @@ class TestRouterModel(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = SamplerPresets.router_preset() if config is None else config
+        self.cfg = (
+            SamplerPresets.router_preset(
+                return_model_config_flag=True,
+            )
+            if config is None
+            else config
+        )
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
@@ -50,6 +56,7 @@ class TestRouterModel(unittest.TestCase):
                 message = f"Testing configuration with num_experts={num_experts} and noisy_flag_option={noisy_flag_opition}"
                 with self.subTest(msg=message):
                     config = SamplerPresets.router_preset(
+                        return_model_config_flag=True,
                         num_experts=num_experts,
                         noisy_topk_flag=noisy_flag_opition,
                     )
@@ -72,10 +79,11 @@ class TestRouterModel(unittest.TestCase):
                         message = f"Testing the configuration with num_experts={num_experts} and noisy_flag_option={noisy_flag_option}"
                         with self.subTest(msg=message):
                             cfg = SamplerPresets.router_preset(
+                                return_model_config_flag=True,
                                 layer_stack_option=layer_stack_option,
                                 num_experts=num_experts,
                                 noisy_topk_flag=noisy_flag_option,
-                                num_layers=num_layers,
+                                stack_num_layers=num_layers,
                                 bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
                                 memory_option=LinearMemoryOptions.WEIGHTED,
                                 generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,

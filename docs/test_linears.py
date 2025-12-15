@@ -74,7 +74,7 @@ class TestLinearLayer(TestLinears):
                     message = f"Test failed for the options: {input_dim}, {output_dim}, {bias_flag}"
                     with self.subTest(i=message):
                         c = LinearPresets.base_linear_layer_preset(
-                            preset_model_config_flag=True,
+                            return_model_config_flag=True,
                         )
                         overrides = LinearLayerConfig(
                             input_dim=input_dim,
@@ -100,7 +100,7 @@ class TestAdaptiveLinearLayer(TestLinears):
                         message = f"Test failed for the options: {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
                         with self.subTest(message=message):
                             cfg = LinearPresets.adaptive_linear_layer_preset(
-                                preset_model_config_flag=True,
+                                return_model_config_flag=True,
                                 bias_flag=bias_flag,
                                 generator_depth=generators_depth,
                                 diagonal_option=diagonal_option,
@@ -137,7 +137,7 @@ class TestAdaptiveLinearLayer(TestLinears):
                                                 with self.subTest(message=message):
                                                     batch_size = 2
                                                     cfg = LinearPresets.adaptive_linear_layer_preset(
-                                                        preset_model_config_flag=True,
+                                                        return_model_config_flag=True,
                                                         stack_num_layers=linear_stack_option,
                                                         batch_size=batch_size,
                                                         input_dim=input_dim,
@@ -185,7 +185,7 @@ class TestLinearLayerBaseStack(TestLinears):
             message = f"Test failed for the inputs: {num_layers}"
             with self.subTest(i=message):
                 cfg = LinearPresets.base_linear_layer_stack_preset(
-                    preset_model_config_flag=True,
+                    return_model_config_flag=True,
                     stack_num_layers=num_layers,
                 )
                 m = LinearLayerStack(cfg).build_model()
@@ -204,7 +204,7 @@ class TestLinearLayerAdaptiveStack(TestLinears):
             message = f"Test failed for the inputs: {num_layers}"
             with self.subTest(i=message):
                 cfg = LinearPresets.adaptive_linear_layer_stack_preset(
-                    preset_model_config_flag=True,
+                    return_model_config_flag=True,
                     stack_num_layers=num_layers,
                 )
                 m = AdaptiveLinearLayerStack(cfg).build_model()
