@@ -2,8 +2,8 @@ import torch
 import unittest
 
 from Emperor.config import ModelConfig
-from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from Emperor.sampler.utils.config import SamplerConfigs
+from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.sampler.utils.presets import SamplerPresets
 from Emperor.sampler.utils.routers import RouterModel
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -26,7 +26,7 @@ class TestRouterModel(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = SamplerConfigs.router_preset() if config is None else config
+        self.cfg = SamplerPresets.router_preset() if config is None else config
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
@@ -38,7 +38,7 @@ class TestRouterModel(unittest.TestCase):
             message = f"AssertionError should be raised for the inputs: {n}"
             with self.subTest(msg=message):
                 with self.assertRaises(AssertionError):
-                    config = SamplerConfigs.router_preset(num_experts=n)
+                    config = SamplerPresets.router_preset(num_experts=n)
                     RouterModel(config)
 
     def test_init_with_different_configs(self):
@@ -49,7 +49,7 @@ class TestRouterModel(unittest.TestCase):
             for noisy_flag_opition in noisy_flag_options:
                 message = f"Testing configuration with num_experts={num_experts} and noisy_flag_option={noisy_flag_opition}"
                 with self.subTest(msg=message):
-                    config = SamplerConfigs.router_preset(
+                    config = SamplerPresets.router_preset(
                         num_experts=num_experts,
                         noisy_topk_flag=noisy_flag_opition,
                     )
@@ -71,7 +71,7 @@ class TestRouterModel(unittest.TestCase):
                     for noisy_flag_option in noisy_flag_options:
                         message = f"Testing the configuration with num_experts={num_experts} and noisy_flag_option={noisy_flag_option}"
                         with self.subTest(msg=message):
-                            cfg = SamplerConfigs.router_preset(
+                            cfg = SamplerPresets.router_preset(
                                 layer_stack_option=layer_stack_option,
                                 num_experts=num_experts,
                                 noisy_topk_flag=noisy_flag_option,

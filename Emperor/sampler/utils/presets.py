@@ -2,7 +2,7 @@ from Emperor.config import ModelConfig
 from Emperor.base.utils import ConfigUtils
 from Emperor.base.layer import LayerStackConfig
 from Emperor.sampler.utils.routers import RouterConfig
-from Emperor.linears.utils.config import LinearsPresets
+from Emperor.linears.utils.presets import LinearPresets
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
@@ -16,7 +16,7 @@ from Emperor.behaviours.utils.enums import (
 )
 
 
-class SamplerConfigs:
+class SamplerPresets:
     @staticmethod
     def router_config(
         input_dim: int = 12,
@@ -40,9 +40,9 @@ class SamplerConfigs:
         # arguments = ConfigUtils.get_method_arguments()
 
         if layer_stack_option == LinearLayerStackOptions.BASE:
-            router_model_config = LinearsPresets.base_stack_config()
+            router_model_config = LinearPresets.base_linear_layer_stack_preset()
         elif layer_stack_option == LinearLayerStackOptions.ADAPTIVE:
-            router_model_config = LinearsPresets.base_stack_config()
+            router_model_config = LinearPresets.adaptive_linear_layer_preset()
 
         return RouterConfig(
             layer_stack_option=layer_stack_option,
@@ -117,7 +117,7 @@ class SamplerConfigs:
             batch_size=batch_size,
             input_dim=input_dim,
             output_dim=num_experts,
-            router_model_config=SamplerConfigs.router_config(**stored_arguments),
+            router_model_config=SamplerPresets.router_config(**stored_arguments),
         )
 
     @staticmethod
@@ -154,6 +154,6 @@ class SamplerConfigs:
             batch_size=batch_size,
             input_dim=input_dim,
             output_dim=num_experts,
-            sampler_model_config=SamplerConfigs.sampler_config(**stored_arguments),
-            router_model_config=SamplerConfigs.router_config(**stored_arguments),
+            sampler_model_config=SamplerPresets.sampler_config(**stored_arguments),
+            router_model_config=SamplerPresets.router_config(**stored_arguments),
         )

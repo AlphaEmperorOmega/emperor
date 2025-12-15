@@ -2,7 +2,7 @@ import torch
 import unittest
 from math import prod
 
-from Emperor.sampler.utils.config import SamplerConfigs
+from Emperor.sampler.utils.presets import SamplerPresets
 from Emperor.sampler.utils.losses import (
     CoefficientOfVariationLoss,
     MutualInformationLoss,
@@ -30,7 +30,7 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
         )
 
     def test__init(self):
-        cfg = SamplerConfigs.sampler_preset()
+        cfg = SamplerPresets.sampler_preset()
         m = SamplerAuxiliaryLosses(cfg)
 
         self.assertIsInstance(
@@ -41,7 +41,7 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
         self.assertIsInstance(m.mutual_information_loss, MutualInformationLoss)
 
     def test_update_accumulated_statistics(self):
-        cfg = SamplerConfigs.sampler_preset(
+        cfg = SamplerPresets.sampler_preset(
             coefficient_of_variation_loss_weight=0.1,
             switch_loss_weight=0.1,
             zero_centred_loss_weight=0.1,
@@ -69,7 +69,7 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
         self.assertTrue(len(m.mutual_information_loss.skip_masks) > 0)
 
     def test__reset_all_accumulations(self):
-        cfg = SamplerConfigs.sampler_preset(
+        cfg = SamplerPresets.sampler_preset(
             coefficient_of_variation_loss_weight=0.1,
             switch_loss_weight=0.1,
             zero_centred_loss_weight=0.1,
@@ -98,7 +98,7 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
         self.assertTrue(len(m.mutual_information_loss.skip_masks) == 0)
 
     def test_compute_total_loss(self):
-        cfg = SamplerConfigs.sampler_preset(
+        cfg = SamplerPresets.sampler_preset(
             coefficient_of_variation_loss_weight=0.1,
             switch_loss_weight=0.1,
             zero_centred_loss_weight=0.1,
@@ -121,7 +121,7 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
         self.assertIsNot(output, 0.0)
 
     def test__get_auxiliary_loss_and_clear(self):
-        cfg = SamplerConfigs.sampler_preset(
+        cfg = SamplerPresets.sampler_preset(
             coefficient_of_variation_loss_weight=0.1,
             switch_loss_weight=0.1,
             zero_centred_loss_weight=0.1,

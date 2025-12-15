@@ -4,7 +4,7 @@ from math import prod
 
 from Emperor.config import ModelConfig
 from Emperor.sampler.model import SamplerModel
-from Emperor.sampler.utils.config import SamplerConfigs
+from Emperor.sampler.utils.presets import SamplerPresets
 from Emperor.sampler.utils.samplers import (
     SamplerBase,
     SamplerFull,
@@ -25,14 +25,14 @@ class TestProbabilitySampler(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+        self.cfg = SamplerPresets.sampler_preset() if config is None else config
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
     def test_init(self):
-        cfg = SamplerConfigs.sampler_preset()
+        cfg = SamplerPresets.sampler_preset()
         c = cfg.sampler_model_config
         m = SamplerBase(cfg)
 
@@ -51,7 +51,7 @@ class TestProbabilitySampler(unittest.TestCase):
         for flag in normalize_probs:
             message = f"Testing configuration with normalize_probabilities_flag={flag}"
             with self.subTest(msg=message):
-                cfg = SamplerConfigs.sampler_preset(
+                cfg = SamplerPresets.sampler_preset(
                     normalize_probabilities_flag=flag,
                 )
                 m = SamplerBase(cfg)
@@ -68,7 +68,7 @@ class TestProbabilitySampler(unittest.TestCase):
                     self.assertTrue(torch.allclose(probs, result))
 
     def test__probability_sampling_strategy(self):
-        cfg = SamplerConfigs.sampler_preset()
+        cfg = SamplerPresets.sampler_preset()
         m = SamplerBase(cfg)
         probabilities = torch.randn(2, 4)
 
@@ -86,7 +86,7 @@ class TestProbabilitySampler(unittest.TestCase):
                     f"filter_above_threshold={filter_flag}"
                 )
                 with self.subTest(msg=message):
-                    cfg = SamplerConfigs.sampler_preset(
+                    cfg = SamplerPresets.sampler_preset(
                         threshold=threshold_option,
                         filter_above_threshold=filter_flag,
                     )
@@ -115,7 +115,7 @@ class TestProbabilitySampler(unittest.TestCase):
         for threshold_option in threshold_options:
             message = f"Testing configuration with threshold={threshold_option}, "
             with self.subTest(msg=message):
-                cfg = SamplerConfigs.sampler_preset(
+                cfg = SamplerPresets.sampler_preset(
                     threshold=threshold_option,
                 )
                 m = SamplerBase(cfg)
@@ -153,7 +153,7 @@ class TestProbabilitySampler(unittest.TestCase):
                 f"Testing configuration with noisy_topk_flag={noisy_topk_flag_option}"
             )
             with self.subTest(msg=message):
-                cfg = SamplerConfigs.sampler_preset(
+                cfg = SamplerPresets.sampler_preset(
                     noisy_topk_flag=noisy_topk_flag_option,
                 )
                 m = SamplerBase(cfg)
@@ -180,7 +180,7 @@ class TestProbabilitySampler(unittest.TestCase):
                     f"noisy_topk_flag_option={noisy_topk_flag_option}"
                 )
                 with self.subTest(msg=message):
-                    cfg = SamplerConfigs.sampler_preset(
+                    cfg = SamplerPresets.sampler_preset(
                         noisy_topk_flag=noisy_topk_flag_option,
                         threshold=threshold_option,
                     )
@@ -250,14 +250,14 @@ class TestSamplerSparse(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+        self.cfg = SamplerPresets.sampler_preset() if config is None else config
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
     def test_sample_probabilities_and_indices(self):
-        cfg = SamplerConfigs.sampler_preset()
+        cfg = SamplerPresets.sampler_preset()
         m = SamplerSparse(cfg)
 
         batch_size = 3
@@ -289,12 +289,12 @@ class TestSamplerSparse(unittest.TestCase):
                             with self.subTest(msg=message):
                                 if normalize_flag:
                                     with self.assertRaises(AssertionError):
-                                        cfg = SamplerConfigs.sampler_preset(
+                                        cfg = SamplerPresets.sampler_preset(
                                             normalize_probabilities_flag=normalize_flag,
                                         )
                                         m = SamplerSparse(cfg)
                                 else:
-                                    cfg = SamplerConfigs.sampler_preset(
+                                    cfg = SamplerPresets.sampler_preset(
                                         noisy_topk_flag=noisy_flag,
                                         threshold=thresh,
                                         filter_above_threshold=filter_flag,
@@ -335,7 +335,7 @@ class TestSamplerSparse(unittest.TestCase):
         for input_mask in input_options:
             message = f"Testing configuration with skip_mask={input_mask}"
             with self.subTest(msg=message):
-                cfg = SamplerConfigs.sampler_preset()
+                cfg = SamplerPresets.sampler_preset()
                 m = SamplerSparse(cfg)
 
                 skip_maks = m._SamplerSparse__prepare_loss_skip_mask(input_mask)
@@ -348,7 +348,7 @@ class TestSamplerSparse(unittest.TestCase):
                     )
 
     def test__prepare_loss_gates(self):
-        cfg = SamplerConfigs.sampler_preset(top_k=1)
+        cfg = SamplerPresets.sampler_preset(top_k=1)
         m = SamplerSparse(cfg)
 
         batch_size = 3
@@ -371,7 +371,7 @@ class TestSamplerSparse(unittest.TestCase):
                 for zero_option in loss_options:
                     message = f"Running test with cross_option={cross_option}, coeff_option={coeff_option}, zero_option={zero_option}"
                     with self.subTest(msg=message):
-                        cfg = SamplerConfigs.sampler_preset(
+                        cfg = SamplerPresets.sampler_preset(
                             top_k=1,
                             noisy_topk_flag=True,
                             threshold=0.8,
@@ -429,14 +429,14 @@ class TestSamplerTopk(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+        self.cfg = SamplerPresets.sampler_preset() if config is None else config
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
     def test_sample_probabilities_and_indices(self):
-        cfg = SamplerConfigs.sampler_preset()
+        cfg = SamplerPresets.sampler_preset()
         m = SamplerTopk(cfg)
 
         batch_size = 3
@@ -466,7 +466,7 @@ class TestSamplerTopk(unittest.TestCase):
                                 f"normalize_flag={normalize_flag}"
                             )
                             with self.subTest(msg=message):
-                                cfg = SamplerConfigs.sampler_preset(
+                                cfg = SamplerPresets.sampler_preset(
                                     top_k=3,
                                     noisy_topk_flag=noisy_flag,
                                     threshold=thresh,
@@ -510,7 +510,7 @@ class TestSamplerTopk(unittest.TestCase):
         for input_mask in input_options:
             message = f"Testing configuration with skip_mask={input_mask}"
             with self.subTest(msg=message):
-                cfg = SamplerConfigs.sampler_preset()
+                cfg = SamplerPresets.sampler_preset()
                 m = SamplerTopk(cfg)
 
                 skip_maks = m._SamplerTopk__prepare_loss_skip_mask(input_mask)
@@ -522,7 +522,7 @@ class TestSamplerTopk(unittest.TestCase):
                     )
 
     def test__prepare_loss_gates(self):
-        cfg = SamplerConfigs.sampler_preset(top_k=1)
+        cfg = SamplerPresets.sampler_preset(top_k=1)
         m = SamplerTopk(cfg)
 
         batch_size = 3
@@ -545,7 +545,7 @@ class TestSamplerTopk(unittest.TestCase):
                     for mutual_option in loss_options:
                         message = f"Running test with cross_option={cross_option}, coeff_option={coeff_option}, zero_option={zero_option}, mutual_option={mutual_option}"
                         with self.subTest(msg=message):
-                            cfg = SamplerConfigs.sampler_preset(
+                            cfg = SamplerPresets.sampler_preset(
                                 top_k=3,
                                 noisy_topk_flag=True,
                                 threshold=0.8,
@@ -610,14 +610,14 @@ class TestSamplerFull(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+        self.cfg = SamplerPresets.sampler_preset() if config is None else config
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
     def test_sample_probabilities_and_indices(self):
-        cfg = SamplerConfigs.sampler_preset(
+        cfg = SamplerPresets.sampler_preset(
             top_k=10,
             num_experts=10,
         )
@@ -647,7 +647,7 @@ class TestSamplerFull(unittest.TestCase):
                             f"normalize_flag={normalize_flag}"
                         )
                         with self.subTest(msg=message):
-                            cfg = SamplerConfigs.sampler_preset(
+                            cfg = SamplerPresets.sampler_preset(
                                 top_k=10,
                                 num_experts=10,
                                 noisy_topk_flag=noisy_flag,
@@ -689,7 +689,7 @@ class TestSamplerFull(unittest.TestCase):
         for threshold_option in threshold_options:
             message = f"threshold={threshold_option}"
             with self.subTest(msg=message):
-                cfg = SamplerConfigs.sampler_preset(
+                cfg = SamplerPresets.sampler_preset(
                     top_k=10,
                     num_experts=10,
                     threshold=threshold_option,
@@ -727,14 +727,14 @@ class TestSamplerModel(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = SamplerConfigs.sampler_preset() if config is None else config
+        self.cfg = SamplerPresets.sampler_preset() if config is None else config
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
     def test_init(self):
-        cfg = SamplerConfigs.sampler_preset()
+        cfg = SamplerPresets.sampler_preset()
         model = SamplerModel(cfg)
         self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
 
@@ -745,7 +745,7 @@ class TestSamplerModel(unittest.TestCase):
         for top_k, model_type in zip(topk_options, model_types):
             message = f"Testing configuration with top_k={top_k}"
             with self.subTest(msg=message):
-                cfg = SamplerConfigs.sampler_preset(
+                cfg = SamplerPresets.sampler_preset(
                     top_k=top_k,
                     num_experts=5,
                 )
@@ -761,7 +761,7 @@ class TestSamplerModel(unittest.TestCase):
             with self.subTest(msg=message):
                 num_experts = 5
                 loss = 0.0 if num_experts == top_k else 0.5
-                cfg = SamplerConfigs.sampler_preset(
+                cfg = SamplerPresets.sampler_preset(
                     top_k=top_k,
                     num_experts=num_experts,
                     coefficient_of_variation_loss_weight=loss,
@@ -805,7 +805,7 @@ class TestSamplerModel(unittest.TestCase):
             with self.subTest(msg=message):
                 num_experts = 5
                 loss = 0.0 if num_experts == top_k else 0.5
-                cfg = SamplerConfigs.sampler_preset(
+                cfg = SamplerPresets.sampler_preset(
                     top_k=top_k,
                     num_experts=num_experts,
                     coefficient_of_variation_loss_weight=loss,

@@ -13,7 +13,7 @@ from Emperor.behaviours.utils.enums import (
 )
 
 
-class LinearsPresets:
+class LinearPresets:
     @staticmethod
     def base_linear_layer_preset(
         preset_model_config_flag: bool = False,
@@ -134,7 +134,7 @@ class LinearsPresets:
             residual_flag=stack_residual_flag,
             adaptive_computation_flag=False,
             dropout_probability=stack_dropout_probability,
-            override_config=LinearsPresets.base_linear_layer_preset(
+            override_config=LinearPresets.base_linear_layer_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
@@ -185,7 +185,7 @@ class LinearsPresets:
             residual_flag=stack_residual_flag,
             adaptive_computation_flag=False,
             dropout_probability=stack_dropout_probability,
-            override_config=LinearsPresets.adaptive_linear_layer_preset(
+            override_config=LinearPresets.adaptive_linear_layer_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,

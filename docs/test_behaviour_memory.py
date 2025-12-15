@@ -4,7 +4,7 @@ import unittest
 from dataclasses import asdict
 from Emperor.config import ModelConfig
 from Emperor.behaviours.utils.behaviours import DynamicMemorySelector
-from Emperor.linears.utils.config import LinearsPresets
+from Emperor.linears.utils.config import LinearPresets
 from Emperor.behaviours.utils.enums import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
@@ -31,7 +31,7 @@ class TestLinearsMemoryBehaviour(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = LinearsPresets.adaptive_linear_layer_preset() if config is None else config
+        self.cfg = LinearPresets.adaptive_linear_layer_preset() if config is None else config
         self.config = self.cfg.transformer_layer_config
         if config is not None:
             for k in asdict(config):
@@ -52,7 +52,7 @@ class TestMemoryFusionHandler(TestLinearsMemoryBehaviour):
                     dim = self.cfg.output_dim
                     if position_option == LinearMemoryPositionOptions.BEFORE_AFFINE:
                         dim = self.cfg.input_dim
-                    cfg = LinearsPresets.adaptive_linear_layer_preset(
+                    cfg = LinearPresets.adaptive_linear_layer_preset(
                         memory_position_option=position_option,
                         memory_size_option=size_option,
                     )
@@ -78,7 +78,7 @@ class TestWeightedMemoryHandler(TestLinearsMemoryBehaviour):
                     dim = self.cfg.output_dim
                     if position_option == LinearMemoryPositionOptions.BEFORE_AFFINE:
                         dim = self.cfg.input_dim
-                    cfg = LinearsPresets.adaptive_linear_layer_preset(
+                    cfg = LinearPresets.adaptive_linear_layer_preset(
                         input_dim=dim,
                         memory_size_option=size_option,
                         memory_position_option=position_option,
@@ -106,7 +106,7 @@ class TestDynamicDiagonalSelector(TestLinearsMemoryBehaviour):
                         dim = self.cfg.output_dim
                         if position_option == LinearMemoryPositionOptions.BEFORE_AFFINE:
                             dim = self.cfg.input_dim
-                        cfg = LinearsPresets.adaptive_linear_layer_preset(
+                        cfg = LinearPresets.adaptive_linear_layer_preset(
                             batch_size=2,
                             input_dim=dim,
                             memory_option=memory_option,

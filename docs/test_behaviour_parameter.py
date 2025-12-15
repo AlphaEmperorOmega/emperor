@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from Emperor.base.utils import Module
 from Emperor.behaviours.utils.behaviours import DynamicParametersBehaviour
-from Emperor.linears.utils.config import LinearsPresets
+from Emperor.linears.utils.config import LinearPresets
 from Emperor.behaviours.utils.enums import DynamicDepthOptions
 from Emperor.behaviours.utils.handlers.parameter import (
     DepthMappingLayer,
@@ -33,7 +33,7 @@ class TestDepthMappingBehaviour(unittest.TestCase):
     def rebuild_presets(self, config: "ModelConfig | None" = None):
         generators_depth = DynamicDepthOptions.DEPTH_OF_TWO
         self.cfg = (
-            LinearsPresets.adaptive_linear_layer_preset(generator_depth=generators_depth)
+            LinearPresets.adaptive_linear_layer_preset(generator_depth=generators_depth)
             if config is None
             else config
         )
@@ -52,7 +52,7 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
         input_tensor = torch.randn(
             self.batch_size, self.generator_depth, self.input_dim
         )
-        cfg = LinearsPresets.adaptive_linear_layer_preset(
+        cfg = LinearPresets.adaptive_linear_layer_preset(
             generator_depth=DynamicDepthOptions.DEPTH_OF_TWO
         )
         cfg = cfg.linear_layer_config
@@ -72,7 +72,7 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
                 )
 
     def test_error_is_thrown_for_zero_depth(self):
-        cfg = LinearsPresets.adaptive_linear_layer_preset(
+        cfg = LinearPresets.adaptive_linear_layer_preset(
             generator_depth=DynamicDepthOptions.DISABLED
         )
         cfg = cfg.linear_layer_config
@@ -83,7 +83,7 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
 class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        cfg = LinearsPresets.adaptive_linear_layer_preset(
+        cfg = LinearPresets.adaptive_linear_layer_preset(
             generator_depth=DynamicDepthOptions.DEPTH_OF_TWO
         )
         cfg = cfg.linear_layer_config
@@ -107,7 +107,7 @@ class TestDynamicParametersBehaviour(TestDepthMappingBehaviour):
                         weight_shape, nn.init.zeros_
                     )
                     generators_depth = DynamicDepthOptions.DEPTH_OF_TWO
-                    cfg = LinearsPresets.adaptive_linear_layer_preset(
+                    cfg = LinearPresets.adaptive_linear_layer_preset(
                         batch_size=2,
                         input_dim=input_dim,
                         output_dim=output_dim,

@@ -5,7 +5,7 @@ import unittest
 from Emperor.base.utils import Module
 from Emperor.config import ModelConfig
 from Emperor.behaviours.utils.behaviours import DynamicDiagonalSelector
-from Emperor.linears.utils.config import LinearsPresets
+from Emperor.linears.utils.config import LinearPresets
 from Emperor.behaviours.utils.enums import DynamicDiagonalOptions
 from Emperor.behaviours.utils.handlers.diagonal import (
     DiagonalHandlerAbstract,
@@ -29,7 +29,7 @@ class TestLinearsDiagonalBehaviour(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = LinearsPresets.adaptive_linear_layer_preset() if config is None else config
+        self.cfg = LinearPresets.adaptive_linear_layer_preset() if config is None else config
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
@@ -43,7 +43,7 @@ class TestLinearsDiagonalBehaviour(unittest.TestCase):
 class TestDiagonalHandlerHandler(TestLinearsDiagonalBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        cfg = LinearsPresets.adaptive_linear_layer_preset()
+        cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.linear_layer_config
         model = DiagonalHandler(cfg)
         output = model(self.weight_params, input_tensor)
@@ -55,7 +55,7 @@ class TestDiagonalHandlerHandler(TestLinearsDiagonalBehaviour):
 class TestAntiDiagonalHandler(TestLinearsDiagonalBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        cfg = LinearsPresets.adaptive_linear_layer_preset()
+        cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.linear_layer_config
         model = AntiDiagonalHandler(cfg)
         output = model(self.weight_params, input_tensor)
@@ -67,7 +67,7 @@ class TestAntiDiagonalHandler(TestLinearsDiagonalBehaviour):
 class TestDiagonalAndAntiDiagonalHandler(TestLinearsDiagonalBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        cfg = LinearsPresets.adaptive_linear_layer_preset()
+        cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.linear_layer_config
         model = DiagonalAndAntiDiagonalHandler(cfg)
         output = model(self.weight_params, input_tensor)
@@ -81,7 +81,7 @@ class TestDynamicDiagonalSelector(TestLinearsDiagonalBehaviour):
         for option in DynamicDiagonalOptions:
             message = f"Test failed for diagonal option: {option}"
             with self.subTest(message):
-                cfg = LinearsPresets.adaptive_linear_layer_preset(diagonal_option=option)
+                cfg = LinearPresets.adaptive_linear_layer_preset(diagonal_option=option)
                 cfg = cfg.linear_layer_config
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 if option == DynamicDiagonalOptions.DISABLED:

@@ -1,7 +1,7 @@
 from Emperor.base.enums import ActivationOptions
 from Emperor.experiments.utils.factories import Experiments
 from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from Emperor.linears.utils.config import LinearsPresets
+from Emperor.linears.utils.config import LinearPresets
 from Emperor.behaviours.utils.enums import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -53,7 +53,7 @@ class LinearsBasePreset:
     def get_config(self) -> "ModelConfig":
         match self.linear_layer_options:
             case LinearLayerOptions.BASE:
-                return LinearsPresets.base_linear_layer_preset(
+                return LinearPresets.base_linear_layer_preset(
                     batch_size=64,
                     input_dim=784,
                     output_dim=10,
@@ -62,7 +62,7 @@ class LinearsBasePreset:
                     parameter_monitor=None,
                 )
             case LinearLayerOptions.ADAPTIVE:
-                return LinearsPresets.adaptive_linear_layer_preset(
+                return LinearPresets.adaptive_linear_layer_preset(
                     batch_size=64,
                     input_dim=784,
                     output_dim=10,
@@ -80,7 +80,7 @@ class LinearsBasePreset:
                     stack_dropout_probability=0.0,
                 )
             case LinearLayerStackOptions.BASE:
-                return LinearsPresets.base_linear_layer_stack_preset(
+                return LinearPresets.base_linear_layer_stack_preset(
                     batch_size=64,
                     input_dim=784,
                     output_dim=10,
@@ -92,7 +92,7 @@ class LinearsBasePreset:
                     stack_dropout_probability=0.0,
                 )
             case LinearLayerStackOptions.ADAPTIVE:
-                return LinearsPresets.adaptive_stack_preset(
+                return LinearPresets.adaptive_stack_preset(
                     batch_size=64,
                     input_dim=784,
                     output_dim=10,

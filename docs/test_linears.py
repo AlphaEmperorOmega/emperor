@@ -6,7 +6,7 @@ from dataclasses import asdict
 from torch.nn import Sequential
 from Emperor.base.layer import Layer
 from Emperor.config import ModelConfig
-from Emperor.linears.utils.config import LinearsPresets
+from Emperor.linears.utils.presets import LinearPresets
 from Emperor.linears.utils.stack import AdaptiveLinearLayerStack, LinearLayerStack
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -35,7 +35,7 @@ class TestLinears(unittest.TestCase):
 
     def rebuild_presets(self, config: ModelConfig | None = None):
         self.cfg = (
-            LinearsPresets.base_linear_layer_preset() if config is None else config
+            LinearPresets.base_linear_layer_preset() if config is None else config
         )
         if config is not None:
             for k in asdict(config):
@@ -52,7 +52,7 @@ class TestLinearLayer(TestLinears):
         for bias_flag in bias_options:
             message = f"Test failed for the inputs: {bias_flag}"
             with self.subTest(i=message):
-                c = LinearsPresets.base_linear_layer_preset(bias_flag=bias_flag)
+                c = LinearPresets.base_linear_layer_preset(bias_flag=bias_flag)
                 overrides = LinearLayerConfig(bias_flag=bias_flag)
                 m = LinearLayer(self.cfg, overrides)
 
@@ -73,7 +73,7 @@ class TestLinearLayer(TestLinears):
                 for bias_flag in bias_options:
                     message = f"Test failed for the options: {input_dim}, {output_dim}, {bias_flag}"
                     with self.subTest(i=message):
-                        c = LinearsPresets.base_linear_layer_preset(
+                        c = LinearPresets.base_linear_layer_preset(
                             preset_model_config_flag=True,
                         )
                         overrides = LinearLayerConfig(
@@ -99,7 +99,7 @@ class TestAdaptiveLinearLayer(TestLinears):
                     for bias_option in DynamicBiasOptions:
                         message = f"Test failed for the options: {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
                         with self.subTest(message=message):
-                            cfg = LinearsPresets.adaptive_linear_layer_preset(
+                            cfg = LinearPresets.adaptive_linear_layer_preset(
                                 preset_model_config_flag=True,
                                 bias_flag=bias_flag,
                                 generator_depth=generators_depth,
@@ -136,7 +136,7 @@ class TestAdaptiveLinearLayer(TestLinears):
                                                 message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Memory option: {memory_option}, Position option: {position_option}, Size option: {size_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
                                                 with self.subTest(message=message):
                                                     batch_size = 2
-                                                    cfg = LinearsPresets.adaptive_linear_layer_preset(
+                                                    cfg = LinearPresets.adaptive_linear_layer_preset(
                                                         preset_model_config_flag=True,
                                                         stack_num_layers=linear_stack_option,
                                                         batch_size=batch_size,
@@ -184,7 +184,7 @@ class TestLinearLayerBaseStack(TestLinears):
         for num_layers in num_layer_options:
             message = f"Test failed for the inputs: {num_layers}"
             with self.subTest(i=message):
-                cfg = LinearsPresets.base_linear_layer_stack_preset(
+                cfg = LinearPresets.base_linear_layer_stack_preset(
                     preset_model_config_flag=True,
                     stack_num_layers=num_layers,
                 )
@@ -203,7 +203,7 @@ class TestLinearLayerAdaptiveStack(TestLinears):
         for num_layers in num_layer_options:
             message = f"Test failed for the inputs: {num_layers}"
             with self.subTest(i=message):
-                cfg = LinearsPresets.adaptive_linear_layer_stack_preset(
+                cfg = LinearPresets.adaptive_linear_layer_stack_preset(
                     preset_model_config_flag=True,
                     stack_num_layers=num_layers,
                 )
