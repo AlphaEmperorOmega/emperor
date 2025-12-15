@@ -2,7 +2,7 @@ from abc import abstractmethod
 from enum import Enum
 from Emperor.base.enums import BaseOptions
 from Emperor.config import ModelConfig
-from Emperor.generators.utils.layers import GeneratorParameterLayer
+from Emperor.adaptive.utils.layers import GeneratorParameterLayer
 from Emperor.linears.options import LinearLayerOptions
 
 

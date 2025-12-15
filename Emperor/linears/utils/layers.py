@@ -6,12 +6,11 @@ from torch import Tensor
 from inspect import Parameter
 from dataclasses import dataclass, field
 from Emperor.base.utils import Module
+from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
 from Emperor.behaviours.model import (
     AdaptiveParameterModel,
     AdaptiveParameterModelConfig,
 )
-from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
-
 
 from typing import TYPE_CHECKING
 

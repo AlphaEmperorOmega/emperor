@@ -53,7 +53,7 @@ class ParameterGeneratorPresets:
     def get_config(self) -> "ModelConfig":
         match self.parameter_generator_options:
             case ParameterGeneratorOptions.VECTOR:
-                return ParameterGeneratorConfigs.base_preset(
+                return ParameterGeneratorConfigs.base_linear_layer_preset(
                     batch_size=64,
                     input_dim=784,
                     output_dim=10,

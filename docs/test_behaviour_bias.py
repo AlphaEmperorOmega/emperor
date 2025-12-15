@@ -5,7 +5,7 @@ import torch.nn as nn
 from Emperor.base.utils import Module
 from Emperor.config import ModelConfig
 from Emperor.behaviours.utils.behaviours import DynamicBiasSelector
-from Emperor.linears.utils.config import LinearsConfigs
+from Emperor.linears.utils.config import LinearsPresets
 from Emperor.behaviours.utils.enums import DynamicBiasOptions
 from Emperor.behaviours.utils.handlers.bias import (
     AffineBiasTransformHandler,
@@ -29,7 +29,7 @@ class TestLinearsBiasBehaviour(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = LinearsConfigs.dynamic_preset() if config is None else config
+        self.cfg = LinearsPresets.adaptive_linear_layer_preset() if config is None else config
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
@@ -42,7 +42,7 @@ class TestLinearsBiasBehaviour(unittest.TestCase):
 class TestAffineBiasTransformHandler(TestLinearsBiasBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        cfg = LinearsConfigs.dynamic_preset()
+        cfg = LinearsPresets.adaptive_linear_layer_preset()
         cfg = cfg.linear_layer_config
         model = AffineBiasTransformHandler(cfg)
         output = model(self.bias_params, input_tensor)
@@ -55,7 +55,7 @@ class TestAffineBiasTransformHandler(TestLinearsBiasBehaviour):
 class TestElementwiseBiasHandler(TestLinearsBiasBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        cfg = LinearsConfigs.dynamic_preset()
+        cfg = LinearsPresets.adaptive_linear_layer_preset()
         cfg = cfg.linear_layer_config
         model = ElementwiseBiasHandler(cfg)
         output = model(self.bias_params, input_tensor)
@@ -68,7 +68,7 @@ class TestElementwiseBiasHandler(TestLinearsBiasBehaviour):
 class TestBiasGeneratorHandler(TestLinearsBiasBehaviour):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
-        cfg = LinearsConfigs.dynamic_preset()
+        cfg = LinearsPresets.adaptive_linear_layer_preset()
         cfg = cfg.linear_layer_config
         model = BiasGeneratorHandler(cfg)
         output = model(self.bias_params, input_tensor)
@@ -83,7 +83,7 @@ class TestDynamicBiasSelector(TestLinearsBiasBehaviour):
         for option in DynamicBiasOptions:
             message = f"Test failed for bias option: {option}"
             with self.subTest(message):
-                cfg = LinearsConfigs.dynamic_preset(bias_option=option)
+                cfg = LinearsPresets.adaptive_linear_layer_preset(bias_option=option)
                 cfg = cfg.linear_layer_config
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 if option == DynamicBiasOptions.DISABLED:
