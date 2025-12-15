@@ -2,18 +2,17 @@ import copy
 import torch
 import torch.nn as nn
 
-from typing import Callable
 from torch import Tensor
-from Emperor.base.layer import LinearLayerStack
+from typing import Callable
+from Emperor.base.layer import LayerStack
 from Emperor.base.models import Classifier
-
+from Emperor.linears.utils.stack import LinearLayerStack
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.generators.utils.layers import ParameterLayerBase
+    from Emperor.adaptive.utils.layers import ParameterLayerBase
 
 
 class ClassifierExperiment(Classifier):
@@ -34,7 +33,14 @@ class SingleLayerClassifierModel(ClassifierExperiment):
         learning_rate: float = 0.1,
     ):
         super().__init__(learning_rate)
-        self.model = nn.Sequential(nn.Flatten(), model(cfg))
+        self.cfg = cfg
+        self.model_type = model
+        self.model = nn.Sequential(nn.Flatten(), self.get_model())
+
+    def get_model(self):
+        if issubclass(self.model_type, LayerStack):
+            return self.model_type(self.cfg).build_model()
+        return self.model_type(self.cfg)
 
     def forward(self, input_batch: Tensor):
         output = self.model(input_batch)
