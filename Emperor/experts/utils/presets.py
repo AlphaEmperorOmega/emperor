@@ -54,11 +54,14 @@ class MixtureOfExpertsPresets:
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
     ) -> "MixtureOfExpertsConfig | ModelConfig":
+        _hidden_dim = max(input_dim, output_dim)
+        stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
+
         if layer_stack_option == LinearLayerStackOptions.BASE:
             expert_model_config = LinearPresets.base_linear_layer_stack_preset(
                 batch_size=batch_size,
                 input_dim=input_dim,
-                output_dim=num_experts,
+                output_dim=output_dim,
                 bias_flag=bias_flag,
                 data_monitor=None,
                 parameter_monitor=None,
@@ -72,7 +75,7 @@ class MixtureOfExpertsPresets:
             expert_model_config = LinearPresets.adaptive_linear_layer_stack_preset(
                 batch_size=batch_size,
                 input_dim=input_dim,
-                output_dim=num_experts,
+                output_dim=output_dim,
                 bias_flag=bias_flag,
                 generator_depth=generator_depth,
                 diagonal_option=diagonal_option,
@@ -176,6 +179,9 @@ class MixtureOfExpertsPresets:
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
     ) -> "LayerStackConfig | ModelConfig":
+        _hidden_dim = max(input_dim, output_dim)
+        stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
+
         config = LayerStackConfig(
             input_dim=input_dim,
             hidden_dim=stack_hidden_dim,
