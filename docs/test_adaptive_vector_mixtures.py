@@ -3,7 +3,7 @@ import unittest
 import torch.nn.functional as F
 
 from torch.nn import Parameter
-from Emperor.adaptive.utils.mixtures.base import MixtureBase, MixtureConfig
+from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase, AdaptiveMixtureConfig
 from Emperor.adaptive.utils.mixtures.vector import (
     VectorBiasMixture,
     VectorMixtureBase,
@@ -13,7 +13,7 @@ from Emperor.adaptive.utils.mixtures.vector import (
 
 class TestVectorMixture(unittest.TestCase):
     def setUp(self):
-        self.cfg = MixtureConfig(
+        self.cfg = AdaptiveMixtureConfig(
             input_dim=4,
             output_dim=5,
             top_k=2,
@@ -34,7 +34,7 @@ class TestVectorMixture(unittest.TestCase):
                 if model_type is VectorWeightsMixture:
                     bank_shape = (c.input_dim, c.depth_dim, c.output_dim)
 
-                self.assertIsInstance(m, MixtureBase)
+                self.assertIsInstance(m, AdaptiveMixtureBase)
                 self.assertIsInstance(m, VectorMixtureBase)
                 self.assertEqual(m.input_dim, c.input_dim)
                 self.assertEqual(m.output_dim, c.output_dim)
@@ -54,7 +54,7 @@ class TestVectorMixture(unittest.TestCase):
                     f"Testing model type: {model_type.__name__} with top_k={top_k}"
                 )
                 with self.subTest(msg=message):
-                    overrides = MixtureConfig(
+                    overrides = AdaptiveMixtureConfig(
                         top_k=top_k,
                         num_experts=6,
                         weighted_parameters_flag=True,
@@ -73,7 +73,7 @@ class TestVectorMixture(unittest.TestCase):
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                overrides = MixtureConfig(
+                overrides = AdaptiveMixtureConfig(
                     top_k=top_k,
                     num_experts=6,
                     weighted_parameters_flag=True,
@@ -107,7 +107,7 @@ class TestVectorMixture(unittest.TestCase):
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                overrides = MixtureConfig(
+                overrides = AdaptiveMixtureConfig(
                     top_k=top_k,
                     num_experts=6,
                     weighted_parameters_flag=True,
@@ -141,7 +141,7 @@ class TestVectorMixture(unittest.TestCase):
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                overrides = MixtureConfig(
+                overrides = AdaptiveMixtureConfig(
                     top_k=top_k,
                     num_experts=6,
                     weighted_parameters_flag=True,
@@ -189,7 +189,7 @@ class TestVectorMixture(unittest.TestCase):
                     f"Testing model type: {model_type.__name__} with top_k={top_k}"
                 )
                 with self.subTest(msg=message):
-                    overrides = MixtureConfig(
+                    overrides = AdaptiveMixtureConfig(
                         top_k=top_k,
                         num_experts=6,
                         weighted_parameters_flag=True,
@@ -232,7 +232,7 @@ class TestVectorMixture(unittest.TestCase):
                     f"Testing model type: {model_type.__name__} with top_k={top_k}"
                 )
                 with self.subTest(msg=message):
-                    overrides = MixtureConfig(
+                    overrides = AdaptiveMixtureConfig(
                         top_k=top_k,
                         num_experts=6,
                         weighted_parameters_flag=True,
@@ -271,7 +271,7 @@ class TestVectorMixture(unittest.TestCase):
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                overrides = MixtureConfig(
+                overrides = AdaptiveMixtureConfig(
                     top_k=top_k,
                     num_experts=6,
                     weighted_parameters_flag=True,
@@ -310,7 +310,7 @@ class TestVectorMixture(unittest.TestCase):
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                overrides = MixtureConfig(
+                overrides = AdaptiveMixtureConfig(
                     top_k=top_k,
                     num_experts=6,
                     weighted_parameters_flag=True,
@@ -346,7 +346,7 @@ class TestVectorMixture(unittest.TestCase):
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                overrides = MixtureConfig(
+                overrides = AdaptiveMixtureConfig(
                     top_k=top_k,
                     num_experts=6,
                     weighted_parameters_flag=True,
@@ -409,7 +409,7 @@ class TestVectorMixture(unittest.TestCase):
                 f"weighted_parameters_flag flag {case['flag']}, input {case['input']}"
             )
             with self.subTest(msg=message):
-                overrides = MixtureConfig(
+                overrides = AdaptiveMixtureConfig(
                     weighted_parameters_flag=case["flag"],
                 )
                 m = VectorMixtureBase(self.cfg, overrides)

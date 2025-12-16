@@ -1,18 +1,26 @@
+import torch
 import unittest
 
-from torch.nn import Parameter
-from Emperor.generators.utils.config import ParameterGeneratorConfigs
-from Emperor.generators.utils.mixtures.base import MixtureBase
-from Emperor.generators.utils.mixtures.generator import (
+from torch.nn import functional as F
+from Emperor.adaptive.utils.mixture import AdaptiveMixtureConfig
+from Emperor.adaptive.utils.presets import ParameterGeneratorConfigs
+from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
+from Emperor.adaptive.utils.mixtures.generator import (
     GeneratorBiasMixture,
     GeneratorMixtureBase,
     GeneratorWeightsMixture,
 )
+from Emperor.experts.utils.layers import MixtureOfExperts
 
 
 class TestGeneratorMixture(unittest.TestCase):
     def setUp(self):
-        self.cfg = ParameterGeneratorConfigs.generator_mixture_for_test()
+        self.cfg = ParameterGeneratorConfigs.adaptive_generator_mixture_preset(
+            return_model_config_flag=True,
+        )
+
+    def tearDown(self):
+        self.cfg = None
 
     def test_init(self):
         model_types = [GeneratorBiasMixture, GeneratorWeightsMixture]
@@ -23,114 +31,46 @@ class TestGeneratorMixture(unittest.TestCase):
             with self.subTest(msg=message):
                 m = model_type(self.cfg)
 
-                bank_shape = (c.output_dim, c.depth_dim)
-                if model_type is GeneratorBiasMixture:
-                    bank_shape = (c.input_dim, c.depth_dim, c.output_dim)
-
-                self.assertIsInstance(m, MixtureBase)
+                self.assertIsInstance(m, AdaptiveMixtureBase)
                 self.assertIsInstance(m, GeneratorMixtureBase)
                 self.assertEqual(m.input_dim, c.input_dim)
                 self.assertEqual(m.output_dim, c.output_dim)
-                self.assertEqual(m.depth_dim, c.depth_dim)
                 self.assertEqual(m.top_k, c.top_k)
                 self.assertEqual(m.num_experts, c.num_experts)
                 self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
-                self.assertIsInstance(m.parameter_bank, Parameter)
-                self.assertEqual(m.parameter_bank.shape, bank_shape)
+                if model_type == GeneratorWeightsMixture:
+                    self.assertIsInstance(m.input_vector_generator, MixtureOfExperts)
+                    self.assertIsInstance(m.output_vector_generator, MixtureOfExperts)
+                else:
+                    self.assertIsInstance(m.bias_generator, MixtureOfExperts)
 
-    # def test_init_parameter_select_range(self):
-    #     model_types = [VectorWeightsMixture, VectorBiasMixture]
-    #     top_k_values = [1, 3, 6]
-    #     for model_type in model_types:
-    #         for top_k in top_k_values:
-    #             message = (
-    #                 f"Testing model type: {model_type.__name__} with top_k={top_k}"
-    #             )
-    #             with self.subTest(msg=message):
-    #                 overrides = MixtureConfig(
-    #                     top_k=top_k,
-    #                     num_experts=6,
-    #                     weighted_parameters_flag=True,
-    #                 )
-    #                 m = model_type(self.cfg, overrides)
-    #                 range_indices = m._init_parameter_select_range()
-    #
-    #                 expected_range_shape = (1, m.range_dim)
-    #                 if 1 < top_k < m.depth_dim:
-    #                     expected_range_shape = (1, m.range_dim, 1)
-    #
-    #                 self.assertEqual(range_indices.shape, expected_range_shape)
-    #
-    # def test_select_parameters_weights(self):
-    #     top_k_values = [1, 3, 6]
-    #     for top_k in top_k_values:
-    #         message = f"Testing with top_k={top_k}"
-    #         with self.subTest(msg=message):
-    #             overrides = MixtureConfig(
-    #                 top_k=top_k,
-    #                 depth_dim=6,
-    #                 num_experts=6,
-    #                 weighted_parameters_flag=True,
-    #             )
-    #             m = VectorWeightsMixture(self.cfg, overrides)
-    #
-    #             batch_size = 5
-    #
-    #             if top_k == 1:
-    #                 indexes_shape = (m.input_dim, batch_size)
-    #                 indexes = torch.randint(0, m.depth_dim, indexes_shape)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 indexes_shape = (m.input_dim, batch_size, top_k)
-    #                 indexes = torch.randint(0, m.depth_dim, indexes_shape)
-    #             else:
-    #                 indexes = None
-    #
-    #             selected_params = m._select_parameters(indexes)
-    #
-    #             if top_k == 1:
-    #                 expected_shape = (batch_size, m.input_dim, m.output_dim)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 expected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
-    #             else:
-    #                 expected_shape = (m.input_dim, m.depth_dim, m.output_dim)
-    #
-    #             self.assertEqual(selected_params.shape, expected_shape)
-    #
-    # def test_select_parameters_bias(self):
-    #     top_k_values = [1, 3, 6]
-    #     for top_k in top_k_values:
-    #         message = f"Testing with top_k={top_k}"
-    #         with self.subTest(msg=message):
-    #             overrides = MixtureConfig(
-    #                 top_k=top_k,
-    #                 depth_dim=6,
-    #                 num_experts=6,
-    #                 weighted_parameters_flag=True,
-    #             )
-    #             m = VectorBiasMixture(self.cfg, overrides)
-    #
-    #             batch_size = 5
-    #
-    #             if top_k == 1:
-    #                 indexes_shape = (m.output_dim, batch_size)
-    #                 indexes = torch.randint(0, m.depth_dim, indexes_shape)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 indexes_shape = (m.output_dim, batch_size, top_k)
-    #                 indexes = torch.randint(0, m.depth_dim, indexes_shape)
-    #             else:
-    #                 indexes = None
-    #
-    #             selected_params = m._select_parameters(indexes)
-    #
-    #             if top_k == 1:
-    #                 expected_shape = (batch_size, m.output_dim)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 expected_shape = (batch_size, m.output_dim, m.top_k)
-    #             else:
-    #                 expected_shape = (m.output_dim, m.depth_dim)
-    #
-    #             self.assertEqual(selected_params.shape, expected_shape)
-    #
+    def test__compute_outer_product(self):
+        top_k_values = [1, 3, 6]
+        c = self.cfg
+
+        for top_k in top_k_values:
+            message = f"Testing top_k value: {top_k}"
+            with self.subTest(msg=message):
+                c = ParameterGeneratorConfigs.adaptive_generator_mixture_preset(
+                    top_k=top_k,
+                )
+                m = GeneratorWeightsMixture(c)
+
+                batch_size = 5
+                input_batch = torch.randn(batch_size, m.input_dim)
+                input_vectors, _ = m.input_vector_generator(input_batch)
+                output_vectors, _ = m.output_vector_generator(input_batch)
+
+                outer_product = m._GeneratorWeightsMixture__compute_outer_product(
+                    input_vectors=input_vectors,
+                    output_vectors=output_vectors,
+                )
+
+                # print(outer_product.shape)
+
+                # selected_parameters = torch.randn(selected_shape)
+                # probs = F.sigmoid(torch.randn(probs_shape))
+
     # def test_compute_weighted_parameters_weights(self):
     #     top_k_values = [1, 3, 6]
     #     for top_k in top_k_values:
