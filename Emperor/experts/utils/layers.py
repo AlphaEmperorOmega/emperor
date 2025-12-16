@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass, field
 
-from Emperor.base.layer import Layer, LayerStackConfig
+from Emperor.base.layer import LayerStackConfig
 from Emperor.sampler.model import SamplerModel
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig, RouterModel
@@ -110,8 +110,8 @@ class MixtureOfExperts(Module):
         self.sampler_model_config = self.cfg.sampler_model_config
 
         self.validator = _Validator(self)
-        self.expert_modules = self.__create_experts()
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
+        self.expert_modules = self.__create_experts()
 
     def __maybe_create_router_and_sampler(
         self,
@@ -160,7 +160,8 @@ class MixtureOfExperts(Module):
         expert_outputs = []
         experts_indices_list = []
         total_loss = torch.tensor(0.0)
-        for expert_index, expert_model in enumerate(self.expert_modules):
+        expert_index = 0
+        for expert_model in self.expert_modules:
             expert_sample_indices = self.__get_expert_indices(
                 indices, probabilities, expert_index
             )
@@ -168,8 +169,10 @@ class MixtureOfExperts(Module):
                 indices, probabilities, expert_index
             )
 
+            expert_index += 1
             if expert_sample_indices.numel() == 0:
                 continue
+
             expert_output, loss = self.__compute_expert_output(
                 expert_model,
                 input_batch,
@@ -178,7 +181,7 @@ class MixtureOfExperts(Module):
             )
             experts_indices_list.append(expert_sample_indices)
             expert_outputs.append(expert_output)
-            total_loss += loss
+            total_loss = total_loss + loss
 
         experts_indices = torch.cat(experts_indices_list)
         output = torch.cat(expert_outputs, dim=0)
@@ -270,6 +273,7 @@ class MixtureOfExperts(Module):
             return logits
 
         self.validator.ensure_probabilities_exist(probabilities)
+        print(logits.shape, probabilities.shape)
         return logits * probabilities.reshape(-1, 1)
 
     def __is_before(self) -> bool:
