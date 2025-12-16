@@ -283,15 +283,21 @@ class MixtureOfExperts(Module):
         indices: Tensor,
         probabilities: Tensor | None = None,
     ) -> Tensor:
+        input_dim, output_dim = experts_output.shape
         if not self.compute_expert_mixture_flag:
-            return experts_output
+            output_shape = (input_dim, output_dim)
+            output = torch.zeros(
+                output_shape, dtype=experts_output.dtype, device=device
+            )
+            output.index_add_(0, indices, experts_output)
+
+            return output
 
         if self.__is_after():
             experts_output = self.__maybe_apply_probabilities(
                 experts_output, probabilities
             )
 
-        input_dim, output_dim = experts_output.shape
         output_shape = (input_dim // self.top_k, output_dim)
         output = torch.zeros(output_shape, dtype=experts_output.dtype, device=device)
         output.index_add_(0, indices, experts_output)
