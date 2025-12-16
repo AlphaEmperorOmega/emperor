@@ -24,7 +24,7 @@ class LinearsExperiments(Experiments):
     ) -> None:
         super().__init__(mini_datasetset_flag)
 
-    def train_model(self, layer_type: LinearLayerOptions):
+    def train_model(self, layer_type: LinearLayerOptions | LinearLayerStackOptions):
         preset = LinearsBasePreset(layer_type).get_config()
         self._set_model_config(preset)
         self._train_model(layer_type)
@@ -32,8 +32,14 @@ class LinearsExperiments(Experiments):
     def train_base_model(self):
         self.train_model(LinearLayerOptions.BASE)
 
-    def train_dynamic_model(self):
+    def train_adaptive_model(self):
         self.train_model(LinearLayerOptions.ADAPTIVE)
+
+    def train_base_stack_model(self):
+        self.train_model(LinearLayerStackOptions.BASE)
+
+    def train_adaptive_stack_model(self):
+        self.train_model(LinearLayerStackOptions.ADAPTIVE)
 
     def test_all_linear_types(self):
         option_types = [LinearLayerOptions, LinearLayerStackOptions]
