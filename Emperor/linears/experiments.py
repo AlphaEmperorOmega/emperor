@@ -1,7 +1,7 @@
 from Emperor.base.enums import ActivationOptions
 from Emperor.experiments.utils.factories import Experiments
 from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from Emperor.linears.utils.config import LinearPresets
+from Emperor.linears.utils.presets import LinearPresets
 from Emperor.behaviours.utils.enums import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
