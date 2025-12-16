@@ -45,7 +45,10 @@ class SingleLayerClassifierModel(ClassifierExperiment):
     def forward(self, input_batch: Tensor):
         output = self.model(input_batch)
         if isinstance(output, tuple):
-            output_tensor, skip_mask, auxiliary_loss = output
+            if len(output) == 3:
+                output_tensor, skip_mask, auxiliary_loss = output
+            else:
+                output_tensor, auxiliary_loss = output
             return output_tensor, auxiliary_loss
         return output, torch.tensor(0.0)
 
