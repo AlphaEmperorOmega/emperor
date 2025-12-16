@@ -1,20 +1,20 @@
 import torch
 
 from torch import Tensor
-from Emperor.adaptive.utils.mixture import MixtureBase
+from Emperor.adaptive.utils.mixture import AdaptiveMixtureBase
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.adaptive.utils.mixture import MixtureConfig
+    from Emperor.adaptive.utils.mixture import AdaptiveMixtureConfig
 
 
-class VectorMixtureBase(MixtureBase):
+class VectorMixtureBase(AdaptiveMixtureBase):
     def __init__(
         self,
-        cfg: "MixtureConfig | ModelConfig",
-        overrides: "MixtureConfig | None" = None,
+        cfg: "AdaptiveMixtureConfig | ModelConfig",
+        overrides: "AdaptiveMixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
 
@@ -77,8 +77,8 @@ class VectorMixtureBase(MixtureBase):
 class VectorWeightsMixture(VectorMixtureBase):
     def __init__(
         self,
-        cfg: "MixtureConfig | ModelConfig",
-        overrides: "MixtureConfig | None" = None,
+        cfg: "AdaptiveMixtureConfig | ModelConfig",
+        overrides: "AdaptiveMixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
         self.range_dim = self.input_dim
@@ -99,8 +99,8 @@ class VectorWeightsMixture(VectorMixtureBase):
 class VectorBiasMixture(VectorMixtureBase):
     def __init__(
         self,
-        cfg: "MixtureConfig | ModelConfig",
-        overrides: "MixtureConfig | None" = None,
+        cfg: "AdaptiveMixtureConfig | ModelConfig",
+        overrides: "AdaptiveMixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
         self.range_dim = self.output_dim
