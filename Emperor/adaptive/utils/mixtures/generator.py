@@ -2,8 +2,8 @@ import torch
 from enum import Enum
 from torch import Tensor
 from torch.nn import functional as F
-from Emperor.adaptive.utils.mixture import MixtureConfig
-from Emperor.adaptive.utils.mixtures.base import MixtureBase
+from Emperor.adaptive.utils.mixture import AdaptiveMixtureConfig
+from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
 from Emperor.experts.utils.layers import MixtureOfExperts
 
 
@@ -20,40 +20,34 @@ class OuterProductNormOptions(Enum):
     LAYER_NORM = 4
 
 
-class GeneratorMixtureBase(MixtureBase):
+class GeneratorMixtureBase(AdaptiveMixtureBase):
     def __init__(
         self,
-        cfg: "MixtureConfig | ModelConfig",
-        overrides: "MixtureConfig | None" = None,
+        cfg: "AdaptiveMixtureConfig | ModelConfig",
+        overrides: "AdaptiveMixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
         config = getattr(cfg, "mixture_model_config", cfg)
-        self.mixture_config: "MixtureConfig" = self._overwrite_config(config, overrides)
-
-    def compute_mixture(
-        self,
-        probs: Tensor,
-        indices: Tensor | None = None,
-    ) -> Tensor:
-        selected_params = self._select_parameters(indices)
-        return self.__compute_parameter_mixture(selected_params, probs)
+        self.mixture_config: "AdaptiveMixtureConfig" = self._overwrite_config(
+            config, overrides
+        )
 
     def _is_topk_sparse(self) -> bool:
         return self.top_k == 1
 
 
-class GeneratorWeightsMixture(MixtureBase):
+class GeneratorWeightsMixture(GeneratorMixtureBase):
     def __init__(
         self,
-        cfg: "MixtureConfig | ModelConfig",
-        overrides: "MixtureConfig | None" = None,
+        cfg: "AdaptiveMixtureConfig | ModelConfig",
+        overrides: "AdaptiveMixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
         self.range_dim = self.input_dim
         self.parameter_mixture_dim = -2
         self.probability_shape = (-1, self.top_k, 1, 1)
-        self.input_vector_generator = MixtureOfExperts(cfg)
-        self.output_vector_generator = MixtureOfExperts(cfg)
+        self.input_vector_generator = MixtureOfExperts(self.mixture_of_experts_config)
+        self.output_vector_generator = MixtureOfExperts(self.mixture_of_experts_config)
         self.register_buffer("select_range", self._init_parameter_select_range())
 
     def compute_mixture(
@@ -150,45 +144,24 @@ class GeneratorWeightsMixture(MixtureBase):
         return self.weighted_parameters_flag and probs is not None
 
 
-class GeneratorBiasMixture(MixtureBase):
+class GeneratorBiasMixture(GeneratorMixtureBase):
     def __init__(
         self,
-        cfg: "MixtureConfig | ModelConfig",
-        overrides: "MixtureConfig | None" = None,
+        cfg: "AdaptiveMixtureConfig | ModelConfig",
+        overrides: "AdaptiveMixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
         self.range_dim = self.output_dim
         self.parameter_mixture_dim = -1
         self.probability_shape = (-1, self.top_k, 1)
-        self.input_weight_vector_generator = MixtureOfExperts(cfg)
+        self.bias_generator = MixtureOfExperts(cfg)
         self.register_buffer("select_range", self._init_parameter_select_range())
 
-    def _select_parameters(self, indices: Tensor | None) -> tuple[Tensor, Tensor]:
-        if indices is None:
-            return self.parameter_bank
-        return self.parameter_bank[indices]
-
-    def __compute_parameter_vectors(
+    def compute_mixture(
         self,
         input_batch: Tensor,
-        bias_params: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None, Tensor | None]:
-        return self.__maybe_compute_einsum(
-            input_batch, bias_params, self.bias_parameters_flag
-        )
-
-    def __generate_bias_parameters(
-        self,
-        generated_biases: Tensor | None = None,
-        bias_probs: Tensor | None = None,
-    ) -> Tensor | None:
-        if not self.bias_parameters_flag:
-            return None
-
-        weighted_biases = self.__apply_parameter_weighting(
-            generated_biases, self.bias_probs_shape, bias_probs
-        )
-
-        if self._is_topk_sparse():
-            return weighted_biases.squeeze(1)
-        return torch.sum(weighted_biases, dim=1)
+        probabilities: Tensor,
+        indices: Tensor | None = None,
+    ) -> Tensor:
+        inputs = (input_batch, indices, probabilities)
+        return self.bias_generator(*inputs)
