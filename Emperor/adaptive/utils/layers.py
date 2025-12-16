@@ -353,22 +353,23 @@ class GeneratorParameterLayer(ParameterLayerBase):
     ):
         super().__init__(cfg, overrides)
 
-        self.weight_router: RouterModel = RouterModel(cfg)
-        self.bias_router = self._init_bias_router_model(cfg)
-        self.weight_sampler: SamplerModel = SamplerModel(cfg)
-        self.bias_sampler: SamplerModel = SamplerModel(cfg)
+        self.weight_router = RouterModel(cfg)
+        self.weight_sampler = SamplerModel(cfg)
         self.weight_generator = GeneratorWeightsMixture(cfg)
-        self.bias_generator = self._init_bias_generator(cfg)
 
-    def _init_bias_router_model(self, cfg: "ModelConfig") -> RouterModel | None:
-        if self.bias_parameters_flag:
-            return RouterModel(cfg)
-        return None
+        self.bias_router, self.bias_sampler, self.bias_generator = (
+            self.__init_bias_generator_models(cfg)
+        )
 
-    def _init_bias_generator(self, cfg: "ModelConfig") -> GeneratorBiasMixture | None:
-        if self.bias_parameters_flag:
-            return GeneratorBiasMixture(cfg)
-        return None
+    def __init_bias_generator_models(
+        self, cfg: "ModelConfig"
+    ) -> tuple[RouterModel | None, SamplerModel | None, GeneratorBiasMixture | None]:
+        if not self.bias_parameters_flag:
+            return None, None, None
+        router = RouterModel(cfg)
+        sampler = SamplerModel(cfg)
+        generator = GeneratorBiasMixture(cfg)
+        return router, sampler, generator
 
     def _generate_parameters(
         self,
@@ -381,12 +382,15 @@ class GeneratorParameterLayer(ParameterLayerBase):
         bias_probabilities, bias_indices = self._compute_bias_probabilities_and_indices(
             input_batch
         )
-
         weight_parameters = self.weight_generator.compute_mixture(
             input_batch,
             weight_probabilities,
             weight_indices,
         )
-        bias_parameters = self.bias_generator.compute_mixture()
+        bias_parameters = self.bias_generator.compute_mixture(
+            input_batch,
+            bias_probabilities,
+            bias_indices,
+        )
 
         return weight_parameters, bias_parameters
