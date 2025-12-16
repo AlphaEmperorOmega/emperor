@@ -20,8 +20,6 @@ from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
-__all__ = ["MixtureOfExpertsConfig", "MixtureOfExperts"]
-
 
 @dataclass
 class MixtureOfExpertsConfig(ConfigBase):
@@ -273,7 +271,6 @@ class MixtureOfExperts(Module):
             return logits
 
         self.validator.ensure_probabilities_exist(probabilities)
-        print(logits.shape, probabilities.shape)
         return logits * probabilities.reshape(-1, 1)
 
     def __is_before(self) -> bool:

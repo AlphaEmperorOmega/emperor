@@ -6,7 +6,7 @@ from Emperor.base.utils import Trainer
 from Emperor.base.datasets import FashionMNIST
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.adaptive.utils.routers import RouterConfig
-from Emperor.adaptive.utils.mixture import MixtureConfig
+from Emperor.adaptive.utils.mixture import AdaptiveMixtureConfig
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.adaptive.utils.layers import ParameterLayerConfig
 

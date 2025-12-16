@@ -11,7 +11,7 @@ from Emperor.experts.utils.enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.experts.experts import MixtureOfExperts
+    from Emperor.experts.utils.layers import MixtureOfExperts
 
 
 class _Validator:
@@ -22,45 +22,27 @@ class _Validator:
 
     def __ensure_values_are_not_none(self):
         if self.model.layer_stack_model is None:
-            raise ValueError(
-                f"Configuration Error: 'layer_stack_option' must not be None, received {self.model.layer_stack_model}"
-            )
+            raise ValueError("Configuration Error: 'layer_stack_option' is None")
         if self.model.top_k is None:
-            raise ValueError(
-                f"Configuration Error: 'top_k' must not be None, received {self.model.top_k}"
-            )
+            raise ValueError("Configuration Error: 'top_k' is None")
         if self.model.num_experts is None:
-            raise ValueError(
-                f"Configuration Error: 'num_experts' must not be None, received {self.model.num_experts}"
-            )
+            raise ValueError("Configuration Error: 'num_experts' is None")
         if self.model.compute_expert_mixture_flag is None:
             raise ValueError(
-                f"Configuration Error: 'compute_expert_mixture_flag' must not be None, received {self.model.compute_expert_mixture_flag}"
+                "Configuration Error: 'compute_expert_mixture_flag' is None"
             )
         if self.model.weighted_parameters_flag is None:
-            raise ValueError(
-                f"Configuration Error: 'weighted_parameters_flag' must not be None, received {self.model.weighted_parameters_flag}"
-            )
+            raise ValueError("Configuration Error: 'weighted_parameters_flag' is None")
         if self.model.init_sampler_model_flag is None:
-            raise ValueError(
-                f"Configuration Error: 'init_sampler_model_flag' must not be None, received {self.model.init_sampler_model_flag}"
-            )
+            raise ValueError("Configuration Error: 'init_sampler_model_flag' is None")
         if self.model.weighting_position_option is None:
-            raise ValueError(
-                f"Configuration Error: 'weighting_position_option' must not be None, received {self.model.weighting_position_option}"
-            )
+            raise ValueError("Configuration Error: 'weighting_position_option' is None")
         if self.model.layer_role_option is None:
-            raise ValueError(
-                f"Configuration Error: 'layer_role_option' must not be None, received {self.model.layer_role_option}"
-            )
+            raise ValueError("Configuration Error: 'layer_role_option' is None")
         if self.model.router_model_config is None:
-            raise ValueError(
-                f"Configuration Error: 'router_model_config' must not be None, received {self.model.router_model_config}"
-            )
+            raise ValueError("Configuration Error: 'router_model_config' is None")
         if self.model.sampler_model_config is None:
-            raise ValueError(
-                f"Configuration Error: 'sampler_model_config' must not be None, received {self.model.sampler_model_config}"
-            )
+            raise ValueError("Configuration Error: 'sampler_model_config' is None")
 
     def __ensure_values_have_correct_types(self):
         if not isinstance(self.model.layer_stack_model, LinearLayerStackOptions):
