@@ -91,7 +91,7 @@ class DynamicParametersBehaviour(Module):
     ) -> Tensor:
         input_vectors = self.__normalize_vectors(input_vectors)
         output_vectors = self.__normalize_vectors(output_vectors)
-        return torch.einsum("bij,bik->bijk", input_vectors, output_vectors)
+        return torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
 
     def __normalize_vectors(
         self,

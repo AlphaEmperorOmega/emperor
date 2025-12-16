@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from enum import Enum
 from torch import Tensor
 from torch.nn import Parameter
-from Emperor.base.utils import Module, ConfigBase, arange, reshape
 from dataclasses import dataclass, field
+from Emperor.base.utils import Module, ConfigBase, arange, reshape
 
 from typing import TYPE_CHECKING
 
@@ -79,7 +79,7 @@ class AdaptiveMixtureBase(Module):
     ):
         super().__init__()
         config = getattr(cfg, "mixture_model_config", cfg)
-        self.cfg: "MixtureConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "AdaptiveMixtureConfig" = self._overwrite_config(config, overrides)
 
         self.input_dim = self.cfg.input_dim
         self.depth_dim = self.cfg.depth_dim
@@ -589,7 +589,7 @@ class GeneratorMixture(ParameterMixture):
                 OuterProductNormOptions.TANH,
             )
 
-        outer_product = torch.einsum("bij,bik->bijk", input_vectors, output_vectors)
+        outer_product = torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
 
         if normalize_before:
             return outer_product
