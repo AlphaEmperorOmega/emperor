@@ -10,12 +10,14 @@ from dataclasses import dataclass, field
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+    from Emperor.experts.utils.layers import MixtureOfExpertsConfig
 
 
 @dataclass
-class MixtureConfig(ConfigBase):
+class AdaptiveMixtureConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Mixture model input dimension"},
@@ -56,6 +58,10 @@ class MixtureConfig(ConfigBase):
             "help": "Used for `GeneratorMixture`. When `True` `anti diagonal parameters` are added to every set or parameters for the topk samplers. Diagonal parameters are added by default"
         },
     )
+    mixture_of_experts_config: "MixtureOfExpertsConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
 
 
 class OuterProductNormOptions(Enum):
@@ -65,11 +71,11 @@ class OuterProductNormOptions(Enum):
     LAYER_NORM = 4
 
 
-class MixtureBase(Module):
+class AdaptiveMixtureBase(Module):
     def __init__(
         self,
-        cfg: "MixtureConfig | ModelConfig",
-        overrides: "MixtureConfig | None" = None,
+        cfg: "AdaptiveMixtureConfig | ModelConfig",
+        overrides: "AdaptiveMixtureConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "mixture_model_config", cfg)
@@ -83,6 +89,7 @@ class MixtureBase(Module):
         self.bias_parameters_flag = self.cfg.bias_parameters_flag
         self.num_experts = self.cfg.num_experts
         self.dynamic_diagonal_params_flag = self.cfg.dynamic_diagonal_params_flag
+        self.mixture_of_experts_config = self.cfg.mixture_of_experts_config
         self.__validate_inputs()
 
     def __validate_inputs(self) -> None:
@@ -95,7 +102,7 @@ class MixtureBase(Module):
             )
 
 
-class ParameterMixture(MixtureBase):
+class ParameterMixture(AdaptiveMixtureBase):
     def __init__(
         self,
         cfg: "MixtureConfig | ModelConfig",
