@@ -7,7 +7,7 @@ from Emperor.base.layer import LayerStackConfig
 from Emperor.sampler.model import SamplerModel
 from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.sampler.utils.routers import RouterConfig, RouterModel
-from Emperor.base.utils import ConfigBase, Module, device
+from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experts.utils._validator import _Validator
 from Emperor.experts.utils.enums import (
@@ -149,42 +149,47 @@ class MixtureOfExperts(Module):
             input_batch, probabilities, indices
         )
 
+        indices = torch.randperm(9)[:3]
+
         total_loss = sampler_loss + expert_loss
         return output, total_loss
 
     def __compute_experts(
         self, input_batch: Tensor, probabilities: Tensor, indices: Tensor
     ) -> tuple[Tensor, Tensor]:
-        expert_outputs = []
-        experts_indices_list = []
+        expert_outputs_list = []
+        top_k_order_indices_list = []
         total_loss = torch.tensor(0.0)
-        expert_index = 0
-        for expert_model in self.expert_modules:
-            expert_sample_indices = self.__get_expert_indices(
-                indices, probabilities, expert_index
+        for expert_index, expert_model in enumerate(self.expert_modules):
+            expert_sample_indices = self.__get_expert_indices(indices, expert_index)
+            top_k_order_indices = self.__get_original_order_indices(
+                indices, expert_index
             )
-            expert_sample_probabilities = self.__get_expert_probabilities(
-                indices, probabilities, expert_index
+            expert_samples_probabilities = self.__get_expert_probabilities(
+                top_k_order_indices, probabilities, expert_index
             )
-
-            expert_index += 1
-            if expert_sample_indices.numel() == 0:
+            if expert_sample_indices is not None and expert_sample_indices.numel() == 0:
                 continue
 
             expert_output, loss = self.__compute_expert_output(
                 expert_model,
                 input_batch,
                 expert_sample_indices,
-                expert_sample_probabilities,
+                expert_samples_probabilities,
             )
-            experts_indices_list.append(expert_sample_indices)
-            expert_outputs.append(expert_output)
             total_loss = total_loss + loss
+            expert_outputs_list.append(expert_output)
+            if self.top_k != self.num_experts:
+                top_k_order_indices_list.append(top_k_order_indices)
 
-        experts_indices = torch.cat(experts_indices_list)
-        output = torch.cat(expert_outputs, dim=0)
-        output = self.__compute_expert_mixture(output, experts_indices, probabilities)
+        expert_outputs = torch.cat(expert_outputs_list, dim=0)
+        original_order_indices = None
+        if self.top_k != self.num_experts:
+            original_order_indices = torch.cat(top_k_order_indices_list)
 
+        output = self.__compute_expert_mixture(
+            expert_outputs, original_order_indices, probabilities
+        )
         return output, total_loss
 
     def __maybe_compute_expert_indices(
@@ -210,20 +215,28 @@ class MixtureOfExperts(Module):
     def __get_expert_indices(
         self,
         indices: Tensor,
-        probabilities: Tensor,
         expert_index: int,
-    ) -> Tensor:
+    ) -> Tensor | None:
         if self.top_k == self.num_experts:
-            num_samples = probabilities.shape[0]
-            indices = torch.arange(num_samples)
-            return indices
+            return None
 
-        boolean_tensor = indices == expert_index
-        samples_for_current_expert = boolean_tensor
+        samples_for_current_expert = indices == expert_index
         if self.top_k > 1:
             samples_for_current_expert = samples_for_current_expert.sum(dim=-1)
         sample_indices_for_expert = samples_for_current_expert.nonzero()
-        return sample_indices_for_expert.squeeze(dim=-1)
+        return sample_indices_for_expert.flatten()
+
+    def __get_original_order_indices(
+        self,
+        indices: Tensor,
+        expert_index: int,
+    ) -> Tensor | None:
+        if self.top_k == self.num_experts:
+            return None
+        boolean_tensor = indices == expert_index
+        original_order_indices = boolean_tensor.flatten()
+        original_order_indices = original_order_indices.nonzero()
+        return original_order_indices.squeeze(dim=-1)
 
     def __get_expert_probabilities(
         self,
@@ -231,15 +244,11 @@ class MixtureOfExperts(Module):
         probabilities: Tensor,
         expert_index: int,
     ) -> Tensor:
-        if self.top_k == self.num_experts:
-            return probabilities[:, expert_index]
-
         if self.__is_before():
-            boolean_tensor = indices == expert_index
-            probabilities = probabilities * boolean_tensor.float()
-            probabilities = probabilities.sum(dim=-1)
-            if self.top_k > 1:
-                probabilities = probabilities[probabilities.nonzero()].squeeze(dim=-1)
+            if self.top_k == self.num_experts:
+                return probabilities[:, expert_index]
+            probabilities = probabilities.flatten()
+            probabilities = probabilities[indices]
 
         return probabilities
 
@@ -250,7 +259,9 @@ class MixtureOfExperts(Module):
         indices: Tensor,
         probabilities: Tensor | None,
     ) -> tuple[list[Tensor], Tensor]:
-        expert_samples = input_batch[indices]
+        expert_samples = input_batch
+        if indices is not None:
+            expert_samples = input_batch[indices]
         if self.__is_before():
             expert_samples = self.__maybe_apply_probabilities(
                 expert_samples, probabilities
@@ -258,8 +269,7 @@ class MixtureOfExperts(Module):
 
         output = expert_model(expert_samples)
         if isinstance(output, tuple):
-            output, expert_loss = output
-            return output, expert_loss
+            return output
         return output, torch.tensor(0.0)
 
     def __maybe_apply_probabilities(
@@ -283,25 +293,19 @@ class MixtureOfExperts(Module):
         indices: Tensor,
         probabilities: Tensor | None = None,
     ) -> Tensor:
-        input_dim, output_dim = experts_output.shape
-        if not self.compute_expert_mixture_flag:
-            output_shape = (input_dim, output_dim)
-            output = torch.zeros(
-                output_shape, dtype=experts_output.dtype, device=device
-            )
-            output.index_add_(0, indices, experts_output)
-
-            return output
-
+        _, output_dim = experts_output.shape
+        if self.top_k != self.num_experts:
+            _, _index_sorted_indices = indices.sort(dim=0)
+            experts_output = experts_output[_index_sorted_indices]
         if self.__is_after():
             experts_output = self.__maybe_apply_probabilities(
                 experts_output, probabilities
             )
 
-        output_shape = (input_dim // self.top_k, output_dim)
-        output = torch.zeros(output_shape, dtype=experts_output.dtype, device=device)
-        output.index_add_(0, indices, experts_output)
-        return output
+        experts_output = experts_output.view(-1, self.top_k, output_dim)
+        if not self.compute_expert_mixture_flag or self.top_k == 1:
+            return experts_output
+        return experts_output.sum(dim=1)
 
     def __is_after(self) -> bool:
         position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
