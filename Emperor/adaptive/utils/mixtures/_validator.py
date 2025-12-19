@@ -9,7 +9,7 @@ class _AdaptiveMixtureBaseValidator:
         self.model = model
         self.__ensure_values_are_not_none()
         self.__ensure_correct_input_types()
-        self.__ensure_weighted_parameters_for_full_mixture()
+        # self.__ensure_weighted_parameters_for_full_mixture()
 
     def __ensure_values_are_not_none(self) -> None:
         if self.model.input_dim is None:

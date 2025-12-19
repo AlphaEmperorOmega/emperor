@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.experts.utils.layers import MixtureOfExpertsConfig
 
 
 @dataclass
@@ -35,10 +34,6 @@ class AdaptiveMixtureConfig(ConfigBase):
             "help": "When `True` the sepected parameters will be multiplied by their probs"
         },
     )
-    mixture_of_experts_config: "MixtureOfExpertsConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
 
 
 class AdaptiveMixtureBase(Module):
@@ -50,11 +45,11 @@ class AdaptiveMixtureBase(Module):
         super().__init__()
         config = getattr(cfg, "mixture_model_config", cfg)
         self.cfg: "AdaptiveMixtureConfig" = self._overwrite_config(config, overrides)
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.top_k = self.cfg.top_k
         self.num_experts = self.cfg.num_experts
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
-        self.mixture_of_experts_config = self.cfg.mixture_of_experts_config
         self._validator = _AdaptiveMixtureBaseValidator(self)
