@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from Emperor.adaptive.utils.enums import ClipParameterOptions
 from Emperor.base.utils import Module, ConfigBase
 from Emperor.adaptive.utils.mixtures._validator import _AdaptiveMixtureBaseValidator
 
@@ -34,6 +35,16 @@ class AdaptiveMixtureConfig(ConfigBase):
             "help": "When `True` the sepected parameters will be multiplied by their probs"
         },
     )
+    clip_parameter_option: ClipParameterOptions | None = field(
+        default=None,
+        metadata={"help": "Specifies the clipping strategy for the mixture parameters"},
+    )
+    clip_range: float | None = field(
+        default=None,
+        metadata={
+            "help": "Specifies the clipping range for the generated mixture parameters. The range will be between +- `clip_range`"
+        },
+    )
 
 
 class AdaptiveMixtureBase(Module):
@@ -52,4 +63,6 @@ class AdaptiveMixtureBase(Module):
         self.top_k = self.cfg.top_k
         self.num_experts = self.cfg.num_experts
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
+        self.clip_parameter_option = self.cfg.clip_parameter_option
+        self.clip_range = self.cfg.clip_range
         self._validator = _AdaptiveMixtureBaseValidator(self)
