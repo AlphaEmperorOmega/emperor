@@ -1,3 +1,5 @@
+from torch import clip
+from Emperor.adaptive.utils.enums import ClipParameterOptions
 from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
@@ -213,6 +215,8 @@ class ParameterGeneratorConfigs:
         num_experts=6,
         compute_expert_mixture_flag=True,
         weighted_parameters_flag=False,
+        clip_parameter_option=ClipParameterOptions.BEFORE,
+        clip_range=5.0,
         experts_weighted_parameters_flag=False,
         weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
         init_sampler_model_flag=False,
@@ -250,6 +254,8 @@ class ParameterGeneratorConfigs:
             top_k=top_k,
             num_experts=num_experts,
             weighted_parameters_flag=weighted_parameters_flag,
+            clip_parameter_option=clip_parameter_option,
+            clip_range=clip_range,
             override_config=MixtureOfExpertsPresets.experts_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
