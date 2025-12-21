@@ -3,8 +3,12 @@ import unittest
 import torch.nn.functional as F
 
 from torch.nn import Parameter
-from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase, AdaptiveMixtureConfig
-from Emperor.adaptive.utils.mixtures.vector import (
+from Emperor.adaptive.utils.presets import ParameterGeneratorConfigs
+from Emperor.adaptive.utils.mixtures.base import (
+    AdaptiveMixtureBase,
+    AdaptiveMixtureConfig,
+)
+from Emperor.adaptive.utils.mixtures.types.vector import (
     VectorBiasMixture,
     VectorMixtureBase,
     VectorWeightsMixture,
@@ -13,12 +17,8 @@ from Emperor.adaptive.utils.mixtures.vector import (
 
 class TestVectorMixture(unittest.TestCase):
     def setUp(self):
-        self.cfg = AdaptiveMixtureConfig(
-            input_dim=4,
-            output_dim=5,
-            top_k=2,
-            num_experts=6,
-            weighted_parameters_flag=False,
+        self.cfg = ParameterGeneratorConfigs.adaptive_generator_mixture_preset(
+            input_dim=8, output_dim=8
         )
 
     def test_init(self):
@@ -30,15 +30,14 @@ class TestVectorMixture(unittest.TestCase):
             with self.subTest(msg=message):
                 m = model_type(self.cfg)
 
-                bank_shape = (c.output_dim, c.depth_dim)
+                bank_shape = (c.output_dim, c.num_experts)
                 if model_type is VectorWeightsMixture:
-                    bank_shape = (c.input_dim, c.depth_dim, c.output_dim)
+                    bank_shape = (c.input_dim, c.num_experts, c.output_dim)
 
                 self.assertIsInstance(m, AdaptiveMixtureBase)
                 self.assertIsInstance(m, VectorMixtureBase)
                 self.assertEqual(m.input_dim, c.input_dim)
                 self.assertEqual(m.output_dim, c.output_dim)
-                self.assertEqual(m.depth_dim, c.depth_dim)
                 self.assertEqual(m.top_k, c.top_k)
                 self.assertEqual(m.num_experts, c.num_experts)
                 self.assertEqual(m.weighted_parameters_flag, c.weighted_parameters_flag)
@@ -63,7 +62,7 @@ class TestVectorMixture(unittest.TestCase):
                     range_indices = m._init_parameter_select_range()
 
                     expected_range_shape = (1, m.range_dim)
-                    if 1 < top_k < m.depth_dim:
+                    if 1 < top_k < m.num_experts:
                         expected_range_shape = (1, m.range_dim, 1)
 
                     self.assertEqual(range_indices.shape, expected_range_shape)
@@ -84,10 +83,10 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     indexes_shape = (m.input_dim, batch_size)
-                    indexes = torch.randint(0, m.depth_dim, indexes_shape)
-                elif 1 < top_k < m.depth_dim:
+                    indexes = torch.randint(0, m.num_experts, indexes_shape)
+                elif 1 < top_k < m.num_experts:
                     indexes_shape = (m.input_dim, batch_size, top_k)
-                    indexes = torch.randint(0, m.depth_dim, indexes_shape)
+                    indexes = torch.randint(0, m.num_experts, indexes_shape)
                 else:
                     indexes = None
 
@@ -95,10 +94,10 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     expected_shape = (batch_size, m.input_dim, m.output_dim)
-                elif 1 < top_k < m.depth_dim:
+                elif 1 < top_k < m.num_experts:
                     expected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
                 else:
-                    expected_shape = (m.input_dim, m.depth_dim, m.output_dim)
+                    expected_shape = (m.input_dim, m.num_experts, m.output_dim)
 
                 self.assertEqual(selected_params.shape, expected_shape)
 
@@ -118,10 +117,10 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     indexes_shape = (m.output_dim, batch_size)
-                    indexes = torch.randint(0, m.depth_dim, indexes_shape)
-                elif 1 < top_k < m.depth_dim:
+                    indexes = torch.randint(0, m.num_experts, indexes_shape)
+                elif 1 < top_k < m.num_experts:
                     indexes_shape = (m.output_dim, batch_size, top_k)
-                    indexes = torch.randint(0, m.depth_dim, indexes_shape)
+                    indexes = torch.randint(0, m.num_experts, indexes_shape)
                 else:
                     indexes = None
 
@@ -129,10 +128,10 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     expected_shape = (batch_size, m.output_dim)
-                elif 1 < top_k < m.depth_dim:
+                elif 1 < top_k < m.num_experts:
                     expected_shape = (batch_size, m.output_dim, m.top_k)
                 else:
-                    expected_shape = (m.output_dim, m.depth_dim)
+                    expected_shape = (m.output_dim, m.num_experts)
 
                 self.assertEqual(selected_params.shape, expected_shape)
 
@@ -153,12 +152,12 @@ class TestVectorMixture(unittest.TestCase):
                 if top_k == 1:
                     selected_shape = (batch_size, m.input_dim, m.output_dim)
                     probs_shape = (m.input_dim, batch_size)
-                elif 1 < top_k < m.depth_dim:
+                elif 1 < top_k < m.num_experts:
                     selected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
                     probs_shape = (m.input_dim, batch_size, top_k)
                 else:
-                    selected_shape = (m.input_dim, m.depth_dim, m.output_dim)
-                    probs_shape = (m.input_dim, batch_size, m.depth_dim)
+                    selected_shape = (m.input_dim, m.num_experts, m.output_dim)
+                    probs_shape = (m.input_dim, batch_size, m.num_experts)
 
                 selected_parameters = torch.randn(selected_shape)
                 probs = F.sigmoid(torch.randn(probs_shape))
@@ -168,13 +167,13 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     expected_shape = (batch_size, m.input_dim, m.output_dim)
-                elif 1 < top_k < m.depth_dim:
+                elif 1 < top_k < m.num_experts:
                     expected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
                 else:
                     expected_shape = (
                         batch_size,
                         m.input_dim,
-                        m.depth_dim,
+                        m.num_experts,
                         m.output_dim,
                     )
 
@@ -201,12 +200,12 @@ class TestVectorMixture(unittest.TestCase):
                     if top_k == 1:
                         selected_shape = (batch_size, m.output_dim)
                         probs_shape = (m.output_dim, batch_size)
-                    elif 1 < top_k < m.depth_dim:
+                    elif 1 < top_k < m.num_experts:
                         selected_shape = (batch_size, m.output_dim, top_k)
                         probs_shape = (m.output_dim, batch_size, m.top_k)
                     else:
-                        selected_shape = (m.output_dim, m.depth_dim)
-                        probs_shape = (m.output_dim, batch_size, m.depth_dim)
+                        selected_shape = (m.output_dim, m.num_experts)
+                        probs_shape = (m.output_dim, batch_size, m.num_experts)
 
                     selected_parameters = torch.randn(selected_shape)
                     probs = F.sigmoid(torch.randn(probs_shape))
@@ -216,10 +215,10 @@ class TestVectorMixture(unittest.TestCase):
 
                     if top_k == 1:
                         expected_shape = (batch_size, m.output_dim)
-                    elif 1 < top_k < m.depth_dim:
+                    elif 1 < top_k < m.num_experts:
                         expected_shape = (batch_size, m.output_dim, top_k)
                     else:
-                        expected_shape = (batch_size, m.output_dim, m.depth_dim)
+                        expected_shape = (batch_size, m.output_dim, m.num_experts)
 
                     self.assertEqual(selected_params.shape, expected_shape)
 
@@ -244,12 +243,12 @@ class TestVectorMixture(unittest.TestCase):
                     if top_k == 1:
                         selected_shape = (batch_size, m.input_dim, m.output_dim)
                         probs_shape = (m.input_dim, batch_size)
-                    elif 1 < top_k < m.depth_dim:
+                    elif 1 < top_k < m.num_experts:
                         selected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
                         probs_shape = (m.input_dim, batch_size, top_k)
                     else:
-                        selected_shape = (m.input_dim, m.depth_dim, m.output_dim)
-                        probs_shape = (m.input_dim, batch_size, m.depth_dim)
+                        selected_shape = (m.input_dim, m.num_experts, m.output_dim)
+                        probs_shape = (m.input_dim, batch_size, m.num_experts)
 
                     selected_parameters = torch.randn(selected_shape)
                     probs = F.sigmoid(torch.randn(probs_shape))
@@ -259,7 +258,7 @@ class TestVectorMixture(unittest.TestCase):
 
                     if top_k == 1:
                         expected_shape = (batch_size, m.input_dim, m.output_dim)
-                    elif 1 < top_k < m.depth_dim:
+                    elif 1 < top_k < m.num_experts:
                         expected_shape = (batch_size, m.input_dim, m.output_dim)
                     else:
                         expected_shape = (batch_size, m.input_dim, m.output_dim)
@@ -279,16 +278,15 @@ class TestVectorMixture(unittest.TestCase):
                 m = VectorBiasMixture(self.cfg, overrides)
 
                 batch_size = 5
-
                 if top_k == 1:
                     selected_shape = (batch_size, m.output_dim)
                     probs_shape = (m.output_dim, batch_size)
-                elif 1 < top_k < m.depth_dim:
+                elif 1 < top_k < m.num_experts:
                     selected_shape = (batch_size, m.output_dim, top_k)
                     probs_shape = (m.output_dim, batch_size, m.top_k)
                 else:
-                    selected_shape = (m.output_dim, m.depth_dim)
-                    probs_shape = (m.output_dim, batch_size, m.depth_dim)
+                    selected_shape = (m.output_dim, m.num_experts)
+                    probs_shape = (m.output_dim, batch_size, m.num_experts)
 
                 selected_parameters = torch.randn(selected_shape)
                 probs = F.sigmoid(torch.randn(probs_shape))
@@ -298,7 +296,7 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     expected_shape = (batch_size, m.output_dim)
-                elif 1 < top_k < m.depth_dim:
+                elif 1 < top_k < m.num_experts:
                     expected_shape = (batch_size, m.output_dim)
                 else:
                     expected_shape = (batch_size, m.output_dim)
@@ -321,12 +319,12 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     shape = (m.input_dim, batch_size)
-                    indices = torch.randint(0, m.depth_dim, shape)
-                elif 1 < top_k < m.depth_dim:
+                    indices = torch.randint(0, m.num_experts, shape)
+                elif 1 < top_k < m.num_experts:
                     shape = (m.input_dim, batch_size, top_k)
-                    indices = torch.randint(0, m.depth_dim, shape)
+                    indices = torch.randint(0, m.num_experts, shape)
                 else:
-                    shape = (m.input_dim, batch_size, m.depth_dim)
+                    shape = (m.input_dim, batch_size, m.num_experts)
                     indices = None
 
                 probs = F.softmax(torch.randn(shape), dim=-1)
@@ -334,7 +332,7 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     expected_shape = (batch_size, m.input_dim, m.output_dim)
-                elif 1 < top_k < m.depth_dim:
+                elif 1 < top_k < m.num_experts:
                     expected_shape = (batch_size, m.input_dim, m.output_dim)
                 else:
                     expected_shape = (batch_size, m.input_dim, m.output_dim)
@@ -357,12 +355,12 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     shape = (m.output_dim, batch_size)
-                    indices = torch.randint(0, m.depth_dim, shape)
-                elif 1 < top_k < m.depth_dim:
+                    indices = torch.randint(0, m.num_experts, shape)
+                elif 1 < top_k < m.num_experts:
                     shape = (m.output_dim, batch_size, top_k)
-                    indices = torch.randint(0, m.depth_dim, shape)
+                    indices = torch.randint(0, m.num_experts, shape)
                 else:
-                    shape = (m.output_dim, batch_size, m.depth_dim)
+                    shape = (m.output_dim, batch_size, m.num_experts)
                     indices = None
 
                 probs = F.softmax(torch.randn(shape), dim=-1)
@@ -370,7 +368,7 @@ class TestVectorMixture(unittest.TestCase):
 
                 if top_k == 1:
                     expected_shape = (batch_size, m.output_dim)
-                elif 1 < top_k < m.depth_dim:
+                elif 1 < top_k < m.num_experts:
                     expected_shape = (batch_size, m.output_dim)
                 else:
                     expected_shape = (batch_size, m.output_dim)

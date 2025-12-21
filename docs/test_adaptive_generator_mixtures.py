@@ -2,18 +2,18 @@ import torch
 import unittest
 
 from torch.types import Tensor
+from Emperor.sampler.model import SamplerModel
+from Emperor.sampler.utils.routers import RouterModel
+from Emperor.sampler.utils.presets import SamplerPresets
+from Emperor.experts.utils.layers import MixtureOfExperts
 from Emperor.adaptive.utils.enums import ClipParameterOptions
 from Emperor.adaptive.utils.presets import ParameterGeneratorConfigs
 from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
-from Emperor.adaptive.utils.mixtures.generator import (
+from Emperor.adaptive.utils.mixtures.types.generator import (
     GeneratorBiasMixture,
     GeneratorMixtureBase,
     GeneratorWeightsMixture,
 )
-from Emperor.experts.utils.layers import MixtureOfExperts
-from Emperor.sampler.model import SamplerModel
-from Emperor.sampler.utils.presets import SamplerPresets
-from Emperor.sampler.utils.routers import RouterModel
 
 
 class TestGeneratorMixture(unittest.TestCase):
