@@ -1,13 +1,16 @@
 import torch
 
 from torch import Tensor
-from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
+from Emperor.adaptive.utils.mixtures.types._validator import _VectorMixtureValidator
+from Emperor.adaptive.utils.mixtures.base import (
+    AdaptiveMixtureBase,
+    AdaptiveMixtureConfig,
+)
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.adaptive.utils.mixture import AdaptiveMixtureConfig
 
 
 class VectorMixtureBase(AdaptiveMixtureBase):
@@ -17,6 +20,9 @@ class VectorMixtureBase(AdaptiveMixtureBase):
         overrides: "AdaptiveMixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
+        self.depth_dim = self.num_experts
+
+        self.validator = _VectorMixtureValidator(self)
 
     def _init_parameter_select_range(self) -> Tensor:
         input_range = torch.arange(self.range_dim)
@@ -45,14 +51,20 @@ class VectorMixtureBase(AdaptiveMixtureBase):
         probs: Tensor,
     ) -> Tensor:
         weighted_parameters = selected_parameters
+
         if self.__should_compute_weighted_parameters(probs):
             weighted_parameters = self._compute_weighted_parameters(
                 selected_parameters, probs
             )
 
-        if self.__is_topk_sparse():
-            return weighted_parameters
-        return weighted_parameters.sum(dim=self.parameter_mixture_dim)
+        if not self.__is_topk_sparse():
+            weighted_parameters = weighted_parameters.sum(
+                dim=self.parameter_mixture_dim
+            )
+        return weighted_parameters
+
+    def _handle_mixture_output(self, weighted_parameters: Tensor):
+        return weighted_parameters
 
     def __is_topk_sparse(self) -> bool:
         return self.top_k == 1
@@ -94,6 +106,9 @@ class VectorWeightsMixture(VectorMixtureBase):
     ) -> Tensor:
         probs = probs.transpose(1, 0).unsqueeze(-1)
         return selected_parameters * probs
+
+    def _handle_mixture_output(self, weighted_parameters: Tensor):
+        return torch.transpose(weighted_parameters, -1, -2)
 
 
 class VectorBiasMixture(VectorMixtureBase):
