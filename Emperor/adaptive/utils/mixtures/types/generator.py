@@ -1,4 +1,5 @@
 import torch
+
 from enum import Enum
 from torch import Tensor
 from Emperor.adaptive.utils.enums import ClipParameterOptions
@@ -150,12 +151,15 @@ class GeneratorBiasMixture(GeneratorMixtureBase):
     ) -> None:
         super().__init__(cfg, overrides)
         self.range_dim = self.output_dim
+        self.bias_generator = self.__init_generator()
+
+    def __init_generator(self):
         output_overrides = MixtureOfExpertsConfig(
             output_dim=self.output_dim,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=True,
         )
-        self.bias_generator = MixtureOfExperts(self.main_cfg, output_overrides)
+        return MixtureOfExperts(self.main_cfg, output_overrides)
 
     def compute_mixture(
         self,

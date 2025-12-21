@@ -1,7 +1,7 @@
 import torch
 
 from torch import Tensor
-from Emperor.adaptive.utils.mixture import AdaptiveMixtureBase
+from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
 
 from typing import TYPE_CHECKING
 
