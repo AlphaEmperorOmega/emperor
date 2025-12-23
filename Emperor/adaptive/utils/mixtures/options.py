@@ -9,6 +9,5 @@ class AdaptiveWeightOptions(BaseOptions):
 
 class AdaptiveBiasOptions(BaseOptions):
     DISABLED = 0
-    VECTOR = 1
-    MATRIX = 2
-    GENERATOR = 3
+    MATRIX = 1
+    GENERATOR = 2

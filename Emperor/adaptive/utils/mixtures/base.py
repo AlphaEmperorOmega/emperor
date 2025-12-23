@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-from Emperor.adaptive.utils.enums import ClipParameterOptions
 from Emperor.base.utils import Module, ConfigBase
+from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.adaptive.utils.mixtures._validator import _AdaptiveMixtureBaseValidator
 
 from typing import TYPE_CHECKING

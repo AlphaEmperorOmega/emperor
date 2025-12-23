@@ -1,5 +1,4 @@
-from torch import Tensor
-from Emperor.adaptive.utils.enums import ClipParameterOptions
+from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 
 from typing import TYPE_CHECKING
 
