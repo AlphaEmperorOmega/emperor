@@ -1,7 +1,9 @@
 import torch
 
 from torch import Tensor
-from Emperor.adaptive.utils.mixtures.types._validator import _VectorMixtureValidator
+from Emperor.adaptive.utils.mixtures.types.utils._validator import (
+    _VectorMixtureValidator,
+)
 from Emperor.adaptive.utils.mixtures.base import (
     AdaptiveMixtureBase,
     AdaptiveMixtureConfig,
@@ -33,11 +35,11 @@ class VectorMixtureBase(AdaptiveMixtureBase):
 
     def compute_mixture(
         self,
-        probs: Tensor,
+        probabilities: Tensor,
         indices: Tensor | None = None,
     ) -> Tensor:
         selected_params = self._select_parameters(indices)
-        return self.__compute_parameter_mixture(selected_params, probs)
+        return self.__compute_parameter_mixture(selected_params, probabilities)
 
     def _select_parameters(self, indices: Tensor | None) -> Tensor:
         if indices is None:
@@ -111,23 +113,25 @@ class VectorWeightsMixture(VectorMixtureBase):
         return torch.transpose(weighted_parameters, -1, -2)
 
 
-class VectorBiasMixture(VectorMixtureBase):
-    def __init__(
-        self,
-        cfg: "AdaptiveMixtureConfig | ModelConfig",
-        overrides: "AdaptiveMixtureConfig | None" = None,
-    ) -> None:
-        super().__init__(cfg, overrides)
-        self.range_dim = self.output_dim
-        self.parameter_mixture_dim = -1
-        self.parameter_bank_shape = (self.output_dim, self.depth_dim)
-        self.parameter_bank = self._init_parameter_bank(self.parameter_bank_shape)
-        self.register_buffer("select_range", self._init_parameter_select_range())
-
-    def _compute_weighted_parameters(
-        self,
-        selected_parameters: Tensor,
-        probs: Tensor,
-    ):
-        probs = probs.transpose(1, 0)
-        return selected_parameters * probs
+# TODO: Maybe in the future come up with a better idea to add biases
+# for this type of model
+# class VectorBiasMixture(VectorMixtureBase):
+#     def __init__(
+#         self,
+#         cfg: "AdaptiveMixtureConfig | ModelConfig",
+#         overrides: "AdaptiveMixtureConfig | None" = None,
+#     ) -> None:
+#         super().__init__(cfg, overrides)
+#         self.range_dim = self.output_dim
+#         self.parameter_mixture_dim = -1
+#         self.parameter_bank_shape = (self.output_dim, self.depth_dim)
+#         self.parameter_bank = self._init_parameter_bank(self.parameter_bank_shape)
+#         self.register_buffer("select_range", self._init_parameter_select_range())
+#
+#     def _compute_weighted_parameters(
+#         self,
+#         selected_parameters: Tensor,
+#         probs: Tensor,
+#     ):
+#         probs = probs.transpose(1, 0)
+#         return selected_parameters * probs

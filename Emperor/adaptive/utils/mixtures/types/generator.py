@@ -1,10 +1,11 @@
 import torch
 
-from enum import Enum
 from torch import Tensor
-from Emperor.adaptive.utils.enums import ClipParameterOptions
-from Emperor.adaptive.utils.mixtures.types._validator import _GeneratorMixtureValidator
+from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.experts.utils.layers import MixtureOfExperts, MixtureOfExpertsConfig
+from Emperor.adaptive.utils.mixtures.types.utils._validator import (
+    _GeneratorMixtureValidator,
+)
 from Emperor.adaptive.utils.mixtures.base import (
     AdaptiveMixtureBase,
     AdaptiveMixtureConfig,
@@ -15,13 +16,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-
-
-class OuterProductNormOptions(Enum):
-    RELU = 1
-    TANH = 2
-    SIGMOID = 3
-    LAYER_NORM = 4
 
 
 class GeneratorMixtureBase(AdaptiveMixtureBase):
