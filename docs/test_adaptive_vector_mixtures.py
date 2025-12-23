@@ -9,7 +9,6 @@ from Emperor.adaptive.utils.mixtures.base import (
     AdaptiveMixtureConfig,
 )
 from Emperor.adaptive.utils.mixtures.types.vector import (
-    VectorBiasMixture,
     VectorMixtureBase,
     VectorWeightsMixture,
 )
@@ -22,7 +21,7 @@ class TestVectorMixture(unittest.TestCase):
         )
 
     def test_init(self):
-        model_types = [VectorWeightsMixture, VectorBiasMixture]
+        model_types = [VectorWeightsMixture]
         c = self.cfg
 
         for model_type in model_types:
@@ -45,7 +44,7 @@ class TestVectorMixture(unittest.TestCase):
                 self.assertEqual(m.parameter_bank.shape, bank_shape)
 
     def test_init_parameter_select_range(self):
-        model_types = [VectorWeightsMixture, VectorBiasMixture]
+        model_types = [VectorWeightsMixture]
         top_k_values = [1, 3, 6]
         for model_type in model_types:
             for top_k in top_k_values:
@@ -75,7 +74,6 @@ class TestVectorMixture(unittest.TestCase):
                 overrides = AdaptiveMixtureConfig(
                     top_k=top_k,
                     num_experts=6,
-                    weighted_parameters_flag=True,
                 )
                 m = VectorWeightsMixture(self.cfg, overrides)
 
@@ -98,40 +96,6 @@ class TestVectorMixture(unittest.TestCase):
                     expected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
                 else:
                     expected_shape = (m.input_dim, m.num_experts, m.output_dim)
-
-                self.assertEqual(selected_params.shape, expected_shape)
-
-    def test_select_parameters_bias(self):
-        top_k_values = [1, 3, 6]
-        for top_k in top_k_values:
-            message = f"Testing with top_k={top_k}"
-            with self.subTest(msg=message):
-                overrides = AdaptiveMixtureConfig(
-                    top_k=top_k,
-                    num_experts=6,
-                    weighted_parameters_flag=True,
-                )
-                m = VectorBiasMixture(self.cfg, overrides)
-
-                batch_size = 5
-
-                if top_k == 1:
-                    indexes_shape = (m.output_dim, batch_size)
-                    indexes = torch.randint(0, m.num_experts, indexes_shape)
-                elif 1 < top_k < m.num_experts:
-                    indexes_shape = (m.output_dim, batch_size, top_k)
-                    indexes = torch.randint(0, m.num_experts, indexes_shape)
-                else:
-                    indexes = None
-
-                selected_params = m._select_parameters(indexes)
-
-                if top_k == 1:
-                    expected_shape = (batch_size, m.output_dim)
-                elif 1 < top_k < m.num_experts:
-                    expected_shape = (batch_size, m.output_dim, m.top_k)
-                else:
-                    expected_shape = (m.output_dim, m.num_experts)
 
                 self.assertEqual(selected_params.shape, expected_shape)
 
@@ -179,93 +143,7 @@ class TestVectorMixture(unittest.TestCase):
 
                 self.assertEqual(selected_params.shape, expected_shape)
 
-    def test_compute_weighted_parameters_biases(self):
-        model_types = [VectorWeightsMixture, VectorBiasMixture]
-        top_k_values = [1, 3, 6]
-        for model_type in model_types:
-            for top_k in top_k_values:
-                message = (
-                    f"Testing model type: {model_type.__name__} with top_k={top_k}"
-                )
-                with self.subTest(msg=message):
-                    overrides = AdaptiveMixtureConfig(
-                        top_k=top_k,
-                        num_experts=6,
-                        weighted_parameters_flag=True,
-                    )
-                    m = VectorBiasMixture(self.cfg, overrides)
-
-                    batch_size = 5
-
-                    if top_k == 1:
-                        selected_shape = (batch_size, m.output_dim)
-                        probs_shape = (m.output_dim, batch_size)
-                    elif 1 < top_k < m.num_experts:
-                        selected_shape = (batch_size, m.output_dim, top_k)
-                        probs_shape = (m.output_dim, batch_size, m.top_k)
-                    else:
-                        selected_shape = (m.output_dim, m.num_experts)
-                        probs_shape = (m.output_dim, batch_size, m.num_experts)
-
-                    selected_parameters = torch.randn(selected_shape)
-                    probs = F.sigmoid(torch.randn(probs_shape))
-                    selected_params = m._compute_weighted_parameters(
-                        selected_parameters, probs
-                    )
-
-                    if top_k == 1:
-                        expected_shape = (batch_size, m.output_dim)
-                    elif 1 < top_k < m.num_experts:
-                        expected_shape = (batch_size, m.output_dim, top_k)
-                    else:
-                        expected_shape = (batch_size, m.output_dim, m.num_experts)
-
-                    self.assertEqual(selected_params.shape, expected_shape)
-
     def test__compute_parameter_mixture_weights(self):
-        model_types = [VectorWeightsMixture, VectorBiasMixture]
-        top_k_values = [1, 3, 6]
-        for model_type in model_types:
-            for top_k in top_k_values:
-                message = (
-                    f"Testing model type: {model_type.__name__} with top_k={top_k}"
-                )
-                with self.subTest(msg=message):
-                    overrides = AdaptiveMixtureConfig(
-                        top_k=top_k,
-                        num_experts=6,
-                        weighted_parameters_flag=True,
-                    )
-                    m = VectorWeightsMixture(self.cfg, overrides)
-
-                    batch_size = 5
-
-                    if top_k == 1:
-                        selected_shape = (batch_size, m.input_dim, m.output_dim)
-                        probs_shape = (m.input_dim, batch_size)
-                    elif 1 < top_k < m.num_experts:
-                        selected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
-                        probs_shape = (m.input_dim, batch_size, top_k)
-                    else:
-                        selected_shape = (m.input_dim, m.num_experts, m.output_dim)
-                        probs_shape = (m.input_dim, batch_size, m.num_experts)
-
-                    selected_parameters = torch.randn(selected_shape)
-                    probs = F.sigmoid(torch.randn(probs_shape))
-                    selected_params = m._VectorMixtureBase__compute_parameter_mixture(
-                        selected_parameters, probs
-                    )
-
-                    if top_k == 1:
-                        expected_shape = (batch_size, m.input_dim, m.output_dim)
-                    elif 1 < top_k < m.num_experts:
-                        expected_shape = (batch_size, m.input_dim, m.output_dim)
-                    else:
-                        expected_shape = (batch_size, m.input_dim, m.output_dim)
-
-                    self.assertEqual(selected_params.shape, expected_shape)
-
-    def test__compute_parameter_mixture_biases(self):
         top_k_values = [1, 3, 6]
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
@@ -275,18 +153,19 @@ class TestVectorMixture(unittest.TestCase):
                     num_experts=6,
                     weighted_parameters_flag=True,
                 )
-                m = VectorBiasMixture(self.cfg, overrides)
+                m = VectorWeightsMixture(self.cfg, overrides)
 
                 batch_size = 5
+
                 if top_k == 1:
-                    selected_shape = (batch_size, m.output_dim)
-                    probs_shape = (m.output_dim, batch_size)
+                    selected_shape = (batch_size, m.input_dim, m.output_dim)
+                    probs_shape = (m.input_dim, batch_size)
                 elif 1 < top_k < m.num_experts:
-                    selected_shape = (batch_size, m.output_dim, top_k)
-                    probs_shape = (m.output_dim, batch_size, m.top_k)
+                    selected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
+                    probs_shape = (m.input_dim, batch_size, top_k)
                 else:
-                    selected_shape = (m.output_dim, m.num_experts)
-                    probs_shape = (m.output_dim, batch_size, m.num_experts)
+                    selected_shape = (m.input_dim, m.num_experts, m.output_dim)
+                    probs_shape = (m.input_dim, batch_size, m.num_experts)
 
                 selected_parameters = torch.randn(selected_shape)
                 probs = F.sigmoid(torch.randn(probs_shape))
@@ -295,11 +174,11 @@ class TestVectorMixture(unittest.TestCase):
                 )
 
                 if top_k == 1:
-                    expected_shape = (batch_size, m.output_dim)
+                    expected_shape = (batch_size, m.input_dim, m.output_dim)
                 elif 1 < top_k < m.num_experts:
-                    expected_shape = (batch_size, m.output_dim)
+                    expected_shape = (batch_size, m.input_dim, m.output_dim)
                 else:
-                    expected_shape = (batch_size, m.output_dim)
+                    expected_shape = (batch_size, m.input_dim, m.output_dim)
 
                 self.assertEqual(selected_params.shape, expected_shape)
 
@@ -336,42 +215,6 @@ class TestVectorMixture(unittest.TestCase):
                     expected_shape = (batch_size, m.input_dim, m.output_dim)
                 else:
                     expected_shape = (batch_size, m.input_dim, m.output_dim)
-
-                self.assertEqual(selected_params.shape, expected_shape)
-
-    def test_compute_mixture_biases(self):
-        top_k_values = [1, 3, 6]
-        for top_k in top_k_values:
-            message = f"Testing with top_k={top_k}"
-            with self.subTest(msg=message):
-                overrides = AdaptiveMixtureConfig(
-                    top_k=top_k,
-                    num_experts=6,
-                    weighted_parameters_flag=True,
-                )
-                m = VectorBiasMixture(self.cfg, overrides)
-
-                batch_size = 5
-
-                if top_k == 1:
-                    shape = (m.output_dim, batch_size)
-                    indices = torch.randint(0, m.num_experts, shape)
-                elif 1 < top_k < m.num_experts:
-                    shape = (m.output_dim, batch_size, top_k)
-                    indices = torch.randint(0, m.num_experts, shape)
-                else:
-                    shape = (m.output_dim, batch_size, m.num_experts)
-                    indices = None
-
-                probs = F.softmax(torch.randn(shape), dim=-1)
-                selected_params = m.compute_mixture(probs, indices)
-
-                if top_k == 1:
-                    expected_shape = (batch_size, m.output_dim)
-                elif 1 < top_k < m.num_experts:
-                    expected_shape = (batch_size, m.output_dim)
-                else:
-                    expected_shape = (batch_size, m.output_dim)
 
                 self.assertEqual(selected_params.shape, expected_shape)
 
