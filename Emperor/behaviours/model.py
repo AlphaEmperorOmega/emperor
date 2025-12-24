@@ -21,7 +21,15 @@ ModuleType = TypeVar("ModuleType", bound=Module)
 
 
 @dataclass
-class AdaptiveParameterModelConfig(ConfigBase):
+class AdaptiveParameterBehaviourConfig(ConfigBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": "Input dimension of the linear layer"},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Output dimension of the linera layer"},
+    )
     generator_depth: DynamicDepthOptions | None = field(
         default=None,
         metadata={
@@ -60,16 +68,15 @@ class AdaptiveParameterModelConfig(ConfigBase):
     )
 
 
-class AdaptiveParameterModel(Module):
+class AdaptiveParameterBehaviour(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterModelConfig",
+        cfg: "AdaptiveParameterBehaviourConfig",
     ):
         super().__init__()
         self.cfg = cfg
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
-        self.bias_flag = self.cfg.bias_flag
         self.generator_depth = self.cfg.generator_depth
         self.diagonal_option = self.cfg.diagonal_option
         self.memory_option = self.cfg.memory_option
@@ -94,8 +101,7 @@ class AdaptiveParameterModel(Module):
         return self.__init_model(is_valid_flag, DynamicMemorySelector)
 
     def __init_bias_model(self) -> DynamicBiasSelector | None:
-        is_disabled = self.bias_option != DynamicBiasOptions.DISABLED
-        is_valid_flag = is_disabled and self.bias_flag
+        is_valid_flag = self.bias_option != DynamicBiasOptions.DISABLED
         return self.__init_model(is_valid_flag, DynamicBiasSelector)
 
     def __init_model(
@@ -137,14 +143,27 @@ class AdaptiveParameterModel(Module):
     ) -> tuple[Tensor, Tensor | None]:
         weights = self.__call_model(self.generator_model, weights, input)
         weights = self.__call_model(self.diagonal_model, weights, input)
-        bias = self.__call_model(self.bias_model, bias, input)
+        bias = self.__call_bias_model(self.bias_model, bias, input)
         return weights, bias
 
     def __call_model(
-        self, model, parameters: Tensor | None, input: Tensor
+        self,
+        model,
+        parameters: Tensor | None = None,
+        input: Tensor | None = None,
     ) -> Tensor | None:
         if model is None:
             return parameters
         if parameters is None:
             return model(input)
+        return model(parameters, input)
+
+    def __call_bias_model(
+        self,
+        model,
+        parameters: Tensor | None = None,
+        input: Tensor | None = None,
+    ) -> Tensor | None:
+        if model is None:
+            return parameters
         return model(parameters, input)

@@ -4,21 +4,22 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Sequential
 from Emperor.base.utils import Module
-from Emperor.base.layer import LayerStackConfig
+from Emperor.base.layer import Layer, LayerStackConfig
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
-    from Emperor.linears.utils.layers import LinearLayerConfig
+    from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 
 
 class DiagonalHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "LinearLayerConfig",
+        cfg: "AdaptiveParameterBehaviourConfig",
     ):
         super().__init__()
-        self.cfg = getattr(cfg, "linear_layer_config", cfg)
+        self.cfg = cfg
         self.cfg_main = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = cfg.input_dim
         self.output_dim = cfg.output_dim
@@ -65,7 +66,7 @@ class DiagonalHandlerAbstract(Module):
 class DiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "LinearLayerConfig",
+        cfg: "AdaptiveParameterBehaviourConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = self._init_model()
@@ -78,7 +79,7 @@ class DiagonalHandler(DiagonalHandlerAbstract):
 class AntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "LinearLayerConfig",
+        cfg: "AdaptiveParameterBehaviourConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = self._init_model()
@@ -92,7 +93,7 @@ class AntiDiagonalHandler(DiagonalHandlerAbstract):
 class DiagonalAndAntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "LinearLayerConfig",
+        cfg: "AdaptiveParameterBehaviourConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = DiagonalHandler(cfg)

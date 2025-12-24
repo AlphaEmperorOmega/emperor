@@ -10,7 +10,10 @@ from Emperor.feedForward.feed_forward import (
     MixtureOfExpertsFeedForwardConfig,
 )
 from Emperor.experts.utils.layers import MixtureOfExpertsConfig
-from Emperor.adaptive.utils.layers import ParameterLayerConfig
+from Emperor.adaptive.utils.layers import (
+    AdaptiveParameterLayerConfig,
+    # ParameterLayerConfig,
+)
 from Emperor.base.layer import LayerStackConfig
 from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
@@ -142,9 +145,8 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`MixtureConfig` configuration"},
     )
-    parameter_generator_model_config: ParameterLayerConfig = field(
-        default_factory=lambda: ParameterLayerConfig(
-            bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
+    parameter_generator_model_config: AdaptiveParameterLayerConfig = field(
+        default_factory=lambda: AdaptiveParameterLayerConfig(
             time_tracker_flag=PARAMETER_GENERATOR_TRACK_TIME_FLAG,
             # dynamic_diagonal_params_flag=PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG,
         ),

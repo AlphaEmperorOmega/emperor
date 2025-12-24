@@ -11,17 +11,16 @@ from Emperor.behaviours.utils.enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.linears.utils.layers import LinearLayerConfig
+    from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 
 
 class MemoryHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "LinearLayerConfig",
+        cfg: "AdaptiveParameterBehaviourConfig",
     ):
         super().__init__()
-        self.cfg_main = cfg
-        self.cfg = getattr(cfg, "linear_layer_config", cfg)
+        self.cfg = cfg
         self.cfg_main = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
@@ -48,7 +47,7 @@ class MemoryHandlerAbstract(Module):
 class MemoryFusionHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "LinearLayerConfig",
+        cfg: "AdaptiveParameterBehaviourConfig",
     ):
         super().__init__(cfg)
         self.memory_model = self.__init_memory_model()
@@ -80,7 +79,7 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
 class WeightedMemoryHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "LinearLayerConfig",
+        cfg: "AdaptiveParameterBehaviourConfig",
     ):
         super().__init__(cfg)
 

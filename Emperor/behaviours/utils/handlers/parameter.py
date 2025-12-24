@@ -8,15 +8,18 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.linears.utils.layers import LinearLayerConfig
+    from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 
 
 class DepthMappingLayer(Module):
     def __init__(self, cfg: "LinearLayerConfig"):
         super().__init__()
         self.cfg = cfg
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
-        self.generator_depth = self.cfg.generator_depth.value
+        self.generator_depth = self.main_cfg.generator_depth.value
+
         self.weight_params, self.bias_params = self.__init_parameter_bank()
         self.__ensure_generator_depth_is_valid()
 
@@ -42,12 +45,11 @@ class DepthMappingLayer(Module):
 class DepthMappingLayerStack(Module):
     def __init__(
         self,
-        cfg: "LinearLayerConfig",
-        overrides: "LayerStackConfig | None" = None,
+        cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
     ):
         super().__init__()
         self.cfg = cfg
-        self.identifier = "layer_stack_config"
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         updated_overrides = self.__override_config(overrides)
         self.generator_depth = cfg.generator_depth.value
