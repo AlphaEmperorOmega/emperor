@@ -3,6 +3,7 @@ from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.behaviours.utils.behaviours import DynamicDiagonalOptions
+from Emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -68,30 +69,36 @@ class LinearPresets:
             bias_flag=bias_flag,
             data_monitor=None,
             parameter_monitor=None,
-            generator_depth=generator_depth,
-            diagonal_option=diagonal_option,
-            bias_option=bias_option,
-            memory_option=memory_option,
-            memory_size_option=memory_size_option,
-            memory_position_option=memory_position_option,
-            override_config=LayerStackConfig(
-                model_type=LinearLayerOptions.BASE,
+            override_config=AdaptiveParameterLayerConfig(
                 input_dim=input_dim,
-                hidden_dim=stack_hidden_dim,
                 output_dim=output_dim,
-                num_layers=stack_num_layers,
-                activation=stack_activation,
-                layer_norm_position=LayerNormPositionOptions.NONE,
-                residual_flag=stack_residual_flag,
-                adaptive_computation_flag=False,
-                dropout_probability=stack_dropout_probability,
-                override_config=LinearLayerConfig(
+                generator_depth=generator_depth,
+                diagonal_option=diagonal_option,
+                bias_option=bias_option,
+                memory_option=memory_option,
+                memory_size_option=memory_size_option,
+                memory_position_option=memory_position_option,
+                override_config=LayerStackConfig(
+                    model_type=LinearLayerOptions.BASE,
                     input_dim=input_dim,
+                    hidden_dim=stack_hidden_dim,
                     output_dim=output_dim,
-                    bias_flag=bias_flag,
-                    generator_depth=generator_depth,
-                    data_monitor=None,
-                    parameter_monitor=None,
+                    num_layers=stack_num_layers,
+                    activation=stack_activation,
+                    layer_norm_position=LayerNormPositionOptions.NONE,
+                    residual_flag=stack_residual_flag,
+                    adaptive_computation_flag=False,
+                    dropout_probability=stack_dropout_probability,
+                    override_config=LinearLayerConfig(
+                        input_dim=input_dim,
+                        output_dim=output_dim,
+                        bias_flag=bias_flag,
+                        data_monitor=None,
+                        parameter_monitor=None,
+                        override_config=AdaptiveParameterLayerConfig(
+                            generator_depth=generator_depth,
+                        ),
+                    ),
                 ),
             ),
         )

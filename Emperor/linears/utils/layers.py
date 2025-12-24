@@ -5,11 +5,10 @@ import torch.nn.functional as F
 from torch import Tensor
 from inspect import Parameter
 from dataclasses import dataclass, field
-from Emperor.base.utils import Module
+from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
 from Emperor.behaviours.model import (
-    AdaptiveParameterModel,
-    AdaptiveParameterModelConfig,
+    AdaptiveParameterBehaviour,
 )
 
 from typing import TYPE_CHECKING
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class LinearLayerConfig(AdaptiveParameterModelConfig):
+class LinearLayerConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Input dimension of the linear layer"},
@@ -53,7 +52,7 @@ class LinearBase(Module):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
-        self.main_cfg = cfg
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.bias_flag = self.cfg.bias_flag
@@ -110,7 +109,7 @@ class AdaptiveLinearLayer(LinearBase):
     ):
         super().__init__(cfg, overrides)
         self.weight_params, self.bias_params = self._init_parameters()
-        self.adaptive_behaviour = AdaptiveParameterModel(self.cfg)
+        self.adaptive_behaviour = AdaptiveParameterBehaviour(self.main_cfg)
 
     def forward(self, input: Tensor) -> Tensor:
         output = self.adaptive_behaviour.compute_adaptive_parameters(
@@ -141,6 +140,6 @@ class AdaptiveLinearLayer(LinearBase):
         linear_transform: Tensor,
         bias_params: Tensor | None = None,
     ) -> Tensor:
-        if self.bias_flag and bias_params is not None:
+        if bias_params is not None:
             return linear_transform + bias_params
         return linear_transform
