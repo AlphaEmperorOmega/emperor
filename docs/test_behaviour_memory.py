@@ -3,8 +3,8 @@ import unittest
 
 from dataclasses import asdict
 from Emperor.config import ModelConfig
+from Emperor.linears.utils.presets import LinearPresets
 from Emperor.behaviours.utils.behaviours import DynamicMemorySelector
-from Emperor.linears.utils.config import LinearPresets
 from Emperor.behaviours.utils.enums import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
@@ -31,12 +31,11 @@ class TestLinearsMemoryBehaviour(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = LinearPresets.adaptive_linear_layer_preset() if config is None else config
-        self.config = self.cfg.transformer_layer_config
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
+        self.cfg = (
+            LinearPresets.adaptive_linear_layer_preset(return_model_config_flag=True)
+            if config is None
+            else config
+        )
 
         self.batch_size = self.cfg.batch_size
         self.input_dim = self.cfg.input_dim
@@ -56,7 +55,7 @@ class TestMemoryFusionHandler(TestLinearsMemoryBehaviour):
                         memory_position_option=position_option,
                         memory_size_option=size_option,
                     )
-                    cfg = cfg.linear_layer_config
+                    cfg = cfg.override_config
                     if size_option == LinearMemorySizeOptions.DISABLED:
                         with self.assertRaises(ValueError):
                             model = MemoryFusionHandler(cfg)
@@ -83,7 +82,7 @@ class TestWeightedMemoryHandler(TestLinearsMemoryBehaviour):
                         memory_size_option=size_option,
                         memory_position_option=position_option,
                     )
-                    cfg = cfg.linear_layer_config
+                    cfg = cfg.override_config
                     if size_option == LinearMemorySizeOptions.DISABLED:
                         with self.assertRaises(ValueError):
                             model = WeightedMemoryHandler(cfg)
@@ -113,7 +112,7 @@ class TestDynamicDiagonalSelector(TestLinearsMemoryBehaviour):
                             memory_position_option=position_option,
                             memory_size_option=size_option,
                         )
-                        cfg = cfg.linear_layer_config
+                        cfg = cfg.override_config
                         if (
                             memory_option == LinearMemoryOptions.DISABLED
                             or size_option == LinearMemorySizeOptions.DISABLED

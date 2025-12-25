@@ -76,7 +76,7 @@ class TestRouterModel(unittest.TestCase):
             for layer_stack_option in LinearLayerStackOptions:
                 for num_experts in num_experts_options:
                     for noisy_flag_option in noisy_flag_options:
-                        message = f"Testing the configuration with num_experts={num_experts} and noisy_flag_option={noisy_flag_option}"
+                        message = f"Testing the configuration with num_layers={num_layers}, layer_stack_option={layer_stack_option}, num_experts={num_experts}, and noisy_flag_option={noisy_flag_option}"
                         with self.subTest(msg=message):
                             cfg = SamplerPresets.router_preset(
                                 return_model_config_flag=True,

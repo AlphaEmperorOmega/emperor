@@ -51,11 +51,11 @@ class TestMixtureOfExperts(unittest.TestCase):
                         with self.subTest(msg=message):
                             c = MixtureOfExpertsPresets.experts_preset(
                                 return_model_config_flag=True,
-                                layer_stack_option=layer_stack_option,
-                                num_experts=num_experts,
-                                layer_role_option=layer_role_option,
-                                top_k=top_k,
-                                init_sampler_model_flag=init_sampler_model_flag,
+                                experts_layer_stack_option=layer_stack_option,
+                                experts_num_experts=num_experts,
+                                experts_layer_role_option=layer_role_option,
+                                experts_top_k=top_k,
+                                experts_init_sampler_model_flag=init_sampler_model_flag,
                             )
 
                             m = MixtureOfExperts(c)
@@ -94,7 +94,7 @@ class TestMixtureOfExperts(unittest.TestCase):
             with self.subTest(msg=message):
                 c = MixtureOfExpertsPresets.experts_preset(
                     return_model_config_flag=True,
-                    layer_stack_option=layer_stack_option,
+                    experts_layer_stack_option=layer_stack_option,
                 )
 
                 m = MixtureOfExperts(c)
@@ -118,9 +118,9 @@ class TestMixtureOfExperts(unittest.TestCase):
                 with self.subTest(msg=message):
                     c = MixtureOfExpertsPresets.experts_preset(
                         return_model_config_flag=True,
-                        init_sampler_model_flag=init_sampler_model_flag,
-                        num_experts=num_experts,
-                        top_k=expert_option,
+                        experts_init_sampler_model_flag=init_sampler_model_flag,
+                        experts_num_experts=num_experts,
+                        experts_top_k=expert_option,
                     )
 
                     m = MixtureOfExperts(c)
@@ -147,9 +147,9 @@ class TestMixtureOfExperts(unittest.TestCase):
                 with self.subTest(msg=message):
                     c = MixtureOfExpertsPresets.experts_preset(
                         return_model_config_flag=True,
-                        init_sampler_model_flag=init_sampler_model_flag,
-                        num_experts=num_experts,
-                        top_k=top_k,
+                        experts_init_sampler_model_flag=init_sampler_model_flag,
+                        experts_num_experts=num_experts,
+                        experts_top_k=top_k,
                     )
 
                     m = MixtureOfExperts(c)
@@ -191,15 +191,14 @@ class TestMixtureOfExperts(unittest.TestCase):
             with self.subTest(msg=message):
                 c = MixtureOfExpertsPresets.experts_preset(
                     return_model_config_flag=True,
-                    num_experts=num_experts,
+                    experts_num_experts=num_experts,
                 )
 
                 m = MixtureOfExperts(c)
 
                 indices = torch.randint(0, m.num_experts, (10, top_k))
-                probabilities = torch.randn(10, top_k)
                 sample_indices_for_expert = m._MixtureOfExperts__get_expert_indices(
-                    indices, probabilities, expert_index
+                    indices, expert_index
                 )
 
                 self.assertIsInstance(sample_indices_for_expert, torch.Tensor)
@@ -213,7 +212,7 @@ class TestMixtureOfExperts(unittest.TestCase):
             with self.subTest(msg=message):
                 c = MixtureOfExpertsPresets.experts_preset(
                     return_model_config_flag=True,
-                    num_experts=num_experts,
+                    experts_num_experts=num_experts,
                 )
 
                 m = MixtureOfExperts(c)
@@ -238,10 +237,10 @@ class TestMixtureOfExperts(unittest.TestCase):
                     with self.subTest(msg=message):
                         c = MixtureOfExpertsPresets.experts_preset(
                             return_model_config_flag=True,
-                            weighted_parameters_flag=weighted_parameters_flag,
-                            weighting_position_option=weighting_position_option,
-                            num_experts=num_experts,
-                            top_k=top_k,
+                            experts_weighted_parameters_flag=weighted_parameters_flag,
+                            experts_weighting_position_option=weighting_position_option,
+                            experts_num_experts=num_experts,
+                            experts_top_k=top_k,
                         )
 
                         m = MixtureOfExperts(c)
@@ -270,9 +269,9 @@ class TestMixtureOfExperts(unittest.TestCase):
                 with self.subTest(msg=message):
                     c = MixtureOfExpertsPresets.experts_preset(
                         return_model_config_flag=True,
-                        weighted_parameters_flag=weighted_parameters_flag,
-                        num_experts=num_experts,
-                        top_k=top_k,
+                        experts_weighted_parameters_flag=weighted_parameters_flag,
+                        experts_num_experts=num_experts,
+                        experts_top_k=top_k,
                     )
 
                     m = MixtureOfExperts(c)
@@ -297,14 +296,14 @@ class TestMixtureOfExperts(unittest.TestCase):
         for top_k in top_k_options:
             for compute_expert_mixture_flag in [True, False]:
                 for weighted_parameters_flag in [True, False]:
-                    message = f"Testing configuration with weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}"
+                    message = f"Testing with weighted_parameters_flag={weighted_parameters_flag}, compute_expert_mixture_flag={compute_expert_mixture_flag}, top_k={top_k}"
                     with self.subTest(msg=message):
                         c = MixtureOfExpertsPresets.experts_preset(
                             return_model_config_flag=True,
-                            weighted_parameters_flag=weighted_parameters_flag,
-                            compute_expert_mixture_flag=compute_expert_mixture_flag,
-                            num_experts=num_experts,
-                            top_k=top_k,
+                            experts_weighted_parameters_flag=weighted_parameters_flag,
+                            experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
+                            experts_num_experts=num_experts,
+                            experts_top_k=top_k,
                         )
 
                         m = MixtureOfExperts(c)
@@ -341,13 +340,13 @@ class TestMixtureOfExperts(unittest.TestCase):
                                         c = MixtureOfExpertsPresets.experts_preset(
                                             return_model_config_flag=True,
                                             batch_size=10,
-                                            layer_stack_option=layer_stack_option,
-                                            top_k=top_k,
-                                            weighting_position_option=weighting_position_option,
-                                            init_sampler_model_flag=init_sampler_model_flag,
-                                            weighted_parameters_flag=weighted_parameters_flag,
-                                            compute_expert_mixture_flag=compute_expert_mixture_flag,
-                                            num_experts=num_experts,
+                                            experts_layer_stack_option=layer_stack_option,
+                                            experts_top_k=top_k,
+                                            experts_weighting_position_option=weighting_position_option,
+                                            experts_init_sampler_model_flag=init_sampler_model_flag,
+                                            experts_weighted_parameters_flag=weighted_parameters_flag,
+                                            experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
+                                            experts_num_experts=num_experts,
                                             stack_num_layers=num_layers,
                                         )
 
@@ -417,7 +416,7 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
             with self.subTest(msg=message):
                 c = MixtureOfExpertsPresets.experts_stack_preset(
                     return_model_config_flag=True,
-                    stack_num_layers=num_layers,
+                    experts_stack_num_layers=num_layers,
                 )
                 m = MixtureOfExpertsStack(c).build_model()
                 if num_layers == 1:
@@ -442,14 +441,14 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
                                     with self.subTest(msg=message):
                                         c = MixtureOfExpertsPresets.experts_stack_preset(
                                             return_model_config_flag=True,
-                                            layer_stack_option=layer_stack_option,
-                                            top_k=top_k,
-                                            weighting_position_option=weighting_position_option,
-                                            init_sampler_model_flag=init_sampler_model_flag,
-                                            weighted_parameters_flag=weighted_parameters_flag,
-                                            compute_expert_mixture_flag=True,
-                                            num_experts=num_experts,
-                                            stack_num_layers=num_layers,
+                                            experts_layer_stack_option=layer_stack_option,
+                                            experts_top_k=top_k,
+                                            experts_weighting_position_option=weighting_position_option,
+                                            experts_init_sampler_model_flag=init_sampler_model_flag,
+                                            experts_weighted_parameters_flag=weighted_parameters_flag,
+                                            experts_compute_expert_mixture_flag=True,
+                                            experts_num_experts=num_experts,
+                                            experts_stack_num_layers=num_layers,
                                         )
                                         m = MixtureOfExpertsStack(c).build_model()
 

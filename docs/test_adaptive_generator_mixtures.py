@@ -6,9 +6,9 @@ from Emperor.sampler.model import SamplerModel
 from Emperor.sampler.utils.routers import RouterModel
 from Emperor.sampler.utils.presets import SamplerPresets
 from Emperor.experts.utils.layers import MixtureOfExperts
-from Emperor.adaptive.utils.enums import ClipParameterOptions
 from Emperor.adaptive.utils.presets import ParameterGeneratorConfigs
 from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
+from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.adaptive.utils.mixtures.types.generator import (
     GeneratorBiasMixture,
     GeneratorMixtureBase,
@@ -55,8 +55,8 @@ class TestGeneratorMixture(unittest.TestCase):
                 message = f"Testing top_k value: {top_k}, init_sampler_model_flag: {init_sampler_model_flag}"
                 with self.subTest(msg=message):
                     c = ParameterGeneratorConfigs.adaptive_generator_mixture_preset(
-                        top_k=top_k,
-                        init_sampler_model_flag=init_sampler_model_flag,
+                        experts_top_k=top_k,
+                        experts_init_sampler_model_flag=init_sampler_model_flag,
                         experts_weighted_parameters_flag=True,
                     )
                     m = GeneratorWeightsMixture(c)
@@ -104,7 +104,7 @@ class TestGeneratorMixture(unittest.TestCase):
                     if top_k == num_experts:
                         weighted_parameters_flag = True
                     c = ParameterGeneratorConfigs.adaptive_generator_mixture_preset(
-                        top_k=top_k,
+                        experts_top_k=top_k,
                         weighted_parameters_flag=weighted_parameters_flag,
                     )
                     m = GeneratorWeightsMixture(c)
@@ -165,12 +165,12 @@ class TestGeneratorMixture(unittest.TestCase):
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
                 c = ParameterGeneratorConfigs.adaptive_generator_mixture_preset(
-                    top_k=top_k,
+                    experts_top_k=top_k,
                     weighted_parameters_flag=True,
                 )
                 m = GeneratorWeightsMixture(c)
 
-                batch_size = 5
+                batch_size = 8
                 generated_parameters = torch.randn(
                     batch_size, top_k, m.input_dim, m.output_dim
                 )
@@ -204,9 +204,9 @@ class TestGeneratorMixture(unittest.TestCase):
                         message = f"Testing top_k={top_k}, init_sampler_model_flag={init_sampler_model_flag}, weighted_parameters_flag={weighted_parameters_flag}, clip_parameter_option={clip_parameter_option}"
                         with self.subTest(msg=message):
                             c = ParameterGeneratorConfigs.adaptive_generator_mixture_preset(
-                                top_k=top_k,
-                                num_experts=num_experts,
-                                init_sampler_model_flag=init_sampler_model_flag,
+                                experts_top_k=top_k,
+                                experts_num_experts=num_experts,
+                                experts_init_sampler_model_flag=init_sampler_model_flag,
                                 weighted_parameters_flag=weighted_parameters_flag,
                                 experts_weighted_parameters_flag=not weighted_parameters_flag,
                                 clip_parameter_option=clip_parameter_option,

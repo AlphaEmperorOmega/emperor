@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from Emperor.base.utils import Module
 from Emperor.behaviours.utils.behaviours import DynamicParametersBehaviour
-from Emperor.linears.utils.config import LinearPresets
+from Emperor.linears.utils.presets import LinearPresets
 from Emperor.behaviours.utils.enums import DynamicDepthOptions
 from Emperor.behaviours.utils.handlers.parameter import (
     DepthMappingLayer,
@@ -31,15 +31,16 @@ class TestDepthMappingBehaviour(unittest.TestCase):
         self.output_dim = None
 
     def rebuild_presets(self, config: "ModelConfig | None" = None):
-        generators_depth = DynamicDepthOptions.DEPTH_OF_TWO
         self.cfg = (
-            LinearPresets.adaptive_linear_layer_preset(generator_depth=generators_depth)
+            LinearPresets.adaptive_linear_layer_preset(
+                return_model_config_flag=True,
+            )
             if config is None
             else config
         )
 
         self.batch_size = self.cfg.batch_size
-        self.generator_depth = self.cfg.linear_layer_config.generator_depth.value
+        self.generator_depth = DynamicDepthOptions.DEPTH_OF_TWO.value
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
@@ -55,7 +56,7 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
         cfg = LinearPresets.adaptive_linear_layer_preset(
             generator_depth=DynamicDepthOptions.DEPTH_OF_TWO
         )
-        cfg = cfg.linear_layer_config
+        cfg = cfg.override_config.override_config.override_config
         model = DepthMappingLayer(cfg)
         output = model(input_tensor)
         expected_shape = (self.batch_size, self.generator_depth, self.output_dim)
@@ -75,7 +76,7 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
         cfg = LinearPresets.adaptive_linear_layer_preset(
             generator_depth=DynamicDepthOptions.DISABLED
         )
-        cfg = cfg.linear_layer_config
+        cfg = cfg.override_config.override_config.override_config
         with self.assertRaises(ValueError) as context:
             model = DepthMappingLayer(cfg)
 
@@ -86,7 +87,7 @@ class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
         cfg = LinearPresets.adaptive_linear_layer_preset(
             generator_depth=DynamicDepthOptions.DEPTH_OF_TWO
         )
-        cfg = cfg.linear_layer_config
+        cfg = cfg.override_config
         model = DepthMappingLayerStack(cfg)
         output = model(input_tensor)
         expected_shape = (self.batch_size, self.generator_depth, self.output_dim)
@@ -113,7 +114,7 @@ class TestDynamicParametersBehaviour(TestDepthMappingBehaviour):
                         output_dim=output_dim,
                         generator_depth=generators_depth,
                     )
-                    cfg = cfg.linear_layer_config
+                    cfg = cfg.override_config
                     model = DynamicParametersBehaviour(cfg)
                     output = model(self.weight_params, input_tensor)
                     expected_shape = (batch_size, input_dim, output_dim)

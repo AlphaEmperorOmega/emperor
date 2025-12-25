@@ -2,7 +2,8 @@ import torch
 import unittest
 from math import prod
 import torch.nn.functional as F
-from Emperor.generators.utils.losses import (
+
+from Emperor.sampler.utils.losses import (
     AuxiliaryLossBase,
     CoefficientOfVariationLoss,
     MutualInformationLoss,
