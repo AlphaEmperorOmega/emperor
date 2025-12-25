@@ -35,7 +35,7 @@ class SamplerPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-    ) -> "RouterConfig | ModelConfig":
+    ) -> "RouterConfig":
         # arguments = ConfigUtils.get_method_arguments()
         _hidden_dim = max(input_dim, num_experts)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
@@ -74,6 +74,7 @@ class SamplerPresets:
             )
 
         config = RouterConfig(
+            input_dim=input_dim,
             layer_stack_option=layer_stack_option,
             num_experts=num_experts,
             noisy_topk_flag=noisy_topk_flag,
@@ -105,7 +106,7 @@ class SamplerPresets:
         switch_loss_weight: float = 0.0,
         zero_centred_loss_weight: float = 0.0,
         mutual_information_loss_weight: float = 0.0,
-    ) -> "SamplerConfig | ModelConfig":
+    ) -> "SamplerConfig":
         config = SamplerConfig(
             top_k=top_k,
             threshold=threshold,

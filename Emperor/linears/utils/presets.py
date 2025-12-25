@@ -2,8 +2,8 @@ from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
+from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from Emperor.behaviours.utils.behaviours import DynamicDiagonalOptions
-from Emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -69,7 +69,7 @@ class LinearPresets:
             bias_flag=bias_flag,
             data_monitor=None,
             parameter_monitor=None,
-            override_config=AdaptiveParameterLayerConfig(
+            override_config=AdaptiveParameterBehaviourConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 generator_depth=generator_depth,
@@ -95,7 +95,7 @@ class LinearPresets:
                         bias_flag=bias_flag,
                         data_monitor=None,
                         parameter_monitor=None,
-                        override_config=AdaptiveParameterLayerConfig(
+                        override_config=AdaptiveParameterBehaviourConfig(
                             generator_depth=generator_depth,
                         ),
                     ),

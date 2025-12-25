@@ -9,6 +9,7 @@ from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
 from Emperor.behaviours.model import (
     AdaptiveParameterBehaviour,
+    AdaptiveParameterBehaviourConfig,
 )
 
 from typing import TYPE_CHECKING
@@ -109,7 +110,14 @@ class AdaptiveLinearLayer(LinearBase):
     ):
         super().__init__(cfg, overrides)
         self.weight_params, self.bias_params = self._init_parameters()
-        self.adaptive_behaviour = AdaptiveParameterBehaviour(self.main_cfg)
+        self.adaptive_behaviour = self.__init_behaviour()
+
+    def __init_behaviour(self):
+        overrides = AdaptiveParameterBehaviourConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
+        return AdaptiveParameterBehaviour(self.main_cfg, overrides)
 
     def forward(self, input: Tensor) -> Tensor:
         output = self.adaptive_behaviour.compute_adaptive_parameters(

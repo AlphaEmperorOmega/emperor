@@ -72,9 +72,12 @@ class AdaptiveParameterBehaviour(Module):
     def __init__(
         self,
         cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
     ):
         super().__init__()
-        self.cfg = cfg
+        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+            cfg, overrides
+        )
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.generator_depth = self.cfg.generator_depth

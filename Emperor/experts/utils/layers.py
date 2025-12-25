@@ -302,9 +302,11 @@ class MixtureOfExperts(Module):
                 experts_output, probabilities
             )
 
-        experts_output = experts_output.view(-1, self.top_k, output_dim)
         if not self.compute_expert_mixture_flag or self.top_k == 1:
             return experts_output
+
+        if self.top_k > 1:
+            experts_output = experts_output.view(-1, self.top_k, output_dim)
         return experts_output.sum(dim=1)
 
     def __is_after(self) -> bool:
