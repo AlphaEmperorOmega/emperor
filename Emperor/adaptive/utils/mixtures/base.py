@@ -65,4 +65,5 @@ class AdaptiveMixtureBase(Module):
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
         self.clip_parameter_option = self.cfg.clip_parameter_option
         self.clip_range = self.cfg.clip_range
-        self._validator = _AdaptiveMixtureBaseValidator(self)
+
+        self.validator = _AdaptiveMixtureBaseValidator(self)

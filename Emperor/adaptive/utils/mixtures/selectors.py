@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
 
 
+# TODO: In the future move those selectors in the
+# `behaviours` modules
 class AdaptiveWeightSelector(Module):
     def __init__(
         self,
@@ -30,17 +32,18 @@ class AdaptiveWeightSelector(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveMixtureConfig" = self._overwrite_config(config, overrides)
-        self.weight_parameter_option = cfg.weight_parameter_option
+        self.cfg = self._overwrite_config(config, overrides)
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
+        self.adaptive_weight_option = self.cfg.adaptive_weight_option
 
     def build_model(self) -> "AdaptiveMixtureBase":
-        match self.weight_parameter_option:
+        match self.adaptive_weight_option:
             case AdaptiveWeightOptions.VECTOR:
-                return VectorWeightsMixture(self.cfg)
+                return VectorWeightsMixture(self.main_cfg)
             case AdaptiveWeightOptions.MATRIX:
-                return MatrixWeightsMixture(self.cfg)
+                return MatrixWeightsMixture(self.main_cfg)
             case AdaptiveWeightOptions.GENERATOR:
-                return GeneratorWeightsMixture(self.cfg)
+                return GeneratorWeightsMixture(self.main_cfg)
             case _:
                 raise ValueError(
                     f"Invalid weight parameter option provided: {self.weight_parameter_option}. Expected one of `AdaptiveWeightOptions`."
@@ -55,24 +58,23 @@ class AdaptiveBiasSelector(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveMixtureConfig" = self._overwrite_config(config, overrides)
-        self.bias_parameter_option = cfg.bias_parameter_option
-        self.model = self.__init_model()
+        self.cfg: "AdaptiveParameterLayerConfig" = self._overwrite_config(
+            config, overrides
+        )
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
+        self.adaptive_bias_option = self.cfg.adaptive_bias_option
 
     def build_model(self) -> "AdaptiveMixtureBase":
-        match self.bias_parameter_option:
+        match self.adaptive_bias_option:
             case AdaptiveBiasOptions.MATRIX:
-                return MatrixBiasMixture(self.cfg)
+                return MatrixBiasMixture(self.main_cfg)
             case AdaptiveBiasOptions.GENERATOR:
-                return GeneratorBiasMixture(self.cfg)
+                return GeneratorBiasMixture(self.main_cfg)
             case AdaptiveBiasOptions.DISABLED:
                 raise ValueError(
                     "If the `bias_parameter_option` is set to `DISABLED`, this class should not be initialized"
                 )
-
-    def forward(
-        self,
-        bias_params: Tensor,
-        logits: Tensor,
-    ) -> Tensor | None:
-        return self.model(bias_params, logits)
+            case _:
+                raise ValueError(
+                    f"Invalid weight parameter option provided: {self.weight_parameter_option}. Expected one of `AdaptiveWeightOptions`."
+                )
