@@ -467,7 +467,9 @@ class LayerStack(Module):
         layers.append(layer)
 
     def __get_model_type(self):
-        return self.model_type.value
+        if isinstance(self.model_type, BaseOptions):
+            return self.model_type.value
+        return self.model_type
 
     def __create_layer(
         self,
