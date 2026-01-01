@@ -8,7 +8,6 @@ from Emperor.base.layer import Layer, LayerStackConfig
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 
@@ -34,17 +33,17 @@ class DiagonalHandlerAbstract(Module):
                 diagonal_padding_shape = (0, 0, 0, padding_size)
         return diagonal_padding_shape
 
-    def _create_stack(self, config, overrides) -> "Layer | Sequential":
-        from Emperor.linears.utils.stack import LinearLayerStack
-
-        return LinearLayerStack(config, overrides).build_model()
-
     def _init_model(
         self,
     ) -> "Layer | Sequential":
         output_dim = min(self.input_dim, self.output_dim)
         overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=output_dim)
         return self._create_stack(self.cfg_main, overrides)
+
+    def _create_stack(self, config, overrides) -> "Layer | Sequential":
+        from Emperor.linears.utils.stack import LinearLayerStack
+
+        return LinearLayerStack(config, overrides).build_model()
 
     def forward(self, weight_params: Tensor) -> Tensor:
         return weight_params
