@@ -233,9 +233,9 @@ class TestGeneratorMixture(unittest.TestCase):
                                 )
 
                             generated_parameters, loss = m.compute_mixture(
-                                input_batch,
                                 probabilities,
                                 indices,
+                                input_batch,
                             )
 
                             expected_shape = (batch_size, m.input_dim, m.output_dim)
