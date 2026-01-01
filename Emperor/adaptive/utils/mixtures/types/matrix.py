@@ -20,9 +20,7 @@ class MatrixMixtureBase(AdaptiveMixtureBase):
         self.depth_dim = self.num_experts
 
     def compute_mixture(
-        self,
-        probabilities: Tensor,
-        indices: Tensor | None = None,
+        self, probabilities: Tensor, indices: Tensor | None = None, *args
     ) -> Tensor:
         selected_params = self._select_parameters(indices)
         return self.__compute_parameter_mixture(selected_params, probabilities)

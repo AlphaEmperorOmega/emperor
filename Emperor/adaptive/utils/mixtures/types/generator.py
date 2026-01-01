@@ -66,9 +66,9 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
 
     def compute_mixture(
         self,
+        probabilities: Tensor | None,
+        indices: Tensor | None,
         input_batch: Tensor,
-        probabilities: Tensor | None = None,
-        indices: Tensor | None = None,
     ) -> tuple[Tensor | Tensor]:
         self.validator.ensure_input_batch_is_2D_tensor(input_batch)
         experts_inputs = (input_batch, probabilities, indices)
@@ -91,6 +91,9 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         if self.clip_parameter_option == ClipParameterOptions.BEFORE:
             input_vectors = self.__normalize_parameters(input_vectors)
             output_vectors = self.__normalize_parameters(output_vectors)
+        if input_vectors.dim() == 2:
+            input_vectors = input_vectors.view(-1, self.top_k, self.input_dim)
+            output_vectors = output_vectors.view(-1, self.top_k, self.output_dim)
 
         outer_product = torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
 
@@ -152,16 +155,14 @@ class GeneratorBiasMixture(GeneratorMixtureBase):
     def __init_generator(self):
         output_overrides = MixtureOfExpertsConfig(
             output_dim=self.output_dim,
-            compute_expert_mixture_flag=False,
             weighted_parameters_flag=True,
         )
         return MixtureOfExperts(self.main_cfg, output_overrides)
 
     def compute_mixture(
         self,
-        input_batch: Tensor,
         probabilities: Tensor,
-        indices: Tensor | None = None,
+        indices: Tensor | None,
+        input_batch: Tensor,
     ) -> Tensor:
-        inputs = (input_batch, indices, probabilities)
-        return self.bias_generator(*inputs)
+        return self.bias_generator(input_batch, probabilities, indices)
