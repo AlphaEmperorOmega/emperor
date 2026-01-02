@@ -7,7 +7,7 @@ from Emperor.base.layer import Layer
 from Emperor.config import ModelConfig
 from Emperor.behaviours.model import AdaptiveParameterBehaviour
 from Emperor.adaptive.utils.stack import AdaptiveParameterLayerStack
-from Emperor.adaptive.utils.presets import ParameterGeneratorConfigs
+from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
 from Emperor.adaptive.utils.mixtures.types.vector import VectorWeightsMixture
 from Emperor.adaptive.utils.layers import (
@@ -30,7 +30,7 @@ from Emperor.adaptive.utils.mixtures.types.matrix import (
 
 class TestAdaptiveParameterLayer(unittest.TestCase):
     def setUp(self):
-        self.cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset()
+        self.cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()
 
     def test_init(self):
         for adaptive_router_otpion in AdaptiveRouterOptions:
@@ -44,7 +44,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                 "input_dim": 8,
                                 "output_dim": 8,
                             }
-                        cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                             adaptive_weight_option=adaptive_weight_otpion,
                             adaptive_bias_option=adaptive_bias_option,
                             init_sampler_model_option=adaptive_router_otpion,
@@ -96,7 +96,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
         for adaptive_behaviour_config in behaviour_config_options:
             message = f"Test failed for the inputs: adaptive_behaviour_config: {adaptive_behaviour_config}"
             with self.subTest(error=message):
-                cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset()
+                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()
                 cfg.adaptive_behaviour_config = adaptive_behaviour_config
                 m = AdaptiveParameterLayer(cfg)
                 behaviour_model = m._AdaptiveParameterLayer__init_adaptive_behaviour()
@@ -117,7 +117,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                         "output_dim": 8,
                         "init_sampler_model_option": AdaptiveRouterOptions.INDEPENTENT_ROUTER,
                     }
-                cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                     adaptive_weight_option=adaptive_weight_option,
                     **options,
                 )
@@ -136,7 +136,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
         for adaptive_bias_option in AdaptiveBiasOptions:
             message = f"Test failed for the inputs: adaptive_bias_option: {adaptive_bias_option}"
             with self.subTest(error=message):
-                cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                     adaptive_bias_option=adaptive_bias_option,
                 )
                 m = AdaptiveParameterLayer(cfg)
@@ -160,7 +160,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                             "input_dim": 8,
                             "output_dim": 8,
                         }
-                    cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                    cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                         init_sampler_model_option=init_sampler_model_flag,
                         adaptive_weight_option=adaptive_weight_option,
                         **options,
@@ -202,7 +202,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             for adaptive_bias_option in AdaptiveBiasOptions:
                 message = f"Testing inputs: init_sampler_model_flag: {init_sampler_model_flag}, adaptive_bias_option: {adaptive_bias_option}"
                 with self.subTest(error=message):
-                    cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                    cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                         init_sampler_model_option=init_sampler_model_flag,
                         adaptive_bias_option=adaptive_bias_option,
                     )
@@ -231,7 +231,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             message = f"Test failed for the inputs: adaptive_weight_option: {adaptive_weight_option}"
             with self.subTest(error=message):
                 options = {}
-                cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                     input_dim=8,
                     output_dim=8,
                     experts_compute_expert_mixture_flag=True,
@@ -265,7 +265,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             message = f"Test failed for the inputs: adaptive_bias_option: {adaptive_bias_option}"
             with self.subTest(error=message):
                 options = {}
-                cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                     input_dim=8,
                     output_dim=8,
                     adaptive_bias_option=adaptive_bias_option,
@@ -314,7 +314,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
 
                             shared_option = AdaptiveRouterOptions.SHARED_ROUTER
                             if init_sampler_model_option == shared_option:
-                                cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                                     experts_compute_expert_mixture_flag=True,
                                     adaptive_weight_option=adaptive_weight_option,
                                     adaptive_bias_option=adaptive_bias_option,
@@ -336,7 +336,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                             ):
                                 options["experts_init_sampler_model_flag"] = True
 
-                        cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                             experts_compute_expert_mixture_flag=True,
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
@@ -369,7 +369,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                         self.assertIsInstance(loss, Tensor)
 
     def test__apply_generated_parameters(self):
-        cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset()
+        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()
         m = AdaptiveParameterLayer(cfg)
 
         batch_size = 5
@@ -390,7 +390,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             self.assertTrue(torch.allclose(output[i], output_i.squeeze(0)))
 
     def test__apply_generated_biases(self):
-        cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset()
+        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()
         m = AdaptiveParameterLayer(cfg)
 
         batch_size = 5
@@ -420,7 +420,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
 
                             shared_option = AdaptiveRouterOptions.SHARED_ROUTER
                             if init_sampler_model_option == shared_option:
-                                cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                                     experts_compute_expert_mixture_flag=True,
                                     adaptive_weight_option=adaptive_weight_option,
                                     adaptive_bias_option=adaptive_bias_option,
@@ -442,7 +442,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                             ):
                                 options["experts_init_sampler_model_flag"] = True
 
-                        cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+                        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                             experts_compute_expert_mixture_flag=True,
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
@@ -475,7 +475,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
 
     def rebuild_presets(self, config: ModelConfig | None = None):
         self.cfg = (
-            ParameterGeneratorConfigs.adaptive_parameter_layer_stack_preset(
+            AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
                 return_model_config_flag=True,
             )
             if config is None
@@ -494,7 +494,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                 for num_layers in num_layer_options:
                     message = f"Testing configuration with num_layers={num_layers}"
                     with self.subTest(msg=message):
-                        cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_stack_preset(
+                        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
                             input_dim=8,
                             output_dim=8,
                             adaptive_weight_option=adaptive_weight_option,
@@ -521,7 +521,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                     for top_k in top_k_options:
                         message = f"Testing with layer_stack_option={adaptive_weight_option.name}, weighting_position_option={adaptive_bias_option.name}, init_sampler_model_flag={AdaptiveRouterOptions.__members__}, compute_expert_mixture_flag={True or False}, weighted_parameters_flag={True or False}, top_k={top_k}, num_layers={num_layers}"
                         with self.subTest(msg=message):
-                            cfg = ParameterGeneratorConfigs.adaptive_parameter_layer_stack_preset(
+                            cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
                                 input_dim=8,
                                 output_dim=8,
                                 experts_compute_expert_mixture_flag=True,
