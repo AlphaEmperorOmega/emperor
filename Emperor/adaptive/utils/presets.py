@@ -14,7 +14,6 @@ from Emperor.adaptive.utils.mixtures.options import (
     AdaptiveWeightOptions,
 )
 from Emperor.adaptive.utils.layers import (
-    AdaptiveParameterLayer,
     AdaptiveParameterLayerConfig,
     AdaptiveRouterOptions,
 )
@@ -28,7 +27,7 @@ from Emperor.behaviours.utils.enums import (
 )
 
 
-class ParameterGeneratorConfigs:
+class AdaptiveParameterLayerPresets:
     @staticmethod
     def adaptive_generator_mixture_preset(
         input_dim=8,
@@ -246,7 +245,7 @@ class ParameterGeneratorConfigs:
                 zero_centred_loss_weight=experts_sampler_zero_centred_loss_weight,
                 mutual_information_loss_weight=experts_sampler_mutual_information_loss_weight,
             ),
-            override_config=ParameterGeneratorConfigs.adaptive_generator_mixture_preset(
+            override_config=AdaptiveParameterLayerPresets.adaptive_generator_mixture_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 router_model_bias_flag=experts_router_model_bias_flag,
@@ -372,7 +371,7 @@ class ParameterGeneratorConfigs:
             residual_flag=adaptive_stack_residual_flag,
             adaptive_computation_flag=False,
             dropout_probability=adaptive_stack_dropout_probability,
-            override_config=ParameterGeneratorConfigs.adaptive_parameter_layer_preset(
+            override_config=AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 adaptive_weight_option=adaptive_weight_option,
