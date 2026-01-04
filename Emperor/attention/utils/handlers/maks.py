@@ -5,7 +5,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.attention.attention import MultiHeadAttentionConfig
+    from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 
 
 class MaskValidator:

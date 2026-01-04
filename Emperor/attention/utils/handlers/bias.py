@@ -6,7 +6,7 @@ from Emperor.base.utils import Module
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.attention.attention import MultiHeadAttentionConfig
+    from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 
 
 class KeyValueBias(Module):

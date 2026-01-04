@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.attention.attention import MultiHeadAttentionConfig
+    from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 
 
 class ProjectorBase(Module):

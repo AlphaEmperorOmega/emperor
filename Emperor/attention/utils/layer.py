@@ -1,26 +1,29 @@
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.attention.utils.batch_handler import BatchDimensionManager
-from Emperor.attention.utils.utils import Utils
-from Emperor.attention.utils.maks_handler import Mask
-from Emperor.attention.utils.bias_handler import KeyValueBias
-from Emperor.attention.utils.processor_handler import Processor
-from Emperor.attention.utils.projection_handler import Projector
-from Emperor.attention.utils.validation_handler import Validator
 from Emperor.base.utils import ConfigBase, Module
-
+from Emperor.attention.utils.utils import Utils
+from Emperor.attention.utils.handlers.maks import Mask
+from Emperor.attention.utils.handlers.bias import KeyValueBias
+from Emperor.attention.utils.handlers.processor import Processor
+from Emperor.attention.utils.handlers.projection import Projector
+from Emperor.attention.utils.handlers.batch import BatchDimensionManager
+from Emperor.attention.utils._validator import (
+    _MultiHeadAttentionConfigValidator,
+)
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from torch.types import _dtype as DType
-    from Emperor.generators.utils.enums import LayerTypes
     from Emperor.config import ModelConfig
+    from Emperor.adaptive.options import AdaptiveLayerStackOptions
+    from Emperor.linears.options import LinearLayerStackOptions
 
 
 @dataclass
 class MultiHeadAttentionConfig(ConfigBase):
-    model_type: "LayerTypes | None" = field(
+    model_type: "AdaptiveLayerStackOptions | LinearLayerStackOptions | None" = field(
         default=None,
         metadata={
             "help": "Type of model used to generate parameters query, key, and value projections"
@@ -150,7 +153,7 @@ class MultiHeadAttention(Module):
         self.__initialize_utilities()
 
     def __initialize_utilities(self):
-        self.validator = Validator(self.cfg)
+        self.validator = _MultiHeadAttentionConfigValidator(self.cfg)
         self.masks = Mask(self.cfg)
         self.projector = Projector(self.cfg, self.main_cfg)
         self.processor = Processor(self.cfg, self.validator, self.projector)
