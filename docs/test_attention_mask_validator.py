@@ -2,9 +2,10 @@ import torch
 import unittest
 
 from dataclasses import asdict
-from Emperor.attention.utils.maks_handler import MaskValidator
-from Emperor.attention.attention import MultiHeadAttentionConfig
 from docs.config import default_unittest_config
+from Emperor.attention.utils.handlers.maks import Mask
+from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+from Emperor.attention.utils.handlers._validator import _MaskValidator
 
 
 class TestMaskValidator(unittest.TestCase):
@@ -33,7 +34,8 @@ class TestMaskValidator(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.model = MaskValidator()
+        model = Mask(self.config)
+        self.model = _MaskValidator(model)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
