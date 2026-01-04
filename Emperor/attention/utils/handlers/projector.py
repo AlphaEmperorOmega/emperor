@@ -2,8 +2,8 @@ import copy
 import torch.nn as nn
 
 from torch import Tensor
-from Emperor.base.layer import Layer
 from Emperor.base.utils import Module
+from Emperor.base.layer import Layer, LayerStack
 from Emperor.linears.utils.layers import LinearLayer
 
 from typing import TYPE_CHECKING
@@ -17,11 +17,9 @@ class ProjectorBase(Module):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        main_cfg: "ModelConfig",
     ):
         super().__init__()
         self.cfg = cfg
-        self.main_cfg = main_cfg
         self.model_type = self.cfg.model_type
         self.embedding_dim = self.cfg.embedding_dim
         self.value_projection_dim = self.cfg.value_projection_dim
@@ -29,18 +27,15 @@ class ProjectorBase(Module):
         self.__resolve_kv_dimensions()
         self.layer_block_model = self.__resolve_layer_block_class()
 
-    def __resolve_layer_block_class(self) -> type[Layer]:
-        # TODO: move this somewhere else in the future since it is used in
-        # `LayerStack` as well
-        from Emperor.generators.utils.enums import (
-            LinearLayerTypes,
-            ParameterGeneratorTypes,
-        )
+    def __resolve_layer_block_class(self) -> type[LayerStack]:
+        from Emperor.linears.options import LinearLayerStackOptions
+        from Emperor.adaptive.options import AdaptiveLayerStackOptions
+        from Emperor.adaptive.utils.stack import AdaptiveParameterLayerStack
 
-        if isinstance(self.model_type, LinearLayerTypes):
-            return Layer
-        elif isinstance(self.model_type, ParameterGeneratorTypes):
-            return ParameterGeneratorLayer
+        if isinstance(self.model_type, LinearLayerStackOptions):
+            return LayerStack
+        elif isinstance(self.model_type, AdaptiveLayerStackOptions):
+            return AdaptiveParameterLayerStack
         else:
             raise RuntimeError(
                 f"Unsupported `model_type` {type(self.model_type)} for `LayerStack`"
@@ -59,9 +54,7 @@ class ProjectorBase(Module):
         )
 
     def _create_model(self, input_dim: int, output_dim: int) -> Layer:
-        config = self.__resolve_model_type_overrides(
-            self.main_cfg, input_dim, output_dim
-        )
+        config = self.__resolve_model_type_overrides(self.cfg, input_dim, output_dim)
         output_model = self.model_type.value(config)
         return self.layer_block_model(model=output_model)
 
@@ -85,9 +78,8 @@ class Projector(ProjectorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        main_cfg: "ModelConfig",
     ):
-        super().__init__(cfg, main_cfg)
+        super().__init__(cfg)
         self.use_separate_projection_weight_flag = (
             self.cfg.use_separate_projection_weight_flag
         )
