@@ -1,6 +1,4 @@
-from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
 from Emperor.adaptive.utils.mixtures.types.vector import VectorWeightsMixture
 from Emperor.adaptive.utils.mixtures.types.matrix import (
     MatrixBiasMixture,
@@ -31,8 +29,7 @@ class AdaptiveWeightSelector(Module):
         overrides: "AdaptiveParameterLayerConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg = self._overwrite_config(config, overrides)
+        self.cfg = self._overwrite_config(cfg, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.adaptive_weight_option = self.cfg.adaptive_weight_option
 
@@ -57,9 +54,8 @@ class AdaptiveBiasSelector(Module):
         overrides: "AdaptiveParameterLayerConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "AdaptiveParameterLayerConfig" = self._overwrite_config(
-            config, overrides
+            cfg, overrides
         )
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.adaptive_bias_option = self.cfg.adaptive_bias_option
