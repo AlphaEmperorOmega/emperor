@@ -81,11 +81,12 @@ class AdaptiveParameterLayerHandler(Layer):
         return model_output
 
     def _handle_model_output(self, output: Tensor) -> tuple | dict:
+        total_loss = self.total_loss
         self.__reset_properties()
         if self.last_layer_flag:
-            return output, self.skip_mask, self.total_loss
+            return output, self.skip_mask, total_loss
         return {
             "input_batch": output,
             "skip_mask": self.skip_mask,
-            "loss": self.total_loss,
+            "loss": total_loss,
         }
