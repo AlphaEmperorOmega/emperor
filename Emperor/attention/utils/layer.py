@@ -5,7 +5,7 @@ from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.handlers.maks import Mask
 from Emperor.attention.utils.handlers.bias import KeyValueBias
 from Emperor.attention.utils.handlers.processor import Processor
-from Emperor.attention.utils.handlers.projection import Projector
+from Emperor.attention.utils.handlers.projector import Projector
 from Emperor.attention.utils.handlers.batch import BatchDimensionManager
 from Emperor.attention.utils._validator import (
     _MultiHeadAttentionConfigValidator,
@@ -13,10 +13,9 @@ from Emperor.attention.utils._validator import (
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
-    from torch.types import _dtype as DType
     from Emperor.config import ModelConfig
+    from torch.types import _dtype as DType
     from Emperor.adaptive.options import AdaptiveLayerStackOptions
     from Emperor.linears.options import LinearLayerStackOptions
 
