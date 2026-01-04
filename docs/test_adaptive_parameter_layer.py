@@ -497,10 +497,10 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                         cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
                             input_dim=8,
                             output_dim=8,
+                            num_layers=num_layers,
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
                             adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                            adaptive_stack_num_layers=num_layers,
                             experts_init_sampler_model_flag=True,
                         )
                         m = AdaptiveParameterLayerStack(cfg).build_model()
@@ -524,11 +524,11 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                             cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
                                 input_dim=8,
                                 output_dim=8,
+                                num_layers=num_layers,
                                 experts_compute_expert_mixture_flag=True,
                                 adaptive_weight_option=adaptive_weight_option,
                                 adaptive_bias_option=adaptive_bias_option,
                                 adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                                adaptive_stack_num_layers=num_layers,
                                 experts_init_sampler_model_flag=True,
                             )
                             m = AdaptiveParameterLayerStack(cfg).build_model()

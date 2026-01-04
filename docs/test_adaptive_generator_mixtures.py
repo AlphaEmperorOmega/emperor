@@ -18,7 +18,9 @@ from Emperor.adaptive.utils.mixtures.types.generator import (
 
 class TestGeneratorMixture(unittest.TestCase):
     def setUp(self):
-        self.cfg = AdaptiveParameterLayerPresets.adaptive_generator_mixture_preset()
+        self.cfg = (
+            AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset()
+        )
 
     def tearDown(self):
         self.cfg = None
@@ -54,8 +56,8 @@ class TestGeneratorMixture(unittest.TestCase):
             for init_sampler_model_flag in boolean_flags:
                 message = f"Testing top_k value: {top_k}, init_sampler_model_flag: {init_sampler_model_flag}"
                 with self.subTest(msg=message):
-                    c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_preset(
-                        experts_top_k=top_k,
+                    c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+                        top_k=top_k,
                         experts_init_sampler_model_flag=init_sampler_model_flag,
                         experts_weighted_parameters_flag=True,
                     )
@@ -103,8 +105,8 @@ class TestGeneratorMixture(unittest.TestCase):
                 with self.subTest(msg=message):
                     if top_k == num_experts:
                         weighted_parameters_flag = True
-                    c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_preset(
-                        experts_top_k=top_k,
+                    c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+                        top_k=top_k,
                         weighted_parameters_flag=weighted_parameters_flag,
                     )
                     m = GeneratorWeightsMixture(c)
@@ -164,8 +166,8 @@ class TestGeneratorMixture(unittest.TestCase):
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_preset(
-                    experts_top_k=top_k,
+                c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+                    top_k=top_k,
                     weighted_parameters_flag=True,
                 )
                 m = GeneratorWeightsMixture(c)
@@ -203,9 +205,9 @@ class TestGeneratorMixture(unittest.TestCase):
                     for clip_parameter_option in ClipParameterOptions:
                         message = f"Testing top_k={top_k}, init_sampler_model_flag={init_sampler_model_flag}, weighted_parameters_flag={weighted_parameters_flag}, clip_parameter_option={clip_parameter_option}"
                         with self.subTest(msg=message):
-                            c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_preset(
-                                experts_top_k=top_k,
-                                experts_num_experts=num_experts,
+                            c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+                                top_k=top_k,
+                                num_experts=num_experts,
                                 experts_init_sampler_model_flag=init_sampler_model_flag,
                                 weighted_parameters_flag=weighted_parameters_flag,
                                 experts_weighted_parameters_flag=not weighted_parameters_flag,
@@ -242,252 +244,3 @@ class TestGeneratorMixture(unittest.TestCase):
                             self.assertEqual(generated_parameters.shape, expected_shape)
                             self.assertIsInstance(generated_parameters, Tensor)
                             self.assertIsInstance(loss, Tensor)
-
-    # def test_compute_weighted_parameters_biases(self):
-    #     model_types = [VectorWeightsMixture, VectorBiasMixture]
-    #     top_k_values = [1, 3, 6]
-    #     for model_type in model_types:
-    #         for top_k in top_k_values:
-    #             message = (
-    #                 f"Testing model type: {model_type.__name__} with top_k={top_k}"
-    #             )
-    #             with self.subTest(msg=message):
-    #                 overrides = MixtureConfig(
-    #                     top_k=top_k,
-    #                     depth_dim=6,
-    #                     num_experts=6,
-    #                     weighted_parameters_flag=True,
-    #                 )
-    #                 m = VectorBiasMixture(self.cfg, overrides)
-    #
-    #                 batch_size = 5
-    #
-    #                 if top_k == 1:
-    #                     selected_shape = (batch_size, m.output_dim)
-    #                     probs_shape = (m.output_dim, batch_size)
-    #                 elif 1 < top_k < m.depth_dim:
-    #                     selected_shape = (batch_size, m.output_dim, top_k)
-    #                     probs_shape = (m.output_dim, batch_size, m.top_k)
-    #                 else:
-    #                     selected_shape = (m.output_dim, m.depth_dim)
-    #                     probs_shape = (m.output_dim, batch_size, m.depth_dim)
-    #
-    #                 selected_parameters = torch.randn(selected_shape)
-    #                 probs = F.sigmoid(torch.randn(probs_shape))
-    #                 selected_params = m._compute_weighted_parameters(
-    #                     selected_parameters, probs
-    #                 )
-    #
-    #                 if top_k == 1:
-    #                     expected_shape = (batch_size, m.output_dim)
-    #                 elif 1 < top_k < m.depth_dim:
-    #                     expected_shape = (batch_size, m.output_dim, top_k)
-    #                 else:
-    #                     expected_shape = (batch_size, m.output_dim, m.depth_dim)
-    #
-    #                 self.assertEqual(selected_params.shape, expected_shape)
-    #
-    # def test__compute_parameter_mixture_weights(self):
-    #     model_types = [VectorWeightsMixture, VectorBiasMixture]
-    #     top_k_values = [1, 3, 6]
-    #     for model_type in model_types:
-    #         for top_k in top_k_values:
-    #             message = (
-    #                 f"Testing model type: {model_type.__name__} with top_k={top_k}"
-    #             )
-    #             with self.subTest(msg=message):
-    #                 overrides = MixtureConfig(
-    #                     top_k=top_k,
-    #                     depth_dim=6,
-    #                     num_experts=6,
-    #                     weighted_parameters_flag=True,
-    #                 )
-    #                 m = VectorWeightsMixture(self.cfg, overrides)
-    #
-    #                 batch_size = 5
-    #
-    #                 if top_k == 1:
-    #                     selected_shape = (batch_size, m.input_dim, m.output_dim)
-    #                     probs_shape = (m.input_dim, batch_size)
-    #                 elif 1 < top_k < m.depth_dim:
-    #                     selected_shape = (batch_size, m.input_dim, top_k, m.output_dim)
-    #                     probs_shape = (m.input_dim, batch_size, top_k)
-    #                 else:
-    #                     selected_shape = (m.input_dim, m.depth_dim, m.output_dim)
-    #                     probs_shape = (m.input_dim, batch_size, m.depth_dim)
-    #
-    #                 selected_parameters = torch.randn(selected_shape)
-    #                 probs = F.sigmoid(torch.randn(probs_shape))
-    #                 selected_params = m._VectorMixtureBase__compute_parameter_mixture(
-    #                     selected_parameters, probs
-    #                 )
-    #
-    #                 if top_k == 1:
-    #                     expected_shape = (batch_size, m.input_dim, m.output_dim)
-    #                 elif 1 < top_k < m.depth_dim:
-    #                     expected_shape = (batch_size, m.input_dim, m.output_dim)
-    #                 else:
-    #                     expected_shape = (batch_size, m.input_dim, m.output_dim)
-    #
-    #                 self.assertEqual(selected_params.shape, expected_shape)
-    #
-    # def test__compute_parameter_mixture_biases(self):
-    #     top_k_values = [1, 3, 6]
-    #     for top_k in top_k_values:
-    #         message = f"Testing with top_k={top_k}"
-    #         with self.subTest(msg=message):
-    #             overrides = MixtureConfig(
-    #                 top_k=top_k,
-    #                 depth_dim=6,
-    #                 num_experts=6,
-    #                 weighted_parameters_flag=True,
-    #             )
-    #             m = VectorBiasMixture(self.cfg, overrides)
-    #
-    #             batch_size = 5
-    #
-    #             if top_k == 1:
-    #                 selected_shape = (batch_size, m.output_dim)
-    #                 probs_shape = (m.output_dim, batch_size)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 selected_shape = (batch_size, m.output_dim, top_k)
-    #                 probs_shape = (m.output_dim, batch_size, m.top_k)
-    #             else:
-    #                 selected_shape = (m.output_dim, m.depth_dim)
-    #                 probs_shape = (m.output_dim, batch_size, m.depth_dim)
-    #
-    #             selected_parameters = torch.randn(selected_shape)
-    #             probs = F.sigmoid(torch.randn(probs_shape))
-    #             selected_params = m._VectorMixtureBase__compute_parameter_mixture(
-    #                 selected_parameters, probs
-    #             )
-    #
-    #             if top_k == 1:
-    #                 expected_shape = (batch_size, m.output_dim)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 expected_shape = (batch_size, m.output_dim)
-    #             else:
-    #                 expected_shape = (batch_size, m.output_dim)
-    #
-    #             self.assertEqual(selected_params.shape, expected_shape)
-    #
-    # def test_compute_mixture_weights(self):
-    #     top_k_values = [1, 3, 6]
-    #     for top_k in top_k_values:
-    #         message = f"Testing with top_k={top_k}"
-    #         with self.subTest(msg=message):
-    #             overrides = MixtureConfig(
-    #                 top_k=top_k,
-    #                 depth_dim=6,
-    #                 num_experts=6,
-    #                 weighted_parameters_flag=True,
-    #             )
-    #             m = VectorWeightsMixture(self.cfg, overrides)
-    #
-    #             batch_size = 5
-    #
-    #             if top_k == 1:
-    #                 shape = (m.input_dim, batch_size)
-    #                 indices = torch.randint(0, m.depth_dim, shape)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 shape = (m.input_dim, batch_size, top_k)
-    #                 indices = torch.randint(0, m.depth_dim, shape)
-    #             else:
-    #                 shape = (m.input_dim, batch_size, m.depth_dim)
-    #                 indices = None
-    #
-    #             probs = F.softmax(torch.randn(shape), dim=-1)
-    #             selected_params = m.compute_mixture(probs, indices)
-    #
-    #             if top_k == 1:
-    #                 expected_shape = (batch_size, m.input_dim, m.output_dim)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 expected_shape = (batch_size, m.input_dim, m.output_dim)
-    #             else:
-    #                 expected_shape = (batch_size, m.input_dim, m.output_dim)
-    #
-    #             self.assertEqual(selected_params.shape, expected_shape)
-    #
-    # def test_compute_mixture_biases(self):
-    #     top_k_values = [1, 3, 6]
-    #     for top_k in top_k_values:
-    #         message = f"Testing with top_k={top_k}"
-    #         with self.subTest(msg=message):
-    #             overrides = MixtureConfig(
-    #                 top_k=top_k,
-    #                 depth_dim=6,
-    #                 num_experts=6,
-    #                 weighted_parameters_flag=True,
-    #             )
-    #             m = VectorBiasMixture(self.cfg, overrides)
-    #
-    #             batch_size = 5
-    #
-    #             if top_k == 1:
-    #                 shape = (m.output_dim, batch_size)
-    #                 indices = torch.randint(0, m.depth_dim, shape)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 shape = (m.output_dim, batch_size, top_k)
-    #                 indices = torch.randint(0, m.depth_dim, shape)
-    #             else:
-    #                 shape = (m.output_dim, batch_size, m.depth_dim)
-    #                 indices = None
-    #
-    #             probs = F.softmax(torch.randn(shape), dim=-1)
-    #             selected_params = m.compute_mixture(probs, indices)
-    #
-    #             if top_k == 1:
-    #                 expected_shape = (batch_size, m.output_dim)
-    #             elif 1 < top_k < m.depth_dim:
-    #                 expected_shape = (batch_size, m.output_dim)
-    #             else:
-    #                 expected_shape = (batch_size, m.output_dim)
-    #
-    #             self.assertEqual(selected_params.shape, expected_shape)
-    #
-    # def test_should_compute_weighted_parameters_subtests(self):
-    #     test_cases = [
-    #         {
-    #             "flag": False,
-    #             "input": None,
-    #             "expected": False,
-    #             "raises": False,
-    #         },
-    #         {
-    #             "flag": False,
-    #             "input": torch.rand(2, 2),
-    #             "expected": False,
-    #             "raises": False,
-    #         },
-    #         {
-    #             "flag": True,
-    #             "input": torch.rand(2, 2),
-    #             "expected": True,
-    #             "raises": False,
-    #         },
-    #         {
-    #             "flag": True,
-    #             "input": None,
-    #             "expected": None,
-    #             "raises": True,
-    #         },
-    #     ]
-    #     for case in test_cases:
-    #         message = (
-    #             f"weighted_parameters_flag flag {case['flag']}, input {case['input']}"
-    #         )
-    #         with self.subTest(msg=message):
-    #             overrides = MixtureConfig(
-    #                 weighted_parameters_flag=case["flag"],
-    #             )
-    #             m = VectorMixtureBase(self.cfg, overrides)
-    #             if case["raises"]:
-    #                 with self.assertRaises(ValueError):
-    #                     m._VectorMixtureBase__should_compute_weighted_parameters(
-    #                         case["input"]
-    #                     )
-    #             else:
-    #                 result = m._VectorMixtureBase__should_compute_weighted_parameters(
-    #                     case["input"]
-    #                 )
-    #                 self.assertEqual(result, case["expected"])
