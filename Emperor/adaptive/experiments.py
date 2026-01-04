@@ -1,7 +1,18 @@
+from Emperor.base.enums import ActivationOptions
+from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experiments.utils.factories import Experiments
-from Emperor.adaptive.options import AdaptiveLayerOptions
-from Emperor.adaptive.utils.config import ParameterGeneratorConfigs
-from Emperor.linears.options import LinearLayerOptions
+from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
+from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
+from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.adaptive.options import (
+    AdaptiveLayerStackOptions,
+    AdaptiveParameterLayerOptions,
+)
+from Emperor.adaptive.utils.mixtures.options import (
+    AdaptiveBiasOptions,
+    AdaptiveWeightOptions,
+)
 from Emperor.behaviours.utils.enums import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -14,76 +25,109 @@ from Emperor.behaviours.utils.enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
+    from Emperor.base.layer import LayerStackConfig
 
 
-class LinearsExperiments(Experiments):
+class AdaptiveParameterExperiments(Experiments):
     def __init__(
         self,
         mini_datasetset_flag: bool = True,
     ) -> None:
         super().__init__(mini_datasetset_flag)
 
-    def train_model(self, layer_type: ParameterGeneratorOptions):
-        preset = ParameterGeneratorPresets(layer_type).get_config()
+    def train_model(self, layer_type: AdaptiveParameterLayerOptions):
+        preset = AdaptiveParameterExperimentPresets(layer_type).get_config()
         self._set_model_config(preset)
-        self._train_model(layer_type)
+        self._train_model(
+            AdaptiveLayerStackOptions.BASE, print_parameter_count_flag=True
+        )
 
-    def train_vector_model(self):
-        self.train_model(ParameterGeneratorOptions.VECTOR)
+    def train_adaptive_vector_stack_model(self):
+        self.train_model(AdaptiveParameterLayerOptions.VECTOR)
 
-    def train_matrix_model(self):
-        self.train_model(ParameterGeneratorOptions.MATRIX)
+    def train_adaptive_matrix_stack_model(self):
+        self.train_model(AdaptiveParameterLayerOptions.MATRIX)
 
-    def train_dynamic_model(self):
-        self.train_model(ParameterGeneratorOptions.GENERATOR)
+    def train_adaptive_generator_stack_model(self):
+        self.train_model(AdaptiveParameterLayerOptions.GENERATOR)
 
-    def test_all_linear_types(self):
-        for layer_type in LinearLayerOptions:
-            self.train_model(layer_type)
+    def test_all_types(self):
+        for option_type in AdaptiveParameterLayerOptions:
+            self.train_model(option_type)
 
 
-class ParameterGeneratorPresets:
-    def __init__(
-        self,
-        parameter_generator_options: ParameterGeneratorOptions,
-    ) -> None:
-        self.parameter_generator_options = parameter_generator_options
+class AdaptiveParameterExperimentPresets:
+    def __init__(self, layer_options: AdaptiveParameterLayerOptions) -> None:
+        self.layer_options = layer_options
 
-    def get_config(self) -> "ModelConfig":
-        match self.parameter_generator_options:
-            case ParameterGeneratorOptions.VECTOR:
-                return ParameterGeneratorConfigs.base_linear_layer_preset(
-                    batch_size=64,
-                    input_dim=784,
-                    output_dim=10,
-                    bias_flag=True,
-                )
-            case ParameterGeneratorOptions.MATRIX:
-                return ParameterGeneratorConfigs.dynamic_preset(
-                    batch_size=64,
-                    input_dim=784,
-                    output_dim=10,
-                    bias_flag=True,
-                    generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
-                    diagonal_option=DynamicDiagonalOptions.DISABLED,
-                    bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
-                    memory_option=LinearMemoryOptions.FUSION,
-                    memory_size_option=LinearMemorySizeOptions.LARGE,
-                    memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
-                    stack_depth=2,
-                )
-            case ParameterGeneratorOptions.GENERATOR:
-                return ParameterGeneratorConfigs.dynamic_preset(
-                    batch_size=64,
-                    input_dim=784,
-                    output_dim=10,
-                    bias_flag=True,
-                    generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
-                    diagonal_option=DynamicDiagonalOptions.DISABLED,
-                    bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
-                    memory_option=LinearMemoryOptions.FUSION,
-                    memory_size_option=LinearMemorySizeOptions.LARGE,
-                    memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
-                    stack_depth=2,
-                )
+    def get_config(self) -> "LayerStackConfig":
+        adaptive_weight_option = None
+        match self.layer_options:
+            case AdaptiveParameterLayerOptions.VECTOR:
+                adaptive_weight_option = AdaptiveWeightOptions.MATRIX
+            case AdaptiveParameterLayerOptions.MATRIX:
+                adaptive_weight_option = AdaptiveWeightOptions.MATRIX
+            case AdaptiveParameterLayerOptions.GENERATOR:
+                adaptive_weight_option = AdaptiveWeightOptions.GENERATOR
+
+        return AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
+            return_model_config_flag=True,
+            batch_size=64,
+            input_dim=784,
+            output_dim=10,
+            hidden_dim=0,
+            num_layers=1,
+            activation=ActivationOptions.RELU,
+            residual_flag=False,
+            dropout_probability=0.0,
+            adaptive_weight_option=adaptive_weight_option,
+            adaptive_bias_option=AdaptiveBiasOptions.GENERATOR,
+            adaptive_mixture_top_k=3,
+            adaptive_mixture_num_experts=9,
+            adaptive_mixture_weighted_parameters_flag=False,
+            adaptive_mixture_clip_parameter_option=ClipParameterOptions.BEFORE,
+            adaptive_mixture_clip_range=5.0,
+            adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
+            adaptive_behaviour_generator_depth=DynamicDepthOptions.DISABLED,
+            adaptive_behaviour_diagonal_option=DynamicDiagonalOptions.DIAGONAL,
+            adaptive_behaviour_bias_option=DynamicBiasOptions.DISABLED,
+            adaptive_behaviour_memory_option=LinearMemoryOptions.DISABLED,
+            adaptive_behaviour_memory_size_option=LinearMemorySizeOptions.DISABLED,
+            adaptive_behaviour_memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
+            experts_router_model_bias_flag=False,
+            experts_router_model_noisy_topk_flag=False,
+            experts_router_model_generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
+            experts_router_model_diagonal_option=DynamicDiagonalOptions.DIAGONAL,
+            experts_router_model_bias_option=DynamicBiasOptions.DISABLED,
+            experts_router_model_memory_option=LinearMemoryOptions.DISABLED,
+            experts_router_model_memory_size_option=LinearMemorySizeOptions.DISABLED,
+            experts_router_model_memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
+            experts_router_model_layer_stack_option=LinearLayerStackOptions.ADAPTIVE,
+            experts_sampler_threshold=0.0,
+            experts_sampler_filter_above_threshold=False,
+            experts_sampler_num_topk_samples=0,
+            experts_sampler_normalize_probabilities_flag=False,
+            experts_sampler_switch_loss_weight=0.1,
+            experts_sampler_zero_centred_loss_weight=0.1,
+            experts_sampler_mutual_information_loss_weight=0.0,
+            experts_sampler_coefficient_of_variation_loss_weight=0.1,
+            experts_layer_stack_option=LinearLayerStackOptions.ADAPTIVE,
+            experts_compute_expert_mixture_flag=True,
+            experts_weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
+            experts_init_sampler_model_flag=True,
+            experts_weighted_parameters_flag=True,
+            experts_layer_role_option=LayerRoleOptions.GENERAL,
+            experts_model_bias_flag=False,
+            experts_model_generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
+            experts_model_diagonal_option=DynamicDiagonalOptions.DIAGONAL,
+            experts_model_bias_option=DynamicBiasOptions.DISABLED,
+            experts_model_memory_option=LinearMemoryOptions.DISABLED,
+            experts_model_memory_size_option=LinearMemorySizeOptions.DISABLED,
+            experts_model_memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
+            stack_bias_flag=False,
+            stack_num_layers=1,
+            stack_hidden_dim=0,
+            stack_activation=ActivationOptions.RELU,
+            stack_residual_flag=True,
+            stack_dropout_probability=0.0,
+        )
