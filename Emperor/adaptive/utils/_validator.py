@@ -5,9 +5,10 @@ from Emperor.adaptive.utils.mixtures.options import (
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from Emperor.adaptive.utils.layers import AdaptiveParameterLayer
-    from Emperor.adaptive.utils.layers import ParameterHanlderBase
+    from Emperor.adaptive.utils.handlers import ParameterHanlderBase
 
 
 class _AdaptiveParameterLayerValidator:
@@ -15,6 +16,8 @@ class _AdaptiveParameterLayerValidator:
         self.model = model
         self.__ensure_values_are_not_none()
         self.__ensure_correct_input_types()
+        self.__ensure_adaptive_bias_option_is_disabled_for_behaviour_bias()
+        self.__ensure_no_parameter_depth_mapping_can_be_used()
 
     def __ensure_values_are_not_none(self) -> None:
         required_attributes = [
@@ -46,6 +49,39 @@ class _AdaptiveParameterLayerValidator:
             if not isinstance(getattr(self.model, attr_name), expected_type):
                 raise TypeError(
                     f"Type Error: '{attr_name}' should be {expected_type.__name__}, but got {type(getattr(self.model, attr_name)).__name__}."
+                )
+
+    def __ensure_adaptive_bias_option_is_disabled_for_behaviour_bias(
+        self,
+    ) -> None:
+        from Emperor.behaviours.utils.enums import DynamicBiasOptions
+
+        if self.model.adaptive_behaviour_config is not None:
+            is_bias_disabled = (
+                self.model.adaptive_bias_option != AdaptiveBiasOptions.DISABLED
+            )
+            is_behaviour_bias_enabled = (
+                self.model.adaptive_behaviour_config.bias_option
+                != DynamicBiasOptions.DISABLED
+            )
+            if is_bias_disabled and is_behaviour_bias_enabled:
+                raise ValueError(
+                    "Configuration Error: 'adaptive_behaviour_config.bias_option' can be used for `AdaptiveParameterLayer` only when 'adaptive_bias_option' is `DISABLED`"
+                )
+
+    def __ensure_no_parameter_depth_mapping_can_be_used(
+        self,
+    ) -> None:
+        from Emperor.behaviours.utils.enums import DynamicDepthOptions
+
+        if self.model.adaptive_behaviour_config is not None:
+            is_generator_depth_disabled = (
+                self.model.adaptive_behaviour_config.generator_depth
+                != DynamicDepthOptions.DISABLED
+            )
+            if is_generator_depth_disabled:
+                raise ValueError(
+                    "Configuration Error: 'adaptive_behaviour_config.generator_depth' needs to be disabled for `AdaptiveParameterLayer`"
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:
