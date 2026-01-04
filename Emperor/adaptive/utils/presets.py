@@ -37,7 +37,7 @@ class AdaptiveParameterLayerPresets:
         clip_range=5.0,
         top_k=3,
         num_experts=6,
-    ) -> "AdaptiveMixtureConfig | ModelConfig":
+    ) -> "AdaptiveMixtureConfig":
         return AdaptiveMixtureConfig(
             input_dim=input_dim,
             output_dim=output_dim,
@@ -92,7 +92,7 @@ class AdaptiveParameterLayerPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-    ) -> "AdaptiveMixtureConfig | ModelConfig":
+    ) -> "AdaptiveMixtureConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
