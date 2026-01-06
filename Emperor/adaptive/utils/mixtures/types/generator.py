@@ -57,9 +57,12 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
                 "weighted_parameters_flag": False,
                 "init_sampler_model_flag": False,
             }
-
-        input_overrides = MixtureOfExpertsConfig(output_dim=self.input_dim, **options)
-        output_overrides = MixtureOfExpertsConfig(output_dim=self.output_dim, **options)
+        input_overrides = MixtureOfExpertsConfig(
+            input_dim=self.input_dim, output_dim=self.input_dim, **options
+        )
+        output_overrides = MixtureOfExpertsConfig(
+            input_dim=self.input_dim, output_dim=self.output_dim, **options
+        )
         input_vector_generator = MixtureOfExperts(self.main_cfg, input_overrides)
         output_vector_generator = MixtureOfExperts(self.main_cfg, output_overrides)
         return input_vector_generator, output_vector_generator
@@ -154,6 +157,7 @@ class GeneratorBiasMixture(GeneratorMixtureBase):
 
     def __init_generator(self):
         output_overrides = MixtureOfExpertsConfig(
+            input_dim=self.input_dim,
             output_dim=self.output_dim,
             weighted_parameters_flag=True,
         )
