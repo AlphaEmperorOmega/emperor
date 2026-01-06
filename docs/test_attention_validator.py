@@ -6,7 +6,7 @@ from dataclasses import asdict
 from docs.config import default_unittest_config
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.attention.utils._validator import (
-    _MultiHeadAttentionConfigValidator,
+    MultiHeadAttentionConfigValidator,
 )
 
 
@@ -36,7 +36,7 @@ class TestValidator(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.model = _MultiHeadAttentionConfigValidator(self.config)
+        self.model = MultiHeadAttentionConfigValidator(self.config)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -384,7 +384,7 @@ class Test_check_self_attention_projection_inputs(TestValidator):
     def test__method(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = _MultiHeadAttentionConfigValidator(config)
+        m = MultiHeadAttentionConfigValidator(config)
 
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
@@ -400,7 +400,7 @@ class Test_check_self_attention_projection_inputs(TestValidator):
     def test__is_error_raised(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = _MultiHeadAttentionConfigValidator(config)
+        m = MultiHeadAttentionConfigValidator(config)
 
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
@@ -418,7 +418,7 @@ class Test_check_indepentent_projections_inputs(TestValidator):
     def test__method(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = _MultiHeadAttentionConfigValidator(config)
+        m = MultiHeadAttentionConfigValidator(config)
 
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
@@ -434,7 +434,7 @@ class Test_check_indepentent_projections_inputs(TestValidator):
     def test__is_error_raised(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = _MultiHeadAttentionConfigValidator(config)
+        m = MultiHeadAttentionConfigValidator(config)
 
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
@@ -452,7 +452,7 @@ class Test___resolve_static_projection_type(TestValidator):
     def test__value_tensor_flag__False(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = _MultiHeadAttentionConfigValidator(config)
+        m = MultiHeadAttentionConfigValidator(config)
 
         value_tensor_flag = False
 
@@ -465,7 +465,7 @@ class Test___resolve_static_projection_type(TestValidator):
     def test__value_tensor_flag__True(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = _MultiHeadAttentionConfigValidator(config)
+        m = MultiHeadAttentionConfigValidator(config)
 
         value_tensor_flag = True
 
