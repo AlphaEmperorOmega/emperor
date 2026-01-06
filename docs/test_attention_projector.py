@@ -1,679 +1,282 @@
 import torch
 import unittest
 
-from dataclasses import asdict
-from Emperor.attention.utils.projection_handler import Projector
-from Emperor.attention.attention import MultiHeadAttentionConfig
-from Emperor.generators.utils.enums import (
-    LayerTypes,
-    LinearLayerTypes,
-    ParameterGeneratorTypes,
+from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.adaptive.options import AdaptiveLayerStackOptions
+from Emperor.attention.utils.presets import MultiHeadAttentionPresets
+from Emperor.adaptive.utils.mixtures.options import AdaptiveWeightOptions
+from Emperor.attention.utils.handlers.projector import (
+    IndependentProjector,
+    ProjectorSelector,
+    SelfAttentionProjector,
 )
-from Emperor.generators.utils.base import Layer
-from docs.config import default_unittest_config
 
 
-class TestProjector(unittest.TestCase):
+class TestSelfAttentionProjector(unittest.TestCase):
     def setUp(self):
-        self.rebuild_presets()
+        self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.model = None
-        self.batch_size = None
-        self.embedding_dim = None
-        self.target_sequence_length = None
-        self.num_heads = None
-        self.head_dim = None
-        self.query_model = None
-        self.key_model = None
-        self.value_model = None
-        self.qkv_model = None
+    def test_init(self):
+        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-    def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.multi_head_attention_model_config
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
+        for projector_option in projector_options:
+            for model_type in projector_option:
+                message = f"Testing configuration: model_type: {model_type}"
+                with self.subTest(i=message):
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        model_type=model_type
+                    )
+                    m = SelfAttentionProjector(c)
+                    self.assertEqual(model_type.value, m.model_type)
 
-        self.model = Projector(self.config, self.cfg)
-
-        self.batch_size = self.config.batch_size
-        self.embedding_dim = self.config.embedding_dim
-        self.target_sequence_length = self.config.target_sequence_length
-        self.source_sequence_length = self.config.source_sequence_length
-        self.num_heads = self.config.num_heads
-        self.head_dim = self.embedding_dim // self.num_heads
-        self.query_model = self.model.query_model
-        self.key_model = self.model.key_model
-        self.value_model = self.model.value_model
-        self.qkv_model = self.model.qkv_model
-
-
-class Test___are_qkv_dimensions_equal(TestProjector):
-    def test__different_embedding_dim(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=64,
-            query_key_projection_dim=32,
-            value_projection_dim=32,
-        )
-        self.rebuild_presets(config)
-
-        output = self.model._Projector__are_qkv_dimensions_equal()
-        self.assertFalse(output)
-
-    def test__different_query_key_projection_dim(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=32,
-            query_key_projection_dim=64,
-            value_projection_dim=32,
-        )
-        self.rebuild_presets(config)
-
-        output = self.model._Projector__are_qkv_dimensions_equal()
-        self.assertFalse(output)
-
-    def test__different_value_projection_dim(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=32,
-            query_key_projection_dim=32,
-            value_projection_dim=64,
-        )
-        self.rebuild_presets(config)
-
-        output = self.model._Projector__are_qkv_dimensions_equal()
-        self.assertFalse(output)
-
-    def test__embd_key_value_same_dim(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=32,
-            query_key_projection_dim=32,
-            value_projection_dim=32,
-        )
-        self.rebuild_presets(config)
-
-        output = self.model._Projector__are_qkv_dimensions_equal()
-        self.assertTrue(output)
-
-
-class Test___build_shared_projection_models(TestProjector):
-    def test__shared_model_inizialization(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=32,
-            query_key_projection_dim=32,
-            value_projection_dim=32,
-        )
-        self.rebuild_presets(config)
-        del self.model.query_model  # Ensure model is not initialized
-        del self.model.key_model  # Ensure model is not initialized
-        del self.model.value_model  # Ensure model is not initialized
-        qkv_model = self.model._Projector__build_shared_projection_models()
-
-        self.assertIsNone(self.model.query_model)
-        self.assertIsNone(self.model.key_model)
-        self.assertIsNone(self.model.value_model)
-        self.assertIsInstance(qkv_model, Layer)
-
-
-class Test___build_separate_projection_models(TestProjector):
-    def test__separate_models_initializations(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=32,
-            query_key_projection_dim=64,
-            value_projection_dim=32,
-        )
-        self.rebuild_presets(config)
-        del self.model.qkv_model  # Ensure model is not initialized
-        query_model, key_model, value_model = (
-            self.model._Projector__build_separate_projection_models()
-        )
-
-        self.assertIsInstance(query_model, Layer)
-        self.assertIsInstance(key_model, Layer)
-        self.assertIsInstance(value_model, Layer)
-        self.assertIsNone(self.model.qkv_model)
-
-
-class Test___build_projection_models(TestProjector):
-    def test__same_qkv_dim__use_separate_projection_weight_flag__False(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=32,
-            query_key_projection_dim=32,
-            value_projection_dim=32,
-            use_separate_projection_weight_flag=False,
-        )
-        self.rebuild_presets(config)
-
-        self.assertIsInstance(self.model.qkv_model, Layer)
-        self.assertIsInstance(self.model.output_model, Layer)
-        self.assertIsNone(self.model.query_model)
-        self.assertIsNone(self.model.key_model)
-        self.assertIsNone(self.model.value_model)
-
-    def test__same_qkv_dim__use_separate_projection_weight_flag__True(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=32,
-            query_key_projection_dim=32,
-            value_projection_dim=32,
-            use_separate_projection_weight_flag=True,
-        )
-        self.rebuild_presets(config)
-
-        self.assertIsInstance(self.model.query_model, Layer)
-        self.assertIsInstance(self.model.key_model, Layer)
-        self.assertIsInstance(self.model.value_model, Layer)
-        self.assertIsInstance(self.model.output_model, Layer)
-        self.assertIsNone(self.model.qkv_model)
-
-    def test__different_qkv_dim(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=32,
-            query_key_projection_dim=64,
-            value_projection_dim=32,
-            use_separate_projection_weight_flag=True,
-        )
-        self.rebuild_presets(config)
-
-        self.assertIsInstance(self.model.query_model, Layer)
-        self.assertIsInstance(self.model.key_model, Layer)
-        self.assertIsInstance(self.model.value_model, Layer)
-        self.assertIsInstance(self.model.output_model, Layer)
-        self.assertIsNone(self.model.qkv_model)
-
-
-class Test___compute_projection(TestProjector):
-    def test_method(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=4,
-            use_separate_projection_weight_flag=True,
-        )
-        self.rebuild_presets(config)
-
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-
-        projected_tensor = self.model._Projector__compute_projection(
-            tensor, self.query_model
-        )
-
-        self.assertIsInstance(projected_tensor, torch.Tensor)
-
-        self.assertEqual(
-            projected_tensor.shape,
-            (self.target_sequence_length, self.batch_size, self.embedding_dim),
-        )
-
-
-class Test___compute_indepentet_projections(TestProjector):
-    def test_method(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=12,
-            use_separate_projection_weight_flag=True,
-        )
-        self.rebuild_presets(config)
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-
-        query_projections, key_projections, value_projections = (
-            self.model._Projector__compute_indepentet_projections(query, key, value)
-        )
-
-        self.assertIsInstance(query_projections, torch.Tensor)
-        self.assertIsInstance(key_projections, torch.Tensor)
-        self.assertIsInstance(value_projections, torch.Tensor)
-
-        self.assertEqual(
-            query_projections.shape,
-            (self.target_sequence_length, self.batch_size, self.embedding_dim),
-        )
-        self.assertEqual(
-            key_projections.shape,
-            (self.source_sequence_length, self.batch_size, self.embedding_dim),
-        )
-        self.assertEqual(
-            value_projections.shape,
-            (self.source_sequence_length, self.batch_size, self.embedding_dim),
-        )
-
-
-class Test___split_self_attention_projection(TestProjector):
-    def test_method(self):
+    def test__split_self_attention_projection(self):
+        c = MultiHeadAttentionPresets.multi_head_attention_preset()
+        m = SelfAttentionProjector(c)
         embeding_dim = 12
         shared_projection_embeding_dim = embeding_dim * 3
         shared_projections = torch.randn(
-            self.target_sequence_length,
-            self.batch_size,
+            c.target_sequence_length,
+            c.batch_size,
             shared_projection_embeding_dim,
         )
 
         query_projections, key_projections, value_projections = (
-            self.model._Projector__split_self_attention_projection(shared_projections)
+            m._SelfAttentionProjector__split_self_attention_projection(
+                shared_projections
+            )
         )
-        self.assertEqual(
-            query_projections.shape,
-            (self.target_sequence_length, self.batch_size, embeding_dim),
-        )
-        self.assertEqual(
-            key_projections.shape,
-            (self.target_sequence_length, self.batch_size, embeding_dim),
-        )
-        self.assertEqual(
-            value_projections.shape,
-            (self.target_sequence_length, self.batch_size, embeding_dim),
-        )
+        expected_shape = (c.target_sequence_length, c.batch_size, embeding_dim)
+        self.assertEqual(query_projections.shape, expected_shape)
+        self.assertEqual(key_projections.shape, expected_shape)
+        self.assertEqual(value_projections.shape, expected_shape)
+
+    def test__compute_projection(self):
+        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+
+        for projector_option in projector_options:
+            for model_type in projector_option:
+                message = f"Testing configuration: model_type: {model_type}"
+                with self.subTest(i=message):
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        model_type=model_type
+                    )
+                    m = SelfAttentionProjector(c)
+
+                    tensor = torch.randn(
+                        c.target_sequence_length,
+                        c.batch_size,
+                        c.embedding_dim,
+                    )
+
+                    projected_tensor = m._compute_projection(tensor, m.qkv_model)
+
+                    expected_shape = (
+                        c.target_sequence_length,
+                        c.batch_size,
+                        c.embedding_dim * 3,
+                    )
+                    self.assertIsInstance(projected_tensor, torch.Tensor)
+                    self.assertEqual(projected_tensor.shape, expected_shape)
+
+    def test_compute_qkv_projections(self):
+        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+
+        for projector_option in projector_options:
+            for model_type in projector_option:
+                for adaptive_type in AdaptiveWeightOptions:
+                    message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
+                    with self.subTest(i=message):
+                        if adaptive_type == AdaptiveWeightOptions.VECTOR:
+                            continue
+                        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                            model_type=model_type,
+                            projector_adaptive_weight_option=adaptive_type,
+                        )
+                        m = SelfAttentionProjector(c)
+
+                        tensor = torch.randn(
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.embedding_dim,
+                        )
+
+                        q_projections, k_projections, v_projections = (
+                            m.compute_qkv_projections(tensor, tensor, tensor)
+                        )
+
+                        expected_shape = (
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.embedding_dim,
+                        )
+                        self.assertIsInstance(q_projections, torch.Tensor)
+                        self.assertIsInstance(k_projections, torch.Tensor)
+                        self.assertIsInstance(v_projections, torch.Tensor)
+                        self.assertEqual(q_projections.shape, expected_shape)
+                        self.assertEqual(k_projections.shape, expected_shape)
+                        self.assertEqual(v_projections.shape, expected_shape)
+
+    def test_compute_output_projection(self):
+        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+
+        for projector_option in projector_options:
+            for model_type in projector_option:
+                for adaptive_type in AdaptiveWeightOptions:
+                    message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
+                    with self.subTest(i=message):
+                        if adaptive_type == AdaptiveWeightOptions.VECTOR:
+                            continue
+                        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                            model_type=model_type,
+                            projector_adaptive_weight_option=adaptive_type,
+                        )
+                        m = SelfAttentionProjector(c)
+
+                        tensor = torch.randn(
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.embedding_dim,
+                        )
+
+                        attentiion_output = m.compute_output_projection(tensor)
+
+                        expected_shape = (
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.embedding_dim,
+                        )
+                        self.assertIsInstance(attentiion_output, torch.Tensor)
+                        self.assertEqual(attentiion_output.shape, expected_shape)
 
 
-class Test___compute_self_attention_projections(TestProjector):
-    def test_method(self):
-        config = MultiHeadAttentionConfig(
-            embedding_dim=12,
-            use_separate_projection_weight_flag=False,
-        )
-        self.rebuild_presets(config)
+class TestIndependentProjector(unittest.TestCase):
+    def setUp(self):
+        self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
-        query = torch.randn(
-            self.config.target_sequence_length,
-            self.config.batch_size,
-            self.embedding_dim,
-        )
+    def test_init(self):
+        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        query_projections, key_projections, value_projections = (
-            self.model._Projector__compute_self_attention_projections(query)
-        )
-        self.assertEqual(
-            query_projections.shape,
-            (
-                self.config.target_sequence_length,
-                self.config.batch_size,
-                self.embedding_dim,
-            ),
-        )
-        self.assertEqual(
-            key_projections.shape,
-            (
-                self.config.target_sequence_length,
-                self.config.batch_size,
-                self.embedding_dim,
-            ),
-        )
-        self.assertEqual(
-            value_projections.shape,
-            (
-                self.config.target_sequence_length,
-                self.config.batch_size,
-                self.embedding_dim,
-            ),
-        )
+        for projector_option in projector_options:
+            for model_type in projector_option:
+                message = f"Testing configuration: model_type: {model_type}"
+                with self.subTest(i=message):
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        model_type=model_type
+                    )
+                    m = IndependentProjector(c)
+                    self.assertEqual(model_type.value, m.model_type)
+
+    def test__compute_projection(self):
+        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+
+        for projector_option in projector_options:
+            for model_type in projector_option:
+                message = f"Testing configuration: model_type: {model_type}"
+                with self.subTest(i=message):
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        model_type=model_type
+                    )
+                    m = IndependentProjector(c)
+
+                    tensor = torch.randn(
+                        c.target_sequence_length,
+                        c.batch_size,
+                        c.embedding_dim,
+                    )
+
+                    projected_tensor = m._compute_projection(tensor, m.query_model)
+
+                    expected_shape = (
+                        c.target_sequence_length,
+                        c.batch_size,
+                        c.query_key_projection_dim,
+                    )
+                    self.assertIsInstance(projected_tensor, torch.Tensor)
+                    self.assertEqual(projected_tensor.shape, expected_shape)
+
+    def test_compute_qkv_projections(self):
+        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+
+        for projector_option in projector_options:
+            for model_type in projector_option:
+                for adaptive_type in AdaptiveWeightOptions:
+                    message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
+                    with self.subTest(i=message):
+                        if adaptive_type == AdaptiveWeightOptions.VECTOR:
+                            continue
+                        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                            model_type=model_type,
+                            projector_adaptive_weight_option=adaptive_type,
+                        )
+                        m = IndependentProjector(c)
+
+                        tensor = torch.randn(
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.embedding_dim,
+                        )
+
+                        q_projections, k_projections, v_projections = (
+                            m.compute_qkv_projections(tensor, tensor, tensor)
+                        )
+
+                        expected_shape = (
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.query_key_projection_dim,
+                        )
+                        expected_value_shape = (
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.value_projection_dim,
+                        )
+                        self.assertIsInstance(q_projections, torch.Tensor)
+                        self.assertIsInstance(k_projections, torch.Tensor)
+                        self.assertIsInstance(v_projections, torch.Tensor)
+                        self.assertEqual(q_projections.shape, expected_shape)
+                        self.assertEqual(k_projections.shape, expected_shape)
+                        self.assertEqual(v_projections.shape, expected_value_shape)
 
 
-class Test_compute_qkv_projections(TestProjector):
-    def test__indepented_projections__model_type__base(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=True,
-            query_key_projection_dim=32,
-            value_projection_dim=64,
-            model_type=LinearLayerTypes.BASE,
-        )
-        self.rebuild_presets(config)
+class TestProjectorSelector(unittest.TestCase):
+    def setUp(self):
+        self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
+    def test_init(self):
+        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        boolean_options = [True, False]
 
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
+        for projector_option in projector_options:
+            for model_type in projector_option:
+                for adaptive_type in AdaptiveWeightOptions:
+                    for is_self_attention_projector_flag in boolean_options:
+                        message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}, is_self_attention_projector_flag: {is_self_attention_projector_flag}"
+                        with self.subTest(i=message):
+                            if adaptive_type == AdaptiveWeightOptions.VECTOR:
+                                continue
 
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
+                            projector_options = {
+                                "is_self_attention_projector_flag": False,
+                                "embedding_dim": 15,
+                                "query_key_projection_dim": 10,
+                                "value_projection_dim": 12,
+                            }
+                            if is_self_attention_projector_flag:
+                                projector_options = {
+                                    "is_self_attention_projector_flag": True,
+                                    "embedding_dim": 12,
+                                    "query_key_projection_dim": 12,
+                                    "value_projection_dim": 12,
+                                }
 
-    def test__self_attention_projections__model_type__base(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=False,
-            query_key_projection_dim=self.config.embedding_dim,
-            value_projection_dim=self.config.embedding_dim,
-            model_type=LinearLayerTypes.BASE,
-        )
-        self.rebuild_presets(config)
+                            c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                                model_type=model_type,
+                                projector_adaptive_weight_option=adaptive_type,
+                                **projector_options,
+                            )
+                            model = ProjectorSelector(c).build_model()
 
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        query = key = value = tensor
-
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
-
-    def test__indepented_projections__model_type__dynamic_base(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=True,
-            query_key_projection_dim=32,
-            value_projection_dim=64,
-            model_type=LinearLayerTypes.DYNAMIC,
-        )
-        self.rebuild_presets(config)
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
-
-    def test__self_attention_projections__model_type__dynamic_base(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=False,
-            query_key_projection_dim=self.config.embedding_dim,
-            value_projection_dim=self.config.embedding_dim,
-            model_type=LinearLayerTypes.DYNAMIC,
-        )
-        self.rebuild_presets(config)
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        query = key = value = tensor
-
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
-
-    def test__indepented_projections__model_type__vector(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=False,
-            query_key_projection_dim=32,
-            value_projection_dim=64,
-            model_type=ParameterGeneratorTypes.VECTOR,
-        )
-        self.rebuild_presets(config)
-
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
-
-    def test__self_attention_projections__model_type__vector(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=False,
-            query_key_projection_dim=self.config.embedding_dim,
-            value_projection_dim=self.config.embedding_dim,
-            model_type=ParameterGeneratorTypes.VECTOR,
-        )
-        self.rebuild_presets(config)
-
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        query = key = value = tensor
-
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
-
-    def test__indepented_projections__model_type__matrix(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=True,
-            query_key_projection_dim=32,
-            value_projection_dim=64,
-            model_type=ParameterGeneratorTypes.MATRIX,
-        )
-        self.rebuild_presets(config)
-
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
-
-    def test__self_attention_projections__model_type__matrix(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=False,
-            query_key_projection_dim=self.config.embedding_dim,
-            value_projection_dim=self.config.embedding_dim,
-            model_type=ParameterGeneratorTypes.MATRIX,
-        )
-        self.rebuild_presets(config)
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        query = key = value = tensor
-
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
-
-    def test__indepented_projections__model_type__generator(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=True,
-            query_key_projection_dim=32,
-            value_projection_dim=64,
-            model_type=ParameterGeneratorTypes.GENERATOR,
-        )
-        self.rebuild_presets(config)
-
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
-
-    def test__self_attention_projections__model_type__generator(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=16,
-            source_sequence_length=16,
-            use_separate_projection_weight_flag=False,
-            query_key_projection_dim=self.config.embedding_dim,
-            value_projection_dim=self.config.embedding_dim,
-            model_type=ParameterGeneratorTypes.GENERATOR,
-        )
-        self.rebuild_presets(config)
-
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        query = key = value = tensor
-
-        query_projections, key_projections, value_projections = (
-            self.model.compute_qkv_projections(query, key, value)
-        )
-
-        expected_qk_output_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            config.query_key_projection_dim,
-        )
-        expected_v_output_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            config.value_projection_dim,
-        )
-        self.assertEqual(query_projections.shape, expected_qk_output_shape)
-        self.assertEqual(key_projections.shape, expected_qk_output_shape)
-        self.assertEqual(value_projections.shape, expected_v_output_shape)
+                            if is_self_attention_projector_flag:
+                                self.assertIsInstance(model, SelfAttentionProjector)
+                            else:
+                                self.assertIsInstance(model, IndependentProjector)
