@@ -4,8 +4,10 @@ import unittest
 
 from dataclasses import asdict
 from docs.config import default_unittest_config
-from Emperor.attention.utils.validation_handler import Validator
-from Emperor.attention.attention import MultiHeadAttentionConfig
+from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+from Emperor.attention.utils._validator import (
+    _MultiHeadAttentionConfigValidator,
+)
 
 
 class TestValidator(unittest.TestCase):
@@ -34,7 +36,7 @@ class TestValidator(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.model = Validator(self.config)
+        self.model = _MultiHeadAttentionConfigValidator(self.config)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -48,12 +50,12 @@ class Test___check_query_dims(TestValidator):
     def test_incorrect_1D_tensor(self):
         query = torch.randn(self.embedding_dim)
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_query_dims(query)
+            self.model._MultiHeadAttentionConfigValidator__check_query_dims(query)
 
     def test_correct_2D_tensor(self):
         query = torch.randn(self.target_sequence_length, self.embedding_dim)
 
-        output = self.model._Validator__check_query_dims(query)
+        output = self.model._MultiHeadAttentionConfigValidator__check_query_dims(query)
         self.assertIsNone(output)
 
     def test_correct_3D_tensor(self):
@@ -61,7 +63,7 @@ class Test___check_query_dims(TestValidator):
             self.target_sequence_length, self.batch_size, self.embedding_dim
         )
 
-        output = self.model._Validator__check_query_dims(query)
+        output = self.model._MultiHeadAttentionConfigValidator__check_query_dims(query)
         self.assertIsNone(output)
 
     def test_incorrect_4D_tensor(self):
@@ -72,7 +74,7 @@ class Test___check_query_dims(TestValidator):
             self.embedding_dim,
         )
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_query_dims(query)
+            self.model._MultiHeadAttentionConfigValidator__check_query_dims(query)
 
 
 class Test___check_query_key_value_dimension_count(TestValidator):
@@ -88,7 +90,9 @@ class Test___check_query_key_value_dimension_count(TestValidator):
             self.source_sequence_length * self.batch_size, self.embedding_dim
         )
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_query_key_value_dimension_count(key, value)
+            self.model._MultiHeadAttentionConfigValidator__check_query_key_value_dimension_count(
+                key, value
+            )
 
     def test_check_incorrect_input_dim_count_with_batched_input_flag_True(
         self,
@@ -97,7 +101,9 @@ class Test___check_query_key_value_dimension_count(TestValidator):
         key = torch.randn(self.source_sequence_length, self.embedding_dim)
         value = torch.randn(self.source_sequence_length, self.embedding_dim)
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_query_key_value_dimension_count(key, value)
+            self.model._MultiHeadAttentionConfigValidator__check_query_key_value_dimension_count(
+                key, value
+            )
 
     def test_check_correct_input_dim_count_with_batched_input_flag_set_to_False(
         self,
@@ -106,7 +112,7 @@ class Test___check_query_key_value_dimension_count(TestValidator):
 
         key = torch.randn(self.source_sequence_length, self.embedding_dim)
         value = torch.randn(self.source_sequence_length, self.embedding_dim)
-        output = self.model._Validator__check_query_key_value_dimension_count(
+        output = self.model._MultiHeadAttentionConfigValidator__check_query_key_value_dimension_count(
             key, value
         )
         self.assertIsNone(output)
@@ -122,7 +128,7 @@ class Test___check_query_key_value_dimension_count(TestValidator):
         value = torch.randn(
             self.source_sequence_length, self.batch_size, self.embedding_dim
         )
-        output = self.model._Validator__check_query_key_value_dimension_count(
+        output = self.model._MultiHeadAttentionConfigValidator__check_query_key_value_dimension_count(
             key, value
         )
         self.assertIsNone(output)
@@ -130,7 +136,7 @@ class Test___check_query_key_value_dimension_count(TestValidator):
 
 class Test___check_key_padding_mask_dimension_count(TestValidator):
     def test_no_padding_mask_input(self):
-        output = self.model._Validator__check_key_padding_mask_dimension_count()
+        output = self.model._MultiHeadAttentionConfigValidator__check_key_padding_mask_dimension_count()
         self.assertIsNone(output)
 
     def test_incorrect_3D_input_padding_mask(self):
@@ -138,14 +144,14 @@ class Test___check_key_padding_mask_dimension_count(TestValidator):
             self.source_sequence_length, self.batch_size, self.embedding_dim
         )
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_key_padding_mask_dimension_count(
+            self.model._MultiHeadAttentionConfigValidator__check_key_padding_mask_dimension_count(
                 key_padding_mask
             )
 
     def test_correct_2D_padding_mask_input_with_batched_input_flag_set_to_True(self):
         self.model.batched_input_flag = True
         key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
-        output = self.model._Validator__check_key_padding_mask_dimension_count(
+        output = self.model._MultiHeadAttentionConfigValidator__check_key_padding_mask_dimension_count(
             key_padding_mask
         )
         self.assertIsNone(output)
@@ -153,7 +159,7 @@ class Test___check_key_padding_mask_dimension_count(TestValidator):
     def test_correct_1D_padding_mask_input_with_batched_input_flag_set_to_False(self):
         self.model.batched_input_flag = False
         key_padding_mask = torch.randn(self.source_sequence_length)
-        output = self.model._Validator__check_key_padding_mask_dimension_count(
+        output = self.model._MultiHeadAttentionConfigValidator__check_key_padding_mask_dimension_count(
             key_padding_mask
         )
         self.assertIsNone(output)
@@ -161,13 +167,13 @@ class Test___check_key_padding_mask_dimension_count(TestValidator):
 
 class Test___check_attention_mask_dim_count_and_shape(TestValidator):
     def test_no_attention_mask_input(self):
-        output = self.model._Validator__check_attention_mask_dim_count_and_shape()
+        output = self.model._MultiHeadAttentionConfigValidator__check_attention_mask_dim_count_and_shape()
         self.assertIsNone(output)
 
     def test_incorrect_1D_input(self):
         attention_mask = torch.randn(self.source_sequence_length)
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_attention_mask_dim_count_and_shape(
+            self.model._MultiHeadAttentionConfigValidator__check_attention_mask_dim_count_and_shape(
                 attention_mask
             )
 
@@ -178,7 +184,7 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
         )
 
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_attention_mask_dim_count_and_shape(
+            self.model._MultiHeadAttentionConfigValidator__check_attention_mask_dim_count_and_shape(
                 attention_mask
             )
 
@@ -187,7 +193,7 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
             self.target_sequence_length, self.source_sequence_length
         )
 
-        output = self.model._Validator__check_attention_mask_dim_count_and_shape(
+        output = self.model._MultiHeadAttentionConfigValidator__check_attention_mask_dim_count_and_shape(
             attention_mask
         )
         self.assertIsNone(output)
@@ -204,7 +210,7 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
         )
 
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_attention_mask_dim_count_and_shape(
+            self.model._MultiHeadAttentionConfigValidator__check_attention_mask_dim_count_and_shape(
                 attention_mask
             )
 
@@ -215,7 +221,7 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
             self.source_sequence_length,
         )
 
-        output = self.model._Validator__check_attention_mask_dim_count_and_shape(
+        output = self.model._MultiHeadAttentionConfigValidator__check_attention_mask_dim_count_and_shape(
             attention_mask
         )
         self.assertIsNone(output)
@@ -229,7 +235,7 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
         )
 
         with self.assertRaises(RuntimeError) as context:
-            self.model._Validator__check_attention_mask_dim_count_and_shape(
+            self.model._MultiHeadAttentionConfigValidator__check_attention_mask_dim_count_and_shape(
                 attention_mask
             )
 
@@ -246,7 +252,11 @@ class Test___resolve_attention_mask_shape(TestValidator):
             self.source_sequence_length,
         )
 
-        output = self.model._Validator__resolve_attention_mask_shape(attention_mask)
+        output = (
+            self.model._MultiHeadAttentionConfigValidator__resolve_attention_mask_shape(
+                attention_mask
+            )
+        )
         self.assertEqual(output, expected_attention_mask_shape)
 
     def test_if_correct_shape_is_returned_for_3D_attention_mask(self):
@@ -262,7 +272,11 @@ class Test___resolve_attention_mask_shape(TestValidator):
             self.source_sequence_length,
         )
 
-        output = self.model._Validator__resolve_attention_mask_shape(attention_mask)
+        output = (
+            self.model._MultiHeadAttentionConfigValidator__resolve_attention_mask_shape(
+                attention_mask
+            )
+        )
         self.assertEqual(output, expected_attention_mask_shape)
 
 
@@ -370,7 +384,7 @@ class Test_check_self_attention_projection_inputs(TestValidator):
     def test__method(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = Validator(config)
+        m = _MultiHeadAttentionConfigValidator(config)
 
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
@@ -386,7 +400,7 @@ class Test_check_self_attention_projection_inputs(TestValidator):
     def test__is_error_raised(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = Validator(config)
+        m = _MultiHeadAttentionConfigValidator(config)
 
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
@@ -404,7 +418,7 @@ class Test_check_indepentent_projections_inputs(TestValidator):
     def test__method(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = Validator(config)
+        m = _MultiHeadAttentionConfigValidator(config)
 
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
@@ -420,7 +434,7 @@ class Test_check_indepentent_projections_inputs(TestValidator):
     def test__is_error_raised(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = Validator(config)
+        m = _MultiHeadAttentionConfigValidator(config)
 
         batch_size = config.batch_size
         source_sequence_length = config.source_sequence_length
@@ -438,29 +452,35 @@ class Test___resolve_static_projection_type(TestValidator):
     def test__value_tensor_flag__False(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = Validator(config)
+        m = _MultiHeadAttentionConfigValidator(config)
 
         value_tensor_flag = False
 
-        output = m._Validator__resolve_static_projection_type(value_tensor_flag)
+        output = m._MultiHeadAttentionConfigValidator__resolve_static_projection_type(
+            value_tensor_flag
+        )
 
         self.assertEqual(output, "static_keys")
 
     def test__value_tensor_flag__True(self):
         c = copy.deepcopy(self.cfg)
         config = c.multi_head_attention_model_config
-        m = Validator(config)
+        m = _MultiHeadAttentionConfigValidator(config)
 
         value_tensor_flag = True
 
-        output = m._Validator__resolve_static_projection_type(value_tensor_flag)
+        output = m._MultiHeadAttentionConfigValidator__resolve_static_projection_type(
+            value_tensor_flag
+        )
         self.assertEqual(output, "static_values")
 
 
 class Test___resolve_static_projection_shape(TestValidator):
     def test_no_input_tensor(self):
         static_tensor = None
-        output = self.model._Validator__resolve_static_projection_shape(static_tensor)
+        output = self.model._MultiHeadAttentionConfigValidator__resolve_static_projection_shape(
+            static_tensor
+        )
 
         self.assertIsNone(output)
 
@@ -468,7 +488,9 @@ class Test___resolve_static_projection_shape(TestValidator):
         static_tensor = torch.randn(
             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
         )
-        output = self.model._Validator__resolve_static_projection_shape(static_tensor)
+        output = self.model._MultiHeadAttentionConfigValidator__resolve_static_projection_shape(
+            static_tensor
+        )
 
         self.assertIsNone(output)
 
@@ -477,7 +499,9 @@ class Test___resolve_static_projection_shape(TestValidator):
             self.batch_size, self.source_sequence_length, self.head_dim
         )
         with self.assertRaises(AssertionError) as context:
-            self.model._Validator__resolve_static_projection_shape(wrong_static_tensor)
+            self.model._MultiHeadAttentionConfigValidator__resolve_static_projection_shape(
+                wrong_static_tensor
+            )
 
 
 class Test_check_static_projection_shapes(TestValidator):
