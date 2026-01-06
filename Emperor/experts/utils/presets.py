@@ -95,6 +95,8 @@ class MixtureOfExpertsPresets:
             )
 
         config = MixtureOfExpertsConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
             top_k=experts_top_k,
             num_experts=experts_num_experts,
             layer_stack_option=experts_layer_stack_option,
