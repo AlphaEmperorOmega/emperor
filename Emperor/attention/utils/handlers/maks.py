@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 from torch import Tensor
-from Emperor.attention.utils.handlers._validator import _MaskValidator
+from Emperor.attention.utils.handlers._validator import MaskValidator
 
 from typing import TYPE_CHECKING
 
@@ -19,7 +19,7 @@ class Mask:
         self.target_dtype = self.cfg.target_dtype
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.validator = _MaskValidator(self)
+        self.validator = MaskValidator(self)
 
     def process_attention_masks(
         self,
