@@ -2,16 +2,15 @@ from dataclasses import asdict
 import unittest
 import torch
 
-from Emperor.attention.utils.projection_handler import Projector
-from Emperor.attention.utils.validation_handler import Validator
-from Emperor.attention.utils.processor_handler import (
+from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+from Emperor.attention.utils.presets import MultiHeadAttentionPresets
+from Emperor.attention.utils.handlers.projector import ProjectorSelector
+from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
+from Emperor.attention.utils.handlers.processor import (
     Processor,
     ProcessorDefault,
     ProcessorWithReturnedWeights,
 )
-
-from Emperor.attention.attention import MultiHeadAttentionConfig
-from docs.config import default_unittest_config
 
 
 class TestProcessor(unittest.TestCase):
@@ -29,16 +28,18 @@ class TestProcessor(unittest.TestCase):
         self.head_dim = None
 
     def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.multi_head_attention_model_config
+        self.config = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+        )
         if config is not None:
             for k in asdict(config):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        validator = Validator(self.config)
-        projector = Projector(self.config, self.cfg)
-
+        validator = MultiHeadAttentionConfigValidator(self.config)
+        projector = ProjectorSelector(self.config).build_model()
         self.model = Processor(self.config, validator, projector)
 
         self.batch_size = self.config.batch_size
