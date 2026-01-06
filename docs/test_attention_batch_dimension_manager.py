@@ -1,9 +1,9 @@
 import torch
 import unittest
 from dataclasses import asdict
-from docs.config import default_unittest_config
-from Emperor.attention.utils.batch_handler import BatchDimensionManager
-from Emperor.attention.attention import MultiHeadAttentionConfig
+from Emperor.attention.utils.presets import MultiHeadAttentionPresets
+from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+from Emperor.attention.utils.handlers.batch import BatchDimensionManager
 
 
 class TestBatchDimensionManager(unittest.TestCase):
@@ -19,8 +19,11 @@ class TestBatchDimensionManager(unittest.TestCase):
         self.target_sequence_length = None
 
     def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.multi_head_attention_model_config
+        self.config = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+        )
         if config is not None:
             for k in asdict(config):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
