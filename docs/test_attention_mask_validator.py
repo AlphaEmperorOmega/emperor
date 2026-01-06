@@ -5,7 +5,7 @@ from dataclasses import asdict
 from docs.config import default_unittest_config
 from Emperor.attention.utils.handlers.maks import Mask
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.attention.utils.handlers._validator import _MaskValidator
+from Emperor.attention.utils.handlers._validator import MaskValidator
 
 
 class TestMaskValidator(unittest.TestCase):
@@ -35,7 +35,7 @@ class TestMaskValidator(unittest.TestCase):
                     setattr(self.config, k, getattr(config, k))
 
         model = Mask(self.config)
-        self.model = _MaskValidator(model)
+        self.model = MaskValidator(model)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
