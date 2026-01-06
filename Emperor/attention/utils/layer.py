@@ -7,7 +7,7 @@ from Emperor.attention.utils.handlers.bias import KeyValueBias
 from Emperor.attention.utils.handlers.processor import Processor
 from Emperor.attention.utils.handlers.projector import ProjectorSelector
 from Emperor.attention.utils.handlers.batch import BatchDimensionManager
-from Emperor.attention.utils._validator import _MultiHeadAttentionConfigValidator
+from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
 
 from typing import TYPE_CHECKING
 
@@ -150,7 +150,7 @@ class MultiHeadAttention(Module):
         self.__initialize_utilities()
 
     def __initialize_utilities(self):
-        self.validator = _MultiHeadAttentionConfigValidator(self.cfg)
+        self.validator = MultiHeadAttentionConfigValidator(self.cfg)
         self.masks = Mask(self.cfg)
         self.projector = ProjectorSelector(self.cfg).build_model()
         self.processor = Processor(self.cfg, self.validator, self.projector)

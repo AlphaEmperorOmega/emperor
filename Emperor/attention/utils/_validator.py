@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 
 
-class _MultiHeadAttentionConfigValidator:
+class MultiHeadAttentionConfigValidator:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",

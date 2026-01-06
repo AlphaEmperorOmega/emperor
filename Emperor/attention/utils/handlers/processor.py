@@ -4,18 +4,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+    from Emperor.attention.utils.handlers.projector import ProjectorBase
+    from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
 
 
 class ProcessorBase:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "Validator",
-        projector: "Projector",
+        validator: "MultiHeadAttentionConfigValidator",
+        projector: "ProjectorBase",
     ):
         self.cfg = cfg
         self.validator = validator
@@ -33,25 +36,27 @@ class ProcessorBase:
         self.zero_attention_flag = self.cfg.zero_attention_flag
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.head_dim = self.embedding_dim // self.num_heads
+        is_qk_dim = (
+            self.query_key_projection_dim is not None
+            and self.query_key_projection_dim != 0
+        )
+        is_v_dim = (
+            self.value_projection_dim is not None and self.value_projection_dim != 0
+        )
         self.qk_head_dim = (
             self.query_key_projection_dim // self.num_heads
-            if self.query_key_projection_dim is not None
-            and self.query_key_projection_dim != 0
+            if is_qk_dim
             else self.head_dim
         )
         self.v_head_dim = (
-            self.value_projection_dim // self.num_heads
-            if self.value_projection_dim is not None and self.value_projection_dim != 0
-            else self.head_dim
+            self.value_projection_dim // self.num_heads if is_v_dim else self.head_dim
         )
 
     def _compute_attention_output(self, weighted_values: Tensor) -> Tensor:
         attention_output = self.projector.compute_output_projection(weighted_values)
         embedding_dim = attention_output.size(1)
         return attention_output.view(
-            self.target_sequence_length,
-            self.batch_size,
-            embedding_dim,
+            self.target_sequence_length, self.batch_size, embedding_dim
         )
 
 
@@ -59,7 +64,7 @@ class ProcessorWithReturnedWeights(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "Validator",
+        validator: "MultiHeadAttentionConfigValidator",
         output_model: nn.Module,
     ):
         super().__init__(cfg, validator, output_model)
@@ -165,7 +170,7 @@ class ProcessorDefault(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "Validator",
+        validator: "MultiHeadAttentionConfigValidator",
         output_model: nn.Module,
     ):
         super().__init__(cfg, validator, output_model)
@@ -180,10 +185,7 @@ class ProcessorDefault(ProcessorBase):
         attention_mask = self.__prepare_attnetion_mask(attention_mask)
         query, key, value = self.__reshape_qkv_for_attention(query, key, value)
         weighted_values = self.__compute_weighted_values(
-            query,
-            key,
-            value,
-            attention_mask,
+            query, key, value, attention_mask
         )
         attention_output = self._compute_attention_output(weighted_values)
         if not self.validator.get_batched_input_flag():
@@ -264,7 +266,7 @@ class Processor:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "Validator",
+        validator: "MultiHeadAttentionConfigValidator",
         output_model: nn.Module,
     ):
         self.cfg = cfg

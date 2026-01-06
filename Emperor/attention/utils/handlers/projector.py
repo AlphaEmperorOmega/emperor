@@ -97,7 +97,9 @@ class ProjectorBase(Module):
         return projection.view(sequence_length, batch_size, -1)
 
     def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
-        return self._compute_projection(weighted_values, self.output_model)
+        if weighted_values.dim() == 3:
+            return self._compute_projection(weighted_values, self.output_model)
+        return self.output_model(weighted_values)
 
 
 class SelfAttentionProjector(ProjectorBase):

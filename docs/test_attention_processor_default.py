@@ -1,12 +1,13 @@
-from dataclasses import asdict
-import unittest
 import torch
+import unittest
 
-from Emperor.attention.utils.projection_handler import Projector
-from Emperor.attention.utils.validation_handler import Validator
-from Emperor.attention.utils.processor_handler import ProcessorDefault
-from Emperor.attention.attention import MultiHeadAttentionConfig
+from dataclasses import asdict
+from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from docs.config import default_unittest_config
+from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+from Emperor.attention.utils.handlers.processor import ProcessorDefault
+from Emperor.attention.utils.handlers.projector import ProjectorSelector
+from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
 
 
 class TestProcessorDefault(unittest.TestCase):
@@ -14,7 +15,6 @@ class TestProcessorDefault(unittest.TestCase):
         self.rebuild_presets()
 
     def tearDown(self):
-        self.cfg = None
         self.config = None
         self.model = None
         self.batch_size = None
@@ -24,23 +24,30 @@ class TestProcessorDefault(unittest.TestCase):
         self.head_dim = None
 
     def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.multi_head_attention_model_config
+        self.config = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+        )
         if config is not None:
             for k in asdict(config):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        validator = Validator(self.config)
-        projector = Projector(self.config, self.cfg)
+        validator = MultiHeadAttentionConfigValidator(self.config)
+        projector = ProjectorSelector(self.config).build_model()
         self.model = ProcessorDefault(self.config, validator, projector)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
+        self.query_key_projection_dim = self.config.query_key_projection_dim
+        self.value_projection_dim = self.config.query_key_projection_dim
         self.target_sequence_length = self.config.target_sequence_length
         self.source_sequence_length = self.config.source_sequence_length
         self.num_heads = self.config.num_heads
         self.head_dim = self.embedding_dim // self.num_heads
+        self.qk_head_dim = self.model.qk_head_dim
+        self.v_head_dim = self.model.v_head_dim
 
 
 class Test____prepare_attnetion_mask(TestProcessorDefault):
@@ -98,13 +105,19 @@ class Test____prepare_attnetion_mask(TestProcessorDefault):
 class Test____reshape_qkv_for_attention(TestProcessorDefault):
     def test__method(self):
         query = torch.randn(
-            self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
+            self.batch_size * self.num_heads,
+            self.target_sequence_length,
+            self.qk_head_dim,
         )
         key = torch.randn(
-            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.qk_head_dim,
         )
         value = torch.randn(
-            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
+            self.batch_size * self.num_heads,
+            self.source_sequence_length,
+            self.v_head_dim,
         )
 
         query, key, value = self.model._ProcessorDefault__reshape_qkv_for_attention(
@@ -120,7 +133,7 @@ class Test____reshape_qkv_for_attention(TestProcessorDefault):
                 self.batch_size,
                 self.num_heads,
                 self.target_sequence_length,
-                self.head_dim,
+                self.qk_head_dim,
             ),
         )
         self.assertEqual(
@@ -129,7 +142,7 @@ class Test____reshape_qkv_for_attention(TestProcessorDefault):
                 self.batch_size,
                 self.num_heads,
                 self.source_sequence_length,
-                self.head_dim,
+                self.qk_head_dim,
             ),
         )
         self.assertEqual(
@@ -138,7 +151,7 @@ class Test____reshape_qkv_for_attention(TestProcessorDefault):
                 self.batch_size,
                 self.num_heads,
                 self.source_sequence_length,
-                self.head_dim,
+                self.v_head_dim,
             ),
         )
 
