@@ -21,6 +21,10 @@ class _Validator:
         self.__ensure_values_have_correct_types()
 
     def __ensure_values_are_not_none(self):
+        if self.model.input_dim is None:
+            raise ValueError("Configuration Error: 'input_dim' is None")
+        if self.model.output_dim is None:
+            raise ValueError("Configuration Error: 'output_dim' is None")
         if self.model.layer_stack_model is None:
             raise ValueError("Configuration Error: 'layer_stack_option' is None")
         if self.model.top_k is None:
@@ -45,6 +49,14 @@ class _Validator:
             raise ValueError("Configuration Error: 'sampler_model_config' is None")
 
     def __ensure_values_have_correct_types(self):
+        if not isinstance(self.model.input_dim, int):
+            raise TypeError(
+                f"Configuration Error: 'input_dim' must be of type int, received type {type(self.model.input_dim).__name__}"
+            )
+        if not isinstance(self.model.output_dim, int):
+            raise TypeError(
+                f"Configuration Error: 'output_dim' must be of type int, received type {type(self.model.output_dim).__name__}"
+            )
         if not isinstance(self.model.layer_stack_model, LinearLayerStackOptions):
             raise TypeError(
                 f"Configuration Error: 'layer_stack_option' must be of type LinearLayerStackOptions, received type {type(self.model.layer_stack_model).__name__}"
