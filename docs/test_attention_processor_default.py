@@ -2,9 +2,8 @@ import torch
 import unittest
 
 from dataclasses import asdict
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from docs.config import default_unittest_config
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from Emperor.attention.utils.handlers.processor import ProcessorDefault
 from Emperor.attention.utils.handlers.projector import ProjectorSelector
 from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
