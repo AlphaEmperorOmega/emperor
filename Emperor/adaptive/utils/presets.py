@@ -347,7 +347,7 @@ class AdaptiveParameterLayerPresets:
         batch_size=4,
         input_dim=8,
         output_dim=6,
-        hidden_dim: int = 0,
+        hidden_dim: int = 4,
         num_layers: int = 2,
         activation: ActivationOptions = ActivationOptions.RELU,
         residual_flag: bool = False,

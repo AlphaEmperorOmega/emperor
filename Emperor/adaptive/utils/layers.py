@@ -121,7 +121,11 @@ class AdaptiveParameterLayer(Module):
     def __init_adaptive_behaviour(self):
         if self.adaptive_behaviour_config is None:
             return None
-        return AdaptiveParameterBehaviour(self.adaptive_behaviour_config)
+        overrides = AdaptiveParameterBehaviourConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
+        return AdaptiveParameterBehaviour(self.adaptive_behaviour_config, overrides)
 
     def __init_weight_model(self) -> AdaptiveMixtureBase:
         overrides = AdaptiveParameterLayerConfig(
