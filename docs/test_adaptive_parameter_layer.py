@@ -496,6 +496,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                     with self.subTest(msg=message):
                         cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
                             input_dim=8,
+                            hidden_dim=8,
                             output_dim=8,
                             num_layers=num_layers,
                             adaptive_weight_option=adaptive_weight_option,
@@ -523,6 +524,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                         with self.subTest(msg=message):
                             cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
                                 input_dim=8,
+                                hidden_dim=8,
                                 output_dim=8,
                                 num_layers=num_layers,
                                 experts_compute_expert_mixture_flag=True,
