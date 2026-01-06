@@ -5,11 +5,9 @@ from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.handlers.maks import Mask
 from Emperor.attention.utils.handlers.bias import KeyValueBias
 from Emperor.attention.utils.handlers.processor import Processor
-from Emperor.attention.utils.handlers.projector import Projector
+from Emperor.attention.utils.handlers.projector import ProjectorSelector
 from Emperor.attention.utils.handlers.batch import BatchDimensionManager
-from Emperor.attention.utils._validator import (
-    _MultiHeadAttentionConfigValidator,
-)
+from Emperor.attention.utils._validator import _MultiHeadAttentionConfigValidator
 
 from typing import TYPE_CHECKING
 
@@ -74,7 +72,7 @@ class MultiHeadAttentionConfig(ConfigBase):
             "help": "Data type (dtype) for the attention outputs (e.g. torch.float32)."
         },
     )
-    use_separate_projection_weight_flag: bool | None = field(
+    is_self_attention_projector_flag: bool | None = field(
         default=None,
         metadata={
             "help": "If True, use separate projection weights for Q, K, V. If False, use shared projection weights (single QKV matrix)."
@@ -144,8 +142,8 @@ class MultiHeadAttention(Module):
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.use_separate_projection_weight_flag = (
-            self.cfg.use_separate_projection_weight_flag
+        self.is_self_attention_projector_flag = (
+            self.cfg.is_self_attention_projector_flag
         )
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self._validate_fields(self.cfg, MultiHeadAttentionConfig)
@@ -154,7 +152,7 @@ class MultiHeadAttention(Module):
     def __initialize_utilities(self):
         self.validator = _MultiHeadAttentionConfigValidator(self.cfg)
         self.masks = Mask(self.cfg)
-        self.projector = Projector(self.cfg, self.main_cfg)
+        self.projector = ProjectorSelector(self.cfg).build_model()
         self.processor = Processor(self.cfg, self.validator, self.projector)
         self.bias = KeyValueBias(self.cfg)
         self.utils = Utils(self.cfg, self.validator)
