@@ -424,6 +424,7 @@ class LayerStack(Module):
                 layer_type=layer_type,
             )
         overrides.model_type = model_type
+        overrides.layer_type = layer_type
         return overrides
 
     def build_model(self) -> Layer | Sequential:
