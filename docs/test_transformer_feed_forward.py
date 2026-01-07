@@ -1,6 +1,7 @@
 import torch
 import unittest
 
+from Emperor.experts.options import MixtureOfExpertsStackOptions
 from Emperor.transformer.presets import TransformerPresets
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.transformer.utils.feed_forward import FeedForward
@@ -8,28 +9,27 @@ from Emperor.adaptive.options import AdaptiveLayerStackOptions
 
 
 class TestFeedForward(unittest.TestCase):
-    def setUp(self):
-        pass
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.model = None
-        self.batch_size = None
-        self.input_dim = None
-        self.output_dim = None
-
     def test_init_with_valid_inputs(self):
         num_layers_list = [2, 4, 6]
-        stack_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        stack_options = [
+            LinearLayerStackOptions,
+            AdaptiveLayerStackOptions,
+            MixtureOfExpertsStackOptions,
+        ]
         for stack_type in stack_options:
             for model_type in stack_type:
                 for num_layers in num_layers_list:
                     message = f"Testing configuration with model_type={model_type}, num_layers={num_layers}"
+                    options = {}
+                    if model_type == MixtureOfExpertsStackOptions.BASE:
+                        options = {
+                            "projector_experts_init_sampler_model_flag": True,
+                        }
                     with self.subTest(msg=message):
                         c = TransformerPresets.transformer_feed_forward_preset(
                             layer_stack_option=model_type,
                             num_layers=num_layers,
+                            **options,
                         )
                         m = FeedForward(c)
                         self.assertIsInstance(m, FeedForward)
@@ -50,16 +50,26 @@ class TestFeedForward(unittest.TestCase):
     def test_forward(self):
         num_layers_list = [2, 4, 6]
         flag_options = [True, False]
-        stack_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        stack_options = [
+            LinearLayerStackOptions,
+            AdaptiveLayerStackOptions,
+            MixtureOfExpertsStackOptions,
+        ]
         for stack_type in stack_options:
             for model_type in stack_type:
                 for num_layers in num_layers_list:
                     for matrix_input_flag in flag_options:
                         message = f"Testing FeedForward configuration with model_type={model_type}, num_layers={num_layers}, matrix_input_flag={matrix_input_flag}"
                         with self.subTest(msg=message):
+                            options = {}
+                            if model_type == MixtureOfExpertsStackOptions.BASE:
+                                options = {
+                                    "projector_experts_init_sampler_model_flag": True,
+                                }
                             c = TransformerPresets.transformer_feed_forward_preset(
                                 layer_stack_option=model_type,
                                 num_layers=num_layers,
+                                **options,
                             )
                             m = FeedForward(c)
                             batch_size = 8

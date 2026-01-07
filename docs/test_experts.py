@@ -4,14 +4,14 @@ import unittest
 from torch.nn import Sequential
 from Emperor.base.layer import Layer
 from Emperor.config import ModelConfig
-from Emperor.experts.utils.layers import MixtureOfExperts
-from Emperor.experts.utils.presets import MixtureOfExpertsPresets
-from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
-from Emperor.experts.utils.stack import MixtureOfExpertsStack
-from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.sampler.model import SamplerModel
 from Emperor.sampler.utils.routers import RouterModel
+from Emperor.experts.utils.layers import MixtureOfExperts
+from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.experts.utils.stack import MixtureOfExpertsStack
+from Emperor.experts.utils.presets import MixtureOfExpertsPresets
 from Emperor.sampler.utils.samplers import SamplerFull, SamplerSparse, SamplerTopk
+from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
 
 
 class TestMixtureOfExperts(unittest.TestCase):
