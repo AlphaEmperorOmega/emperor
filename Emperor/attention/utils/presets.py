@@ -1,8 +1,4 @@
 from torch import float32
-from Emperor.adaptive.utils.mixtures.options import (
-    AdaptiveBiasOptions,
-    AdaptiveWeightOptions,
-)
 from Emperor.base.enums import ActivationOptions
 from Emperor.linears.utils.presets import LinearPresets
 from Emperor.linears.options import LinearLayerStackOptions
@@ -11,6 +7,10 @@ from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.adaptive.utils.mixtures.options import (
+    AdaptiveBiasOptions,
+    AdaptiveWeightOptions,
+)
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,

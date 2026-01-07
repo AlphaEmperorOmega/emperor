@@ -1,5 +1,5 @@
-import torch
 import math
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -54,6 +54,10 @@ class ProcessorBase:
 
     def _compute_attention_output(self, weighted_values: Tensor) -> Tensor:
         attention_output = self.projector.compute_output_projection(weighted_values)
+        if isinstance(attention_output, tuple):
+            # TODO: At the moment the attention mechanism does not handle a tuple output.
+            # This needs to be fixed in the future.
+            attention_output = attention_output[0]
         embedding_dim = attention_output.size(1)
         return attention_output.view(
             self.target_sequence_length, self.batch_size, embedding_dim
