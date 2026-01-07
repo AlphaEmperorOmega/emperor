@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from Emperor.sampler.model import SamplerModel
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.adaptive.utils.routers import RouterModel
-from Emperor.experts.utils.layers import MixtureOfExperts
+from Emperor.base.layer import Layer, LayerStackConfig
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
-from Emperor.base.layer import Layer, LayerStackConfig
+from Emperor.experts.options import MixtureOfExpertsStackOptions
 from Emperor.transformer.utils._validator import FeedForwardValidator
 
 from typing import TYPE_CHECKING
@@ -28,11 +28,9 @@ class FeedForwardConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    layer_stack_option: "LinearLayerStackOptions | AdaptiveLayerStackOptions | None" = (
-        field(
-            default=None,
-            metadata={"help": "Number of layers added to the router"},
-        )
+    layer_stack_option: "LinearLayerStackOptions | AdaptiveLayerStackOptions | MixtureOfExpertsStackOptions | None" = field(
+        default=None,
+        metadata={"help": "Number of layers added to the router"},
     )
     num_layers: int | None = field(
         default=None,
@@ -54,7 +52,6 @@ class FeedForward(Module):
         self.output_dim = self.cfg.output_dim
         self.layer_stack_option = self.cfg.layer_stack_option.value
         self.num_layers = self.cfg.num_layers
-
         self.validator = FeedForwardValidator(self)
         self.model = self._create_model()
         self._store_shape_attributes()
@@ -121,6 +118,22 @@ class FeedForward(Module):
 
 @dataclass
 class MixtureOfExpertsFeedForwardConfig(ConfigBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    hidden_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    num_layers: int | None = field(
+        default=None,
+        metadata={"help": "Number of layers added to the router"},
+    )
     weighted_parameters_flag: bool | None = field(
         default=None,
         metadata={
@@ -141,15 +154,37 @@ class MixtureOfExpertsFeedForward(Module):
             config, overrides
         )
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
+        self.input_dim = self.cfg.input_dim
+        self.hidden_dim = self.cfg.hidden_dim
+        self.output_dim = self.cfg.output_dim
+        self.num_layers = self.cfg.num_layers
+        self.model_num_layers = self.num_layers // 2
 
         self.router = RouterModel(cfg)
         self.sampler = SamplerModel(cfg)
-        self.input_module = MixtureOfExperts(cfg)
-        self.output_module = MixtureOfExperts(cfg, is_output_layer_flag=True)
+        self.input_module = self._create_input_model()
+        self.output_module = self._create_output_model()
+        self.validator = FeedForwardValidator(self)
 
         self.batch_size = None
         self.sequence_length = None
         self.output_shape = None
+
+    def _create_input_model(self) -> Layer | Sequential:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.hidden_dim,
+            num_layers=self.model_num_layers,
+        )
+        return self.layer_stack_option(self.main_cfg, overrides).build_model()
+
+    def _create_output_model(self) -> Layer | Sequential:
+        overrides = LayerStackConfig(
+            input_dim=self.hidden_dim,
+            output_dim=self.output_dim,
+            num_layers=self.model_num_layers,
+        )
+        return self.layer_stack_option(self.main_cfg, overrides).build_model()
 
     def forward(
         self,
