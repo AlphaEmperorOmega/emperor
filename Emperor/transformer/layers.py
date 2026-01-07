@@ -7,7 +7,7 @@ from torch.nn import ModuleList
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.base.enums import LayerNormPositionOptions
-from Emperor.feedForward.feed_forward import FeedForward
+from Emperor.transformer.utils.feed_forward import FeedForward
 from Emperor.attention.utils.layer import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.adaptive.utils.base import (
     Layer,
