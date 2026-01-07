@@ -1,3 +1,4 @@
+from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.utils.presets import LinearPresets
@@ -408,6 +409,7 @@ class AdaptiveParameterLayerPresets:
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
         config = LayerStackConfig(
+            model_type=AdaptiveLayerOptions.BASE,
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             output_dim=output_dim,

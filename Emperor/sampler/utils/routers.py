@@ -4,11 +4,6 @@ from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import Module, ConfigBase
 from Emperor.linears.options import LinearLayerStackOptions
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
-
 
 @dataclass
 class RouterConfig(ConfigBase):
@@ -35,7 +30,7 @@ class RouterConfig(ConfigBase):
 class RouterModel(Module):
     def __init__(
         self,
-        cfg: "ModelConfig",
+        cfg: "RouterConfig",
         overrides: "RouterConfig | None" = None,
     ) -> None:
         super().__init__()
