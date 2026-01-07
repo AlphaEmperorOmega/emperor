@@ -1,9 +1,11 @@
+import torch
 import unittest
 from dataclasses import asdict
+from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from docs.config import default_unittest_config
 from Emperor.attention.utils.utils import Utils
-from Emperor.attention.utils.validation_handler import Validator
-from Emperor.attention.attention import MultiHeadAttentionConfig
+from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
 
 
 class TestKeyValueBias(unittest.TestCase):
@@ -21,14 +23,17 @@ class TestKeyValueBias(unittest.TestCase):
         self.head_dim = None
 
     def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.multi_head_attention_model_config
+        self.config = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+        )
         if config is not None:
             for k in asdict(config):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.validator = Validator(self.config)
+        self.validator = MultiHeadAttentionConfigValidator(self.config)
         self.model = Utils(self.config, self.validator)
 
         self.batch_size = self.config.batch_size
