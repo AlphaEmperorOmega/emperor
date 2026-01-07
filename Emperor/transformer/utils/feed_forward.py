@@ -1,15 +1,16 @@
-import copy
 import torch
+
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
-from Emperor.base.layer import Layer, LayerStack
-from Emperor.base.utils import ConfigBase, Module
-from Emperor.experts.utils.layers import MixtureOfExperts
-from Emperor.adaptive.utils.routers import RouterModel
-from Emperor.adaptive.options import AdaptiveLayerOptions
-from Emperor.linears.options import LinearLayerOptions
 from Emperor.sampler.model import SamplerModel
+from Emperor.base.utils import ConfigBase, Module
+from Emperor.adaptive.utils.routers import RouterModel
+from Emperor.experts.utils.layers import MixtureOfExperts
+from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.adaptive.options import AdaptiveLayerStackOptions
+from Emperor.base.layer import Layer, LayerStackConfig
+from Emperor.transformer.utils._validator import FeedForwardValidator
 
 from typing import TYPE_CHECKING
 
@@ -17,26 +18,25 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
-class _Validator:
-    @staticmethod
-    def ensure_valid_number_of_layers(num_layers: int) -> None:
-        if not (num_layers >= 2 and num_layers % 2 == 0):
-            raise RuntimeError(
-                "The Transformer FeedForward module requires at least 2 layers, and the number of layers is even."
-            )
-
-
 @dataclass
 class FeedForwardConfig(ConfigBase):
-    model_type: "LinearLayerOptions | AdaptiveLayerOptions | None" = field(
+    input_dim: int | None = field(
         default=None,
-        metadata={"help": "Linear model module used for output transformation"},
+        metadata={"help": ""},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    layer_stack_option: "LinearLayerStackOptions | AdaptiveLayerStackOptions | None" = (
+        field(
+            default=None,
+            metadata={"help": "Number of layers added to the router"},
+        )
     )
     num_layers: int | None = field(
         default=None,
-        metadata={
-            "help": "Number of layers to be added to the transformer feed forward module, it requires at least 2 layers.",
-        },
+        metadata={"help": "Number of layers added to the router"},
     )
 
 
@@ -47,26 +47,25 @@ class FeedForward(Module):
         overrides: "FeedForwardConfig | None" = None,
     ) -> None:
         super().__init__()
-        config = getattr(cfg, "transformer_feed_forward_config", cfg)
-        self.cfg: FeedForwardConfig = self._overwrite_config(config, overrides)
+        self.cfg: FeedForwardConfig = self._overwrite_config(cfg, overrides)
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
-        self.model_type = self.cfg.model_type
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
+        self.layer_stack_option = self.cfg.layer_stack_option.value
         self.num_layers = self.cfg.num_layers
-        self._validate_fields(self.cfg, FeedForwardConfig)
-        _Validator.ensure_valid_number_of_layers(self.num_layers)
 
-        self.model = self._create_model(cfg)
+        self.validator = FeedForwardValidator(self)
+        self.model = self._create_model()
         self._store_shape_attributes()
 
-    def _create_model(self, config: "ModelConfig") -> Layer | Sequential:
-        config = self.__update_config(config)
-        return LayerStack(config).build_model()
-
-    def __update_config(self, confg: "ModelConfig"):
-        c = copy.deepcopy(confg)
-        c.layer_stack_config.num_layers = self.num_layers
-        c.layer_stack_config.model_type = self.model_type
-        return c
+    def _create_model(self) -> Layer | Sequential:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+            num_layers=self.num_layers,
+        )
+        return self.layer_stack_option(self.main_cfg, overrides).build_model()
 
     def _store_shape_attributes(self):
         self.batch_size = None
@@ -81,7 +80,10 @@ class FeedForward(Module):
         input_batch, skip_mask = self._ensure_correct_shape(input_batch, skip_mask)
         projected_inputs = self.model(input_batch)
         if isinstance(projected_inputs, tuple):
-            output, loss = projected_inputs
+            if len(projected_inputs) == 2:
+                output, loss = projected_inputs
+            else:
+                output, skip_mask, loss = projected_inputs
             output = self._revert_to_original_shape(output)
             return output, loss
         return self._revert_to_original_shape(projected_inputs), torch.tensor(0.0)
