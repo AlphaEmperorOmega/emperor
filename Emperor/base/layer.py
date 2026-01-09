@@ -5,8 +5,8 @@ from typing import Self
 from torch.types import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
-from Emperor.base.enums import ActivationOptions, BaseOptions, LayerNormPositionOptions
 from Emperor.base.utils import ConfigBase, Module
+from Emperor.base.enums import ActivationOptions, BaseOptions, LayerNormPositionOptions
 
 from typing import TYPE_CHECKING
 
@@ -109,39 +109,29 @@ class Layer(Module):
 
     def forward(
         self,
-        main_model_input: Tensor | tuple,
+        model_input: Tensor | tuple,
         skip_mask: Tensor | None = None,
     ) -> Tensor | tuple[Tensor | None]:
         # TODO: Ensure that the skip_maks will be used
         # in the future.
-        main_model_input = self._handle_model_input(main_model_input)
-
-        if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
-            main_model_input = self.layer_norm_module(main_model_input)
-
-        output = self._handle_model_processing(main_model_input)
-
-        if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
-            output = self.layer_norm_module(output)
-        if self.has_activation:
-            # TODO: Add the option to to redirect each sample in the
-            # input batch to use a different activation function
-            output = self.activation_function(output)
-        if self.apply_gates_bool:
-            # TODO: Finish the implementation of the gates module
-            # output = self.gate_module(output) * output
-            pass
-        if self.has_dropout:
-            output = self.dropout_module(output)
-        if self.residual_connection_flag:
-            output = output + main_model_input
-        if self.layer_norm_position == LayerNormPositionOptions.AFTER:
-            output = self.layer_norm_module(output)
-
+        model_input = self._handle_model_input(model_input)
+        output = self.__apply_layer_norm_before(model_input)
+        output = self._handle_model_processing(output)
+        output = self.__apply_layer_norm_default(output)
+        output = self.__apply_activation(output)
+        output = self.__apply_gates(output)
+        output = self.__apply_dropout(output)
+        output = self.__apply_residual_connection(output, model_input)
+        output = self.__apply_layer_norm_after(output)
         return self._handle_model_output(output)
 
-    def _handle_model_input(self, model_inputs: Tensor) -> Tensor:
-        return model_inputs
+    def _handle_model_input(self, input: Tensor) -> Tensor:
+        return input
+
+    def __apply_layer_norm_before(self, input: Tensor):
+        if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
+            return self.layer_norm_module(input)
+        return input
 
     def _handle_model_processing(
         self,
@@ -149,6 +139,39 @@ class Layer(Module):
         additional_model_inputs: dict = {},
     ) -> Tensor:
         return self.model(main_model_input, **additional_model_inputs)
+
+    def __apply_layer_norm_default(self, input: Tensor):
+        if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
+            return self.layer_norm_module(input)
+        return input
+
+    def __apply_activation(self, input: Tensor):
+        # TODO: Add the option to to redirect each sample in the
+        # input batch to use a different activation function
+        if self.has_activation:
+            return self.activation_function(input)
+        return input
+
+    def __apply_gates(self, input: Tensor):
+        # TODO: Implement the gates option
+        # if self.apply_gates_bool:
+        #     return self.gate_module(output) * output
+        return input
+
+    def __apply_dropout(self, input: Tensor):
+        if self.has_dropout:
+            return self.dropout_module(input)
+        return input
+
+    def __apply_residual_connection(self, input: Tensor, prev_input: Tensor):
+        if self.residual_connection_flag:
+            return input + prev_input
+        return input
+
+    def __apply_layer_norm_after(self, input: Tensor):
+        if self.layer_norm_position == LayerNormPositionOptions.AFTER:
+            return self.layer_norm_module(input)
+        return input
 
     def _handle_model_output(self, output: Tensor) -> Tensor:
         return output
@@ -161,199 +184,6 @@ class Layer(Module):
     #     data: LayerData,
     # ) -> LayerData:
     #     output = self.model(data.tensor)
-
-
-class ParameterGeneratorLayer(Layer):
-    def __init__(
-        self,
-        model: "Module",
-        activation_function: "ActivationOptions | None" = None,
-        layer_norm_dim: int | None = None,
-        residual_connection_flag: bool = False,
-        is_adaptive_computation: bool = False,
-        dropout_probability: float = 0.0,
-        layer_norm_position: "LayerNormPositionOptions | None" = None,
-    ):
-        super().__init__(
-            model,
-            activation_function,
-            layer_norm_dim,
-            residual_connection_flag,
-            is_adaptive_computation,
-            dropout_probability,
-            layer_norm_position,
-        )
-
-        self.loss = torch.tensor(0.0)
-
-    def _handle_model_input(
-        self, main_model_input: Tensor | tuple[Tensor, Tensor]
-    ) -> Tensor:
-        if isinstance(main_model_input, tuple):
-            main_model_input, previous_loss = main_model_input
-            self.loss = previous_loss
-        return main_model_input
-
-    def _handle_model_processing(
-        self,
-        main_model_input: Tensor,
-        additional_model_inputs: dict,
-    ) -> Tensor:
-        model_output = self.model(
-            main_model_input,
-            **additional_model_inputs,
-        )
-        output, skip_mask, loss = model_output
-        self.loss = self.loss + loss
-        return output
-
-    def _handle_model_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
-        return output, self.loss
-
-
-class SelfAttentionLayer(Layer):
-    def __init__(
-        self,
-        model: "Module",
-        activation_function: "ActivationOptions | None" = None,
-        layer_norm_dim: int | None = None,
-        residual_connection_flag: bool = False,
-        is_adaptive_computation: bool = False,
-        dropout_probability: float = 0.0,
-        layer_norm_position: "LayerNormPositionOptions | None" = None,
-    ):
-        super().__init__(
-            model,
-            activation_function,
-            layer_norm_dim,
-            residual_connection_flag,
-            is_adaptive_computation,
-            dropout_probability,
-            layer_norm_position,
-        )
-
-        self.loss = torch.tensor(0.0)
-
-    def _handle_model_input(
-        self, main_model_input: Tensor | tuple[Tensor, Tensor]
-    ) -> Tensor:
-        if isinstance(main_model_input, tuple):
-            main_model_input, previous_loss = main_model_input
-            self.loss = previous_loss
-        return main_model_input
-
-    def _handle_model_processing(
-        self,
-        main_model_input: Tensor,
-        additional_model_inputs: dict,
-    ) -> Tensor:
-        model_output = self.model(
-            main_model_input,
-            main_model_input,
-            main_model_input,
-            **additional_model_inputs,
-        )
-        attention_output, attention_weights = model_output
-        return attention_output
-
-    def _handle_model_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
-        return output, self.loss
-
-
-class CrossAttentionLayer(Layer):
-    def __init__(
-        self,
-        model: "Module",
-        activation_function: "ActivationOptions | None" = None,
-        layer_norm_dim: int | None = None,
-        residual_connection_flag: bool = False,
-        is_adaptive_computation: bool = False,
-        dropout_probability: float = 0.0,
-        layer_norm_position: "LayerNormPositionOptions | None" = None,
-    ):
-        super().__init__(
-            model,
-            activation_function,
-            layer_norm_dim,
-            residual_connection_flag,
-            is_adaptive_computation,
-            dropout_probability,
-            layer_norm_position,
-        )
-
-        self.loss = torch.tensor(0.0)
-
-    def _handle_model_input(
-        self, main_model_input: Tensor | tuple[Tensor, Tensor]
-    ) -> Tensor:
-        if isinstance(main_model_input, tuple):
-            main_model_input, previous_loss = main_model_input
-            self.loss = previous_loss
-        return main_model_input
-
-    def _handle_model_processing(
-        self,
-        main_model_input: Tensor,
-        additional_model_inputs: dict,
-    ) -> Tensor:
-        model_output = self.model(
-            main_model_input,
-            **additional_model_inputs,
-        )
-        attention_output, attention_weights = model_output
-        self.loss = self.loss
-        return attention_output
-
-    def _handle_model_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
-        return output, self.loss
-
-
-class FeedForwardLayer(Layer):
-    def __init__(
-        self,
-        model: "Module",
-        activation_function: "ActivationOptions | None" = None,
-        layer_norm_dim: int | None = None,
-        residual_connection_flag: bool = False,
-        is_adaptive_computation: bool = False,
-        dropout_probability: float = 0.0,
-        layer_norm_position: "LayerNormPositionOptions | None" = None,
-    ):
-        super().__init__(
-            model,
-            activation_function,
-            layer_norm_dim,
-            residual_connection_flag,
-            is_adaptive_computation,
-            dropout_probability,
-            layer_norm_position,
-        )
-
-        self.loss = torch.tensor(0.0)
-
-    def _handle_model_input(
-        self, main_model_input: Tensor | tuple[Tensor, Tensor]
-    ) -> Tensor:
-        if isinstance(main_model_input, tuple):
-            main_model_input, previous_loss = main_model_input
-            self.loss = previous_loss
-        return main_model_input
-
-    def _handle_model_processing(
-        self,
-        main_model_input: Tensor,
-        additional_model_inputs: dict,
-    ) -> Tensor:
-        model_output = self.model(
-            main_model_input,
-            **additional_model_inputs,
-        )
-        output, loss = model_output
-        self.loss = self.loss + loss
-        return output
-
-    def _handle_model_output(self, output: Tensor) -> tuple[Tensor, Tensor]:
-        return output, self.loss
 
 
 @dataclass
