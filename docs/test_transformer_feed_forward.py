@@ -23,7 +23,7 @@ class TestFeedForward(unittest.TestCase):
                     options = {}
                     if model_type == MixtureOfExpertsStackOptions.BASE:
                         options = {
-                            "projector_experts_init_sampler_model_flag": True,
+                            "experts_init_sampler_model_flag": True,
                         }
                     with self.subTest(msg=message):
                         c = TransformerPresets.transformer_feed_forward_preset(
@@ -64,7 +64,7 @@ class TestFeedForward(unittest.TestCase):
                             options = {}
                             if model_type == MixtureOfExpertsStackOptions.BASE:
                                 options = {
-                                    "projector_experts_init_sampler_model_flag": True,
+                                    "experts_init_sampler_model_flag": True,
                                 }
                             c = TransformerPresets.transformer_feed_forward_preset(
                                 layer_stack_option=model_type,
