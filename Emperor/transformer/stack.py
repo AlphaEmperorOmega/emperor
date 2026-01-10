@@ -4,39 +4,18 @@ import torch.nn as nn
 
 from torch import Tensor
 from torch.nn import ModuleList
-from dataclasses import dataclass, field
-from Emperor.base.utils import ConfigBase, Module
-from Emperor.transformer.layers import TransformerDecoderLayer, TransformerEncoderLayer
+from Emperor.base.utils import Module
+from Emperor.transformer.layers import (
+    TransformerConfig,
+    TransformerDecoderLayer,
+    TransformerEncoderLayer,
+)
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.transformer.layers import TransformerLayerBase
-
-
-@dataclass
-class TransformerConfig(ConfigBase):
-    num_layers: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    source_sequence_length: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    target_sequence_length: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    layer_norm_dim: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    causal_attention_mask_flag: bool | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
 
 
 class TransformerBase(Module):
