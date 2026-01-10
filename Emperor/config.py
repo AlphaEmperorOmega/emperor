@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.utils import ConfigBase
-from Emperor.transformer.layers import TransformerConfig
+from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.transformer.utils.feed_forward import FeedForwardConfig
 from Emperor.experts.utils.layers import MixtureOfExpertsConfig
 from Emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig

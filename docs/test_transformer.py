@@ -3,8 +3,8 @@ import unittest
 import itertools
 
 from torch.nn import LayerNorm, ModuleList
-from Emperor.transformer.presets import TransformerPresets
-from Emperor.transformer.stack import (
+from Emperor.transformer.utils.presets import TransformerPresets
+from Emperor.transformer.utils.stack import (
     Transformer,
     TransformerDecoder,
     TransformerEncoder,

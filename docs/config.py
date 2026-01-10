@@ -12,7 +12,7 @@ from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.sampler.utils.routers import RouterConfig
 from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.transformer.stack import TransformerConfig
+from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.transformer.utils.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,

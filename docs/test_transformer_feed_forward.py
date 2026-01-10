@@ -1,11 +1,11 @@
 import torch
 import unittest
 
-from Emperor.experts.options import MixtureOfExpertsStackOptions
-from Emperor.transformer.presets import TransformerPresets
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.transformer.utils.feed_forward import FeedForward
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
+from Emperor.experts.options import MixtureOfExpertsStackOptions
+from Emperor.transformer.utils.presets import TransformerPresets
 
 
 class TestFeedForward(unittest.TestCase):

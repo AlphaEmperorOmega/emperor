@@ -2,10 +2,13 @@ import torch
 import itertools
 import unittest
 
-from Emperor.transformer.presets import TransformerPresets
 from Emperor.attention.utils.layer import MultiHeadAttention
 from Emperor.transformer.utils.feed_forward import FeedForward
-from Emperor.transformer.layers import TransformerDecoderLayer, TransformerEncoderLayer
+from Emperor.transformer.utils.presets import TransformerPresets
+from Emperor.transformer.utils.layers import (
+    TransformerDecoderLayer,
+    TransformerEncoderLayer,
+)
 
 
 class TestTransformerEncoderLayer(unittest.TestCase):
