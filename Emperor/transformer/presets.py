@@ -1,8 +1,8 @@
 from torch import float32
 from Emperor.base.enums import ActivationOptions
+from Emperor.transformer.stack import TransformerConfig
 from Emperor.linears.utils.presets import LinearPresets
 from Emperor.linears.options import LinearLayerStackOptions
-from Emperor.transformer.layers import TransformerLayerConfig
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
 from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
 from Emperor.experts.options import MixtureOfExpertsStackOptions
@@ -244,13 +244,17 @@ class TransformerPresets:
         )
 
     @staticmethod
-    def transformer_layer_preset(
+    def transformer_preset(
         input_dim=8,
         hidden_dim=4,
         output_dim=6,
         layer_stack_option=LinearLayerStackOptions.ADAPTIVE,
         num_layers=2,
         embedding_dim=8,
+        source_sequence_length: int = 6,
+        target_sequence_length: int = 6,
+        layer_norm_dim: int = 8,
+        causal_attention_mask_flag: bool = False,
         attention_model_type=LinearLayerStackOptions.ADAPTIVE,
         attention_batch_size=8,
         attention_num_heads=4,
@@ -372,7 +376,7 @@ class TransformerPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-    ) -> "TransformerLayerConfig":
+    ) -> "TransformerConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
@@ -521,7 +525,12 @@ class TransformerPresets:
             stack_dropout_probability=stack_dropout_probability,
         )
 
-        return TransformerLayerConfig(
+        return TransformerConfig(
+            num_layers=num_layers,
+            source_sequence_length=source_sequence_length,
+            target_sequence_length=target_sequence_length,
+            layer_norm_dim=layer_norm_dim,
+            causal_attention_mask_flag=causal_attention_mask_flag,
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
         )
