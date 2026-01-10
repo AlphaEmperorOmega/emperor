@@ -25,7 +25,6 @@ from Emperor.neuron.neuron import (
     TerminalRangeOptions,
     TerminalZAxisOffsetOptions,
 )
-from Emperor.transformer.layers import TransformerLayerConfig
 
 
 def default_unittest_config():
@@ -171,7 +170,7 @@ def default_unittest_config():
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.NONE,
         ),
-        transformer_layer_config=TransformerLayerConfig(),
+        transformer_layer_config=TransformerConfig(),
         transformer_config=TransformerConfig(
             num_layers=6,
             source_sequence_length=16,
