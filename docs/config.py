@@ -1,22 +1,19 @@
 import torch
 import torch.nn as nn
+
+from Emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig
+from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
+from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from Emperor.base.layer import LayerStackConfig
 from Emperor.config import ModelConfig
-from Emperor.experts.experts import MixtureOfExpertsConfig
-from Emperor.attention.attention import MultiHeadAttentionConfig
-from Emperor.generators.utils.layers import ParameterLayerConfig
-from Emperor.generators.utils.linears import LinearLayerConfig
-from Emperor.generators.utils.mixture import MixtureConfig
-from Emperor.generators.utils.routers import RouterConfig
-from Emperor.generators.utils.samplers import SamplerConfig
-from Emperor.generators.utils.enums import (
-    # AttentionTypes,
-    # FeedForwardTypes,
-    LayerTypes,
-    LinearLayerTypes,
-)
-from Emperor.generators.utils.base import LayerStackConfig
-from Emperor.feedForward.feed_forward import (
+from Emperor.experts.utils.layers import MixtureOfExpertsConfig
+from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
+from Emperor.linears.utils.layers import LinearLayerConfig
+from Emperor.sampler.utils.routers import RouterConfig
+from Emperor.sampler.utils.samplers import SamplerConfig
+from Emperor.transformer.stack import TransformerConfig
+from Emperor.transformer.utils.feed_forward import (
     FeedForwardConfig,
     MixtureOfExpertsFeedForwardConfig,
 )
@@ -28,7 +25,7 @@ from Emperor.neuron.neuron import (
     TerminalRangeOptions,
     TerminalZAxisOffsetOptions,
 )
-from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
+from Emperor.transformer.layers import TransformerLayerConfig
 
 
 def default_unittest_config():
@@ -86,13 +83,8 @@ def default_unittest_config():
         gather_frequency_flag=GATHER_FREQUENCY_FLAG,
         router_model_config=RouterConfig(
             input_dim=ROUTER_INPUT_DIM,
-            hidden_dim=ROUTER_HIDDEN_DIM,
             num_experts=ROUTER_OUTPUT_DIM,
             noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
-            activation=ROUTER_ACTIVATION_FUNCTION,
-            num_layers=ROUTER_NUM_LAYERNUM_LAYERSS,
-            diagonal_model_type_flag=ROUTER_DYNAMIC_LINEAR_MODEL_FLAG,
-            residual_flag=False,
         ),
         sampler_model_config=SamplerConfig(
             top_k=SAMPLER_TOP_K,
@@ -107,20 +99,15 @@ def default_unittest_config():
             zero_centred_loss_weight=SAMPLER_ZERO_CENTRED_WEIGHT,
             mutual_information_loss_weight=SAMPLER_MUTUAL_INFORMATION_WEIGHT,
         ),
-        mixture_model_config=MixtureConfig(
+        mixture_model_config=AdaptiveMixtureConfig(
             input_dim=MIXTURE_INPUT_DIM,
             output_dim=MIXTURE_OUTPUT_DIM,
-            depth_dim=MIXTURE_DEPTH_DIM,
             top_k=MIXTURE_TOP_K,
-            bias_parameters_flag=MIXTURE_BIAS_PARAMETERS_FLAG,
             weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
             num_experts=MIXTURE_ROUTER_OUTPUT_DIM,
-            dynamic_diagonal_params_flag=MIXTURE_CROSS_DIAGONAL_FLAG,
         ),
-        parameter_generator_model_config=ParameterLayerConfig(
-            bias_parameters_flag=PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG,
+        parameter_generator_model_config=AdaptiveParameterLayerConfig(
             time_tracker_flag=False,
-            dynamic_diagonal_params_flag=False,
         ),
         linear_layer_config=LinearLayerConfig(
             input_dim=INPUT_DIM,
@@ -134,10 +121,6 @@ def default_unittest_config():
             input_dim=ROUTER_INPUT_DIM,
             output_dim=64,
             top_k=MIXTURE_TOP_K,
-            dropout_probability=0.1,
-            layer_norm_flag=True,
-            activation=ActivationOptions.GELU,
-            model_type=LinearLayerTypes.DYNAMIC,
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
@@ -147,24 +130,20 @@ def default_unittest_config():
             input_dim=64,
             output_dim=ROUTER_INPUT_DIM,
             top_k=MIXTURE_TOP_K,
-            dropout_probability=0.1,
-            layer_norm_flag=True,
-            activation=ActivationOptions.GELU,
-            model_type=LinearLayerTypes.DYNAMIC,
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
             init_sampler_model_flag=False,
         ),
         multi_head_attention_model_config=MultiHeadAttentionConfig(
-            model_type=LinearLayerTypes.DYNAMIC,
+            model_type=LinearLayerStackOptions.ADAPTIVE,
             batch_size=BATCH_SIZE,
             num_heads=4,
             embedding_dim=HIDDEN_DIM,
             target_sequence_length=16,
             source_sequence_length=16,
             target_dtype=torch.float32,
-            use_separate_projection_weight_flag=False,
+            is_self_attention_projector_flag=False,
             dropout_probability=0.0,
             key_value_bias_flag=False,
             zero_attention_flag=False,
@@ -177,14 +156,14 @@ def default_unittest_config():
         ),
         transformer_feed_forward_config=FeedForwardConfig(
             num_layers=2,
-            model_type=LinearLayerTypes.DYNAMIC,
+            layer_stack_option=LinearLayerOptions.ADAPTIVE,
         ),
         layer_stack_config=LayerStackConfig(
             input_dim=HIDDEN_DIM,
             hidden_dim=HIDDEN_DIM,
             output_dim=HIDDEN_DIM,
             num_layers=2,
-            model_type=LinearLayerTypes.DYNAMIC,
+            model_type=LinearLayerOptions.ADAPTIVE,
             activation=ActivationOptions.GELU,
             layer_norm_dim=HIDDEN_DIM,
             residual_flag=False,
@@ -192,11 +171,7 @@ def default_unittest_config():
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.NONE,
         ),
-        transformer_layer_config=TransformerLayerConfig(
-            layer_norm_position=LayerNormPositionOptions.DEFAULT,
-            dropout_probability=0.0,
-            layer_norm_dim=HIDDEN_DIM,
-        ),
+        transformer_layer_config=TransformerLayerConfig(),
         transformer_config=TransformerConfig(
             num_layers=6,
             source_sequence_length=16,
@@ -205,7 +180,7 @@ def default_unittest_config():
             causal_attention_mask_flag=False,
         ),
         neuron_nucleus_config=NucleusConfig(
-            model_type=LayerTypes.DYNAMIC_BASE,
+            model_type=LinearLayerOptions.ADAPTIVE,
         ),
         neuron_axon_config=AxonsConfig(
             memory_type=None,
