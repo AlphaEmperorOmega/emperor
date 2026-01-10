@@ -10,7 +10,7 @@ from Emperor.transformer.layers import TransformerDecoderLayer, TransformerEncod
 
 class TestTransformerEncoderLayer(unittest.TestCase):
     def test_init(self):
-        c = TransformerPresets.transformer_layer_preset()
+        c = TransformerPresets.transformer_preset()
         m = TransformerEncoderLayer(c)
 
         self.assertIsInstance(m.self_attention_model, MultiHeadAttention)
@@ -22,7 +22,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         source_sequence_length = 6
         target_sequence_length = 6
         embedding_dim = 10
-        c = TransformerPresets.transformer_layer_preset(
+        c = TransformerPresets.transformer_preset(
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
@@ -85,7 +85,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
 
 class TestTransformerDecoderLayer(unittest.TestCase):
     def test_init(self):
-        c = TransformerPresets.transformer_layer_preset()
+        c = TransformerPresets.transformer_preset()
         self.model = TransformerDecoderLayer(c)
 
         self.assertIsInstance(self.model.self_attention_model, MultiHeadAttention)
@@ -98,7 +98,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         source_sequence_length = 6
         target_sequence_length = 6
         embedding_dim = 10
-        c = TransformerPresets.transformer_layer_preset(
+        c = TransformerPresets.transformer_preset(
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
