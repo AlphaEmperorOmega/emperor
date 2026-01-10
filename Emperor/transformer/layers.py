@@ -25,7 +25,27 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class TransformerLayerConfig(ConfigBase):
+class TransformerConfig(ConfigBase):
+    num_layers: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    source_sequence_length: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    target_sequence_length: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    layer_norm_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    causal_attention_mask_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
     attention_config: "MultiHeadAttentionConfig | None" = field(
         default=None,
         metadata={"help": ""},
@@ -39,12 +59,12 @@ class TransformerLayerConfig(ConfigBase):
 class TransformerLayerBase(Module):
     def __init__(
         self,
-        cfg: "TransformerLayerConfig | ModelConfig",
-        overrides: "TransformerLayerConfig | None" = None,
+        cfg: "TransformerConfig | ModelConfig",
+        overrides: "TransformerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "transformer_layer_config", cfg)
-        self.cfg: "TransformerLayerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
         self.main_config = cfg
         self.attention_config = self.cfg.attention_config
         self.feed_forward_config = self.cfg.feed_forward_config
@@ -66,8 +86,8 @@ class TransformerLayerBase(Module):
 class TransformerEncoderLayer(TransformerLayerBase):
     def __init__(
         self,
-        cfg: "TransformerLayerConfig | ModelConfig",
-        overrides: "TransformerLayerConfig | None" = None,
+        cfg: "TransformerConfig | ModelConfig",
+        overrides: "TransformerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
 
@@ -91,8 +111,8 @@ class TransformerEncoderLayer(TransformerLayerBase):
         x_ff, ff_loss = self.feed_forward_model(x)
         x = self._apply_residual_connection(x_ff, x)
 
-        # FIXME: Ensure you get a tensor from the attention and feed forward
-        # models, otherwise this returns an error
+        # FIXME: Ensure you get a tensor from the attention
+        # and feed forward models, otherwise this returns an error
         # total_loss = attn_loss + ff_loss
         total_loss = torch.tensor(0.0)
         return x, total_loss
@@ -101,8 +121,8 @@ class TransformerEncoderLayer(TransformerLayerBase):
 class TransformerDecoderLayer(TransformerLayerBase):
     def __init__(
         self,
-        cfg: "TransformerLayerConfig | ModelConfig",
-        overrides: "TransformerLayerConfig | None" = None,
+        cfg: "TransformerConfig | ModelConfig",
+        overrides: "TransformerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
 
@@ -140,8 +160,8 @@ class TransformerDecoderLayer(TransformerLayerBase):
         x_ff, ff_loss = self.feed_forward_model(x)
         x = self._apply_residual_connection(x_ff, x)
 
-        # FIXME: Ensure you get a tensor from the attention and feed forward
-        # models, otherwise this returns an error
+        # FIXME: Ensure you get a tensor from the attention and
+        # feed forward models, otherwise this returns an error
         # total_loss = self_attn_loss + cross_attn_loss + ff_loss
         total_loss = torch.tensor(0.0)
         return x, total_loss
