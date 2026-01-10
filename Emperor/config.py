@@ -5,10 +5,8 @@ from dataclasses import dataclass, field
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.utils import ConfigBase
-from Emperor.feedForward.feed_forward import (
-    FeedForwardConfig,
-    MixtureOfExpertsFeedForwardConfig,
-)
+from Emperor.transformer.stack import TransformerConfig
+from Emperor.transformer.utils.feed_forward import FeedForwardConfig
 from Emperor.experts.utils.layers import MixtureOfExpertsConfig
 from Emperor.adaptive.utils.layers import (
     AdaptiveParameterLayerConfig,
@@ -28,8 +26,7 @@ from Emperor.neuron.neuron import (
     TerminalConfig,
     TerminalRangeOptions,
 )
-from Emperor.transformer.layer import TransformerConfig, TransformerLayerConfig
-
+from Emperor.transformer.layers import TransformerLayerConfig
 
 # MODEL WISE CONFI
 BATCH_SIZE = 10
@@ -223,17 +220,13 @@ class ModelConfig(ConfigBase):
     )
     transformer_feed_forward_config: FeedForwardConfig = field(
         default_factory=lambda: FeedForwardConfig(
-            model_type=LinearLayerOptions.ADAPTIVE,
+            layer_stack_option=LinearLayerOptions.ADAPTIVE,
             num_layers=1,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
     transformer_layer_config: TransformerLayerConfig = field(
-        default_factory=lambda: TransformerLayerConfig(
-            layer_norm_position=LayerNormPositionOptions.DEFAULT,
-            dropout_probability=0.0,
-            layer_norm_dim=0,
-        ),
+        default_factory=lambda: TransformerLayerConfig(),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
     transformer_config: TransformerConfig | None = field(
