@@ -66,8 +66,8 @@ class TransformerLayerBase(Module):
         config = getattr(cfg, "transformer_layer_config", cfg)
         self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
         self.main_config = cfg
-        self.attention_config = self.cfg.attention_config
-        self.feed_forward_config = self.cfg.feed_forward_config
+        self.attention_config: "MultiHeadAttentionConfig" = self.cfg.attention_config
+        self.feed_forward_config: "FeedForwardConfig" = self.cfg.feed_forward_config
 
     def _create_self_attention_model(self) -> MultiHeadAttention:
         return MultiHeadAttention(self.attention_config)

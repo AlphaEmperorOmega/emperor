@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch import Tensor
 from torch.nn import ModuleList
 from Emperor.base.utils import Module
-from Emperor.transformer.layers import (
+from Emperor.transformer.utils.layers import (
     TransformerConfig,
     TransformerDecoderLayer,
     TransformerEncoderLayer,
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
-    from Emperor.transformer.layers import TransformerLayerBase
+    from Emperor.transformer.utils.layers import TransformerLayerBase
 
 
 class TransformerBase(Module):
