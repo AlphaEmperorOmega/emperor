@@ -5,15 +5,11 @@ from dataclasses import dataclass, field
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.utils import ConfigBase
-from Emperor.transformer.stack import TransformerConfig
+from Emperor.transformer.layers import TransformerConfig
 from Emperor.transformer.utils.feed_forward import FeedForwardConfig
 from Emperor.experts.utils.layers import MixtureOfExpertsConfig
-from Emperor.adaptive.utils.layers import (
-    AdaptiveParameterLayerConfig,
-    # ParameterLayerConfig,
-)
+from Emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig
 from Emperor.base.layer import LayerStackConfig
-from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
 from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
@@ -26,7 +22,6 @@ from Emperor.neuron.neuron import (
     TerminalConfig,
     TerminalRangeOptions,
 )
-from Emperor.transformer.layers import TransformerLayerConfig
 
 # MODEL WISE CONFI
 BATCH_SIZE = 10
@@ -225,8 +220,8 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
-    transformer_layer_config: TransformerLayerConfig = field(
-        default_factory=lambda: TransformerLayerConfig(),
+    transformer_layer_config: TransformerConfig = field(
+        default_factory=lambda: TransformerConfig(),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
     transformer_config: TransformerConfig | None = field(
