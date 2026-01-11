@@ -76,7 +76,7 @@ class TransformerBase(Module):
         return torch.triu(negative_infinity_tensor, diagonal=1)
 
 
-class TransformerEncoder(TransformerBase):
+class TransformerEncoderStack(TransformerBase):
     def __init__(
         self,
         cfg: "TransformerConfig | ModelConfig",
@@ -128,7 +128,7 @@ class TransformerEncoder(TransformerBase):
         return output, total_loss
 
 
-class TransformerDecoder(TransformerBase):
+class TransformerDecoderStack(TransformerBase):
     def __init__(
         self,
         cfg: "TransformerConfig | ModelConfig",
@@ -188,8 +188,8 @@ class Transformer(Module):
         cfg: "ModelConfig",
     ):
         super().__init__()
-        self.encoder_model = TransformerEncoder(cfg)
-        self.decoder_model = TransformerDecoder(cfg)
+        self.encoder_model = TransformerEncoderStack(cfg)
+        self.decoder_model = TransformerDecoderStack(cfg)
 
     def forward(
         self,

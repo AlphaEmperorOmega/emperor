@@ -6,12 +6,12 @@ from torch.nn import LayerNorm, ModuleList
 from Emperor.transformer.utils.presets import TransformerPresets
 from Emperor.transformer.utils.stack import (
     Transformer,
-    TransformerDecoder,
-    TransformerEncoder,
+    TransformerDecoderStack,
+    TransformerEncoderStack,
 )
 
 
-class TestTransformerEncoder(unittest.TestCase):
+class TestTransformerEncoderStack(unittest.TestCase):
     def test_init(self):
         batch_size = 4
         num_heads = 2
@@ -33,7 +33,7 @@ class TestTransformerEncoder(unittest.TestCase):
             attention_target_sequence_length=target_sequence_length,
             attention_source_sequence_length=source_sequence_length,
         )
-        m = TransformerEncoder(c)
+        m = TransformerEncoderStack(c)
 
         self.assertEqual(m.num_layers, num_layers)
         self.assertEqual(m.source_sequence_length, source_sequence_length)
@@ -64,7 +64,7 @@ class TestTransformerEncoder(unittest.TestCase):
             attention_target_sequence_length=target_sequence_length,
             attention_source_sequence_length=source_sequence_length,
         )
-        m = TransformerEncoder(c)
+        m = TransformerEncoderStack(c)
 
         soruce_token_embeddings = torch.randn(
             source_sequence_length,
@@ -110,7 +110,7 @@ class TestTransformerEncoder(unittest.TestCase):
                 self.assertIsInstance(loss, torch.Tensor)
 
 
-class TestTransformerDecoder(unittest.TestCase):
+class TestTransformerDecoderStack(unittest.TestCase):
     def test_init(self):
         batch_size = 4
         num_heads = 2
@@ -132,7 +132,7 @@ class TestTransformerDecoder(unittest.TestCase):
             attention_target_sequence_length=target_sequence_length,
             attention_source_sequence_length=source_sequence_length,
         )
-        m = TransformerDecoder(c)
+        m = TransformerDecoderStack(c)
 
         self.assertEqual(m.num_layers, num_layers)
         self.assertEqual(m.source_sequence_length, source_sequence_length)
@@ -163,7 +163,7 @@ class TestTransformerDecoder(unittest.TestCase):
             attention_target_sequence_length=target_sequence_length,
             attention_source_sequence_length=source_sequence_length,
         )
-        m = TransformerDecoder(c)
+        m = TransformerDecoderStack(c)
         target_token_embeddings = torch.randn(
             target_sequence_length,
             batch_size,
@@ -265,8 +265,8 @@ class TestTransformer(unittest.TestCase):
         )
         m = Transformer(c)
 
-        self.assertIsInstance(m.encoder_model, TransformerEncoder)
-        self.assertIsInstance(m.decoder_model, TransformerDecoder)
+        self.assertIsInstance(m.encoder_model, TransformerEncoderStack)
+        self.assertIsInstance(m.decoder_model, TransformerDecoderStack)
 
     def test_all_possible_inputs(self):
         batch_size = 4
