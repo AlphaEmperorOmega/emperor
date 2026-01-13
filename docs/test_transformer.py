@@ -22,12 +22,12 @@ class TestTransformerEncoderStack(unittest.TestCase):
         layer_norm_dim = 10
 
         c = TransformerPresets.transformer_preset(
+            batch_size=batch_size,
             num_layers=num_layers,
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
             layer_norm_dim=layer_norm_dim,
-            attention_batch_size=batch_size,
             attention_num_heads=num_heads,
             embedding_dim=embedding_dim,
             attention_target_sequence_length=target_sequence_length,
@@ -53,12 +53,12 @@ class TestTransformerEncoderStack(unittest.TestCase):
         layer_norm_dim = 10
 
         c = TransformerPresets.transformer_preset(
+            batch_size=batch_size,
             num_layers=num_layers,
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
             layer_norm_dim=layer_norm_dim,
-            attention_batch_size=batch_size,
             attention_num_heads=num_heads,
             embedding_dim=embedding_dim,
             attention_target_sequence_length=target_sequence_length,
@@ -121,12 +121,12 @@ class TestTransformerDecoderStack(unittest.TestCase):
         layer_norm_dim = 10
 
         c = TransformerPresets.transformer_preset(
+            batch_size=batch_size,
             num_layers=num_layers,
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
             layer_norm_dim=layer_norm_dim,
-            attention_batch_size=batch_size,
             attention_num_heads=num_heads,
             embedding_dim=embedding_dim,
             attention_target_sequence_length=target_sequence_length,
@@ -152,12 +152,12 @@ class TestTransformerDecoderStack(unittest.TestCase):
         layer_norm_dim = 10
 
         c = TransformerPresets.transformer_preset(
+            batch_size=batch_size,
             num_layers=num_layers,
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
             layer_norm_dim=layer_norm_dim,
-            attention_batch_size=batch_size,
             attention_num_heads=num_heads,
             embedding_dim=embedding_dim,
             attention_target_sequence_length=target_sequence_length,
@@ -252,12 +252,12 @@ class TestTransformer(unittest.TestCase):
         layer_norm_dim = 10
 
         c = TransformerPresets.transformer_preset(
+            batch_size=batch_size,
             num_layers=num_layers,
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
             layer_norm_dim=layer_norm_dim,
-            attention_batch_size=batch_size,
             attention_num_heads=num_heads,
             embedding_dim=embedding_dim,
             attention_target_sequence_length=target_sequence_length,
@@ -278,12 +278,12 @@ class TestTransformer(unittest.TestCase):
         layer_norm_dim = 10
 
         c = TransformerPresets.transformer_preset(
+            batch_size=batch_size,
             num_layers=num_layers,
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
             layer_norm_dim=layer_norm_dim,
-            attention_batch_size=batch_size,
             attention_num_heads=num_heads,
             embedding_dim=embedding_dim,
             attention_target_sequence_length=target_sequence_length,

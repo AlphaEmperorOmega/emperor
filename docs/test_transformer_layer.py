@@ -26,10 +26,10 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         target_sequence_length = 6
         embedding_dim = 10
         c = TransformerPresets.transformer_preset(
+            batch_size=batch_size,
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
-            attention_batch_size=batch_size,
             attention_num_heads=num_heads,
             embedding_dim=embedding_dim,
             attention_target_sequence_length=target_sequence_length,
@@ -102,10 +102,10 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         target_sequence_length = 6
         embedding_dim = 10
         c = TransformerPresets.transformer_preset(
+            batch_size=batch_size,
             input_dim=embedding_dim,
             hidden_dim=embedding_dim,
             output_dim=embedding_dim,
-            attention_batch_size=batch_size,
             attention_num_heads=num_heads,
             embedding_dim=embedding_dim,
             attention_target_sequence_length=target_sequence_length,
