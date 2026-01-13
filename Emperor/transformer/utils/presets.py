@@ -11,6 +11,10 @@ from Emperor.transformer.utils.feed_forward import FeedForwardConfig
 from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from Emperor.transformer.utils.embedding.selector import (
+    PositionalEmbeddingConfig,
+    PositionalEmbeddingOptions,
+)
 from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
 from Emperor.adaptive.utils.mixtures.options import (
     AdaptiveBiasOptions,
@@ -27,6 +31,24 @@ from Emperor.behaviours.utils.enums import (
 
 
 class TransformerPresets:
+    @staticmethod
+    def transformer_positional_embedding_preset(
+        positional_embedding_option: PositionalEmbeddingOptions = PositionalEmbeddingOptions.LEARNED,
+        num_embeddings: int = 24,
+        embedding_dim: int = 8,
+        padding_idx: int = 0,
+        init_size: int = 1024,
+        auto_expand_flag: bool = False,
+    ) -> "PositionalEmbeddingConfig":
+        return PositionalEmbeddingConfig(
+            positional_embedding_option=positional_embedding_option,
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            padding_idx=padding_idx,
+            init_size=init_size,
+            auto_expand_flag=auto_expand_flag,
+        )
+
     @staticmethod
     def transformer_feed_forward_preset(
         input_dim=8,
@@ -245,6 +267,8 @@ class TransformerPresets:
 
     @staticmethod
     def transformer_preset(
+        return_model_config_flag: bool = False,
+        batch_size=8,
         input_dim=8,
         hidden_dim=4,
         output_dim=6,
@@ -256,7 +280,6 @@ class TransformerPresets:
         layer_norm_dim: int = 8,
         causal_attention_mask_flag: bool = False,
         attention_model_type=LinearLayerStackOptions.ADAPTIVE,
-        attention_batch_size=8,
         attention_num_heads=4,
         attention_target_sequence_length=18,
         attention_source_sequence_length=20,
@@ -385,7 +408,7 @@ class TransformerPresets:
             hidden_dim=hidden_dim,
             output_dim=output_dim,
             model_type=attention_model_type,
-            batch_size=attention_batch_size,
+            batch_size=batch_size,
             num_heads=attention_num_heads,
             embedding_dim=embedding_dim,
             query_key_projection_dim=embedding_dim,
@@ -525,7 +548,7 @@ class TransformerPresets:
             stack_dropout_probability=stack_dropout_probability,
         )
 
-        return TransformerConfig(
+        config = TransformerConfig(
             num_layers=num_layers,
             source_sequence_length=source_sequence_length,
             target_sequence_length=target_sequence_length,
@@ -533,4 +556,14 @@ class TransformerPresets:
             causal_attention_mask_flag=causal_attention_mask_flag,
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
+        )
+
+        if not return_model_config_flag:
+            return config
+
+        return ModelConfig(
+            batch_size=batch_size,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            layer_stack_config=config,
         )
