@@ -4,6 +4,7 @@ from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.transformer.utils.feed_forward import FeedForward, FeedForwardConfig
+from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingOptions
 from Emperor.attention.utils.layer import MultiHeadAttention, MultiHeadAttentionConfig
 
 from typing import TYPE_CHECKING
@@ -43,6 +44,10 @@ class TransformerConfig(ConfigBase):
         metadata={"help": ""},
     )
     causal_attention_mask_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    positional_embedding_option: "PositionalEmbeddingOptions | None" = field(
         default=None,
         metadata={"help": ""},
     )

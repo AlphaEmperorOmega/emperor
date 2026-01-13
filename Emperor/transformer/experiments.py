@@ -1,3 +1,4 @@
+from torch import float32
 from Emperor.base.enums import ActivationOptions
 from Emperor.transformer.options import TransformerOptions
 from Emperor.experiments.utils.factories import Experiments
@@ -21,7 +22,7 @@ from Emperor.behaviours.utils.enums import (
 )
 
 
-class AdaptiveParameterExperiments(Experiments):
+class TransformerExperiments(Experiments):
     def __init__(
         self,
         mini_datasetset_flag: bool = True,
@@ -39,12 +40,6 @@ class AdaptiveParameterExperiments(Experiments):
     def train_transformer_decoder_stack_model(self):
         self.train_model(TransformerOptions.DECODER)
 
-    def train_transformer_encoder_layer_model(self):
-        self.train_model(TransformerOptions.ENCODER_LAYER)
-
-    def train_transformer_decoder_layer_model(self):
-        self.train_model(TransformerOptions.DECODER_LAYER)
-
     def test_all_types(self):
         for option_type in TransformerOptions:
             self.train_model(option_type)
@@ -56,8 +51,10 @@ class AdaptiveParameterExperimentPresets:
 
     def get_config(self) -> "TransformerConfig":
         return TransformerPresets.transformer_preset(
-            input_dim=8,
-            hidden_dim=4,
+            return_model_config_flag=True,
+            batch_size=64,
+            input_dim=784,
+            hidden_dim=10,
             output_dim=6,
             layer_stack_option=LinearLayerStackOptions.ADAPTIVE,
             num_layers=2,
@@ -67,7 +64,6 @@ class AdaptiveParameterExperimentPresets:
             layer_norm_dim=8,
             causal_attention_mask_flag=False,
             attention_model_type=LinearLayerStackOptions.ADAPTIVE,
-            attention_batch_size=8,
             attention_num_heads=4,
             attention_target_sequence_length=18,
             attention_source_sequence_length=20,
