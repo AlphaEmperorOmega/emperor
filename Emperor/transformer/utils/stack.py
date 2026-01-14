@@ -23,10 +23,11 @@ class TransformerBase(Module):
         super().__init__()
         self.cfg: "TransformerConfig" = cfg
         self.num_layers = self.cfg.num_layers
+        self.embedding_dim = self.cfg.embedding_dim
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
-        self.layer_norm_dim = self.cfg.layer_norm_dim
+        self.layer_norm_dim = self.cfg.embedding_dim
 
         self.layer_norm_module = self.__init_layer_norm_module()
         self.layers = self.__create_layers()
