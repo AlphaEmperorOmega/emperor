@@ -1,16 +1,23 @@
 import torch
 
 from torch import Tensor
+from Emperor.base.layer import Layer
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.transformer.utils.feed_forward import FeedForward, FeedForwardConfig
 from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingOptions
 from Emperor.attention.utils.layer import MultiHeadAttention, MultiHeadAttentionConfig
+from Emperor.transformer.utils.feed_forward import FeedForward, FeedForwardConfig
+from Emperor.transformer.utils.wrappers import (
+    CrossAttentionLayer,
+    FeedForwardLayer,
+    SelfAttentionLayer,
+)
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
+    from Emperor.base.enums import LayerNormPositionOptions
 
 
 # TODO: Add the ability to freze old neurons or root neurons once
@@ -39,7 +46,15 @@ class TransformerConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    layer_norm_dim: int | None = field(
+    embedding_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    layer_norm_position: "LayerNormPositionOptions | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    dropout_probability: float | None = field(
         default=None,
         metadata={"help": ""},
     )
@@ -71,18 +86,41 @@ class TransformerLayerBase(Module):
         config = getattr(cfg, "transformer_layer_config", cfg)
         self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
         self.main_config = cfg
+        self.embedding_dim = self.cfg.embedding_dim
+        self.layer_norm_dim = self.embedding_dim
+        self.layer_norm_position = self.cfg.layer_norm_position
+        self.dropout_probability = self.cfg.dropout_probability
         self.attention_config: "MultiHeadAttentionConfig" = self.cfg.attention_config
         self.feed_forward_config: "FeedForwardConfig" = self.cfg.feed_forward_config
 
-    def _create_self_attention_model(self) -> MultiHeadAttention:
-        return MultiHeadAttention(self.attention_config)
+    def _create_self_attention_model(self) -> Layer:
+        wrapper_class = SelfAttentionLayer
+        model = MultiHeadAttention(self.attention_config)
+        return self.__create_layer_block(wrapper_class, model)
 
-    def _create_cross_attention_model(self) -> MultiHeadAttention:
-        overrides = MultiHeadAttentionConfig(is_self_attention_projector_flag=False)
-        return MultiHeadAttention(self.attention_config, overrides)
+    def _create_cross_attention_model(self) -> Layer:
+        wrapper_class = CrossAttentionLayer
+        overrides = MultiHeadAttentionConfig(is_self_attention_projector_flag=True)
+        model = MultiHeadAttention(self.attention_config, overrides)
+        return self.__create_layer_block(wrapper_class, model)
 
-    def _create_feed_forward_model(self) -> FeedForward:
-        return FeedForward(self.feed_forward_config)
+    def _create_feed_forward_model(self) -> Layer:
+        wrapper_class = FeedForwardLayer
+        model = FeedForward(self.feed_forward_config)
+        return self.__create_layer_block(wrapper_class, model)
+
+    def __create_layer_block(
+        self,
+        wrapper_class: type[Layer],
+        model: MultiHeadAttention | FeedForward,
+    ) -> Layer:
+        return wrapper_class(
+            model=model,
+            residual_connection_flag=True,
+            layer_norm_dim=self.layer_norm_dim,
+            layer_norm_position=self.layer_norm_position,
+            dropout_probability=self.dropout_probability,
+        )
 
     def _apply_residual_connection(self, input: Tensor, prev_input: Tensor):
         return input + prev_input
@@ -105,16 +143,16 @@ class TransformerEncoderLayer(TransformerLayerBase):
         source_key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        x_att, attn_loss = self.self_attention_model(
-            q=source_token_embeddings,
-            k=source_token_embeddings,
-            v=source_token_embeddings,
-            k_padding_mask=source_key_padding_mask,
-            attention_mask=attention_mask,
+        x, attn_loss = self.self_attention_model(
+            {
+                "q": source_token_embeddings,
+                "k": source_token_embeddings,
+                "v": source_token_embeddings,
+                "k_padding_mask": source_key_padding_mask,
+                "attention_mask": attention_mask,
+            }
         )
-        x = self._apply_residual_connection(x_att, source_token_embeddings)
-        x_ff, ff_loss = self.feed_forward_model(x)
-        x = self._apply_residual_connection(x_ff, x)
+        x, ff_loss = self.feed_forward_model(x)
 
         # FIXME: Ensure you get a tensor from the attention
         # and feed forward models, otherwise this returns an error
@@ -144,29 +182,35 @@ class TransformerDecoderLayer(TransformerLayerBase):
         attention_mask: Tensor | None = None,
         encoder_attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        # TODO: This will have to be replaced with an object for
-        # a clearner implementation
-        x_self, self_attn_loss = self.self_attention_model(
-            q=target_token_embeddings,
-            k=target_token_embeddings,
-            v=target_token_embeddings,
-            k_padding_mask=key_padding_mask,
-            attention_mask=attention_mask,
+        x, self_attn_loss = self.self_attention_model(
+            {
+                "q": target_token_embeddings,
+                "k": target_token_embeddings,
+                "v": target_token_embeddings,
+                "k_padding_mask": key_padding_mask,
+                "attention_mask": attention_mask,
+            }
         )
-        x = self._apply_residual_connection(x_self, target_token_embeddings)
-        x_corss, cross_attn_loss = self.cross_attention_model(
-            q=x,
-            k=encoder_output,
-            v=encoder_output,
-            k_padding_mask=encoder_padding_mask,
-            attention_mask=encoder_attention_mask,
-        )
-        x = self._apply_residual_connection(x_corss, x)
-        x_ff, ff_loss = self.feed_forward_model(x)
-        x = self._apply_residual_connection(x_ff, x)
+        if self.__should_compute_cross_attention(encoder_output):
+            x, cross_attn_loss = self.cross_attention_model(
+                {
+                    "q": x,
+                    "k": encoder_output,
+                    "v": encoder_output,
+                    "k_padding_mask": encoder_padding_mask,
+                    "attention_mask": encoder_attention_mask,
+                }
+            )
+        x, ff_loss = self.feed_forward_model(x)
 
         # FIXME: Ensure you get a tensor from the attention and
         # feed forward models, otherwise this returns an error
         # total_loss = self_attn_loss + cross_attn_loss + ff_loss
         total_loss = torch.tensor(0.0)
         return x, total_loss
+
+    def __should_compute_cross_attention(
+        self,
+        encoder_output: Tensor | None,
+    ) -> bool:
+        return self.cross_attention_model is None and encoder_output is None
