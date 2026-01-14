@@ -3,6 +3,7 @@ import itertools
 import unittest
 
 from Emperor.attention.utils.layer import MultiHeadAttention
+from Emperor.base.layer import Layer
 from Emperor.transformer.utils.feed_forward import FeedForward
 from Emperor.transformer.utils.presets import TransformerPresets
 from Emperor.transformer.utils.layers import (
@@ -16,8 +17,8 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         c = TransformerPresets.transformer_preset()
         m = TransformerEncoderLayer(c)
 
-        self.assertIsInstance(m.self_attention_model, MultiHeadAttention)
-        self.assertIsInstance(m.feed_forward_model, FeedForward)
+        self.assertIsInstance(m.self_attention_model, Layer)
+        self.assertIsInstance(m.feed_forward_model, Layer)
 
     def test_forward_with_different_inputs(self):
         batch_size = 4
@@ -91,9 +92,9 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         c = TransformerPresets.transformer_preset()
         self.model = TransformerDecoderLayer(c)
 
-        self.assertIsInstance(self.model.self_attention_model, MultiHeadAttention)
-        self.assertIsInstance(self.model.cross_attention_model, MultiHeadAttention)
-        self.assertIsInstance(self.model.feed_forward_model, FeedForward)
+        self.assertIsInstance(self.model.self_attention_model, Layer)
+        self.assertIsInstance(self.model.cross_attention_model, Layer)
+        self.assertIsInstance(self.model.feed_forward_model, Layer)
 
     def test_forward_width_different_inputs(self):
         batch_size = 4

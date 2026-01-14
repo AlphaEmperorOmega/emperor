@@ -229,7 +229,6 @@ class ModelConfig(ConfigBase):
             num_layers=2,
             source_sequence_length=0,
             target_sequence_length=0,
-            layer_norm_dim=0,
             causal_attention_mask_flag=False,
         ),
         metadata={

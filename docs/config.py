@@ -175,7 +175,6 @@ def default_unittest_config():
             num_layers=6,
             source_sequence_length=16,
             target_sequence_length=16,
-            layer_norm_dim=HIDDEN_DIM,
             causal_attention_mask_flag=False,
         ),
         neuron_nucleus_config=NucleusConfig(
