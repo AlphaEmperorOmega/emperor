@@ -52,9 +52,8 @@ class PositionalEmbedding(Module):
         super().__init__()
         self.cfg = cfg
         self.positional_embedding_option = self.cfg.positional_embedding_option
-        self.embedding_model = self.__init_positiona_embedding_model()
 
-    def __init_positiona_embedding_model(self) -> Module | None:
+    def build_model(self) -> Module | None:
         match self.positional_embedding_option:
             case PositionalEmbeddingOptions.SINUSOIDAL:
                 return SinusoidalPositionalEmbedding(self.cfg)
@@ -64,19 +63,3 @@ class PositionalEmbedding(Module):
                 raise ValueError(
                     "If the `positional_embedding_option` is set to `DISABLED`, this class should not be initialized"
                 )
-
-    def forward(
-        self,
-        token_embeddings: Tensor,
-        incremental_state: dict[str, dict[str, Tensor | None]] | None = None,
-        time_step: Tensor | None = None,
-        positions: Tensor | None = None,
-    ) -> Tensor:
-        if self.embedding_model is None:
-            return token_embeddings
-        return self.embedding_model(
-            token_embeddings,
-            incremental_state=incremental_state,
-            time_step=time_step,
-            positions=positions,
-        )
