@@ -4,9 +4,9 @@ from torch import Tensor
 from Emperor.base.layer import Layer
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
+from Emperor.transformer.utils.feed_forward import FeedForward, FeedForwardConfig
 from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingOptions
 from Emperor.attention.utils.layer import MultiHeadAttention, MultiHeadAttentionConfig
-from Emperor.transformer.utils.feed_forward import FeedForward, FeedForwardConfig
 from Emperor.transformer.utils.wrappers import (
     CrossAttentionLayer,
     FeedForwardLayer,
@@ -143,7 +143,7 @@ class TransformerEncoderLayer(TransformerLayerBase):
         source_key_padding_mask: Tensor | None = None,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        x, attn_loss = self.self_attention_model(
+        X, attn_loss = self.self_attention_model(
             {
                 "q": source_token_embeddings,
                 "k": source_token_embeddings,
@@ -152,13 +152,13 @@ class TransformerEncoderLayer(TransformerLayerBase):
                 "attention_mask": attention_mask,
             }
         )
-        x, ff_loss = self.feed_forward_model(x)
+        X, ff_loss = self.feed_forward_model(X)
 
         # FIXME: Ensure you get a tensor from the attention
         # and feed forward models, otherwise this returns an error
         # total_loss = attn_loss + ff_loss
         total_loss = torch.tensor(0.0)
-        return x, total_loss
+        return X, total_loss
 
 
 class TransformerDecoderLayer(TransformerLayerBase):
@@ -182,7 +182,7 @@ class TransformerDecoderLayer(TransformerLayerBase):
         attention_mask: Tensor | None = None,
         encoder_attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        x, self_attn_loss = self.self_attention_model(
+        X, self_attn_loss = self.self_attention_model(
             {
                 "q": target_token_embeddings,
                 "k": target_token_embeddings,
@@ -192,22 +192,22 @@ class TransformerDecoderLayer(TransformerLayerBase):
             }
         )
         if self.__should_compute_cross_attention(encoder_output):
-            x, cross_attn_loss = self.cross_attention_model(
+            X, cross_attn_loss = self.cross_attention_model(
                 {
-                    "q": x,
+                    "q": X,
                     "k": encoder_output,
                     "v": encoder_output,
                     "k_padding_mask": encoder_padding_mask,
                     "attention_mask": encoder_attention_mask,
                 }
             )
-        x, ff_loss = self.feed_forward_model(x)
+        X, ff_loss = self.feed_forward_model(X)
 
         # FIXME: Ensure you get a tensor from the attention and
         # feed forward models, otherwise this returns an error
         # total_loss = self_attn_loss + cross_attn_loss + ff_loss
         total_loss = torch.tensor(0.0)
-        return x, total_loss
+        return X, total_loss
 
     def __should_compute_cross_attention(
         self,
