@@ -35,10 +35,7 @@ class MixtureOfExpertsExperiments(Experiments):
         self._train_model(layer_type)
 
     def test_all_types(self):
-        option_types = [
-            # MixtureOfExpertsOptions,
-            MixtureOfExpertsStackOptions
-        ]
+        option_types = [MixtureOfExpertsStackOptions]
 
         for option_type in option_types:
             for option in option_type:
