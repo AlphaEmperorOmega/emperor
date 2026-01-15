@@ -4,15 +4,15 @@ import torch.nn as nn
 
 from torch import Tensor
 from Emperor.transformer.utils.presets import TransformerPresets
-from Emperor.transformer.utils.embedding.selector import (
-    PositionalEmbedding,
-    PositionalEmbeddingOptions,
-)
 from Emperor.transformer.utils.embedding.options.learned_embedding import (
     LearnedPositionalEmbedding,
 )
 from Emperor.transformer.utils.embedding.options.sinusoidal_embedding import (
     SinusoidalPositionalEmbedding,
+)
+from Emperor.transformer.utils.embedding.selector import (
+    PositionalEmbeddingOptions,
+    PositionalEmbeddingSelector,
 )
 
 
@@ -135,10 +135,10 @@ class TestPositionalEmbedding(unittest.TestCase):
                 )
                 if positional_embedding_option == PositionalEmbeddingOptions.DISABLED:
                     with self.assertRaises(ValueError):
-                        m = PositionalEmbedding(c).build_model()
+                        m = PositionalEmbeddingSelector(c).build()
                     continue
 
-                m = PositionalEmbedding(c).build_model()
+                m = PositionalEmbeddingSelector(c).build()
                 if positional_embedding_option == PositionalEmbeddingOptions.SINUSOIDAL:
                     self.assertIsInstance(m, SinusoidalPositionalEmbedding)
                 if positional_embedding_option == PositionalEmbeddingOptions.LEARNED:

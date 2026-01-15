@@ -3,9 +3,9 @@ import unittest
 import itertools
 
 from torch.nn import LayerNorm, ModuleList
+from Emperor.transformer.utils.models import Transformer
 from Emperor.transformer.utils.presets import TransformerPresets
 from Emperor.transformer.utils.stack import (
-    Transformer,
     TransformerDecoderStack,
     TransformerEncoderStack,
 )
