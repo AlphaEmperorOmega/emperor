@@ -1,8 +1,8 @@
 from Emperor.base.enums import BaseOptions
 from Emperor.base.utils import Module
 from Emperor.transformer.utils.patch.options.base import PatchConfig
+from Emperor.transformer.utils.patch.options.patch_tokenizer import PatchTokenizer
 from Emperor.transformer.utils.patch.options.patch_embedding import PatchEmbeddingConv
-from Emperor.transformer.utils.patch.options.patch_tokenization import PatchTokenizer
 
 
 class PatchOptions(BaseOptions):

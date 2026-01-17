@@ -34,7 +34,7 @@ class PatchConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    dropout: int | None = field(
+    dropout: float | None = field(
         default=None,
         metadata={"help": ""},
     )
@@ -54,13 +54,15 @@ class PatchBase(Module):
         self.padding = self.cfg.padding
         self.dropout = self.cfg.dropout
 
-        self.global_token = self.__maybe_create_global_token()
+        self.class_token = self._create_class_token()
 
-    def __maybe_create_global_token(self):
-        global_token_init = torch.randn((1, 1, self.embedding_dim))
-        return Parameter(global_token_init, requires_grad=True)
+    def _create_class_token(self, shape: tuple | None = None) -> Parameter:
+        if shape is None:
+            shape = (1, 1, self.embedding_dim)
+        class_token_init = torch.randn(shape)
+        return Parameter(class_token_init, requires_grad=True)
 
-    def _add_global_token(self, X: Tensor) -> Tensor:
+    def _concatenate_class_token(self, X: Tensor) -> Tensor:
         batch_size = X.size(0)
-        global_token = self.global_token.expand(batch_size, -1, -1)
-        return torch.cat([global_token, X], dim=1)
+        class_token = self.class_token.expand(batch_size, -1, -1)
+        return torch.cat([class_token, X], dim=1)
