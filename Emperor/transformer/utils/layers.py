@@ -18,6 +18,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.base.enums import LayerNormPositionOptions
+    from Emperor.transformer.utils.patch.options.base import PatchConfig
+    from Emperor.transformer.utils.embedding.options.base import (
+        PositionalEmbeddingConfig,
+    )
 
 
 # TODO: Add the ability to freze old neurons or root neurons once
@@ -63,6 +67,14 @@ class TransformerConfig(ConfigBase):
         metadata={"help": ""},
     )
     positional_embedding_option: "PositionalEmbeddingOptions | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    patch_config: "PatchConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    positional_embedding_config: "PositionalEmbeddingConfig | None" = field(
         default=None,
         metadata={"help": ""},
     )
