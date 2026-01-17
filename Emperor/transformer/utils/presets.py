@@ -1,15 +1,24 @@
+import torch
+
 from torch import float32
-from Emperor.base.enums import ActivationOptions
+from Emperor.attention.utils.layer import MultiHeadAttentionConfig
+from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from Emperor.base.layer import LayerStackConfig
+from Emperor.config import ModelConfig
+from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.linears.utils.presets import LinearPresets
-from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
 from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
 from Emperor.experts.options import MixtureOfExpertsStackOptions
 from Emperor.experts.utils.presets import MixtureOfExpertsPresets
+from Emperor.transformer.utils.patch.selector import PatchOptions
 from Emperor.transformer.utils.feed_forward import FeedForwardConfig
+from Emperor.transformer.utils.patch.options.base import PatchConfig
 from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
+
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.transformer.utils.embedding.selector import (
     PositionalEmbeddingConfig,
@@ -33,6 +42,7 @@ from Emperor.behaviours.utils.enums import (
 class TransformerPresets:
     @staticmethod
     def transformer_positional_embedding_preset(
+        text_processing_flag=False,
         positional_embedding_option: PositionalEmbeddingOptions = PositionalEmbeddingOptions.LEARNED,
         num_embeddings: int = 24,
         embedding_dim: int = 8,
@@ -41,12 +51,31 @@ class TransformerPresets:
         auto_expand_flag: bool = False,
     ) -> "PositionalEmbeddingConfig":
         return PositionalEmbeddingConfig(
+            text_processing_flag=text_processing_flag,
             positional_embedding_option=positional_embedding_option,
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
             padding_idx=padding_idx,
             init_size=init_size,
             auto_expand_flag=auto_expand_flag,
+        )
+
+    @staticmethod
+    def transformer_patch_preset(
+        patch_option: "PatchOptions" = PatchOptions.TOKENIZER,
+        embedding_dim: int = 32,
+        patch_size: int = 3,
+        stride: int = 3,
+        padding: int = 0,
+        dropout: float = 0.0,
+    ) -> "PatchConfig":
+        return PatchConfig(
+            patch_option=patch_option,
+            embedding_dim=embedding_dim,
+            patch_size=patch_size,
+            stride=stride,
+            padding=padding,
+            dropout=dropout,
         )
 
     @staticmethod
@@ -263,6 +292,88 @@ class TransformerPresets:
             output_dim=output_dim,
             num_layers=num_layers,
             override_config=projector_config,
+        )
+
+    @staticmethod
+    def transformer_feed_forward_linear_base_preset(
+        input_dim: int = 8,
+        hidden_dim: int = 4,
+        output_dim: int = 6,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
+        bias_flag: bool = False,
+        stack_num_layers: int = 2,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+        stack_dropout_probability: float = 0.0,
+    ) -> "FeedForwardConfig":
+        layer_stack_model_option = LinearLayerStackOptions.BASE
+
+        return FeedForwardConfig(
+            layer_stack_option=layer_stack_model_option,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            num_layers=stack_num_layers,
+            override_config=LinearPresets.base_linear_layer_stack_preset(
+                input_dim=input_dim,
+                output_dim=output_dim,
+                bias_flag=bias_flag,
+                data_monitor=None,
+                parameter_monitor=None,
+                layer_norm_position=layer_norm_position,
+                stack_num_layers=stack_num_layers,
+                stack_hidden_dim=hidden_dim,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=stack_dropout_probability,
+            ),
+        )
+
+    @staticmethod
+    def transformer_feed_forward_linear_adaptive_preset(
+        batch_size: int = 8,
+        input_dim: int = 12,
+        hidden_dim: int = 4,
+        output_dim: int = 6,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
+        bias_flag: bool = True,
+        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
+        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
+        memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
+        memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+        stack_num_layers: int = 2,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+        stack_dropout_probability: float = 0.0,
+        adaptive_behaviour_stack_num_layers: int = 2,
+    ) -> "FeedForwardConfig":
+        layer_stack_model_option = LinearLayerStackOptions.ADAPTIVE
+
+        return FeedForwardConfig(
+            layer_stack_option=layer_stack_model_option,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            num_layers=stack_num_layers,
+            override_config=LinearPresets.adaptive_linear_layer_stack_preset(
+                batch_size=batch_size,
+                input_dim=input_dim,
+                output_dim=output_dim,
+                bias_flag=bias_flag,
+                layer_norm_position=layer_norm_position,
+                generator_depth=generator_depth,
+                diagonal_option=diagonal_option,
+                bias_option=bias_option,
+                memory_option=memory_option,
+                memory_size_option=memory_size_option,
+                memory_position_option=memory_position_option,
+                stack_num_layers=stack_num_layers,
+                stack_hidden_dim=hidden_dim,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=stack_dropout_probability,
+                adaptive_behaviour_stack_num_layers=adaptive_behaviour_stack_num_layers,
+            ),
         )
 
     @staticmethod
@@ -559,6 +670,201 @@ class TransformerPresets:
             causal_attention_mask_flag=causal_attention_mask_flag,
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
+        )
+
+        if not return_model_config_flag:
+            return config
+
+        return ModelConfig(
+            batch_size=batch_size,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            layer_stack_config=config,
+        )
+
+    @staticmethod
+    def transformer_linear_base_preset(
+        return_model_config_flag: bool = False,
+        batch_size: int = 8,
+        num_layers: int = 2,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
+        num_heads: int = 4,
+        embedding_dim: int = 0,
+        query_key_projection_dim: int = 0,
+        value_projection_dim: int = 0,
+        target_sequence_length: int = 0,
+        source_sequence_length: int = 0,
+        target_dtype=float32,
+        is_self_attention_projector_flag: bool = False,
+        dropout_probability: float = 0.0,
+        key_value_bias_flag: bool = False,
+        zero_attention_flag: bool = False,
+        causal_attention_mask_flag: bool = False,
+        add_key_value_bias_flag: bool = False,
+        average_attention_weights_flag: bool = False,
+        return_attention_weights_flag: bool = False,
+        attn_stack_num_layers: int = 1,
+        attn_bias_flag: bool = False,
+        ff_stack_num_layers: int = 2,
+        ff_bias_flag: bool = False,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+    ) -> "TransformerConfig":
+        config = TransformerConfig(
+            num_layers=num_layers,
+            source_sequence_length=source_sequence_length,
+            target_sequence_length=target_sequence_length,
+            embedding_dim=embedding_dim,
+            layer_norm_position=layer_norm_position,
+            dropout_probability=dropout_probability,
+            causal_attention_mask_flag=causal_attention_mask_flag,
+            attention_config=MultiHeadAttentionPresets.multi_head_attention_linear_base_preset(
+                batch_size=batch_size,
+                layer_norm_position=layer_norm_position,
+                bias_flag=attn_bias_flag,
+                num_heads=num_heads,
+                embedding_dim=embedding_dim,
+                query_key_projection_dim=query_key_projection_dim,
+                value_projection_dim=value_projection_dim,
+                target_sequence_length=target_sequence_length,
+                source_sequence_length=source_sequence_length,
+                target_dtype=target_dtype,
+                is_self_attention_projector_flag=is_self_attention_projector_flag,
+                dropout_probability=dropout_probability,
+                key_value_bias_flag=key_value_bias_flag,
+                zero_attention_flag=zero_attention_flag,
+                causal_attention_mask_flag=causal_attention_mask_flag,
+                add_key_value_bias_flag=add_key_value_bias_flag,
+                average_attention_weights_flag=average_attention_weights_flag,
+                return_attention_weights_flag=return_attention_weights_flag,
+                stack_num_layers=attn_stack_num_layers,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=dropout_probability,
+            ),
+            feed_forward_config=TransformerPresets.transformer_feed_forward_linear_base_preset(
+                input_dim=embedding_dim,
+                hidden_dim=embedding_dim,
+                output_dim=embedding_dim,
+                layer_norm_position=layer_norm_position,
+                bias_flag=ff_bias_flag,
+                stack_num_layers=ff_stack_num_layers,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=dropout_probability,
+            ),
+        )
+
+        if not return_model_config_flag:
+            return config
+
+        return ModelConfig(
+            batch_size=batch_size,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            layer_stack_config=config,
+        )
+
+    @staticmethod
+    def transformer_linear_adaptive_preset(
+        return_model_config_flag: bool = False,
+        batch_size: int = 8,
+        num_layers: int = 2,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
+        num_heads: int = 4,
+        embedding_dim: int = 0,
+        query_key_projection_dim: int = 0,
+        value_projection_dim: int = 0,
+        target_sequence_length: int = 0,
+        source_sequence_length: int = 0,
+        target_dtype=float32,
+        is_self_attention_projector_flag: bool = False,
+        dropout_probability: float = 0.0,
+        key_value_bias_flag: bool = False,
+        zero_attention_flag: bool = False,
+        causal_attention_mask_flag: bool = False,
+        add_key_value_bias_flag: bool = False,
+        average_attention_weights_flag: bool = False,
+        return_attention_weights_flag: bool = False,
+        attn_stack_num_layers: int = 1,
+        attn_bias_flag: bool = False,
+        attn_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
+        attn_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        attn_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        attn_memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
+        attn_memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
+        attn_memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+        attn_behaviour_stack_num_layers: int = 2,
+        ff_stack_num_layers: int = 2,
+        ff_bias_flag: bool = False,
+        ff_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
+        ff_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        ff_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        ff_memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
+        ff_memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
+        ff_memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+        ff_behaviour_stack_num_layers: int = 2,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+    ) -> "TransformerConfig":
+        config = TransformerConfig(
+            num_layers=num_layers,
+            source_sequence_length=source_sequence_length,
+            target_sequence_length=target_sequence_length,
+            embedding_dim=embedding_dim,
+            layer_norm_position=layer_norm_position,
+            dropout_probability=dropout_probability,
+            causal_attention_mask_flag=causal_attention_mask_flag,
+            attention_config=MultiHeadAttentionPresets.multi_head_attention_linear_adaptive_preset(
+                batch_size=batch_size,
+                layer_norm_position=layer_norm_position,
+                bias_flag=attn_bias_flag,
+                num_heads=num_heads,
+                embedding_dim=embedding_dim,
+                generator_depth=attn_generator_depth,
+                diagonal_option=attn_diagonal_option,
+                bias_option=attn_bias_option,
+                memory_option=attn_memory_option,
+                memory_size_option=attn_memory_size_option,
+                memory_position_option=attn_memory_position_option,
+                query_key_projection_dim=query_key_projection_dim,
+                value_projection_dim=value_projection_dim,
+                target_sequence_length=target_sequence_length,
+                source_sequence_length=source_sequence_length,
+                target_dtype=target_dtype,
+                is_self_attention_projector_flag=is_self_attention_projector_flag,
+                dropout_probability=dropout_probability,
+                key_value_bias_flag=key_value_bias_flag,
+                zero_attention_flag=zero_attention_flag,
+                causal_attention_mask_flag=causal_attention_mask_flag,
+                add_key_value_bias_flag=add_key_value_bias_flag,
+                average_attention_weights_flag=average_attention_weights_flag,
+                return_attention_weights_flag=return_attention_weights_flag,
+                stack_num_layers=attn_stack_num_layers,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=dropout_probability,
+                adaptive_behaviour_stack_num_layers=attn_behaviour_stack_num_layers,
+            ),
+            feed_forward_config=TransformerPresets.transformer_feed_forward_linear_adaptive_preset(
+                batch_size=batch_size,
+                input_dim=embedding_dim,
+                hidden_dim=embedding_dim,
+                output_dim=embedding_dim,
+                layer_norm_position=layer_norm_position,
+                bias_flag=ff_bias_flag,
+                generator_depth=ff_generator_depth,
+                diagonal_option=ff_diagonal_option,
+                bias_option=ff_bias_option,
+                memory_option=ff_memory_option,
+                memory_size_option=ff_memory_size_option,
+                memory_position_option=ff_memory_position_option,
+                stack_num_layers=ff_stack_num_layers,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=dropout_probability,
+                adaptive_behaviour_stack_num_layers=ff_behaviour_stack_num_layers,
+            ),
         )
 
         if not return_model_config_flag:
