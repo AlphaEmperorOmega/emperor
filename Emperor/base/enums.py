@@ -17,6 +17,7 @@ class ActivationOptions(BaseOptions):
     SELU = F.selu
     SOFTPLUS = F.softplus
     SOFTSIGN = F.softsign
+    SILU = F.silu
 
 
 class LayerNormPositionOptions(BaseOptions):
