@@ -1,10 +1,18 @@
 from torch import Tensor
+from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import Module
+from dataclasses import dataclass, field
+from Emperor.base.utils import ConfigBase
+from Emperor.linears.utils.layers import LinearLayerConfig
+from Emperor.linears.utils.stack import LinearLayerStack
+from Emperor.transformer.utils.embedding.options.base import PositionalEmbeddingConfig
 from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingSelector
+from Emperor.transformer.utils.layers import TransformerConfig
+from Emperor.transformer.utils.patch.options.base import PatchConfig
 from Emperor.transformer.utils.patch.selector import PatchSelector
 from Emperor.transformer.utils.stack import (
-    TransformerDecoderStack,
     TransformerEncoderStack,
+    TransformerDecoderStack,
 )
 
 from typing import TYPE_CHECKING
@@ -13,24 +21,82 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
-class BERTVITModel(Module):
+@dataclass
+class BERTVITModelConfig(ConfigBase):
+    patch_config: "PatchConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    positional_embedding_config: "PositionalEmbeddingConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    encoder_config: "TransformerConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    output_config: "LinearLayerConfig | LayerStackConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+
+
+class TransformerBase(Module):
     def __init__(
         self,
         cfg: "ModelConfig",
     ):
         super().__init__()
-        self.patch_model = PatchSelector(cfg).build()
-        self.positional_embedding_model = PositionalEmbeddingSelector(cfg).build()
-        self.encoder_model = TransformerEncoderStack(cfg)
+        self.cfg = cfg
+        self.input_dim = self.cfg.input_dim
+        self.hidden_dim = self.cfg.hidden_dim
+        self.output_dim = self.cfg.output_dim
 
-    def forward(
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
+        self.patch_config = self.main_cfg.patch_config
+        self.embedding_config = self.main_cfg.positional_embedding_config
+        self.encoder_config = self.main_cfg.encoder_config
+        self.output_config = self.main_cfg.output_config
+
+        self.patch = PatchSelector(self.patch_config).build()
+        self.embedding = PositionalEmbeddingSelector(self.embedding_config).build()
+        self.output = LinearLayerStack(self.output_config).build_model()
+
+
+class TransformerEncoderModel(TransformerBase):
+    def __init__(
         self,
-        tokens_tensor: Tensor,
-    ) -> Tensor:
-        X = self.patch_model(tokens_tensor)
-        X = self.positional_embedding_model(X)
-        X = self.encoder_model(X)
+        cfg: "ModelConfig",
+    ):
+        super().__init__()
+        self.cfg = cfg
+        self.input_dim = self.cfg.input_dim
+        self.hidden_dim = self.cfg.hidden_dim
+        self.output_dim = self.cfg.output_dim
+
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
+        self.patch_config = self.main_cfg.patch_config
+        self.embedding_config = self.main_cfg.positional_embedding_config
+        self.encoder_config = self.main_cfg.encoder_config
+        self.output_config = self.main_cfg.output_config
+
+        self.patch = PatchSelector(self.patch_config).build()
+        self.positional_embedding = PositionalEmbeddingSelector(
+            self.embedding_config
+        ).build()
+        self.transformer = TransformerEncoderStack(self.encoder_config)
+        self.output = LinearLayerStack(self.output_config).build_model()
+
+    def forward(self, tokens_tensor: Tensor) -> Tensor:
+        X = self.patch(tokens_tensor)
+        X = self.embedding(X)
+        X, loss = self.transformer(X)
+        X = self.__select_class_tokens(X)
+        X = self.output(X)
         return X
+
+    def __select_class_tokens(self, X: Tensor) -> Tensor:
+        return X[:, 0, :]
 
 
 class Transformer(Module):
