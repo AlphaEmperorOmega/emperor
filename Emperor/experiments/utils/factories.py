@@ -13,23 +13,24 @@ class Experiments:
     def __init__(
         self,
         mini_datasetset_flag: bool = True,
+        is_transformer_flag: bool = False,
     ) -> None:
         self.mini_datasetset_flag = mini_datasetset_flag
+        self.is_transformer_flag = is_transformer_flag
         self.model_config = None
         self.learning_rates = [
-            1e-5,
-            1e-4,
+            # 1e-5,
+            # 1e-4,
             1e-3,
-            1e-2,
-            1e-1,
-        ]
-
-        self.model_types = [
-            ClassifierExperiment,
+            # 1e-2,
+            # 1e-1,
         ]
         self.trainer_types = [
             FashionMNISTModelTrainer,
         ]
+
+    def _get_model_type(self):
+        return ClassifierExperiment
 
     def _print_model_title(
         self,
@@ -49,25 +50,26 @@ class Experiments:
         layer_type: BaseOptions,
         print_parameter_count_flag: bool = False,
     ) -> None:
-        layer_type = layer_type.value
+        layer_type = (
+            layer_type.value if isinstance(layer_type, BaseOptions) else layer_type
+        )
         for learning_rate in self.learning_rates:
-            for model_type in self.model_types:
-                for trainer_type in self.trainer_types:
-                    self._print_model_title(
-                        layer_type, self._get_model_config(), learning_rate
-                    )
-                    trainer = ModelTrainer(
-                        self._get_model_config(),
-                        model_type,
-                        layer_type,
-                        learning_rate,
-                        trainer_type,
-                        self.mini_datasetset_flag,
-                        num_epochs=20,
-                    )
-                    if print_parameter_count_flag:
-                        trainer.print_model_parameter_count()
-                    trainer.train()
+            for trainer_type in self.trainer_types:
+                self._print_model_title(
+                    layer_type, self._get_model_config(), learning_rate
+                )
+                trainer = ModelTrainer(
+                    self._get_model_config(),
+                    self._get_model_type(),
+                    layer_type,
+                    learning_rate,
+                    trainer_type,
+                    self.mini_datasetset_flag,
+                    num_epochs=20,
+                )
+                if print_parameter_count_flag:
+                    trainer.print_model_parameter_count()
+                trainer.train()
 
     def _get_model_config(self) -> None:
         if self.model_config is None:
@@ -83,20 +85,17 @@ class Experiments:
         for learning_rate in self.learning_rates:
             for layer_type, all_layer_type_presets in self.preset_collections.items():
                 for trainer_type in self.trainer_types:
-                    for model_type in self.model_types:
-                        for layer_preset in all_layer_type_presets:
-                            self._print_model_title(
-                                layer_type, layer_preset, learning_rate
-                            )
-                            trainer = ModelTrainer(
-                                layer_preset,
-                                model_type,
-                                layer_type,
-                                learning_rate,
-                                trainer_type,
-                                self.mini_datasetset_flag,
-                            )
-                            trainer.train()
+                    for layer_preset in all_layer_type_presets:
+                        self._print_model_title(layer_type, layer_preset, learning_rate)
+                        trainer = ModelTrainer(
+                            layer_preset,
+                            self._get_model_type(),
+                            layer_type,
+                            learning_rate,
+                            trainer_type,
+                            self.mini_datasetset_flag,
+                        )
+                        trainer.train()
 
 
 class ModelTrainer:
