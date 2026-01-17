@@ -23,7 +23,7 @@ class PositionalEmbeddingValidator:
     def ensure_propper_input_shape(self, input: Tensor) -> None:
         if input.dim() != 2:
             raise ValueError(
-                f"Invalid input shape: got {input.shape}, expected the input to be a matrix."
+                f"Invalid input shape: got {input.shape}, expected the input to be a matrix of ints."
             )
 
 

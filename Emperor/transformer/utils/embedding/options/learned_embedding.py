@@ -21,6 +21,7 @@ class LearnedPositionalEmbedding(Module):
     ):
         super().__init__()
         self.cfg = cfg
+        self.text_processing_flag = self.cfg.text_processing_flag
         self.embedding_dim = self.cfg.embedding_dim
         self.padding_idx = self.cfg.padding_idx
         self.num_embeddings = self.__get_num_embeddings(cfg)
@@ -50,12 +51,28 @@ class LearnedPositionalEmbedding(Module):
         incremental_state: Dict[str, Dict[str, Tensor | None]] | None = None,
         positions: Tensor | None = None,
     ) -> Tensor:
+        if self.text_processing_flag:
+            return self.__process_text(input, incremental_state, positions)
+        return self.__process_images(input)
+
+    def __process_text(
+        self,
+        input: Tensor,
+        incremental_state: Dict[str, Dict[str, Tensor | None]] | None = None,
+        positions: Tensor | None = None,
+    ) -> Tensor:
         self.validator.ensure_propper_input_shape(input)
         self.validator.ensure_propper_input_type(input)
         self.validator.ensure_padding_index_exists_for_positions(positions)
 
         positions = self.__resolve_positions(input, incremental_state, positions)
         return self.embedding_model(positions)
+
+    def __process_images(
+        self,
+        input: Tensor,
+    ) -> Tensor:
+        return self.embedding_model.weight + input
 
     def __resolve_positions(
         self,

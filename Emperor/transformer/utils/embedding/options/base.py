@@ -9,6 +9,10 @@ if TYPE_CHECKING:
 
 @dataclass
 class PositionalEmbeddingConfig(ConfigBase):
+    text_processing_flag: bool = field(
+        default=False,
+        metadata={"help": ""},
+    )
     positional_embedding_option: "PositionalEmbeddingOptions | None" = field(
         default=None,
         metadata={"help": ""},
