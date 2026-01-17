@@ -2,8 +2,8 @@ import torch
 import itertools
 import unittest
 
-from Emperor.attention.utils.layer import MultiHeadAttention
 from Emperor.base.layer import Layer
+from Emperor.attention.utils.layer import MultiHeadAttention
 from Emperor.transformer.utils.feed_forward import FeedForward
 from Emperor.transformer.utils.presets import TransformerPresets
 from Emperor.transformer.utils.layers import (

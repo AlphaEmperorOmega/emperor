@@ -5,7 +5,6 @@ import itertools
 from dataclasses import asdict
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
 from Emperor.linears.options import LinearLayerStackOptions
-from docs.config import default_unittest_config
 from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.handlers.maks import Mask
 from Emperor.attention.utils.handlers.processor import Processor
