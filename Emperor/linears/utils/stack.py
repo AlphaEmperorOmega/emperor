@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 class LinearLayerStack(LayerStack):
     def __init__(
         self,
-        cfg: "LayerStackConfig",
+        cfg: "LayerStackConfig | ModelConfig",
         overrides: "LayerStackConfig | None" = None,
     ):
         overrides = self.__get_model_type(overrides)

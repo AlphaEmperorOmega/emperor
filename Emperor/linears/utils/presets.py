@@ -48,6 +48,7 @@ class LinearPresets:
         input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
@@ -85,7 +86,7 @@ class LinearPresets:
                     output_dim=output_dim,
                     num_layers=stack_num_layers,
                     activation=stack_activation,
-                    layer_norm_position=LayerNormPositionOptions.NONE,
+                    layer_norm_position=layer_norm_position,
                     residual_flag=stack_residual_flag,
                     adaptive_computation_flag=False,
                     dropout_probability=stack_dropout_probability,
@@ -121,12 +122,13 @@ class LinearPresets:
         bias_flag: bool = True,
         data_monitor=None,
         parameter_monitor=None,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
         stack_num_layers: int = 2,
         stack_hidden_dim: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-    ) -> "LayerStackConfig | ModelConfig":
+    ) -> "LayerStackConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
@@ -137,7 +139,7 @@ class LinearPresets:
             output_dim=output_dim,
             num_layers=stack_num_layers,
             activation=stack_activation,
-            layer_norm_position=LayerNormPositionOptions.NONE,
+            layer_norm_position=layer_norm_position,
             residual_flag=stack_residual_flag,
             adaptive_computation_flag=False,
             dropout_probability=stack_dropout_probability,
@@ -166,6 +168,7 @@ class LinearPresets:
         input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
@@ -177,7 +180,8 @@ class LinearPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-    ) -> "LayerStackConfig | ModelConfig":
+        adaptive_behaviour_stack_num_layers: int = 2,
+    ) -> "LayerStackConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
@@ -188,7 +192,7 @@ class LinearPresets:
             output_dim=output_dim,
             num_layers=stack_num_layers,
             activation=stack_activation,
-            layer_norm_position=LayerNormPositionOptions.NONE,
+            layer_norm_position=layer_norm_position,
             residual_flag=stack_residual_flag,
             adaptive_computation_flag=False,
             dropout_probability=stack_dropout_probability,
@@ -202,7 +206,7 @@ class LinearPresets:
                 memory_option=memory_option,
                 memory_size_option=memory_size_option,
                 memory_position_option=memory_position_option,
-                stack_num_layers=stack_num_layers,
+                stack_num_layers=adaptive_behaviour_stack_num_layers,
                 stack_hidden_dim=stack_hidden_dim,
                 stack_activation=stack_activation,
                 stack_residual_flag=stack_residual_flag,
@@ -212,6 +216,7 @@ class LinearPresets:
 
         if not return_model_config_flag:
             return config
+
         return ModelConfig(
             batch_size=batch_size,
             input_dim=input_dim,
