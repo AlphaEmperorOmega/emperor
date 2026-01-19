@@ -1,5 +1,4 @@
 from Emperor.config import ModelConfig
-from Emperor.base.enums import BaseOptions
 from Emperor.experiments.utils.models import ClassifierExperiment
 from Emperor.experiments.utils.presets import FashionMNISTModelTrainer
 
@@ -17,111 +16,73 @@ class Experiments:
     ) -> None:
         self.mini_datasetset_flag = mini_datasetset_flag
         self.is_transformer_flag = is_transformer_flag
-        self.model_config = None
-        self.learning_rates = [
-            # 1e-5,
-            # 1e-4,
-            1e-3,
-            # 1e-2,
-            # 1e-1,
-        ]
-        self.trainer_types = [
-            FashionMNISTModelTrainer,
-        ]
 
-    def _get_model_type(self):
-        return ClassifierExperiment
+        self.num_epochs = self._get_num_epochs()
+        self.learning_rates = self._get_learning_rates()
+        self.trainer_types = self._get_dataset_trainers()
+        self.model_config = self._get_model_config()
+        self.experiment_type = self._get_experiment_type()
+        self.model_type = self._get_model_type()
 
-    def _print_model_title(
-        self,
-        layer_type,
-        layer_preset,
-        learning_rate: float,
-    ) -> None:
-        print("\n" * 2 + "-" * 50)
-        model_type_msg = ""  # f"Model type: {layer_type.__name__} "
-        model_preset_msg = ""  # f" Model preset: {layer_preset.__name__} "
-        learning_rate_msg = f" Learning rate: {learning_rate} "
-        message = "\n " + model_type_msg + model_preset_msg + learning_rate_msg + " \n"
-        print(message)
+    def _get_num_epochs(self) -> int:
+        return 10
 
-    def _train_model(
-        self,
-        layer_type: BaseOptions,
-        print_parameter_count_flag: bool = False,
-    ) -> None:
-        layer_type = (
-            layer_type.value if isinstance(layer_type, BaseOptions) else layer_type
+    def _get_learning_rates(self) -> list:
+        return [1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
+
+    def _get_dataset_trainers(self) -> list:
+        return [FashionMNISTModelTrainer]
+
+    def _get_model_config(self) -> ModelConfig:
+        raise NotImplementedError(
+            "The method '_get_model_config' must be implemented in the subclass."
         )
-        for learning_rate in self.learning_rates:
-            for trainer_type in self.trainer_types:
-                self._print_model_title(
-                    layer_type, self._get_model_config(), learning_rate
-                )
-                trainer = ModelTrainer(
-                    self._get_model_config(),
-                    self._get_model_type(),
-                    layer_type,
-                    learning_rate,
-                    trainer_type,
-                    self.mini_datasetset_flag,
-                    num_epochs=20,
-                )
-                if print_parameter_count_flag:
-                    trainer.print_model_parameter_count()
-                trainer.train()
-
-    def _get_model_config(self) -> None:
-        if self.model_config is None:
-            raise ValueError(
-                "self.model_config is None. It must be set before calling this method."
-            )
-        return self.model_config
 
     def _set_model_config(self, model_config: "ModelConfig") -> None:
         self.model_config = model_config
 
-    def test_all_preset_models(self) -> None:
-        for learning_rate in self.learning_rates:
-            for layer_type, all_layer_type_presets in self.preset_collections.items():
-                for trainer_type in self.trainer_types:
-                    for layer_preset in all_layer_type_presets:
-                        self._print_model_title(layer_type, layer_preset, learning_rate)
-                        trainer = ModelTrainer(
-                            layer_preset,
-                            self._get_model_type(),
-                            layer_type,
-                            learning_rate,
-                            trainer_type,
-                            self.mini_datasetset_flag,
-                        )
-                        trainer.train()
+    def _get_experiment_type(self):
+        return ClassifierExperiment
 
-
-class ModelTrainer:
-    def __init__(
-        self,
-        model_config,
-        model_type,
-        layer_type,
-        learning_rate,
-        trainer_type,
-        mini_datasetset_flag,
-        num_epochs: int = 5,
-    ):
-        self.cfg = model_config
-        self.model = model_type(self.cfg, layer_type, learning_rate)
-
-        self.trainer = trainer_type(
-            self.model,
-            self.cfg,
-            mini_datasetset_flag,
-            num_epochs=num_epochs,
+    def _get_model_type(self) -> type:
+        raise NotImplementedError(
+            "The method '_get_model_type' must be implemented in the subclass."
         )
 
-    def print_model_parameter_count(self):
-        count = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        print(f"Model parameter count: {count}")
+    def train_model(self) -> None:
+        for trainer_type in self.trainer_types:
+            for learning_rate in self.learning_rates:
+                model = self.experiment_type(
+                    self.model_config, self.model_type, learning_rate
+                )
+                trainer = trainer_type(
+                    model,
+                    self.model_config,
+                    self.mini_datasetset_flag,
+                    num_epochs=self.num_epochs,
+                )
 
-    def train(self):
-        self.trainer.train()
+                parameter_count = self.__print_model_parameter_count(model)
+                self.__print_model_title(trainer_type, learning_rate, parameter_count)
+                trainer.train()
+
+    def __print_model_parameter_count(self, model) -> int:
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    def __print_model_title(
+        self,
+        dataset_trainer,
+        learning_rate: float,
+        parameter_count: int,
+    ) -> None:
+        print("\n" * 2 + "#" * 50)
+        message_parts = [
+            f"# Model type: {self.model_type.__name__} \n",
+            f"# Trainer type: {dataset_trainer.__name__} \n",
+            f"# Learning rate: {learning_rate} \n",
+            f"# Experiment type: {self.experiment_type.__name__} \n",
+            f"# Model Parameter count: {parameter_count} \n",
+            f"# Config option: {self.model_config_option} \n",
+        ]
+        message = "\n" + "".join(message_parts) + "\n"
+        print(message)

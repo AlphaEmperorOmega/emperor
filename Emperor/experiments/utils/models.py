@@ -17,7 +17,7 @@ class ClassifierExperiment(Classifier):
         cfg: "ModelConfig",
         model_type,
         learning_rate: float = 0.1,
-        flatten_flag: bool = True,
+        flatten_flag: bool = False,
     ):
         super().__init__()
         self.cfg = cfg
@@ -26,46 +26,14 @@ class ClassifierExperiment(Classifier):
         self.flatten_flag = flatten_flag
         self.plotProgress = False
 
-        self.model = self.get_model()
+        self.model = self.build()
 
-    def get_model(self):
+    def build(self):
         model = self.model_type(self.cfg)
         if issubclass(self.model_type, LayerStack):
             model = model.build_model()
         if self.flatten_flag:
             return nn.Sequential(nn.Flatten(), model)
-        return model
-
-    def forward(self, input_batch: Tensor):
-        output = self.model(input_batch)
-        if isinstance(output, tuple):
-            if len(output) == 3:
-                output_tensor, skip_mask, auxiliary_loss = output
-            else:
-                output_tensor, auxiliary_loss = output
-            return output_tensor, auxiliary_loss
-        return output, torch.tensor(0.0)
-
-
-class TransformerClassifierExperiment(Classifier):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-        model_type,
-        learning_rate: float = 0.1,
-    ):
-        super().__init__()
-        self.cfg = cfg
-        self.lr = learning_rate
-        self.model_type = model_type
-        self.plotProgress = False
-
-        self.model = self.get_model()
-
-    def get_model(self):
-        model = self.model_type(self.cfg)
-        if issubclass(self.model_type, LayerStack):
-            model = model.build_model()
         return model
 
     def forward(self, input_batch: Tensor):
