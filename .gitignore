@@ -7,3 +7,5 @@ data/
 nul
 torchvenv
 logs
+emperor.egg-info
+pyproject.toml

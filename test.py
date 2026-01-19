@@ -1,6 +1,6 @@
-from Emperor.experiments.models.bert_vit_transformer import (
-    BERTVITExperiment,
-    BERTVITExperimentOptions,
+from Emperor.experiments.models.vit_transformer import (
+    VITExperiment,
+    VITExperimentOptions,
 )
 from Emperor.linears.experiments import LinearsExperiments
 from Emperor.transformer.experiments import TransformerExperiments
@@ -19,4 +19,4 @@ if __name__ == "__main__":
     # AdaptiveParameterExperiments(**options).test_all_types()
     # TransformerExperiments(**options).train_transformer_BERT_VIT_model()
 
-    BERTVITExperiment(**options).train_model(BERTVITExperimentOptions.ADAPTIVE_VIT)
+    VITExperiment(**options).train_model(VITExperimentOptions.CUSTOM_VIT)
