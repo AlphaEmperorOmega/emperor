@@ -1,6 +1,7 @@
 import torch
 
 from torch import Tensor
+from models.parser import get_parser
 from Emperor.config import ModelConfig
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
@@ -16,7 +17,7 @@ from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.transformer.utils.stack import TransformerEncoderStack
 from Emperor.transformer.utils.patch.options.base import PatchConfig
 from Emperor.transformer.utils.feed_forward import FeedForwardConfig
-from Emperor.experiments.utils.models import TransformerClassifierExperiment
+from Emperor.experiments.utils.presets import FashionMNISTModelTrainer
 from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingOptions
 from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingSelector
@@ -89,312 +90,63 @@ class VITModel(Module):
 
 
 class VITExperimentOptions(BaseOptions):
-    BASE_VIT = 0
-    ADAPTIVE_VIT = 1
-    CUSTOM_VIT = 2
+    BASE = 0
+    ADAPTIVE = 1
 
 
 class VITExperiment(Experiments):
     def __init__(
         self,
+        model_config_option: VITExperimentOptions | None = None,
         mini_datasetset_flag: bool = False,
     ) -> None:
+        self.model_config_option = model_config_option
         super().__init__(mini_datasetset_flag)
+
+    def _get_num_epochs(self) -> int:
+        return 5
 
     def _get_learning_rates(self) -> list:
         return [1e-3, 1e-2]
 
-    def train_model(
-        self,
-        model_config_options: VITExperimentOptions = VITExperimentOptions.BASE_VIT,
-    ):
-        preset = VITExperimentPresets().get_config(model_config_options)
-        self._set_model_config(preset)
-        self._train_model(VITModel, print_parameter_count_flag=True)
+    def _get_dataset_trainers(self) -> list:
+        return [FashionMNISTModelTrainer]
+
+    def _get_model_config(self):
+        if self.model_config_option is None:
+            return None
+        return VITExperimentPresets().get_config(self.model_config_option)
+
+    def _get_model_type(self) -> type:
+        return VITModel
+
+    def train_model(self) -> None:
+        if self.model_config_option is not None:
+            super().train_model()
+
+        for config_option in VITExperimentOptions:
+            self.model_config_option = config_option
+            config = VITExperimentPresets().get_config(config_option)
+            self._set_model_config(config)
+            super().train_model()
 
 
 class VITExperimentPresets:
     def get_config(
         self,
-        model_config_options: VITExperimentOptions = VITExperimentOptions.BASE_VIT,
+        model_config_options: VITExperimentOptions = VITExperimentOptions.BASE,
     ) -> "ModelConfig":
         match model_config_options:
-            case VITExperimentOptions.BASE_VIT:
-                return self.base_linear_transformer_config()
-            case VITExperimentOptions.ADAPTIVE_VIT:
-                return self.adaptive_linear_transformer_config()
-            case VITExperimentOptions.CUSTOM_VIT:
-                return self.custom_linear_transformer_config()
+            case VITExperimentOptions.BASE:
+                return self.__base_linear_transformer_config()
+            case VITExperimentOptions.ADAPTIVE:
+                return self.__adaptive_linear_transformer_config()
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `VITExperimentOptions`."
                 )
 
-    def base_linear_transformer_config(self) -> "ModelConfig":
-        BATCH_SIZE = 64
-        INPUT_DIM = 32
-        EMBEDDING_DIM = 32
-        OUTPUT_DIM = 10
-        DROPOUT_PROBABILITY = 0.0
-        ACTIVATION_FUNCTION = ActivationOptions.RELU
-
-        OUTPUT_NUM_LAYERS = 1
-        TRANSFORMER_NUM_LAYERS = 1
-
-        ATTN_BIAS_FLAG = False
-        ATTN_NUM_LAYERS = 1
-        FF_BIAS_FLAG = True
-        FF_NUM_LAYERS = 2
-
-        OUTPUT_BIAS_FLAG = True
-        OUTPUT_NUM_LAYERS = 1
-
-        IMAGE_PATCH_SIZE = 4
-        CLASS_TOKEN_LENGTH = 1
-        IMAGE_HEIGHT = IMAGE_HEIGHT = 28
-        KERNEL_SIZE = IMAGE_PATCH_SIZE
-        PADDING_SIZE = 0
-        DILATATION_SIZE = 0
-        STRIDE = IMAGE_PATCH_SIZE
-        H_OUT = (
-            IMAGE_HEIGHT + 2 * PADDING_SIZE - DILATATION_SIZE * (KERNEL_SIZE - 1) - 1
-        ) // STRIDE + 1
-        W_OUT = (
-            IMAGE_HEIGHT + 2 * PADDING_SIZE - DILATATION_SIZE * (KERNEL_SIZE - 1) - 1
-        ) // STRIDE + 1
-        SEQUENCE_LENGTH = H_OUT * W_OUT + 1
-        NUM_EMBEDDINGS = SEQUENCE_LENGTH - CLASS_TOKEN_LENGTH
-
-        return ModelConfig(
-            batch_size=BATCH_SIZE,
-            input_dim=INPUT_DIM,
-            hidden_dim=EMBEDDING_DIM,
-            output_dim=OUTPUT_DIM,
-            override_config=VITModelConfig(
-                patch_config=PatchConfig(
-                    patch_option=PatchOptions.LINEAR,
-                    embedding_dim=EMBEDDING_DIM,
-                    num_input_channels=1,
-                    patch_size=IMAGE_PATCH_SIZE,
-                    stride=IMAGE_PATCH_SIZE,
-                    padding=0,
-                    dropout_probability=0.0,
-                    override_config=LayerStackConfig(
-                        model_type=LinearLayerOptions.BASE,
-                        input_dim=EMBEDDING_DIM,
-                        hidden_dim=EMBEDDING_DIM,
-                        output_dim=EMBEDDING_DIM,
-                        num_layers=1,
-                        activation=ACTIVATION_FUNCTION,
-                        layer_norm_position=LayerNormPositionOptions.DEFAULT,
-                        residual_flag=False,
-                        adaptive_computation_flag=False,
-                        dropout_probability=DROPOUT_PROBABILITY,
-                        override_config=LinearLayerConfig(
-                            input_dim=EMBEDDING_DIM,
-                            output_dim=EMBEDDING_DIM,
-                            bias_flag=True,
-                            data_monitor=None,
-                            parameter_monitor=None,
-                        ),
-                    ),
-                ),
-                positional_embedding_config=PositionalEmbeddingConfig(
-                    text_processing_flag=False,
-                    positional_embedding_option=PositionalEmbeddingOptions.LEARNED,
-                    num_embeddings=NUM_EMBEDDINGS,
-                    embedding_dim=EMBEDDING_DIM,
-                    padding_idx=0,
-                    init_size=1024,
-                    auto_expand_flag=False,
-                ),
-                encoder_config=TransformerPresets.transformer_linear_base_preset(
-                    batch_size=BATCH_SIZE,
-                    num_layers=TRANSFORMER_NUM_LAYERS,
-                    layer_norm_position=LayerNormPositionOptions.DEFAULT,
-                    num_heads=4,
-                    embedding_dim=EMBEDDING_DIM,
-                    query_key_projection_dim=EMBEDDING_DIM,
-                    value_projection_dim=EMBEDDING_DIM,
-                    target_sequence_length=SEQUENCE_LENGTH,
-                    source_sequence_length=SEQUENCE_LENGTH,
-                    target_dtype=torch.float32,
-                    is_self_attention_projector_flag=True,
-                    dropout_probability=DROPOUT_PROBABILITY,
-                    key_value_bias_flag=False,
-                    zero_attention_flag=False,
-                    causal_attention_mask_flag=False,
-                    add_key_value_bias_flag=False,
-                    average_attention_weights_flag=False,
-                    return_attention_weights_flag=False,
-                    attn_stack_num_layers=ATTN_NUM_LAYERS,
-                    attn_bias_flag=ATTN_BIAS_FLAG,
-                    ff_stack_num_layers=FF_NUM_LAYERS,
-                    ff_bias_flag=FF_BIAS_FLAG,
-                    stack_activation=ACTIVATION_FUNCTION,
-                    stack_residual_flag=False,
-                ),
-                output_config=LinearPresets.base_linear_layer_stack_preset(
-                    batch_size=BATCH_SIZE,
-                    input_dim=EMBEDDING_DIM,
-                    output_dim=OUTPUT_DIM,
-                    bias_flag=OUTPUT_BIAS_FLAG,
-                    data_monitor=None,
-                    parameter_monitor=None,
-                    layer_norm_position=LayerNormPositionOptions.NONE,
-                    stack_num_layers=OUTPUT_NUM_LAYERS,
-                    stack_hidden_dim=EMBEDDING_DIM,
-                    stack_activation=ACTIVATION_FUNCTION,
-                    stack_residual_flag=False,
-                    stack_dropout_probability=DROPOUT_PROBABILITY,
-                ),
-            ),
-        )
-
-    def adaptive_linear_transformer_config(self) -> "ModelConfig":
-        BATCH_SIZE = 16
-        INPUT_DIM = 32
-        EMBEDDING_DIM = 32
-        OUTPUT_DIM = 10
-        DROPOUT_PROBABILITY = 0.1
-        IMAGE_PATCH_SIZE = 4
-        ACTIVATION_FUNCTION = ActivationOptions.GELU
-
-        TRANSFORMER_NUM_LAYERS = 2
-
-        ATTN_BIAS_FLAG = False
-        ATTN_NUM_LAYERS = 1
-        ATTN_GENERATOR_DEPTH = DynamicDepthOptions.DEPTH_OF_TWO
-        ATTN_DIAGONAL_OPTION = DynamicDiagonalOptions.DIAGONAL
-        ATTN_BIAS_OPTION = DynamicBiasOptions.DISABLED
-        ATTN_BEHAVIOUR_STACK_NUM_LAYERS = 2
-
-        FF_BIAS_FLAG = True
-        FF_NUM_LAYERS = 2
-        FF_GENERATOR_DEPTH = DynamicDepthOptions.DEPTH_OF_TWO
-        FF_DIAGONAL_OPTION = DynamicDiagonalOptions.DIAGONAL
-        FF_BIAS_OPTION = DynamicBiasOptions.DYNAMIC_PARAMETERS
-        FF_BEHAVIOUR_STACK_NUM_LAYERS = 2
-
-        OUTPUT_BIAS_FLAG = True
-        OUTPUT_NUM_LAYERS = 1
-        OUTPUT_GENERATOR_DEPTH = DynamicDepthOptions.DEPTH_OF_TWO
-        OUTPUT_DIAGONAL_OPTIONS = DynamicDiagonalOptions.DIAGONAL
-        OUTPUT_DYNAMIC_BIAS_OPTIONS = DynamicBiasOptions.DYNAMIC_PARAMETERS
-        OUTPUT_BEHAVIOUR_STACK_NUM_LAYERS = 1
-
-        IMAGE_PATCH_SIZE = 4
-        CLASS_TOKEN_LENGTH = 1
-        IMAGE_HEIGHT = IMAGE_HEIGHT = 28
-        KERNEL_SIZE = IMAGE_PATCH_SIZE
-        PADDING_SIZE = 0
-        DILATATION_SIZE = 0
-        STRIDE = IMAGE_PATCH_SIZE
-        H_OUT = (
-            IMAGE_HEIGHT + 2 * PADDING_SIZE - DILATATION_SIZE * (KERNEL_SIZE - 1) - 1
-        ) // STRIDE + 1
-        W_OUT = (
-            IMAGE_HEIGHT + 2 * PADDING_SIZE - DILATATION_SIZE * (KERNEL_SIZE - 1) - 1
-        ) // STRIDE + 1
-        SEQUENCE_LENGTH = H_OUT * W_OUT + 1
-        NUM_EMBEDDINGS = SEQUENCE_LENGTH - CLASS_TOKEN_LENGTH
-
-        return ModelConfig(
-            batch_size=BATCH_SIZE,
-            input_dim=INPUT_DIM,
-            hidden_dim=EMBEDDING_DIM,
-            output_dim=OUTPUT_DIM,
-            override_config=VITModelConfig(
-                patch_config=PatchConfig(
-                    patch_option=PatchOptions.LINEAR,
-                    num_input_channels=1,
-                    embedding_dim=EMBEDDING_DIM,
-                    patch_size=IMAGE_PATCH_SIZE,
-                    stride=IMAGE_PATCH_SIZE,
-                    padding=0,
-                    dropout_probability=0.0,
-                    override_config=LayerStackConfig(
-                        model_type=LinearLayerOptions.BASE,
-                        input_dim=EMBEDDING_DIM,
-                        hidden_dim=EMBEDDING_DIM,
-                        output_dim=EMBEDDING_DIM,
-                        num_layers=1,
-                        activation=ACTIVATION_FUNCTION,
-                        layer_norm_position=LayerNormPositionOptions.DEFAULT,
-                        residual_flag=False,
-                        adaptive_computation_flag=False,
-                        dropout_probability=DROPOUT_PROBABILITY,
-                        override_config=LinearLayerConfig(
-                            input_dim=EMBEDDING_DIM,
-                            output_dim=EMBEDDING_DIM,
-                            bias_flag=True,
-                            data_monitor=None,
-                            parameter_monitor=None,
-                        ),
-                    ),
-                ),
-                positional_embedding_config=PositionalEmbeddingConfig(
-                    text_processing_flag=False,
-                    positional_embedding_option=PositionalEmbeddingOptions.LEARNED,
-                    num_embeddings=NUM_EMBEDDINGS,
-                    embedding_dim=EMBEDDING_DIM,
-                    padding_idx=0,
-                    init_size=1024,
-                    auto_expand_flag=False,
-                ),
-                encoder_config=TransformerPresets.transformer_linear_adaptive_preset(
-                    batch_size=BATCH_SIZE,
-                    num_layers=TRANSFORMER_NUM_LAYERS,
-                    layer_norm_position=LayerNormPositionOptions.DEFAULT,
-                    num_heads=4,
-                    embedding_dim=EMBEDDING_DIM,
-                    query_key_projection_dim=EMBEDDING_DIM,
-                    value_projection_dim=EMBEDDING_DIM,
-                    target_sequence_length=SEQUENCE_LENGTH,
-                    source_sequence_length=SEQUENCE_LENGTH,
-                    target_dtype=torch.float32,
-                    is_self_attention_projector_flag=False,
-                    dropout_probability=DROPOUT_PROBABILITY,
-                    key_value_bias_flag=False,
-                    zero_attention_flag=False,
-                    causal_attention_mask_flag=False,
-                    add_key_value_bias_flag=False,
-                    average_attention_weights_flag=False,
-                    return_attention_weights_flag=False,
-                    attn_stack_num_layers=ATTN_NUM_LAYERS,
-                    attn_bias_flag=ATTN_BIAS_FLAG,
-                    attn_generator_depth=ATTN_GENERATOR_DEPTH,
-                    attn_diagonal_option=ATTN_DIAGONAL_OPTION,
-                    attn_bias_option=ATTN_BIAS_OPTION,
-                    attn_behaviour_stack_num_layers=ATTN_BEHAVIOUR_STACK_NUM_LAYERS,
-                    ff_stack_num_layers=FF_NUM_LAYERS,
-                    ff_bias_flag=FF_BIAS_FLAG,
-                    ff_generator_depth=FF_GENERATOR_DEPTH,
-                    ff_diagonal_option=FF_DIAGONAL_OPTION,
-                    ff_bias_option=FF_BIAS_OPTION,
-                    ff_behaviour_stack_num_layers=FF_BEHAVIOUR_STACK_NUM_LAYERS,
-                    stack_activation=ACTIVATION_FUNCTION,
-                    stack_residual_flag=False,
-                ),
-                output_config=LinearPresets.adaptive_linear_layer_stack_preset(
-                    batch_size=BATCH_SIZE,
-                    input_dim=EMBEDDING_DIM,
-                    output_dim=OUTPUT_DIM,
-                    bias_flag=OUTPUT_BIAS_FLAG,
-                    generator_depth=OUTPUT_GENERATOR_DEPTH,
-                    diagonal_option=OUTPUT_DIAGONAL_OPTIONS,
-                    bias_option=OUTPUT_DYNAMIC_BIAS_OPTIONS,
-                    stack_num_layers=OUTPUT_NUM_LAYERS,
-                    stack_hidden_dim=EMBEDDING_DIM,
-                    stack_activation=ACTIVATION_FUNCTION,
-                    stack_residual_flag=False,
-                    stack_dropout_probability=DROPOUT_PROBABILITY,
-                    adaptive_behaviour_stack_num_layers=OUTPUT_BEHAVIOUR_STACK_NUM_LAYERS,
-                ),
-            ),
-        )
-
-    def custom_linear_transformer_config(self) -> "ModelConfig":
+    def __base_linear_transformer_config(self) -> "ModelConfig":
         BATCH_SIZE = 64
         INPUT_DIM = 64
         EMBEDDING_DIM = 64
@@ -403,7 +155,7 @@ class VITExperimentPresets:
         ACTIVATION_FUNCTION = ActivationOptions.RELU
 
         OUTPUT_NUM_LAYERS = 1
-        TRANSFORMER_NUM_LAYERS = 6
+        TRANSFORMER_NUM_LAYERS = 2
 
         ATTN_BIAS_FLAG = False
         ATTN_NUM_HEADS = 4
@@ -568,6 +320,154 @@ class VITExperimentPresets:
             ),
         )
 
+    def __adaptive_linear_transformer_config(self) -> "ModelConfig":
+        BATCH_SIZE = 16
+        INPUT_DIM = 32
+        EMBEDDING_DIM = 32
+        OUTPUT_DIM = 10
+        DROPOUT_PROBABILITY = 0.1
+        IMAGE_PATCH_SIZE = 4
+        ACTIVATION_FUNCTION = ActivationOptions.RELU
+
+        TRANSFORMER_NUM_LAYERS = 2
+
+        ATTN_BIAS_FLAG = False
+        ATTN_NUM_LAYERS = 1
+        ATTN_GENERATOR_DEPTH = DynamicDepthOptions.DEPTH_OF_TWO
+        ATTN_DIAGONAL_OPTION = DynamicDiagonalOptions.DIAGONAL
+        ATTN_BIAS_OPTION = DynamicBiasOptions.DISABLED
+        ATTN_BEHAVIOUR_STACK_NUM_LAYERS = 2
+
+        FF_BIAS_FLAG = True
+        FF_NUM_LAYERS = 2
+        FF_GENERATOR_DEPTH = DynamicDepthOptions.DEPTH_OF_TWO
+        FF_DIAGONAL_OPTION = DynamicDiagonalOptions.DIAGONAL
+        FF_BIAS_OPTION = DynamicBiasOptions.DYNAMIC_PARAMETERS
+        FF_BEHAVIOUR_STACK_NUM_LAYERS = 2
+
+        OUTPUT_BIAS_FLAG = True
+        OUTPUT_NUM_LAYERS = 1
+        OUTPUT_GENERATOR_DEPTH = DynamicDepthOptions.DEPTH_OF_TWO
+        OUTPUT_DIAGONAL_OPTIONS = DynamicDiagonalOptions.DIAGONAL
+        OUTPUT_DYNAMIC_BIAS_OPTIONS = DynamicBiasOptions.DYNAMIC_PARAMETERS
+        OUTPUT_BEHAVIOUR_STACK_NUM_LAYERS = 1
+
+        IMAGE_PATCH_SIZE = 4
+        CLASS_TOKEN_LENGTH = 1
+        IMAGE_HEIGHT = IMAGE_HEIGHT = 28
+        KERNEL_SIZE = IMAGE_PATCH_SIZE
+        PADDING_SIZE = 0
+        DILATATION_SIZE = 0
+        STRIDE = IMAGE_PATCH_SIZE
+        H_OUT = (
+            IMAGE_HEIGHT + 2 * PADDING_SIZE - DILATATION_SIZE * (KERNEL_SIZE - 1) - 1
+        ) // STRIDE + 1
+        W_OUT = (
+            IMAGE_HEIGHT + 2 * PADDING_SIZE - DILATATION_SIZE * (KERNEL_SIZE - 1) - 1
+        ) // STRIDE + 1
+        SEQUENCE_LENGTH = H_OUT * W_OUT + 1
+        NUM_EMBEDDINGS = SEQUENCE_LENGTH - CLASS_TOKEN_LENGTH
+
+        return ModelConfig(
+            batch_size=BATCH_SIZE,
+            input_dim=INPUT_DIM,
+            hidden_dim=EMBEDDING_DIM,
+            output_dim=OUTPUT_DIM,
+            override_config=VITModelConfig(
+                patch_config=PatchConfig(
+                    patch_option=PatchOptions.LINEAR,
+                    num_input_channels=1,
+                    embedding_dim=EMBEDDING_DIM,
+                    patch_size=IMAGE_PATCH_SIZE,
+                    stride=IMAGE_PATCH_SIZE,
+                    padding=0,
+                    dropout_probability=0.0,
+                    override_config=LayerStackConfig(
+                        model_type=LinearLayerOptions.BASE,
+                        input_dim=EMBEDDING_DIM,
+                        hidden_dim=EMBEDDING_DIM,
+                        output_dim=EMBEDDING_DIM,
+                        num_layers=1,
+                        activation=ACTIVATION_FUNCTION,
+                        layer_norm_position=LayerNormPositionOptions.DEFAULT,
+                        residual_flag=False,
+                        adaptive_computation_flag=False,
+                        dropout_probability=DROPOUT_PROBABILITY,
+                        override_config=LinearLayerConfig(
+                            input_dim=EMBEDDING_DIM,
+                            output_dim=EMBEDDING_DIM,
+                            bias_flag=True,
+                            data_monitor=None,
+                            parameter_monitor=None,
+                        ),
+                    ),
+                ),
+                positional_embedding_config=PositionalEmbeddingConfig(
+                    text_processing_flag=False,
+                    positional_embedding_option=PositionalEmbeddingOptions.LEARNED,
+                    num_embeddings=NUM_EMBEDDINGS,
+                    embedding_dim=EMBEDDING_DIM,
+                    padding_idx=0,
+                    init_size=1024,
+                    auto_expand_flag=False,
+                ),
+                encoder_config=TransformerPresets.transformer_linear_adaptive_preset(
+                    batch_size=BATCH_SIZE,
+                    num_layers=TRANSFORMER_NUM_LAYERS,
+                    layer_norm_position=LayerNormPositionOptions.DEFAULT,
+                    num_heads=4,
+                    embedding_dim=EMBEDDING_DIM,
+                    query_key_projection_dim=EMBEDDING_DIM,
+                    value_projection_dim=EMBEDDING_DIM,
+                    target_sequence_length=SEQUENCE_LENGTH,
+                    source_sequence_length=SEQUENCE_LENGTH,
+                    target_dtype=torch.float32,
+                    is_self_attention_projector_flag=False,
+                    dropout_probability=DROPOUT_PROBABILITY,
+                    key_value_bias_flag=False,
+                    zero_attention_flag=False,
+                    causal_attention_mask_flag=False,
+                    add_key_value_bias_flag=False,
+                    average_attention_weights_flag=False,
+                    return_attention_weights_flag=False,
+                    attn_stack_num_layers=ATTN_NUM_LAYERS,
+                    attn_bias_flag=ATTN_BIAS_FLAG,
+                    attn_generator_depth=ATTN_GENERATOR_DEPTH,
+                    attn_diagonal_option=ATTN_DIAGONAL_OPTION,
+                    attn_bias_option=ATTN_BIAS_OPTION,
+                    attn_behaviour_stack_num_layers=ATTN_BEHAVIOUR_STACK_NUM_LAYERS,
+                    ff_stack_num_layers=FF_NUM_LAYERS,
+                    ff_bias_flag=FF_BIAS_FLAG,
+                    ff_generator_depth=FF_GENERATOR_DEPTH,
+                    ff_diagonal_option=FF_DIAGONAL_OPTION,
+                    ff_bias_option=FF_BIAS_OPTION,
+                    ff_behaviour_stack_num_layers=FF_BEHAVIOUR_STACK_NUM_LAYERS,
+                    stack_activation=ACTIVATION_FUNCTION,
+                    stack_residual_flag=False,
+                ),
+                output_config=LinearPresets.adaptive_linear_layer_stack_preset(
+                    batch_size=BATCH_SIZE,
+                    input_dim=EMBEDDING_DIM,
+                    output_dim=OUTPUT_DIM,
+                    bias_flag=OUTPUT_BIAS_FLAG,
+                    generator_depth=OUTPUT_GENERATOR_DEPTH,
+                    diagonal_option=OUTPUT_DIAGONAL_OPTIONS,
+                    bias_option=OUTPUT_DYNAMIC_BIAS_OPTIONS,
+                    stack_num_layers=OUTPUT_NUM_LAYERS,
+                    stack_hidden_dim=EMBEDDING_DIM,
+                    stack_activation=ACTIVATION_FUNCTION,
+                    stack_residual_flag=False,
+                    stack_dropout_probability=DROPOUT_PROBABILITY,
+                    adaptive_behaviour_stack_num_layers=OUTPUT_BEHAVIOUR_STACK_NUM_LAYERS,
+                ),
+            ),
+        )
+
 
 if __name__ == "__main__":
-    VITExperiment().train_model(VITExperimentOptions.CUSTOM_VIT)
+    parser = get_parser(VITExperimentOptions.names())
+    args = parser.parse_args()
+    config_option = VITExperimentOptions.get_option(args.config_name)
+
+    experiment = VITExperiment(config_option)
+    experiment.train_model()
