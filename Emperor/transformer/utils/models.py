@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class BERTVITModelConfig(ConfigBase):
+class VITModelConfig(ConfigBase):
     patch_config: "PatchConfig | None" = field(
         default=None,
         metadata={"help": ""},
@@ -68,11 +68,7 @@ class TransformerEncoderModel(TransformerBase):
         self,
         cfg: "ModelConfig",
     ):
-        super().__init__()
-        self.cfg = cfg
-        self.input_dim = self.cfg.input_dim
-        self.hidden_dim = self.cfg.hidden_dim
-        self.output_dim = self.cfg.output_dim
+        super().__init__(cfg)
 
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.patch_config = self.main_cfg.patch_config

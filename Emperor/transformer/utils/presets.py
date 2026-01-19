@@ -62,12 +62,21 @@ class TransformerPresets:
 
     @staticmethod
     def transformer_patch_preset(
-        patch_option: "PatchOptions" = PatchOptions.TOKENIZER,
+        patch_option: "PatchOptions" = PatchOptions.LINEAR,
         embedding_dim: int = 32,
         patch_size: int = 3,
         stride: int = 3,
         padding: int = 0,
         dropout: float = 0.0,
+        input_dim: int = 8,
+        hidden_dim: int = 4,
+        output_dim: int = 6,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
+        bias_flag: bool = False,
+        stack_num_layers: int = 2,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+        stack_dropout_probability: float = 0.0,
     ) -> "PatchConfig":
         return PatchConfig(
             patch_option=patch_option,
@@ -76,6 +85,19 @@ class TransformerPresets:
             stride=stride,
             padding=padding,
             dropout=dropout,
+            override_config=LinearPresets.base_linear_layer_stack_preset(
+                input_dim=input_dim,
+                output_dim=output_dim,
+                bias_flag=bias_flag,
+                data_monitor=None,
+                parameter_monitor=None,
+                layer_norm_position=layer_norm_position,
+                stack_num_layers=stack_num_layers,
+                stack_hidden_dim=hidden_dim,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=stack_dropout_probability,
+            ),
         )
 
     @staticmethod
