@@ -3,7 +3,24 @@ import torch.nn.functional as F
 
 
 class BaseOptions(Enum):
-    pass
+    def __call__(self, x):
+        return self.value(x)
+
+    @classmethod
+    def has_option(cls, name: str) -> bool:
+        return name in cls.__members__
+
+    @classmethod
+    def get_option(cls, name: str | None):
+        if name is None:
+            return None
+        if cls.has_option(name):
+            return cls[name]
+        raise ValueError(f"Option '{name}' does not exist in {cls.__name__}.")
+
+    @classmethod
+    def names(cls) -> list[str]:
+        return list(cls.__members__.keys())
 
 
 class ActivationOptions(BaseOptions):
