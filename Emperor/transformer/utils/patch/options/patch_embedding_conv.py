@@ -30,6 +30,8 @@ class PatchEmbeddingConv(PatchBase):
 
     def forward(self, X: Tensor):
         X = self.patch_model(X)
-        X = X.permute(0, 2, 1)
+        X = X.transpose(1, 2)
         X = self._concatenate_class_token(X)
+        X = self.dropout(X)
+
         return X
