@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 
 from torch import Tensor
 from Emperor.base.utils import Module
@@ -92,14 +93,20 @@ class DynamicParametersBehaviour(Module):
     ) -> Tensor:
         input_vectors = self.__normalize_vectors(input_vectors)
         output_vectors = self.__normalize_vectors(output_vectors)
-        return torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
+        outer_product = torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
+        return self.__normalize_vectors(outer_product, True)
+        # return torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
 
     def __normalize_vectors(
         self,
         outer_product: Tensor,
+        normalize_flag: bool = False,
     ) -> Tensor:
         # TODO: Add flag to normalize the the input before or after the outer product
-        return torch.clamp(outer_product, -5.0, 5.0)
+        # return torch.clamp(outer_product, -5.0, 5.0)
+        if not normalize_flag:
+            return outer_product
+        return F.tanh(outer_product)
 
 
 # TODO: Add option for a kernel to take the context

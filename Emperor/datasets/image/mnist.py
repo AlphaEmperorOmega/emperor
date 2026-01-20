@@ -7,7 +7,7 @@ from Emperor.base.utils import DataModule
 from torchvision.transforms.transforms import Compose
 
 
-class MNIST(DataModule):
+class Mnist(DataModule):
     def __init__(
         self,
         batch_size,

@@ -7,7 +7,7 @@ from Emperor.base.utils import DataModule
 from torchvision.transforms.transforms import Compose
 
 
-class CIFAR100(DataModule):
+class Cifar100(DataModule):
     def __init__(
         self,
         batch_size,

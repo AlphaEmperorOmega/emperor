@@ -442,7 +442,9 @@ class DataModule(HyperParameters):
         show_images(X.squeeze(1).permute(0, 2, 3, 1), nrows, ncols, titles=labels)
 
     def _text_labels(self, indices) -> list:
-        raise NotImplementedError("The 'test_labels' method must be implemented in the subclass.")
+        raise NotImplementedError(
+            "The 'test_labels' method must be implemented in the subclass."
+        )
 
 
 class Trainer(HyperParameters):
@@ -464,8 +466,15 @@ class Trainer(HyperParameters):
         model.board.xlim = [0, self.max_epochs]
         self.model = model
 
-    def fit(self, model, data, print_loss_flag: bool = False):
+    def fit(
+        self,
+        model,
+        data,
+        print_loss_flag: bool = False,
+        print_loss_frequency: int = 50,
+    ):
         self.print_loss_flag = print_loss_flag
+        self.print_loss_frequency = print_loss_frequency
         self.prepare_data(data)
         self.prepare_model(model)
         self.optim = model.configure_optimizers()
@@ -499,10 +508,9 @@ class Trainer(HyperParameters):
         self,
         loss: torch.Tensor,
         auxiliary_loss: torch.Tensor,
-        batch_rate: int = 20,
         batch_idx: int = 0,
     ) -> None:
-        if self.print_loss_flag and batch_idx % batch_rate == 0:
+        if self.print_loss_flag and batch_idx % self.print_loss_frequency == 0:
             message = [
                 f"Epoch: {self.epoch}",
                 f"Batch: {batch_idx}",
