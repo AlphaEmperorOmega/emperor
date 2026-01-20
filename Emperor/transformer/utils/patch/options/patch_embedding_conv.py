@@ -20,13 +20,13 @@ class PatchEmbeddingConv(PatchBase):
     def __create_patch_extraction_model(self):
         return nn.Sequential(
             nn.Conv2d(
-                in_channels=self.cfg.input_channels,
+                in_channels=self.cfg.num_input_channels,
                 out_channels=self.cfg.embedding_dim,
                 kernel_size=self.cfg.patch_size,
                 stride=self.cfg.patch_size,
             ),
             nn.Flatten(2),
-        )
+        ).to(self.device)
 
     def forward(self, X: Tensor):
         X = self.patch_model(X)

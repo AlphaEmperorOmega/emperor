@@ -38,7 +38,10 @@ class LearnedPositionalEmbedding(Module):
 
     def __initialize_embedding_model(self) -> nn.Embedding:
         embeddings = nn.Embedding(
-            self.num_embeddings, self.embedding_dim, self.padding_idx
+            self.num_embeddings,
+            self.embedding_dim,
+            self.padding_idx,
+            device=self.device,
         )
         nn.init.normal_(embeddings.weight, mean=0, std=self.embedding_dim**-0.5)
         if self.padding_idx is not None:

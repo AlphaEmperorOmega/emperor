@@ -48,7 +48,7 @@ masked_fill = torch.masked_fill
 sigmoid = torch.sigmoid
 batch_matmul = torch.bmm
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = "cpu"
+# device = "cpu"
 
 numpy = lambda x, *args, **kwargs: x.detach().numpy(*args, **kwargs)
 size = lambda x, *args, **kwargs: x.numel(*args, **kwargs)
@@ -97,7 +97,6 @@ def try_all_gpus():
 
 
 def show_images(imgs, num_rows, num_cols, titles=None, scale=1.5):
-    """Plot a list of images."""
     figsize = (num_cols * scale, num_rows * scale)
     _, axes = plt.subplots(num_rows, num_cols, figsize=figsize)
     axes = axes.flatten()
@@ -215,6 +214,8 @@ class Module(nn.Module, HyperParameters):
     ):
         super().__init__()
         self.save_hyperparameters()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = "cpu"
         self.board = ProgressBoard()
 
     def loss(self, y_hat, y):
@@ -378,18 +379,20 @@ class Module(nn.Module, HyperParameters):
         return class_type(cfg)
 
 
-class ParameterBank:
+class ParameterBank(Module):
     def __init__(
         self,
         shape: tuple,
         initializer: callable,
     ):
+        super().__init__()
         self.shape = shape
         self.initializer = initializer
         self.parameter_bank = self.__create_bank()
 
     def __create_bank(self) -> Parameter:
-        parameter_bank = Parameter(randn(*self.shape))
+        default_params = randn(*self.shape, device=self.device)
+        parameter_bank = Parameter(default_params)
         self.initializer(parameter_bank)
         return parameter_bank
 
@@ -404,8 +407,8 @@ class DataModule(HyperParameters):
         self,
         root="data",
         num_workers=4,
-        testDatasetFalg=False,
-        testDatasetNumSamples=512,
+        test_dataset_flag=False,
+        test_dataset_num_samples=64,
     ):
         self.save_hyperparameters()
 
@@ -423,14 +426,23 @@ class DataModule(HyperParameters):
         dataset = torch.utils.data.TensorDataset(*tensors)
         return torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=train)
 
-    def getDataset(self, dataset):
-        if self.testDatasetFalg:
-            totalSamplesRange = range(len(dataset))
+    def get_dataset(self, dataset):
+        if self.test_dataset_flag:
+            total_samples_range = range(len(dataset))
             small_dataset_idxs = random.sample(
-                totalSamplesRange, self.testDatasetNumSamples
+                total_samples_range, self.test_dataset_num_samples
             )
             return torch.utils.data.Subset(dataset, small_dataset_idxs)
         return dataset
+
+    def visualize(self, batch, nrows=1, ncols=8, labels=[]):
+        X, y = batch
+        if not labels:
+            labels = self._text_labels(y)
+        show_images(X.squeeze(1).permute(0, 2, 3, 1), nrows, ncols, titles=labels)
+
+    def _text_labels(self, indices) -> list:
+        raise NotImplementedError("The 'test_labels' method must be implemented in the subclass.")
 
 
 class Trainer(HyperParameters):
