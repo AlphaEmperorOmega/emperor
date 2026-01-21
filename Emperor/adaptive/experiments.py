@@ -4,7 +4,11 @@ from Emperor.experiments.utils.factories import Experiments
 from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    InitSamplerOptions,
+    LayerRoleOptions,
+)
 from Emperor.adaptive.options import (
     AdaptiveLayerStackOptions,
     AdaptiveParameterLayerOptions,
@@ -21,6 +25,7 @@ from Emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
+
 
 from typing import TYPE_CHECKING
 
@@ -114,7 +119,7 @@ class AdaptiveParameterExperimentPresets:
             experts_layer_stack_option=LinearLayerStackOptions.ADAPTIVE,
             experts_compute_expert_mixture_flag=True,
             experts_weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
-            experts_init_sampler_model_flag=True,
+            experts_init_sampler_option=InitSamplerOptions.LAYER,
             experts_weighted_parameters_flag=True,
             experts_layer_role_option=LayerRoleOptions.GENERAL,
             experts_model_bias_flag=False,

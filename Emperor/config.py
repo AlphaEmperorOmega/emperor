@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.utils import ConfigBase
+from Emperor.experts.utils.enums import InitSamplerOptions
 from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.transformer.utils.feed_forward import FeedForwardConfig
 from Emperor.experts.utils.layers import MixtureOfExpertsConfig
@@ -164,7 +165,7 @@ class ModelConfig(ConfigBase):
             num_experts=12,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
-            init_sampler_model_flag=False,
+            init_sampler_option=InitSamplerOptions.SHARED,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
@@ -175,7 +176,7 @@ class ModelConfig(ConfigBase):
             num_experts=12,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
-            init_sampler_model_flag=False,
+            init_sampler_option=InitSamplerOptions.SHARED,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )

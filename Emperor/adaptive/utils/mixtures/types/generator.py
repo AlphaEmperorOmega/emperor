@@ -1,8 +1,9 @@
 import torch
 
 from torch import Tensor
-from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from Emperor.experts.utils.enums import InitSamplerOptions
 from Emperor.experts.utils.layers import MixtureOfExperts, MixtureOfExpertsConfig
+from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.adaptive.utils.mixtures.types.utils._validator import (
     _GeneratorMixtureValidator,
 )
@@ -55,7 +56,7 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
             options = {
                 "compute_expert_mixture_flag": False,
                 "weighted_parameters_flag": False,
-                "init_sampler_model_flag": False,
+                "init_sampler_option": InitSamplerOptions.DISABLED,
             }
         input_overrides = MixtureOfExpertsConfig(
             input_dim=self.input_dim, output_dim=self.input_dim, **options

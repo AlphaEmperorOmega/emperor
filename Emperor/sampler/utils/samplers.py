@@ -2,8 +2,8 @@ import torch
 from math import prod
 from torch import Tensor
 from dataclasses import dataclass, field
+from Emperor.base.utils import expand_dims
 from Emperor.base.utils import Module, ConfigBase
-from Emperor.base.utils import expand_dims, device
 from Emperor.sampler.utils.losses import SamplerAuxiliaryLosses
 
 from typing import TYPE_CHECKING
@@ -108,7 +108,7 @@ class SamplerBase(Module):
 
         self.noise_epsilon = 1e-2
         self.auxiliary_loss_model = SamplerAuxiliaryLosses(self.cfg)
-        self.default_loss = torch.tensor(0.0, device=device, requires_grad=False)
+        self.default_loss = torch.tensor(0.0, device=self.device, requires_grad=False)
         self.updated_skip_mask = None
         self.auxiliary_loss = self.default_loss
 
@@ -287,12 +287,12 @@ class SamplerSparse(SamplerBase):
         self, sampled_probabilities: Tensor, indices: Tensor
     ) -> Tensor:
         input_dim = prod(torch.tensor(sampled_probabilities.shape))
-        gates_buffer = torch.zeros(input_dim, self.num_experts).to(device)
+        gates_buffer = torch.zeros(input_dim, self.num_experts).to(self.device)
         gates = gates_buffer.scatter(
             1,
             indices.view(-1, self.top_k),
             sampled_probabilities.view(-1, self.top_k),
-        ).to(device)
+        ).to(self.device)
 
         return gates
 
@@ -370,12 +370,12 @@ class SamplerTopk(SamplerBase):
         self, sampled_probabilities: Tensor, indices: Tensor
     ) -> Tensor:
         input_dim = prod(torch.tensor(sampled_probabilities.shape))
-        gates_buffer = torch.zeros(input_dim, self.num_experts).to(device)
+        gates_buffer = torch.zeros(input_dim, self.num_experts).to(self.device)
         gates = gates_buffer.scatter(
             1,
             indices.view(-1, self.top_k),
             sampled_probabilities.view(-1, self.top_k),
-        ).to(device)
+        ).to(self.device)
 
         return gates
 
