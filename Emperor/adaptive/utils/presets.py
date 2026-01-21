@@ -1,3 +1,4 @@
+from dataclasses import InitVar
 from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
@@ -9,7 +10,11 @@ from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    InitSamplerOptions,
+    LayerRoleOptions,
+)
 from Emperor.adaptive.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
@@ -78,7 +83,7 @@ class AdaptiveParameterLayerPresets:
         experts_layer_stack_option=LinearLayerStackOptions.BASE,
         experts_compute_expert_mixture_flag=False,
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        experts_init_sampler_model_flag=False,
+        experts_init_sampler_option=InitSamplerOptions.SHARED,
         experts_weighted_parameters_flag=False,
         experts_layer_role_option=LayerRoleOptions.GENERAL,
         experts_model_bias_flag: bool = False,
@@ -130,7 +135,7 @@ class AdaptiveParameterLayerPresets:
                 experts_layer_stack_option=experts_layer_stack_option,
                 experts_compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                 experts_weighting_position_option=experts_weighting_position_option,
-                experts_init_sampler_model_flag=experts_init_sampler_model_flag,
+                experts_init_sampler_option=experts_init_sampler_option,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_layer_role_option=experts_layer_role_option,
                 experts_model_bias_flag=experts_model_bias_flag,
@@ -189,7 +194,7 @@ class AdaptiveParameterLayerPresets:
         experts_layer_stack_option=LinearLayerStackOptions.BASE,
         experts_compute_expert_mixture_flag=False,
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        experts_init_sampler_model_flag=False,
+        experts_init_sampler_option=InitSamplerOptions.SHARED,
         experts_weighted_parameters_flag=False,
         experts_layer_role_option=LayerRoleOptions.GENERAL,
         experts_model_bias_flag: bool = False,
@@ -241,7 +246,7 @@ class AdaptiveParameterLayerPresets:
                 experts_layer_stack_option=experts_layer_stack_option,
                 experts_compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                 experts_weighting_position_option=experts_weighting_position_option,
-                experts_init_sampler_model_flag=experts_init_sampler_model_flag,
+                experts_init_sampler_option=experts_init_sampler_option,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_layer_role_option=experts_layer_role_option,
                 experts_model_bias_flag=experts_model_bias_flag,
@@ -388,7 +393,7 @@ class AdaptiveParameterLayerPresets:
         experts_layer_stack_option=LinearLayerStackOptions.BASE,
         experts_compute_expert_mixture_flag=False,
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        experts_init_sampler_model_flag=False,
+        experts_init_sampler_option=InitSamplerOptions.SHARED,
         experts_weighted_parameters_flag=False,
         experts_layer_role_option=LayerRoleOptions.GENERAL,
         experts_model_bias_flag: bool = False,
@@ -457,7 +462,7 @@ class AdaptiveParameterLayerPresets:
                 experts_layer_stack_option=experts_layer_stack_option,
                 experts_compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                 experts_weighting_position_option=experts_weighting_position_option,
-                experts_init_sampler_model_flag=experts_init_sampler_model_flag,
+                experts_init_sampler_option=experts_init_sampler_option,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_layer_role_option=experts_layer_role_option,
                 experts_model_bias_flag=experts_model_bias_flag,

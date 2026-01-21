@@ -6,7 +6,11 @@ from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    InitSamplerOptions,
+    LayerRoleOptions,
+)
 from Emperor.adaptive.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
@@ -83,7 +87,7 @@ class MultiHeadAttentionPresets:
         projector_experts_layer_stack_option=LinearLayerStackOptions.BASE,
         projector_experts_compute_expert_mixture_flag=True,
         projector_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        projector_experts_init_sampler_model_flag=False,
+        projector_experts_init_sampler_option=InitSamplerOptions.LAYER,
         projector_experts_weighted_parameters_flag=False,
         projector_experts_layer_role_option=LayerRoleOptions.GENERAL,
         projector_experts_bias_flag: bool = False,
@@ -146,7 +150,7 @@ class MultiHeadAttentionPresets:
             experts_layer_stack_option=projector_experts_layer_stack_option,
             experts_compute_expert_mixture_flag=projector_experts_compute_expert_mixture_flag,
             experts_weighting_position_option=projector_experts_weighting_position_option,
-            experts_init_sampler_model_flag=projector_experts_init_sampler_model_flag,
+            experts_init_sampler_option=projector_experts_init_sampler_option,
             experts_weighted_parameters_flag=projector_experts_weighted_parameters_flag,
             experts_layer_role_option=projector_experts_layer_role_option,
             experts_model_bias_flag=projector_experts_bias_flag,

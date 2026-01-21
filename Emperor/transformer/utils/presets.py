@@ -1,13 +1,7 @@
-import torch
-
 from torch import float32
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.base.layer import LayerStackConfig
 from Emperor.config import ModelConfig
-from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.linears.utils.presets import LinearPresets
-from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
+from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
 from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
@@ -18,13 +12,17 @@ from Emperor.transformer.utils.feed_forward import FeedForwardConfig
 from Emperor.transformer.utils.patch.options.base import PatchConfig
 from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
-
+from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.transformer.utils.embedding.selector import (
     PositionalEmbeddingConfig,
     PositionalEmbeddingOptions,
 )
-from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    InitSamplerOptions,
+    LayerRoleOptions,
+)
 from Emperor.adaptive.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
@@ -71,6 +69,7 @@ class TransformerPresets:
         input_dim: int = 8,
         hidden_dim: int = 4,
         output_dim: int = 6,
+        num_input_channels: int = 1,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
         bias_flag: bool = False,
         stack_num_layers: int = 2,
@@ -84,7 +83,8 @@ class TransformerPresets:
             patch_size=patch_size,
             stride=stride,
             padding=padding,
-            dropout=dropout,
+            dropout_probability=dropout,
+            num_input_channels=num_input_channels,
             override_config=LinearPresets.base_linear_layer_stack_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
@@ -146,7 +146,7 @@ class TransformerPresets:
         experts_layer_stack_option=LinearLayerStackOptions.BASE,
         experts_compute_expert_mixture_flag=True,
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        experts_init_sampler_model_flag=False,
+        experts_init_sampler_option=InitSamplerOptions.SHARED,
         experts_weighted_parameters_flag=False,
         experts_layer_role_option=LayerRoleOptions.GENERAL,
         experts_bias_flag: bool = False,
@@ -195,7 +195,7 @@ class TransformerPresets:
                 experts_layer_stack_option=experts_layer_stack_option,
                 experts_compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                 experts_weighting_position_option=experts_weighting_position_option,
-                experts_init_sampler_model_flag=experts_init_sampler_model_flag,
+                experts_init_sampler_option=experts_init_sampler_option,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_layer_role_option=experts_layer_role_option,
                 experts_model_bias_flag=experts_bias_flag,
@@ -260,7 +260,7 @@ class TransformerPresets:
                 experts_layer_stack_option=experts_layer_stack_option,
                 experts_compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                 experts_weighting_position_option=experts_weighting_position_option,
-                experts_init_sampler_model_flag=experts_init_sampler_model_flag,
+                experts_init_sampler_option=experts_init_sampler_option,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_layer_role_option=experts_layer_role_option,
                 experts_model_bias_flag=experts_bias_flag,
@@ -464,7 +464,7 @@ class TransformerPresets:
         attention_experts_layer_stack_option=LinearLayerStackOptions.BASE,
         attention_experts_compute_expert_mixture_flag=True,
         attention_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        attention_experts_init_sampler_model_flag=False,
+        attention_experts_init_sampler_option=InitSamplerOptions.DISABLED,
         attention_experts_weighted_parameters_flag=False,
         attention_experts_layer_role_option=LayerRoleOptions.GENERAL,
         attention_experts_bias_flag: bool = False,
@@ -513,7 +513,7 @@ class TransformerPresets:
         forward_experts_layer_stack_option=LinearLayerStackOptions.BASE,
         forward_experts_compute_expert_mixture_flag=True,
         forward_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        forward_experts_init_sampler_model_flag=False,
+        forward_experts_init_sampler_option=InitSamplerOptions.DISABLED,
         forward_experts_weighted_parameters_flag=False,
         forward_experts_layer_role_option=LayerRoleOptions.GENERAL,
         forward_experts_bias_flag: bool = False,
@@ -597,7 +597,7 @@ class TransformerPresets:
             projector_experts_layer_stack_option=attention_experts_layer_stack_option,
             projector_experts_compute_expert_mixture_flag=attention_experts_compute_expert_mixture_flag,
             projector_experts_weighting_position_option=attention_experts_weighting_position_option,
-            projector_experts_init_sampler_model_flag=attention_experts_init_sampler_model_flag,
+            projector_experts_init_sampler_option=attention_experts_init_sampler_option,
             projector_experts_weighted_parameters_flag=attention_experts_weighted_parameters_flag,
             projector_experts_layer_role_option=attention_experts_layer_role_option,
             projector_experts_bias_flag=attention_experts_bias_flag,
@@ -660,7 +660,7 @@ class TransformerPresets:
             experts_layer_stack_option=forward_experts_layer_stack_option,
             experts_compute_expert_mixture_flag=forward_experts_compute_expert_mixture_flag,
             experts_weighting_position_option=forward_experts_weighting_position_option,
-            experts_init_sampler_model_flag=forward_experts_init_sampler_model_flag,
+            experts_init_sampler_option=forward_experts_init_sampler_option,
             experts_weighted_parameters_flag=forward_experts_weighted_parameters_flag,
             experts_layer_role_option=forward_experts_layer_role_option,
             experts_bias_flag=forward_experts_bias_flag,
