@@ -7,6 +7,7 @@ from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.base.layer import LayerStackConfig
 from Emperor.config import ModelConfig
+from Emperor.experts.utils.enums import InitSamplerOptions
 from Emperor.experts.utils.layers import MixtureOfExpertsConfig
 from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
@@ -15,7 +16,7 @@ from Emperor.sampler.utils.samplers import SamplerConfig
 from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.transformer.utils.feed_forward import (
     FeedForwardConfig,
-    MixtureOfExpertsFeedForwardConfig,
+    # MixtureOfExpertsFeedForwardConfig,
 )
 from Emperor.neuron.neuron import (
     AxonsConfig,
@@ -113,9 +114,9 @@ def default_unittest_config():
             output_dim=OUTPUT_DIM,
             bias_flag=True,
         ),
-        mixture_of_experts_config=MixtureOfExpertsFeedForwardConfig(
-            weighted_parameters_flag=True,
-        ),
+        # mixture_of_experts_config=MixtureOfExpertsFeedForwardConfig(
+        #     weighted_parameters_flag=True,
+        # ),
         input_moe_layer_config=MixtureOfExpertsConfig(
             input_dim=ROUTER_INPUT_DIM,
             output_dim=64,
@@ -123,7 +124,7 @@ def default_unittest_config():
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
-            init_sampler_model_flag=False,
+            init_sampler_option=InitSamplerOptions.LAYER,
         ),
         output_moe_layer_config=MixtureOfExpertsConfig(
             input_dim=64,
@@ -132,7 +133,7 @@ def default_unittest_config():
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
-            init_sampler_model_flag=False,
+            init_sampler_option=InitSamplerOptions.LAYER,
         ),
         multi_head_attention_model_config=MultiHeadAttentionConfig(
             model_type=LinearLayerStackOptions.ADAPTIVE,

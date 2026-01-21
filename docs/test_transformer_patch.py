@@ -4,13 +4,17 @@ import torch.nn as nn
 
 from Emperor.transformer.utils.presets import TransformerPresets
 from Emperor.transformer.utils.patch.selector import PatchOptions
-from Emperor.transformer.utils.patch.options.patch_tokenizer import PatchTokenizer
-from Emperor.transformer.utils.patch.options.patch_embedding import PatchEmbeddingConv
+from Emperor.transformer.utils.patch.options.patch_embedding_conv import (
+    PatchEmbeddingConv,
+)
+from Emperor.transformer.utils.patch.options.patch_embedding_linear import (
+    PatchEmbeddingLinear,
+)
 
 
 class TestPatchTokenizerEmbedding(unittest.TestCase):
     def test_init(self):
-        patch_option = PatchOptions.TOKENIZER
+        patch_option = PatchOptions.LINEAR
         embedding_dim = 32
         patch_size = 3
         stride = 3
@@ -25,18 +29,18 @@ class TestPatchTokenizerEmbedding(unittest.TestCase):
             padding=padding,
             dropout=dropout,
         )
-        m = PatchTokenizer(c)
+        m = PatchEmbeddingLinear(c)
 
         self.assertEqual(m.embedding_dim, embedding_dim)
         self.assertEqual(m.patch_size, patch_size)
         self.assertEqual(m.stride, stride)
         self.assertEqual(m.padding, padding)
-        self.assertEqual(m.dropout, dropout)
-        self.assertEqual(m.global_token.shape, (1, 1, embedding_dim))
+        self.assertEqual(m.dropout_probability, dropout)
+        self.assertEqual(m.class_token.shape, (1, 1, embedding_dim))
         self.assertIsInstance(m.patch_model, nn.Unfold)
 
     def test_forward(self):
-        patch_option = PatchOptions.TOKENIZER
+        patch_option = PatchOptions.LINEAR
         embedding_dim = 32
         patch_size = 5
         stride = 5
@@ -51,7 +55,7 @@ class TestPatchTokenizerEmbedding(unittest.TestCase):
             padding=padding,
             dropout=dropout,
         )
-        m = PatchTokenizer(c)
+        m = PatchEmbeddingLinear(c)
 
         batch_size = 4
         num_channels = 1

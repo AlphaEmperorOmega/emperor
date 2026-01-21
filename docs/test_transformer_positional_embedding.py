@@ -96,6 +96,7 @@ class TestLearnedPositionalEmbedding(unittest.TestCase):
         auto_expand_flag = True
 
         c = TransformerPresets.transformer_positional_embedding_preset(
+            text_processing_flag=True,
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
             padding_idx=padding_idx,
@@ -105,7 +106,7 @@ class TestLearnedPositionalEmbedding(unittest.TestCase):
         m = LearnedPositionalEmbedding(c)
 
         batch_size = 4
-        sequence_length = 16
+        sequence_length = num_embeddings
         input_tokens = torch.randint(0, embedding_dim, (batch_size, sequence_length))
         output_positional_tokens = m(input_tokens)
 

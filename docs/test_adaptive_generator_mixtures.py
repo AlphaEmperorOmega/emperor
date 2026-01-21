@@ -2,6 +2,7 @@ import torch
 import unittest
 
 from torch.types import Tensor
+from Emperor.experts.utils.enums import InitSamplerOptions
 from Emperor.sampler.model import SamplerModel
 from Emperor.sampler.utils.routers import RouterModel
 from Emperor.sampler.utils.presets import SamplerPresets
@@ -49,16 +50,19 @@ class TestGeneratorMixture(unittest.TestCase):
 
     def test__compute_outer_product(self):
         top_k_values = [1, 3, 6]
-        boolean_flags = [True, False]
-        c = self.cfg
+        init_sampler_model_options = [
+            InitSamplerOptions.DISABLED,
+            InitSamplerOptions.LAYER,
+        ]
 
+        c = self.cfg
         for top_k in top_k_values:
-            for init_sampler_model_flag in boolean_flags:
-                message = f"Testing top_k value: {top_k}, init_sampler_model_flag: {init_sampler_model_flag}"
+            for init_sampler_model_option in init_sampler_model_options:
+                message = f"Testing top_k value: {top_k}, init_sampler_model_option: {init_sampler_model_option}"
                 with self.subTest(msg=message):
                     c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
                         top_k=top_k,
-                        experts_init_sampler_model_flag=init_sampler_model_flag,
+                        experts_init_sampler_option=init_sampler_model_option,
                         experts_weighted_parameters_flag=True,
                     )
                     m = GeneratorWeightsMixture(c)
@@ -66,7 +70,7 @@ class TestGeneratorMixture(unittest.TestCase):
                     batch_size = 5
                     input_batch = torch.randn(batch_size, m.input_dim)
                     probabilities, indices = None, None
-                    if not init_sampler_model_flag:
+                    if init_sampler_model_option == InitSamplerOptions.DISABLED:
                         router_cfg = SamplerPresets.router_preset(input_dim=8)
                         sampler_cfg = SamplerPresets.sampler_preset(top_k=top_k)
                         router = RouterModel(router_cfg)
@@ -197,18 +201,22 @@ class TestGeneratorMixture(unittest.TestCase):
         num_experts = 6
         top_k_values = [1, 3, 6]
         boolean_flags = [True, False]
+        init_sampler_model_options = [
+            InitSamplerOptions.DISABLED,
+            InitSamplerOptions.LAYER,
+        ]
         c = self.cfg
 
         for top_k in top_k_values:
-            for init_sampler_model_flag in boolean_flags:
+            for init_sampler_model_option in init_sampler_model_options:
                 for weighted_parameters_flag in boolean_flags:
                     for clip_parameter_option in ClipParameterOptions:
-                        message = f"Testing top_k={top_k}, init_sampler_model_flag={init_sampler_model_flag}, weighted_parameters_flag={weighted_parameters_flag}, clip_parameter_option={clip_parameter_option}"
+                        message = f"Testing top_k={top_k}, init_sampler_model_option={init_sampler_model_option}, weighted_parameters_flag={weighted_parameters_flag}, clip_parameter_option={clip_parameter_option}"
                         with self.subTest(msg=message):
                             c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
                                 top_k=top_k,
                                 num_experts=num_experts,
-                                experts_init_sampler_model_flag=init_sampler_model_flag,
+                                experts_init_sampler_option=init_sampler_model_option,
                                 weighted_parameters_flag=weighted_parameters_flag,
                                 experts_weighted_parameters_flag=not weighted_parameters_flag,
                                 clip_parameter_option=clip_parameter_option,
@@ -219,10 +227,11 @@ class TestGeneratorMixture(unittest.TestCase):
                             input_batch = torch.randn(batch_size, m.input_dim)
                             probabilities, indices = None, None
                             if (
-                                not init_sampler_model_flag
+                                init_sampler_model_option == InitSamplerOptions.DISABLED
                                 or m.weighted_parameters_flag
                                 or m.num_experts == m.top_k
-                                and not init_sampler_model_flag
+                                and init_sampler_model_option
+                                == InitSamplerOptions.DISABLED
                             ):
                                 router_cfg = SamplerPresets.router_preset(input_dim=8)
                                 sampler_cfg = SamplerPresets.sampler_preset(top_k=top_k)

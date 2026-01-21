@@ -26,6 +26,7 @@ from Emperor.adaptive.utils.mixtures.types.matrix import (
     MatrixBiasMixture,
     MatrixWeightsMixture,
 )
+from Emperor.experts.utils.enums import InitSamplerOptions
 
 
 class TestAdaptiveParameterLayer(unittest.TestCase):
@@ -237,7 +238,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                     experts_compute_expert_mixture_flag=True,
                     adaptive_weight_option=adaptive_weight_option,
                     init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                    experts_init_sampler_model_flag=True,
+                    experts_init_sampler_option=InitSamplerOptions.LAYER,
                     **options,
                 )
 
@@ -270,7 +271,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                     output_dim=8,
                     adaptive_bias_option=adaptive_bias_option,
                     init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                    experts_init_sampler_model_flag=True,
+                    experts_init_sampler_option=InitSamplerOptions.LAYER,
                     experts_compute_expert_mixture_flag=True,
                     **options,
                 )
@@ -319,7 +320,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                     adaptive_weight_option=adaptive_weight_option,
                                     adaptive_bias_option=adaptive_bias_option,
                                     init_sampler_model_option=init_sampler_model_option,
-                                    experts_init_sampler_model_flag=True,
+                                    experts_init_sampler_option=InitSamplerOptions.LAYER,
                                     **options,
                                 )
                                 with self.assertRaises(ValueError):
@@ -334,7 +335,9 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                 init_sampler_model_option
                                 == AdaptiveRouterOptions.INDEPENTENT_ROUTER
                             ):
-                                options["experts_init_sampler_model_flag"] = True
+                                options["experts_init_sampler_option"] = (
+                                    InitSamplerOptions.LAYER
+                                )
 
                         cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                             experts_compute_expert_mixture_flag=True,
@@ -425,7 +428,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                     adaptive_weight_option=adaptive_weight_option,
                                     adaptive_bias_option=adaptive_bias_option,
                                     init_sampler_model_option=init_sampler_model_option,
-                                    experts_init_sampler_model_flag=True,
+                                    experts_init_sampler_option=InitSamplerOptions.LAYER,
                                     **options,
                                 )
                                 with self.assertRaises(ValueError):
@@ -440,7 +443,9 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                 init_sampler_model_option
                                 == AdaptiveRouterOptions.INDEPENTENT_ROUTER
                             ):
-                                options["experts_init_sampler_model_flag"] = True
+                                options["experts_init_sampler_option"] = (
+                                    InitSamplerOptions.LAYER
+                                )
 
                         cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
                             experts_compute_expert_mixture_flag=True,
@@ -502,7 +507,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
                             adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                            experts_init_sampler_model_flag=True,
+                            experts_init_sampler_option=InitSamplerOptions.LAYER,
                         )
                         m = AdaptiveParameterLayerStack(cfg).build_model()
 
@@ -531,7 +536,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                                 adaptive_weight_option=adaptive_weight_option,
                                 adaptive_bias_option=adaptive_bias_option,
                                 adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                                experts_init_sampler_model_flag=True,
+                                experts_init_sampler_option=InitSamplerOptions.LAYER,
                             )
                             m = AdaptiveParameterLayerStack(cfg).build_model()
 
