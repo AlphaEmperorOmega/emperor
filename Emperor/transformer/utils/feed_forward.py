@@ -3,13 +3,11 @@ import torch
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
-from Emperor.sampler.model import SamplerModel
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.adaptive.utils.routers import RouterModel
-from Emperor.base.layer import Layer, LayerStackConfig
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
 from Emperor.experts.options import MixtureOfExpertsStackOptions
+from Emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from Emperor.transformer.utils._validator import FeedForwardValidator
 
 from typing import TYPE_CHECKING
@@ -62,7 +60,10 @@ class FeedForward(Module):
             output_dim=self.output_dim,
             num_layers=self.num_layers,
         )
-        return self.layer_stack_option(self.main_cfg, overrides).build_model()
+        model = self.layer_stack_option(self.main_cfg, overrides)
+        if isinstance(model, LayerStack):
+            return model.build_model()
+        return model
 
     def _store_shape_attributes(self):
         self.batch_size = None
@@ -114,117 +115,3 @@ class FeedForward(Module):
         if self.output_shape is None:
             return output_projection
         return output_projection.view(self.output_shape)
-
-
-@dataclass
-class MixtureOfExpertsFeedForwardConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    hidden_dim: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    num_layers: int | None = field(
-        default=None,
-        metadata={"help": "Number of layers added to the router"},
-    )
-    weighted_parameters_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When `True` the sepected parameters will be multiplied by their probs."
-        },
-    )
-
-
-class MixtureOfExpertsFeedForward(Module):
-    def __init__(
-        self,
-        cfg: "MixtureOfExpertsFeedForwardConfig | ModelConfig",
-        overrides: "MixtureOfExpertsFeedForwardConfig | None" = None,
-    ) -> None:
-        super().__init__()
-        config = getattr(cfg, "mixture_of_experts_config", cfg)
-        self.cfg: MixtureOfExpertsFeedForwardConfig = self._overwrite_config(
-            config, overrides
-        )
-        self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
-        self.input_dim = self.cfg.input_dim
-        self.hidden_dim = self.cfg.hidden_dim
-        self.output_dim = self.cfg.output_dim
-        self.num_layers = self.cfg.num_layers
-        self.model_num_layers = self.num_layers // 2
-
-        self.router = RouterModel(cfg)
-        self.sampler = SamplerModel(cfg)
-        self.input_module = self._create_input_model()
-        self.output_module = self._create_output_model()
-        self.validator = FeedForwardValidator(self)
-
-        self.batch_size = None
-        self.sequence_length = None
-        self.output_shape = None
-
-    def _create_input_model(self) -> Layer | Sequential:
-        overrides = LayerStackConfig(
-            input_dim=self.input_dim,
-            output_dim=self.hidden_dim,
-            num_layers=self.model_num_layers,
-        )
-        return self.layer_stack_option(self.main_cfg, overrides).build_model()
-
-    def _create_output_model(self) -> Layer | Sequential:
-        overrides = LayerStackConfig(
-            input_dim=self.hidden_dim,
-            output_dim=self.output_dim,
-            num_layers=self.model_num_layers,
-        )
-        return self.layer_stack_option(self.main_cfg, overrides).build_model()
-
-    def forward(
-        self,
-        input_batch: Tensor,
-        skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None, Tensor]:
-        input_batch_matrix, skip_mask = self._prepare_inputs(input_batch, skip_mask)
-        logits = self.router.compute_logit_scores(input_batch_matrix)
-        probabilities, indices, skip_mask, sampler_loss = (
-            self.sampler.sample_probabilities_and_indices(logits, skip_mask)
-        )
-        input_projection, input_loss = self.input_module.compute_expert_outputs(
-            input_batch_matrix, indices
-        )
-        output_projection, output_loss = self.output_module.compute_expert_outputs(
-            input_projection, indices, probabilities
-        )
-        expert_mixture_output = output_projection.view(self.output_shape)
-        loss = sampler_loss + input_loss + output_loss
-        return expert_mixture_output, skip_mask, loss
-
-    def _prepare_inputs(
-        self,
-        input_batch: Tensor,
-        skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None]:
-        self.__resolve_output_shape(input_batch)
-        input_batch = input_batch.reshape(self.batch_size * self.sequence_length, -1)
-        if skip_mask is not None:
-            skip_mask = skip_mask.view(-1, 1)
-        return input_batch, skip_mask
-
-    def __resolve_output_shape(self, input_batch: Tensor) -> None:
-        input_shape = input_batch.shape
-        if self.batch_size is not None:
-            return
-        if len(input_shape) > 2:
-            self.batch_size, self.sequence_length, _ = input_shape
-            self.output_shape = [self.batch_size, self.sequence_length, -1]
-            return
-        self.sequence_length = 1
-        self.batch_size, _ = input_shape
-        self.output_shape = [self.batch_size, -1]
