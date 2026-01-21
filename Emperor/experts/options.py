@@ -1,6 +1,6 @@
 from Emperor.base.enums import BaseOptions
 from Emperor.experts.utils.layers import MixtureOfExperts
-from Emperor.experts.utils.stack import MixtureOfExpertsStack
+from Emperor.experts.utils.model import MixtureOfExpertsModel
 
 
 class MixtureOfExpertsOptions(BaseOptions):
@@ -8,4 +8,4 @@ class MixtureOfExpertsOptions(BaseOptions):
 
 
 class MixtureOfExpertsStackOptions(BaseOptions):
-    BASE = MixtureOfExpertsStack
+    BASE = MixtureOfExpertsModel
