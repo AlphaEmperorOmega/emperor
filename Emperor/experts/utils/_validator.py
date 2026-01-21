@@ -5,6 +5,7 @@ from Emperor.sampler.utils.routers import RouterConfig
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
+    InitSamplerOptions,
     LayerRoleOptions,
 )
 
@@ -37,8 +38,8 @@ class _Validator:
             )
         if self.model.weighted_parameters_flag is None:
             raise ValueError("Configuration Error: 'weighted_parameters_flag' is None")
-        if self.model.init_sampler_model_flag is None:
-            raise ValueError("Configuration Error: 'init_sampler_model_flag' is None")
+        if self.model.init_sampler_option is None:
+            raise ValueError("Configuration Error: 'init_sampler_option' is None")
         if self.model.weighting_position_option is None:
             raise ValueError("Configuration Error: 'weighting_position_option' is None")
         if self.model.layer_role_option is None:
@@ -84,7 +85,7 @@ class _Validator:
             raise TypeError(
                 f"Configuration Error: 'weighting_position_option' must be of type ExpertWeightingPositionOptions, received type {type(self.model.weighting_position_option).__name__}"
             )
-        if not isinstance(self.model.init_sampler_model_flag, bool):
+        if not isinstance(self.model.init_sampler_option, InitSamplerOptions):
             raise TypeError(
                 f"Configuration Error: 'init_sampler_model_flag' must be of type bool, received type {type(self.model.init_sampler_model_flag).__name__}"
             )
@@ -102,9 +103,10 @@ class _Validator:
             )
 
     def ensure_sampler_is_initialized(self) -> None:
-        if not self.model.init_sampler_model_flag:
+        options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
+        if self.model.init_sampler_option not in options:
             raise ValueError(
-                "The `init_sampler_model_flag` must be set to `True` to initialize the `RouterModel` and `SamplerModel` when `indices` are not provided."
+                f"The `init_sampler_option` must be set to `InitSamplerOptions.LAYER` to initialize the `RouterModel` and `SamplerModel` when `indices` are not provided. Current option: {self.model.init_sampler_option}"
             )
 
     def ensure_external_probabilities_are_not_given(
@@ -118,9 +120,9 @@ class _Validator:
             )
 
     def ensure_no_sampler_with_indices(self) -> None:
-        if self.model.init_sampler_model_flag:
+        if self.model.init_sampler_option != InitSamplerOptions.LAYER:
             raise ValueError(
-                "Invalid configuration: `init_sampler_model_flag` must be set to `False` when `indices` are provided. This prevents creating duplicate `RouterModel` and `SamplerModel` instances in the current layer."
+                f"Invalid configuration: `init_sampler_model_flag` must be set to `False` when `indices` are provided. This prevents creating duplicate `RouterModel` and `SamplerModel` instances in the current layer. Current value: {self.model.init_sampler_option}"
             )
 
     def ensure_probabilities_exist(self, probabilities: Tensor | None) -> None:
@@ -139,4 +141,15 @@ class _Validator:
         if self.model.sampler_model_config is None:
             raise ValueError(
                 "Configuration Error: `sampler_model_config` must be defined to properly initialize and utilize the sampler model in the mixture of experts layer."
+            )
+
+
+class MixtureOfExpertsModelValidator:
+    def __init__(self, model: "MixtureOfExperts"):
+        self.model = model
+
+    def ensure_no_sampler_with_indices(self) -> None:
+        if self.model.init_sampler_option == InitSamplerOptions.DISABLED:
+            raise ValueError(
+                "Invalid configuration: `init_sampler_model_flag` must be set to `False` when `indices` are provided. This prevents creating duplicate `RouterModel` and `SamplerModel` instances in the current layer."
             )

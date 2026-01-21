@@ -10,3 +10,9 @@ class LayerRoleOptions(Enum):
     GENERAL = 1
     INPUT = 2
     OUTPUT = 3
+
+
+class InitSamplerOptions(Enum):
+    DISABLED = 1
+    SHARED = 2
+    LAYER = 3

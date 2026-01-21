@@ -5,7 +5,11 @@ from Emperor.linears.utils.presets import LinearPresets
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experts.utils.layers import MixtureOfExpertsConfig
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    InitSamplerOptions,
+    LayerRoleOptions,
+)
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -45,7 +49,7 @@ class MixtureOfExpertsPresets:
         experts_layer_stack_option=LinearLayerStackOptions.BASE,
         experts_compute_expert_mixture_flag=False,
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        experts_init_sampler_model_flag=False,
+        experts_init_sampler_option=InitSamplerOptions.DISABLED,
         experts_weighted_parameters_flag=False,
         experts_layer_role_option=LayerRoleOptions.GENERAL,
         experts_model_bias_flag: bool = False,
@@ -103,7 +107,7 @@ class MixtureOfExpertsPresets:
             compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
             weighted_parameters_flag=experts_weighted_parameters_flag,
             weighting_position_option=experts_weighting_position_option,
-            init_sampler_model_flag=experts_init_sampler_model_flag,
+            init_sampler_option=experts_init_sampler_option,
             layer_role_option=experts_layer_role_option,
             override_config=expert_model_config,
             router_model_config=SamplerPresets.router_preset(
@@ -176,7 +180,7 @@ class MixtureOfExpertsPresets:
         experts_layer_stack_option=LinearLayerStackOptions.BASE,
         experts_compute_expert_mixture_flag=False,
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        experts_init_sampler_model_flag=False,
+        experts_init_sampler_option=InitSamplerOptions.DISABLED,
         experts_weighted_parameters_flag=False,
         experts_layer_role_option=LayerRoleOptions.GENERAL,
         experts_model_bias_flag: bool = False,
@@ -234,7 +238,7 @@ class MixtureOfExpertsPresets:
                 experts_layer_stack_option=experts_layer_stack_option,
                 experts_compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                 experts_weighting_position_option=experts_weighting_position_option,
-                experts_init_sampler_model_flag=experts_init_sampler_model_flag,
+                experts_init_sampler_option=experts_init_sampler_option,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_layer_role_option=experts_layer_role_option,
                 experts_model_bias_flag=experts_model_bias_flag,

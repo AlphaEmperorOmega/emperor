@@ -3,15 +3,17 @@ import torch.nn as nn
 from torch import Tensor
 from dataclasses import dataclass, field
 
-from Emperor.base.layer import LayerStackConfig
+
 from Emperor.sampler.model import SamplerModel
-from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.sampler.utils.routers import RouterConfig, RouterModel
+from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experts.utils._validator import _Validator
+from Emperor.sampler.utils.samplers import SamplerConfig
+from Emperor.linears.options import LinearLayerStackOptions
+from Emperor.sampler.utils.routers import RouterConfig, RouterModel
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
+    InitSamplerOptions,
     LayerRoleOptions,
 )
 
@@ -61,10 +63,10 @@ class MixtureOfExpertsConfig(ConfigBase):
             "help": "Dictates if the weights are applided before or after the experts."
         },
     )
-    init_sampler_model_flag: bool | None = field(
+    init_sampler_option: InitSamplerOptions | None = field(
         default=None,
         metadata={
-            "help": "When `True` the `RouterModel `and `SamplerModel` will be added to the current layer."
+            "help": "Use `SHARED` for a single router and sampler across all layers, or `LAYER` for one per layer."
         },
     )
     layer_role_option: LayerRoleOptions | None = field(
@@ -101,7 +103,7 @@ class MixtureOfExperts(Module):
         self.num_experts = self.cfg.num_experts
         self.compute_expert_mixture_flag = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
-        self.init_sampler_model_flag = self.cfg.init_sampler_model_flag
+        self.init_sampler_option = self.cfg.init_sampler_option
         self.weighting_position_option = self.cfg.weighting_position_option
         self.layer_role_option = self.cfg.layer_role_option
         self.router_model_config = self.cfg.router_model_config
@@ -114,14 +116,14 @@ class MixtureOfExperts(Module):
     def __maybe_create_router_and_sampler(
         self,
     ) -> tuple[RouterModel | None, SamplerModel | None]:
-        if not self.cfg.init_sampler_model_flag:
-            return None, None
-        self.validator.ensure_router_config_exists()
-        self.validator.ensure_sampler_config_exists()
-        router_overrides = RouterConfig(input_dim=self.input_dim)
-        router = RouterModel(self.router_model_config, router_overrides)
-        sampler = SamplerModel(self.sampler_model_config)
-        return router, sampler
+        if self.init_sampler_option == InitSamplerOptions.LAYER:
+            self.validator.ensure_router_config_exists()
+            self.validator.ensure_sampler_config_exists()
+            router_overrides = RouterConfig(input_dim=self.input_dim)
+            router = RouterModel(self.router_model_config, router_overrides)
+            sampler = SamplerModel(self.sampler_model_config)
+            return router, sampler
+        return None, None
 
     def __create_experts(self) -> nn.ModuleList:
         expert_list = []
@@ -148,8 +150,6 @@ class MixtureOfExperts(Module):
         output, expert_loss = self.__compute_experts(
             input_batch, probabilities, indices
         )
-
-        indices = torch.randperm(9)[:3]
 
         total_loss = sampler_loss + expert_loss
         return output, total_loss
@@ -198,14 +198,16 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
     ) -> tuple[Tensor | None, Tensor | None, Tensor]:
-        if indices is not None or probabilities is not None:
-            self.validator.ensure_no_sampler_with_indices()
+        if self.init_sampler_option != InitSamplerOptions.LAYER or (
+            indices is not None or probabilities is not None
+        ):
             return probabilities, indices, torch.tensor(0.0)
         self.validator.ensure_sampler_is_initialized()
         self.validator.ensure_external_probabilities_are_not_given(
             probabilities, indices
         )
         logits = self.router.compute_logit_scores(inputs)
+        # TODO: In the future see if `skip_mask` needs to be implemented
         skip_mask = None
         probabilities, indices, skip_mask, sampler_loss = (
             self.sampler.sample_probabilities_and_indices(logits, skip_mask)
