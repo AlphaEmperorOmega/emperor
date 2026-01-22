@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
+
 from torch import Tensor
 from dataclasses import dataclass, field
-
-
 from Emperor.sampler.model import SamplerModel
 from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import ConfigBase, Module
@@ -14,7 +13,6 @@ from Emperor.sampler.utils.routers import RouterConfig, RouterModel
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
-    LayerRoleOptions,
 )
 
 from typing import TYPE_CHECKING, Callable
@@ -69,12 +67,6 @@ class MixtureOfExpertsConfig(ConfigBase):
             "help": "Use `SHARED` for a single router and sampler across all layers, or `LAYER` for one per layer."
         },
     )
-    layer_role_option: LayerRoleOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Dictates if the layer is used as an normal, input or output MoE layer."
-        },
-    )
     router_model_config: "RouterConfig | None" = field(
         default=None,
         metadata={"help": ""},
@@ -105,7 +97,6 @@ class MixtureOfExperts(Module):
         self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
         self.init_sampler_option = self.cfg.init_sampler_option
         self.weighting_position_option = self.cfg.weighting_position_option
-        self.layer_role_option = self.cfg.layer_role_option
         self.router_model_config = self.cfg.router_model_config
         self.sampler_model_config = self.cfg.sampler_model_config
 
