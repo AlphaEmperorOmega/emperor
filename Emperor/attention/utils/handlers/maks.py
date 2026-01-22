@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 from torch import Tensor
-from Emperor.attention.utils.handlers._validator import MaskValidator
+from Emperor.attention.utils.handlers.validators._mask import MaskValidator
 
 from typing import TYPE_CHECKING
 
