@@ -15,7 +15,6 @@ from Emperor.sampler.utils.samplers import SamplerFull, SamplerSparse, SamplerTo
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
-    LayerRoleOptions,
 )
 
 
@@ -49,49 +48,42 @@ class TestMixtureOfExperts(unittest.TestCase):
         init_sampler_options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
 
         for layer_stack_option in LinearLayerStackOptions:
-            for layer_role_option in LayerRoleOptions:
-                for top_k in top_k_options:
-                    for init_sampler_option in init_sampler_options:
-                        message = f"Testing configuration with num_experts={num_experts}, top_k={top_k}, layer_stack_option={layer_stack_option}, layer_role_option={layer_role_option}, and init_sampler_option={init_sampler_option}"
-                        with self.subTest(msg=message):
-                            c = MixtureOfExpertsPresets.experts_preset(
-                                return_model_config_flag=True,
-                                experts_layer_stack_option=layer_stack_option,
-                                experts_num_experts=num_experts,
-                                experts_layer_role_option=layer_role_option,
-                                experts_top_k=top_k,
-                                experts_init_sampler_option=init_sampler_option,
-                            )
+            for top_k in top_k_options:
+                for init_sampler_option in init_sampler_options:
+                    message = f"Testing configuration with num_experts={num_experts}, top_k={top_k}, layer_stack_option={layer_stack_option}, and init_sampler_option={init_sampler_option}"
+                    with self.subTest(msg=message):
+                        c = MixtureOfExpertsPresets.experts_preset(
+                            return_model_config_flag=True,
+                            experts_layer_stack_option=layer_stack_option,
+                            experts_num_experts=num_experts,
+                            experts_top_k=top_k,
+                            experts_init_sampler_option=init_sampler_option,
+                        )
 
-                            m = MixtureOfExperts(c)
-                            cfg = m.cfg
-                            self.assertIsInstance(m, MixtureOfExperts)
-                            self.assertEqual(
-                                m.layer_stack_model.value, layer_stack_option.value
-                            )
-                            self.assertEqual(m.top_k, top_k)
-                            self.assertEqual(m.num_experts, num_experts)
-                            self.assertEqual(
-                                m.compute_expert_mixture_flag,
-                                cfg.compute_expert_mixture_flag,
-                            )
-                            self.assertEqual(
-                                m.weighted_parameters_flag, cfg.weighted_parameters_flag
-                            )
-                            self.assertEqual(
-                                m.init_sampler_option, cfg.init_sampler_option
-                            )
-                            self.assertEqual(
-                                m.weighting_position_option,
-                                cfg.weighting_position_option,
-                            )
-                            self.assertEqual(m.layer_role_option, cfg.layer_role_option)
-                            self.assertEqual(
-                                m.router_model_config, cfg.router_model_config
-                            )
-                            self.assertEqual(
-                                m.sampler_model_config, cfg.sampler_model_config
-                            )
+                        m = MixtureOfExperts(c)
+                        cfg = m.cfg
+                        self.assertIsInstance(m, MixtureOfExperts)
+                        self.assertEqual(
+                            m.layer_stack_model.value, layer_stack_option.value
+                        )
+                        self.assertEqual(m.top_k, top_k)
+                        self.assertEqual(m.num_experts, num_experts)
+                        self.assertEqual(
+                            m.compute_expert_mixture_flag,
+                            cfg.compute_expert_mixture_flag,
+                        )
+                        self.assertEqual(
+                            m.weighted_parameters_flag, cfg.weighted_parameters_flag
+                        )
+                        self.assertEqual(m.init_sampler_option, cfg.init_sampler_option)
+                        self.assertEqual(
+                            m.weighting_position_option,
+                            cfg.weighting_position_option,
+                        )
+                        self.assertEqual(m.router_model_config, cfg.router_model_config)
+                        self.assertEqual(
+                            m.sampler_model_config, cfg.sampler_model_config
+                        )
 
     def test__create_experts(self):
         for layer_stack_option in LinearLayerStackOptions:
