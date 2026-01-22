@@ -5,8 +5,8 @@ from dataclasses import asdict
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from Emperor.attention.utils.handlers.processor import ProcessorDefault
-from Emperor.attention.utils.handlers.projector import ProjectorSelector
-from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
+from Emperor.attention.utils.handlers.projector import ProjectorBuilder
+from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 
 class TestProcessorDefault(unittest.TestCase):
@@ -33,8 +33,8 @@ class TestProcessorDefault(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        validator = MultiHeadAttentionConfigValidator(self.config)
-        projector = ProjectorSelector(self.config).build_model()
+        validator = MultiHeadAttentionValidator(self.config)
+        projector = ProjectorBuilder(self.config).build_model()
         self.model = ProcessorDefault(self.config, validator, projector)
 
         self.batch_size = self.config.batch_size

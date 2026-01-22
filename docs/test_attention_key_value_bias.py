@@ -1,11 +1,9 @@
-import torch
 import unittest
 from dataclasses import asdict
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from docs.config import default_unittest_config
 from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
+from Emperor.attention.utils.presets import MultiHeadAttentionPresets
+from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 
 class TestKeyValueBias(unittest.TestCase):
@@ -33,7 +31,7 @@ class TestKeyValueBias(unittest.TestCase):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        self.validator = MultiHeadAttentionConfigValidator(self.config)
+        self.validator = MultiHeadAttentionValidator(self.config)
         self.model = Utils(self.config, self.validator)
 
         self.batch_size = self.config.batch_size
