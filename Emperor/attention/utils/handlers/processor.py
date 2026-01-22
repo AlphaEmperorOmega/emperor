@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
     from Emperor.attention.utils.handlers.projector import ProjectorBase
-    from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
+    from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 
 class ProcessorBase:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionConfigValidator",
+        validator: "MultiHeadAttentionValidator",
         projector: "ProjectorBase",
     ):
         self.cfg = cfg
@@ -68,7 +68,7 @@ class ProcessorWithReturnedWeights(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionConfigValidator",
+        validator: "MultiHeadAttentionValidator",
         output_model: nn.Module,
     ):
         super().__init__(cfg, validator, output_model)
@@ -174,7 +174,7 @@ class ProcessorDefault(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionConfigValidator",
+        validator: "MultiHeadAttentionValidator",
         output_model: nn.Module,
     ):
         super().__init__(cfg, validator, output_model)
@@ -270,7 +270,7 @@ class Processor:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionConfigValidator",
+        validator: "MultiHeadAttentionValidator",
         output_model: nn.Module,
     ):
         self.cfg = cfg

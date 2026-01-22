@@ -1,15 +1,16 @@
 from torch import float32
-from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.linears.utils.presets import LinearPresets
+from Emperor.attention.utils.enums import ProjectorOptions
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
+from Emperor.experts.utils.presets import MixtureOfExpertsPresets
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
+from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
-    LayerRoleOptions,
 )
 from Emperor.adaptive.utils.mixtures.options import (
     AdaptiveBiasOptions,
@@ -40,7 +41,7 @@ class MultiHeadAttentionPresets:
         target_sequence_length=18,
         source_sequence_length=20,
         target_dtype=float32,
-        is_self_attention_projector_flag=False,
+        projector_option=ProjectorOptions.INDEPENDENT,
         dropout_probability=0.0,
         key_value_bias_flag=False,
         zero_attention_flag=False,
@@ -48,6 +49,7 @@ class MultiHeadAttentionPresets:
         add_key_value_bias_flag=False,
         average_attention_weights_flag=False,
         return_attention_weights_flag=False,
+        use_kv_expert_models_flag=False,
         adaptive_stack_num_layers=2,
         adaptive_stack_activation=ActivationOptions.RELU,
         adaptive_stack_residual_flag=False,
@@ -88,8 +90,8 @@ class MultiHeadAttentionPresets:
         projector_experts_compute_expert_mixture_flag=True,
         projector_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
         projector_experts_init_sampler_option=InitSamplerOptions.LAYER,
+        projector_experts_stack_num_layers: int = 2,
         projector_experts_weighted_parameters_flag=False,
-        projector_experts_layer_role_option=LayerRoleOptions.GENERAL,
         projector_experts_bias_flag: bool = False,
         projector_experts_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         projector_experts_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
@@ -152,7 +154,6 @@ class MultiHeadAttentionPresets:
             experts_weighting_position_option=projector_experts_weighting_position_option,
             experts_init_sampler_option=projector_experts_init_sampler_option,
             experts_weighted_parameters_flag=projector_experts_weighted_parameters_flag,
-            experts_layer_role_option=projector_experts_layer_role_option,
             experts_model_bias_flag=projector_experts_bias_flag,
             experts_model_generator_depth=projector_experts_generator_depth,
             experts_model_diagonal_option=projector_experts_diagonal_option,
@@ -198,6 +199,49 @@ class MultiHeadAttentionPresets:
                 stack_dropout_probability=stack_dropout_probability,
             )
 
+        experts_config = MixtureOfExpertsPresets.experts_stack_preset(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            router_model_bias_flag=projector_router_bias_flag,
+            router_model_noisy_topk_flag=projector_router_noisy_topk_flag,
+            router_model_generator_depth=projector_router_generator_depth,
+            router_model_diagonal_option=projector_router_diagonal_option,
+            router_model_bias_option=projector_router_bias_option,
+            router_model_memory_option=projector_router_memory_option,
+            router_model_memory_size_option=projector_router_memory_size_option,
+            router_model_memory_position_option=projector_router_memory_position_option,
+            router_model_layer_stack_option=projector_router_layer_stack_option,
+            sampler_threshold=projector_sampler_threshold,
+            sampler_filter_above_threshold=projector_sampler_filter_above_threshold,
+            sampler_num_topk_samples=projector_sampler_num_topk_samples,
+            sampler_normalize_probabilities_flag=projector_sampler_normalize_probabilities_flag,
+            sampler_switch_loss_weight=projector_sampler_switch_loss_weight,
+            sampler_zero_centred_loss_weight=projector_sampler_zero_centred_loss_weight,
+            sampler_mutual_information_loss_weight=projector_sampler_mutual_information_loss_weight,
+            sampler_coefficient_of_variation_loss_weight=projector_sampler_coefficient_of_variation_loss_weight,
+            experts_layer_stack_option=projector_experts_layer_stack_option,
+            experts_compute_expert_mixture_flag=projector_experts_compute_expert_mixture_flag,
+            experts_weighting_position_option=projector_experts_weighting_position_option,
+            experts_init_sampler_option=projector_experts_init_sampler_option,
+            experts_weighted_parameters_flag=projector_experts_weighted_parameters_flag,
+            experts_model_bias_flag=projector_experts_bias_flag,
+            experts_model_generator_depth=projector_experts_generator_depth,
+            experts_model_diagonal_option=projector_experts_diagonal_option,
+            experts_model_bias_option=projector_experts_bias_option,
+            experts_model_memory_option=projector_experts_memory_option,
+            experts_model_memory_size_option=projector_experts_memory_size_option,
+            experts_model_memory_position_option=projector_experts_memory_position_option,
+            experts_stack_num_layers=projector_experts_stack_num_layers,
+            experts_stack_activation=ActivationOptions.RELU,
+            experts_stack_residual_flag=False,
+            experts_stack_dropout_probability=0.0,
+            stack_num_layers=stack_num_layers,
+            stack_hidden_dim=stack_hidden_dim,
+            stack_activation=stack_activation,
+            stack_residual_flag=stack_residual_flag,
+            stack_dropout_probability=stack_dropout_probability,
+        )
+
         return MultiHeadAttentionConfig(
             model_type=model_type,
             batch_size=batch_size,
@@ -208,7 +252,7 @@ class MultiHeadAttentionPresets:
             target_sequence_length=target_sequence_length,
             source_sequence_length=source_sequence_length,
             target_dtype=target_dtype,
-            is_self_attention_projector_flag=is_self_attention_projector_flag,
+            projector_option=projector_option,
             dropout_probability=dropout_probability,
             key_value_bias_flag=key_value_bias_flag,
             zero_attention_flag=zero_attention_flag,
@@ -216,6 +260,8 @@ class MultiHeadAttentionPresets:
             add_key_value_bias_flag=add_key_value_bias_flag,
             average_attention_weights_flag=average_attention_weights_flag,
             return_attention_weights_flag=return_attention_weights_flag,
+            experts_config=experts_config,
+            use_kv_expert_models_flag=use_kv_expert_models_flag,
             override_config=projector_config,
         )
 
@@ -231,7 +277,7 @@ class MultiHeadAttentionPresets:
         target_sequence_length: int = 0,
         source_sequence_length: int = 0,
         target_dtype=float32,
-        is_self_attention_projector_flag: bool = False,
+        projector_option: ProjectorOptions = ProjectorOptions.INDEPENDENT,
         dropout_probability: float = 0.0,
         key_value_bias_flag: bool = False,
         zero_attention_flag: bool = False,
@@ -256,7 +302,7 @@ class MultiHeadAttentionPresets:
             target_sequence_length=target_sequence_length,
             source_sequence_length=source_sequence_length,
             target_dtype=target_dtype,
-            is_self_attention_projector_flag=is_self_attention_projector_flag,
+            projector_option=projector_option,
             dropout_probability=dropout_probability,
             key_value_bias_flag=key_value_bias_flag,
             zero_attention_flag=zero_attention_flag,
@@ -297,7 +343,7 @@ class MultiHeadAttentionPresets:
         target_sequence_length: int = 0,
         source_sequence_length: int = 0,
         target_dtype=float32,
-        is_self_attention_projector_flag: bool = False,
+        projector_option: ProjectorOptions = ProjectorOptions.INDEPENDENT,
         dropout_probability: float = 0.0,
         key_value_bias_flag: bool = False,
         zero_attention_flag: bool = False,
@@ -323,7 +369,7 @@ class MultiHeadAttentionPresets:
             target_sequence_length=target_sequence_length,
             source_sequence_length=source_sequence_length,
             target_dtype=target_dtype,
-            is_self_attention_projector_flag=is_self_attention_projector_flag,
+            projector_option=projector_option,
             dropout_probability=dropout_probability,
             key_value_bias_flag=key_value_bias_flag,
             zero_attention_flag=zero_attention_flag,

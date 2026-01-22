@@ -7,7 +7,10 @@ from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
 from Emperor.transformer.utils.presets import TransformerPresets
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    InitSamplerOptions,
+)
 from Emperor.adaptive.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
@@ -114,9 +117,8 @@ class AdaptiveParameterExperimentPresets:
             attention_experts_layer_stack_option=LinearLayerStackOptions.BASE,
             attention_experts_compute_expert_mixture_flag=True,
             attention_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-            attention_experts_init_sampler_model_flag=False,
+            attention_experts_init_sampler_option=InitSamplerOptions.DISABLED,
             attention_experts_weighted_parameters_flag=False,
-            attention_experts_layer_role_option=LayerRoleOptions.GENERAL,
             attention_experts_bias_flag=False,
             attention_experts_generator_depth=DynamicDepthOptions.DISABLED,
             attention_experts_diagonal_option=DynamicDiagonalOptions.DISABLED,
@@ -163,9 +165,8 @@ class AdaptiveParameterExperimentPresets:
             forward_experts_layer_stack_option=LinearLayerStackOptions.BASE,
             forward_experts_compute_expert_mixture_flag=True,
             forward_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-            forward_experts_init_sampler_model_flag=False,
+            forward_experts_init_sampler_option=InitSamplerOptions.DISABLED,
             forward_experts_weighted_parameters_flag=False,
-            forward_experts_layer_role_option=LayerRoleOptions.GENERAL,
             forward_experts_bias_flag=False,
             forward_experts_generator_depth=DynamicDepthOptions.DISABLED,
             forward_experts_diagonal_option=DynamicDiagonalOptions.DISABLED,

@@ -112,7 +112,7 @@ class TransformerLayerBase(Module):
 
     def _create_cross_attention_model(self) -> Layer:
         wrapper_class = CrossAttentionLayer
-        overrides = MultiHeadAttentionConfig(is_self_attention_projector_flag=True)
+        overrides = MultiHeadAttentionConfig(projector_option=True)
         model = MultiHeadAttention(self.attention_config, overrides)
         return self.__create_layer_block(wrapper_class, model)
 

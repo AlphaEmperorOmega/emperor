@@ -8,7 +8,6 @@ from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
-    LayerRoleOptions,
 )
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -51,7 +50,6 @@ class MixtureOfExpertsPresets:
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
         experts_init_sampler_option=InitSamplerOptions.DISABLED,
         experts_weighted_parameters_flag=False,
-        experts_layer_role_option=LayerRoleOptions.GENERAL,
         experts_model_bias_flag: bool = False,
         experts_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         experts_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
@@ -108,7 +106,6 @@ class MixtureOfExpertsPresets:
             weighted_parameters_flag=experts_weighted_parameters_flag,
             weighting_position_option=experts_weighting_position_option,
             init_sampler_option=experts_init_sampler_option,
-            layer_role_option=experts_layer_role_option,
             override_config=expert_model_config,
             router_model_config=SamplerPresets.router_preset(
                 input_dim=input_dim,
@@ -182,7 +179,6 @@ class MixtureOfExpertsPresets:
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
         experts_init_sampler_option=InitSamplerOptions.DISABLED,
         experts_weighted_parameters_flag=False,
-        experts_layer_role_option=LayerRoleOptions.GENERAL,
         experts_model_bias_flag: bool = False,
         experts_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         experts_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
@@ -199,7 +195,7 @@ class MixtureOfExpertsPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-    ) -> "LayerStackConfig | ModelConfig":
+    ) -> "LayerStackConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
@@ -240,7 +236,6 @@ class MixtureOfExpertsPresets:
                 experts_weighting_position_option=experts_weighting_position_option,
                 experts_init_sampler_option=experts_init_sampler_option,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
-                experts_layer_role_option=experts_layer_role_option,
                 experts_model_bias_flag=experts_model_bias_flag,
                 experts_model_generator_depth=experts_model_generator_depth,
                 experts_model_diagonal_option=experts_model_diagonal_option,

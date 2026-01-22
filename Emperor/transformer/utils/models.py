@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class VITModelConfig(ConfigBase):
+class VITExperimentConfig(ConfigBase):
     patch_config: "PatchConfig | None" = field(
         default=None,
         metadata={"help": ""},

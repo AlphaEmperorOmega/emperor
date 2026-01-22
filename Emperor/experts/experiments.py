@@ -2,7 +2,7 @@ from Emperor.base.enums import ActivationOptions
 from Emperor.experiments.utils.factories import Experiments
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experts.utils.presets import MixtureOfExpertsPresets
-from Emperor.experts.utils.enums import ExpertWeightingPositionOptions, LayerRoleOptions
+from Emperor.experts.utils.enums import ExpertWeightingPositionOptions
 from Emperor.experts.options import (
     MixtureOfExpertsOptions,
     MixtureOfExpertsStackOptions,
@@ -65,7 +65,6 @@ class MixtureOfExpertsPreset:
                     weighted_parameters_flag=True,
                     weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
                     init_sampler_model_flag=True,
-                    layer_role_option=LayerRoleOptions.GENERAL,
                     generator_depth=DynamicDepthOptions.DISABLED,
                     diagonal_option=DynamicDiagonalOptions.DISABLED,
                     bias_option=DynamicBiasOptions.DISABLED,
@@ -101,7 +100,6 @@ class MixtureOfExpertsPreset:
                     weighted_parameters_flag=True,
                     weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
                     init_sampler_model_flag=True,
-                    layer_role_option=LayerRoleOptions.GENERAL,
                     generator_depth=DynamicDepthOptions.DISABLED,
                     diagonal_option=DynamicDiagonalOptions.DISABLED,
                     bias_option=DynamicBiasOptions.DISABLED,

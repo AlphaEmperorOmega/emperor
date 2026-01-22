@@ -7,7 +7,6 @@ from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptio
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
-    LayerRoleOptions,
 )
 from Emperor.adaptive.options import (
     AdaptiveLayerStackOptions,
@@ -119,9 +118,8 @@ class AdaptiveParameterExperimentPresets:
             experts_layer_stack_option=LinearLayerStackOptions.ADAPTIVE,
             experts_compute_expert_mixture_flag=True,
             experts_weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
-            experts_init_sampler_option=InitSamplerOptions.LAYER,
+            experts_init_sampler_option=InitSamplerOptions.DISABLED,
             experts_weighted_parameters_flag=True,
-            experts_layer_role_option=LayerRoleOptions.GENERAL,
             experts_model_bias_flag=False,
             experts_model_generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
             experts_model_diagonal_option=DynamicDiagonalOptions.DIAGONAL,

@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-    from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
+    from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 
 class Utils:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionConfigValidator",
+        validator: "MultiHeadAttentionValidator",
     ):
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
