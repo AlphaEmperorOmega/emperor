@@ -30,6 +30,7 @@ class MixtureOfExpertsModel(Module):
             self.cfg, cfg
         )
 
+        self.top_k = self.main_cfg.top_k
         self.input_dim = self.main_cfg.input_dim
         self.init_sampler_option = self.main_cfg.init_sampler_option
         self.router_model_config = self.main_cfg.router_model_config
@@ -38,6 +39,9 @@ class MixtureOfExpertsModel(Module):
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
         self.expert_stack = self._create_expert_stack()
         self.validator = MixtureOfExpertsModelValidator(self)
+
+    def get_top_k(self) -> int:
+        return self.top_k
 
     def _create_expert_stack(self) -> Layer | Sequential:
         return MixtureOfExpertsStack(self.cfg).build_model()
