@@ -6,13 +6,13 @@ from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
-    LayerRoleOptions,
 )
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.experts.utils.layers import MixtureOfExperts
+    from Emperor.experts.utils.model import MixtureOfExpertsModel
 
 
 class _Validator:
@@ -42,8 +42,6 @@ class _Validator:
             raise ValueError("Configuration Error: 'init_sampler_option' is None")
         if self.model.weighting_position_option is None:
             raise ValueError("Configuration Error: 'weighting_position_option' is None")
-        if self.model.layer_role_option is None:
-            raise ValueError("Configuration Error: 'layer_role_option' is None")
         if self.model.router_model_config is None:
             raise ValueError("Configuration Error: 'router_model_config' is None")
         if self.model.sampler_model_config is None:
@@ -88,10 +86,6 @@ class _Validator:
         if not isinstance(self.model.init_sampler_option, InitSamplerOptions):
             raise TypeError(
                 f"Configuration Error: 'init_sampler_model_flag' must be of type bool, received type {type(self.model.init_sampler_model_flag).__name__}"
-            )
-        if not isinstance(self.model.layer_role_option, LayerRoleOptions):
-            raise TypeError(
-                f"Configuration Error: 'layer_role_option' must be of type LayerRoleOptions, received type {type(self.model.layer_role_option).__name__}"
             )
         if not isinstance(self.model.router_model_config, RouterConfig):
             raise TypeError(
@@ -145,8 +139,17 @@ class _Validator:
 
 
 class MixtureOfExpertsModelValidator:
-    def __init__(self, model: "MixtureOfExperts"):
+    def __init__(self, model: "MixtureOfExpertsModel"):
         self.model = model
+        self.__ensure_propper_main_config()
+
+    def __ensure_propper_main_config(self) -> None:
+        from Emperor.experts.utils.layers import MixtureOfExpertsConfig
+
+        if self.model.main_cfg == MixtureOfExpertsConfig:
+            raise ValueError(
+                "Invalid configuration: `main_cfg` must not directly match `MixtureOfExpertsConfig`. Ensure `main_cfg` is correctly derived and properly initialized."
+            )
 
     def ensure_no_sampler_with_indices(self) -> None:
         if self.model.init_sampler_option == InitSamplerOptions.DISABLED:
