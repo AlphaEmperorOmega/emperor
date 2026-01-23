@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from inspect import Parameter
+from torch.nn import Parameter
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
