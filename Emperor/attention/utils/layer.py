@@ -1,21 +1,24 @@
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.base.utils import ConfigBase, Module
 from Emperor.attention.utils.utils import Utils
+from Emperor.base.layer import LayerStackConfig
+from Emperor.base.utils import ConfigBase, Module
 from Emperor.attention.utils.handlers.maks import Mask
+from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.attention.utils.handlers.bias import KeyValueBias
-from Emperor.attention.utils.handlers.processor import Processor
-from Emperor.attention.utils.handlers.projector import ProjectorSelector
+from Emperor.attention.utils.handlers.processor import ProcessorBuilder
+from Emperor.attention.utils.handlers.projector import ProjectorBuilder
 from Emperor.attention.utils.handlers.batch import BatchDimensionManager
-from Emperor.attention.utils._validator import MultiHeadAttentionConfigValidator
+from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from torch.types import _dtype as DType
-    from Emperor.adaptive.options import AdaptiveLayerStackOptions
     from Emperor.linears.options import LinearLayerStackOptions
+    from Emperor.adaptive.options import AdaptiveLayerStackOptions
 
 
 @dataclass
@@ -72,11 +75,9 @@ class MultiHeadAttentionConfig(ConfigBase):
             "help": "Data type (dtype) for the attention outputs (e.g. torch.float32)."
         },
     )
-    is_self_attention_projector_flag: bool | None = field(
+    attention_option: AttentionOptions | None = field(
         default=None,
-        metadata={
-            "help": "If True, use separate projection weights for Q, K, V. If False, use shared projection weights (single QKV matrix)."
-        },
+        metadata={"help": "Option for selecting the type of projector to use."},
     )
     dropout_probability: float | None = field(
         default=None,
@@ -114,6 +115,18 @@ class MultiHeadAttentionConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
+    experts_config: "LayerStackConfig | None" = field(
+        default=None,
+        metadata={
+            "help": "Type of model used to generate parameters query, key, and value projections"
+        },
+    )
+    use_kv_expert_models_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "Type of model used to generate parameters query, key, and value projections"
+        },
+    )
 
 
 class MultiHeadAttention(Module):
@@ -142,18 +155,17 @@ class MultiHeadAttention(Module):
         self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.is_self_attention_projector_flag = (
-            self.cfg.is_self_attention_projector_flag
-        )
+        self.attention_option = self.cfg.attention_option
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self._validate_fields(self.cfg, MultiHeadAttentionConfig)
         self.__initialize_utilities()
 
-    def __initialize_utilities(self):
-        self.validator = MultiHeadAttentionConfigValidator(self.cfg)
+        self.validator = MultiHeadAttentionValidator(self.cfg)
         self.masks = Mask(self.cfg)
-        self.projector = ProjectorSelector(self.cfg).build_model()
-        self.processor = Processor(self.cfg, self.validator, self.projector)
+        self.projector = ProjectorBuilder(self.cfg).build()
+        self.processor = ProcessorBuilder(
+            self.cfg, self.validator, self.projector
+        ).build()
         self.bias = KeyValueBias(self.cfg)
         self.utils = Utils(self.cfg, self.validator)
         self.batch_utils = BatchDimensionManager(self.cfg)
@@ -198,3 +210,18 @@ class MultiHeadAttention(Module):
             attention_output
         )
         return attention_output, attention_weights
+
+
+class MixtureOfMultiHeadAttention(MultiHeadAttention):
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig | ModelConfig",
+        overrides: "MultiHeadAttentionConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+
+        self.__initialize_utilities()
+
+    def __initialize_utilities(self):
+        self.projector = ProjectorBuilder(self.cfg).build_model()
+        self.processor = Processor(self.cfg, self.validator, self.projector)

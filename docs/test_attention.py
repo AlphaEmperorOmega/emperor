@@ -4,7 +4,7 @@ import itertools
 
 from dataclasses import asdict
 from Emperor.attention.utils._validator import MultiHeadAttentionValidator
-from Emperor.attention.utils.enums import ProjectorOptions
+from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.handlers.maks import Mask
 from Emperor.linears.options import LinearLayerStackOptions
@@ -34,7 +34,7 @@ class TestAttention(unittest.TestCase):
             embedding_dim=12,
             query_key_projection_dim=12,
             value_projection_dim=12,
-            projector_option=ProjectorOptions.SELF_ATTENTION,
+            attention_option=AttentionOptions.SELF_ATTENTION,
         )
         if config is not None:
             for k in asdict(config):
@@ -66,8 +66,8 @@ class TestMultiHeadAttention__init(TestAttention):
             self.model.source_sequence_length, self.config.source_sequence_length
         )
         self.assertEqual(
-            self.model.projector_option,
-            self.config.projector_option,
+            self.model.attention_option,
+            self.config.attention_option,
         )
         self.assertEqual(
             self.model.dropout_probability, self.config.dropout_probability
@@ -96,10 +96,10 @@ class TestMultIHeadAttention____initialize_attention_components(TestAttention):
 
 
 class TestMultIHeadAttention_forward(TestAttention):
-    def test__projector_option_with_same_qkv_tensors(self):
+    def test__attention_option_with_same_qkv_tensors(self):
         tests = [
-            {"projector_option": ProjectorOptions.INDEPENDENT},
-            {"projector_option": ProjectorOptions.SELF_ATTENTION},
+            {"attention_option": AttentionOptions.INDEPENDENT},
+            {"attention_option": AttentionOptions.SELF_ATTENTION},
         ]
         for test in tests:
             config = MultiHeadAttentionConfig(
@@ -135,11 +135,11 @@ class TestMultIHeadAttention_forward(TestAttention):
                 (self.target_sequence_length, self.batch_size, self.embedding_dim),
             )
 
-    def test__projector_option_with_different_qkv_tensors(self):
+    def test__attention_option_with_different_qkv_tensors(self):
         config = MultiHeadAttentionConfig(
             target_sequence_length=32,
             source_sequence_length=32,
-            projector_option=ProjectorOptions.INDEPENDENT,
+            attention_option=AttentionOptions.INDEPENDENT,
         )
         self.rebuild_presets(config)
 
@@ -179,7 +179,7 @@ class TestMultIHeadAttention_forward(TestAttention):
         config = MultiHeadAttentionConfig(
             target_sequence_length=32,
             source_sequence_length=32,
-            projector_option=ProjectorOptions.INDEPENDENT,
+            attention_option=AttentionOptions.INDEPENDENT,
         )
         self.rebuild_presets(config)
 
@@ -215,7 +215,7 @@ class TestMultIHeadAttention_forward(TestAttention):
         config = MultiHeadAttentionConfig(
             target_sequence_length=32,
             source_sequence_length=32,
-            projector_option=ProjectorOptions.INDEPENDENT,
+            attention_option=AttentionOptions.INDEPENDENT,
         )
         self.rebuild_presets(config)
 
@@ -257,7 +257,7 @@ class TestMultIHeadAttention_forward(TestAttention):
         config = MultiHeadAttentionConfig(
             target_sequence_length=32,
             source_sequence_length=32,
-            projector_option=ProjectorOptions.INDEPENDENT,
+            attention_option=AttentionOptions.INDEPENDENT,
         )
         self.rebuild_presets(config)
 
@@ -304,7 +304,7 @@ class TestMultIHeadAttention_forward(TestAttention):
             config = MultiHeadAttentionConfig(
                 target_sequence_length=32,
                 source_sequence_length=32,
-                projector_option=ProjectorOptions.SELF_ATTENTION,
+                attention_option=AttentionOptions.SELF_ATTENTION,
                 **test,
             )
             self.rebuild_presets(config)
@@ -341,10 +341,10 @@ class TestMultIHeadAttention_forward(TestAttention):
             else:
                 self.assertIsNone(attention_weights)
 
-    def test__projector_option(self):
+    def test__attention_option(self):
         tests = [
-            {"projector_option": ProjectorOptions.INDEPENDENT},
-            {"projector_option": ProjectorOptions.SELF_ATTENTION},
+            {"attention_option": AttentionOptions.INDEPENDENT},
+            {"attention_option": AttentionOptions.SELF_ATTENTION},
         ]
 
         for test in tests:
@@ -394,7 +394,7 @@ class TestMultIHeadAttention_forward(TestAttention):
             config = MultiHeadAttentionConfig(
                 target_sequence_length=32,
                 source_sequence_length=32,
-                projector_option=ProjectorOptions.INDEPENDENT,
+                attention_option=AttentionOptions.INDEPENDENT,
                 **test,
             )
             self.rebuild_presets(config)
@@ -445,7 +445,7 @@ class TestMultIHeadAttention_forward(TestAttention):
             config = MultiHeadAttentionConfig(
                 target_sequence_length=32,
                 source_sequence_length=32,
-                projector_option=ProjectorOptions.INDEPENDENT,
+                attention_option=AttentionOptions.INDEPENDENT,
                 **test,
             )
             self.rebuild_presets(config)
@@ -495,7 +495,7 @@ class TestMultIHeadAttention_forward(TestAttention):
             config = MultiHeadAttentionConfig(
                 target_sequence_length=32,
                 source_sequence_length=32,
-                projector_option=ProjectorOptions.INDEPENDENT,
+                attention_option=AttentionOptions.INDEPENDENT,
                 **test,
             )
             self.rebuild_presets(config)
@@ -545,7 +545,7 @@ class TestMultIHeadAttention_forward(TestAttention):
                 target_sequence_length=32,
                 source_sequence_length=32,
                 return_attention_weights_flag=True,
-                projector_option=ProjectorOptions.SELF_ATTENTION,
+                attention_option=AttentionOptions.SELF_ATTENTION,
                 **test,
             )
             self.rebuild_presets(config)
@@ -593,7 +593,7 @@ class TestMultIHeadAttention_forward(TestAttention):
     #         config = MultiHeadAttentionConfig(
     #             target_sequence_length=32,
     #             source_sequence_length=32,
-    #             projector_option=True,
+    #             attention_option=True,
     #             **test,
     #         )
     #         self.rebuild_presets(config)
@@ -663,7 +663,7 @@ class TestMultIHeadAttention_forward(TestAttention):
             config = MultiHeadAttentionConfig(
                 target_sequence_length=32,
                 source_sequence_length=32,
-                projector_option=ProjectorOptions.INDEPENDENT,
+                attention_option=AttentionOptions.INDEPENDENT,
                 **test,
             )
             self.rebuild_presets(config)
@@ -709,7 +709,7 @@ class TestMultIHeadAttention_forward(TestAttention):
             # "return_attention_weights_flag",
             "average_attention_weights_flag",
             "causal_attention_mask_flag",
-            # "projector_option",
+            # "attention_option",
         ]
         combinations = list(itertools.product([False, True], repeat=len(flags)))
         tests = [dict(zip(flags, combo)) for combo in combinations]
@@ -757,7 +757,7 @@ class TestMultIHeadAttention_forward(TestAttention):
             # "return_attention_weights_flag",
             "average_attention_weights_flag",
             "causal_attention_mask_flag",
-            # "projector_option",
+            # "attention_option",
         ]
         combinations = list(itertools.product([False, True], repeat=len(flags)))
         tests = [dict(zip(flags, combo)) for combo in combinations]
@@ -805,16 +805,16 @@ class TestMultIHeadAttention_forward(TestAttention):
             # "return_attention_weights_flag",
             "average_attention_weights_flag",
             "causal_attention_mask_flag",
-            # "projector_option",
+            # "attention_option",
         ]
         combinations = list(itertools.product([False, True], repeat=len(flags)))
         tests = [dict(zip(flags, combo)) for combo in combinations]
         batch_sizes = [2, 4, 8]  # Pass
 
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 for test in tests:
                     for batch_size in batch_sizes:
                         message = f"Failed for model_type: {model_type}, batch_size: {batch_size}, test: {test}"
@@ -827,7 +827,7 @@ class TestMultIHeadAttention_forward(TestAttention):
                                 value_projection_dim=12,
                                 target_sequence_length=24,
                                 source_sequence_length=24,
-                                projector_option=ProjectorOptions.INDEPENDENT,
+                                attention_option=AttentionOptions.INDEPENDENT,
                                 **test,
                             )
                             m = MultiHeadAttention(c)
@@ -886,7 +886,7 @@ class TestMultIHeadAttention_forward(TestAttention):
     #         # "return_attention_weights_flag",
     #         "average_attention_weights_flag",
     #         "causal_attention_mask_flag",
-    #         # "projector_option",
+    #         # "attention_option",
     #     ]
     #     combinations = list(itertools.product([False, True], repeat=len(flags)))
     #     tests = [dict(zip(flags, combo)) for combo in combinations]
@@ -899,7 +899,7 @@ class TestMultIHeadAttention_forward(TestAttention):
     #                     embedding_dim=embedding_dim,
     #                     target_sequence_length=32,
     #                     source_sequence_length=32,
-    #                     projector_option=True,
+    #                     attention_option=True,
     #                     **test,
     #                 )
     #                 self.rebuild_presets(config)
@@ -950,7 +950,7 @@ class TestMultIHeadAttention_forward(TestAttention):
     #         # "return_attention_weights_flag",
     #         "average_attention_weights_flag",
     #         "causal_attention_mask_flag",
-    #         # "projector_option",
+    #         # "attention_option",
     #     ]
     #     combinations = list(itertools.product([False, True], repeat=len(flags)))
     #     tests = [dict(zip(flags, combo)) for combo in combinations]
@@ -966,7 +966,7 @@ class TestMultIHeadAttention_forward(TestAttention):
     #                     value_projection_dim=query_key_value_projection_dim,
     #                     target_sequence_length=32,
     #                     source_sequence_length=32,
-    #                     projector_option=True,
+    #                     attention_option=True,
     #                     **test,
     #                 )
     #                 self.rebuild_presets(config)
@@ -1017,7 +1017,7 @@ class TestMultIHeadAttention_forward(TestAttention):
     #         # "return_attention_weights_flag",
     #         "average_attention_weights_flag",
     #         "causal_attention_mask_flag",
-    #         # "projector_option",
+    #         # "attention_option",
     #     ]
     #     combinations = list(itertools.product([False, True], repeat=len(flags)))
     #     tests = [dict(zip(flags, combo)) for combo in combinations]
@@ -1029,7 +1029,7 @@ class TestMultIHeadAttention_forward(TestAttention):
     #                     model_type=model_type,
     #                     target_sequence_length=target_sequence_length,
     #                     source_sequence_length=32,
-    #                     projector_option=True,
+    #                     attention_option=True,
     #                     **test,
     #                 )
     #                 self.rebuild_presets(config)

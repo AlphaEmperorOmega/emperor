@@ -1,5 +1,5 @@
 from torch import float32
-from Emperor.attention.utils.enums import ProjectorOptions
+from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.config import ModelConfig
 from Emperor.linears.utils.presets import LinearPresets
 from Emperor.linears.options import LinearLayerStackOptions
@@ -545,7 +545,7 @@ class TransformerPresets:
             target_sequence_length=attention_target_sequence_length,
             source_sequence_length=attention_source_sequence_length,
             target_dtype=attention_target_dtype,
-            projector_option=ProjectorOptions.INDEPENDENT,
+            attention_option=AttentionOptions.INDEPENDENT,
             dropout_probability=attention_dropout_probability,
             key_value_bias_flag=attention_key_value_bias_flag,
             zero_attention_flag=attention_zero_attention_flag,
@@ -710,7 +710,7 @@ class TransformerPresets:
         target_sequence_length: int = 0,
         source_sequence_length: int = 0,
         target_dtype=float32,
-        projector_option: bool = False,
+        attention_option: bool = False,
         dropout_probability: float = 0.0,
         key_value_bias_flag: bool = False,
         zero_attention_flag: bool = False,
@@ -744,7 +744,7 @@ class TransformerPresets:
                 target_sequence_length=target_sequence_length,
                 source_sequence_length=source_sequence_length,
                 target_dtype=target_dtype,
-                projector_option=projector_option,
+                attention_option=attention_option,
                 dropout_probability=dropout_probability,
                 key_value_bias_flag=key_value_bias_flag,
                 zero_attention_flag=zero_attention_flag,
@@ -793,7 +793,7 @@ class TransformerPresets:
         target_sequence_length: int = 0,
         source_sequence_length: int = 0,
         target_dtype=float32,
-        projector_option: bool = False,
+        attention_option: bool = False,
         dropout_probability: float = 0.0,
         key_value_bias_flag: bool = False,
         zero_attention_flag: bool = False,
@@ -847,7 +847,7 @@ class TransformerPresets:
                 target_sequence_length=target_sequence_length,
                 source_sequence_length=source_sequence_length,
                 target_dtype=target_dtype,
-                projector_option=projector_option,
+                attention_option=attention_option,
                 dropout_probability=dropout_probability,
                 key_value_bias_flag=key_value_bias_flag,
                 zero_attention_flag=zero_attention_flag,

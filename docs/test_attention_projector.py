@@ -3,7 +3,7 @@ import unittest
 
 from torch.nn import Sequential
 
-from Emperor.attention.utils.enums import ProjectorOptions
+from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.experts.utils.model import MixtureOfExpertsModel
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
@@ -22,10 +22,10 @@ class TestSelfAttentionProjector(unittest.TestCase):
         self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
     def test_init(self):
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 message = f"Testing configuration: model_type: {model_type}"
                 with self.subTest(i=message):
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
@@ -56,10 +56,10 @@ class TestSelfAttentionProjector(unittest.TestCase):
         self.assertEqual(value_projections.shape, expected_shape)
 
     def test__compute_projection(self):
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 message = f"Testing configuration: model_type: {model_type}"
                 with self.subTest(i=message):
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
@@ -84,10 +84,10 @@ class TestSelfAttentionProjector(unittest.TestCase):
                     self.assertEqual(projected_tensor.shape, expected_shape)
 
     def test_compute_qkv_projections(self):
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 for adaptive_type in AdaptiveWeightOptions:
                     message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
                     with self.subTest(i=message):
@@ -122,10 +122,10 @@ class TestSelfAttentionProjector(unittest.TestCase):
                         self.assertEqual(v_projections.shape, expected_shape)
 
     def test_compute_output_projection(self):
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 for adaptive_type in AdaptiveWeightOptions:
                     message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
                     with self.subTest(i=message):
@@ -159,10 +159,10 @@ class TestIndependentProjector(unittest.TestCase):
         self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
     def test_init(self):
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 message = f"Testing configuration: model_type: {model_type}"
                 with self.subTest(i=message):
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
@@ -172,10 +172,10 @@ class TestIndependentProjector(unittest.TestCase):
                     self.assertEqual(model_type.value, m.model_type)
 
     def test__compute_projection(self):
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 message = f"Testing configuration: model_type: {model_type}"
                 with self.subTest(i=message):
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
@@ -200,10 +200,10 @@ class TestIndependentProjector(unittest.TestCase):
                     self.assertEqual(projected_tensor.shape, expected_shape)
 
     def test_compute_qkv_projections(self):
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 for adaptive_type in AdaptiveWeightOptions:
                     message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
                     with self.subTest(i=message):
@@ -249,11 +249,11 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
 
     def test_init(self):
         boolean_options = [True, False]
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
         for use_kv_expert_models_flag in boolean_options:
-            for projector_option in projector_options:
-                for model_type in projector_option:
+            for attention_option in attention_options:
+                for model_type in attention_option:
                     message = f"Testing configuration: model_type: {model_type}"
                     with self.subTest(i=message):
                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
@@ -273,11 +273,11 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
 
     def test__compute_projection(self):
         boolean_options = [True, False]
-        projector_options = [LinearLayerStackOptions]
+        attention_options = [LinearLayerStackOptions]
 
         for use_kv_expert_models_flag in boolean_options:
-            for projector_option in projector_options:
-                for model_type in projector_option:
+            for attention_option in attention_options:
+                for model_type in attention_option:
                     message = f"Testing configuration: model_type: {model_type}"
                     with self.subTest(i=message):
                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
@@ -318,11 +318,11 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
 
     def test_compute_qkv_projections(self):
         boolean_options = [True, False]
-        projector_options = [LinearLayerStackOptions]
+        attention_options = [LinearLayerStackOptions]
 
         for use_kv_expert_models_flag in boolean_options:
-            for projector_option in projector_options:
-                for model_type in projector_option:
+            for attention_option in attention_options:
+                for model_type in attention_option:
                     for adaptive_type in AdaptiveWeightOptions:
                         message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
                         with self.subTest(i=message):
@@ -389,27 +389,27 @@ class TestProjectorBuilder(unittest.TestCase):
         self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
     def test_init(self):
-        projector_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
         boolean_options = [True, False]
 
-        for projector_option in projector_options:
-            for model_type in projector_option:
+        for attention_option in attention_options:
+            for model_type in attention_option:
                 for adaptive_type in AdaptiveWeightOptions:
-                    for projector_option in boolean_options:
-                        message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}, projector_option: {projector_option}"
+                    for attention_option in boolean_options:
+                        message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}, attention_option: {attention_option}"
                         with self.subTest(i=message):
                             if adaptive_type == AdaptiveWeightOptions.VECTOR:
                                 continue
 
-                            projector_options = {
-                                "projector_option": ProjectorOptions.INDEPENDENT,
+                            attention_options = {
+                                "attention_option": AttentionOptions.INDEPENDENT,
                                 "embedding_dim": 15,
                                 "query_key_projection_dim": 10,
                                 "value_projection_dim": 12,
                             }
-                            if projector_option:
-                                projector_options = {
-                                    "projector_option": ProjectorOptions.SELF_ATTENTION,
+                            if attention_option:
+                                attention_options = {
+                                    "attention_option": AttentionOptions.SELF_ATTENTION,
                                     "embedding_dim": 12,
                                     "query_key_projection_dim": 12,
                                     "value_projection_dim": 12,
@@ -418,11 +418,11 @@ class TestProjectorBuilder(unittest.TestCase):
                             c = MultiHeadAttentionPresets.multi_head_attention_preset(
                                 model_type=model_type,
                                 projector_adaptive_weight_option=adaptive_type,
-                                **projector_options,
+                                **attention_options,
                             )
                             model = ProjectorBuilder(c).build_model()
 
-                            if projector_option:
+                            if attention_option:
                                 self.assertIsInstance(model, SelfAttentionProjector)
                             else:
                                 self.assertIsInstance(model, IndependentProjector)

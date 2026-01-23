@@ -1,6 +1,6 @@
 from torch import float32
 from Emperor.linears.utils.presets import LinearPresets
-from Emperor.attention.utils.enums import ProjectorOptions
+from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
 from Emperor.experts.utils.presets import MixtureOfExpertsPresets
@@ -41,7 +41,7 @@ class MultiHeadAttentionPresets:
         target_sequence_length=18,
         source_sequence_length=20,
         target_dtype=float32,
-        projector_option=ProjectorOptions.INDEPENDENT,
+        attention_option=AttentionOptions.INDEPENDENT,
         dropout_probability=0.0,
         key_value_bias_flag=False,
         zero_attention_flag=False,
@@ -252,7 +252,7 @@ class MultiHeadAttentionPresets:
             target_sequence_length=target_sequence_length,
             source_sequence_length=source_sequence_length,
             target_dtype=target_dtype,
-            projector_option=projector_option,
+            attention_option=attention_option,
             dropout_probability=dropout_probability,
             key_value_bias_flag=key_value_bias_flag,
             zero_attention_flag=zero_attention_flag,
@@ -277,7 +277,7 @@ class MultiHeadAttentionPresets:
         target_sequence_length: int = 0,
         source_sequence_length: int = 0,
         target_dtype=float32,
-        projector_option: ProjectorOptions = ProjectorOptions.INDEPENDENT,
+        attention_option: AttentionOptions = AttentionOptions.INDEPENDENT,
         dropout_probability: float = 0.0,
         key_value_bias_flag: bool = False,
         zero_attention_flag: bool = False,
@@ -302,7 +302,7 @@ class MultiHeadAttentionPresets:
             target_sequence_length=target_sequence_length,
             source_sequence_length=source_sequence_length,
             target_dtype=target_dtype,
-            projector_option=projector_option,
+            attention_option=attention_option,
             dropout_probability=dropout_probability,
             key_value_bias_flag=key_value_bias_flag,
             zero_attention_flag=zero_attention_flag,
@@ -343,7 +343,7 @@ class MultiHeadAttentionPresets:
         target_sequence_length: int = 0,
         source_sequence_length: int = 0,
         target_dtype=float32,
-        projector_option: ProjectorOptions = ProjectorOptions.INDEPENDENT,
+        attention_option: AttentionOptions = AttentionOptions.INDEPENDENT,
         dropout_probability: float = 0.0,
         key_value_bias_flag: bool = False,
         zero_attention_flag: bool = False,
@@ -369,7 +369,7 @@ class MultiHeadAttentionPresets:
             target_sequence_length=target_sequence_length,
             source_sequence_length=source_sequence_length,
             target_dtype=target_dtype,
-            projector_option=projector_option,
+            attention_option=attention_option,
             dropout_probability=dropout_probability,
             key_value_bias_flag=key_value_bias_flag,
             zero_attention_flag=zero_attention_flag,

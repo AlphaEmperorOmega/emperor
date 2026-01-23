@@ -143,7 +143,7 @@ def default_unittest_config():
             target_sequence_length=16,
             source_sequence_length=16,
             target_dtype=torch.float32,
-            projector_option=False,
+            attention_option=False,
             dropout_probability=0.0,
             key_value_bias_flag=False,
             zero_attention_flag=False,

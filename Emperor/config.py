@@ -191,7 +191,7 @@ class ModelConfig(ConfigBase):
             target_sequence_length=16,
             source_sequence_length=32,
             target_dtype=float32,
-            projector_option=False,
+            attention_option=False,
             dropout_probability=0.0,
             key_value_bias_flag=False,
             zero_attention_flag=False,
