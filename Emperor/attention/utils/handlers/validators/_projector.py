@@ -34,7 +34,7 @@ class IndependentProjectorValidator:
     def ensure_attention_weights_returned_for_self_attention_only(self):
         if self.model.return_attention_weights_flag:
             raise RuntimeError(
-                "`attention_weights` can be returned only when self attention is computed, ensure that `projector_option` is set to `True` and the `query`, `key` and `value` tensors are the same tensor."
+                "`attention_weights` can be returned only when self attention is computed, ensure that `attention_option` is set to `True` and the `query`, `key` and `value` tensors are the same tensor."
             )
 
     def ensure_propper_kv_shapes_for_independent_projector(
@@ -75,7 +75,7 @@ class MixtureOfAttentionHeadsProjectorValidator:
     def ensure_attention_weights_returned_for_self_attention_only(self):
         if self.model.return_attention_weights_flag:
             raise RuntimeError(
-                "`attention_weights` can be returned only when self attention is computed, ensure that `projector_option` is set to `True` and the `query`, `key` and `value` tensors are the same tensor."
+                "`attention_weights` can be returned only when self attention is computed, ensure that `attention_option` is set to `True` and the `query`, `key` and `value` tensors are the same tensor."
             )
 
     def ensure_propper_kv_shapes_for_independent_projector(
