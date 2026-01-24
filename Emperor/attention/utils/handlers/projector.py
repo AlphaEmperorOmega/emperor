@@ -29,19 +29,19 @@ class ProjectorBuilder(Module):
         self.embedding_dim = self.cfg.embedding_dim
         self.query_key_projection_dim = self.cfg.query_key_projection_dim
         self.value_projection_dim = self.cfg.value_projection_dim
-        self.projector_option = self.cfg.projector_option
+        self.attention_option = self.cfg.attention_option
 
-    def build_model(self):
-        from Emperor.attention.utils.enums import ProjectorOptions
+    def build(self) -> "ProjectorBase":
+        from Emperor.attention.utils.enums import AttentionOptions
 
-        match self.projector_option:
-            case ProjectorOptions.SELF_ATTENTION:
+        match self.attention_option:
+            case AttentionOptions.SELF_ATTENTION:
                 self.__should_use_self_attention_projector()
                 return SelfAttentionProjector(self.cfg)
-            case ProjectorOptions.INDEPENDENT:
+            case AttentionOptions.INDEPENDENT:
                 return IndependentProjector(self.cfg)
-            case ProjectorOptions.MIXTURE_OF_ATTENTION_HEADS:
-                return IndependentProjector(self.cfg)
+            case AttentionOptions.MIXTURE_OF_ATTENTION_HEADS:
+                return MixtureOfAttentionHeadsProjector(self.cfg)
 
     def __should_use_self_attention_projector(self):
         are_qk_dims_same = self.embedding_dim == self.query_key_projection_dim
@@ -64,7 +64,7 @@ class ProjectorBase(Module):
         self.query_key_projection_dim = self.cfg.query_key_projection_dim
         self.value_projection_dim = self.cfg.value_projection_dim
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.projector_option = self.cfg.projector_option
+        self.attention_option = self.cfg.attention_option
         self.experts_config = self.cfg.experts_config
         self.use_kv_expert_models_flag = self.cfg.use_kv_expert_models_flag
         self.__resolve_kv_dimensions()
@@ -108,6 +108,16 @@ class ProjectorBase(Module):
         if weighted_values.dim() == 3:
             return self._compute_projection(weighted_values, self.output_model)
         return self.output_model(weighted_values)
+
+    def compute_qkv_projections(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        raise NotImplementedError(
+            "`compute_qkv_projections` method must be implemented by subclass"
+        )
 
 
 class SelfAttentionProjector(ProjectorBase):
