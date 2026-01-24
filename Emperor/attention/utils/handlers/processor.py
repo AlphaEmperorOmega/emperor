@@ -4,24 +4,48 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
+from Emperor.attention.utils.enums import AttentionOptions
+from Emperor.attention.utils.handlers.reshaper import ReshaperBase
+from Emperor.attention.utils.handlers.validators._processor import ProcessorValidator
 
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
     from Emperor.attention.utils.handlers.projector import ProjectorBase
-    from Emperor.attention.utils._validator import MultiHeadAttentionValidator
+
+
+class ProcessorBuilder:
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig",
+        output_model: nn.Module,
+    ):
+        self.cfg = cfg
+        self.output_model = output_model
+        self.attention_option = self.cfg.attention_option
+        self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
+        self.use_kv_expert_models_flag = self.cfg.use_kv_expert_models_flag
+
+    def build(self) -> "ProcessorBase":
+        inputs = (self.cfg, self.output_model)
+        match self.attention_option:
+            case AttentionOptions.SELF_ATTENTION:
+                return SelfAttentionProcessor(*inputs)
+            case AttentionOptions.INDEPENDENT:
+                return ProcessorDefault(*inputs)
+            case AttentionOptions.MIXTURE_OF_ATTENTION_HEADS:
+                return MixtureOfAttentionHeadsProcessor(*inputs)
 
 
 class ProcessorBase:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionValidator",
         projector: "ProjectorBase",
     ):
         self.cfg = cfg
-        self.validator = validator
         self.projector = projector
         self.num_heads = self.cfg.num_heads
         self.batch_size = self.cfg.batch_size
@@ -31,6 +55,7 @@ class ProcessorBase:
         self.source_sequence_length = self.cfg.source_sequence_length
         self.query_key_projection_dim = self.cfg.query_key_projection_dim
         self.value_projection_dim = self.cfg.value_projection_dim
+        self.use_kv_expert_models_flag = self.cfg.use_kv_expert_models_flag
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
         self.zero_attention_flag = self.cfg.zero_attention_flag
@@ -51,6 +76,8 @@ class ProcessorBase:
         self.v_head_dim = (
             self.value_projection_dim // self.num_heads if is_v_dim else self.head_dim
         )
+        self.reshaper = ReshaperBase(self.cfg)
+        self.validator = ProcessorValidator(self)
 
     def _compute_attention_output(self, weighted_values: Tensor) -> Tensor:
         attention_output = self.projector.compute_output_projection(weighted_values)
@@ -63,15 +90,25 @@ class ProcessorBase:
             self.target_sequence_length, self.batch_size, embedding_dim
         )
 
+    def compute_attention(
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        attention_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
+        raise NotImplementedError(
+            "`compute_attention` method must be implemented by subclass"
+        )
 
-class ProcessorWithReturnedWeights(ProcessorBase):
+
+class SelfAttentionProcessor(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionValidator",
         output_model: nn.Module,
     ):
-        super().__init__(cfg, validator, output_model)
+        super().__init__(cfg, output_model)
 
     def compute_attention(
         self,
@@ -163,7 +200,7 @@ class ProcessorWithReturnedWeights(ProcessorBase):
     def __handle_batched_input(
         self, attention_output: Tensor, attention_weights: Tensor
     ) -> tuple[Tensor, Tensor]:
-        if not self.validator.get_batched_input_flag():
+        if not self.validator.get_batched_input_flag(attention_output):
             output_with_removed_batch_dim = attention_output.squeeze(1)
             weights_with_removed_batch_dim = attention_weights.squeeze(0)
             return output_with_removed_batch_dim, weights_with_removed_batch_dim
@@ -174,10 +211,9 @@ class ProcessorDefault(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionValidator",
         output_model: nn.Module,
     ):
-        super().__init__(cfg, validator, output_model)
+        super().__init__(cfg, output_model)
 
     def compute_attention(
         self,
@@ -187,12 +223,12 @@ class ProcessorDefault(ProcessorBase):
         attention_mask: Tensor | None,
     ) -> tuple[Tensor, None]:
         attention_mask = self.__prepare_attnetion_mask(attention_mask)
-        query, key, value = self.__reshape_qkv_for_attention(query, key, value)
+        query, key, value = self.reshaper.reshape_before_attention(query, key, value)
         weighted_values = self.__compute_weighted_values(
             query, key, value, attention_mask
         )
         attention_output = self._compute_attention_output(weighted_values)
-        if not self.validator.get_batched_input_flag():
+        if not self.validator.get_batched_input_flag(attention_output):
             attention_output = attention_output.squeeze(1)
         return attention_output, None
 
@@ -211,36 +247,6 @@ class ProcessorDefault(ProcessorBase):
             self.target_sequence_length,
             -1,
         )
-
-    def __reshape_qkv_for_attention(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-    ):
-        source_sequence_length = key.size(1)
-        q_shape = (
-            self.batch_size,
-            self.num_heads,
-            self.target_sequence_length,
-            self.qk_head_dim,
-        )
-        k_shape = (
-            self.batch_size,
-            self.num_heads,
-            source_sequence_length,
-            self.qk_head_dim,
-        )
-        v_shape = (
-            self.batch_size,
-            self.num_heads,
-            source_sequence_length,
-            self.v_head_dim,
-        )
-        query = query.view(q_shape)
-        key = key.view(k_shape)
-        value = value.view(v_shape)
-        return query, key, value
 
     def __compute_weighted_values(
         self,
@@ -266,32 +272,84 @@ class ProcessorDefault(ProcessorBase):
         )
 
 
-class Processor:
+class MixtureOfAttentionHeadsProcessor(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        validator: "MultiHeadAttentionValidator",
         output_model: nn.Module,
     ):
-        self.cfg = cfg
-        self.validator = validator
-        self.output_model = output_model
-        self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.processor = self.__create_processor()
-
-    def __create_processor(
-        self,
-    ) -> ProcessorDefault | ProcessorWithReturnedWeights:
-        processor_type = ProcessorDefault
-        if self.return_attention_weights_flag:
-            processor_type = ProcessorWithReturnedWeights
-        return processor_type(self.cfg, self.validator, self.output_model)
+        super().__init__(cfg, output_model)
 
     def compute_attention(
         self,
         query: Tensor,
         key: Tensor,
         value: Tensor,
+        attention_mask: Tensor | None,
+    ) -> tuple[Tensor, None]:
+        weights = self.__compute_masked_attention_weights(query, key, attention_mask)
+        weighted_value = self.__compute_weighted_values(weights, value)
+        output = self._compute_attention_output(weighted_value)
+
+        return output, None
+
+    def __compute_masked_attention_weights(
+        self,
+        query: Tensor,
+        key: Tensor,
+        attention_mask: Tensor | None,
+    ) -> Tensor:
+        scaled_query = self.__scale_query(query)
+        raw_weights = self.__compute_raw_masked_attention_weights(
+            scaled_query, key, attention_mask
+        )
+        weights = F.softmax(raw_weights, dim=-1)
+        if self.dropout_probability > 0.0:
+            weights = F.dropout(weights, p=self.dropout_probability)
+        return weights
+
+    def __scale_query(self, query: Tensor) -> Tensor:
+        head_dim = query.size(-1)
+        query_scalar = head_dim**-0.5
+        return query * query_scalar
+
+    def __compute_raw_masked_attention_weights(
+        self,
+        query: Tensor,
+        key: Tensor,
         attention_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None]:
-        return self.processor.compute_attention(query, key, value, attention_mask)
+    ) -> Tensor:
+        key = key.transpose(-2, -1)
+        raw_weights = torch.einsum("bkhie,bhje->bkhij", query, key)
+        # TODO: Add relative positional encoding support here
+        if attention_mask is not None:
+            attention_mask = attention_mask.unsqueeze(0)
+            return raw_weights + attention_mask
+        return raw_weights
+
+    def __compute_weighted_values(
+        self,
+        attention_weights: Tensor,
+        values: Tensor,
+    ) -> Tensor:
+        assert self.target_sequence_length == self.source_sequence_length, (
+            f"At the moment different source and target sequence lengths are not supported so `target_sequence_length`: {self.target_sequence_length} must be equal to `source_sequence_length`:{self.source_sequence_length}. See if this can be fixed in the future."
+        )
+        # The reason this does not work is because `weighted_values` after torch.bmm(attention_weights, values)
+        # need to be reshaped into `weighted_values_output_shape`, if `source_sequence_length` and
+        # `target_sequence_length` are different then the reshaping will not work.
+        weighted_values_output_shape = (
+            self.target_sequence_length * self.batch_size,
+            self.embedding_dim,
+        )
+        einsum_equation = "bkhij,bkhje->bkhie"
+        if self.use_kv_expert_models_flag:
+            einsum_equation = "bkhij,bkhje->bkhie"
+            # raise NotImplementedError(
+            #     "The 'use_kv_expert_models_flag' feature is not supported for MixtureOfAttentionHeadsProcessor."
+            # )
+
+        weighted_values = torch.einsum(einsum_equation, attention_weights, values)
+        weighted_values = weighted_values.transpose(0, 1)
+        weighted_values = weighted_values.contiguous()
+        return weighted_values.view(weighted_values_output_shape)
