@@ -27,20 +27,6 @@ class Utils:
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
         self.head_dim = self.embedding_dim // self.num_heads
-        self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
-
-    def __resolve_qkv_head_dim(self):
-        qk_head_dim = (
-            self.query_key_projection_dim // self.num_heads
-            if self.query_key_projection_dim != 0
-            else self.head_dim
-        )
-        v_head_dim = (
-            self.value_projection_dim // self.num_heads
-            if self.value_projection_dim != 0
-            else self.head_dim
-        )
-        return qk_head_dim, v_head_dim
 
     def add_batch_dimension_if_missing(
         self,
@@ -60,37 +46,6 @@ class Utils:
         if attention_mask is not None:
             attention_mask = attention_mask.unsqueeze(0)
         return query, key, value, key_padding_mask, attention_mask
-
-    def reshape_qkv_for_attention(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        static_keys: Tensor | None = None,
-        static_values: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        self.validator.check_static_projection_shapes(static_keys, static_values)
-
-        query = self.__reshape_projection_tesnor(query, None, self.qk_head_dim)
-        key = self.__reshape_projection_tesnor(key, static_keys, self.qk_head_dim)
-        value = self.__reshape_projection_tesnor(value, static_values, self.v_head_dim)
-
-        return query, key, value
-
-    def __reshape_projection_tesnor(
-        self,
-        tensor: Tensor,
-        static_tensor: Tensor | None = None,
-        head_dim: int | None = None,
-    ) -> Tensor:
-        if static_tensor is not None:
-            return static_tensor
-
-        sequence_length = tensor.shape[0]
-        head_dim = head_dim or self.head_dim
-        shape = (sequence_length, self.batch_size * self.num_heads, head_dim)
-        reshaped_tensor = tensor.view(shape)
-        return reshaped_tensor.transpose(0, 1)
 
     def add_zero_attention(
         self,
