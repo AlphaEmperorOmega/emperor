@@ -6,6 +6,7 @@ from Emperor.base.utils import ConfigBase, Module
 from Emperor.attention.utils.handlers.maks import Mask
 from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.attention.utils.handlers.bias import KeyValueBias
+from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
 from Emperor.attention.utils.handlers.processor import ProcessorBuilder
 from Emperor.attention.utils.handlers.projector import ProjectorBuilder
 from Emperor.attention.utils.handlers.batch import BatchDimensionManager
@@ -166,6 +167,7 @@ class MultiHeadAttention(Module):
         self.processor = ProcessorBuilder(
             self.cfg, self.validator, self.projector
         ).build()
+        self.reshaper = ReshaperBuilder(self.cfg).build()
         self.bias = KeyValueBias(self.cfg)
         self.utils = Utils(self.cfg, self.validator)
         self.batch_utils = BatchDimensionManager(self.cfg)
@@ -196,7 +198,7 @@ class MultiHeadAttention(Module):
         k, v, k_padding_mask, attention_mask = self.bias.add_kv_learnable_bias_vectors(
             k, v, k_padding_mask, attention_mask
         )
-        q, k, v = self.utils.reshape_qkv_for_attention(q, k, v, static_k, static_v)
+        q, k, v = self.reshaper.reshape_qkv_for_attention(q, k, v, static_k, static_v)
         k, v, attention_mask, k_padding_mask = self.utils.add_zero_attention(
             k, v, attention_mask, k_padding_mask
         )
@@ -220,8 +222,6 @@ class MixtureOfMultiHeadAttention(MultiHeadAttention):
     ):
         super().__init__(cfg, overrides)
 
-        self.__initialize_utilities()
-
-    def __initialize_utilities(self):
-        self.projector = ProjectorBuilder(self.cfg).build_model()
+        self.projector = ProjectorBuilder(self.cfg).build()
+        self.reshaper = ReshaperBuilder(self.cfg).build()
         self.processor = Processor(self.cfg, self.validator, self.projector)
