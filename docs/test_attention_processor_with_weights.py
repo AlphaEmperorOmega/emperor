@@ -9,10 +9,10 @@ from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from Emperor.attention.utils.handlers.projector import ProjectorBuilder
 from Emperor.attention.utils._validator import MultiHeadAttentionValidator
-from Emperor.attention.utils.handlers.processor import ProcessorWithReturnedWeights
+from Emperor.attention.utils.handlers.processor import SelfAttentionProcessor
 
 
-class TestProcessorWithReturnedWeights(unittest.TestCase):
+class TestSelfAttentionProcessor(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -39,7 +39,7 @@ class TestProcessorWithReturnedWeights(unittest.TestCase):
 
         validator = MultiHeadAttentionValidator(self.config)
         projector = ProjectorBuilder(self.config).build_model()
-        self.model = ProcessorWithReturnedWeights(self.config, validator, projector)
+        self.model = SelfAttentionProcessor(self.config, validator, projector)
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -49,12 +49,12 @@ class TestProcessorWithReturnedWeights(unittest.TestCase):
         self.head_dim = self.embedding_dim // self.num_heads
 
 
-class Test____scale_query(TestProcessorWithReturnedWeights):
+class Test____scale_query(TestSelfAttentionProcessor):
     def test__method(self):
         query = torch.randn(
             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
         )
-        scaled_query_tensor = self.model._ProcessorWithReturnedWeights__scale_query(
+        scaled_query_tensor = self.model._SelfAttentionProcessor__scale_query(
             query
         )
 
@@ -64,7 +64,7 @@ class Test____scale_query(TestProcessorWithReturnedWeights):
         self.assertTrue(torch.equal(scaled_query_tensor, expected_result))
 
 
-class Test____compute_raw_masked_attention_weights(TestProcessorWithReturnedWeights):
+class Test____compute_raw_masked_attention_weights(TestSelfAttentionProcessor):
     def test__attention_mask__None(self):
         query = torch.randn(
             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
@@ -74,7 +74,7 @@ class Test____compute_raw_masked_attention_weights(TestProcessorWithReturnedWeig
         )
         attention_mask = None
 
-        raw_unmasked_weights = self.model._ProcessorWithReturnedWeights__compute_raw_masked_attention_weights(
+        raw_unmasked_weights = self.model._SelfAttentionProcessor__compute_raw_masked_attention_weights(
             query, key, attention_mask
         )
 
@@ -111,7 +111,7 @@ class Test____compute_raw_masked_attention_weights(TestProcessorWithReturnedWeig
         )
         attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
 
-        raw_masked_weights = self.model._ProcessorWithReturnedWeights__compute_raw_masked_attention_weights(
+        raw_masked_weights = self.model._SelfAttentionProcessor__compute_raw_masked_attention_weights(
             query, key, attention_mask
         )
 
@@ -137,7 +137,7 @@ class Test____compute_raw_masked_attention_weights(TestProcessorWithReturnedWeig
             )
 
 
-class Test____compute_masked_attention_weights(TestProcessorWithReturnedWeights):
+class Test____compute_masked_attention_weights(TestSelfAttentionProcessor):
     def test__method_using_mock(self):
         mock_scaled_query = torch.randn(
             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
@@ -148,10 +148,10 @@ class Test____compute_masked_attention_weights(TestProcessorWithReturnedWeights)
             self.source_sequence_length,
         )
 
-        self.model._ProcessorWithReturnedWeights__scale_query = MagicMock(
+        self.model._SelfAttentionProcessor__scale_query = MagicMock(
             return_value=mock_scaled_query
         )
-        self.model._ProcessorWithReturnedWeights__compute_raw_masked_attention_weights = MagicMock(
+        self.model._SelfAttentionProcessor__compute_raw_masked_attention_weights = MagicMock(
             return_value=mock_raw_weights
         )
 
@@ -164,15 +164,15 @@ class Test____compute_masked_attention_weights(TestProcessorWithReturnedWeights)
         attention_mask = None
 
         result = (
-            self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
+            self.model._SelfAttentionProcessor__compute_masked_attention_weights(
                 query, key, attention_mask
             )
         )
 
-        self.model._ProcessorWithReturnedWeights__scale_query.assert_called_once_with(
+        self.model._SelfAttentionProcessor__scale_query.assert_called_once_with(
             query
         )
-        self.model._ProcessorWithReturnedWeights__compute_raw_masked_attention_weights.assert_called_once_with(
+        self.model._SelfAttentionProcessor__compute_raw_masked_attention_weights.assert_called_once_with(
             mock_scaled_query, key, attention_mask
         )
 
@@ -189,7 +189,7 @@ class Test____compute_masked_attention_weights(TestProcessorWithReturnedWeights)
         attention_mask = None
 
         masked_softmax_weights = (
-            self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
+            self.model._SelfAttentionProcessor__compute_masked_attention_weights(
                 query, key, attention_mask
             )
         )
@@ -218,7 +218,7 @@ class Test____compute_masked_attention_weights(TestProcessorWithReturnedWeights)
         attention_mask = None
 
         masked_softmax_weights = (
-            self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
+            self.model._SelfAttentionProcessor__compute_masked_attention_weights(
                 query, key, attention_mask
             )
         )
@@ -249,7 +249,7 @@ class Test____compute_masked_attention_weights(TestProcessorWithReturnedWeights)
         attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
 
         masked_softmax_weights = (
-            self.model._ProcessorWithReturnedWeights__compute_masked_attention_weights(
+            self.model._SelfAttentionProcessor__compute_masked_attention_weights(
                 query, key, attention_mask
             )
         )
@@ -269,7 +269,7 @@ class Test____compute_masked_attention_weights(TestProcessorWithReturnedWeights)
         )
 
 
-class Test____compute_weighted_values(TestProcessorWithReturnedWeights):
+class Test____compute_weighted_values(TestSelfAttentionProcessor):
     def test__method(self):
         config = MultiHeadAttentionConfig(
             source_sequence_length=32,
@@ -286,7 +286,7 @@ class Test____compute_weighted_values(TestProcessorWithReturnedWeights):
         )
 
         weighted_values = (
-            self.model._ProcessorWithReturnedWeights__compute_weighted_values(
+            self.model._SelfAttentionProcessor__compute_weighted_values(
                 attention_weights, values
             )
         )
@@ -298,7 +298,7 @@ class Test____compute_weighted_values(TestProcessorWithReturnedWeights):
         )
 
 
-class Test____compute_attention_output(TestProcessorWithReturnedWeights):
+class Test____compute_attention_output(TestSelfAttentionProcessor):
     def test__method(self):
         config = MultiHeadAttentionConfig(
             source_sequence_length=32,
@@ -319,7 +319,7 @@ class Test____compute_attention_output(TestProcessorWithReturnedWeights):
         )
 
 
-class Test____maybe_average_attention_weights(TestProcessorWithReturnedWeights):
+class Test____maybe_average_attention_weights(TestSelfAttentionProcessor):
     def test__average_attention_weights_flag__False(self):
         config = MultiHeadAttentionConfig(average_attention_weights_flag=False)
         self.rebuild_presets(config)
@@ -331,7 +331,7 @@ class Test____maybe_average_attention_weights(TestProcessorWithReturnedWeights):
         )
 
         output_attention_weights = (
-            self.model._ProcessorWithReturnedWeights__maybe_average_attention_weights(
+            self.model._SelfAttentionProcessor__maybe_average_attention_weights(
                 attention_weights
             )
         )
@@ -361,7 +361,7 @@ class Test____maybe_average_attention_weights(TestProcessorWithReturnedWeights):
         )
 
         output_attention_weights = (
-            self.model._ProcessorWithReturnedWeights__maybe_average_attention_weights(
+            self.model._SelfAttentionProcessor__maybe_average_attention_weights(
                 attention_weights
             )
         )
@@ -375,7 +375,7 @@ class Test____maybe_average_attention_weights(TestProcessorWithReturnedWeights):
         )
 
 
-class Test____handle_batched_input(TestProcessorWithReturnedWeights):
+class Test____handle_batched_input(TestSelfAttentionProcessor):
     def test__batched_input_flag__False(self):
         config = MultiHeadAttentionConfig(
             batch_size=1,
@@ -393,7 +393,7 @@ class Test____handle_batched_input(TestProcessorWithReturnedWeights):
         )
 
         output_attention_output, output_attention_weights = (
-            self.model._ProcessorWithReturnedWeights__handle_batched_input(
+            self.model._SelfAttentionProcessor__handle_batched_input(
                 attention_output, attention_weights
             )
         )
@@ -421,7 +421,7 @@ class Test____handle_batched_input(TestProcessorWithReturnedWeights):
         )
 
         output_attention_output, output_attention_weights = (
-            self.model._ProcessorWithReturnedWeights__handle_batched_input(
+            self.model._SelfAttentionProcessor__handle_batched_input(
                 attention_output, attention_weights
             )
         )
@@ -432,7 +432,7 @@ class Test____handle_batched_input(TestProcessorWithReturnedWeights):
         self.assertTrue(torch.equal(output_attention_weights, attention_weights))
 
 
-class Test____ensure_correct_shape_output(TestProcessorWithReturnedWeights):
+class Test____ensure_correct_shape_output(TestSelfAttentionProcessor):
     def test__average_attention_weights_flag__True(self):
         config = MultiHeadAttentionConfig(
             average_attention_weights_flag=True,
@@ -449,7 +449,7 @@ class Test____ensure_correct_shape_output(TestProcessorWithReturnedWeights):
         )
 
         output_attention_output, output_attention_weights = (
-            self.model._ProcessorWithReturnedWeights__ensure_correct_shape_output(
+            self.model._SelfAttentionProcessor__ensure_correct_shape_output(
                 attention_output, attention_weights
             )
         )
@@ -483,7 +483,7 @@ class Test____ensure_correct_shape_output(TestProcessorWithReturnedWeights):
         )
 
         output_attention_output, output_attention_weights = (
-            self.model._ProcessorWithReturnedWeights__ensure_correct_shape_output(
+            self.model._SelfAttentionProcessor__ensure_correct_shape_output(
                 attention_output, attention_weights
             )
         )
@@ -500,7 +500,7 @@ class Test____ensure_correct_shape_output(TestProcessorWithReturnedWeights):
         )
 
 
-class Test__compute_attention(TestProcessorWithReturnedWeights):
+class Test__compute_attention(TestSelfAttentionProcessor):
     def test__average_attention_weights_flag__True(self):
         config = MultiHeadAttentionConfig(
             source_sequence_length=32,
