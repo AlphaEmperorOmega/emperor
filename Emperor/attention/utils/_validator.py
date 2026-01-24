@@ -138,12 +138,12 @@ class MultiHeadAttentionValidator:
             and self.value_model is not None
         )
         assert ensure_qkv_models_exist, (
-            "When query, key, and value are not the same and self attention is not performed, ensure `projector_option` is `True`"
+            "When query, key, and value are not the same and self attention is not performed, ensure `attention_option` is `True`"
         )
 
     def validate_attention_weights_flag_with_projection_type(self):
         assert not self.return_attention_weights_flag, (
-            "`attention_weights` can be returned only when self attention is performed, ensure that `projector_option` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
+            "`attention_weights` can be returned only when self attention is performed, ensure that `attention_option` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
         )
 
     def check_indepentent_projections_inputs(self, key: Tensor, value: Tensor) -> None:
