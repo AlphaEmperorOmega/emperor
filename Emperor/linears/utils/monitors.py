@@ -1,6 +1,7 @@
 import os
 
 import torch
+from torch.nn import Parameter
 from torch.types import Tensor
 from torch.utils.tensorboard import SummaryWriter
 
@@ -55,7 +56,9 @@ class DataMonitor:
         self.update_frequency = 20
         DataMonitor.test += 1
 
-    def update(self, inputs: Tensor, outputs: Tensor) -> None:
+    def update(
+        self, inputs: Tensor | Parameter, outputs: Tensor | Parameter | None
+    ) -> None:
         self.monitor.increase_step()
 
         input_mean = torch.mean(inputs)
