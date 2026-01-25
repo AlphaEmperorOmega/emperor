@@ -10,5 +10,5 @@ class ProcessorValidator:
     def __init__(self, model: "ProcessorBase"):
         self.model = model
 
-    def get_batched_input_flag(self, tensor: Tensor) -> bool:
-        return tensor.size(0) > 1
+    def is_input_tensor_single_batch(self, tensor: Tensor) -> bool:
+        return tensor.size(0) == 1
