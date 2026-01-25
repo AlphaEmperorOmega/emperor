@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from Emperor.attention.utils.handlers.reshaper import ReshaperBase
+from Emperor.attention.utils.handlers.reshaper import ReshaperBase, ReshaperBuilder
 from Emperor.attention.utils.handlers.validators._processor import ProcessorValidator
 
 from typing import TYPE_CHECKING
@@ -19,10 +19,10 @@ class ProcessorBuilder:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        output_model: nn.Module,
+        projector: "ProjectorBase",
     ):
         self.cfg = cfg
-        self.output_model = output_model
+        self.projector = projector
         self.attention_option = self.cfg.attention_option
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
         self.use_kv_expert_models_flag = self.cfg.use_kv_expert_models_flag
@@ -30,7 +30,7 @@ class ProcessorBuilder:
     def build(self) -> "ProcessorBase":
         from Emperor.attention.utils.enums import AttentionOptions
 
-        inputs = (self.cfg, self.output_model)
+        inputs = (self.cfg, self.projector)
         match self.attention_option:
             case AttentionOptions.SELF_ATTENTION:
                 return SelfAttentionProcessor(*inputs)
@@ -83,7 +83,7 @@ class ProcessorBase:
         self.v_head_dim = (
             self.value_projection_dim // self.num_heads if is_v_dim else self.head_dim
         )
-        self.reshaper = ReshaperBase(self.cfg)
+        self.reshaper = ReshaperBuilder(self.cfg).build()
         self.validator = ProcessorValidator(self)
 
     def _compute_attention_output(self, weighted_values: Tensor) -> Tensor:
@@ -113,9 +113,9 @@ class SelfAttentionProcessor(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        output_model: nn.Module,
+        projector: "ProjectorBase",
     ):
-        super().__init__(cfg, output_model)
+        super().__init__(cfg, projector)
 
     def compute_attention(
         self,
@@ -218,9 +218,9 @@ class IndependentProcessor(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        output_model: nn.Module,
+        projector: "ProjectorBase",
     ):
-        super().__init__(cfg, output_model)
+        super().__init__(cfg, projector)
 
     def compute_attention(
         self,
@@ -228,7 +228,7 @@ class IndependentProcessor(ProcessorBase):
         key: Tensor,
         value: Tensor,
         attention_mask: Tensor | None,
-    ) -> tuple[Tensor, None]:
+    ) -> tuple[Tensor, Tensor | None]:
         attention_mask = self.__prepare_attnetion_mask(attention_mask)
         query, key, value = self.reshaper.reshape_before_attention(query, key, value)
         weighted_values = self.__compute_weighted_values(
@@ -252,7 +252,7 @@ class IndependentProcessor(ProcessorBase):
             self.batch_size,
             self.num_heads,
             self.target_sequence_length,
-            -1,
+            self.source_sequence_length,
         )
 
     def __compute_weighted_values(
@@ -283,17 +283,17 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
-        output_model: nn.Module,
+        projector: "ProjectorBase",
     ):
-        super().__init__(cfg, output_model)
+        super().__init__(cfg, projector)
 
     def compute_attention(
         self,
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        attention_mask: Tensor | None,
-    ) -> tuple[Tensor, None]:
+        attention_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None]:
         weights = self.__compute_masked_attention_weights(query, key, attention_mask)
         weighted_value = self.__compute_weighted_values(weights, value)
         output = self._compute_attention_output(weighted_value)
