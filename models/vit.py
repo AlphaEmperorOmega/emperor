@@ -34,7 +34,7 @@ from Emperor.behaviours.utils.enums import (
 
 
 @dataclass
-class VITModelConfig(ConfigBase):
+class VITExperimentConfig(ConfigBase):
     patch_config: "PatchConfig | None" = field(
         default=None,
         metadata={"help": ""},
@@ -60,11 +60,8 @@ class VITModel(Module):
     ):
         super().__init__()
         self.cfg = cfg
-        self.input_dim = self.cfg.input_dim
-        self.hidden_dim = self.cfg.hidden_dim
-        self.output_dim = self.cfg.output_dim
+        self.main_cfg: VITExperimentConfig = self._resolve_main_config(self.cfg, cfg)
 
-        self.main_cfg: VITModelConfig = self._resolve_main_config(self.cfg, cfg)
         self.patch_config = self.main_cfg.patch_config
         self.embedding_config = self.main_cfg.positional_embedding_config
         self.encoder_config = self.main_cfg.encoder_config
@@ -206,7 +203,7 @@ class VITExperimentPresets:
             input_dim=self.input_dim,
             hidden_dim=self.embedding_dim,
             output_dim=self.output_dim,
-            override_config=VITModelConfig(
+            override_config=VITExperimentConfig(
                 patch_config=PatchConfig(
                     patch_option=PatchOptions.CONV,
                     embedding_dim=self.embedding_dim,
@@ -262,7 +259,7 @@ class VITExperimentPresets:
                         target_sequence_length=self.sequence_length,
                         source_sequence_length=self.sequence_length,
                         target_dtype=torch.float32,
-                        is_self_attention_projector_flag=True,
+                        attention_option=True,
                         dropout_probability=self.dropout_probability,
                         key_value_bias_flag=False,
                         zero_attention_flag=False,
@@ -399,7 +396,7 @@ class VITExperimentPresets:
             input_dim=self.input_dim,
             hidden_dim=self.embedding_dim,
             output_dim=self.output_dim,
-            override_config=VITModelConfig(
+            override_config=VITExperimentConfig(
                 patch_config=PatchConfig(
                     patch_option=PatchOptions.CONV,
                     num_input_channels=self.input_channels,
@@ -448,7 +445,7 @@ class VITExperimentPresets:
                     target_sequence_length=self.sequence_length,
                     source_sequence_length=self.sequence_length,
                     target_dtype=torch.float32,
-                    is_self_attention_projector_flag=False,
+                    attention_option=False,
                     dropout_probability=self.dropout_probability,
                     key_value_bias_flag=False,
                     zero_attention_flag=False,
