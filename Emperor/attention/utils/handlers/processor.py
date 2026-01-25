@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.attention.utils.handlers.reshaper import ReshaperBase
 from Emperor.attention.utils.handlers.validators._processor import ProcessorValidator
 
@@ -29,14 +28,20 @@ class ProcessorBuilder:
         self.use_kv_expert_models_flag = self.cfg.use_kv_expert_models_flag
 
     def build(self) -> "ProcessorBase":
+        from Emperor.attention.utils.enums import AttentionOptions
+
         inputs = (self.cfg, self.output_model)
         match self.attention_option:
             case AttentionOptions.SELF_ATTENTION:
                 return SelfAttentionProcessor(*inputs)
             case AttentionOptions.INDEPENDENT:
-                return ProcessorDefault(*inputs)
+                return IndependentProcessor(*inputs)
             case AttentionOptions.MIXTURE_OF_ATTENTION_HEADS:
                 return MixtureOfAttentionHeadsProcessor(*inputs)
+            case _:
+                raise ValueError(
+                    f"Attention option not supported or unknown option given: {self.attention_option}"
+                )
 
 
 class ProcessorBase:
@@ -209,7 +214,7 @@ class SelfAttentionProcessor(ProcessorBase):
         return attention_output, attention_weights
 
 
-class ProcessorDefault(ProcessorBase):
+class IndependentProcessor(ProcessorBase):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",

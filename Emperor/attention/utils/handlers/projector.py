@@ -11,7 +11,6 @@ from Emperor.attention.utils.handlers.validators._projector import (
     SelfAttentionProjectorValidator,
 )
 
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -42,6 +41,10 @@ class ProjectorBuilder(Module):
                 return IndependentProjector(self.cfg)
             case AttentionOptions.MIXTURE_OF_ATTENTION_HEADS:
                 return MixtureOfAttentionHeadsProjector(self.cfg)
+            case _:
+                raise ValueError(
+                    f"Attention option not supported or unknown option given: {self.attention_option}"
+                )
 
     def __should_use_self_attention_projector(self):
         are_qk_dims_same = self.embedding_dim == self.query_key_projection_dim

@@ -3,11 +3,11 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.attention.utils.handlers.projector import ProjectorBase
+    from Emperor.attention.utils.handlers.processor import ProcessorBase
 
 
 class ProcessorValidator:
-    def __init__(self, model: "ProjectorBase"):
+    def __init__(self, model: "ProcessorBase"):
         self.model = model
 
     def get_batched_input_flag(self, tensor: Tensor) -> bool:
