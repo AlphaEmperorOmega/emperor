@@ -60,13 +60,15 @@ class ProjectorBase(Module):
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.model_type = self.cfg.model_type.value
-        self.embedding_dim = self.cfg.embedding_dim
-        self.query_key_projection_dim = self.cfg.query_key_projection_dim
-        self.value_projection_dim = self.cfg.value_projection_dim
-        self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
-        self.attention_option = self.cfg.attention_option
+        self.embedding_dim: int = self.cfg.embedding_dim
+        self.query_key_projection_dim: int = self.cfg.query_key_projection_dim
+        self.value_projection_dim: int = self.cfg.value_projection_dim
+        self.return_attention_weights_flag: bool = (
+            self.cfg.return_attention_weights_flag
+        )
+        self.attention_option: "AttentionOptions" = self.cfg.attention_option
         self.experts_config = self.cfg.experts_config
-        self.use_kv_expert_models_flag = self.cfg.use_kv_expert_models_flag
+        self.use_kv_expert_models_flag: bool = self.cfg.use_kv_expert_models_flag
         self.__resolve_kv_dimensions()
         self.output_model = self._build_output_model()
 
