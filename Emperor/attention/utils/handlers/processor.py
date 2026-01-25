@@ -168,18 +168,15 @@ class SelfAttentionProcessor(ProcessorBase):
         values: Tensor,
     ) -> Tensor:
         assert self.target_sequence_length == self.source_sequence_length, (
-            f"At the moment different source and target sequence lengths are not supported so `target_sequence_length`: {self.target_sequence_length} must be equal to `source_sequence_length`:{self.source_sequence_length}. See if this can be fixed in the future."
-        )
-        # The reason this does not work is because `weighted_values` after torch.bmm(attention_weights, values)
-        # need to be reshaped into `weighted_values_output_shape`, if `source_sequence_length` and
-        # `target_sequence_length` are different then the reshaping will not work.
-        weighted_values_output_shape = (
-            self.target_sequence_length * self.batch_size,
-            self.embedding_dim,
+            f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
         )
         weighted_values = torch.bmm(attention_weights, values)
         weighted_values = weighted_values.transpose(0, 1)
         weighted_values = weighted_values.contiguous()
+        weighted_values_output_shape = (
+            self.target_sequence_length * self.batch_size,
+            self.embedding_dim,
+        )
         return weighted_values.view(weighted_values_output_shape)
 
     def __ensure_correct_shape_output(
@@ -207,11 +204,11 @@ class SelfAttentionProcessor(ProcessorBase):
     def __handle_batched_input(
         self, attention_output: Tensor, attention_weights: Tensor
     ) -> tuple[Tensor, Tensor]:
-        if not self.validator.get_batched_input_flag(attention_output):
-            output_with_removed_batch_dim = attention_output.squeeze(1)
-            weights_with_removed_batch_dim = attention_weights.squeeze(0)
-            return output_with_removed_batch_dim, weights_with_removed_batch_dim
-        return attention_output, attention_weights
+        if self.validator.is_input_tensor_single_batch(attention_output):
+            return attention_output, attention_weights
+        output_with_removed_batch_dim = attention_output.squeeze(1)
+        weights_with_removed_batch_dim = attention_weights.squeeze(0)
+        return output_with_removed_batch_dim, weights_with_removed_batch_dim
 
 
 class IndependentProcessor(ProcessorBase):
@@ -235,7 +232,7 @@ class IndependentProcessor(ProcessorBase):
             query, key, value, attention_mask
         )
         attention_output = self._compute_attention_output(weighted_values)
-        if not self.validator.get_batched_input_flag(attention_output):
+        if self.validator.is_input_tensor_single_batch(attention_output):
             attention_output = attention_output.squeeze(1)
         return attention_output, None
 
