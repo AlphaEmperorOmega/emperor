@@ -4,10 +4,6 @@ import unittest
 from torch.nn import Sequential
 
 from Emperor.attention.utils.enums import AttentionOptions
-from Emperor.experts.options import (
-    MixtureOfExpertsOptions,
-    MixtureOfExpertsStackOptions,
-)
 from Emperor.experts.utils.model import MixtureOfExpertsModel
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
