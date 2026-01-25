@@ -41,11 +41,12 @@ class ReshaperBase:
         self.batch_size: int = self.cfg.batch_size
         self.num_heads: int = self.cfg.num_heads
         self.embedding_dim: int = self.cfg.embedding_dim
+        self.target_sequence_length: int = self.cfg.target_sequence_length
         self.attention_option = self.cfg.attention_option
-        self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
         self.query_key_projection_dim: int = self.cfg.query_key_projection_dim
         self.value_projection_dim: int = self.cfg.value_projection_dim
         self.head_dim = self.embedding_dim // self.num_heads
+        self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
         self.validator = ReshaperValidator(self)
 
     def __resolve_qkv_head_dim(self):
@@ -82,12 +83,28 @@ class ReshaperBase:
         return query, key, value
 
     def _reshape_query(self, query: Tensor) -> Tensor:
-        q_shape = (self.batch_size, self.num_heads, -1, self.qk_head_dim)
+        q_shape = (
+            self.batch_size,
+            self.num_heads,
+            self.target_sequence_length,
+            self.qk_head_dim,
+        )
         return query.view(q_shape)
 
     def _reshape_kv(self, key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
-        k_shape = (self.batch_size, self.num_heads, -1, self.qk_head_dim)
-        v_shape = (self.batch_size, self.num_heads, -1, self.v_head_dim)
+        source_sequence_length = key.size(1)
+        k_shape = (
+            self.batch_size,
+            self.num_heads,
+            source_sequence_length,
+            self.qk_head_dim,
+        )
+        v_shape = (
+            self.batch_size,
+            self.num_heads,
+            source_sequence_length,
+            self.v_head_dim,
+        )
         return key.view(k_shape), value.view(v_shape)
 
 
