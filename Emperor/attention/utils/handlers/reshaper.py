@@ -1,6 +1,5 @@
 from torch import Tensor
 from Emperor.base.utils import Module
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.attention.utils.handlers.validators._reshaper import ReshaperValidator
 
 from typing import TYPE_CHECKING
