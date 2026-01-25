@@ -47,20 +47,22 @@ class ProcessorBase:
     ):
         self.cfg = cfg
         self.projector = projector
-        self.num_heads = self.cfg.num_heads
-        self.batch_size = self.cfg.batch_size
-        self.embedding_dim = self.cfg.embedding_dim
-        self.dropout_probability = self.cfg.dropout_probability
-        self.target_sequence_length = self.cfg.target_sequence_length
-        self.source_sequence_length = self.cfg.source_sequence_length
-        self.query_key_projection_dim = self.cfg.query_key_projection_dim
-        self.value_projection_dim = self.cfg.value_projection_dim
-        self.use_kv_expert_models_flag = self.cfg.use_kv_expert_models_flag
-        self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
-        self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
-        self.zero_attention_flag = self.cfg.zero_attention_flag
-        self.add_key_value_bias_flag = self.cfg.add_key_value_bias_flag
-        self.head_dim = self.embedding_dim // self.num_heads
+        self.num_heads: int = self.cfg.num_heads
+        self.batch_size: int = self.cfg.batch_size
+        self.embedding_dim: int = self.cfg.embedding_dim
+        self.dropout_probability: float = self.cfg.dropout_probability
+        self.target_sequence_length: int = self.cfg.target_sequence_length
+        self.source_sequence_length: int = self.cfg.source_sequence_length
+        self.query_key_projection_dim: int = self.cfg.query_key_projection_dim
+        self.value_projection_dim: int = self.cfg.value_projection_dim
+        self.use_kv_expert_models_flag: bool = self.cfg.use_kv_expert_models_flag
+        self.causal_attention_mask_flag: bool = self.cfg.causal_attention_mask_flag
+        self.average_attention_weights_flag: bool = (
+            self.cfg.average_attention_weights_flag
+        )
+        self.zero_attention_flag: bool = self.cfg.zero_attention_flag
+        self.add_key_value_bias_flag: bool = self.cfg.add_key_value_bias_flag
+        self.head_dim: int = self.embedding_dim // self.num_heads
         is_qk_dim = (
             self.query_key_projection_dim is not None
             and self.query_key_projection_dim != 0
