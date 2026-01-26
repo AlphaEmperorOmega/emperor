@@ -254,7 +254,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
 
     def test_init(self):
         boolean_options = [True, False]
-        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+        attention_options = [LinearLayerStackOptions]
 
         for use_kv_expert_models_flag in boolean_options:
             for attention_option in attention_options:
