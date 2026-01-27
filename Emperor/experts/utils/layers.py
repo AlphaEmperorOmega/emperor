@@ -86,19 +86,21 @@ class MixtureOfExperts(Module):
         super().__init__()
         config = getattr(cfg, "mixture_of_experts_config", cfg)
         self.cfg: "MixtureOfExpertsConfig" = self._overwrite_config(config, overrides)
-        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
+        self.main_cfg: "LayerStackConfig" = self._resolve_main_config(self.cfg, cfg)
 
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
-        self.layer_stack_model = self.cfg.layer_stack_option
-        self.top_k = self.cfg.top_k
-        self.num_experts = self.cfg.num_experts
-        self.compute_expert_mixture_flag = self.cfg.compute_expert_mixture_flag
-        self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
-        self.init_sampler_option = self.cfg.init_sampler_option
-        self.weighting_position_option = self.cfg.weighting_position_option
-        self.router_model_config = self.cfg.router_model_config
-        self.sampler_model_config = self.cfg.sampler_model_config
+        self.input_dim: int = self.cfg.input_dim
+        self.output_dim: int = self.cfg.output_dim
+        self.layer_stack_model: "LinearLayerStackOptions" = self.cfg.layer_stack_option
+        self.top_k: int = self.cfg.top_k
+        self.num_experts: int = self.cfg.num_experts
+        self.compute_expert_mixture_flag: bool = self.cfg.compute_expert_mixture_flag
+        self.weighted_parameters_flag: bool = self.cfg.weighted_parameters_flag
+        self.init_sampler_option: "InitSamplerOptions" = self.cfg.init_sampler_option
+        self.weighting_position_option: "ExpertWeightingPositionOptions" = (
+            self.cfg.weighting_position_option
+        )
+        self.router_model_config: "RouterConfig" = self.cfg.router_model_config
+        self.sampler_model_config: "SamplerConfig" = self.cfg.sampler_model_config
 
         self.validator = _Validator(self)
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
@@ -134,7 +136,7 @@ class MixtureOfExperts(Module):
         input_batch: Tensor,
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         probabilities, indices, sampler_loss = self.__maybe_compute_expert_indices(
             input_batch, probabilities, indices
         )
