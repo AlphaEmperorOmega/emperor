@@ -24,7 +24,7 @@ class LinearBaseValidator:
                 )
 
     def __ensure_types(self) -> None:
-        from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
+        from Emperor.linears.utils.monitors import TensorMonitor, StatisticsMonitor
 
         if not isinstance(self.model.input_dim, int):
             raise TypeError(
@@ -40,17 +40,17 @@ class LinearBaseValidator:
             )
         if self.model.data_monitor is not None and not (
             isinstance(self.model.data_monitor, type)
-            and issubclass(self.model.data_monitor, DataMonitor)
+            and issubclass(self.model.data_monitor, TensorMonitor)
         ):
             raise TypeError(
-                "Type Error: 'data_monitor' should be a DataMonitor subclass or None."
+                "Type Error: 'data_monitor' should be a TensorMonitor subclass or None."
             )
         if self.model.parameter_monitor is not None and not (
             isinstance(self.model.parameter_monitor, type)
-            and issubclass(self.model.parameter_monitor, ParameterMonitor)
+            and issubclass(self.model.parameter_monitor, StatisticsMonitor)
         ):
             raise TypeError(
-                "Type Error: 'parameter_monitor' should be a ParameterMonitor subclass or None."
+                "Type Error: 'parameter_monitor' should be a StatisticsMonitor subclass or None."
             )
 
     def __ensure_positive_dimensions(self) -> None:

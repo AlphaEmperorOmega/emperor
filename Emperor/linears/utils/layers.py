@@ -7,7 +7,7 @@ from torch.nn import Parameter
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils._validator import LinearBaseValidator
-from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
+from Emperor.linears.utils.monitors import TensorMonitor, StatisticsMonitor
 from Emperor.behaviours.model import (
     AdaptiveParameterBehaviour,
     AdaptiveParameterBehaviourConfig,
@@ -35,13 +35,17 @@ class LinearLayerConfig(ConfigBase):
             "help": "When true bias will be added to after the matrix multiplication between, the input and output"
         },
     )
-    data_monitor: type[DataMonitor] | None = field(
+    data_monitor: type[TensorMonitor] | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Optional monitor class that tracks input/output statistics and logs to TensorBoard."
+        },
     )
-    parameter_monitor: type[ParameterMonitor] | None = field(
+    parameter_monitor: type[StatisticsMonitor] | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={
+            "help": "Optional monitor class that tracks parameter statistics (mean/var/norm) and logs to TensorBoard."
+        },
     )
 
 
@@ -60,9 +64,9 @@ class LinearBase(Module):
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag
-        self.data_monitor: DataMonitor = self.construct(self.cfg.data_monitor)
+        self.data_monitor: TensorMonitor = self.construct(self.cfg.data_monitor)
         self.weight_params, self.bias_params = self._init_parameters()
-        self.parameter_monitor: ParameterMonitor = self.construct(
+        self.parameter_monitor: StatisticsMonitor = self.construct(
             self.cfg.parameter_monitor
         )
         self.validator = LinearBaseValidator(self)
