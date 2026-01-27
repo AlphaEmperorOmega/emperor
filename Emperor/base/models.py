@@ -24,37 +24,36 @@ class Classifier(Module):
         loss = self.loss(output, batch[-1])
         accuracy = self.accuracy(output, batch[-1])
 
-        self.log_train_metrics(loss, accuracy)
-
         if auxilary_loss is not None:
             loss += auxilary_loss
+
+        self.log_train_metrics(loss, accuracy)
 
         return loss, auxilary_loss
 
     def validation_step(self, batch):
-        Y_hat, auxilaryLoss = self(*batch[:-1])
+        Y_hat, auxilary_loss = self(*batch[:-1])
         loss = self.loss(Y_hat, batch[-1])
         accuracy = self.accuracy(Y_hat, batch[-1])
 
+        if auxilary_loss is not None:
+            loss += auxilary_loss
+
         self.log_validation_metrics(loss, accuracy)
-
-        if auxilaryLoss is not None:
-            loss += auxilaryLoss
-
-        return loss, auxilaryLoss
+        return loss, auxilary_loss
 
     def accuracy(self, Y_hat, Y, averaged=True):
-        """Compute the number of correct predictions."""
-        Y_hat = reshape(Y_hat, (-1, Y_hat.shape[-1])).to("cpu")
-        preds = astype(argmax(Y_hat, axis=1), Y.dtype)
-        compare = astype(preds == reshape(Y, -1), float32)
-        return reduce_mean(compare) if averaged else compare
+        Y_hat = Y_hat.detach().cpu()
+        Y = Y.detach().cpu().view(-1)
+        preds = Y_hat.argmax(dim=1)
+        correct = (preds == Y).float()
+        return correct.mean() if averaged else correct
 
     def loss(self, Y_hat, Y, averaged=True):
-        Y_hat = reshape(Y_hat, (-1, Y_hat.shape[-1]))
-        Y = reshape(Y, (-1,)).to(device)
-        loss = F.cross_entropy(Y_hat, Y, reduction="mean" if averaged else "none")
-        return loss
+        Y_hat = Y_hat.view(-1, Y_hat.size(-1))
+        Y = Y.view(-1).to(Y_hat.device)
+        reduction = "mean" if averaged else "none"
+        return F.cross_entropy(Y_hat, Y, reduction=reduction)
 
     def layer_summary(self, X_shape):
         X = randn(*X_shape)
