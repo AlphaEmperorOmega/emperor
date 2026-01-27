@@ -286,7 +286,7 @@ class MixtureOfExperts(Module):
         indices: Tensor,
         probabilities: Tensor | None = None,
     ) -> Tensor:
-        _, output_dim = experts_output.shape
+        output_dim = experts_output.size(-1)
         if self.top_k != self.num_experts:
             _, _index_sorted_indices = indices.sort(dim=0)
             experts_output = experts_output[_index_sorted_indices]
