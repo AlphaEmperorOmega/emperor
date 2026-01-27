@@ -6,6 +6,7 @@ from torch import Tensor
 from torch.nn import Parameter
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
+from Emperor.linears.utils._validator import LinearBaseValidator
 from Emperor.linears.utils.monitors import DataMonitor, ParameterMonitor
 from Emperor.behaviours.model import (
     AdaptiveParameterBehaviour,
@@ -64,6 +65,7 @@ class LinearBase(Module):
         self.parameter_monitor: ParameterMonitor = self.construct(
             self.cfg.parameter_monitor
         )
+        self.validator = LinearBaseValidator(self)
 
     def _init_parameters(self) -> tuple[Parameter, Parameter | None]:
         weight_params = self.__init_weight_parameters()
