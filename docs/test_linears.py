@@ -1,20 +1,14 @@
 import torch
 import unittest
 
-from dataclasses import asdict
-
 from torch.nn import Sequential
 from Emperor.base.layer import Layer
-from Emperor.config import ModelConfig
 from Emperor.linears.utils.presets import LinearPresets
 from Emperor.linears.utils.stack import AdaptiveLinearLayerStack, LinearLayerStack
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
 )
 from Emperor.linears.utils.layers import (
     AdaptiveLinearLayer,
@@ -23,30 +17,7 @@ from Emperor.linears.utils.layers import (
 )
 
 
-class TestLinears(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.input_dim = None
-        self.output_dim = None
-
-    def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = (
-            LinearPresets.base_linear_layer_preset() if config is None else config
-        )
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
-
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
-
-
-class TestLinearLayer(TestLinears):
+class TestLinearLayer(unittest.TestCase):
     def test_init_with_different_configation_options(self):
         bias_options = [True, False]
         for bias_flag in bias_options:
@@ -54,7 +25,7 @@ class TestLinearLayer(TestLinears):
             with self.subTest(i=message):
                 c = LinearPresets.base_linear_layer_preset(bias_flag=bias_flag)
                 overrides = LinearLayerConfig(bias_flag=bias_flag)
-                m = LinearLayer(self.cfg, overrides)
+                m = LinearLayer(c, overrides)
 
                 self.assertEqual(m.input_dim, c.input_dim)
                 self.assertEqual(m.output_dim, c.output_dim)
@@ -88,8 +59,46 @@ class TestLinearLayer(TestLinears):
                         expected_output_shape = (c.batch_size, overrides.output_dim)
                         self.assertEqual(output.shape, expected_output_shape)
 
+    def test_gradients_flow_through_linear_layer(self):
+        input_params = [4, 8]
+        output_params = [3, 6]
+        for input_dim in input_params:
+            for output_dim in output_params:
+                for bias_flag in [True, False]:
+                    with self.subTest(
+                        input_dim=input_dim, output_dim=output_dim, bias_flag=bias_flag
+                    ):
+                        c = LinearPresets.base_linear_layer_preset(
+                            return_model_config_flag=True
+                        )
+                        overrides = LinearLayerConfig(
+                            input_dim=input_dim,
+                            output_dim=output_dim,
+                            bias_flag=bias_flag,
+                        )
+                        m = LinearLayer(c, overrides)
 
-class TestAdaptiveLinearLayer(TestLinears):
+                        input_batch = torch.randn(
+                            c.batch_size, overrides.input_dim, requires_grad=True
+                        )
+                        output = m.forward(input_batch)
+                        output.sum().backward()
+
+                        self.assertIsNotNone(m.weight_params.grad)
+                        self.assertEqual(
+                            m.weight_params.grad.shape, m.weight_params.shape
+                        )
+
+                        if bias_flag:
+                            self.assertIsNotNone(m.bias_params.grad)
+                            self.assertEqual(
+                                m.bias_params.grad.shape, m.bias_params.shape
+                            )
+                        else:
+                            self.assertIsNone(m.bias_params)
+
+
+class TestAdaptiveLinearLayer(unittest.TestCase):
     def test_init_with_different_configation_options(self):
         bias_options = [True, False]
 
@@ -118,84 +127,54 @@ class TestAdaptiveLinearLayer(TestLinears):
 
     def test_forward(self):
         bias_options = [True, False]
-        input_params = output_params = [4, 8, 16]
-        layer_stack_options = [1, 2, 3]
+        input_params = output_params = [8, 16]
 
-        # for linear_stack_option in layer_stack_options:
-        #     for bias_flag in bias_options:
-        #         for input_dim in input_params:
-        #             for output_dim in output_params:
-        #                 for generators_depth in DynamicDepthOptions:
-        #                     for diagonal_option in DynamicDiagonalOptions:
-        #                         for bias_option in DynamicBiasOptions:
-        #                             for memory_option in LinearMemoryOptions:
-        #                                 for (
-        #                                     position_option
-        #                                 ) in LinearMemoryPositionOptions:
-        #                                     for size_option in LinearMemorySizeOptions:
-        #                                         message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Memory option: {memory_option}, Position option: {position_option}, Size option: {size_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
-        #                                         with self.subTest(message=message):
-        #                                             batch_size = 2
-        #                                             cfg = LinearPresets.adaptive_linear_layer_preset(
-        #                                                 return_model_config_flag=True,
-        #                                                 stack_num_layers=linear_stack_option,
-        #                                                 batch_size=batch_size,
-        #                                                 input_dim=input_dim,
-        #                                                 output_dim=output_dim,
-        #                                                 bias_flag=bias_flag,
-        #                                                 generator_depth=generators_depth,
-        #                                                 diagonal_option=diagonal_option,
-        #                                                 bias_option=bias_option,
-        #                                                 memory_option=memory_option,
-        #                                                 memory_position_option=position_option,
-        #                                                 memory_size_option=size_option,
-        #                                             )
-        #
-        #                                             if (
-        #                                                 memory_option
-        #                                                 != LinearMemoryOptions.DISABLED
-        #                                                 and size_option
-        #                                                 == LinearMemorySizeOptions.DISABLED
-        #                                             ):
-        #                                                 with self.assertRaises(
-        #                                                     ValueError
-        #                                                 ):
-        #                                                     m = AdaptiveLinearLayer(cfg)
-        #                                             else:
-        #                                                 m = AdaptiveLinearLayer(cfg)
-        #                                                 input_batch = torch.randn(
-        #                                                     batch_size, input_dim
-        #                                                 )
-        #                                                 should_throw_error = [
-        #                                                     DynamicBiasOptions.SCALE_AND_OFFSET,
-        #                                                     DynamicBiasOptions.ELEMENT_WISE_OFFSET,
-        #                                                 ]
-        #                                                 if (
-        #                                                     not bias_flag
-        #                                                     and bias_option
-        #                                                     in should_throw_error
-        #                                                 ):
-        #                                                     with self.assertRaises(
-        #                                                         ValueError
-        #                                                     ):
-        #                                                         output = m.forward(
-        #                                                             input_batch
-        #                                                         )
-        #                                                 else:
-        #                                                     output = m.forward(
-        #                                                         input_batch
-        #                                                     )
-        #                                                     expected_output_shape = (
-        #                                                         batch_size,
-        #                                                         output_dim,
-        #                                                     )
-        #                                                     self.assertEqual(
-        #                                                         output.shape,
-        #                                                         expected_output_shape,
-        #                                                     )
+        for bias_flag in bias_options:
+            for input_dim in input_params:
+                for output_dim in output_params:
+                    for generators_depth in DynamicDepthOptions:
+                        for diagonal_option in DynamicDiagonalOptions:
+                            for bias_option in DynamicBiasOptions:
+                                message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
+                                with self.subTest(message=message):
+                                    batch_size = 2
+                                    cfg = LinearPresets.adaptive_linear_layer_preset(
+                                        return_model_config_flag=True,
+                                        stack_num_layers=3,
+                                        batch_size=batch_size,
+                                        input_dim=input_dim,
+                                        output_dim=output_dim,
+                                        bias_flag=bias_flag,
+                                        generator_depth=generators_depth,
+                                        diagonal_option=diagonal_option,
+                                        bias_option=bias_option,
+                                    )
+
+                                    m = AdaptiveLinearLayer(cfg)
+                                    input_batch = torch.randn(batch_size, input_dim)
+                                    should_throw_error = [
+                                        DynamicBiasOptions.SCALE_AND_OFFSET,
+                                        DynamicBiasOptions.ELEMENT_WISE_OFFSET,
+                                    ]
+                                    if (
+                                        not bias_flag
+                                        and bias_option in should_throw_error
+                                    ):
+                                        with self.assertRaises(ValueError):
+                                            output = m.forward(input_batch)
+                                    else:
+                                        output = m.forward(input_batch)
+                                        expected_output_shape = (
+                                            batch_size,
+                                            output_dim,
+                                        )
+                                        self.assertEqual(
+                                            output.shape,
+                                            expected_output_shape,
+                                        )
 
 
-class TestLinearLayerBaseStack(TestLinears):
+class TestLinearLayerBaseStack(unittest.TestCase):
     def test_init_with_different_configation_options(self):
         num_layer_options = [1, 2, 3]
 
@@ -213,8 +192,32 @@ class TestLinearLayerBaseStack(TestLinears):
                 else:
                     self.assertIsInstance(m, Sequential)
 
+    def test_gradients_flow_through_linear_layer_stack(self):
+        num_layer_options = [1, 2, 3]
+        for num_layers in num_layer_options:
+            with self.subTest(num_layers=num_layers):
+                batch_size = 2
+                input_dim = 8
+                output_dim = 4
+                cfg = LinearPresets.base_linear_layer_stack_preset(
+                    return_model_config_flag=True,
+                    stack_num_layers=num_layers,
+                    batch_size=batch_size,
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                )
+                m = LinearLayerStack(cfg).build_model()
 
-class TestLinearLayerAdaptiveStack(TestLinears):
+                input_batch = torch.randn(batch_size, input_dim, requires_grad=True)
+                output = m.forward(input_batch)
+                output.sum().backward()
+
+                grads = [p.grad for p in m.parameters() if p.requires_grad]
+                non_none_grads = [g for g in grads if g is not None]
+                self.assertTrue(len(non_none_grads) > 0)
+
+
+class TestLinearLayerAdaptiveStack(unittest.TestCase):
     def test_init_with_different_configation_options(self):
         num_layer_options = [1, 2, 3]
 
@@ -231,3 +234,28 @@ class TestLinearLayerAdaptiveStack(TestLinears):
                     self.assertIsInstance(m, Layer)
                 else:
                     self.assertIsInstance(m, Sequential)
+
+    def test_gradients_flow_through_adaptive_linear_layer_stack(self):
+        num_layer_options = [1, 2, 3]
+        for num_layers in num_layer_options:
+            with self.subTest(num_layers=num_layers):
+                batch_size = 2
+                input_dim = 8
+                output_dim = 4
+                cfg = LinearPresets.adaptive_linear_layer_stack_preset(
+                    return_model_config_flag=True,
+                    stack_num_layers=num_layers,
+                    batch_size=batch_size,
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                )
+
+                m = AdaptiveLinearLayerStack(cfg).build_model()
+
+                input_batch = torch.randn(batch_size, input_dim, requires_grad=True)
+                output = m.forward(input_batch)
+                output.sum().backward()
+
+                grads = [p.grad for p in m.parameters() if p.requires_grad]
+                non_none_grads = [g for g in grads if g is not None]
+                self.assertTrue(len(non_none_grads) > 0)
