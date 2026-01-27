@@ -19,7 +19,7 @@ class Experiments:
     def __init__(
         self,
         mini_datasetset_flag: bool = True,
-        print_loss_frequency=50,
+        print_loss_frequency: int = 50,
     ) -> None:
         self.mini_datasetset_flag = mini_datasetset_flag
         self.print_loss_flag = True
@@ -48,6 +48,9 @@ class Experiments:
 
     def _set_model_config(self, model_config: "ModelConfig") -> None:
         self.model_config = model_config
+
+    def _set_dataset_option(self, dataset_option) -> None:
+        self.dataset_options = [dataset_option]
 
     def _get_experiment_type(self):
         return ClassifierExperiment
