@@ -1,6 +1,4 @@
-import math
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
@@ -8,7 +6,6 @@ from Emperor.attention.utils.handlers.reshaper import ReshaperBase, ReshaperBuil
 from Emperor.attention.utils.handlers.validators._processor import ProcessorValidator
 
 from typing import TYPE_CHECKING
-
 
 if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
@@ -148,8 +145,7 @@ class SelfAttentionProcessor(ProcessorBase):
 
     def __scale_query(self, query: Tensor) -> Tensor:
         head_dim = query.size(-1)
-        query_scalar = math.sqrt(1.0 / float(head_dim))
-        return query * query_scalar
+        return query * head_dim**-0.5
 
     def __compute_raw_masked_attention_weights(
         self,
@@ -167,17 +163,16 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
-        assert self.target_sequence_length == self.source_sequence_length, (
-            f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
-        )
+        assert (
+            self.target_sequence_length == self.source_sequence_length
+        ), f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
         weighted_values = torch.bmm(attention_weights, values)
-        weighted_values = weighted_values.transpose(0, 1)
-        weighted_values = weighted_values.contiguous()
-        weighted_values_output_shape = (
+        values = weighted_values.transpose(0, 1)
+        values = values.contiguous()
+        return values.view(
             self.target_sequence_length * self.batch_size,
             self.embedding_dim,
         )
-        return weighted_values.view(weighted_values_output_shape)
 
     def __ensure_correct_shape_output(
         self,
@@ -283,6 +278,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         projector: "ProjectorBase",
     ):
         super().__init__(cfg, projector)
+        self.top_k: int = self.projector.top_k
 
     def compute_attention(
         self,
@@ -291,6 +287,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         value: Tensor,
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None]:
+        query, key, value = self.reshaper.reshape_before_attention(query, key, value)
         weights = self.__compute_masked_attention_weights(query, key, attention_mask)
         weighted_value = self.__compute_weighted_values(weights, value)
         output = self._compute_attention_output(weighted_value)
@@ -314,8 +311,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
 
     def __scale_query(self, query: Tensor) -> Tensor:
         head_dim = query.size(-1)
-        query_scalar = head_dim**-0.5
-        return query * query_scalar
+        return query * head_dim**-0.5
 
     def __compute_raw_masked_attention_weights(
         self,
@@ -323,11 +319,19 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         key: Tensor,
         attention_mask: Tensor | None = None,
     ) -> Tensor:
+        total_batch_size = self.batch_size * self.num_heads * self.top_k
         key = key.transpose(-2, -1)
-        raw_weights = torch.einsum("bkhie,bhje->bkhij", query, key)
+        einsum_equation = "bkhie,bhej->bkhij"
+        if self.use_kv_expert_models_flag:
+            einsum_equation = "bkhie,bkhej->bkhij"
+        raw_weights = torch.einsum(einsum_equation, query, key)
+        raw_weights = raw_weights.contiguous().view(
+            total_batch_size, self.source_sequence_length, self.target_sequence_length
+        )
+
         # TODO: Add relative positional encoding support here
         if attention_mask is not None:
-            attention_mask = attention_mask.unsqueeze(0)
+            attention_mask = attention_mask
             return raw_weights + attention_mask
         return raw_weights
 
@@ -336,24 +340,16 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
-        assert self.target_sequence_length == self.source_sequence_length, (
-            f"At the moment different source and target sequence lengths are not supported so `target_sequence_length`: {self.target_sequence_length} must be equal to `source_sequence_length`:{self.source_sequence_length}. See if this can be fixed in the future."
-        )
-        # The reason this does not work is because `weighted_values` after torch.bmm(attention_weights, values)
-        # need to be reshaped into `weighted_values_output_shape`, if `source_sequence_length` and
-        # `target_sequence_length` are different then the reshaping will not work.
-        weighted_values_output_shape = (
-            self.target_sequence_length * self.batch_size,
-            self.embedding_dim,
-        )
-        einsum_equation = "bkhij,bkhje->bkhie"
+        einsum_equation = "bkhie,bhej->bkhij"
         if self.use_kv_expert_models_flag:
-            einsum_equation = "bkhij,bkhje->bkhie"
-            # raise NotImplementedError(
-            #     "The 'use_kv_expert_models_flag' feature is not supported for MixtureOfAttentionHeadsProcessor."
-            # )
+            einsum_equation = "bkhie,bkhej->bkhij"
 
         weighted_values = torch.einsum(einsum_equation, attention_weights, values)
-        weighted_values = weighted_values.transpose(0, 1)
-        weighted_values = weighted_values.contiguous()
-        return weighted_values.view(weighted_values_output_shape)
+        values = weighted_values.permute(3, 0, 1, 2, 4)
+        values = values.contiguous()
+        return values.view(
+            self.target_sequence_length,
+            self.batch_size,
+            self.top_k,
+            self.embedding_dim,
+        )
