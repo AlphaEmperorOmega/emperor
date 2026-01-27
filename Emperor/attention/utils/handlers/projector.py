@@ -70,7 +70,7 @@ class ProjectorBase(Module):
             self.cfg.return_attention_weights_flag
         )
         self.attention_option: "AttentionOptions" = self.cfg.attention_option
-        self.experts_config = self.cfg.experts_config
+        self.experts_config: "LayerStackConfig" = self.cfg.experts_config
         self.use_kv_expert_models_flag: bool = self.cfg.use_kv_expert_models_flag
         self.__resolve_kv_dimensions()
         self.output_model = self._build_output_model()
@@ -275,3 +275,8 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
                 projection, skip_mask, loss = projection
 
         return projection
+
+    def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
+        if weighted_values.dim() == 3:
+            return self._compute_projection(weighted_values, self.output_model)
+        return self.output_model(weighted_values)
