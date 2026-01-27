@@ -17,13 +17,11 @@ class ClassifierExperiment(Classifier):
         cfg: "ModelConfig",
         model_type,
         learning_rate: float = 0.1,
-        flatten_flag: bool = False,
     ):
         super().__init__()
         self.cfg = cfg
         self.lr = learning_rate
         self.model_type = model_type
-        self.flatten_flag = flatten_flag
         self.plotProgress = False
 
         self.model = self.build()
@@ -32,8 +30,6 @@ class ClassifierExperiment(Classifier):
         model = self.model_type(self.cfg)
         if issubclass(self.model_type, LayerStack):
             model = model.build_model()
-        if self.flatten_flag:
-            return nn.Sequential(nn.Flatten(), model)
         return model
 
     def forward(self, input_batch: Tensor):
