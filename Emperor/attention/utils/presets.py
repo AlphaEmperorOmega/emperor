@@ -199,7 +199,7 @@ class MultiHeadAttentionPresets:
                 stack_dropout_probability=stack_dropout_probability,
             )
 
-        experts_config = MixtureOfExpertsPresets.experts_stack_preset(
+        experts_config = MixtureOfExpertsPresets.experts_preset(
             input_dim=input_dim,
             output_dim=output_dim,
             router_model_bias_flag=projector_router_bias_flag,
@@ -231,10 +231,6 @@ class MultiHeadAttentionPresets:
             experts_model_memory_option=projector_experts_memory_option,
             experts_model_memory_size_option=projector_experts_memory_size_option,
             experts_model_memory_position_option=projector_experts_memory_position_option,
-            experts_stack_num_layers=projector_experts_stack_num_layers,
-            experts_stack_activation=ActivationOptions.RELU,
-            experts_stack_residual_flag=False,
-            experts_stack_dropout_probability=0.0,
             stack_num_layers=stack_num_layers,
             stack_hidden_dim=stack_hidden_dim,
             stack_activation=stack_activation,

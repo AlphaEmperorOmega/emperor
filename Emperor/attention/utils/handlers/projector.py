@@ -1,3 +1,7 @@
+from Emperor.experts.utils.enums import InitSamplerOptions
+from Emperor.experts.utils.layers import MixtureOfExperts, MixtureOfExpertsConfig
+from Emperor.sampler.model import SamplerModel
+from Emperor.sampler.utils.routers import RouterConfig, RouterModel
 import torch.nn as nn
 
 from torch.types import Tensor
@@ -70,7 +74,7 @@ class ProjectorBase(Module):
             self.cfg.return_attention_weights_flag
         )
         self.attention_option: "AttentionOptions" = self.cfg.attention_option
-        self.experts_config: "LayerStackConfig" = self.cfg.experts_config
+        self.experts_config: "MixtureOfExpertsConfig" = self.cfg.experts_config
         self.use_kv_expert_models_flag: bool = self.cfg.use_kv_expert_models_flag
         self.__resolve_kv_dimensions()
         self.output_model = self._build_output_model()
@@ -206,31 +210,81 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
     ):
         super().__init__(cfg, overrides)
 
-        self.validator = MixtureOfAttentionHeadsProjectorValidator(self)
-
         qk_dims = (self.embedding_dim, self.query_key_projection_dim)
         v_dims = (self.embedding_dim, self.value_projection_dim)
-        self.query_model = self._create_experts_model(*qk_dims)
+
+        self.query_model = self._create_q_model(*qk_dims)
         self.key_model = self._create_kv_model(*qk_dims)
         self.value_model = self._create_kv_model(*v_dims)
         self.top_k = self.query_model.get_top_k()
+        # self.router, self.sampler = self.__maybe_create_router_and_sampler()
+
+        self.validator = MixtureOfAttentionHeadsProjectorValidator(self)
+
+    # def __maybe_create_router_and_sampler(
+    #     self,
+    # ) -> tuple[RouterModel | None, SamplerModel | None]:
+    #     if self.init_sampler_option == InitSamplerOptions.DISABLED:
+    #         router_overrides = RouterConfig(input_dim=self.input_dim)
+    #         router = RouterModel(self.router_model_config, router_overrides)
+    #         sampler = SamplerModel(self.sampler_model_config)
+    #         return router, sampler
+    #     return None, None
+    #
+    # def __maybe_compute_expert_indices(
+    #     self,
+    #     inputs: Tensor,
+    #     probabilities: Tensor | None = None,
+    #     indices: Tensor | None = None,
+    # ) -> tuple[Tensor | None, Tensor | None, Tensor]:
+    #     if self.init_sampler_option != InitSamplerOptions.SHARED or (
+    #         indices is not None or probabilities is not None
+    #     ):
+    #         return probabilities, indices, torch.tensor(0.0)
+    #
+    #     logits = self.router.compute_logit_scores(inputs)
+    #
+    #     # TODO: In the future see if `skip_mask` needs to be implemented
+    #     skip_mask = None
+    #     probabilities, indices, skip_mask, sampler_loss = (
+    #         self.sampler.sample_probabilities_and_indices(logits, skip_mask)
+    #     )
+    #     return probabilities, indices, sampler_loss
+
+    def _create_q_model(self, input_dim: int, output_dim: int):
+        overrides = MixtureOfExpertsConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            weighted_parameters_flag=False,
+            compute_expert_mixture_flag=False,
+        )
+        return self._create_experts_model(overrides)
 
     def _create_kv_model(self, input_dim: int, output_dim: int):
         if self.use_kv_expert_models_flag:
-            return self._create_experts_model(input_dim, output_dim)
+            overrides = MixtureOfExpertsConfig(
+                input_dim=input_dim,
+                output_dim=output_dim,
+                weighted_parameters_flag=False,
+                compute_expert_mixture_flag=False,
+            )
+            return self._create_experts_model(overrides)
         return self._create_model(input_dim, output_dim)
 
     def _build_output_model(self) -> MixtureOfExpertsModel:
-        return self._create_experts_model(self.value_projection_dim, self.embedding_dim)
+        overrides = MixtureOfExpertsConfig(
+            input_dim=self.value_projection_dim,
+            output_dim=self.embedding_dim,
+            weighted_parameters_flag=True,
+            compute_expert_mixture_flag=True,
+        )
+        return self._create_experts_model(overrides)
 
     def _create_experts_model(
-        self, input_dim: int, output_dim: int
-    ) -> MixtureOfExpertsModel:
-        overrides = LayerStackConfig(
-            input_dim=input_dim,
-            output_dim=output_dim,
-        )
-        return MixtureOfExpertsModel(self.experts_config, overrides)
+        self,
+        overrides: MixtureOfExpertsConfig,
+    ) -> MixtureOfExperts:
+        return MixtureOfExperts(self.experts_config, overrides)
 
     def compute_qkv_projections(
         self,
@@ -277,6 +331,4 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         return projection
 
     def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
-        if weighted_values.dim() == 3:
-            return self._compute_projection(weighted_values, self.output_model)
-        return self.output_model(weighted_values)
+        return self._compute_projection(weighted_values, self.output_model)
