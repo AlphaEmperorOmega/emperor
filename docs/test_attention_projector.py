@@ -18,8 +18,6 @@ from Emperor.attention.utils.handlers.projector import (
 
 
 class TestSelfAttentionProjector(unittest.TestCase):
-    def setUp(self):
-        self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
     def test_init(self):
         attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
@@ -146,7 +144,11 @@ class TestSelfAttentionProjector(unittest.TestCase):
                             c.embedding_dim,
                         )
 
-                        attentiion_output = m.compute_output_projection(tensor)
+                        projected_tensor = m._compute_projection(tensor, m.qkv_model)
+
+                        attentiion_output = m.compute_output_projection(
+                            projected_tensor
+                        )
 
                         expected_shape = (
                             c.target_sequence_length,
@@ -158,8 +160,6 @@ class TestSelfAttentionProjector(unittest.TestCase):
 
 
 class TestIndependentProjector(unittest.TestCase):
-    def setUp(self):
-        self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
     def test_init(self):
         attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
@@ -249,8 +249,6 @@ class TestIndependentProjector(unittest.TestCase):
 
 
 class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
-    def setUp(self):
-        self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
     def test_init(self):
         boolean_options = [True, False]
@@ -395,10 +393,40 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                             self.assertEqual(k_projections.shape, expected_shape)
                             self.assertEqual(v_projections.shape, expected_shape)
 
+    def test_compute_output_projection(self):
+        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+
+        for attention_option in attention_options:
+            for model_type in attention_option:
+                for adaptive_type in AdaptiveWeightOptions:
+                    message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
+                    with self.subTest(i=message):
+                        if adaptive_type == AdaptiveWeightOptions.VECTOR:
+                            continue
+                        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                            model_type=model_type,
+                            projector_adaptive_weight_option=adaptive_type,
+                        )
+                        m = SelfAttentionProjector(c)
+
+                        tensor = torch.randn(
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.embedding_dim,
+                        )
+
+                        attentiion_output = m.compute_output_projection(tensor)
+
+                        expected_shape = (
+                            c.target_sequence_length,
+                            c.batch_size,
+                            c.embedding_dim,
+                        )
+                        self.assertIsInstance(attentiion_output, torch.Tensor)
+                        self.assertEqual(attentiion_output.shape, expected_shape)
+
 
 class TestProjectorBuilder(unittest.TestCase):
-    def setUp(self):
-        self.cfg = MultiHeadAttentionPresets.multi_head_attention_preset()
 
     def test_init(self):
         model_types = [
