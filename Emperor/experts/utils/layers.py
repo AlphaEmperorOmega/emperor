@@ -106,6 +106,9 @@ class MixtureOfExperts(Module):
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
         self.expert_modules = self.__create_experts()
 
+    def get_top_k(self) -> int:
+        return self.top_k
+
     def __maybe_create_router_and_sampler(
         self,
     ) -> tuple[RouterModel | None, SamplerModel | None]:
@@ -239,7 +242,7 @@ class MixtureOfExperts(Module):
         probabilities: Tensor,
         expert_index: int,
     ) -> Tensor:
-        if self.__is_before():
+        if self.__should_apply_probabilities_before_experts():
             if self.top_k == self.num_experts:
                 return probabilities[:, expert_index]
             probabilities = probabilities.flatten()
@@ -257,7 +260,7 @@ class MixtureOfExperts(Module):
         expert_samples = input_batch
         if indices is not None:
             expert_samples = input_batch[indices]
-        if self.__is_before():
+        if self.__should_apply_probabilities_before_experts():
             expert_samples = self.__maybe_apply_probabilities(
                 expert_samples, probabilities
             )
@@ -278,7 +281,7 @@ class MixtureOfExperts(Module):
         self.validator.ensure_probabilities_exist(probabilities)
         return logits * probabilities.reshape(-1, 1)
 
-    def __is_before(self) -> bool:
+    def __should_apply_probabilities_before_experts(self) -> bool:
         position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
         return self.weighting_position_option == position_option
 
@@ -292,7 +295,7 @@ class MixtureOfExperts(Module):
         if self.top_k != self.num_experts:
             _, _index_sorted_indices = indices.sort(dim=0)
             experts_output = experts_output[_index_sorted_indices]
-        if self.__is_after():
+        if self.__should_apply_probabilities_after_experts():
             experts_output = self.__maybe_apply_probabilities(
                 experts_output, probabilities
             )
@@ -304,6 +307,6 @@ class MixtureOfExperts(Module):
             experts_output = experts_output.view(-1, self.top_k, output_dim)
         return experts_output.sum(dim=1)
 
-    def __is_after(self) -> bool:
+    def __should_apply_probabilities_after_experts(self) -> bool:
         position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
         return self.weighting_position_option == position_option
