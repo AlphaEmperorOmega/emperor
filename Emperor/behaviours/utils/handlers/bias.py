@@ -2,7 +2,7 @@ from torch import Tensor
 from torch.nn import Sequential
 from Emperor.base.utils import Module
 from Emperor.base.layer import Layer, LayerStackConfig
-from Emperor.behaviours.utils.handlers._validator import _BiasHandlerAbstractValidator
+from Emperor.behaviours.utils.handlers._validator import BiasHandlerAbstractValidator
 
 from typing import TYPE_CHECKING
 
@@ -21,7 +21,7 @@ class BiasHandlerAbstract(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
-        self.validator = _BiasHandlerAbstractValidator(self)
+        self.validator = BiasHandlerAbstractValidator(self)
 
     def _init_model(
         self, overrides: LayerStackConfig | None = None

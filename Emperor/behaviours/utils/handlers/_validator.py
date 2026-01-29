@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from Emperor.behaviours.utils.handlers.bias import BiasHandlerAbstract
 
 
-class _BiasHandlerAbstractValidator:
+class BiasHandlerAbstractValidator:
     def __init__(self, model: "BiasHandlerAbstract"):
         self.model = model
 
