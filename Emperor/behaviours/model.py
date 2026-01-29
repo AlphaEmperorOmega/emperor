@@ -16,6 +16,7 @@ from Emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
+from Emperor.behaviours.utils._validator import AdaptiveParameterBehaviourValidator
 
 ModuleType = TypeVar("ModuleType", bound=Module)
 
@@ -86,6 +87,7 @@ class AdaptiveParameterBehaviour(Module):
         self.memory_size_option = self.cfg.memory_size_option
         self.memory_position_option = self.cfg.memory_position_option
         self.bias_option = self.cfg.bias_option
+        self.validator = AdaptiveParameterBehaviourValidator(self)
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
         self.memory_model = self.__init_memory_model()
