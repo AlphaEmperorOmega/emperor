@@ -95,3 +95,4 @@ class MixtureOfExpertsModel(Module):
         probabilities, indices, skip_mask, sampler_loss = (
             self.sampler.sample_probabilities_and_indices(logits, skip_mask)
         )
+        return probabilities, indices, sampler_loss
