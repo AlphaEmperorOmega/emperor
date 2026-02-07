@@ -19,7 +19,7 @@ class LinearBaseValidator:
         self.validate()
 
     def _resolve_monitor_types(self) -> None:
-        from Emperor.linears.utils.monitors import TensorMonitor, StatisticsMonitor
+        from Emperor.linears.utils._monitors import StatisticsMonitor, TensorMonitor
 
         self._TYPES = {
             "TensorMonitor": TensorMonitor,

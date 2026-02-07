@@ -2,8 +2,8 @@ import os
 from typing import Optional
 
 import torch
-from torch.nn import Parameter
 from torch import Tensor
+from torch.nn import Parameter
 from torch.utils.tensorboard import SummaryWriter
 
 

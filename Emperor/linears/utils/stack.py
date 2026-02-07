@@ -16,7 +16,7 @@ class LinearLayerStack(LayerStack):
         overrides = self.__get_model_type(overrides)
         super().__init__(cfg, overrides)
 
-    def __get_model_type(self, overrides: "LayerStackConfig") -> "LinearLayerOptions":
+    def __get_model_type(self, overrides: "LayerStackConfig") -> "LayerStackConfig":
         from Emperor.linears.options import LinearLayerOptions
 
         return super()._override_model_type(overrides, LinearLayerOptions.BASE)

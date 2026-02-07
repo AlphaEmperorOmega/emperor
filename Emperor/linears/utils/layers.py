@@ -7,7 +7,7 @@ from torch.nn import Parameter
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.linears.utils._validator import LinearBaseValidator
-from Emperor.linears.utils.monitors import TensorMonitor, StatisticsMonitor
+from Emperor.linears.utils._monitors import TensorMonitor, StatisticsMonitor
 from Emperor.behaviours.model import (
     AdaptiveParameterBehaviour,
     AdaptiveParameterBehaviourConfig,
@@ -27,7 +27,7 @@ class LinearLayerConfig(ConfigBase):
     )
     output_dim: int | None = field(
         default=None,
-        metadata={"help": "Output dimension of the linera layer"},
+        metadata={"help": "Output dimension of the linear layer"},
     )
     bias_flag: bool | None = field(
         default=None,
@@ -52,8 +52,8 @@ class LinearLayerConfig(ConfigBase):
 class LinearBase(Module):
     def __init__(
         self,
-        cfg: "LinearLayerConfig | LinearLayerConfig | ModelConfig",
-        overrides: "LinearLayerConfig | LinearLayerConfig | None" = None,
+        cfg: "LinearLayerConfig | ModelConfig",
+        overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
@@ -117,7 +117,6 @@ class AdaptiveLinearLayer(LinearBase):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        self.weight_params, self.bias_params = self._init_parameters()
         self.adaptive_behaviour = self.__init_behaviour()
 
     def __init_behaviour(self):
