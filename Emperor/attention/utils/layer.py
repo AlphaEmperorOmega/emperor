@@ -1,7 +1,6 @@
 from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.attention.utils.utils import Utils
-from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.attention.utils.handlers.maks import Mask
 from Emperor.attention.utils.enums import AttentionOptions
@@ -14,12 +13,12 @@ from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from torch.types import _dtype as DType
     from Emperor.linears.options import LinearLayerStackOptions
     from Emperor.adaptive.options import AdaptiveLayerStackOptions
+    from Emperor.experts.utils.layers import MixtureOfExpertsConfig
 
 
 @dataclass
@@ -116,7 +115,7 @@ class MultiHeadAttentionConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    experts_config: "LayerStackConfig | None" = field(
+    experts_config: "MixtureOfExpertsConfig | None" = field(
         default=None,
         metadata={
             "help": "Type of model used to generate parameters query, key, and value projections"
@@ -212,16 +211,3 @@ class MultiHeadAttention(Module):
             attention_output
         )
         return attention_output, attention_weights
-
-
-class MixtureOfMultiHeadAttention(MultiHeadAttention):
-    def __init__(
-        self,
-        cfg: "MultiHeadAttentionConfig | ModelConfig",
-        overrides: "MultiHeadAttentionConfig | None" = None,
-    ):
-        super().__init__(cfg, overrides)
-
-        self.projector = ProjectorBuilder(self.cfg).build()
-        self.reshaper = ReshaperBuilder(self.cfg).build()
-        self.processor = Processor(self.cfg, self.validator, self.projector)
