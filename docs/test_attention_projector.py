@@ -2,9 +2,9 @@ import torch
 import unittest
 
 from torch.nn import Sequential
-
+from Emperor.experts.utils.layers import MixtureOfExperts
 from Emperor.attention.utils.enums import AttentionOptions
-from Emperor.experts.utils.model import MixtureOfExpertsModel
+from Emperor.experts.utils.enums import InitSamplerOptions
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
 from Emperor.attention.utils.presets import MultiHeadAttentionPresets
@@ -64,6 +64,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
                         attention_option=AttentionOptions.SELF_ATTENTION,
                         model_type=model_type,
+                        embedding_dim=18,
                     )
                     m = SelfAttentionProjector(c)
 
@@ -135,6 +136,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
                             model_type=model_type,
                             projector_adaptive_weight_option=adaptive_type,
+                            embedding_dim=18,
                         )
                         m = SelfAttentionProjector(c)
 
@@ -144,11 +146,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
                             c.embedding_dim,
                         )
 
-                        projected_tensor = m._compute_projection(tensor, m.qkv_model)
-
-                        attentiion_output = m.compute_output_projection(
-                            projected_tensor
-                        )
+                        attentiion_output = m.compute_output_projection(tensor)
 
                         expected_shape = (
                             c.target_sequence_length,
@@ -268,63 +266,49 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                         )
                         m = MixtureOfAttentionHeadsProjector(c)
 
-                        self.assertIsInstance(m.query_model, MixtureOfExpertsModel)
-                        self.assertIsInstance(m.output_model, MixtureOfExpertsModel)
+                        self.assertIsInstance(m.query_model, MixtureOfExperts)
+                        self.assertIsInstance(m.output_model, MixtureOfExperts)
                         if use_kv_expert_models_flag:
-                            self.assertIsInstance(m.key_model, MixtureOfExpertsModel)
-                            self.assertIsInstance(m.value_model, MixtureOfExpertsModel)
+                            self.assertIsInstance(m.key_model, MixtureOfExperts)
+                            self.assertIsInstance(m.value_model, MixtureOfExperts)
                         else:
                             self.assertIsInstance(m.key_model, Sequential)
                             self.assertIsInstance(m.value_model, Sequential)
 
     def test__compute_projection(self):
-        boolean_options = [True, False]
         attention_options = [LinearLayerStackOptions]
 
-        for use_kv_expert_models_flag in boolean_options:
-            for attention_option in attention_options:
-                for model_type in attention_option:
-                    message = f"Testing configuration: model_type: {model_type}"
-                    with self.subTest(i=message):
-                        if model_type == AdaptiveWeightOptions.VECTOR:
-                            continue
+        for attention_option in attention_options:
+            for model_type in attention_option:
+                message = f"Testing configuration: model_type: {model_type}"
+                with self.subTest(i=message):
+                    if model_type == AdaptiveWeightOptions.VECTOR:
+                        continue
 
-                        c = MultiHeadAttentionPresets.multi_head_attention_preset(
-                            attention_option=AttentionOptions.MIXTURE_OF_ATTENTION_HEADS,
-                            model_type=model_type,
-                            use_kv_expert_models_flag=use_kv_expert_models_flag,
-                            projector_experts_compute_expert_mixture_flag=False,
-                            projector_experts_layer_stack_option=model_type,
-                            projector_experts_stack_num_layers=1,
-                        )
-                        m = MixtureOfAttentionHeadsProjector(c)
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        attention_option=AttentionOptions.MIXTURE_OF_ATTENTION_HEADS,
+                        model_type=model_type,
+                        projector_experts_compute_expert_mixture_flag=False,
+                        projector_experts_layer_stack_option=model_type,
+                        projector_experts_stack_num_layers=1,
+                    )
+                    m = MixtureOfAttentionHeadsProjector(c)
 
-                        tensor = torch.randn(
-                            c.target_sequence_length,
-                            c.batch_size,
-                            c.embedding_dim,
-                        )
+                    tensor = torch.randn(
+                        c.target_sequence_length,
+                        c.batch_size,
+                        c.embedding_dim,
+                    )
 
-                        projected_tensor = m._compute_kv_projection(tensor, m.key_model)
+                    projected_tensor = m._compute_kv_projection(tensor, m.key_model)
 
-                        if use_kv_expert_models_flag:
-                            expected_shape = (
-                                c.target_sequence_length,
-                                c.batch_size,
-                                m.top_k,
-                                c.query_key_projection_dim,
-                            )
-                            self.assertIsInstance(projected_tensor, torch.Tensor)
-                            self.assertEqual(projected_tensor.shape, expected_shape)
-                            continue
-
-                        expected_shape = (
-                            c.target_sequence_length,
-                            c.batch_size,
-                            c.query_key_projection_dim,
-                        )
-                        self.assertIsInstance(projected_tensor, torch.Tensor)
-                        self.assertEqual(projected_tensor.shape, expected_shape)
+                    expected_shape = (
+                        c.target_sequence_length,
+                        c.batch_size,
+                        c.query_key_projection_dim,
+                    )
+                    self.assertIsInstance(projected_tensor, torch.Tensor)
+                    self.assertEqual(projected_tensor.shape, expected_shape)
 
     def test_compute_qkv_projections(self):
         boolean_options = [True, False]
@@ -334,7 +318,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
             for attention_option in attention_options:
                 for model_type in attention_option:
                     for adaptive_type in AdaptiveWeightOptions:
-                        message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}"
+                        message = f"Testing configuration: model_type: {model_type}, adaptive_type: {adaptive_type}, use_kv_expert_models_flag: {use_kv_expert_models_flag}, attention_option: {attention_option}"
                         with self.subTest(i=message):
                             if adaptive_type == AdaptiveWeightOptions.VECTOR:
                                 continue
@@ -342,11 +326,15 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                                 model_type=model_type,
                                 query_key_projection_dim=14,
                                 value_projection_dim=14,
+                                embedding_dim=14,
+                                target_sequence_length=7,
+                                source_sequence_length=7,
                                 projector_adaptive_weight_option=adaptive_type,
                                 use_kv_expert_models_flag=use_kv_expert_models_flag,
                                 projector_experts_compute_expert_mixture_flag=False,
                                 projector_experts_layer_stack_option=model_type,
                                 projector_experts_stack_num_layers=1,
+                                projector_experts_init_sampler_option=InitSamplerOptions.LAYER,
                             )
                             m = MixtureOfAttentionHeadsProjector(c)
 
@@ -404,10 +392,13 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                         if adaptive_type == AdaptiveWeightOptions.VECTOR:
                             continue
                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                            embedding_dim=12,
+                            query_key_projection_dim=12,
+                            value_projection_dim=12,
                             model_type=model_type,
                             projector_adaptive_weight_option=adaptive_type,
                         )
-                        m = SelfAttentionProjector(c)
+                        m = MixtureOfAttentionHeadsProjector(c)
 
                         tensor = torch.randn(
                             c.target_sequence_length,
@@ -415,7 +406,18 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                             c.embedding_dim,
                         )
 
-                        attentiion_output = m.compute_output_projection(tensor)
+                        q_projections, k_projections, v_projections = (
+                            m.compute_qkv_projections(tensor, tensor, tensor)
+                        )
+
+                        weighted_values = torch.randn(
+                            c.target_sequence_length,
+                            c.batch_size,
+                            m.top_k,
+                            c.embedding_dim,
+                        )
+
+                        attentiion_output = m.compute_output_projection(weighted_values)
 
                         expected_shape = (
                             c.target_sequence_length,
