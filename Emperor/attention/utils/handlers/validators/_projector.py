@@ -1,7 +1,6 @@
 import torch
 
 from torch.types import Tensor
-from Emperor.base.layer import LayerStackConfig
 
 from typing import TYPE_CHECKING
 
@@ -63,9 +62,10 @@ class MixtureOfAttentionHeadsProjectorValidator:
             raise ValueError("Configuration Error: 'use_kv_expert_models_flag' is None")
 
     def __ensure_required_config_options_are_correct_types(self):
-        if not isinstance(self.model.experts_config, LayerStackConfig):
+        from Emperor.experts.utils.layers import MixtureOfExpertsConfig
+        if not isinstance(self.model.experts_config, MixtureOfExpertsConfig):
             raise TypeError(
-                f"Configuration Error: 'experts_config' must be of type LayerStackConfig, received type {type(self.model.experts_config).__name__}"
+                f"Configuration Error: 'experts_config' must be of type MixtureOfExpertsConfig, received type {type(self.model.experts_config).__name__}"
             )
         if not isinstance(self.model.use_kv_expert_models_flag, bool):
             raise TypeError(
