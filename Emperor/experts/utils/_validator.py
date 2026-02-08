@@ -1,11 +1,8 @@
 from torch import Tensor
 
-from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.sampler.utils.routers import RouterConfig
-from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
-    InitSamplerOptions,
+    InitSamplerOptions
 )
 
 from typing import TYPE_CHECKING
@@ -48,6 +45,9 @@ class _Validator:
             raise ValueError("Configuration Error: 'sampler_model_config' is None")
 
     def __ensure_values_have_correct_types(self):
+        from Emperor.linears.options import LinearLayerStackOptions
+        from Emperor.sampler.utils.samplers import SamplerConfig
+        from Emperor.sampler.utils.routers import RouterConfig
         if not isinstance(self.model.input_dim, int):
             raise TypeError(
                 f"Configuration Error: 'input_dim' must be of type int, received type {type(self.model.input_dim).__name__}"
