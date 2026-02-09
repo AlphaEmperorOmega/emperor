@@ -8,7 +8,7 @@ import IPython.display as display
 import matplotlib.pyplot as plt
 
 from typing_extensions import Dict
-from dataclasses import dataclass, fields, field
+from dataclasses import dataclass, fields, field, asdict
 from torch.nn import Parameter, Linear, Sequential
 
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -566,6 +566,13 @@ class ConfigBase:
 
     def get_custom_parameters(self) -> Dict[str, Any]:
         return self._passed_args
+
+    def update(self, other: "ConfigBase") -> "ConfigBase":
+        other_dict = asdict(other)
+        for key, value in other_dict.items():
+            if value is not None:
+                setattr(self, key, value)
+        return self
 
 
 class ConfigUtils:
