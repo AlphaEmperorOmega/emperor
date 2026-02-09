@@ -114,12 +114,13 @@ class AdaptiveParameterBehaviour(Module):
     ) -> ModuleType | None:
         from Emperor.linears.utils.layers import LinearLayerConfig
 
-        if is_valid_flag:
-            overrides = LinearLayerConfig(
-                input_dim=self.input_dim, output_dim=self.output_dim
-            )
-            return model_class(self.cfg, overrides)
-        return None
+        if not is_valid_flag:
+            return None
+
+        overrides = LinearLayerConfig(
+            input_dim=self.input_dim, output_dim=self.output_dim
+        )
+        return model_class(self.cfg, overrides)
 
     def compute_adaptive_parameters(
         self,
