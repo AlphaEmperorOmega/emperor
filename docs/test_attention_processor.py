@@ -734,29 +734,32 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                 )
                 self.assertEqual(weighted_values.shape, expected_shape)
 
-    # def test__compute_attention_output(self):
-    #     top_k = 3
-    #     c = MultiHeadAttentionPresets.multi_head_attention_preset(
-    #         source_sequence_length=8,
-    #         target_sequence_length=8,
-    #         embedding_dim=16,
-    #         value_projection_dim=16,
-    #         projector_adaptive_mixture_top_k=top_k,
-    #     )
-    #     projector = MixtureOfAttentionHeadsProjector(c)
-    #     m = MixtureOfAttentionHeadsProcessor(c, projector)
-    #
-    #     weighted_values = torch.randn(
-    #         c.target_sequence_length,
-    #         c.batch_size,
-    #         top_k,
-    #         c.embedding_dim,
-    #     )
-    #
-    #     weighted_values = m._compute_attention_output(weighted_values)
-    #
-    #     expected_shape = (c.target_sequence_length, c.batch_size, c.embedding_dim)
-    #     self.assertEqual(weighted_values.shape, expected_shape)
+    def test__compute_attention_output(self):
+        top_k = 3
+        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            source_sequence_length=8,
+            target_sequence_length=8,
+            embedding_dim=16,
+            value_projection_dim=16,
+            projector_adaptive_mixture_top_k=top_k,
+        )
+        projector = MixtureOfAttentionHeadsProjector(c)
+        m = MixtureOfAttentionHeadsProcessor(c, projector)
+
+        tensor = torch.randn(
+            c.target_sequence_length,
+            c.batch_size,
+            c.embedding_dim,
+        )
+
+        q_projections, k_projections, v_projections = (
+            projector.compute_qkv_projections(tensor, tensor, tensor)
+        )
+
+        weighted_values, _ = m.compute_attention(q_projections, k_projections, v_projections)
+
+        expected_shape = (c.target_sequence_length, c.batch_size, c.embedding_dim)
+        self.assertEqual(weighted_values.shape, expected_shape)
 
 
 # class TestProcessor(unittest.TestCase):

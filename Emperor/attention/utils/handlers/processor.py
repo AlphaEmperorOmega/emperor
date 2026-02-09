@@ -331,7 +331,6 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
 
         # TODO: Add relative positional encoding support here
         if attention_mask is not None:
-            attention_mask = attention_mask
             return raw_weights + attention_mask
         return raw_weights
 
