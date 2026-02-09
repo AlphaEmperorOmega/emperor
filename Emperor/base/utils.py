@@ -215,7 +215,7 @@ class Module(nn.Module, HyperParameters):
         super().__init__()
         self.save_hyperparameters()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # self.device = "cpu"
+        self.device = "cpu"
         self.board = ProgressBoard()
 
     def loss(self, y_hat, y):

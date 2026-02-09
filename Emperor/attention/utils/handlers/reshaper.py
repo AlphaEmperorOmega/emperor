@@ -164,6 +164,7 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
         cfg: "MultiHeadAttentionConfig",
     ):
         super().__init__(cfg)
+        self.top_k: int = cfg.experts_config.top_k
         self.use_kv_expert_models_flag: bool = self.cfg.use_kv_expert_models_flag
 
     def reshape_qkv_for_attention(

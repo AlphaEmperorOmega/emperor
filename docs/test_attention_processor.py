@@ -737,11 +737,13 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
     def test__compute_attention_output(self):
         top_k = 3
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
-            source_sequence_length=8,
-            target_sequence_length=8,
+            source_sequence_length=12,
+            target_sequence_length=12,
             embedding_dim=16,
+            query_key_projection_dim=16,
             value_projection_dim=16,
             projector_adaptive_mixture_top_k=top_k,
+            attention_option=AttentionOptions.MIXTURE_OF_ATTENTION_HEADS,
         )
         projector = MixtureOfAttentionHeadsProjector(c)
         m = MixtureOfAttentionHeadsProcessor(c, projector)
@@ -755,6 +757,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         q_projections, k_projections, v_projections = (
             projector.compute_qkv_projections(tensor, tensor, tensor)
         )
+        print(q_projections.shape)
+        print(k_projections.shape)
+        print(v_projections.shape)
 
         weighted_values, _ = m.compute_attention(q_projections, k_projections, v_projections)
 
