@@ -16,6 +16,7 @@ from Emperor.attention.utils.handlers.projector import (
 from Emperor.attention.utils.handlers.processor import (
     IndependentProcessor,
     MixtureOfAttentionHeadsProcessor,
+    ProcessorBuilder,
     SelfAttentionProcessor,
 )
 
@@ -754,205 +755,169 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
             c.embedding_dim,
         )
 
-        q_projections, k_projections, v_projections = (
-            projector.compute_qkv_projections(tensor, tensor, tensor)
+        q_projections, k_projections, v_projections = projector.compute_qkv_projections(
+            tensor, tensor, tensor
         )
-        print(q_projections.shape)
-        print(k_projections.shape)
-        print(v_projections.shape)
 
-        weighted_values, _ = m.compute_attention(q_projections, k_projections, v_projections)
+        weighted_values, _ = m.compute_attention(
+            q_projections, k_projections, v_projections
+        )
 
         expected_shape = (c.target_sequence_length, c.batch_size, c.embedding_dim)
         self.assertEqual(weighted_values.shape, expected_shape)
 
 
-# class TestProcessor(unittest.TestCase):
-#     def setUp(self):
-#         self.rebuild_presets()
-#
-#     def tearDown(self):
-#         self.cfg = None
-#         self.config = None
-#         self.model = None
-#         self.batch_size = None
-#         self.embedding_dim = None
-#         self.target_sequence_length = None
-#         self.num_heads = None
-#         self.head_dim = None
-#
-#     def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-#         self.config = MultiHeadAttentionPresets.multi_head_attention_preset(
-#             embedding_dim=12,
-#             query_key_projection_dim=12,
-#             value_projection_dim=12,
-#         )
-#         if config is not None:
-#             for k in asdict(config):
-#                 if hasattr(self.config, k) and getattr(config, k) is not None:
-#                     setattr(self.config, k, getattr(config, k))
-#
-#         validator = MultiHeadAttentionValidator(self.config)
-#         self.model = ProcessorBuilder(self.config, validator, projector)
-#
-#         self.batch_size = self.config.batch_size
-#         self.embedding_dim = self.config.embedding_dim
-#         self.target_sequence_length = self.config.target_sequence_length
-#         self.source_sequence_length = self.config.source_sequence_length
-#         self.num_heads = self.config.num_heads
-#         self.head_dim = self.embedding_dim // self.num_heads
-#
-#
-# class Test__init(TestProcessor):
-#     def test__init(self):
-#         self.assertIsInstance(self.model, Processor)
-#         self.assertIsInstance(
-#             self.model.processor,
-#             (ProcessorDefault, ProcessorWithReturnedWeights),
-#         )
-#
-#
-# class Test____create_processor(TestProcessor):
-#     def test__return_attention_weights_flag__False(self):
-#         config = MultiHeadAttentionConfig(
-#             return_attention_weights_flag=False,
-#         )
-#         self.rebuild_presets(config)
-#         self.assertIsInstance(self.model.processor, ProcessorDefault)
-#
-#     def test__return_attention_weights_flag__True(self):
-#         config = MultiHeadAttentionConfig(
-#             return_attention_weights_flag=True,
-#         )
-#         self.rebuild_presets(config)
-#         self.assertIsInstance(self.model.processor, ProcessorWithReturnedWeights)
-#
-#
-# class Test____compute_weighted_values_default(TestProcessor):
-#     def test__return_attention_weights_flag__True(self):
-#         config = MultiHeadAttentionConfig(
-#             source_sequence_length=32,
-#             target_sequence_length=32,
-#             return_attention_weights_flag=True,
-#         )
-#         self.rebuild_presets(config)
-#
-#         query = torch.randn(
-#             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
-#         )
-#         key = torch.randn(
-#             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
-#         )
-#         value = torch.randn(
-#             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
-#         )
-#         attention_mask = torch.randn(
-#             1, self.target_sequence_length, self.source_sequence_length
-#         )
-#         attention_mask = torch.where(
-#             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-#         )
-#         attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
-#
-#         output_attention_output, output_attention_weights = (
-#             self.model.compute_attention(query, key, value, attention_mask)
-#         )
-#
-#         self.assertIsInstance(output_attention_output, torch.Tensor)
-#         self.assertIsInstance(output_attention_weights, torch.Tensor)
-#         self.assertEqual(
-#             output_attention_output.shape,
-#             (self.target_sequence_length, self.batch_size, self.embedding_dim),
-#         )
-#         self.assertEqual(
-#             output_attention_weights.shape,
-#             (
-#                 self.batch_size,
-#                 self.num_heads,
-#                 self.target_sequence_length,
-#                 self.source_sequence_length,
-#             ),
-#         )
-#
-#     def test__return_attention_weights_flag__True__average_attention_weights_flag__True(
-#         self,
-#     ):
-#         config = MultiHeadAttentionConfig(
-#             source_sequence_length=32,
-#             target_sequence_length=32,
-#             return_attention_weights_flag=True,
-#             average_attention_weights_flag=True,
-#         )
-#         self.rebuild_presets(config)
-#
-#         query = torch.randn(
-#             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
-#         )
-#         key = torch.randn(
-#             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
-#         )
-#         value = torch.randn(
-#             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
-#         )
-#         attention_mask = torch.randn(
-#             1, self.target_sequence_length, self.source_sequence_length
-#         )
-#         attention_mask = torch.where(
-#             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-#         )
-#         attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
-#
-#         output_attention_output, output_attention_weights = (
-#             self.model.compute_attention(query, key, value, attention_mask)
-#         )
-#
-#         self.assertIsInstance(output_attention_output, torch.Tensor)
-#         self.assertIsInstance(output_attention_weights, torch.Tensor)
-#         self.assertEqual(
-#             output_attention_output.shape,
-#             (self.target_sequence_length, self.batch_size, self.embedding_dim),
-#         )
-#         self.assertEqual(
-#             output_attention_weights.shape,
-#             (
-#                 self.batch_size,
-#                 self.target_sequence_length,
-#                 self.source_sequence_length,
-#             ),
-#         )
-#
-#     def test__return_attention_weights_flag__False(self):
-#         config = MultiHeadAttentionConfig(
-#             source_sequence_length=32,
-#             target_sequence_length=32,
-#             return_attention_weights_flag=False,
-#         )
-#         self.rebuild_presets(config)
-#
-#         query = torch.randn(
-#             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
-#         )
-#         key = torch.randn(
-#             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
-#         )
-#         value = torch.randn(
-#             self.batch_size * self.num_heads, self.target_sequence_length, self.head_dim
-#         )
-#         attention_mask = torch.randn(
-#             1, self.target_sequence_length, self.source_sequence_length
-#         )
-#         attention_mask = torch.where(
-#             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-#         )
-#         attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
-#
-#         output_attention_output, output_attention_weights = (
-#             self.model.compute_attention(query, key, value, attention_mask)
-#         )
-#
-#         self.assertIsInstance(output_attention_output, torch.Tensor)
-#         self.assertIsNone(output_attention_weights)
-#         self.assertEqual(
-#             output_attention_output.shape,
-#             (self.target_sequence_length, self.batch_size, self.embedding_dim),
-#         )
+class TestProcessorBuilder(unittest.TestCase):
+    def test_init(self):
+        processor_configs = [
+            (AttentionOptions.SELF_ATTENTION, SelfAttentionProjector),
+            (AttentionOptions.INDEPENDENT, IndependentProjector),
+            (
+                AttentionOptions.MIXTURE_OF_ATTENTION_HEADS,
+                MixtureOfAttentionHeadsProjector,
+            ),
+        ]
+
+        for attention_option, projector in processor_configs:
+            message = f"Testing configuration: attention_option: {attention_option}"
+            with self.subTest(i=message):
+                c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    attention_option=attention_option,
+                )
+                projector_instance = projector(c)
+                builder = ProcessorBuilder(c, projector_instance)
+                self.assertIsInstance(builder, ProcessorBuilder)
+
+    def test_build(self):
+        processor_configs = [
+            (
+                AttentionOptions.SELF_ATTENTION,
+                SelfAttentionProjector,
+                SelfAttentionProcessor,
+            ),
+            (AttentionOptions.INDEPENDENT, IndependentProjector, IndependentProcessor),
+            (
+                AttentionOptions.MIXTURE_OF_ATTENTION_HEADS,
+                MixtureOfAttentionHeadsProjector,
+                MixtureOfAttentionHeadsProcessor,
+            ),
+        ]
+
+        for attention_option, projector_cls, processor_cls in processor_configs:
+            message = f"Testing configuration: attention_option: {attention_option}"
+            with self.subTest(i=message):
+                c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    attention_option=attention_option,
+                )
+                projector = projector_cls(c)
+                m = ProcessorBuilder(c, projector).build()
+                self.assertIsInstance(m, processor_cls)
+                self.assertIsInstance(m.projector, projector_cls)
+
+    def test_compute_attention__self_attention(self):
+        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            attention_option=AttentionOptions.SELF_ATTENTION,
+            source_sequence_length=32,
+            target_sequence_length=32,
+        )
+        head_dim = c.embedding_dim // c.num_heads
+        projector = SelfAttentionProjector(c)
+        m = ProcessorBuilder(c, projector).build()
+
+        query = torch.randn(
+            c.batch_size * c.num_heads, c.source_sequence_length, head_dim
+        )
+        key = torch.randn(
+            c.batch_size * c.num_heads, c.target_sequence_length, head_dim
+        )
+        value = torch.randn(
+            c.batch_size * c.num_heads, c.target_sequence_length, head_dim
+        )
+        attention_mask = create_attention_mask(c)
+
+        output_attention_output, output_attention_weights = m.compute_attention(
+            query, key, value, attention_mask
+        )
+
+        expected_output_shape = (
+            c.target_sequence_length,
+            c.batch_size,
+            c.embedding_dim,
+        )
+        expected_weights_shape = (
+            c.batch_size,
+            c.num_heads,
+            c.target_sequence_length,
+            c.source_sequence_length,
+        )
+        self.assertIsInstance(output_attention_output, torch.Tensor)
+        self.assertIsInstance(output_attention_weights, torch.Tensor)
+        self.assertEqual(output_attention_output.shape, expected_output_shape)
+        self.assertEqual(output_attention_weights.shape, expected_weights_shape)
+
+    def test_compute_attention__independent(self):
+        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            attention_option=AttentionOptions.INDEPENDENT,
+            embedding_dim=12,
+            query_key_projection_dim=0,
+            value_projection_dim=0,
+            source_sequence_length=32,
+            target_sequence_length=32,
+        )
+        head_dim = c.embedding_dim // c.num_heads
+        projector = IndependentProjector(c)
+        m = ProcessorBuilder(c, projector).build()
+
+        query = torch.randn(
+            c.batch_size * c.num_heads, c.source_sequence_length, head_dim
+        )
+        key = value = torch.randn(
+            c.batch_size * c.num_heads, c.target_sequence_length, head_dim
+        )
+        attention_mask = create_attention_mask(c)
+
+        output_attention_output, output_attention_weights = m.compute_attention(
+            query, key, value, attention_mask
+        )
+
+        expected_output_shape = (
+            c.target_sequence_length,
+            c.batch_size,
+            c.embedding_dim,
+        )
+        self.assertIsInstance(output_attention_output, torch.Tensor)
+        self.assertIsNone(output_attention_weights)
+        self.assertEqual(output_attention_output.shape, expected_output_shape)
+
+    def test_compute_attention__mixture_of_attention_heads(self):
+        top_k = 3
+        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            attention_option=AttentionOptions.MIXTURE_OF_ATTENTION_HEADS,
+            source_sequence_length=12,
+            target_sequence_length=12,
+            embedding_dim=16,
+            query_key_projection_dim=16,
+            value_projection_dim=16,
+            projector_adaptive_mixture_top_k=top_k,
+        )
+        projector = MixtureOfAttentionHeadsProjector(c)
+        m = ProcessorBuilder(c, projector).build()
+
+        tensor = torch.randn(
+            c.target_sequence_length,
+            c.batch_size,
+            c.embedding_dim,
+        )
+
+        q_projections, k_projections, v_projections = projector.compute_qkv_projections(
+            tensor, tensor, tensor
+        )
+
+        output_attention_output, output_attention_weights = m.compute_attention(
+            q_projections, k_projections, v_projections
+        )
+
+        expected_output_shape = (c.target_sequence_length, c.batch_size, c.embedding_dim)
+        self.assertIsInstance(output_attention_output, torch.Tensor)
+        self.assertIsNone(output_attention_weights)
+        self.assertEqual(output_attention_output.shape, expected_output_shape)
