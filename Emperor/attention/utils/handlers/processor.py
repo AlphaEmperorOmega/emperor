@@ -89,7 +89,7 @@ class ProcessorBase:
             # TODO: At the moment the attention mechanism does not handle a tuple output.
             # This needs to be fixed in the future.
             attention_output = attention_output[0]
-        embedding_dim = attention_output.size(1)
+        embedding_dim = attention_output.size(-1)
         return attention_output.view(
             self.target_sequence_length, self.batch_size, embedding_dim
         )
@@ -163,9 +163,9 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
-        assert self.target_sequence_length == self.source_sequence_length, (
-            f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
-        )
+        assert (
+            self.target_sequence_length == self.source_sequence_length
+        ), f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
         weighted_values = torch.bmm(attention_weights, values)
         values = weighted_values.transpose(0, 1)
         values = values.contiguous()
@@ -352,8 +352,6 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
             self.target_sequence_length,
             self.source_sequence_length,
         )
-        print()
-        print(attention_weights.shape, values.shape)
         weighted_values = torch.einsum(einsum_equation, attention_weights, values)
         values = weighted_values.permute(3, 0, 1, 2, 4)
         values = values.contiguous()
