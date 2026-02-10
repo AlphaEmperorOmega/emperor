@@ -340,10 +340,20 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
-        einsum_equation = "bkhie,bhej->bkhij"
+        # einsum_equation = "bkhie,bhej->bkhij"
+        einsum_equation = "bkhij,bhje->bkhie"
         if self.use_kv_expert_models_flag:
             einsum_equation = "bkhie,bkhej->bkhij"
 
+        attention_weights = attention_weights.contiguous().view(
+            self.batch_size,
+            self.top_k,
+            self.num_heads,
+            self.target_sequence_length,
+            self.source_sequence_length,
+        )
+        print()
+        print(attention_weights.shape, values.shape)
         weighted_values = torch.einsum(einsum_equation, attention_weights, values)
         values = weighted_values.permute(3, 0, 1, 2, 4)
         values = values.contiguous()
