@@ -5,7 +5,6 @@ __pycache__
 data
 data/
 nul
-torchvenv
+torchenv/
 logs
 emperor.egg-info
-# pyproject.toml
