@@ -2,7 +2,11 @@ from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.base.layer import LayerStackConfig
 from Emperor.base.utils import Module, ConfigBase
-from Emperor.linears.options import LinearLayerStackOptions
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from Emperor.linears.options import LinearLayerStackOptions
 
 
 @dataclass
@@ -11,7 +15,7 @@ class RouterConfig(ConfigBase):
         default=None,
         metadata={"help": "Number of layers added to the router"},
     )
-    layer_stack_option: LinearLayerStackOptions | None = field(
+    layer_stack_option: "LinearLayerStackOptions | None" = field(
         default=None,
         metadata={"help": "Number of layers added to the router"},
     )

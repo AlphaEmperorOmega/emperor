@@ -233,7 +233,6 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         self.skip_mask = None
         self.sampler_loss = None
 
-
     def __create_router_and_sampler(
         self,
     ) -> tuple["RouterModel", "SamplerModel"]:
@@ -272,7 +271,6 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         )
         return MixtureOfExpertsReduce(self.experts_config, overrides)
 
-
     def compute_qkv_projections(
         self,
         query: Tensor,
@@ -294,10 +292,10 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         # TODO: Ensure the skip mask gets used in the future
         skip_mask = None
         (
-          self.probabilities,
-          self.indices,
-          self.skip_mask,
-          self.sampler_loss,
+            self.probabilities,
+            self.indices,
+            self.skip_mask,
+            self.sampler_loss,
         ) = self.sampler.sample_probabilities_and_indices(logits, skip_mask)
 
     def _compute_q_projection(self, X: Tensor, model: MixtureOfExperts) -> Tensor:
