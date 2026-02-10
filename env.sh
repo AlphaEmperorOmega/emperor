@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-VENV_PATH="$HOME/Development/001_emperor/torchenv"
+VENV_PATH="./torchenv"
 
 if [ ! -d "$VENV_PATH" ]; then
   echo "Virtual environment not found at $VENV_PATH"
