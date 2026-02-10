@@ -340,8 +340,8 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
-        # einsum_equation = "bkhie,bhej->bkhij"
-        einsum_equation = "bkhij,bhje->bkhie"
+        einsum_equation = "bkhie,bhej->bkhij"
+        # einsum_equation = "bkhij,bhje->bkhie"
         if self.use_kv_expert_models_flag:
             einsum_equation = "bkhie,bkhej->bkhij"
 
