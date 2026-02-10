@@ -232,24 +232,36 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
         return query, key, value
 
     def _reshape_query(self, query: Tensor) -> Tensor:
-        q_shape = (self.batch_size, self.top_k, self.num_heads, -1, self.qk_head_dim)
+        q_shape = (-1, self.batch_size, self.top_k, self.num_heads, self.qk_head_dim)
         return query.view(q_shape)
 
     def _reshape_kv(self, key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
         if self.use_kv_expert_models_flag:
             k_shape = (
+                -1,
                 self.batch_size,
                 self.top_k,
                 self.num_heads,
-                -1,
                 self.qk_head_dim,
             )
             v_shape = (
+                -1,
                 self.batch_size,
                 self.top_k,
                 self.num_heads,
-                -1,
                 self.v_head_dim,
             )
             return key.view(k_shape), value.view(v_shape)
-        return super()._reshape_kv(key, value)
+        k_shape = (
+            -1,
+            self.batch_size,
+            self.num_heads,
+            self.qk_head_dim,
+        )
+        v_shape = (
+            -1,
+            self.batch_size,
+            self.num_heads,
+            self.v_head_dim,
+        )
+        return key.view(k_shape), value.view(v_shape)

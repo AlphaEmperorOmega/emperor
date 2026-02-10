@@ -163,9 +163,9 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
-        assert (
-            self.target_sequence_length == self.source_sequence_length
-        ), f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
+        assert self.target_sequence_length == self.source_sequence_length, (
+            f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
+        )
         weighted_values = torch.bmm(attention_weights, values)
         values = weighted_values.transpose(0, 1)
         values = values.contiguous()
@@ -320,6 +320,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         attention_mask: Tensor | None = None,
     ) -> Tensor:
         total_batch_size = self.batch_size * self.num_heads * self.top_k
+
         key = key.transpose(-2, -1)
         einsum_equation = "bkhie,bhej->bkhij"
         if self.use_kv_expert_models_flag:

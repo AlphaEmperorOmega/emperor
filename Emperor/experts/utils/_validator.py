@@ -2,7 +2,7 @@ from torch import Tensor
 
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
-    InitSamplerOptions
+    InitSamplerOptions,
 )
 
 from typing import TYPE_CHECKING
@@ -48,6 +48,7 @@ class _Validator:
         from Emperor.linears.options import LinearLayerStackOptions
         from Emperor.sampler.utils.samplers import SamplerConfig
         from Emperor.sampler.utils.routers import RouterConfig
+
         if not isinstance(self.model.input_dim, int):
             raise TypeError(
                 f"Configuration Error: 'input_dim' must be of type int, received type {type(self.model.input_dim).__name__}"
@@ -137,6 +138,12 @@ class _Validator:
                 "Configuration Error: `sampler_model_config` must be defined to properly initialize and utilize the sampler model in the mixture of experts layer."
             )
 
+    def ensure_tensor_is_vector_or_matrix(self, X: Tensor | None) -> None:
+        if X is not None and X.dim() > 2:
+            raise ValueError(
+                "Input Error: `X` must be a 1-dimensional or 2-dimensional tensor."
+            )
+
 
 class MixtureOfExpertsModelValidator:
     def __init__(self, model: "MixtureOfExpertsModel"):
@@ -155,4 +162,10 @@ class MixtureOfExpertsModelValidator:
         if self.model.init_sampler_option == InitSamplerOptions.DISABLED:
             raise ValueError(
                 "Invalid configuration: `init_sampler_model_flag` must be set to `False` when `indices` are provided. This prevents creating duplicate `RouterModel` and `SamplerModel` instances in the current layer."
+            )
+
+    def ensure_tensor_is_vector_or_matrix(self, X: Tensor | None) -> None:
+        if X is not None and X.dim() > 2:
+            raise ValueError(
+                "Input Error: `X` must be a 1-dimensional or 2-dimensional tensor."
             )

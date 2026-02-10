@@ -292,11 +292,16 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         # TODO: Ensure the skip mask gets used in the future
         skip_mask = None
         (
-            self.probabilities,
-            self.indices,
-            self.skip_mask,
-            self.sampler_loss,
+            probabilities,
+            indices,
+            skip_mask,
+            sampler_loss,
         ) = self.sampler.sample_probabilities_and_indices(logits, skip_mask)
+
+        self.probabilities = probabilities.view(-1, self.top_k)
+        self.indices = indices.view(-1, self.top_k)
+        self.skip_mask = skip_mask
+        self.sampler_loss = sampler_loss
 
     def _compute_q_projection(self, X: Tensor, model: MixtureOfExperts) -> Tensor:
         sequence_length, batch_size, _ = X.shape
