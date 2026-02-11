@@ -25,6 +25,9 @@ def create_search_space(
     search_space: dict,
     num_samples: int | None = None,
 ) -> list["ModelConfig"]:
+    if search_space == {}:
+        return [base_preset_callback(**base_config)]
+
     experiments = []
     parameter_names = list(search_space.keys())
     parameter_value_options = list(search_space.values())
