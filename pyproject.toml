@@ -7,7 +7,7 @@ name = "emperor"
 version = "0.1.0"
 description = "A PyTorch-based deep learning framework"
 readme = "README.md"
-requires-python = ">=3.8,<3.14"
+requires-python = ">=3.11,<3.14"
 license = { text = "MIT" }
 authors = [{ name = "Emperor", email = "emperor@example.com" }]
 keywords = ["machine learning", "deep learning", "pytorch", "transformers"]
