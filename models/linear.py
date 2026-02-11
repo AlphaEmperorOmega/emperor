@@ -2,8 +2,6 @@ import copy
 import torch
 import itertools
 
-import torch.nn as nn
-
 from torch import Tensor
 from models.parser import get_parser
 from Emperor.config import ModelConfig
@@ -16,27 +14,16 @@ from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.utils.factories import Experiments
+from Emperor.experiments.utils.factories import ExperimentBase
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 
 
 @dataclass
-class LinearExperimentConfig(ConfigBase):
+class ExperimentConfig(ConfigBase):
     model_config: "LayerStackConfig | None" = field(
         default=None,
         metadata={"help": ""},
-    )
-
-
-@dataclass
-class ExperimentConfig(ConfigBase):
-    dataset: type | None = field(
-        default=None,
-    )
-
-    grid_search_configs: list["ModelConfig"] | None = field(
-        default=None,
     )
 
 
@@ -47,7 +34,7 @@ class LinearModel(Module):
     ):
         super().__init__()
         self.cfg = cfg
-        self.main_cfg: LinearExperimentConfig = self._resolve_main_config(self.cfg, cfg)
+        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
         self.model_config: LayerStackConfig = self.main_cfg.model_config
         self.model = LayerStack(self.model_config).build_model()
 
@@ -61,14 +48,14 @@ class LinearModel(Module):
         return X
 
 
-class LinearExperimentOptions(BaseOptions):
+class ExperimentOptions(BaseOptions):
     BASE = 0
 
 
-class LinearExperiment(Experiments):
+class Experiment(ExperimentBase):
     def __init__(
         self,
-        model_config_option: LinearExperimentOptions | None = None,
+        model_config_option: ExperimentOptions | None = None,
         mini_datasetset_flag: bool = False,
     ) -> None:
         self.print_frequency = 50
@@ -87,7 +74,7 @@ class LinearExperiment(Experiments):
     def _get_model_config(self):
         if self.model_config_option is None:
             return None
-        return LinearExperimentPresets().get_config(self.model_config_option)
+        return ExperimentPresets().get_config(self.model_config_option)
 
     def _get_model_type(self) -> type:
         return LinearModel
@@ -97,10 +84,10 @@ class LinearExperiment(Experiments):
             super().train_model()
             return None
 
-        for config_option in LinearExperimentOptions:
+        for config_option in ExperimentOptions:
             self.model_config_option = config_option
             for dataset_type in self.dataset_options:
-                config_options = LinearExperimentPresets().get_config(
+                config_options = ExperimentPresets().get_config(
                     config_option, dataset_type
                 )
                 self._set_dataset_option(dataset_type)
@@ -109,7 +96,7 @@ class LinearExperiment(Experiments):
                     super().train_model()
 
 
-class LinearExperimentPresets:
+class ExperimentPresets:
     def __init__(self) -> None:
         self.dataset_specs = {
             Mnist: {
@@ -132,11 +119,11 @@ class LinearExperimentPresets:
 
     def get_config(
         self,
-        model_config_options: LinearExperimentOptions = LinearExperimentOptions.BASE,
+        model_config_options: ExperimentOptions = ExperimentOptions.BASE,
         dataset: type = Mnist,
     ) -> list["ModelConfig"]:
         match model_config_options:
-            case LinearExperimentOptions.BASE:
+            case ExperimentOptions.BASE:
                 return self.__base_grid_search_config(dataset)
             case _:
                 raise ValueError(
@@ -203,7 +190,7 @@ class LinearExperimentPresets:
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             output_dim=output_dim,
-            override_config=LinearExperimentConfig(
+            override_config=ExperimentConfig(
                 model_config=LayerStackConfig(
                     model_type=LinearLayerOptions.BASE,
                     input_dim=input_dim,
@@ -226,9 +213,9 @@ class LinearExperimentPresets:
 
 
 if __name__ == "__main__":
-    parser = get_parser(LinearExperimentOptions.names())
+    parser = get_parser(ExperimentOptions.names())
     args = parser.parse_args()
-    config_option = LinearExperimentOptions.get_option(args.config_name)
+    config_option = ExperimentOptions.get_option(args.config_name)
 
-    experiment = LinearExperiment(config_option)
+    experiment = Experiment(config_option)
     experiment.train_model()
