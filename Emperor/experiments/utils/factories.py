@@ -1,6 +1,10 @@
 import os
 import datetime
 
+from pprint import pprint
+import itertools
+from copy import deepcopy
+from dataclasses import asdict
 from Emperor.base.utils import Trainer
 from Emperor.config import ModelConfig
 from Emperor.datasets.image.mnist import Mnist
@@ -9,13 +13,42 @@ from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
 from Emperor.experiments.utils.models import ClassifierExperiment
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from Emperor.experiments.utils.models import ClassifierExperiment
 
 
-class Experiments:
+def create_search_space(
+    base_preset_callback: Callable,
+    base_config: dict,
+    search_space: dict,
+    num_samples: int | None = None,
+) -> list["ModelConfig"]:
+    experiments = []
+    parameter_names = list(search_space.keys())
+    parameter_value_options = list(search_space.values())
+
+    is_grid_search = num_samples is None
+    if is_grid_search:
+        all_combinations = itertools.product(*parameter_value_options)
+    else:
+        create_single_sample = lambda: (
+            random.choice(value_options) for value_options in parameter_value_options
+        )
+        all_combinations = (create_single_sample() for _ in range(num_samples))
+
+    for parameter_values in all_combinations:
+        updated_params = base_config
+        for param_name, param_value in zip(parameter_names, parameter_values):
+            updated_params[param_name] = param_value
+        preset = base_preset_callback(**updated_params)
+        experiments.append(preset)
+
+    return experiments
+
+
+class ExperimentBase:
     def __init__(
         self,
         mini_datasetset_flag: bool = True,
