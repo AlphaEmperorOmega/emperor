@@ -43,15 +43,21 @@ class Classifier(Module):
         return loss, auxilary_loss
 
     def accuracy(self, Y_hat, Y, averaged=True):
-        Y_hat = Y_hat.detach().cpu()
-        Y = Y.detach().cpu().view(-1)
+        num_classes = Y_hat.size(-1)
+        Y_hat = Y_hat.detach().view(-1, num_classes)
+        Y = Y.detach().view(-1)
+        if Y.device != Y_hat.device:
+            Y = Y.to(Y_hat.device)
         preds = Y_hat.argmax(dim=1)
         correct = (preds == Y).float()
         return correct.mean() if averaged else correct
 
     def loss(self, Y_hat, Y, averaged=True):
-        Y_hat = Y_hat.view(-1, Y_hat.size(-1))
-        Y = Y.view(-1).to(Y_hat.device)
+        num_classes = Y_hat.size(-1)
+        Y_hat = Y_hat.view(-1, num_classes)
+        Y = Y.view(-1)
+        if Y.device != Y_hat.device:
+            Y = Y.to(Y_hat.device)
         reduction = "mean" if averaged else "none"
         return F.cross_entropy(Y_hat, Y, reduction=reduction)
 
