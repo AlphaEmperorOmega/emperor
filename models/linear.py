@@ -14,7 +14,7 @@ from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.utils.factories import ExperimentBase
+from Emperor.experiments.utils.factories import ExperimentBase, create_search_space
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 
@@ -27,7 +27,7 @@ class ExperimentConfig(ConfigBase):
     )
 
 
-class LinearModel(Module):
+class Model(Module):
     def __init__(
         self,
         cfg: "ModelConfig",
@@ -77,7 +77,7 @@ class Experiment(ExperimentBase):
         return ExperimentPresets().get_config(self.model_config_option)
 
     def _get_model_type(self) -> type:
-        return LinearModel
+        return Model
 
     def train_model(self) -> None:
         if self.model_config_option is not None:
@@ -130,57 +130,38 @@ class ExperimentPresets:
                     "The specified option is not supported. Please choose a valid `LinearExperimentOptions`."
                 )
 
-    def __base_grid_search_config(self, dataset: type) -> list["ModelConfig"]:
+    def __base_grid_search_config(
+        self,
+        dataset: type = Mnist,
+        num_random_search_samples: int | None = None,
+    ) -> list["ModelConfig"]:
         spec = self.dataset_specs[dataset]
 
-        base_preset_params = {
-            "batch_size": 128,
+        base_config = {
             "input_dim": spec["input_dim"],
-            "hidden_dim": 256,
             "output_dim": spec["output_dim"],
-            "bias_flag": True,
-            "layer_norm_position": LayerNormPositionOptions.DEFAULT,
-            "stack_num_layers": 4,
-            "stack_activation": ActivationOptions.RELU,
-            "stack_residual_flag": False,
-            "stack_dropout_probability": 0.1,
         }
 
-        grid_search_space = {
+        search_space = {
             "hidden_dim": [128, 256],
             "stack_num_layers": [3, 6],
             "stack_dropout_probability": [0.0, 0.1],
             "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU],
         }
 
-        return self.__create_grid_search(base_preset_params, grid_search_space)
+        return create_search_space(
+            self.__preset, base_config, search_space, num_random_search_samples
+        )
 
-    def __create_grid_search(
+    def __preset(
         self,
-        base_params: dict,
-        grid_search_space: dict,
-    ) -> list["ModelConfig"]:
-        experiments = []
-        grid_keys = list(grid_search_space.keys())
-        grid_values = list(grid_search_space.values())
-
-        for combination in itertools.product(*grid_values):
-            params = copy.deepcopy(base_params)
-            for key, value in zip(grid_keys, combination):
-                params[key] = value
-            experiments.append(self.__linear_preset(**params))
-
-        return experiments
-
-    def __linear_preset(
-        self,
-        batch_size: int = 8,
-        input_dim: int = 12,
-        hidden_dim: int = 12,
-        output_dim: int = 6,
+        batch_size: int = 64,
+        input_dim: int = 28**2,
+        hidden_dim: int = 256,
+        output_dim: int = 10,
         bias_flag: bool = True,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
-        stack_num_layers: int = 2,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT,
+        stack_num_layers: int = 3,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
