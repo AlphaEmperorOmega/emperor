@@ -1,5 +1,5 @@
 from Emperor.base.enums import ActivationOptions
-from Emperor.experiments.utils.factories import Experiments
+from Emperor.experiments.utils.factories import ExperimentBase
 from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from Emperor.linears.utils.presets import LinearPresets
 from Emperor.behaviours.utils.enums import (
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
 
 
-class LinearsExperiments(Experiments):
+class LinearsExperiments(ExperimentBase):
     def __init__(
         self,
         mini_datasetset_flag: bool = True,
