@@ -4,19 +4,22 @@ import itertools
 
 from torch import Tensor
 from models.parser import get_parser
-from Emperor.config import ModelConfig
 from dataclasses import dataclass, field
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.datasets.image.cifar_10 import Cifar10
 from Emperor.datasets.image.cifar_100 import Cifar100
-from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
 from Emperor.experiments.utils.factories import ExperimentBase, create_search_space
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from Emperor.config import ModelConfig
 
 
 @dataclass
@@ -165,7 +168,10 @@ class ExperimentPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-    ):
+    ) -> "ModelConfig":
+        from Emperor.config import ModelConfig
+        from Emperor.linears.options import LinearLayerOptions
+
         return ModelConfig(
             batch_size=batch_size,
             input_dim=input_dim,
