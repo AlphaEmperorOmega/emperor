@@ -1,4 +1,3 @@
-from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig
 from Emperor.linears.options import LinearLayerOptions
 from Emperor.linears.utils.layers import LinearLayerConfig
@@ -25,6 +24,8 @@ class LinearPresets:
         data_monitor=None,
         parameter_monitor=None,
     ) -> "LinearLayerConfig | ModelConfig":
+        from Emperor.config import ModelConfig
+
         config = LinearLayerConfig(
             input_dim=input_dim,
             output_dim=output_dim,
@@ -61,6 +62,8 @@ class LinearPresets:
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
     ) -> "LinearLayerConfig | ModelConfig":
+        from Emperor.config import ModelConfig
+
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
@@ -129,6 +132,8 @@ class LinearPresets:
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
     ) -> "LayerStackConfig":
+        from Emperor.config import ModelConfig
+
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
@@ -182,6 +187,8 @@ class LinearPresets:
         stack_dropout_probability: float = 0.0,
         adaptive_behaviour_stack_num_layers: int = 2,
     ) -> "LayerStackConfig":
+        from Emperor.config import ModelConfig
+
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 

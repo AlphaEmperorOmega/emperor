@@ -1,24 +1,25 @@
 from .utils.presets import LinearPresets
-from .experiments import LinearsExperiments, LinearsBasePreset
 from .options import LinearLayerOptions, LinearLayerStackOptions
 from .utils.stack import LinearLayerStack, AdaptiveLinearLayerStack
-from .utils.layers import LinearLayer, AdaptiveLinearLayer, LinearLayerConfig, LinearBase
+from .utils.layers import (
+    LinearLayer,
+    AdaptiveLinearLayer,
+    LinearLayerConfig,
+    LinearBase,
+)
 
 __all__ = [
     # Core layer classes
-    'LinearLayer',
-    'AdaptiveLinearLayer',
-    'LinearBase',
+    "LinearLayer",
+    "AdaptiveLinearLayer",
+    "LinearBase",
     # Stack classes
-    'LinearLayerStack',
-    'AdaptiveLinearLayerStack',
+    "LinearLayerStack",
+    "AdaptiveLinearLayerStack",
     # Configuration
-    'LinearLayerConfig',
-    'LinearPresets',
+    "LinearLayerConfig",
+    "LinearPresets",
     # Options/Enums
-    'LinearLayerOptions',
-    'LinearLayerStackOptions',
-    # Experiments
-    'LinearsExperiments',
-    'LinearsBasePreset',
+    "LinearLayerOptions",
+    "LinearLayerStackOptions",
 ]

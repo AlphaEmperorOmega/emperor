@@ -1,5 +1,5 @@
-from torch import float32
 import torch.nn as nn
+from torch import float32
 from dataclasses import dataclass, field
 
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
