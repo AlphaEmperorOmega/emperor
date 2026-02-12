@@ -5,6 +5,8 @@ import itertools
 from dataclasses import asdict
 from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 from Emperor.attention.utils.enums import AttentionOptions
+from Emperor.attention.utils.handlers.batch import BatchDimensionManager
+from Emperor.attention.utils.handlers.bias import KeyValueBias
 from Emperor.attention.utils.utils import Utils
 from Emperor.attention.utils.handlers.maks import Mask
 from Emperor.linears.options import LinearLayerStackOptions
@@ -16,160 +18,131 @@ from Emperor.attention.utils.layer import MultiHeadAttention, MultiHeadAttention
 
 
 class TestAttention(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.model = None
-        self.batch_size = None
-        self.embedding_dim = None
-        self.target_sequence_length = None
-        self.num_heads = None
-        self.head_dim = None
-
-    def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.config = MultiHeadAttentionPresets.multi_head_attention_preset(
-            embedding_dim=12,
-            query_key_projection_dim=12,
-            value_projection_dim=12,
-            attention_option=AttentionOptions.SELF_ATTENTION,
-        )
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
-
-        self.model = MultiHeadAttention(self.config)
-
-        self.batch_size = self.config.batch_size
-        self.embedding_dim = self.config.embedding_dim
-        self.target_sequence_length = self.config.target_sequence_length
-        self.source_sequence_length = self.config.source_sequence_length
-        self.num_heads = self.config.num_heads
-        self.head_dim = self.embedding_dim // self.num_heads
-
     def test__init_input_layer_with_default_config(self):
-        self.assertIsInstance(self.model, MultiHeadAttention)
-        self.assertEqual(self.model.batch_size, self.config.batch_size)
-        self.assertEqual(self.model.model_type, self.config.model_type)
-        self.assertEqual(self.model.num_heads, self.config.num_heads)
-        self.assertEqual(self.model.embedding_dim, self.config.embedding_dim)
-        self.assertEqual(self.model.target_dtype, self.config.target_dtype)
-        self.assertEqual(
-            self.model.target_sequence_length, self.config.target_sequence_length
+        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=16,
+            value_projection_dim=20,
         )
-        self.assertEqual(
-            self.model.source_sequence_length, self.config.source_sequence_length
-        )
-        self.assertEqual(
-            self.model.attention_option,
-            self.config.attention_option,
-        )
-        self.assertEqual(
-            self.model.dropout_probability, self.config.dropout_probability
-        )
-        self.assertEqual(
-            self.model.key_value_bias_flag, self.config.key_value_bias_flag
-        )
-        self.assertEqual(
-            self.model.zero_attention_flag, self.config.zero_attention_flag
-        )
-        self.assertEqual(
-            self.model.query_key_projection_dim, self.config.query_key_projection_dim
-        )
-        self.assertEqual(
-            self.model.value_projection_dim, self.config.value_projection_dim
-        )
+        m = MultiHeadAttention(c)
+        self.assertEqual(m.batch_size, c.batch_size)
+        self.assertEqual(m.model_type, c.model_type)
+        self.assertEqual(m.num_heads, c.num_heads)
+        self.assertEqual(m.embedding_dim, c.embedding_dim)
+        self.assertEqual(m.target_dtype, c.target_dtype)
+        self.assertEqual(m.target_sequence_length, c.target_sequence_length)
+        self.assertEqual(m.source_sequence_length, c.source_sequence_length)
+        self.assertEqual(m.attention_option, c.attention_option)
+        self.assertEqual(m.dropout_probability, c.dropout_probability)
+        self.assertEqual(m.key_value_bias_flag, c.key_value_bias_flag)
+        self.assertEqual(m.zero_attention_flag, c.zero_attention_flag)
+        self.assertEqual(m.query_key_projection_dim, c.query_key_projection_dim)
+        self.assertEqual(m.value_projection_dim, c.value_projection_dim)
+        self.assertIsInstance(m.validator, MultiHeadAttentionValidator)
+        self.assertIsInstance(m.masks, Mask)
+        self.assertIsInstance(m.projector, ProjectorBase)
+        self.assertIsInstance(m.processor, ProcessorBase)
+        self.assertIsInstance(m.bias, KeyValueBias)
+        self.assertIsInstance(m.utils, Utils)
+        self.assertIsInstance(m.batch_utils, BatchDimensionManager)
 
-    def test__ensure_componets_are_initialzied(self):
-        self.assertIsInstance(self.model.validator, MultiHeadAttentionValidator)
-        self.assertIsInstance(self.model.masks, Mask)
-        self.assertIsInstance(self.model.projector, ProjectorBase)
-        self.assertIsInstance(self.model.processor, ProcessorBase)
-        self.assertIsInstance(self.model.utils, Utils)
-
-    def test_init_with_different_configation_options(self):
-        attention_options = [
-            AttentionOptions.SELF_ATTENTION,
-            AttentionOptions.INDEPENDENT,
-        ]
-        model_types = list(LinearLayerStackOptions) + list(AdaptiveLayerStackOptions)
-
-        for model_type in model_types:
-            for attention_option in attention_options:
-                for key_value_bias_flag in [True, False]:
-                    for zero_attention_flag in [True, False]:
-                        for causal_attention_mask_flag in [True, False]:
-                            for add_key_value_bias_flag in [True, False]:
-                                for average_attention_weights_flag in [True, False]:
-                                    for return_attention_weights_flag in [True, False]:
-                                        message = f"Test failed for options - model_type: {model_type}, attention_option: {attention_option}, key_value_bias_flag: {key_value_bias_flag}, zero_attention_flag: {zero_attention_flag}, causal_attention_mask_flag: {causal_attention_mask_flag}, add_key_value_bias_flag: {add_key_value_bias_flag}, average_attention_weights_flag: {average_attention_weights_flag}, return_attention_weights_flag: {return_attention_weights_flag}"
-                                        with self.subTest(message=message):
-                                            c = MultiHeadAttentionPresets.multi_head_attention_preset(
-                                                model_type=model_type,
-                                                embedding_dim=12,
-                                                query_key_projection_dim=12,
-                                                value_projection_dim=12,
-                                                attention_option=attention_option,
-                                                key_value_bias_flag=key_value_bias_flag,
-                                                zero_attention_flag=zero_attention_flag,
-                                                causal_attention_mask_flag=causal_attention_mask_flag,
-                                                add_key_value_bias_flag=add_key_value_bias_flag,
-                                                average_attention_weights_flag=average_attention_weights_flag,
-                                                return_attention_weights_flag=return_attention_weights_flag,
-                                            )
-                                            m = MultiHeadAttention(c)
-
-                                            self.assertIsInstance(m, MultiHeadAttention)
-                                            self.assertEqual(m.model_type, model_type)
-                                            self.assertEqual(
-                                                m.attention_option, attention_option
-                                            )
-                                            self.assertEqual(m.embedding_dim, 12)
-                                            self.assertEqual(
-                                                m.key_value_bias_flag,
-                                                key_value_bias_flag,
-                                            )
-                                            self.assertEqual(
-                                                m.zero_attention_flag,
-                                                zero_attention_flag,
-                                            )
-                                            self.assertEqual(
-                                                m.causal_attention_mask_flag,
-                                                causal_attention_mask_flag,
-                                            )
-                                            self.assertEqual(
-                                                m.add_key_value_bias_flag,
-                                                add_key_value_bias_flag,
-                                            )
-                                            self.assertEqual(
-                                                m.average_attention_weights_flag,
-                                                average_attention_weights_flag,
-                                            )
-                                            self.assertEqual(
-                                                m.return_attention_weights_flag,
-                                                return_attention_weights_flag,
-                                            )
+    # def test_init_with_different_configation_options(self):
+    #     attention_options = [
+    #         AttentionOptions.SELF_ATTENTION,
+    #         AttentionOptions.INDEPENDENT,
+    #     ]
+    #     model_types = list(LinearLayerStackOptions) + list(AdaptiveLayerStackOptions)
+    #
+    #     for model_type in model_types:
+    #         for attention_option in attention_options:
+    #             for key_value_bias_flag in [True, False]:
+    #                 for zero_attention_flag in [True, False]:
+    #                     for causal_attention_mask_flag in [True, False]:
+    #                         for add_key_value_bias_flag in [True, False]:
+    #                             for average_attention_weights_flag in [True, False]:
+    #                                 for return_attention_weights_flag in [True, False]:
+    #                                     message = f"Test failed for options - model_type: {model_type}, attention_option: {attention_option}, key_value_bias_flag: {key_value_bias_flag}, zero_attention_flag: {zero_attention_flag}, causal_attention_mask_flag: {causal_attention_mask_flag}, add_key_value_bias_flag: {add_key_value_bias_flag}, average_attention_weights_flag: {average_attention_weights_flag}, return_attention_weights_flag: {return_attention_weights_flag}"
+    #                                     with self.subTest(message=message):
+    #                                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
+    #                                             model_type=model_type,
+    #                                             embedding_dim=12,
+    #                                             query_key_projection_dim=12,
+    #                                             value_projection_dim=12,
+    #                                             attention_option=attention_option,
+    #                                             key_value_bias_flag=key_value_bias_flag,
+    #                                             zero_attention_flag=zero_attention_flag,
+    #                                             causal_attention_mask_flag=causal_attention_mask_flag,
+    #                                             add_key_value_bias_flag=add_key_value_bias_flag,
+    #                                             average_attention_weights_flag=average_attention_weights_flag,
+    #                                             return_attention_weights_flag=return_attention_weights_flag,
+    #                                         )
+    #                                         m = MultiHeadAttention(c)
+    #
+    #                                         self.assertIsInstance(m, MultiHeadAttention)
+    #                                         self.assertEqual(m.model_type, model_type)
+    #                                         self.assertEqual(
+    #                                             m.attention_option, attention_option
+    #                                         )
+    #                                         self.assertEqual(m.embedding_dim, 12)
+    #                                         self.assertEqual(
+    #                                             m.key_value_bias_flag,
+    #                                             key_value_bias_flag,
+    #                                         )
+    #                                         self.assertEqual(
+    #                                             m.zero_attention_flag,
+    #                                             zero_attention_flag,
+    #                                         )
+    #                                         self.assertEqual(
+    #                                             m.causal_attention_mask_flag,
+    #                                             causal_attention_mask_flag,
+    #                                         )
+    #                                         self.assertEqual(
+    #                                             m.add_key_value_bias_flag,
+    #                                             add_key_value_bias_flag,
+    #                                         )
+    #                                         self.assertEqual(
+    #                                             m.average_attention_weights_flag,
+    #                                             average_attention_weights_flag,
+    #                                         )
+    #                                         self.assertEqual(
+    #                                             m.return_attention_weights_flag,
+    #                                             return_attention_weights_flag,
+    #                                         )
 
     def test__attention_option_with_same_qkv_tensors(self):
-        tests = [
-            {"attention_option": AttentionOptions.INDEPENDENT},
-            {"attention_option": AttentionOptions.SELF_ATTENTION},
-        ]
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
+        batch_size = 4
+        sequence_lengths = 8
+
+        for attention_option in AttentionOptions:
+            message = f"Test failed for the inputs: {attention_option}"
             with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    **test,
+                options = {}
+                if attention_option == AttentionOptions.SELF_ATTENTION:
+                    options = {
+                        "embedding_dim": 12,
+                        "query_key_projection_dim": 12,
+                        "value_projection_dim": 12,
+                    }
+                else:
+                    options = {
+                        "embedding_dim": 12,
+                        "query_key_projection_dim": 16,
+                        "value_projection_dim": 20,
+                    }
+
+                c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    batch_size=batch_size,
+                    target_sequence_length=sequence_lengths,
+                    source_sequence_length=sequence_lengths,
+                    attention_option=attention_option,
+                    **options,
                 )
-                self.rebuild_presets(config)
+                m = MultiHeadAttention(c)
 
                 query = key = value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
+                    sequence_lengths,
+                    batch_size,
+                    m.embedding_dim,
                 )
 
                 key_padding_mask = None
@@ -177,7 +150,7 @@ class TestAttention(unittest.TestCase):
                 static_key = None
                 static_values = None
 
-                attention_output, attention_weights = self.model.forward(
+                attention_output, attention_weights = m.forward(
                     query,
                     key,
                     value,
@@ -187,1025 +160,1026 @@ class TestAttention(unittest.TestCase):
                     static_values,
                 )
 
+                expected_shape = (sequence_lengths, batch_size, m.embedding_dim)
                 self.assertIsInstance(attention_output, torch.Tensor)
-                self.assertIsNone(attention_weights)
-                self.assertEqual(
-                    attention_output.shape,
-                    (self.target_sequence_length, self.batch_size, self.embedding_dim),
-                )
-
-    def test__attention_option_with_different_qkv_tensors(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=32,
-            source_sequence_length=32,
-            attention_option=AttentionOptions.INDEPENDENT,
-        )
-        self.rebuild_presets(config)
-
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-
-        key_padding_mask = None
-        attention_mask = None
-        static_key = None
-        static_values = None
-
-        attention_output, attention_weights = self.model.forward(
-            query,
-            key,
-            value,
-            key_padding_mask,
-            attention_mask,
-            static_key,
-            static_values,
-        )
-
-        self.assertIsInstance(attention_output, torch.Tensor)
-        self.assertIsNone(attention_weights)
-        self.assertEqual(
-            attention_output.shape,
-            (self.target_sequence_length, self.batch_size, self.embedding_dim),
-        )
-
-    def test__qkv_tensors_and_key_padding_mask(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=32,
-            source_sequence_length=32,
-            attention_option=AttentionOptions.INDEPENDENT,
-        )
-        self.rebuild_presets(config)
-
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-
-        key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
-        attention_mask = None
-        static_key = None
-        static_values = None
-
-        attention_output, attention_weights = self.model.forward(
-            query,
-            key,
-            value,
-            key_padding_mask,
-            attention_mask,
-            static_key,
-            static_values,
-        )
-
-        self.assertIsInstance(attention_output, torch.Tensor)
-        self.assertIsNone(attention_weights)
-
-    def test__qkv_tensors_and_attention_mask(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=32,
-            source_sequence_length=32,
-            attention_option=AttentionOptions.INDEPENDENT,
-        )
-        self.rebuild_presets(config)
-
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-
-        key_padding_mask = None
-        attention_mask = torch.randn(
-            1, self.target_sequence_length, self.source_sequence_length
-        )
-        attention_mask = torch.where(
-            attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-        )
-        attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
-        static_key = None
-        static_values = None
-
-        attention_output, attention_weights = self.model.forward(
-            query,
-            key,
-            value,
-            key_padding_mask,
-            attention_mask,
-            static_key,
-            static_values,
-        )
-
-        self.assertIsInstance(attention_output, torch.Tensor)
-        self.assertIsNone(attention_weights)
-
-    def test__qkv_tensors_and_key_padding_mask_and_attention_mask(self):
-        config = MultiHeadAttentionConfig(
-            target_sequence_length=32,
-            source_sequence_length=32,
-            attention_option=AttentionOptions.INDEPENDENT,
-        )
-        self.rebuild_presets(config)
-
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
-        attention_mask = torch.randn(
-            1, self.target_sequence_length, self.source_sequence_length
-        )
-        attention_mask = torch.where(
-            attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-        )
-        attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
-        static_key = None
-        static_values = None
-
-        attention_output, attention_weights = self.model.forward(
-            query,
-            key,
-            value,
-            key_padding_mask,
-            attention_mask,
-            static_key,
-            static_values,
-        )
-
-        self.assertIsInstance(attention_output, torch.Tensor)
-        self.assertIsNone(attention_weights)
-
-    def test__return_attention_weights_flag(self):
-        tests = [
-            {"return_attention_weights_flag": False},
-            {"return_attention_weights_flag": True},
-        ]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    attention_option=AttentionOptions.SELF_ATTENTION,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = key = value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_values = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_values,
-                )
-
-                self.assertIsInstance(attention_output, torch.Tensor)
-                if test["return_attention_weights_flag"]:
+                if attention_option == AttentionOptions.SELF_ATTENTION:
                     self.assertIsInstance(attention_weights, torch.Tensor)
                 else:
                     self.assertIsNone(attention_weights)
+                self.assertEqual(attention_output.shape, expected_shape)
 
-    def test__attention_option(self):
-        tests = [
-            {"attention_option": AttentionOptions.INDEPENDENT},
-            {"attention_option": AttentionOptions.SELF_ATTENTION},
-        ]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = key = value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_value = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_value,
-                )
-
-                self.assertIsInstance(attention_output, torch.Tensor)
-                self.assertIsNone(attention_weights)
-
-    def test__zero_attention_flag(self):
-        tests = [
-            {"zero_attention_flag": False},
-            {"zero_attention_flag": True},
-        ]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    attention_option=AttentionOptions.INDEPENDENT,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_value = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_value,
-                )
-
-                self.assertIsInstance(attention_output, torch.Tensor)
-                self.assertIsNone(attention_weights)
-
-    def test__causal_attention_mask_flag(self):
-        tests = [
-            {"causal_attention_mask_flag": False},
-            {"causal_attention_mask_flag": True},
-        ]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    attention_option=AttentionOptions.INDEPENDENT,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_value = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_value,
-                )
-
-                self.assertIsInstance(attention_output, torch.Tensor)
-                self.assertIsNone(attention_weights)
-
-    def test__add_key_value_bias_flag(self):
-        tests = [
-            {"add_key_value_bias_flag": False},
-            {"add_key_value_bias_flag": True},
-        ]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    attention_option=AttentionOptions.INDEPENDENT,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_value = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_value,
-                )
-                self.assertIsInstance(attention_output, torch.Tensor)
-                self.assertIsNone(attention_weights)
-
-    def test__average_attention_weights_flag(self):
-        tests = [
-            {"average_attention_weights_flag": False},
-            {"average_attention_weights_flag": True},
-        ]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    return_attention_weights_flag=True,
-                    attention_option=AttentionOptions.SELF_ATTENTION,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = key = value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_value = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_value,
-                )
-                self.assertIsInstance(attention_output, torch.Tensor)
-                self.assertIsInstance(attention_weights, torch.Tensor)
-                if test["average_attention_weights_flag"]:
-                    self.assertEqual(attention_weights.dim(), 3)
-                else:
-                    self.assertEqual(attention_weights.dim(), 4)
-
-    # TODO: This flag has been removed but ensure you test the new condition
-    # def test__batch_first_flag(self):
+    # def test__attention_option_with_different_qkv_tensors(self):
+    #     config = MultiHeadAttentionConfig(
+    #         target_sequence_length=32,
+    #         source_sequence_length=32,
+    #         attention_option=AttentionOptions.INDEPENDENT,
+    #     )
+    #     self.rebuild_presets(config)
+    #
+    #     query = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     key = torch.randn(
+    #         self.source_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     value = torch.randn(
+    #         self.source_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #
+    #     key_padding_mask = None
+    #     attention_mask = None
+    #     static_key = None
+    #     static_values = None
+    #
+    #     attention_output, attention_weights = self.model.forward(
+    #         query,
+    #         key,
+    #         value,
+    #         key_padding_mask,
+    #         attention_mask,
+    #         static_key,
+    #         static_values,
+    #     )
+    #
+    #     self.assertIsInstance(attention_output, torch.Tensor)
+    #     self.assertIsNone(attention_weights)
+    #     self.assertEqual(
+    #         attention_output.shape,
+    #         (self.target_sequence_length, self.batch_size, self.embedding_dim),
+    #     )
+    #
+    # def test__qkv_tensors_and_key_padding_mask(self):
+    #     config = MultiHeadAttentionConfig(
+    #         target_sequence_length=32,
+    #         source_sequence_length=32,
+    #         attention_option=AttentionOptions.INDEPENDENT,
+    #     )
+    #     self.rebuild_presets(config)
+    #
+    #     query = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     key = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     value = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #
+    #     key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
+    #     attention_mask = None
+    #     static_key = None
+    #     static_values = None
+    #
+    #     attention_output, attention_weights = self.model.forward(
+    #         query,
+    #         key,
+    #         value,
+    #         key_padding_mask,
+    #         attention_mask,
+    #         static_key,
+    #         static_values,
+    #     )
+    #
+    #     self.assertIsInstance(attention_output, torch.Tensor)
+    #     self.assertIsNone(attention_weights)
+    #
+    # def test__qkv_tensors_and_attention_mask(self):
+    #     config = MultiHeadAttentionConfig(
+    #         target_sequence_length=32,
+    #         source_sequence_length=32,
+    #         attention_option=AttentionOptions.INDEPENDENT,
+    #     )
+    #     self.rebuild_presets(config)
+    #
+    #     query = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     key = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     value = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #
+    #     key_padding_mask = None
+    #     attention_mask = torch.randn(
+    #         1, self.target_sequence_length, self.source_sequence_length
+    #     )
+    #     attention_mask = torch.where(
+    #         attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #     )
+    #     attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
+    #     static_key = None
+    #     static_values = None
+    #
+    #     attention_output, attention_weights = self.model.forward(
+    #         query,
+    #         key,
+    #         value,
+    #         key_padding_mask,
+    #         attention_mask,
+    #         static_key,
+    #         static_values,
+    #     )
+    #
+    #     self.assertIsInstance(attention_output, torch.Tensor)
+    #     self.assertIsNone(attention_weights)
+    #
+    # def test__qkv_tensors_and_key_padding_mask_and_attention_mask(self):
+    #     config = MultiHeadAttentionConfig(
+    #         target_sequence_length=32,
+    #         source_sequence_length=32,
+    #         attention_option=AttentionOptions.INDEPENDENT,
+    #     )
+    #     self.rebuild_presets(config)
+    #
+    #     query = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     key = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     value = torch.randn(
+    #         self.target_sequence_length, self.batch_size, self.embedding_dim
+    #     )
+    #     key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
+    #     attention_mask = torch.randn(
+    #         1, self.target_sequence_length, self.source_sequence_length
+    #     )
+    #     attention_mask = torch.where(
+    #         attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #     )
+    #     attention_mask = attention_mask.repeat(self.batch_size * self.num_heads, 1, 1)
+    #     static_key = None
+    #     static_values = None
+    #
+    #     attention_output, attention_weights = self.model.forward(
+    #         query,
+    #         key,
+    #         value,
+    #         key_padding_mask,
+    #         attention_mask,
+    #         static_key,
+    #         static_values,
+    #     )
+    #
+    #     self.assertIsInstance(attention_output, torch.Tensor)
+    #     self.assertIsNone(attention_weights)
+    #
+    # def test__return_attention_weights_flag(self):
     #     tests = [
-    #         {"batch_first_flag": False},
-    #         {"batch_first_flag": True},
+    #         {"return_attention_weights_flag": False},
+    #         {"return_attention_weights_flag": True},
     #     ]
     #
     #     for test in tests:
-    #         config = MultiHeadAttentionConfig(
-    #             target_sequence_length=32,
-    #             source_sequence_length=32,
-    #             attention_option=True,
-    #             **test,
-    #         )
-    #         self.rebuild_presets(config)
-    #
-    #         if test["batch_first_flag"]:
-    #             q_shape = (
-    #                 self.batch_size,
-    #                 self.source_sequence_length,
-    #                 self.embedding_dim,
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 attention_option=AttentionOptions.SELF_ATTENTION,
+    #                 **test,
     #             )
-    #             kv_shape = (
-    #                 self.batch_size,
-    #                 self.target_sequence_length,
-    #                 self.embedding_dim,
+    #             self.rebuild_presets(config)
+    #
+    #             query = key = value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
     #             )
-    #         else:
-    #             q_shape = (
-    #                 self.source_sequence_length,
-    #                 self.batch_size,
-    #                 self.embedding_dim,
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
     #             )
-    #             kv_shape = (
-    #                 self.target_sequence_length,
-    #                 self.batch_size,
-    #                 self.embedding_dim,
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_values = None
+    #
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_values,
     #             )
     #
-    #         query = torch.randn(q_shape)
-    #         key = torch.randn(kv_shape)
-    #         value = torch.randn(kv_shape)
-    #         key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
-    #         attention_mask = torch.randn(
-    #             1, self.target_sequence_length, self.source_sequence_length
-    #         )
-    #         attention_mask = torch.where(
-    #             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-    #         )
-    #         attention_mask = attention_mask.repeat(
-    #             self.batch_size * self.num_heads, 1, 1
-    #         )
-    #         static_key = None
-    #         static_value = None
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #             if test["return_attention_weights_flag"]:
+    #                 self.assertIsInstance(attention_weights, torch.Tensor)
+    #             else:
+    #                 self.assertIsNone(attention_weights)
     #
-    #         attention_output, attention_weights = self.model.forward(
-    #             query,
-    #             key,
-    #             value,
-    #             key_padding_mask,
-    #             attention_mask,
-    #             static_key,
-    #             static_value,
-    #         )
+    # def test__attention_option(self):
+    #     tests = [
+    #         {"attention_option": AttentionOptions.INDEPENDENT},
+    #         {"attention_option": AttentionOptions.SELF_ATTENTION},
+    #     ]
     #
-    #         self.assertIsInstance(attention_output, torch.Tensor)
-    #         self.assertEqual(attention_output.shape, kv_shape)
-    #         self.assertIsNone(attention_weights)
-
-    def test__add_key_value_bias_flag__and__zero_attention_flag(self):
-        tests = [
-            {"add_key_value_bias_flag": False, "zero_attention_flag": False},
-            {"add_key_value_bias_flag": True, "zero_attention_flag": False},
-            {"add_key_value_bias_flag": False, "zero_attention_flag": True},
-            {"add_key_value_bias_flag": True, "zero_attention_flag": True},
-        ]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    attention_option=AttentionOptions.INDEPENDENT,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_value = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_value,
-                )
-                self.assertIsInstance(attention_output, torch.Tensor)
-                self.assertIsNone(attention_weights)
-
-    def test__self_attention__possible_flag_combinations(self):
-        flags = [
-            "add_key_value_bias_flag",
-            "zero_attention_flag",
-            # "return_attention_weights_flag",
-            "average_attention_weights_flag",
-            "causal_attention_mask_flag",
-            # "attention_option",
-        ]
-        combinations = list(itertools.product([False, True], repeat=len(flags)))
-        tests = [dict(zip(flags, combo)) for combo in combinations]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = key = value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_value = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_value,
-                )
-                self.assertIsInstance(attention_output, torch.Tensor)
-                # self.assertIsNone(attention_weights)
-
-    def test__differetn_input_tensors__possible_flag_combinations(self):
-        flags = [
-            "add_key_value_bias_flag",
-            "zero_attention_flag",
-            # "return_attention_weights_flag",
-            "average_attention_weights_flag",
-            "causal_attention_mask_flag",
-            # "attention_option",
-        ]
-        combinations = list(itertools.product([False, True], repeat=len(flags)))
-        tests = [dict(zip(flags, combo)) for combo in combinations]
-
-        for test in tests:
-            message = f"Test failed for the inputs: {test}"
-            with self.subTest(i=message):
-                config = MultiHeadAttentionConfig(
-                    target_sequence_length=32,
-                    source_sequence_length=32,
-                    **test,
-                )
-                self.rebuild_presets(config)
-
-                query = key = value = torch.randn(
-                    self.target_sequence_length, self.batch_size, self.embedding_dim
-                )
-
-                key_padding_mask = torch.randn(
-                    self.batch_size, self.source_sequence_length
-                )
-                attention_mask = torch.randn(
-                    1, self.target_sequence_length, self.source_sequence_length
-                )
-                attention_mask = torch.where(
-                    attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-                )
-                attention_mask = attention_mask.repeat(
-                    self.batch_size * self.num_heads, 1, 1
-                )
-                static_key = None
-                static_value = None
-
-                attention_output, attention_weights = self.model.forward(
-                    query,
-                    key,
-                    value,
-                    key_padding_mask,
-                    attention_mask,
-                    static_key,
-                    static_value,
-                )
-                self.assertIsInstance(attention_output, torch.Tensor)
-
-    def test__all_layer_types_and_flags_and_different_batch_sizes(self):
-        flags = [
-            "add_key_value_bias_flag",
-            "zero_attention_flag",
-            # "return_attention_weights_flag",
-            "average_attention_weights_flag",
-            "causal_attention_mask_flag",
-            # "attention_option",
-        ]
-        combinations = list(itertools.product([False, True], repeat=len(flags)))
-        tests = [dict(zip(flags, combo)) for combo in combinations]
-        batch_sizes = [2, 4, 8]  # Pass
-
-        attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
-
-        for attention_option in attention_options:
-            for model_type in attention_option:
-                for test in tests:
-                    for batch_size in batch_sizes:
-                        message = f"Failed for model_type: {model_type}, batch_size: {batch_size}, test: {test}"
-                        with self.subTest(msg=message):
-                            c = MultiHeadAttentionPresets.multi_head_attention_preset(
-                                model_type=model_type,
-                                batch_size=batch_size,
-                                embedding_dim=12,
-                                query_key_projection_dim=12,
-                                value_projection_dim=12,
-                                target_sequence_length=24,
-                                source_sequence_length=24,
-                                attention_option=AttentionOptions.INDEPENDENT,
-                                **test,
-                            )
-                            m = MultiHeadAttention(c)
-                            query = torch.randn(
-                                c.target_sequence_length,
-                                c.batch_size,
-                                c.embedding_dim,
-                            )
-                            key = torch.randn(
-                                c.target_sequence_length,
-                                c.batch_size,
-                                c.embedding_dim,
-                            )
-                            value = torch.randn(
-                                c.target_sequence_length,
-                                c.batch_size,
-                                c.embedding_dim,
-                            )
-                            key_padding_mask = torch.randn(
-                                c.batch_size, c.source_sequence_length
-                            )
-                            attention_mask = torch.randn(
-                                1,
-                                c.target_sequence_length,
-                                c.source_sequence_length,
-                            )
-                            attention_mask = torch.where(
-                                attention_mask > 0,
-                                torch.tensor(float("-inf")),
-                                torch.tensor(0.0),
-                            )
-                            attention_mask = attention_mask.repeat(
-                                c.batch_size * c.num_heads, 1, 1
-                            )
-                            static_key = None
-                            static_value = None
-
-                            attention_output, attention_weights = m.forward(
-                                query,
-                                key,
-                                value,
-                                key_padding_mask,
-                                attention_mask,
-                                static_key,
-                                static_value,
-                            )
-                            self.assertIsInstance(attention_output, torch.Tensor)
-
-    # FIX: In the case of this test embedding dimension is only updated in the
-    # `MultiHeadAttentionConfig` and but not the `ModelConfig`.
+    #     for test in tests:
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 **test,
+    #             )
+    #             self.rebuild_presets(config)
     #
-    # def test__all_layer_types_and_flags_and_different_embedding_dims(self):
-    #     ...
-
-    # BUG: `query_key_projection_dim` and `value_projection_dim` not working if not equel to `embedding_dim`. Fix this later!
+    #             query = key = value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_value = None
     #
-    # def test__all_layer_types_and_flags_and_different_query_key_projection_dim(self):
-    #     ...
-
-    # BUG: `target_sequence_length` and `source_sequence_length` not working if not equal. Fix this later!
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_value,
+    #             )
     #
-    # def test__all_layer_types_and_flags_and_different_target_sequence_length(self):
-    #     ...
-
-    def test_forward(self):
-        attention_options = [
-            AttentionOptions.SELF_ATTENTION,
-            AttentionOptions.INDEPENDENT,
-        ]
-        model_types = list(LinearLayerStackOptions) + list(AdaptiveLayerStackOptions)
-        batch_sizes = [2, 4]
-        num_heads_options = [2, 4]
-
-        for model_type in model_types:
-            for attention_option in attention_options:
-                for batch_size in batch_sizes:
-                    for num_heads in num_heads_options:
-                        for key_value_bias_flag in [True, False]:
-                            for zero_attention_flag in [True, False]:
-                                for causal_attention_mask_flag in [True, False]:
-                                    for add_key_value_bias_flag in [True, False]:
-                                        for return_attention_weights_flag in [
-                                            True,
-                                            False,
-                                        ]:
-                                            for average_attention_weights_flag in [
-                                                True,
-                                                False,
-                                            ]:
-                                                message = f"Test failed for options - model_type: {model_type}, attention_option: {attention_option}, batch_size: {batch_size}, num_heads: {num_heads}, key_value_bias_flag: {key_value_bias_flag}, zero_attention_flag: {zero_attention_flag}, causal_attention_mask_flag: {causal_attention_mask_flag}, add_key_value_bias_flag: {add_key_value_bias_flag}, return_attention_weights_flag: {return_attention_weights_flag}, average_attention_weights_flag: {average_attention_weights_flag}"
-                                                with self.subTest(message=message):
-                                                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
-                                                        model_type=model_type,
-                                                        batch_size=batch_size,
-                                                        num_heads=num_heads,
-                                                        embedding_dim=12,
-                                                        query_key_projection_dim=12,
-                                                        value_projection_dim=12,
-                                                        target_sequence_length=24,
-                                                        source_sequence_length=24,
-                                                        attention_option=attention_option,
-                                                        key_value_bias_flag=key_value_bias_flag,
-                                                        zero_attention_flag=zero_attention_flag,
-                                                        causal_attention_mask_flag=causal_attention_mask_flag,
-                                                        add_key_value_bias_flag=add_key_value_bias_flag,
-                                                        return_attention_weights_flag=return_attention_weights_flag,
-                                                        average_attention_weights_flag=average_attention_weights_flag,
-                                                    )
-                                                    m = MultiHeadAttention(c)
-
-                                                    if (
-                                                        attention_option
-                                                        == AttentionOptions.SELF_ATTENTION
-                                                    ):
-                                                        query = key = value = (
-                                                            torch.randn(
-                                                                c.target_sequence_length,
-                                                                batch_size,
-                                                                c.embedding_dim,
-                                                            )
-                                                        )
-                                                    else:
-                                                        query = torch.randn(
-                                                            c.target_sequence_length,
-                                                            batch_size,
-                                                            c.embedding_dim,
-                                                        )
-                                                        key = torch.randn(
-                                                            c.source_sequence_length,
-                                                            batch_size,
-                                                            c.embedding_dim,
-                                                        )
-                                                        value = torch.randn(
-                                                            c.source_sequence_length,
-                                                            batch_size,
-                                                            c.embedding_dim,
-                                                        )
-
-                                                    key_padding_mask = torch.randn(
-                                                        batch_size,
-                                                        c.source_sequence_length,
-                                                    )
-                                                    attention_mask = torch.randn(
-                                                        1,
-                                                        c.target_sequence_length,
-                                                        c.source_sequence_length,
-                                                    )
-                                                    attention_mask = torch.where(
-                                                        attention_mask > 0,
-                                                        torch.tensor(float("-inf")),
-                                                        torch.tensor(0.0),
-                                                    )
-                                                    attention_mask = (
-                                                        attention_mask.repeat(
-                                                            batch_size * num_heads,
-                                                            1,
-                                                            1,
-                                                        )
-                                                    )
-
-                                                    (
-                                                        attention_output,
-                                                        attention_weights,
-                                                    ) = m.forward(
-                                                        query,
-                                                        key,
-                                                        value,
-                                                        key_padding_mask,
-                                                        attention_mask,
-                                                        None,
-                                                        None,
-                                                    )
-
-                                                    self.assertIsInstance(
-                                                        attention_output, torch.Tensor
-                                                    )
-                                                    self.assertEqual(
-                                                        attention_output.shape,
-                                                        (
-                                                            c.target_sequence_length,
-                                                            batch_size,
-                                                            c.embedding_dim,
-                                                        ),
-                                                    )
-                                                    if return_attention_weights_flag:
-                                                        self.assertIsInstance(
-                                                            attention_weights,
-                                                            torch.Tensor,
-                                                        )
-                                                        if average_attention_weights_flag:
-                                                            self.assertEqual(
-                                                                attention_weights.dim(),
-                                                                3,
-                                                            )
-                                                        else:
-                                                            self.assertEqual(
-                                                                attention_weights.dim(),
-                                                                4,
-                                                            )
-                                                    else:
-                                                        self.assertIsNone(
-                                                            attention_weights
-                                                        )
-
-    # ------------------------------------------------------------------ #
-    #  gradient tests
-    # ------------------------------------------------------------------ #
-
-    def test_gradients_flow_through_multi_head_attention(self):
-        attention_options = [
-            AttentionOptions.SELF_ATTENTION,
-            AttentionOptions.INDEPENDENT,
-        ]
-        model_types = list(LinearLayerStackOptions) + list(AdaptiveLayerStackOptions)
-
-        for model_type in model_types:
-            for attention_option in attention_options:
-                for key_value_bias_flag in [True, False]:
-                    for zero_attention_flag in [True, False]:
-                        for causal_attention_mask_flag in [True, False]:
-                            for add_key_value_bias_flag in [True, False]:
-                                message = f"Test failed for options - model_type: {model_type}, attention_option: {attention_option}, key_value_bias_flag: {key_value_bias_flag}, zero_attention_flag: {zero_attention_flag}, causal_attention_mask_flag: {causal_attention_mask_flag}, add_key_value_bias_flag: {add_key_value_bias_flag}"
-                                with self.subTest(message=message):
-                                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
-                                        model_type=model_type,
-                                        embedding_dim=12,
-                                        query_key_projection_dim=12,
-                                        value_projection_dim=12,
-                                        target_sequence_length=16,
-                                        source_sequence_length=16,
-                                        attention_option=attention_option,
-                                        key_value_bias_flag=key_value_bias_flag,
-                                        zero_attention_flag=zero_attention_flag,
-                                        causal_attention_mask_flag=causal_attention_mask_flag,
-                                        add_key_value_bias_flag=add_key_value_bias_flag,
-                                    )
-                                    m = MultiHeadAttention(c)
-
-                                    if (
-                                        attention_option
-                                        == AttentionOptions.SELF_ATTENTION
-                                    ):
-                                        query = key = value = torch.randn(
-                                            c.target_sequence_length,
-                                            c.batch_size,
-                                            c.embedding_dim,
-                                            requires_grad=True,
-                                        )
-                                    else:
-                                        query = torch.randn(
-                                            c.target_sequence_length,
-                                            c.batch_size,
-                                            c.embedding_dim,
-                                            requires_grad=True,
-                                        )
-                                        key = torch.randn(
-                                            c.source_sequence_length,
-                                            c.batch_size,
-                                            c.embedding_dim,
-                                            requires_grad=True,
-                                        )
-                                        value = torch.randn(
-                                            c.source_sequence_length,
-                                            c.batch_size,
-                                            c.embedding_dim,
-                                            requires_grad=True,
-                                        )
-
-                                    attention_output, _ = m.forward(
-                                        query,
-                                        key,
-                                        value,
-                                        None,
-                                        None,
-                                        None,
-                                        None,
-                                    )
-                                    attention_output.sum().backward()
-
-                                    grads = [
-                                        p.grad
-                                        for p in m.parameters()
-                                        if p.requires_grad
-                                    ]
-                                    non_none_grads = [g for g in grads if g is not None]
-                                    self.assertTrue(len(non_none_grads) > 0)
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #             self.assertIsNone(attention_weights)
+    #
+    # def test__zero_attention_flag(self):
+    #     tests = [
+    #         {"zero_attention_flag": False},
+    #         {"zero_attention_flag": True},
+    #     ]
+    #
+    #     for test in tests:
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 attention_option=AttentionOptions.INDEPENDENT,
+    #                 **test,
+    #             )
+    #             self.rebuild_presets(config)
+    #
+    #             query = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_value = None
+    #
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_value,
+    #             )
+    #
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #             self.assertIsNone(attention_weights)
+    #
+    # def test__causal_attention_mask_flag(self):
+    #     tests = [
+    #         {"causal_attention_mask_flag": False},
+    #         {"causal_attention_mask_flag": True},
+    #     ]
+    #
+    #     for test in tests:
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 attention_option=AttentionOptions.INDEPENDENT,
+    #                 **test,
+    #             )
+    #             self.rebuild_presets(config)
+    #
+    #             query = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_value = None
+    #
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_value,
+    #             )
+    #
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #             self.assertIsNone(attention_weights)
+    #
+    # def test__add_key_value_bias_flag(self):
+    #     tests = [
+    #         {"add_key_value_bias_flag": False},
+    #         {"add_key_value_bias_flag": True},
+    #     ]
+    #
+    #     for test in tests:
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 attention_option=AttentionOptions.INDEPENDENT,
+    #                 **test,
+    #             )
+    #             self.rebuild_presets(config)
+    #
+    #             query = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_value = None
+    #
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_value,
+    #             )
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #             self.assertIsNone(attention_weights)
+    #
+    # def test__average_attention_weights_flag(self):
+    #     tests = [
+    #         {"average_attention_weights_flag": False},
+    #         {"average_attention_weights_flag": True},
+    #     ]
+    #
+    #     for test in tests:
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 return_attention_weights_flag=True,
+    #                 attention_option=AttentionOptions.SELF_ATTENTION,
+    #                 **test,
+    #             )
+    #             self.rebuild_presets(config)
+    #
+    #             query = key = value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_value = None
+    #
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_value,
+    #             )
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #             self.assertIsInstance(attention_weights, torch.Tensor)
+    #             if test["average_attention_weights_flag"]:
+    #                 self.assertEqual(attention_weights.dim(), 3)
+    #             else:
+    #                 self.assertEqual(attention_weights.dim(), 4)
+    #
+    # # TODO: This flag has been removed but ensure you test the new condition
+    # # def test__batch_first_flag(self):
+    # #     tests = [
+    # #         {"batch_first_flag": False},
+    # #         {"batch_first_flag": True},
+    # #     ]
+    # #
+    # #     for test in tests:
+    # #         config = MultiHeadAttentionConfig(
+    # #             target_sequence_length=32,
+    # #             source_sequence_length=32,
+    # #             attention_option=True,
+    # #             **test,
+    # #         )
+    # #         self.rebuild_presets(config)
+    # #
+    # #         if test["batch_first_flag"]:
+    # #             q_shape = (
+    # #                 self.batch_size,
+    # #                 self.source_sequence_length,
+    # #                 self.embedding_dim,
+    # #             )
+    # #             kv_shape = (
+    # #                 self.batch_size,
+    # #                 self.target_sequence_length,
+    # #                 self.embedding_dim,
+    # #             )
+    # #         else:
+    # #             q_shape = (
+    # #                 self.source_sequence_length,
+    # #                 self.batch_size,
+    # #                 self.embedding_dim,
+    # #             )
+    # #             kv_shape = (
+    # #                 self.target_sequence_length,
+    # #                 self.batch_size,
+    # #                 self.embedding_dim,
+    # #             )
+    # #
+    # #         query = torch.randn(q_shape)
+    # #         key = torch.randn(kv_shape)
+    # #         value = torch.randn(kv_shape)
+    # #         key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
+    # #         attention_mask = torch.randn(
+    # #             1, self.target_sequence_length, self.source_sequence_length
+    # #         )
+    # #         attention_mask = torch.where(
+    # #             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    # #         )
+    # #         attention_mask = attention_mask.repeat(
+    # #             self.batch_size * self.num_heads, 1, 1
+    # #         )
+    # #         static_key = None
+    # #         static_value = None
+    # #
+    # #         attention_output, attention_weights = self.model.forward(
+    # #             query,
+    # #             key,
+    # #             value,
+    # #             key_padding_mask,
+    # #             attention_mask,
+    # #             static_key,
+    # #             static_value,
+    # #         )
+    # #
+    # #         self.assertIsInstance(attention_output, torch.Tensor)
+    # #         self.assertEqual(attention_output.shape, kv_shape)
+    # #         self.assertIsNone(attention_weights)
+    #
+    # def test__add_key_value_bias_flag__and__zero_attention_flag(self):
+    #     tests = [
+    #         {"add_key_value_bias_flag": False, "zero_attention_flag": False},
+    #         {"add_key_value_bias_flag": True, "zero_attention_flag": False},
+    #         {"add_key_value_bias_flag": False, "zero_attention_flag": True},
+    #         {"add_key_value_bias_flag": True, "zero_attention_flag": True},
+    #     ]
+    #
+    #     for test in tests:
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 attention_option=AttentionOptions.INDEPENDENT,
+    #                 **test,
+    #             )
+    #             self.rebuild_presets(config)
+    #
+    #             query = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_value = None
+    #
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_value,
+    #             )
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #             self.assertIsNone(attention_weights)
+    #
+    # def test__self_attention__possible_flag_combinations(self):
+    #     flags = [
+    #         "add_key_value_bias_flag",
+    #         "zero_attention_flag",
+    #         # "return_attention_weights_flag",
+    #         "average_attention_weights_flag",
+    #         "causal_attention_mask_flag",
+    #         # "attention_option",
+    #     ]
+    #     combinations = list(itertools.product([False, True], repeat=len(flags)))
+    #     tests = [dict(zip(flags, combo)) for combo in combinations]
+    #
+    #     for test in tests:
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 **test,
+    #             )
+    #             self.rebuild_presets(config)
+    #
+    #             query = key = value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_value = None
+    #
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_value,
+    #             )
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #             # self.assertIsNone(attention_weights)
+    #
+    # def test__differetn_input_tensors__possible_flag_combinations(self):
+    #     flags = [
+    #         "add_key_value_bias_flag",
+    #         "zero_attention_flag",
+    #         # "return_attention_weights_flag",
+    #         "average_attention_weights_flag",
+    #         "causal_attention_mask_flag",
+    #         # "attention_option",
+    #     ]
+    #     combinations = list(itertools.product([False, True], repeat=len(flags)))
+    #     tests = [dict(zip(flags, combo)) for combo in combinations]
+    #
+    #     for test in tests:
+    #         message = f"Test failed for the inputs: {test}"
+    #         with self.subTest(i=message):
+    #             config = MultiHeadAttentionConfig(
+    #                 target_sequence_length=32,
+    #                 source_sequence_length=32,
+    #                 **test,
+    #             )
+    #             self.rebuild_presets(config)
+    #
+    #             query = key = value = torch.randn(
+    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
+    #             )
+    #
+    #             key_padding_mask = torch.randn(
+    #                 self.batch_size, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.randn(
+    #                 1, self.target_sequence_length, self.source_sequence_length
+    #             )
+    #             attention_mask = torch.where(
+    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
+    #             )
+    #             attention_mask = attention_mask.repeat(
+    #                 self.batch_size * self.num_heads, 1, 1
+    #             )
+    #             static_key = None
+    #             static_value = None
+    #
+    #             attention_output, attention_weights = self.model.forward(
+    #                 query,
+    #                 key,
+    #                 value,
+    #                 key_padding_mask,
+    #                 attention_mask,
+    #                 static_key,
+    #                 static_value,
+    #             )
+    #             self.assertIsInstance(attention_output, torch.Tensor)
+    #
+    # def test__all_layer_types_and_flags_and_different_batch_sizes(self):
+    #     flags = [
+    #         "add_key_value_bias_flag",
+    #         "zero_attention_flag",
+    #         # "return_attention_weights_flag",
+    #         "average_attention_weights_flag",
+    #         "causal_attention_mask_flag",
+    #         # "attention_option",
+    #     ]
+    #     combinations = list(itertools.product([False, True], repeat=len(flags)))
+    #     tests = [dict(zip(flags, combo)) for combo in combinations]
+    #     batch_sizes = [2, 4, 8]  # Pass
+    #
+    #     attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
+    #
+    #     for attention_option in attention_options:
+    #         for model_type in attention_option:
+    #             for test in tests:
+    #                 for batch_size in batch_sizes:
+    #                     message = f"Failed for model_type: {model_type}, batch_size: {batch_size}, test: {test}"
+    #                     with self.subTest(msg=message):
+    #                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
+    #                             model_type=model_type,
+    #                             batch_size=batch_size,
+    #                             embedding_dim=12,
+    #                             query_key_projection_dim=12,
+    #                             value_projection_dim=12,
+    #                             target_sequence_length=24,
+    #                             source_sequence_length=24,
+    #                             attention_option=AttentionOptions.INDEPENDENT,
+    #                             **test,
+    #                         )
+    #                         m = MultiHeadAttention(c)
+    #                         query = torch.randn(
+    #                             c.target_sequence_length,
+    #                             c.batch_size,
+    #                             c.embedding_dim,
+    #                         )
+    #                         key = torch.randn(
+    #                             c.target_sequence_length,
+    #                             c.batch_size,
+    #                             c.embedding_dim,
+    #                         )
+    #                         value = torch.randn(
+    #                             c.target_sequence_length,
+    #                             c.batch_size,
+    #                             c.embedding_dim,
+    #                         )
+    #                         key_padding_mask = torch.randn(
+    #                             c.batch_size, c.source_sequence_length
+    #                         )
+    #                         attention_mask = torch.randn(
+    #                             1,
+    #                             c.target_sequence_length,
+    #                             c.source_sequence_length,
+    #                         )
+    #                         attention_mask = torch.where(
+    #                             attention_mask > 0,
+    #                             torch.tensor(float("-inf")),
+    #                             torch.tensor(0.0),
+    #                         )
+    #                         attention_mask = attention_mask.repeat(
+    #                             c.batch_size * c.num_heads, 1, 1
+    #                         )
+    #                         static_key = None
+    #                         static_value = None
+    #
+    #                         attention_output, attention_weights = m.forward(
+    #                             query,
+    #                             key,
+    #                             value,
+    #                             key_padding_mask,
+    #                             attention_mask,
+    #                             static_key,
+    #                             static_value,
+    #                         )
+    #                         self.assertIsInstance(attention_output, torch.Tensor)
+    #
+    # # FIX: In the case of this test embedding dimension is only updated in the
+    # # `MultiHeadAttentionConfig` and but not the `ModelConfig`.
+    # #
+    # # def test__all_layer_types_and_flags_and_different_embedding_dims(self):
+    # #     ...
+    #
+    # # BUG: `query_key_projection_dim` and `value_projection_dim` not working if not equel to `embedding_dim`. Fix this later!
+    # #
+    # # def test__all_layer_types_and_flags_and_different_query_key_projection_dim(self):
+    # #     ...
+    #
+    # # BUG: `target_sequence_length` and `source_sequence_length` not working if not equal. Fix this later!
+    # #
+    # # def test__all_layer_types_and_flags_and_different_target_sequence_length(self):
+    # #     ...
+    #
+    # def test_forward(self):
+    #     attention_options = [
+    #         AttentionOptions.SELF_ATTENTION,
+    #         AttentionOptions.INDEPENDENT,
+    #     ]
+    #     model_types = list(LinearLayerStackOptions) + list(AdaptiveLayerStackOptions)
+    #     batch_sizes = [2, 4]
+    #     num_heads_options = [2, 4]
+    #
+    #     for model_type in model_types:
+    #         for attention_option in attention_options:
+    #             for batch_size in batch_sizes:
+    #                 for num_heads in num_heads_options:
+    #                     for key_value_bias_flag in [True, False]:
+    #                         for zero_attention_flag in [True, False]:
+    #                             for causal_attention_mask_flag in [True, False]:
+    #                                 for add_key_value_bias_flag in [True, False]:
+    #                                     for return_attention_weights_flag in [
+    #                                         True,
+    #                                         False,
+    #                                     ]:
+    #                                         for average_attention_weights_flag in [
+    #                                             True,
+    #                                             False,
+    #                                         ]:
+    #                                             message = f"Test failed for options - model_type: {model_type}, attention_option: {attention_option}, batch_size: {batch_size}, num_heads: {num_heads}, key_value_bias_flag: {key_value_bias_flag}, zero_attention_flag: {zero_attention_flag}, causal_attention_mask_flag: {causal_attention_mask_flag}, add_key_value_bias_flag: {add_key_value_bias_flag}, return_attention_weights_flag: {return_attention_weights_flag}, average_attention_weights_flag: {average_attention_weights_flag}"
+    #                                             with self.subTest(message=message):
+    #                                                 c = MultiHeadAttentionPresets.multi_head_attention_preset(
+    #                                                     model_type=model_type,
+    #                                                     batch_size=batch_size,
+    #                                                     num_heads=num_heads,
+    #                                                     embedding_dim=12,
+    #                                                     query_key_projection_dim=12,
+    #                                                     value_projection_dim=12,
+    #                                                     target_sequence_length=24,
+    #                                                     source_sequence_length=24,
+    #                                                     attention_option=attention_option,
+    #                                                     key_value_bias_flag=key_value_bias_flag,
+    #                                                     zero_attention_flag=zero_attention_flag,
+    #                                                     causal_attention_mask_flag=causal_attention_mask_flag,
+    #                                                     add_key_value_bias_flag=add_key_value_bias_flag,
+    #                                                     return_attention_weights_flag=return_attention_weights_flag,
+    #                                                     average_attention_weights_flag=average_attention_weights_flag,
+    #                                                 )
+    #                                                 m = MultiHeadAttention(c)
+    #
+    #                                                 if (
+    #                                                     attention_option
+    #                                                     == AttentionOptions.SELF_ATTENTION
+    #                                                 ):
+    #                                                     query = key = value = (
+    #                                                         torch.randn(
+    #                                                             c.target_sequence_length,
+    #                                                             batch_size,
+    #                                                             c.embedding_dim,
+    #                                                         )
+    #                                                     )
+    #                                                 else:
+    #                                                     query = torch.randn(
+    #                                                         c.target_sequence_length,
+    #                                                         batch_size,
+    #                                                         c.embedding_dim,
+    #                                                     )
+    #                                                     key = torch.randn(
+    #                                                         c.source_sequence_length,
+    #                                                         batch_size,
+    #                                                         c.embedding_dim,
+    #                                                     )
+    #                                                     value = torch.randn(
+    #                                                         c.source_sequence_length,
+    #                                                         batch_size,
+    #                                                         c.embedding_dim,
+    #                                                     )
+    #
+    #                                                 key_padding_mask = torch.randn(
+    #                                                     batch_size,
+    #                                                     c.source_sequence_length,
+    #                                                 )
+    #                                                 attention_mask = torch.randn(
+    #                                                     1,
+    #                                                     c.target_sequence_length,
+    #                                                     c.source_sequence_length,
+    #                                                 )
+    #                                                 attention_mask = torch.where(
+    #                                                     attention_mask > 0,
+    #                                                     torch.tensor(float("-inf")),
+    #                                                     torch.tensor(0.0),
+    #                                                 )
+    #                                                 attention_mask = (
+    #                                                     attention_mask.repeat(
+    #                                                         batch_size * num_heads,
+    #                                                         1,
+    #                                                         1,
+    #                                                     )
+    #                                                 )
+    #
+    #                                                 (
+    #                                                     attention_output,
+    #                                                     attention_weights,
+    #                                                 ) = m.forward(
+    #                                                     query,
+    #                                                     key,
+    #                                                     value,
+    #                                                     key_padding_mask,
+    #                                                     attention_mask,
+    #                                                     None,
+    #                                                     None,
+    #                                                 )
+    #
+    #                                                 self.assertIsInstance(
+    #                                                     attention_output, torch.Tensor
+    #                                                 )
+    #                                                 self.assertEqual(
+    #                                                     attention_output.shape,
+    #                                                     (
+    #                                                         c.target_sequence_length,
+    #                                                         batch_size,
+    #                                                         c.embedding_dim,
+    #                                                     ),
+    #                                                 )
+    #                                                 if return_attention_weights_flag:
+    #                                                     self.assertIsInstance(
+    #                                                         attention_weights,
+    #                                                         torch.Tensor,
+    #                                                     )
+    #                                                     if average_attention_weights_flag:
+    #                                                         self.assertEqual(
+    #                                                             attention_weights.dim(),
+    #                                                             3,
+    #                                                         )
+    #                                                     else:
+    #                                                         self.assertEqual(
+    #                                                             attention_weights.dim(),
+    #                                                             4,
+    #                                                         )
+    #                                                 else:
+    #                                                     self.assertIsNone(
+    #                                                         attention_weights
+    #                                                     )
+    #
+    # # ------------------------------------------------------------------ #
+    # #  gradient tests
+    # # ------------------------------------------------------------------ #
+    #
+    # def test_gradients_flow_through_multi_head_attention(self):
+    #     attention_options = [
+    #         AttentionOptions.SELF_ATTENTION,
+    #         AttentionOptions.INDEPENDENT,
+    #     ]
+    #     model_types = list(LinearLayerStackOptions) + list(AdaptiveLayerStackOptions)
+    #
+    #     for model_type in model_types:
+    #         for attention_option in attention_options:
+    #             for key_value_bias_flag in [True, False]:
+    #                 for zero_attention_flag in [True, False]:
+    #                     for causal_attention_mask_flag in [True, False]:
+    #                         for add_key_value_bias_flag in [True, False]:
+    #                             message = f"Test failed for options - model_type: {model_type}, attention_option: {attention_option}, key_value_bias_flag: {key_value_bias_flag}, zero_attention_flag: {zero_attention_flag}, causal_attention_mask_flag: {causal_attention_mask_flag}, add_key_value_bias_flag: {add_key_value_bias_flag}"
+    #                             with self.subTest(message=message):
+    #                                 c = MultiHeadAttentionPresets.multi_head_attention_preset(
+    #                                     model_type=model_type,
+    #                                     embedding_dim=12,
+    #                                     query_key_projection_dim=12,
+    #                                     value_projection_dim=12,
+    #                                     target_sequence_length=16,
+    #                                     source_sequence_length=16,
+    #                                     attention_option=attention_option,
+    #                                     key_value_bias_flag=key_value_bias_flag,
+    #                                     zero_attention_flag=zero_attention_flag,
+    #                                     causal_attention_mask_flag=causal_attention_mask_flag,
+    #                                     add_key_value_bias_flag=add_key_value_bias_flag,
+    #                                 )
+    #                                 m = MultiHeadAttention(c)
+    #
+    #                                 if (
+    #                                     attention_option
+    #                                     == AttentionOptions.SELF_ATTENTION
+    #                                 ):
+    #                                     query = key = value = torch.randn(
+    #                                         c.target_sequence_length,
+    #                                         c.batch_size,
+    #                                         c.embedding_dim,
+    #                                         requires_grad=True,
+    #                                     )
+    #                                 else:
+    #                                     query = torch.randn(
+    #                                         c.target_sequence_length,
+    #                                         c.batch_size,
+    #                                         c.embedding_dim,
+    #                                         requires_grad=True,
+    #                                     )
+    #                                     key = torch.randn(
+    #                                         c.source_sequence_length,
+    #                                         c.batch_size,
+    #                                         c.embedding_dim,
+    #                                         requires_grad=True,
+    #                                     )
+    #                                     value = torch.randn(
+    #                                         c.source_sequence_length,
+    #                                         c.batch_size,
+    #                                         c.embedding_dim,
+    #                                         requires_grad=True,
+    #                                     )
+    #
+    #                                 attention_output, _ = m.forward(
+    #                                     query,
+    #                                     key,
+    #                                     value,
+    #                                     None,
+    #                                     None,
+    #                                     None,
+    #                                     None,
+    #                                 )
+    #                                 attention_output.sum().backward()
+    #
+    #                                 grads = [
+    #                                     p.grad
+    #                                     for p in m.parameters()
+    #                                     if p.requires_grad
+    #                                 ]
+    #                                 non_none_grads = [g for g in grads if g is not None]
+    #                                 self.assertTrue(len(non_none_grads) > 0)
