@@ -56,7 +56,12 @@ class ProcessorBase:
         self.target_sequence_length: int = self.cfg.target_sequence_length
         self.source_sequence_length: int = self.cfg.source_sequence_length
         self.query_key_projection_dim: int = self.cfg.query_key_projection_dim
+        if self.query_key_projection_dim == 0:
+            self.query_key_projection_dim = self.embedding_dim
         self.value_projection_dim: int = self.cfg.value_projection_dim
+        if self.value_projection_dim == 0:
+            self.value_projection_dim = self.embedding_dim
+
         self.use_kv_expert_models_flag: bool = self.cfg.use_kv_expert_models_flag
         self.causal_attention_mask_flag: bool = self.cfg.causal_attention_mask_flag
         self.average_attention_weights_flag: bool = (
@@ -65,23 +70,22 @@ class ProcessorBase:
         self.zero_attention_flag: bool = self.cfg.zero_attention_flag
         self.add_key_value_bias_flag: bool = self.cfg.add_key_value_bias_flag
         self.head_dim: int = self.embedding_dim // self.num_heads
-        is_qk_dim = (
-            self.query_key_projection_dim is not None
-            and self.query_key_projection_dim != 0
-        )
-        is_v_dim = (
-            self.value_projection_dim is not None and self.value_projection_dim != 0
-        )
-        self.qk_head_dim = (
-            self.query_key_projection_dim // self.num_heads
-            if is_qk_dim
-            else self.head_dim
-        )
-        self.v_head_dim = (
-            self.value_projection_dim // self.num_heads if is_v_dim else self.head_dim
-        )
+        self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
         self.reshaper = ReshaperBuilder(self.cfg).build()
         self.validator = ProcessorValidator(self)
+
+    def __resolve_qkv_head_dim(self):
+        qk_head_dim = (
+            self.query_key_projection_dim // self.num_heads
+            if self.query_key_projection_dim != 0
+            else self.head_dim
+        )
+        v_head_dim = (
+            self.value_projection_dim // self.num_heads
+            if self.value_projection_dim != 0
+            else self.head_dim
+        )
+        return qk_head_dim, v_head_dim
 
     def _compute_attention_output(self, weighted_values: Tensor) -> Tensor:
         attention_output = self.projector.compute_output_projection(weighted_values)
@@ -163,9 +167,9 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
-        assert self.target_sequence_length == self.source_sequence_length, (
-            f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
-        )
+        assert (
+            self.target_sequence_length == self.source_sequence_length
+        ), f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
         weighted_values = torch.bmm(attention_weights, values)
         values = weighted_values.transpose(0, 1)
         values = values.contiguous()
@@ -267,7 +271,7 @@ class IndependentProcessor(ProcessorBase):
         weighted_values = weighted_values.contiguous()
         return weighted_values.view(
             self.batch_size * self.target_sequence_length,
-            self.embedding_dim,
+            self.value_projection_dim,
         )
 
 
@@ -359,5 +363,5 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
             self.target_sequence_length,
             self.batch_size,
             self.top_k,
-            self.embedding_dim,
+            self.value_projection_dim,
         )
