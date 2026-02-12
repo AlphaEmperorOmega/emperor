@@ -15,8 +15,22 @@ if TYPE_CHECKING:
 class SelfAttentionProjectorValidator:
     def __init__(self, model: "SelfAttentionProjector"):
         self.model = model
+        self.__ensure_qkv_dims_are_equal_for_self_attention()
 
-    def ensure_qkv_are_equal_for_self_attention(
+    def __ensure_qkv_dims_are_equal_for_self_attention(self):
+        if not (
+            self.model.query_key_projection_dim
+            == self.model.value_projection_dim
+            == self.model.embedding_dim
+        ):
+            raise RuntimeError(
+                f"Self attention requires `query_key_projection_dim`, `value_projection_dim`, and `embedding_dim` to be equal, "
+                f"but got query_key_projection_dim={self.model.query_key_projection_dim}, "
+                f"value_projection_dim={self.model.value_projection_dim}, "
+                f"embedding_dim={self.model.embedding_dim}."
+            )
+
+    def ensure_qkv_are_same_tensor_for_self_attention(
         self, key: Tensor, query: Tensor, value: Tensor
     ):
         are_qkv_same = key is value and query is key
@@ -63,6 +77,7 @@ class MixtureOfAttentionHeadsProjectorValidator:
 
     def __ensure_required_config_options_are_correct_types(self):
         from Emperor.experts.utils.layers import MixtureOfExpertsConfig
+
         if not isinstance(self.model.experts_config, MixtureOfExpertsConfig):
             raise TypeError(
                 f"Configuration Error: 'experts_config' must be of type MixtureOfExpertsConfig, received type {type(self.model.experts_config).__name__}"
