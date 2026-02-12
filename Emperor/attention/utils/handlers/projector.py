@@ -74,7 +74,11 @@ class ProjectorBase(Module):
         self.model_type = self.cfg.model_type.value
         self.embedding_dim: int = self.cfg.embedding_dim
         self.query_key_projection_dim: int = self.cfg.query_key_projection_dim
+        if self.query_key_projection_dim == 0:
+            self.query_key_projection_dim = self.embedding_dim
         self.value_projection_dim: int = self.cfg.value_projection_dim
+        if self.value_projection_dim == 0:
+            self.value_projection_dim = self.embedding_dim
         self.return_attention_weights_flag: bool = (
             self.cfg.return_attention_weights_flag
         )
@@ -154,7 +158,7 @@ class SelfAttentionProjector(ProjectorBase):
         key: Tensor,
         value: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        self.validator.ensure_qkv_are_equal_for_self_attention(key, query, value)
+        self.validator.ensure_qkv_are_same_tensor_for_self_attention(key, query, value)
         qkv_projection = self._compute_projection(query, self.qkv_model)
         query_projections, key_projections, value_projections = (
             self.__split_self_attention_projection(qkv_projection)
@@ -164,14 +168,12 @@ class SelfAttentionProjector(ProjectorBase):
     def __split_self_attention_projection(
         self, qkv_projections: Tensor
     ) -> tuple[Tensor, Tensor, Tensor]:
-        projections = qkv_projections.unflatten(-1, (3, -1))
-        projections = projections.unsqueeze(0)
-        projections = projections.transpose(0, -2)
-        projections = projections.squeeze(-2)
-        projections = projections.contiguous()
-        query_projections = projections[0]
-        key_projections = projections[1]
-        value_projections = projections[2]
+        X = qkv_projections.unflatten(-1, (3, -1))
+        X = X.unsqueeze(0).transpose(0, -2)
+        X = X.squeeze(-2).contiguous()
+        query_projections = X[0]
+        key_projections = X[1]
+        value_projections = X[2]
 
         return query_projections, key_projections, value_projections
 
@@ -341,6 +343,6 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         return projection
 
     def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
-        sequence_length, batch_size, _, embedding_dim = weighted_values.shape
+        sequence_length, batch_size, _, _ = weighted_values.shape
         projection = self._compute_projection(weighted_values, self.output_model)
-        return projection.view(sequence_length, batch_size, embedding_dim)
+        return projection.view(sequence_length, batch_size, self.embedding_dim)
