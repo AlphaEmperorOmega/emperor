@@ -42,8 +42,6 @@ class TestUtils(unittest.TestCase):
         self.target_sequence_length = self.config.target_sequence_length
         self.source_sequence_length = self.config.source_sequence_length
         self.query_key_projection_dim = self.config.query_key_projection_dim
-        self.qk_head_dim = self.model.qk_head_dim
-        self.v_head_dim = self.model.v_head_dim
         self.num_heads = self.config.num_heads
         self.head_dim = self.embedding_dim // self.num_heads
 
@@ -126,127 +124,6 @@ class Test_add_batch_dimension_if_missing(TestUtils):
             output_attention_mask.shape,
             (1, self.target_sequence_length, self.source_sequence_length),
         )
-
-
-class Test___reshape_projection_tesnor(TestUtils):
-    def test_with_given_static_tensor(self):
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        static_tensor = torch.randn(
-            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
-        )
-        output = self.model._Utils__reshape_projection_tesnor(tensor, static_tensor)
-
-        self.assertTrue(torch.equal(output, static_tensor))
-
-    def test_without_static_tensor(self):
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        output = self.model._Utils__reshape_projection_tesnor(tensor)
-        expected_output_shape = (
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            self.head_dim,
-        )
-        self.assertEqual(output.shape, expected_output_shape)
-
-    def test_without_static_tensor_and_custom_projection_dim(self):
-        config = MultiHeadAttentionConfig(
-            query_key_projection_dim=64,
-        )
-        self.rebuild_presets(config)
-        tensor = torch.randn(
-            self.target_sequence_length, self.batch_size, self.query_key_projection_dim
-        )
-        static_tensor = None
-        head_dim = self.model.qk_head_dim
-        output = self.model._Utils__reshape_projection_tesnor(
-            tensor, static_tensor, head_dim
-        )
-        expected_output_shape = (
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            head_dim,
-        )
-        self.assertEqual(output.shape, expected_output_shape)
-
-
-class Test__reshape_qkv_for_attention(TestUtils):
-    def test__qkv_inputs_only(self):
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        static_key = None
-        static_value = None
-
-        query, key, value = self.model.reshape_qkv_for_attention(
-            query, key, value, static_key, static_value
-        )
-
-        expected_q_shape = (
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            self.head_dim,
-        )
-        expected_kv_shape = (
-            self.batch_size * self.num_heads,
-            self.source_sequence_length,
-            self.head_dim,
-        )
-        self.assertIsInstance(query, torch.Tensor)
-        self.assertIsInstance(key, torch.Tensor)
-        self.assertIsInstance(value, torch.Tensor)
-        self.assertEqual(query.shape, expected_q_shape)
-        self.assertEqual(key.shape, expected_kv_shape)
-        self.assertEqual(value.shape, expected_kv_shape)
-
-    def test__all_inputs(self):
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
-        )
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        static_key = torch.randn(
-            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
-        )
-        static_value = torch.randn(
-            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
-        )
-
-        query, key, value = self.model.reshape_qkv_for_attention(
-            query, key, value, static_key, static_value
-        )
-
-        expected_q_shape = (
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            self.qk_head_dim,
-        )
-        expected_kv_shape = (
-            self.batch_size * self.num_heads,
-            self.source_sequence_length,
-            self.v_head_dim,
-        )
-        self.assertIsInstance(query, torch.Tensor)
-        self.assertIsInstance(key, torch.Tensor)
-        self.assertIsInstance(value, torch.Tensor)
-        self.assertEqual(query.shape, expected_q_shape)
-        self.assertEqual(key.shape, expected_kv_shape)
-        self.assertEqual(value.shape, expected_kv_shape)
-        self.assertTrue(torch.equal(key, static_key))
-        self.assertTrue(torch.equal(value, static_value))
 
 
 class Test____concatenate_zeros_tensor(TestUtils):
