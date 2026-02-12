@@ -157,15 +157,13 @@ class MultiHeadAttention(Module):
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
         self.attention_option = self.cfg.attention_option
         self.average_attention_weights_flag = self.cfg.average_attention_weights_flag
-        self._validate_fields(self.cfg, MultiHeadAttentionConfig)
-        self.__initialize_utilities()
+        # self._validate_fields(self.cfg, MultiHeadAttentionConfig)
+        # self.__initialize_utilities()
 
         self.validator = MultiHeadAttentionValidator(self.cfg)
         self.masks = Mask(self.cfg)
         self.projector = ProjectorBuilder(self.cfg).build()
-        self.processor = ProcessorBuilder(
-            self.cfg, self.validator, self.projector
-        ).build()
+        self.processor = ProcessorBuilder(self.cfg, self.projector).build()
         self.reshaper = ReshaperBuilder(self.cfg).build()
         self.bias = KeyValueBias(self.cfg)
         self.utils = Utils(self.cfg, self.validator)
