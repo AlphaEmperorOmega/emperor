@@ -1,149 +1,285 @@
+import torch
 import unittest
-from dataclasses import asdict
-from Emperor.attention.utils.utils import Utils
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 
+from Emperor.attention.utils.presets import MultiHeadAttentionPresets
+from Emperor.attention.utils.handlers.bias import KeyValueBias
 
 class TestKeyValueBias(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
+    def test_init(self):
+        bias_options = [True, False]
+        dimension_options = [(8, 8, 8), (12, 14, 16), (8, 12, 8)]
 
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.model = None
-        self.batch_size = None
-        self.embedding_dim = None
-        self.target_sequence_length = None
-        self.num_heads = None
-        self.head_dim = None
+        for add_key_value_bias_flag in bias_options:
+            for embedding_dim, qk_dim, v_dim in dimension_options:
+                message = f"Test failed for the options: add_key_value_bias_flag={add_key_value_bias_flag}, embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
+                with self.subTest(i=message):
+                    cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        embedding_dim=embedding_dim,
+                        query_key_projection_dim=qk_dim,
+                        value_projection_dim=v_dim,
+                        add_key_value_bias_flag=add_key_value_bias_flag,
+                    )
+                    m = KeyValueBias(cfg)
 
-    def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.config = MultiHeadAttentionPresets.multi_head_attention_preset(
-            embedding_dim=12,
-            query_key_projection_dim=12,
-            value_projection_dim=12,
-        )
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
+                    self.assertEqual(m.batch_size, cfg.batch_size)
+                    self.assertEqual(
+                        m.add_key_value_bias_flag, add_key_value_bias_flag
+                    )
+                    self.assertEqual(m.query_key_projection_dim, qk_dim)
+                    self.assertEqual(m.value_projection_dim, v_dim)
 
-        self.validator = MultiHeadAttentionValidator(self.config)
-        self.model = Utils(self.config, self.validator)
+                    if add_key_value_bias_flag:
+                        self.assertIsInstance(m.key_bias_vector, torch.Tensor)
+                        self.assertIsInstance(m.value_bias_vector, torch.Tensor)
+                        self.assertEqual(
+                            m.key_bias_vector.shape, (1, 1, qk_dim)
+                        )
+                        self.assertEqual(
+                            m.value_bias_vector.shape, (1, 1, v_dim)
+                        )
+                    else:
+                        self.assertIsNone(m.key_bias_vector)
+                        self.assertIsNone(m.value_bias_vector)
 
-        self.batch_size = self.config.batch_size
-        self.embedding_dim = self.config.embedding_dim
-        self.target_sequence_length = self.config.target_sequence_length
-        self.source_sequence_length = self.config.source_sequence_length
-        self.qk_head_dim = self.model.qk_head_dim
-        self.v_head_dim = self.model.v_head_dim
-        self.num_heads = self.config.num_heads
-        self.head_dim = self.embedding_dim // self.num_heads
+    def test_forward_no_bias(self):
+        batch_size = 2
+        source_seq_len = 10
 
+        dimension_options = [(8, 8, 8), (12, 14, 16), (8, 12, 8)]
 
-# class Test__add_learnable_bias_vectors(TestKeyValueBias):
-#     def test__kv_input_tensor_only__no_kv_biases(self):
-#         key_projections = torch.randn(
-#             self.source_sequence_length, self.batch_size, self.embedding_dim
-#         )
-#         value_projections = torch.randn(
-#             self.source_sequence_length, self.batch_size, self.embedding_dim
-#         )
-#
-#         (
-#             out_key_projections,
-#             out_value_projections,
-#             out_key_padding_mask,
-#             out_attention_mask,
-#         ) = self.model.add_learnable_bias_vectors(key_projections, value_projections)
-#         self.assertEqual(out_key_projections.shape, key_projections.shape)
-#         self.assertEqual(out_value_projections.shape, out_value_projections.shape)
-#         self.assertIsNone(out_key_padding_mask)
-#         self.assertIsNone(out_attention_mask)
-#
-#     def test__all_inputs__no_kv_biases(self):
-#         key_projections = torch.randn(
-#             self.source_sequence_length, self.batch_size, self.embedding_dim
-#         )
-#         value_projections = torch.randn(
-#             self.source_sequence_length, self.batch_size, self.embedding_dim
-#         )
-#         key_padding_mask = torch.randint(
-#             0, 2, (self.batch_size, self.source_sequence_length)
-#         )
-#         attention_mask = torch.randn(
-#             self.batch_size * self.num_heads,
-#             self.target_sequence_length,
-#             self.source_sequence_length,
-#         )
-#
-#         (
-#             out_key_projections,
-#             out_value_projections,
-#             out_key_padding_mask,
-#             out_attention_mask,
-#         ) = self.model.add_learnable_bias_vectors(
-#             key_projections, value_projections, key_padding_mask, attention_mask
-#         )
-#         self.assertEqual(out_key_projections.shape, key_projections.shape)
-#         self.assertEqual(out_value_projections.shape, out_value_projections.shape)
-#         self.assertEqual(out_key_padding_mask.shape, key_padding_mask.shape)
-#         self.assertEqual(out_attention_mask.shape, attention_mask.shape)
-#         self.assertTrue(torch.equal(out_key_projections, key_projections))
-#         self.assertTrue(torch.equal(out_value_projections, out_value_projections))
-#         self.assertTrue(torch.equal(out_key_padding_mask, key_padding_mask))
-#         self.assertTrue(torch.equal(out_attention_mask, attention_mask))
-#
-#     def test__all_inputs__add_key_value_bias_flag__True(self):
-#         config = MultiHeadAttentionConfig(
-#             add_key_value_bias_flag=True,
-#         )
-#         self.rebuild_presets(config)
-#
-#         key_projections = torch.randn(
-#             self.source_sequence_length, self.batch_size, self.embedding_dim
-#         )
-#         value_projections = torch.randn(
-#             self.source_sequence_length, self.batch_size, self.embedding_dim
-#         )
-#         key_padding_mask = torch.randint(
-#             0, 2, (self.batch_size, self.source_sequence_length)
-#         )
-#         attention_mask = torch.randn(
-#             self.batch_size * self.num_heads,
-#             self.target_sequence_length,
-#             self.source_sequence_length,
-#         )
-#
-#         (
-#             out_key_projections,
-#             out_value_projections,
-#             out_key_padding_mask,
-#             out_attention_mask,
-#         ) = self.model.add_learnable_bias_vectors(
-#             key_projections, value_projections, key_padding_mask, attention_mask
-#         )
-#         source_sequence_length_updated = self.source_sequence_length + 1
-#         expected_kv_shape = (
-#             source_sequence_length_updated,
-#             self.batch_size,
-#             self.embedding_dim,
-#         )
-#
-#         self.assertEqual(out_key_projections.shape, expected_kv_shape)
-#         self.assertEqual(out_value_projections.shape, expected_kv_shape)
-#         self.assertEqual(
-#             out_key_padding_mask.shape,
-#             (self.batch_size, source_sequence_length_updated),
-#         )
-#         self.assertEqual(
-#             out_attention_mask.shape,
-#             (
-#                 self.batch_size * self.num_heads,
-#                 self.target_sequence_length,
-#                 source_sequence_length_updated,
-#             ),
-#         )
+        for embedding_dim, qk_dim, v_dim in dimension_options:
+            message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
+            with self.subTest(i=message):
+                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    embedding_dim=embedding_dim,
+                    query_key_projection_dim=qk_dim,
+                    value_projection_dim=v_dim,
+                    batch_size=batch_size,
+                    source_sequence_length=source_seq_len,
+                    add_key_value_bias_flag=False,
+                )
+                m = KeyValueBias(cfg)
+
+                key_projections = torch.randn(
+                    source_seq_len, batch_size, qk_dim
+                )
+                value_projections = torch.randn(
+                    source_seq_len, batch_size, v_dim
+                )
+
+                out_k, out_v, out_k_mask, out_attn_mask = (
+                    m.add_kv_learnable_bias_vectors(
+                        key_projections, value_projections
+                    )
+                )
+
+                self.assertEqual(out_k.shape, key_projections.shape)
+                self.assertEqual(out_v.shape, value_projections.shape)
+                self.assertTrue(torch.equal(out_k, key_projections))
+                self.assertTrue(torch.equal(out_v, value_projections))
+                self.assertIsNone(out_k_mask)
+                self.assertIsNone(out_attn_mask)
+
+    def test_forward_no_bias_with_masks(self):
+        batch_size = 4
+        num_heads = 4
+        source_seq_len = 10
+        target_seq_len = 18
+
+        dimension_options = [(8, 8, 8), (12, 14, 16), (8, 12, 8)]
+
+        for embedding_dim, qk_dim, v_dim in dimension_options:
+            message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
+            with self.subTest(i=message):
+                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    embedding_dim=embedding_dim,
+                    query_key_projection_dim=qk_dim,
+                    value_projection_dim=v_dim,
+                    batch_size=batch_size,
+                    num_heads=num_heads,
+                    source_sequence_length=source_seq_len,
+                    target_sequence_length=target_seq_len,
+                    add_key_value_bias_flag=False,
+                )
+                m = KeyValueBias(cfg)
+
+                key_projections = torch.randn(
+                    source_seq_len, batch_size, qk_dim
+                )
+                value_projections = torch.randn(
+                    source_seq_len, batch_size, v_dim
+                )
+                key_padding_mask = torch.randint(
+                    0, 2, (batch_size, source_seq_len)
+                )
+                attention_mask = torch.randn(
+                    batch_size * num_heads, target_seq_len, source_seq_len
+                )
+
+                out_k, out_v, out_k_mask, out_attn_mask = (
+                    m.add_kv_learnable_bias_vectors(
+                        key_projections,
+                        value_projections,
+                        key_padding_mask,
+                        attention_mask,
+                    )
+                )
+
+                self.assertEqual(out_k.shape, key_projections.shape)
+                self.assertEqual(out_v.shape, value_projections.shape)
+                self.assertTrue(torch.equal(out_k, key_projections))
+                self.assertTrue(torch.equal(out_v, value_projections))
+                self.assertTrue(torch.equal(out_k_mask, key_padding_mask))
+                self.assertTrue(torch.equal(out_attn_mask, attention_mask))
+
+    def test_forward_with_bias_no_masks(self):
+        batch_size = 4
+        source_seq_len = 20
+
+        dimension_options = [(8, 8, 8), (12, 14, 16), (8, 12, 8)]
+
+        for embedding_dim, qk_dim, v_dim in dimension_options:
+            message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
+            with self.subTest(i=message):
+                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    embedding_dim=embedding_dim,
+                    query_key_projection_dim=qk_dim,
+                    value_projection_dim=v_dim,
+                    batch_size=batch_size,
+                    source_sequence_length=source_seq_len,
+                    add_key_value_bias_flag=True,
+                )
+                m = KeyValueBias(cfg)
+
+                key_projections = torch.randn(
+                    source_seq_len, batch_size, qk_dim
+                )
+                value_projections = torch.randn(
+                    source_seq_len, batch_size, v_dim
+                )
+
+                out_k, out_v, out_k_mask, out_attn_mask = (
+                    m.add_kv_learnable_bias_vectors(
+                        key_projections, value_projections
+                    )
+                )
+
+                expected_seq_len = source_seq_len + 1
+                self.assertEqual(
+                    out_k.shape, (expected_seq_len, batch_size, qk_dim)
+                )
+                self.assertEqual(
+                    out_v.shape, (expected_seq_len, batch_size, v_dim)
+                )
+                self.assertIsNone(out_k_mask)
+                self.assertIsNone(out_attn_mask)
+
+    def test_forward_with_bias_and_masks(self):
+        batch_size = 4
+        num_heads = 4
+        source_seq_len = 10
+        target_seq_len = 18
+
+        dimension_options = [(8, 8, 8), (12, 14, 16), (8, 12, 8)]
+
+        for embedding_dim, qk_dim, v_dim in dimension_options:
+            message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
+            with self.subTest(i=message):
+                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    embedding_dim=embedding_dim,
+                    query_key_projection_dim=qk_dim,
+                    value_projection_dim=v_dim,
+                    batch_size=batch_size,
+                    num_heads=num_heads,
+                    source_sequence_length=source_seq_len,
+                    target_sequence_length=target_seq_len,
+                    add_key_value_bias_flag=True,
+                )
+                m = KeyValueBias(cfg)
+
+                key_projections = torch.randn(
+                    source_seq_len, batch_size, qk_dim
+                )
+                value_projections = torch.randn(
+                    source_seq_len, batch_size, v_dim
+                )
+                key_padding_mask = torch.randint(
+                    0, 2, (batch_size, source_seq_len)
+                )
+                attention_mask = torch.randn(
+                    batch_size * num_heads,
+                    target_seq_len,
+                    source_seq_len,
+                )
+
+                out_k, out_v, out_k_mask, out_attn_mask = (
+                    m.add_kv_learnable_bias_vectors(
+                        key_projections,
+                        value_projections,
+                        key_padding_mask,
+                        attention_mask,
+                    )
+                )
+
+                expected_seq_len = source_seq_len + 1
+                self.assertEqual(
+                    out_k.shape, (expected_seq_len, batch_size, qk_dim)
+                )
+                self.assertEqual(
+                    out_v.shape, (expected_seq_len, batch_size, v_dim)
+                )
+                self.assertEqual(
+                    out_k_mask.shape,
+                    (batch_size, expected_seq_len),
+                )
+                self.assertEqual(
+                    out_attn_mask.shape,
+                    (
+                        batch_size * num_heads,
+                        target_seq_len,
+                        expected_seq_len,
+                    ),
+                )
+
+    def test_gradients_flow_through_bias_vectors(self):
+        batch_size = 4
+        source_seq_len = 20
+
+        dimension_options = [(8, 8, 8), (12, 14, 16), (8, 12, 8)]
+
+        for embedding_dim, qk_dim, v_dim in dimension_options:
+            message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
+            with self.subTest(i=message):
+                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    embedding_dim=embedding_dim,
+                    query_key_projection_dim=qk_dim,
+                    value_projection_dim=v_dim,
+                    batch_size=batch_size,
+                    source_sequence_length=source_seq_len,
+                    add_key_value_bias_flag=True,
+                )
+                m = KeyValueBias(cfg)
+
+                key_projections = torch.randn(
+                    source_seq_len, batch_size, qk_dim
+                )
+                value_projections = torch.randn(
+                    source_seq_len, batch_size, v_dim
+                )
+
+                out_k, out_v, _, _ = m.add_kv_learnable_bias_vectors(
+                    key_projections, value_projections
+                )
+                loss = out_k.sum() + out_v.sum()
+                loss.backward()
+
+                self.assertIsNotNone(m.key_bias_vector.grad)
+                self.assertEqual(
+                    m.key_bias_vector.grad.shape,
+                    m.key_bias_vector.shape,
+                )
+                self.assertIsNotNone(m.value_bias_vector.grad)
+                self.assertEqual(
+                    m.value_bias_vector.grad.shape,
+                    m.value_bias_vector.shape,
+                )
