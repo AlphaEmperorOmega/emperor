@@ -19,6 +19,9 @@ dependencies = [
   "matplotlib",
   "ipython",
   "tensorboard",
+  "pandas",
+  "ipykernel",
+  "numpy",
 ]
 
 [project.urls]
