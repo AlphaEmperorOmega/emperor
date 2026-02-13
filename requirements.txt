@@ -1,4 +1,0 @@
-pandas
-ipykernel
-matplotlib
-numpy
