@@ -10,12 +10,32 @@ if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 
 
+class MaskBuilder:
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig",
+    ):
+        self.cfg = cfg
+        self.attention_option = self.cfg.attention_option
+
+    def build(self) -> "Mask":
+        from Emperor.attention.utils.enums import AttentionOptions
+
+        match self.attention_option:
+            case AttentionOptions.MIXTURE_OF_ATTENTION_HEADS:
+                return MixtureOfAttentionHeadsMask(self.cfg)
+            case _:
+                return Mask(self.cfg)
+
+
 class Mask:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
     ):
         self.cfg = cfg
+        self.batch_size = self.cfg.batch_size
+        self.num_heads = self.cfg.num_heads
         self.target_dtype = self.cfg.target_dtype
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
@@ -98,3 +118,73 @@ class Mask:
             mask_placeholder = torch.zeros_like(mask, dtype=target_type)
             mask = mask_placeholder.masked_fill_(mask, float("-inf"))
         return mask
+
+    def merge_padding_and_attention_mask(
+        self,
+        key: Tensor,
+        key_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ) -> Tensor | None:
+        if key_padding_mask is None:
+            return attention_mask
+
+        source_sequence_length = key.size(1)
+
+        shape_view = (self.batch_size, 1, 1, source_sequence_length)
+        key_padding_mask = key_padding_mask.view(shape_view)
+
+        shape_expand = (-1, self.num_heads, -1, -1)
+        key_padding_mask = key_padding_mask.expand(shape_expand)
+
+        batch_size = self.batch_size * self.num_heads
+        shape_reshape = (batch_size, 1, source_sequence_length)
+        key_padding_mask = key_padding_mask.reshape(shape_reshape)
+
+        attention_mask = self._merge_attention_and_padding_mask(
+            key_padding_mask, attention_mask
+        )
+        return attention_mask
+
+    def _merge_attention_and_padding_mask(
+        self,
+        key_padding_mask: Tensor,
+        attention_mask: Tensor | None = None,
+    ) -> Tensor | None:
+        if attention_mask is None:
+            return key_padding_mask
+        return attention_mask + key_padding_mask
+
+
+class MixtureOfAttentionHeadsMask(Mask):
+    def __init__(
+        self,
+        cfg: "MultiHeadAttentionConfig",
+    ):
+        super().__init__(cfg)
+        self.top_k = self.cfg.experts_config.top_k
+
+    def merge_padding_and_attention_mask(
+        self,
+        key: Tensor,
+        key_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+    ) -> Tensor | None:
+        if key_padding_mask is None:
+            return attention_mask
+
+        source_sequence_length = key.size(1)
+
+        shape_view = (self.batch_size, 1, 1, source_sequence_length)
+        key_padding_mask = key_padding_mask.view(shape_view)
+
+        shape_expand = (-1, self.num_heads * self.top_k, -1, -1)
+        key_padding_mask = key_padding_mask.expand(shape_expand)
+
+        batch_size = self.batch_size * self.num_heads * self.top_k
+        shape_reshape = (batch_size, 1, source_sequence_length)
+        key_padding_mask = key_padding_mask.reshape(shape_reshape)
+
+        attention_mask = self._merge_attention_and_padding_mask(
+            key_padding_mask, attention_mask
+        )
+        return attention_mask

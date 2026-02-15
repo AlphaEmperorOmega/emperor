@@ -1,4 +1,5 @@
 from torch import Tensor
+from Emperor.attention.utils.enums import AttentionOptions
 
 from typing import TYPE_CHECKING
 
@@ -18,12 +19,15 @@ class MultiHeadAttentionValidator:
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.head_dim = self.embeding_dim // self.num_heads
         self.batched_input_flag = None
+        self.attention_option = self.cfg.attention_option
         self.source_sequence_length = self.cfg.source_sequence_length
         self.target_sequence_length = self.cfg.target_sequence_length
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
 
     def assert_correct_head_dim(self, head_dim: int) -> None:
-        assert (head_dim * self.num_heads) == self.embeding_dim, (
+        assert (
+            head_dim * self.num_heads
+        ) == self.embeding_dim, (
             "`embedding_dim` must be perfectly divisible by `number_of_heads`."
         )
 
@@ -103,11 +107,19 @@ class MultiHeadAttentionValidator:
         self, attention_mask: Tensor
     ) -> tuple[int, int, int] | tuple[int, int]:
         if attention_mask.dim() == 3:
-            return (
-                self.batch_size * self.num_heads,
-                self.target_sequence_length,
-                self.source_sequence_length,
-            )
+            if self.attention_option == AttentionOptions.MIXTURE_OF_ATTENTION_HEADS:
+                top_k = self.cfg.experts_config.top_k
+                return (
+                    self.batch_size * self.num_heads * top_k,
+                    self.target_sequence_length,
+                    self.source_sequence_length,
+                )
+            else:
+                return (
+                    self.batch_size * self.num_heads,
+                    self.target_sequence_length,
+                    self.source_sequence_length,
+                )
         return (self.target_sequence_length, self.source_sequence_length)
 
     def is_tensor_batched(self, tensor: Tensor) -> bool:
@@ -119,17 +131,17 @@ class MultiHeadAttentionValidator:
 
     def is_input_batched(self, tensor: Tensor | None = None) -> bool:
         if self.batched_input_flag is None:
-            assert tensor is not None, (
-                "Tensor must be provided to check batch dimension."
-            )
+            assert (
+                tensor is not None
+            ), "Tensor must be provided to check batch dimension."
             self.batched_input_flag = tensor.dim() == 3
             return self.batched_input_flag
         return self.batched_input_flag
 
     def assert_correct_embedding_dim(self, expected_embedding_dim: int):
-        assert self.embedding_dim == expected_embedding_dim, (
-            f"Was expecting embedding dimension of {expected_embedding_dim}, but got {self.embedding_dim}"
-        )
+        assert (
+            self.embedding_dim == expected_embedding_dim
+        ), f"Was expecting embedding dimension of {expected_embedding_dim}, but got {self.embedding_dim}"
 
     def are_separate_projection_models_initialized(self) -> None:
         ensure_qkv_models_exist = (
@@ -137,14 +149,14 @@ class MultiHeadAttentionValidator:
             and self.key_model is not None
             and self.value_model is not None
         )
-        assert ensure_qkv_models_exist, (
-            "When query, key, and value are not the same and self attention is not performed, ensure `attention_option` is `True`"
-        )
+        assert (
+            ensure_qkv_models_exist
+        ), "When query, key, and value are not the same and self attention is not performed, ensure `attention_option` is `True`"
 
     def validate_attention_weights_flag_with_projection_type(self):
-        assert not self.return_attention_weights_flag, (
-            "`attention_weights` can be returned only when self attention is performed, ensure that `attention_option` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
-        )
+        assert (
+            not self.return_attention_weights_flag
+        ), "`attention_weights` can be returned only when self attention is performed, ensure that `attention_option` is set to `False` and the `query`, `key` and `value` tensors are the same tensor."
 
     def check_indepentent_projections_inputs(self, key: Tensor, value: Tensor) -> None:
         k_sequence_length, k_batch_size, _ = key.shape
@@ -181,12 +193,12 @@ class MultiHeadAttentionValidator:
         if static_tensor is not None:
             tensor_type = self.__resolve_static_projection_type(value_tensor_flag)
             expected_first_dim = self.batch_size * self.num_heads
-            assert static_tensor.size(0) == expected_first_dim, (
-                f"expecting {tensor_type}.size(0) of {expected_first_dim}, but got {static_tensor.size(0)}"
-            )
-            assert static_tensor.size(2) == self.head_dim, (
-                f"expecting {tensor_type}.size(2) of {self.head_dim}, but got {static_tensor.size(2)}"
-            )
+            assert (
+                static_tensor.size(0) == expected_first_dim
+            ), f"expecting {tensor_type}.size(0) of {expected_first_dim}, but got {static_tensor.size(0)}"
+            assert (
+                static_tensor.size(2) == self.head_dim
+            ), f"expecting {tensor_type}.size(2) of {self.head_dim}, but got {static_tensor.size(2)}"
 
     def __resolve_static_projection_type(self, value_tensor_flag: bool = False) -> str:
         return "static_values" if value_tensor_flag else "static_keys"

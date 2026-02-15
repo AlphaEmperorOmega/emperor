@@ -8,17 +8,12 @@ if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 
 
-class ReshaperBuilder(Module):
+class ReshaperBuilder:
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
     ):
-        super().__init__()
         self.cfg = cfg
-
-        self.embedding_dim = self.cfg.embedding_dim
-        self.query_key_projection_dim = self.cfg.query_key_projection_dim
-        self.value_projection_dim = self.cfg.value_projection_dim
         self.attention_option = self.cfg.attention_option
 
     def build(self) -> "ReshaperBase":
@@ -233,7 +228,6 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
     def _reshape_query(self, query: Tensor) -> Tensor:
         q_shape = (self.batch_size, self.top_k, self.num_heads, -1, self.qk_head_dim)
         return query.view(q_shape)
-        # return query.view(q_shape).permute(1, 2, 3, 0, 4)
 
     def _reshape_kv(self, key: Tensor, value: Tensor) -> tuple[Tensor, Tensor]:
         if self.use_kv_expert_models_flag:
@@ -252,7 +246,6 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
                 self.v_head_dim,
             )
             return key, value
-            # return key.permute(1, 2, 3, 0, 4), value.permute(1, 2, 3, 0, 4)
         k_shape = (
             self.batch_size,
             self.num_heads,
@@ -266,6 +259,3 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
             self.v_head_dim,
         )
         return key.view(k_shape), value.view(v_shape)
-        # return key.view(k_shape).permute(1, 2, 0, 3), value.view(v_shape).permute(
-        #     1, 2, 0, 3
-        # )

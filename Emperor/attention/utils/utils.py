@@ -72,38 +72,3 @@ class Utils:
             zero_attetion_shape, dtype=tensor.dtype, device=tensor.device
         )
         return torch.cat([tensor, zeros_tensor], dim=1)
-
-    def merge_padding_and_attention_mask(
-        self,
-        key: Tensor,
-        key_padding_mask: Tensor | None = None,
-        attention_mask: Tensor | None = None,
-    ) -> Tensor | None:
-        if key_padding_mask is None:
-            return attention_mask
-
-        source_sequence_length = key.size(1)
-
-        shape_view = (self.batch_size, 1, 1, source_sequence_length)
-        key_padding_mask = key_padding_mask.view(shape_view)
-
-        shape_expand = (-1, self.num_heads, -1, -1)
-        key_padding_mask = key_padding_mask.expand(shape_expand)
-
-        batch_size = self.batch_size * self.num_heads
-        shape_reshape = (batch_size, 1, source_sequence_length)
-        key_padding_mask = key_padding_mask.reshape(shape_reshape)
-
-        attention_mask = self.__merge_attention_and_padding_mask(
-            key_padding_mask, attention_mask
-        )
-        return attention_mask
-
-    def __merge_attention_and_padding_mask(
-        self,
-        key_padding_mask: Tensor,
-        attention_mask: Tensor | None = None,
-    ) -> Tensor | None:
-        if attention_mask is None:
-            return key_padding_mask
-        return attention_mask + key_padding_mask

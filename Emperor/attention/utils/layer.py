@@ -2,7 +2,7 @@ from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.attention.utils.utils import Utils
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.attention.utils.handlers.maks import Mask
+from Emperor.attention.utils.handlers.maks import Mask, MaskBuilder
 from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.attention.utils.handlers.bias import KeyValueBias
 from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
@@ -161,7 +161,7 @@ class MultiHeadAttention(Module):
         # self.__initialize_utilities()
 
         self.validator = MultiHeadAttentionValidator(self.cfg)
-        self.masks = Mask(self.cfg)
+        self.masks = MaskBuilder(self.cfg).build()
         self.projector = ProjectorBuilder(self.cfg).build()
         self.processor = ProcessorBuilder(self.cfg, self.projector).build()
         self.reshaper = ReshaperBuilder(self.cfg).build()
@@ -199,7 +199,7 @@ class MultiHeadAttention(Module):
         k, v, attention_mask, k_padding_mask = self.utils.add_zero_attention(
             k, v, attention_mask, k_padding_mask
         )
-        merged_masks = self.utils.merge_padding_and_attention_mask(
+        merged_masks = self.masks.merge_padding_and_attention_mask(
             k, k_padding_mask, attention_mask
         )
         attention_output, attention_weights = self.processor.compute_attention(
