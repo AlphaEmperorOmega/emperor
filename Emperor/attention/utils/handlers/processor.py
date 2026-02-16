@@ -68,6 +68,9 @@ class ProcessorBase:
             self.cfg.average_attention_weights_flag
         )
         self.zero_attention_flag: bool = self.cfg.zero_attention_flag
+        self.return_attention_weights_flag: bool = (
+            self.cfg.return_attention_weights_flag
+        )
         self.add_key_value_bias_flag: bool = self.cfg.add_key_value_bias_flag
         self.head_dim: int = self.embedding_dim // self.num_heads
         self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
@@ -182,7 +185,12 @@ class SelfAttentionProcessor(ProcessorBase):
         self,
         attention_output: Tensor,
         attention_weights: Tensor,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor | None]:
+        if not self.return_attention_weights_flag:
+            if self.validator.is_input_tensor_single_batch(attention_output):
+                return attention_output, None
+            return attention_output.squeeze(1), None
+
         source_sequence_length = attention_weights.size(-1)
         attention_weights_shape = (
             self.batch_size,
