@@ -786,7 +786,6 @@ class TestAttention(unittest.TestCase):
                                         source_sequence_length,
                                         attention_mask_repeat,
                                     )
-                                    attention_mask = None
                                     static_key = None
                                     static_values = None
 
@@ -813,339 +812,505 @@ class TestAttention(unittest.TestCase):
                                         attention_output.shape, expected_shape
                                     )
 
-    # def test__add_key_value_bias_flag(self):
-    #     tests = [
-    #         {"add_key_value_bias_flag": False},
-    #         {"add_key_value_bias_flag": True},
-    #     ]
-    #
-    #     for test in tests:
-    #         message = f"Test failed for the inputs: {test}"
-    #         with self.subTest(i=message):
-    #             config = MultiHeadAttentionConfig(
-    #                 target_sequence_length=32,
-    #                 source_sequence_length=32,
-    #                 attention_option=AttentionOptions.INDEPENDENT,
-    #                 **test,
-    #             )
-    #             self.rebuild_presets(config)
-    #
-    #             query = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #             key = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #             value = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #             key_padding_mask = torch.randn(
-    #                 self.batch_size, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.randn(
-    #                 1, self.target_sequence_length, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.where(
-    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-    #             )
-    #             attention_mask = attention_mask.repeat(
-    #                 self.batch_size * self.num_heads, 1, 1
-    #             )
-    #             static_key = None
-    #             static_value = None
-    #
-    #             attention_output, attention_weights = self.model.forward(
-    #                 query,
-    #                 key,
-    #                 value,
-    #                 key_padding_mask,
-    #                 attention_mask,
-    #                 static_key,
-    #                 static_value,
-    #             )
-    #             self.assertIsInstance(attention_output, torch.Tensor)
-    #             self.assertIsNone(attention_weights)
-    #
-    # def test__average_attention_weights_flag(self):
-    #     tests = [
-    #         {"average_attention_weights_flag": False},
-    #         {"average_attention_weights_flag": True},
-    #     ]
-    #
-    #     for test in tests:
-    #         message = f"Test failed for the inputs: {test}"
-    #         with self.subTest(i=message):
-    #             config = MultiHeadAttentionConfig(
-    #                 target_sequence_length=32,
-    #                 source_sequence_length=32,
-    #                 return_attention_weights_flag=True,
-    #                 attention_option=AttentionOptions.SELF_ATTENTION,
-    #                 **test,
-    #             )
-    #             self.rebuild_presets(config)
-    #
-    #             query = key = value = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #             key_padding_mask = torch.randn(
-    #                 self.batch_size, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.randn(
-    #                 1, self.target_sequence_length, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.where(
-    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-    #             )
-    #             attention_mask = attention_mask.repeat(
-    #                 self.batch_size * self.num_heads, 1, 1
-    #             )
-    #             static_key = None
-    #             static_value = None
-    #
-    #             attention_output, attention_weights = self.model.forward(
-    #                 query,
-    #                 key,
-    #                 value,
-    #                 key_padding_mask,
-    #                 attention_mask,
-    #                 static_key,
-    #                 static_value,
-    #             )
-    #             self.assertIsInstance(attention_output, torch.Tensor)
-    #             self.assertIsInstance(attention_weights, torch.Tensor)
-    #             if test["average_attention_weights_flag"]:
-    #                 self.assertEqual(attention_weights.dim(), 3)
-    #             else:
-    #                 self.assertEqual(attention_weights.dim(), 4)
-    #
-    # # TODO: This flag has been removed but ensure you test the new condition
-    # # def test__batch_first_flag(self):
-    # #     tests = [
-    # #         {"batch_first_flag": False},
-    # #         {"batch_first_flag": True},
-    # #     ]
-    # #
-    # #     for test in tests:
-    # #         config = MultiHeadAttentionConfig(
-    # #             target_sequence_length=32,
-    # #             source_sequence_length=32,
-    # #             attention_option=True,
-    # #             **test,
-    # #         )
-    # #         self.rebuild_presets(config)
-    # #
-    # #         if test["batch_first_flag"]:
-    # #             q_shape = (
-    # #                 self.batch_size,
-    # #                 self.source_sequence_length,
-    # #                 self.embedding_dim,
-    # #             )
-    # #             kv_shape = (
-    # #                 self.batch_size,
-    # #                 self.target_sequence_length,
-    # #                 self.embedding_dim,
-    # #             )
-    # #         else:
-    # #             q_shape = (
-    # #                 self.source_sequence_length,
-    # #                 self.batch_size,
-    # #                 self.embedding_dim,
-    # #             )
-    # #             kv_shape = (
-    # #                 self.target_sequence_length,
-    # #                 self.batch_size,
-    # #                 self.embedding_dim,
-    # #             )
-    # #
-    # #         query = torch.randn(q_shape)
-    # #         key = torch.randn(kv_shape)
-    # #         value = torch.randn(kv_shape)
-    # #         key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
-    # #         attention_mask = torch.randn(
-    # #             1, self.target_sequence_length, self.source_sequence_length
-    # #         )
-    # #         attention_mask = torch.where(
-    # #             attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-    # #         )
-    # #         attention_mask = attention_mask.repeat(
-    # #             self.batch_size * self.num_heads, 1, 1
-    # #         )
-    # #         static_key = None
-    # #         static_value = None
-    # #
-    # #         attention_output, attention_weights = self.model.forward(
-    # #             query,
-    # #             key,
-    # #             value,
-    # #             key_padding_mask,
-    # #             attention_mask,
-    # #             static_key,
-    # #             static_value,
-    # #         )
-    # #
-    # #         self.assertIsInstance(attention_output, torch.Tensor)
-    # #         self.assertEqual(attention_output.shape, kv_shape)
-    # #         self.assertIsNone(attention_weights)
-    #
-    # def test__add_key_value_bias_flag__and__zero_attention_flag(self):
-    #     tests = [
-    #         {"add_key_value_bias_flag": False, "zero_attention_flag": False},
-    #         {"add_key_value_bias_flag": True, "zero_attention_flag": False},
-    #         {"add_key_value_bias_flag": False, "zero_attention_flag": True},
-    #         {"add_key_value_bias_flag": True, "zero_attention_flag": True},
-    #     ]
-    #
-    #     for test in tests:
-    #         message = f"Test failed for the inputs: {test}"
-    #         with self.subTest(i=message):
-    #             config = MultiHeadAttentionConfig(
-    #                 target_sequence_length=32,
-    #                 source_sequence_length=32,
-    #                 attention_option=AttentionOptions.INDEPENDENT,
-    #                 **test,
-    #             )
-    #             self.rebuild_presets(config)
-    #
-    #             query = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #             key = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #             value = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #             key_padding_mask = torch.randn(
-    #                 self.batch_size, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.randn(
-    #                 1, self.target_sequence_length, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.where(
-    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-    #             )
-    #             attention_mask = attention_mask.repeat(
-    #                 self.batch_size * self.num_heads, 1, 1
-    #             )
-    #             static_key = None
-    #             static_value = None
-    #
-    #             attention_output, attention_weights = self.model.forward(
-    #                 query,
-    #                 key,
-    #                 value,
-    #                 key_padding_mask,
-    #                 attention_mask,
-    #                 static_key,
-    #                 static_value,
-    #             )
-    #             self.assertIsInstance(attention_output, torch.Tensor)
-    #             self.assertIsNone(attention_weights)
-    #
-    # def test__self_attention__possible_flag_combinations(self):
-    #     flags = [
-    #         "add_key_value_bias_flag",
-    #         "zero_attention_flag",
-    #         # "return_attention_weights_flag",
-    #         "average_attention_weights_flag",
-    #         "causal_attention_mask_flag",
-    #         # "attention_option",
-    #     ]
-    #     combinations = list(itertools.product([False, True], repeat=len(flags)))
-    #     tests = [dict(zip(flags, combo)) for combo in combinations]
-    #
-    #     for test in tests:
-    #         message = f"Test failed for the inputs: {test}"
-    #         with self.subTest(i=message):
-    #             config = MultiHeadAttentionConfig(
-    #                 target_sequence_length=32,
-    #                 source_sequence_length=32,
-    #                 **test,
-    #             )
-    #             self.rebuild_presets(config)
-    #
-    #             query = key = value = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #             key_padding_mask = torch.randn(
-    #                 self.batch_size, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.randn(
-    #                 1, self.target_sequence_length, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.where(
-    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-    #             )
-    #             attention_mask = attention_mask.repeat(
-    #                 self.batch_size * self.num_heads, 1, 1
-    #             )
-    #             static_key = None
-    #             static_value = None
-    #
-    #             attention_output, attention_weights = self.model.forward(
-    #                 query,
-    #                 key,
-    #                 value,
-    #                 key_padding_mask,
-    #                 attention_mask,
-    #                 static_key,
-    #                 static_value,
-    #             )
-    #             self.assertIsInstance(attention_output, torch.Tensor)
-    #             # self.assertIsNone(attention_weights)
-    #
-    # def test__differetn_input_tensors__possible_flag_combinations(self):
-    #     flags = [
-    #         "add_key_value_bias_flag",
-    #         "zero_attention_flag",
-    #         # "return_attention_weights_flag",
-    #         "average_attention_weights_flag",
-    #         "causal_attention_mask_flag",
-    #         # "attention_option",
-    #     ]
-    #     combinations = list(itertools.product([False, True], repeat=len(flags)))
-    #     tests = [dict(zip(flags, combo)) for combo in combinations]
-    #
-    #     for test in tests:
-    #         message = f"Test failed for the inputs: {test}"
-    #         with self.subTest(i=message):
-    #             config = MultiHeadAttentionConfig(
-    #                 target_sequence_length=32,
-    #                 source_sequence_length=32,
-    #                 **test,
-    #             )
-    #             self.rebuild_presets(config)
-    #
-    #             query = key = value = torch.randn(
-    #                 self.target_sequence_length, self.batch_size, self.embedding_dim
-    #             )
-    #
-    #             key_padding_mask = torch.randn(
-    #                 self.batch_size, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.randn(
-    #                 1, self.target_sequence_length, self.source_sequence_length
-    #             )
-    #             attention_mask = torch.where(
-    #                 attention_mask > 0, torch.tensor(float("-inf")), torch.tensor(0.0)
-    #             )
-    #             attention_mask = attention_mask.repeat(
-    #                 self.batch_size * self.num_heads, 1, 1
-    #             )
-    #             static_key = None
-    #             static_value = None
-    #
-    #             attention_output, attention_weights = self.model.forward(
-    #                 query,
-    #                 key,
-    #                 value,
-    #                 key_padding_mask,
-    #                 attention_mask,
-    #                 static_key,
-    #                 static_value,
-    #             )
-    #             self.assertIsInstance(attention_output, torch.Tensor)
-    #
+    def test__add_key_value_bias_flag(self):
+        batch_size = 4
+        sequence_lengths = [8, 10]
+        embeddimd_dim = 12
+        qkv_dimensions = [0, 16, 20]
+        bool_options = [True, False]
+
+        for target_sequence_length in sequence_lengths:
+            for source_sequence_length in sequence_lengths:
+                for query_key_projection_dim in qkv_dimensions:
+                    for value_projection_dim in qkv_dimensions:
+                        for attention_option in AttentionOptions:
+                            for add_key_value_bias_flag in bool_options:
+                                message = f"Test failed for the inputs: attention_option={attention_option}, query_key_projection_dim={query_key_projection_dim}, value_projection_dim={value_projection_dim}, add_key_value_bias_flag={add_key_value_bias_flag}"
+                                with self.subTest(i=message):
+                                    if (
+                                        attention_option
+                                        == AttentionOptions.SELF_ATTENTION
+                                    ):
+                                        query_key_projection_dim = embeddimd_dim
+                                        value_projection_dim = embeddimd_dim
+                                        source_sequence_length = target_sequence_length
+
+                                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                                        batch_size=batch_size,
+                                        embedding_dim=embeddimd_dim,
+                                        target_sequence_length=target_sequence_length,
+                                        source_sequence_length=source_sequence_length,
+                                        attention_option=attention_option,
+                                        query_key_projection_dim=query_key_projection_dim,
+                                        value_projection_dim=value_projection_dim,
+                                        add_key_value_bias_flag=add_key_value_bias_flag,
+                                    )
+
+                                    m = MultiHeadAttention(c)
+
+                                    query, key, value = create_qkv_tensors(
+                                        target_sequence_length,
+                                        source_sequence_length,
+                                        batch_size,
+                                        m.embedding_dim,
+                                        attention_option,
+                                    )
+
+                                    key_padding_mask = create_key_padding_mask(
+                                        batch_size, source_sequence_length
+                                    )
+
+                                    attention_mask_repeat = batch_size * m.num_heads
+                                    if (
+                                        attention_option
+                                        == AttentionOptions.MIXTURE_OF_ATTENTION_HEADS
+                                    ):
+                                        attention_mask_repeat = (
+                                            batch_size
+                                            * m.num_heads
+                                            * c.experts_config.top_k
+                                        )
+
+                                    attention_mask = create_attention_mask(
+                                        target_sequence_length,
+                                        source_sequence_length,
+                                        attention_mask_repeat,
+                                    )
+                                    static_key = None
+                                    static_values = None
+
+                                    attention_output, attention_weights = m.forward(
+                                        query,
+                                        key,
+                                        value,
+                                        key_padding_mask,
+                                        attention_mask,
+                                        static_key,
+                                        static_values,
+                                    )
+
+                                    expected_shape = (
+                                        target_sequence_length,
+                                        batch_size,
+                                        m.embedding_dim,
+                                    )
+                                    self.assertIsInstance(
+                                        attention_output, torch.Tensor
+                                    )
+                                    self.assertIsNone(attention_weights)
+                                    self.assertEqual(
+                                        attention_output.shape, expected_shape
+                                    )
+
+    def test__average_attention_weights_flag(self):
+        batch_size = 4
+        sequence_lengths = [8, 10]
+        embeddimd_dim = 12
+        qkv_dimensions = [0, 16, 20]
+        bool_options = [True, False]
+
+        for target_sequence_length in sequence_lengths:
+            for source_sequence_length in sequence_lengths:
+                for query_key_projection_dim in qkv_dimensions:
+                    for value_projection_dim in qkv_dimensions:
+                        for attention_option in AttentionOptions:
+                            for average_attention_weights_flag in bool_options:
+                                message = f"Test failed for the inputs: attention_option={attention_option}, query_key_projection_dim={query_key_projection_dim}, value_projection_dim={value_projection_dim}, average_attention_weights_flag={average_attention_weights_flag}"
+                                with self.subTest(i=message):
+                                    if (
+                                        attention_option
+                                        == AttentionOptions.SELF_ATTENTION
+                                    ):
+                                        query_key_projection_dim = embeddimd_dim
+                                        value_projection_dim = embeddimd_dim
+                                        source_sequence_length = target_sequence_length
+
+                                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                                        batch_size=batch_size,
+                                        embedding_dim=embeddimd_dim,
+                                        target_sequence_length=target_sequence_length,
+                                        source_sequence_length=source_sequence_length,
+                                        attention_option=attention_option,
+                                        query_key_projection_dim=query_key_projection_dim,
+                                        value_projection_dim=value_projection_dim,
+                                        return_attention_weights_flag=True,
+                                        average_attention_weights_flag=average_attention_weights_flag,
+                                    )
+
+                                    m = MultiHeadAttention(c)
+
+                                    query, key, value = create_qkv_tensors(
+                                        target_sequence_length,
+                                        source_sequence_length,
+                                        batch_size,
+                                        m.embedding_dim,
+                                        attention_option,
+                                    )
+
+                                    key_padding_mask = create_key_padding_mask(
+                                        batch_size, source_sequence_length
+                                    )
+
+                                    attention_mask_repeat = batch_size * m.num_heads
+                                    if (
+                                        attention_option
+                                        == AttentionOptions.MIXTURE_OF_ATTENTION_HEADS
+                                    ):
+                                        attention_mask_repeat = (
+                                            batch_size
+                                            * m.num_heads
+                                            * c.experts_config.top_k
+                                        )
+
+                                    attention_mask = create_attention_mask(
+                                        target_sequence_length,
+                                        source_sequence_length,
+                                        attention_mask_repeat,
+                                    )
+                                    static_key = None
+                                    static_values = None
+
+                                    if (
+                                        attention_option
+                                        != AttentionOptions.SELF_ATTENTION
+                                    ):
+                                        with self.assertRaises(RuntimeError):
+                                            m.forward(
+                                                query,
+                                                key,
+                                                value,
+                                                key_padding_mask,
+                                                attention_mask,
+                                                static_key,
+                                                static_values,
+                                            )
+                                        continue
+
+                                    attention_output, attention_weights = m.forward(
+                                        query,
+                                        key,
+                                        value,
+                                        key_padding_mask,
+                                        attention_mask,
+                                        static_key,
+                                        static_values,
+                                    )
+
+                                    expected_shape = (
+                                        target_sequence_length,
+                                        batch_size,
+                                        m.embedding_dim,
+                                    )
+                                    self.assertIsInstance(
+                                        attention_output, torch.Tensor
+                                    )
+                                    self.assertIsInstance(
+                                        attention_weights, torch.Tensor
+                                    )
+                                    self.assertEqual(
+                                        attention_output.shape, expected_shape
+                                    )
+                                    if average_attention_weights_flag:
+                                        self.assertEqual(attention_weights.dim(), 3)
+                                    else:
+                                        self.assertEqual(attention_weights.dim(), 4)
+
+    def test__add_key_value_bias_and_zero_attention_flags(self):
+        batch_size = 4
+        sequence_lengths = [8, 10]
+        embeddimd_dim = 12
+        qkv_dimensions = [0, 16, 20]
+        bool_options = [True, False]
+
+        for target_sequence_length in sequence_lengths:
+            for source_sequence_length in sequence_lengths:
+                for query_key_projection_dim in qkv_dimensions:
+                    for value_projection_dim in qkv_dimensions:
+                        for attention_option in AttentionOptions:
+                            for add_key_value_bias_flag in bool_options:
+                                for zero_attention_flag in bool_options:
+                                    message = f"Test failed for the inputs: attention_option={attention_option}, query_key_projection_dim={query_key_projection_dim}, value_projection_dim={value_projection_dim}, add_key_value_bias_flag={add_key_value_bias_flag}, zero_attention_flag={zero_attention_flag}"
+                                    with self.subTest(i=message):
+                                        if (
+                                            attention_option
+                                            == AttentionOptions.SELF_ATTENTION
+                                        ):
+                                            query_key_projection_dim = embeddimd_dim
+                                            value_projection_dim = embeddimd_dim
+                                            source_sequence_length = (
+                                                target_sequence_length
+                                            )
+
+                                        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                                            batch_size=batch_size,
+                                            embedding_dim=embeddimd_dim,
+                                            target_sequence_length=target_sequence_length,
+                                            source_sequence_length=source_sequence_length,
+                                            attention_option=attention_option,
+                                            query_key_projection_dim=query_key_projection_dim,
+                                            value_projection_dim=value_projection_dim,
+                                            add_key_value_bias_flag=add_key_value_bias_flag,
+                                            zero_attention_flag=zero_attention_flag,
+                                        )
+
+                                        m = MultiHeadAttention(c)
+
+                                        query, key, value = create_qkv_tensors(
+                                            target_sequence_length,
+                                            source_sequence_length,
+                                            batch_size,
+                                            m.embedding_dim,
+                                            attention_option,
+                                        )
+
+                                        key_padding_mask = create_key_padding_mask(
+                                            batch_size, source_sequence_length
+                                        )
+
+                                        attention_mask_repeat = batch_size * m.num_heads
+                                        if (
+                                            attention_option
+                                            == AttentionOptions.MIXTURE_OF_ATTENTION_HEADS
+                                        ):
+                                            attention_mask_repeat = (
+                                                batch_size
+                                                * m.num_heads
+                                                * c.experts_config.top_k
+                                            )
+
+                                        attention_mask = create_attention_mask(
+                                            target_sequence_length,
+                                            source_sequence_length,
+                                            attention_mask_repeat,
+                                        )
+                                        static_key = None
+                                        static_values = None
+
+                                        attention_output, attention_weights = m.forward(
+                                            query,
+                                            key,
+                                            value,
+                                            key_padding_mask,
+                                            attention_mask,
+                                            static_key,
+                                            static_values,
+                                        )
+
+                                        expected_shape = (
+                                            target_sequence_length,
+                                            batch_size,
+                                            m.embedding_dim,
+                                        )
+                                        self.assertIsInstance(
+                                            attention_output, torch.Tensor
+                                        )
+                                        self.assertIsNone(attention_weights)
+                                        self.assertEqual(
+                                            attention_output.shape, expected_shape
+                                        )
+
+    def test__self_attention_possible_flag_combinations(self):
+        batch_size = 4
+        sequence_lengths = [8, 10]
+        embeddimd_dim = 12
+        qkv_dimensions = [0, 16, 20]
+        bool_options = [True, False]
+
+        for target_sequence_length in sequence_lengths:
+            for source_sequence_length in sequence_lengths:
+                for query_key_projection_dim in qkv_dimensions:
+                    for value_projection_dim in qkv_dimensions:
+                        for add_key_value_bias_flag in bool_options:
+                            for zero_attention_flag in bool_options:
+                                for average_attention_weights_flag in bool_options:
+                                    for causal_attention_mask_flag in bool_options:
+                                        for (
+                                            return_attention_weights_flag
+                                        ) in bool_options:
+                                            message = f"Test failed for the inputs: query_key_projection_dim={query_key_projection_dim}, value_projection_dim={value_projection_dim}, add_key_value_bias_flag={add_key_value_bias_flag}, zero_attention_flag={zero_attention_flag}, average_attention_weights_flag={average_attention_weights_flag}, causal_attention_mask_flag={causal_attention_mask_flag}"
+                                            with self.subTest(i=message):
+                                                query_key_projection_dim = embeddimd_dim
+                                                value_projection_dim = embeddimd_dim
+                                                source_sequence_length = (
+                                                    target_sequence_length
+                                                )
+
+                                                c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                                                    batch_size=batch_size,
+                                                    embedding_dim=embeddimd_dim,
+                                                    target_sequence_length=target_sequence_length,
+                                                    source_sequence_length=source_sequence_length,
+                                                    attention_option=AttentionOptions.SELF_ATTENTION,
+                                                    query_key_projection_dim=query_key_projection_dim,
+                                                    value_projection_dim=value_projection_dim,
+                                                    add_key_value_bias_flag=add_key_value_bias_flag,
+                                                    zero_attention_flag=zero_attention_flag,
+                                                    average_attention_weights_flag=average_attention_weights_flag,
+                                                    causal_attention_mask_flag=causal_attention_mask_flag,
+                                                    return_attention_weights_flag=return_attention_weights_flag,
+                                                )
+
+                                                m = MultiHeadAttention(c)
+
+                                                query, key, value = create_qkv_tensors(
+                                                    target_sequence_length,
+                                                    source_sequence_length,
+                                                    batch_size,
+                                                    m.embedding_dim,
+                                                    AttentionOptions.SELF_ATTENTION,
+                                                )
+
+                                                key_padding_mask = (
+                                                    create_key_padding_mask(
+                                                        batch_size,
+                                                        source_sequence_length,
+                                                    )
+                                                )
+
+                                                attention_mask_repeat = (
+                                                    batch_size * m.num_heads
+                                                )
+
+                                                attention_mask = create_attention_mask(
+                                                    target_sequence_length,
+                                                    source_sequence_length,
+                                                    attention_mask_repeat,
+                                                )
+                                                static_key = None
+                                                static_values = None
+
+                                                attention_output, attention_weights = (
+                                                    m.forward(
+                                                        query,
+                                                        key,
+                                                        value,
+                                                        key_padding_mask,
+                                                        attention_mask,
+                                                        static_key,
+                                                        static_values,
+                                                    )
+                                                )
+
+                                                expected_shape = (
+                                                    target_sequence_length,
+                                                    batch_size,
+                                                    m.embedding_dim,
+                                                )
+                                                self.assertIsInstance(
+                                                    attention_output, torch.Tensor
+                                                )
+                                                self.assertEqual(
+                                                    attention_output.shape,
+                                                    expected_shape,
+                                                )
+                                                if return_attention_weights_flag:
+                                                    self.assertIsInstance(
+                                                        attention_weights, torch.Tensor
+                                                    )
+                                                    if average_attention_weights_flag:
+                                                        self.assertEqual(
+                                                            attention_weights.dim(), 3
+                                                        )
+                                                    else:
+                                                        self.assertEqual(
+                                                            attention_weights.dim(), 4
+                                                        )
+                                                else:
+                                                    self.assertIsNone(attention_weights)
+
+    def test__independent_possible_flag_combinations(self):
+        batch_size = 4
+        sequence_lengths = [8, 10]
+        embeddimd_dim = 12
+        qkv_dimensions = [0, 16, 20]
+        bool_options = [True, False]
+
+        for target_sequence_length in sequence_lengths:
+            for source_sequence_length in sequence_lengths:
+                for query_key_projection_dim in qkv_dimensions:
+                    for value_projection_dim in qkv_dimensions:
+                        for add_key_value_bias_flag in bool_options:
+                            for zero_attention_flag in bool_options:
+                                for average_attention_weights_flag in bool_options:
+                                    for causal_attention_mask_flag in bool_options:
+                                        for (
+                                            return_attention_weights_flag
+                                        ) in bool_options:
+                                            message = f"Test failed for the inputs: query_key_projection_dim={query_key_projection_dim}, value_projection_dim={value_projection_dim}, add_key_value_bias_flag={add_key_value_bias_flag}, zero_attention_flag={zero_attention_flag}, average_attention_weights_flag={average_attention_weights_flag}, causal_attention_mask_flag={causal_attention_mask_flag}"
+                                            with self.subTest(i=message):
+                                                query_key_projection_dim = embeddimd_dim
+                                                value_projection_dim = embeddimd_dim
+
+                                                c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                                                    batch_size=batch_size,
+                                                    embedding_dim=embeddimd_dim,
+                                                    target_sequence_length=target_sequence_length,
+                                                    source_sequence_length=source_sequence_length,
+                                                    attention_option=AttentionOptions.INDEPENDENT,
+                                                    query_key_projection_dim=query_key_projection_dim,
+                                                    value_projection_dim=value_projection_dim,
+                                                    add_key_value_bias_flag=add_key_value_bias_flag,
+                                                    zero_attention_flag=zero_attention_flag,
+                                                    average_attention_weights_flag=average_attention_weights_flag,
+                                                    causal_attention_mask_flag=causal_attention_mask_flag,
+                                                    return_attention_weights_flag=return_attention_weights_flag,
+                                                )
+
+                                                m = MultiHeadAttention(c)
+
+                                                query, key, value = create_qkv_tensors(
+                                                    target_sequence_length,
+                                                    source_sequence_length,
+                                                    batch_size,
+                                                    m.embedding_dim,
+                                                    AttentionOptions.INDEPENDENT,
+                                                )
+
+                                                key_padding_mask = (
+                                                    create_key_padding_mask(
+                                                        batch_size,
+                                                        source_sequence_length,
+                                                    )
+                                                )
+
+                                                attention_mask_repeat = (
+                                                    batch_size * m.num_heads
+                                                )
+
+                                                attention_mask = create_attention_mask(
+                                                    target_sequence_length,
+                                                    source_sequence_length,
+                                                    attention_mask_repeat,
+                                                )
+                                                static_key = None
+                                                static_values = None
+
+                                                attention_output, attention_weights = (
+                                                    m.forward(
+                                                        query,
+                                                        key,
+                                                        value,
+                                                        key_padding_mask,
+                                                        attention_mask,
+                                                        static_key,
+                                                        static_values,
+                                                    )
+                                                )
+
+                                                expected_shape = (
+                                                    target_sequence_length,
+                                                    batch_size,
+                                                    m.embedding_dim,
+                                                )
+                                                self.assertIsInstance(
+                                                    attention_output, torch.Tensor
+                                                )
+                                                self.assertEqual(
+                                                    attention_output.shape,
+                                                    expected_shape,
+                                                )
+                                                self.assertIsNone(attention_weights)
+
     # def test__all_layer_types_and_flags_and_different_batch_sizes(self):
     #     flags = [
     #         "add_key_value_bias_flag",
