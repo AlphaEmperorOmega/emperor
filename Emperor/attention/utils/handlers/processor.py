@@ -344,9 +344,6 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         if self.use_kv_expert_models_flag:
             einsum_equation = "bkhie,bkhej->bkhij"
         raw_weights = torch.einsum(einsum_equation, query, key)
-        # raw_weights = raw_weights.contiguous().view(
-        #     total_batch_size, self.source_sequence_length, self.target_sequence_length
-        # )
         raw_weights = raw_weights.contiguous().view(
             total_batch_size, self.target_sequence_length, source_sequence_length
         )
@@ -363,7 +360,6 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
     ) -> Tensor:
         source_sequence_length = values.size(-2)
         einsum_equation = "bkhie,bhej->bkhij"
-        # einsum_equation = "bkhij,bhje->bkhie"
         if self.use_kv_expert_models_flag:
             einsum_equation = "bkhie,bkhej->bkhij"
 
