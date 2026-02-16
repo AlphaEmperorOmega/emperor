@@ -250,17 +250,18 @@ class IndependentProcessor(ProcessorBase):
             return None
         is_mask_single_batch = attention_mask.size(0) == 1
         is_mask_batched = attention_mask.dim() == 3
+        source_sequence_length = attention_mask.size(-1)
         if is_mask_single_batch and is_mask_batched:
             return attention_mask.unsqueeze(0)
         if attention_mask.size(1) == 1:
             return attention_mask.reshape(
-                self.batch_size, self.num_heads, self.source_sequence_length, 1
+                self.batch_size, self.num_heads, source_sequence_length, 1
             )
         return attention_mask.view(
             self.batch_size,
             self.num_heads,
             self.target_sequence_length,
-            self.source_sequence_length,
+            source_sequence_length,
         )
 
     def __compute_weighted_values(
@@ -336,14 +337,18 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         attention_mask: Tensor | None = None,
     ) -> Tensor:
         total_batch_size = self.batch_size * self.num_heads * self.top_k
+        source_sequence_length = key.size(-2)
 
         key = key.transpose(-2, -1)
         einsum_equation = "bkhie,bhej->bkhij"
         if self.use_kv_expert_models_flag:
             einsum_equation = "bkhie,bkhej->bkhij"
         raw_weights = torch.einsum(einsum_equation, query, key)
+        # raw_weights = raw_weights.contiguous().view(
+        #     total_batch_size, self.source_sequence_length, self.target_sequence_length
+        # )
         raw_weights = raw_weights.contiguous().view(
-            total_batch_size, self.source_sequence_length, self.target_sequence_length
+            total_batch_size, self.target_sequence_length, source_sequence_length
         )
 
         # TODO: Add relative positional encoding support here
@@ -356,6 +361,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
+        source_sequence_length = values.size(-2)
         einsum_equation = "bkhie,bhej->bkhij"
         # einsum_equation = "bkhij,bhje->bkhie"
         if self.use_kv_expert_models_flag:
@@ -366,7 +372,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
             self.top_k,
             self.num_heads,
             self.target_sequence_length,
-            self.source_sequence_length,
+            source_sequence_length,
         )
         weighted_values = torch.einsum(einsum_equation, attention_weights, values)
         values = weighted_values.permute(3, 0, 1, 2, 4)
