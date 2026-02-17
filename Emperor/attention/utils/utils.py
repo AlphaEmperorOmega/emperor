@@ -67,7 +67,8 @@ class Utils:
         return padded_key, padded_value, key_padding_mask, attention_mask
 
     def __concatenate_zeros_tensor(self, tensor: Tensor) -> Tensor:
-        zero_attetion_shape = (self.batch_size * self.num_heads, 1, self.head_dim)
+        head_dim = tensor.size(-1)
+        zero_attetion_shape = (self.batch_size * self.num_heads, 1, head_dim)
         zeros_tensor = torch.zeros(
             zero_attetion_shape, dtype=tensor.dtype, device=tensor.device
         )
