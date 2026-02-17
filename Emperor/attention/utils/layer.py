@@ -2,7 +2,7 @@ from torch import Tensor
 from dataclasses import dataclass, field
 from Emperor.attention.utils.utils import Utils
 from Emperor.base.utils import ConfigBase, Module
-from Emperor.attention.utils.handlers.maks import Mask, MaskBuilder
+from Emperor.attention.utils.handlers.maks import MaskBuilder
 from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.attention.utils.handlers.bias import KeyValueBias
 from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
