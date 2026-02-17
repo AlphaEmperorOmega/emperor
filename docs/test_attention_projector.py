@@ -26,15 +26,24 @@ class TestSelfAttentionProjector(unittest.TestCase):
             for model_type in attention_option:
                 message = f"Testing configuration: model_type: {model_type}"
                 with self.subTest(i=message):
+                    embedding_dim = 12
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
                         attention_option=AttentionOptions.SELF_ATTENTION,
                         model_type=model_type,
+                        embedding_dim=embedding_dim,
+                        query_key_projection_dim=embedding_dim,
+                        value_projection_dim=embedding_dim,
                     )
                     m = SelfAttentionProjector(c)
                     self.assertEqual(model_type.value, m.model_type)
 
     def test__split_self_attention_projection(self):
-        c = MultiHeadAttentionPresets.multi_head_attention_preset()
+        embedding_dim = 12
+        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=embedding_dim,
+            query_key_projection_dim=embedding_dim,
+            value_projection_dim=embedding_dim,
+        )
         m = SelfAttentionProjector(c)
         embeding_dim = 12
         shared_projection_embeding_dim = embeding_dim * 3
@@ -61,10 +70,13 @@ class TestSelfAttentionProjector(unittest.TestCase):
             for model_type in attention_option:
                 message = f"Testing configuration: model_type: {model_type}"
                 with self.subTest(i=message):
+                    embedding_dim = 18
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
                         attention_option=AttentionOptions.SELF_ATTENTION,
                         model_type=model_type,
-                        embedding_dim=18,
+                        embedding_dim=embedding_dim,
+                        query_key_projection_dim=embedding_dim,
+                        value_projection_dim=embedding_dim,
                     )
                     m = SelfAttentionProjector(c)
 
@@ -94,9 +106,13 @@ class TestSelfAttentionProjector(unittest.TestCase):
                     with self.subTest(i=message):
                         if adaptive_type == AdaptiveWeightOptions.VECTOR:
                             continue
+                        embedding_dim = 12
                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
                             attention_option=AttentionOptions.SELF_ATTENTION,
                             model_type=model_type,
+                            embedding_dim=embedding_dim,
+                            query_key_projection_dim=embedding_dim,
+                            value_projection_dim=embedding_dim,
                             projector_adaptive_weight_option=adaptive_type,
                         )
                         m = SelfAttentionProjector(c)
@@ -133,10 +149,13 @@ class TestSelfAttentionProjector(unittest.TestCase):
                     with self.subTest(i=message):
                         if adaptive_type == AdaptiveWeightOptions.VECTOR:
                             continue
+                        embedding_dim = 18
                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
                             model_type=model_type,
+                            embedding_dim=embedding_dim,
+                            query_key_projection_dim=embedding_dim,
+                            value_projection_dim=embedding_dim,
                             projector_adaptive_weight_option=adaptive_type,
-                            embedding_dim=18,
                         )
                         m = SelfAttentionProjector(c)
 

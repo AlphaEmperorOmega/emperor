@@ -50,8 +50,12 @@ class TestSelfAttentionProcessor(unittest.TestCase):
             for model_type in attention_option:
                 message = f"Testing configuration: model_type: {model_type}"
                 with self.subTest(i=message):
+                    embedding_dim = 12
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
                         model_type=model_type,
+                        embedding_dim=embedding_dim,
+                        query_key_projection_dim=embedding_dim,
+                        value_projection_dim=embedding_dim,
                     )
                     projector = SelfAttentionProjector(c)
                     m = SelfAttentionProcessor(c, projector)
@@ -917,7 +921,11 @@ class TestProcessorBuilder(unittest.TestCase):
             q_projections, k_projections, v_projections
         )
 
-        expected_output_shape = (c.target_sequence_length, c.batch_size, c.embedding_dim)
+        expected_output_shape = (
+            c.target_sequence_length,
+            c.batch_size,
+            c.embedding_dim,
+        )
         self.assertIsInstance(output_attention_output, torch.Tensor)
         self.assertIsNone(output_attention_weights)
         self.assertEqual(output_attention_output.shape, expected_output_shape)
