@@ -277,7 +277,6 @@ class IndependentProcessor(ProcessorBase):
             value,
             attention_mask,
             self.dropout_probability,
-            self.causal_attention_mask_flag,
         )
 
         weighted_values = weighted_values.permute(2, 0, 1, 3)
