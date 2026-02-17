@@ -413,6 +413,9 @@ class TestIndependentProcessor(unittest.TestCase):
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
                         attention_option=AttentionOptions.INDEPENDENT,
                         model_type=model_type,
+                        embedding_dim=12,
+                        query_key_projection_dim=20,
+                        value_projection_dim=16,
                     )
                     projector = IndependentProjector(c)
                     m = IndependentProcessor(c, projector)
@@ -422,6 +425,9 @@ class TestIndependentProcessor(unittest.TestCase):
     def test__prepare_attnetion_mask(self):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             attention_option=AttentionOptions.INDEPENDENT,
+            embedding_dim=12,
+            query_key_projection_dim=20,
+            value_projection_dim=16,
         )
 
         attention_mask = create_attention_mask(c)
@@ -465,8 +471,9 @@ class TestIndependentProcessor(unittest.TestCase):
     def test__compute_weighted_values(self):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             attention_option=AttentionOptions.INDEPENDENT,
-            query_key_projection_dim=0,
-            value_projection_dim=0,
+            embedding_dim=12,
+            query_key_projection_dim=20,
+            value_projection_dim=16,
             source_sequence_length=16,
             target_sequence_length=16,
         )
@@ -506,8 +513,8 @@ class TestIndependentProcessor(unittest.TestCase):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             attention_option=AttentionOptions.INDEPENDENT,
             embedding_dim=12,
-            query_key_projection_dim=0,
-            value_projection_dim=0,
+            query_key_projection_dim=20,
+            value_projection_dim=16,
             source_sequence_length=16,
             target_sequence_length=16,
         )

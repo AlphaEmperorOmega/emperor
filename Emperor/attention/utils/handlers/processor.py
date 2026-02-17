@@ -281,6 +281,7 @@ class IndependentProcessor(ProcessorBase):
 
         weighted_values = weighted_values.permute(2, 0, 1, 3)
         weighted_values = weighted_values.contiguous()
+        print(weighted_values.shape)
         return weighted_values.view(
             self.batch_size * self.target_sequence_length,
             self.value_projection_dim,
