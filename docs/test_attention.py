@@ -185,7 +185,7 @@ class TestAttention(unittest.TestCase):
 
     def test__qkv_tensors_and_key_padding_mask(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
 
@@ -271,7 +271,7 @@ class TestAttention(unittest.TestCase):
 
     def test__qkv_tensors_and_attention_mask(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
 
@@ -367,7 +367,7 @@ class TestAttention(unittest.TestCase):
 
     def test__qkv_tensors_with_combined_key_and_attention_masks(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
 
@@ -465,7 +465,7 @@ class TestAttention(unittest.TestCase):
 
     def test__return_attention_weights_flag(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -568,7 +568,7 @@ class TestAttention(unittest.TestCase):
 
     def test__zero_attention_flag(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -658,7 +658,7 @@ class TestAttention(unittest.TestCase):
 
     def test__causal_attention_mask_flag(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -748,7 +748,7 @@ class TestAttention(unittest.TestCase):
 
     def test__add_key_value_bias_flag(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -838,7 +838,7 @@ class TestAttention(unittest.TestCase):
 
     def test__average_attention_weights_flag(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -951,7 +951,7 @@ class TestAttention(unittest.TestCase):
 
     def test__add_key_value_bias_and_zero_attention_flags(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -1045,7 +1045,7 @@ class TestAttention(unittest.TestCase):
 
     def test__self_attention_with_all_possible_flag_combinations(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -1169,7 +1169,7 @@ class TestAttention(unittest.TestCase):
 
     def test__independent_with_all_possible_flag_combinations(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -1283,7 +1283,7 @@ class TestAttention(unittest.TestCase):
 
     def test__mixture_of_attention_heads_with_all_possible_flag_combinations(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]
@@ -1400,7 +1400,7 @@ class TestAttention(unittest.TestCase):
 
     def test_gradients_flow_through_multi_head_attention(self):
         batch_size = 4
-        sequence_lengths = [8, 10]
+        sequence_lengths = [8, 12]
         embeddimd_dim = 12
         qkv_dimensions = [0, 16, 20]
         bool_options = [True, False]

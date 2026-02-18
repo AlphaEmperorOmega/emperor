@@ -511,8 +511,8 @@ class TestIndependentProcessor(unittest.TestCase):
             embedding_dim=12,
             query_key_projection_dim=20,
             value_projection_dim=16,
-            source_sequence_length=16,
-            target_sequence_length=24,
+            source_sequence_length=24,
+            target_sequence_length=16,
         )
         attention_mask_options = [None, create_attention_mask(c, True)]
         boolean_options = [True, False]
@@ -544,6 +544,7 @@ class TestIndependentProcessor(unittest.TestCase):
                         c.source_sequence_length,
                         m.value_projection_dim // c.num_heads,
                     )
+
                     if causal_attention_mask_flag:
                         attention_mask = None
 
