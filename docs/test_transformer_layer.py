@@ -32,19 +32,11 @@ def create_attention_mask(
     source_sequence_length: int,
     attention_mask_repeat: int = 1,
 ) -> torch.Tensor:
-    attention_mask_shape = (
-        1,
-        target_sequence_length,
-        source_sequence_length,
+    attention_mask = torch.triu(
+        torch.full((target_sequence_length, source_sequence_length), float("-inf")),
+        diagonal=1,
     )
-    attention_mask = torch.randint(0, 2, attention_mask_shape)
-    attention_mask = torch.where(
-        attention_mask > 0,
-        torch.tensor(float("-inf")),
-        torch.tensor(0.0),
-    )
-    attention_mask = attention_mask.repeat(attention_mask_repeat, 1, 1)
-    return attention_mask
+    return attention_mask.unsqueeze(0).repeat(attention_mask_repeat, 1, 1)
 
 
 class TestTransformerEncoderLayer(unittest.TestCase):
