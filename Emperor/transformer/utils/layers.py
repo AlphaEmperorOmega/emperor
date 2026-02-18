@@ -1,6 +1,7 @@
 import torch
 
 from torch import Tensor
+from Emperor.attention.utils.enums import AttentionOptions
 from Emperor.base.layer import Layer
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
@@ -107,12 +108,17 @@ class TransformerLayerBase(Module):
 
     def _create_self_attention_model(self) -> Layer:
         wrapper_class = SelfAttentionLayer
-        model = MultiHeadAttention(self.attention_config)
+        overrides = MultiHeadAttentionConfig(
+            attention_option=AttentionOptions.SELF_ATTENTION
+        )
+        model = MultiHeadAttention(self.attention_config, overrides)
         return self.__create_layer_block(wrapper_class, model)
 
     def _create_cross_attention_model(self) -> Layer:
         wrapper_class = CrossAttentionLayer
-        overrides = MultiHeadAttentionConfig(attention_option=True)
+        overrides = MultiHeadAttentionConfig(
+            attention_option=AttentionOptions.INDEPENDENT
+        )
         model = MultiHeadAttention(self.attention_config, overrides)
         return self.__create_layer_block(wrapper_class, model)
 
