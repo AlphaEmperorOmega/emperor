@@ -140,16 +140,6 @@ class Mask:
         shape_reshape = (batch_size, 1, source_sequence_length)
         key_padding_mask = key_padding_mask.reshape(shape_reshape)
 
-        attention_mask = self._merge_attention_and_padding_mask(
-            key_padding_mask, attention_mask
-        )
-        return attention_mask
-
-    def _merge_attention_and_padding_mask(
-        self,
-        key_padding_mask: Tensor,
-        attention_mask: Tensor | None = None,
-    ) -> Tensor | None:
         if attention_mask is None:
             return key_padding_mask
         return attention_mask + key_padding_mask
@@ -184,7 +174,6 @@ class MixtureOfAttentionHeadsMask(Mask):
         shape_reshape = (batch_size, 1, source_sequence_length)
         key_padding_mask = key_padding_mask.reshape(shape_reshape)
 
-        attention_mask = self._merge_attention_and_padding_mask(
-            key_padding_mask, attention_mask
-        )
-        return attention_mask
+        if attention_mask is None:
+            return key_padding_mask
+        return attention_mask + key_padding_mask

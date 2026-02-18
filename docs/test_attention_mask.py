@@ -552,3 +552,81 @@ class Test_process_attention_masks(TestMask):
 
         self.assertTrue(torch.equal(output_key_padding_mask, key_padding_mask))
         self.assertTrue(torch.equal(output_attention_mask, attention_mask))
+
+
+class Test__merge_padding_and_attention_mask(TestMask):
+    def test__inputs_as_None(self):
+        key = torch.randn(
+            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
+        )
+        key_padding_mask = None
+        attention_mask = None
+
+        output = self.model.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
+
+        self.assertIsNone(output)
+
+    def test__attention_mask__None(self):
+        key = torch.randn(
+            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
+        )
+        key_padding_mask = torch.randint(
+            0, 2, (self.batch_size, self.source_sequence_length)
+        )
+        attention_mask = None
+
+        output = self.model.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            output.shape,
+            (self.batch_size * self.num_heads, 1, self.source_sequence_length),
+        )
+
+    def test__key_padding_mask__None(self):
+        key = torch.randn(
+            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
+        )
+        key_padding_mask = None
+        attention_mask = torch.randn(
+            self.batch_size * self.num_heads,
+            self.target_sequence_length,
+            self.source_sequence_length,
+        )
+        output = self.model.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertTrue(torch.equal(output, attention_mask))
+
+    def test__all_inputs(self):
+        key = torch.randn(
+            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
+        )
+        key_padding_mask = torch.randint(
+            0, 2, (self.batch_size, self.source_sequence_length)
+        )
+        attention_mask = torch.randn(
+            self.batch_size * self.num_heads,
+            self.target_sequence_length,
+            self.source_sequence_length,
+        )
+
+        output = self.model.merge_padding_and_attention_mask(
+            key, key_padding_mask, attention_mask
+        )
+
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            output.shape,
+            (
+                self.batch_size * self.num_heads,
+                self.target_sequence_length,
+                self.source_sequence_length,
+            ),
+        )
