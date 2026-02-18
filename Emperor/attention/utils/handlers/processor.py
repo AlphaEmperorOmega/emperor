@@ -170,9 +170,6 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_weights: Tensor,
         values: Tensor,
     ) -> Tensor:
-        assert (
-            self.target_sequence_length == self.source_sequence_length
-        ), f"Self-attention requires that `target_sequence_length`: {self.target_sequence_length} is equal to `source_sequence_length`:{self.source_sequence_length}."
         weighted_values = torch.bmm(attention_weights, values)
         values = weighted_values.transpose(0, 1)
         values = values.contiguous()
@@ -255,7 +252,7 @@ class IndependentProcessor(ProcessorBase):
             return attention_mask.unsqueeze(0)
         if attention_mask.size(1) == 1:
             return attention_mask.reshape(
-                self.batch_size, self.num_heads, source_sequence_length, 1
+                self.batch_size, self.num_heads, 1, source_sequence_length
             )
         return attention_mask.view(
             self.batch_size,
