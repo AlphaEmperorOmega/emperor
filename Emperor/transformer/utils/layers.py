@@ -109,7 +109,9 @@ class TransformerLayerBase(Module):
     def _create_self_attention_model(self) -> Layer:
         wrapper_class = SelfAttentionLayer
         overrides = MultiHeadAttentionConfig(
-            attention_option=AttentionOptions.SELF_ATTENTION
+            attention_option=AttentionOptions.SELF_ATTENTION,
+            query_key_projection_dim=self.embedding_dim,
+            value_projection_dim=self.embedding_dim,
         )
         model = MultiHeadAttention(self.attention_config, overrides)
         return self.__create_layer_block(wrapper_class, model)
