@@ -50,12 +50,12 @@ class TestSelfAttentionProcessor(unittest.TestCase):
             for model_type in attention_option:
                 message = f"Testing configuration: model_type: {model_type}"
                 with self.subTest(i=message):
-                    embedding_dim = 12
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
                         model_type=model_type,
-                        embedding_dim=embedding_dim,
-                        query_key_projection_dim=embedding_dim,
-                        value_projection_dim=embedding_dim,
+                        embedding_dim=12,
+                        query_key_projection_dim=12,
+                        value_projection_dim=12,
+                        return_attention_weights_flag=True,
                     )
                     projector = SelfAttentionProjector(c)
                     m = SelfAttentionProcessor(c, projector)
@@ -63,7 +63,12 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     self.assertIsInstance(m.projector, SelfAttentionProjector)
 
     def test__scale_query(self):
-        c = MultiHeadAttentionPresets.multi_head_attention_preset()
+        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            return_attention_weights_flag=True,
+        )
         head_dim = c.embedding_dim // c.num_heads
         query = torch.randn(
             c.batch_size * c.num_heads, c.target_sequence_length, head_dim
@@ -82,6 +87,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             source_sequence_length=8,
             target_sequence_length=8,
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            return_attention_weights_flag=True,
         )
         head_dim = c.embedding_dim // c.num_heads
         query = torch.randn(
@@ -133,6 +142,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             source_sequence_length=8,
             target_sequence_length=8,
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            return_attention_weights_flag=True,
         )
         projector = SelfAttentionProjector(c)
         m = SelfAttentionProcessor(c, projector)
@@ -164,6 +177,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             source_sequence_length=8,
             target_sequence_length=8,
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            return_attention_weights_flag=True,
         )
         projector = SelfAttentionProjector(c)
         m = SelfAttentionProcessor(c, projector)
@@ -190,6 +207,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             source_sequence_length=8,
             target_sequence_length=8,
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            return_attention_weights_flag=True,
         )
         projector = SelfAttentionProjector(c)
         m = SelfAttentionProcessor(c, projector)
@@ -212,6 +233,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                 c = MultiHeadAttentionPresets.multi_head_attention_preset(
                     source_sequence_length=8,
                     target_sequence_length=8,
+                    embedding_dim=12,
+                    query_key_projection_dim=12,
+                    value_projection_dim=12,
+                    return_attention_weights_flag=True,
                     average_attention_weights_flag=average_attention_weights_flag,
                 )
                 projector = SelfAttentionProjector(c)
@@ -258,6 +283,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                 c = MultiHeadAttentionPresets.multi_head_attention_preset(
                     source_sequence_length=8,
                     target_sequence_length=8,
+                    embedding_dim=12,
+                    query_key_projection_dim=12,
+                    value_projection_dim=12,
+                    return_attention_weights_flag=True,
                     batch_size=batch_size_option,
                 )
                 projector = SelfAttentionProjector(c)
@@ -305,6 +334,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             source_sequence_length=8,
             target_sequence_length=8,
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            return_attention_weights_flag=True,
         )
         projector = SelfAttentionProjector(c)
         m = SelfAttentionProcessor(c, projector)
@@ -345,6 +378,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
             source_sequence_length=8,
             target_sequence_length=8,
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            return_attention_weights_flag=True,
         )
         head_dim = c.embedding_dim // c.num_heads
 
@@ -427,7 +464,7 @@ class TestIndependentProcessor(unittest.TestCase):
             attention_option=AttentionOptions.INDEPENDENT,
             embedding_dim=12,
             query_key_projection_dim=20,
-            value_projection_dim=16,
+            value_projection_dim=24,
         )
 
         attention_mask = create_attention_mask(c)
@@ -475,14 +512,7 @@ class TestIndependentProcessor(unittest.TestCase):
             query_key_projection_dim=20,
             value_projection_dim=16,
             source_sequence_length=16,
-            target_sequence_length=16,
-        )
-        head_dim = c.embedding_dim // c.num_heads
-        query = torch.randn(
-            c.batch_size, c.num_heads, c.target_sequence_length, head_dim
-        )
-        key = value = torch.randn(
-            c.batch_size, c.num_heads, c.source_sequence_length, head_dim
+            target_sequence_length=24,
         )
         attention_mask_options = [None, create_attention_mask(c, True)]
         boolean_options = [True, False]
@@ -495,6 +525,25 @@ class TestIndependentProcessor(unittest.TestCase):
                     c.causal_attention_mask_flag = causal_attention_mask_flag
                     projector = IndependentProjector(c)
                     m = IndependentProcessor(c, projector)
+
+                    query = torch.randn(
+                        c.batch_size,
+                        c.num_heads,
+                        c.target_sequence_length,
+                        m.query_key_projection_dim // c.num_heads,
+                    )
+                    key = value = torch.randn(
+                        c.batch_size,
+                        c.num_heads,
+                        c.source_sequence_length,
+                        m.query_key_projection_dim // c.num_heads,
+                    )
+                    value = torch.randn(
+                        c.batch_size,
+                        c.num_heads,
+                        c.source_sequence_length,
+                        m.value_projection_dim // c.num_heads,
+                    )
                     if causal_attention_mask_flag:
                         attention_mask = None
 
@@ -504,7 +553,7 @@ class TestIndependentProcessor(unittest.TestCase):
 
                     expected_shape = (
                         m.batch_size * m.target_sequence_length,
-                        m.embedding_dim,
+                        m.value_projection_dim,
                     )
                     self.assertIsInstance(weighted_values, torch.Tensor)
                     self.assertEqual(weighted_values.shape, expected_shape)
@@ -516,7 +565,7 @@ class TestIndependentProcessor(unittest.TestCase):
             query_key_projection_dim=20,
             value_projection_dim=16,
             source_sequence_length=16,
-            target_sequence_length=16,
+            target_sequence_length=24,
         )
         head_dim = c.embedding_dim // c.num_heads
         query = torch.randn(
@@ -538,6 +587,22 @@ class TestIndependentProcessor(unittest.TestCase):
                     c.causal_attention_mask_flag = causal_attention_mask_flag
                     projector = IndependentProjector(c)
                     m = IndependentProcessor(c, projector)
+
+                    query = torch.randn(
+                        c.batch_size * c.num_heads,
+                        c.target_sequence_length,
+                        m.query_key_projection_dim // c.num_heads,
+                    )
+                    key = value = torch.randn(
+                        c.batch_size * c.num_heads,
+                        c.source_sequence_length,
+                        m.query_key_projection_dim // c.num_heads,
+                    )
+                    value = torch.randn(
+                        c.batch_size * c.num_heads,
+                        c.source_sequence_length,
+                        m.value_projection_dim // c.num_heads,
+                    )
 
                     output_attention_output, _ = m.compute_attention(
                         query, key, value, attention_mask
@@ -565,6 +630,11 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                     c = MultiHeadAttentionPresets.multi_head_attention_preset(
                         attention_option=AttentionOptions.INDEPENDENT,
                         model_type=model_type,
+                        embedding_dim=12,
+                        query_key_projection_dim=20,
+                        value_projection_dim=16,
+                        source_sequence_length=8,
+                        target_sequence_length=12,
                     )
                     projector = MixtureOfAttentionHeadsProjector(c)
                     m = MixtureOfAttentionHeadsProcessor(c, projector)
@@ -572,7 +642,13 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                     self.assertIsInstance(m.projector, MixtureOfAttentionHeadsProjector)
 
     def test__scale_query(self):
-        c = MultiHeadAttentionPresets.multi_head_attention_preset()
+        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=20,
+            value_projection_dim=16,
+            source_sequence_length=8,
+            target_sequence_length=12,
+        )
         head_dim = c.embedding_dim // c.num_heads
         query = torch.randn(
             c.batch_size * c.num_heads, c.target_sequence_length, head_dim
@@ -590,8 +666,11 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
     def test__compute_raw_masked_attention_weights(self):
         top_k = 3
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=20,
+            value_projection_dim=16,
             source_sequence_length=8,
-            target_sequence_length=8,
+            target_sequence_length=12,
             projector_adaptive_mixture_top_k=top_k,
         )
         head_dim = c.embedding_dim // c.num_heads
@@ -644,8 +723,11 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
     def test__compute_masked_attention_weights(self):
         top_k = 3
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
+            embedding_dim=12,
+            query_key_projection_dim=20,
+            value_projection_dim=16,
             source_sequence_length=8,
-            target_sequence_length=8,
+            target_sequence_length=12,
             projector_adaptive_mixture_top_k=top_k,
         )
         projector = MixtureOfAttentionHeadsProjector(c)
@@ -699,8 +781,11 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
             message = f"Testing configuration: use_kv_expert_models_flag: {use_kv_expert_models_flag}"
             with self.subTest(i=message):
                 c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    embedding_dim=12,
+                    query_key_projection_dim=20,
+                    value_projection_dim=16,
                     source_sequence_length=8,
-                    target_sequence_length=8,
+                    target_sequence_length=12,
                     projector_adaptive_mixture_top_k=top_k,
                     use_kv_expert_models_flag=use_kv_expert_models_flag,
                 )
@@ -720,7 +805,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                     c.batch_size,
                     c.num_heads,
                     c.source_sequence_length,
-                    head_dim,
+                    m.value_projection_dim // c.num_heads,
                 )
                 if use_kv_expert_models_flag:
                     value_shape = (
@@ -728,7 +813,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                         top_k,
                         c.num_heads,
                         c.source_sequence_length,
-                        head_dim,
+                        m.value_projection_dim // c.num_heads,
                     )
 
                 values = torch.randn(value_shape)
@@ -742,18 +827,18 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                     c.target_sequence_length,
                     c.batch_size,
                     top_k,
-                    c.embedding_dim,
+                    c.value_projection_dim,
                 )
                 self.assertEqual(weighted_values.shape, expected_shape)
 
     def test__compute_attention_output(self):
         top_k = 3
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
-            source_sequence_length=12,
-            target_sequence_length=12,
-            embedding_dim=16,
-            query_key_projection_dim=16,
+            embedding_dim=12,
+            query_key_projection_dim=20,
             value_projection_dim=16,
+            source_sequence_length=8,
+            target_sequence_length=12,
             projector_adaptive_mixture_top_k=top_k,
             attention_option=AttentionOptions.MIXTURE_OF_ATTENTION_HEADS,
         )
@@ -795,6 +880,24 @@ class TestProcessorBuilder(unittest.TestCase):
                 c = MultiHeadAttentionPresets.multi_head_attention_preset(
                     attention_option=attention_option,
                 )
+                if attention_option == AttentionOptions.SELF_ATTENTION:
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        attention_option=attention_option,
+                        source_sequence_length=8,
+                        target_sequence_length=14,
+                        embedding_dim=12,
+                        query_key_projection_dim=12,
+                        value_projection_dim=12,
+                    )
+                else:
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        attention_option=attention_option,
+                        embedding_dim=12,
+                        query_key_projection_dim=20,
+                        value_projection_dim=16,
+                        source_sequence_length=8,
+                        target_sequence_length=12,
+                    )
                 projector_instance = projector(c)
                 builder = ProcessorBuilder(c, projector_instance)
                 self.assertIsInstance(builder, ProcessorBuilder)
@@ -817,9 +920,24 @@ class TestProcessorBuilder(unittest.TestCase):
         for attention_option, projector_cls, processor_cls in processor_configs:
             message = f"Testing configuration: attention_option: {attention_option}"
             with self.subTest(i=message):
-                c = MultiHeadAttentionPresets.multi_head_attention_preset(
-                    attention_option=attention_option,
-                )
+                if attention_option == AttentionOptions.SELF_ATTENTION:
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        attention_option=attention_option,
+                        source_sequence_length=8,
+                        target_sequence_length=14,
+                        embedding_dim=12,
+                        query_key_projection_dim=12,
+                        value_projection_dim=12,
+                    )
+                else:
+                    c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                        attention_option=attention_option,
+                        embedding_dim=12,
+                        query_key_projection_dim=20,
+                        value_projection_dim=16,
+                        source_sequence_length=8,
+                        target_sequence_length=12,
+                    )
                 projector = projector_cls(c)
                 m = ProcessorBuilder(c, projector).build()
                 self.assertIsInstance(m, processor_cls)
@@ -830,7 +948,12 @@ class TestProcessorBuilder(unittest.TestCase):
             attention_option=AttentionOptions.SELF_ATTENTION,
             source_sequence_length=32,
             target_sequence_length=32,
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            return_attention_weights_flag=True,
         )
+
         head_dim = c.embedding_dim // c.num_heads
         projector = SelfAttentionProjector(c)
         m = ProcessorBuilder(c, projector).build()
