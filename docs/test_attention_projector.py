@@ -18,7 +18,6 @@ from Emperor.attention.utils.handlers.projector import (
 
 
 class TestSelfAttentionProjector(unittest.TestCase):
-
     def test_init(self):
         attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
@@ -177,7 +176,6 @@ class TestSelfAttentionProjector(unittest.TestCase):
 
 
 class TestIndependentProjector(unittest.TestCase):
-
     def test_init(self):
         attention_options = [LinearLayerStackOptions, AdaptiveLayerStackOptions]
 
@@ -266,7 +264,6 @@ class TestIndependentProjector(unittest.TestCase):
 
 
 class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
-
     def test_init(self):
         boolean_options = [True, False]
         attention_options = [LinearLayerStackOptions]
@@ -439,8 +436,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                         attentiion_output = m.compute_output_projection(weighted_values)
 
                         expected_shape = (
-                            c.target_sequence_length,
-                            c.batch_size,
+                            c.target_sequence_length * c.batch_size,
                             c.embedding_dim,
                         )
                         self.assertIsInstance(attentiion_output, torch.Tensor)
@@ -448,7 +444,6 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
 
 
 class TestProjectorBuilder(unittest.TestCase):
-
     def test_init(self):
         model_types = [
             LinearLayerStackOptions,
