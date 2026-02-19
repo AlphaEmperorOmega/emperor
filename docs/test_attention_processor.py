@@ -4,6 +4,7 @@ import unittest
 
 from torch.types import Tensor
 from Emperor.attention.utils.enums import AttentionOptions
+from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.adaptive.options import AdaptiveLayerStackOptions
 from Emperor.attention.utils.layer import MultiHeadAttentionConfig
@@ -844,6 +845,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
             attention_option=AttentionOptions.MIXTURE_OF_ATTENTION_HEADS,
         )
         projector = MixtureOfAttentionHeadsProjector(c)
+        reshaper = ReshaperBuilder(c).build()
         m = MixtureOfAttentionHeadsProcessor(c, projector)
 
         tensor = torch.randn(
@@ -854,6 +856,11 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
 
         q_projections, k_projections, v_projections = projector.compute_qkv_projections(
             tensor, tensor, tensor
+        )
+        q_projections, k_projections, v_projections = (
+            reshaper.reshape_qkv_for_attention(
+                q_projections, k_projections, v_projections
+            )
         )
 
         weighted_values, _ = m.compute_attention(
