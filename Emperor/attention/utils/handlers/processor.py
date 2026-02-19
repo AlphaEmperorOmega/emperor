@@ -97,8 +97,9 @@ class ProcessorBase:
             # This needs to be fixed in the future.
             attention_output = attention_output[0]
         embedding_dim = attention_output.size(-1)
+        target_sequence_length = attention_output.size(0) // self.batch_size
         return attention_output.view(
-            self.target_sequence_length, self.batch_size, embedding_dim
+            target_sequence_length, self.batch_size, embedding_dim
         )
 
     def compute_attention(
@@ -173,8 +174,9 @@ class SelfAttentionProcessor(ProcessorBase):
         weighted_values = torch.bmm(attention_weights, values)
         values = weighted_values.transpose(0, 1)
         values = values.contiguous()
+        target_sequence_length = values.size(0)
         return values.view(
-            self.target_sequence_length * self.batch_size,
+            target_sequence_length * self.batch_size,
             self.embedding_dim,
         )
 
