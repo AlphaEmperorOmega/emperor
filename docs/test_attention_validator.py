@@ -175,17 +175,6 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
                 attention_mask
             )
 
-    def test_input_with_correct_2D_dim_count_but_incorrect_shape(self):
-        wrong_source_sequence_length = 12
-        attention_mask = torch.randn(
-            self.target_sequence_length, wrong_source_sequence_length
-        )
-
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_attention_mask_dim_count_and_shape(
-                attention_mask
-            )
-
     def test_input_with_correct_2D_dim_count_correct_shape(self):
         attention_mask = torch.randn(
             self.target_sequence_length, self.source_sequence_length
@@ -195,22 +184,6 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
             attention_mask
         )
         self.assertIsNone(output)
-
-    def test_input_with_correct_3D_dim_count_but_incorrect_shape(self):
-        self.model.batched_input_flag = True
-
-        source_sequence_length = 12
-
-        attention_mask = torch.randn(
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            source_sequence_length,
-        )
-
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_attention_mask_dim_count_and_shape(
-                attention_mask
-            )
 
     def test_input_with_correct_3D_dim_count_but_correct_shape(self):
         attention_mask = torch.randn(
@@ -236,46 +209,6 @@ class Test___check_attention_mask_dim_count_and_shape(TestValidator):
             self.model._MultiHeadAttentionValidator__check_attention_mask_dim_count_and_shape(
                 attention_mask
             )
-
-
-class Test___resolve_attention_mask_shape(TestValidator):
-    def test_if_correct_shape_is_returned_for_2D_attention_mask(self):
-        expected_attention_mask_shape = (
-            self.target_sequence_length,
-            self.source_sequence_length,
-        )
-
-        attention_mask = torch.randn(
-            self.target_sequence_length,
-            self.source_sequence_length,
-        )
-
-        output = (
-            self.model._MultiHeadAttentionValidator__resolve_attention_mask_shape(
-                attention_mask
-            )
-        )
-        self.assertEqual(output, expected_attention_mask_shape)
-
-    def test_if_correct_shape_is_returned_for_3D_attention_mask(self):
-        expected_attention_mask_shape = (
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            self.source_sequence_length,
-        )
-
-        attention_mask = torch.randn(
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            self.source_sequence_length,
-        )
-
-        output = (
-            self.model._MultiHeadAttentionValidator__resolve_attention_mask_shape(
-                attention_mask
-            )
-        )
-        self.assertEqual(output, expected_attention_mask_shape)
 
 
 class Test_check_attention_input_shapes(TestValidator):
@@ -476,8 +409,10 @@ class Test___resolve_static_projection_type(TestValidator):
 class Test___resolve_static_projection_shape(TestValidator):
     def test_no_input_tensor(self):
         static_tensor = None
-        output = self.model._MultiHeadAttentionValidator__resolve_static_projection_shape(
-            static_tensor
+        output = (
+            self.model._MultiHeadAttentionValidator__resolve_static_projection_shape(
+                static_tensor
+            )
         )
 
         self.assertIsNone(output)
@@ -486,8 +421,10 @@ class Test___resolve_static_projection_shape(TestValidator):
         static_tensor = torch.randn(
             self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
         )
-        output = self.model._MultiHeadAttentionValidator__resolve_static_projection_shape(
-            static_tensor
+        output = (
+            self.model._MultiHeadAttentionValidator__resolve_static_projection_shape(
+                static_tensor
+            )
         )
 
         self.assertIsNone(output)

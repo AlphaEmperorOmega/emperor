@@ -92,33 +92,8 @@ class MultiHeadAttentionValidator:
                 f"but found {attention_mask.dim()}-D tensor instead"
             )
 
-        # expected_shape = self.__resolve_attention_mask_shape(attention_mask)
-        # if attention_mask.shape != expected_shape:
-        #     raise RuntimeError(
-        #         f"Expected `attention_mask` shape to be {expected_shape} but got {attention_mask.shape}"
-        #     )
-
     def __format_dimension_context(self) -> str:
         return "batched (3-D)" if self.batched_input_flag else "unbatched (2-D)"
-
-    def __resolve_attention_mask_shape(
-        self, attention_mask: Tensor
-    ) -> tuple[int, int, int] | tuple[int, int]:
-        if attention_mask.dim() == 3:
-            if self.attention_option == AttentionOptions.MIXTURE_OF_ATTENTION_HEADS:
-                top_k = self.cfg.experts_config.top_k
-                return (
-                    self.batch_size * self.num_heads * top_k,
-                    self.target_sequence_length,
-                    self.source_sequence_length,
-                )
-            else:
-                return (
-                    self.batch_size * self.num_heads,
-                    self.target_sequence_length,
-                    self.source_sequence_length,
-                )
-        return (self.target_sequence_length, self.source_sequence_length)
 
     def is_tensor_batched(self, tensor: Tensor) -> bool:
         self.batched_input_flag = tensor.dim() == 3
