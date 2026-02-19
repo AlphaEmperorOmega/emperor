@@ -343,6 +343,4 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         return projection
 
     def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
-        sequence_length, batch_size, _, _ = weighted_values.shape
-        projection = self._compute_projection(weighted_values, self.output_model)
-        return projection.view(sequence_length, batch_size, self.embedding_dim)
+        return self._compute_projection(weighted_values, self.output_model)
