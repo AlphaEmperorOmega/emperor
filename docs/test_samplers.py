@@ -72,10 +72,10 @@ class TestProbabilitySampler(unittest.TestCase):
                     distribution_check = result.sum(dim=-1)
                     expected_distribution = torch.tensor([1.0, 1.0])
                     self.assertTrue(
-                        torch.allclose(distribution_check, expected_distribution)
+                        torch.equal(distribution_check.round(decimals=4), expected_distribution.round(decimals=4))
                     )
                 else:
-                    self.assertTrue(torch.allclose(probs, result))
+                    self.assertTrue(torch.equal(probs.round(decimals=4), result.round(decimals=4)))
 
     def test__probability_sampling_strategy(self):
         cfg = SamplerPresets.sampler_preset()
@@ -113,12 +113,12 @@ class TestProbabilitySampler(unittest.TestCase):
                     if threshold_option > 0.0:
                         if filter_flag:
                             expected_mask[0] = 0.0
-                            self.assertTrue(torch.allclose(output, expected_mask))
+                            self.assertTrue(torch.equal(output.round(decimals=4), expected_mask.round(decimals=4)))
                         else:
                             expected_mask[1] = 0.0
-                            self.assertTrue(torch.allclose(output, expected_mask))
+                            self.assertTrue(torch.equal(output.round(decimals=4), expected_mask.round(decimals=4)))
                     else:
-                        self.assertTrue(torch.allclose(skip_mask, output))
+                        self.assertTrue(torch.equal(skip_mask.round(decimals=4), output.round(decimals=4)))
 
     def test__apply_skip_mask__threshold__zero(self):
         threshold_options = [0.0, 0.4]
@@ -145,8 +145,8 @@ class TestProbabilitySampler(unittest.TestCase):
                 )
 
                 if threshold_option == 0.0:
-                    self.assertTrue(torch.allclose(masked_probs, probs))
-                    self.assertTrue(torch.allclose(router_logit_scores, logits))
+                    self.assertTrue(torch.equal(masked_probs.round(decimals=4), probs.round(decimals=4)))
+                    self.assertTrue(torch.equal(router_logit_scores.round(decimals=4), logits.round(decimals=4)))
                 else:
                     self.assertTrue(
                         torch.sum(masked_probs[unmasked_token, :]).item() > 0
@@ -181,7 +181,7 @@ class TestProbabilitySampler(unittest.TestCase):
                     self.assertNotEqual(logits.mean(), result.mean())
                     self.assertEqual(result.shape, (batch_size, m.num_experts))
                 else:
-                    self.assertTrue(torch.allclose(logits, result))
+                    self.assertTrue(torch.equal(logits.round(decimals=4), result.round(decimals=4)))
 
     def test__compute_masked_probabilities(self):
         noisy_topk_flag_options = [True, False]
@@ -236,9 +236,9 @@ class TestProbabilitySampler(unittest.TestCase):
                             torch.sum(router_logit_scores[1:, :]).item() == 0
                         )
                         self.assertTrue(
-                            torch.allclose(
-                                torch.sum(masked_probabilities[0, :], dim=-1),
-                                torch.tensor(1.0).float(),
+                            torch.equal(
+                                torch.sum(masked_probabilities[0, :], dim=-1).round(decimals=4),
+                                torch.tensor(1.0).float().round(decimals=4),
                             )
                         )
                     elif noisy_topk_flag_option and (threshold_option == 0.0):
@@ -366,7 +366,7 @@ class TestSamplerSparse(unittest.TestCase):
                     self.assertIsNone(skip_maks)
                 else:
                     self.assertTrue(
-                        torch.allclose(skip_maks, input_mask.reshape(-1, 1))
+                        torch.equal(skip_maks.round(decimals=4), input_mask.reshape(-1, 1).round(decimals=4))
                     )
 
     def test__prepare_loss_gates(self):
@@ -386,7 +386,7 @@ class TestSamplerSparse(unittest.TestCase):
 
         self.assertEqual(gates.shape, (batch_size, m.num_experts))
         self.assertTrue(
-            torch.allclose(torch.sum(gates, dim=-1), torch.ones(batch_size).float())
+            torch.equal(torch.sum(gates, dim=-1).round(decimals=4), torch.ones(batch_size).float().round(decimals=4))
         )
 
     def test_compute_loss(self):
@@ -551,7 +551,7 @@ class TestSamplerTopk(unittest.TestCase):
                     self.assertIsNone(skip_maks)
                 else:
                     self.assertTrue(
-                        torch.allclose(skip_maks, input_mask.reshape(-1, 1))
+                        torch.equal(skip_maks.round(decimals=4), input_mask.reshape(-1, 1).round(decimals=4))
                     )
 
     def test__prepare_loss_gates(self):
@@ -567,7 +567,7 @@ class TestSamplerTopk(unittest.TestCase):
 
         self.assertEqual(gates.shape, (batch_size, m.num_experts))
         self.assertTrue(
-            torch.allclose(torch.sum(gates, dim=-1), torch.ones(batch_size).float())
+            torch.equal(torch.sum(gates, dim=-1).round(decimals=4), torch.ones(batch_size).float().round(decimals=4))
         )
 
     def test_compute_loss(self):
@@ -751,11 +751,11 @@ class TestSamplerFull(unittest.TestCase):
                 if threshold_option > 0.0:
                     self.assertEqual(masked_probabilities.shape, shape)
                     self.assertFalse(
-                        torch.allclose(probabilities, masked_probabilities)
+                        torch.equal(probabilities.round(decimals=4), masked_probabilities.round(decimals=4))
                     )
                 else:
                     self.assertEqual(masked_probabilities.shape, shape)
-                    self.assertTrue(torch.allclose(probabilities, masked_probabilities))
+                    self.assertTrue(torch.equal(probabilities.round(decimals=4), masked_probabilities.round(decimals=4)))
 
 
 class TestSamplerModel(unittest.TestCase):

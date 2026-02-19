@@ -390,7 +390,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             input_i = input[i].unsqueeze(0)
             weight_parameters_i = weight_parameters[i]
             output_i = torch.mm(input_i, weight_parameters_i)
-            self.assertTrue(torch.allclose(output[i], output_i.squeeze(0)))
+            self.assertTrue(torch.equal(output[i].round(decimals=4), output_i.squeeze(0).round(decimals=4)))
 
     def test__apply_generated_biases(self):
         cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()

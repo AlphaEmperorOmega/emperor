@@ -133,9 +133,9 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                             torch.tensor(float("-inf")),
                         )
                         self.assertTrue(
-                            torch.allclose(
-                                raw_masked_weights[idx],
-                                single_head_qk_attention_weights,
+                            torch.equal(
+                                raw_masked_weights[idx].round(decimals=4),
+                                single_head_qk_attention_weights.round(decimals=4),
                             )
                         )
 
@@ -272,7 +272,7 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     )
                     self.assertEqual(output_attention_weights.shape, expected_shape)
                     self.assertTrue(
-                        torch.allclose(output_attention_weights, attention_weights)
+                        torch.equal(output_attention_weights.round(decimals=4), attention_weights.round(decimals=4))
                     )
 
     def test__handle_batched_input(self):

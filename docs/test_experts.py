@@ -159,7 +159,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     indices, probabilities, sampler_loss = (
                         m._maybe_compute_expert_indices(inputs, indices_input)
                     )
-                    self.assertTrue(torch.allclose(indices, indices_input))
+                    self.assertTrue(torch.equal(indices, indices_input))
                     self.assertIsNone(probabilities)
                     self.assertEqual(sampler_loss.item(), 0.0)
 
@@ -265,10 +265,10 @@ class TestMixtureOfExperts(unittest.TestCase):
                     if weighted_parameters_flag:
                         self.assertIsInstance(output, torch.Tensor)
                         expected_output = logits * pribabilities.view(-1, 1)
-                        self.assertTrue(torch.allclose(output, expected_output))
+                        self.assertTrue(torch.equal(output, expected_output))
                         continue
                     self.assertIsInstance(output, torch.Tensor)
-                    self.assertTrue(torch.allclose(output, logits))
+                    self.assertTrue(torch.equal(output, logits))
 
     def test__compute_expert_mixture(self):
         num_experts = 6
