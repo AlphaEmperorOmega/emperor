@@ -15,7 +15,7 @@ class PositionalEmbeddingOptions(BaseOptions):
     LEARNED = 2
 
 
-class PositionalEmbeddingSelector(Module):
+class AbsolutePositionalEmbeddingSelector(Module):
     def __init__(
         self,
         cfg: "PositionalEmbeddingConfig",
