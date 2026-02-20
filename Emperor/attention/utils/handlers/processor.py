@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 from torch import Tensor
-from Emperor.attention.utils.handlers.reshaper import ReshaperBase, ReshaperBuilder
+from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
 from Emperor.attention.utils.handlers.validators._processor import ProcessorValidator
 
 from typing import TYPE_CHECKING

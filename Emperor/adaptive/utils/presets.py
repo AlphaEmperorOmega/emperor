@@ -1,4 +1,3 @@
-from dataclasses import InitVar
 from Emperor.adaptive.options import AdaptiveLayerOptions
 from Emperor.config import ModelConfig
 from Emperor.base.layer import LayerStackConfig

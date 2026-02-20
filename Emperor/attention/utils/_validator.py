@@ -1,5 +1,4 @@
 from torch import Tensor
-from Emperor.attention.utils.enums import AttentionOptions
 
 from typing import TYPE_CHECKING
 

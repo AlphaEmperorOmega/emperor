@@ -4,7 +4,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
 from torchvision.transforms.transforms import Compose
-from Emperor.base.utils import DataModule, show_images
+from Emperor.base.utils import DataModule
 
 
 class Cifar10(DataModule):

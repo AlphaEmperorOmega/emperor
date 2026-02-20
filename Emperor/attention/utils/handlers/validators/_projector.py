@@ -1,5 +1,3 @@
-import torch
-
 from torch.types import Tensor
 
 from typing import TYPE_CHECKING

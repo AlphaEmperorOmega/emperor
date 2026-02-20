@@ -1,10 +1,9 @@
-from tensorboard.summary.writer.event_file_writer import os
 import torch.nn.functional as F
 
+from .utils import randn
 from .utils import Module
 from torch.types import Tensor
 from Emperor.monitor.monitors import ScalarMonitor
-from .utils import reshape, astype, argmax, float32, reduce_mean, randn, device
 
 
 class Classifier(Module):
