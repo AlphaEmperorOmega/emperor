@@ -6,13 +6,15 @@ from Emperor.base.utils import Module
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingConfig
+    from Emperor.embedding.relative.options.config import (
+        RelativePositionalEmbeddingConfig,
+    )
 
 
-class LearnedPositionalEmbedding(Module):
+class LearnedPositionalBias(Module):
     def __init__(
         self,
-        cfg: "PositionalEmbeddingConfig",
+        cfg: "RelativePositionalEmbeddingConfig",
     ):
         super().__init__()
         self.cfg = cfg
@@ -26,7 +28,7 @@ class LearnedPositionalEmbedding(Module):
         embeding_shape = (self.num_heads, self.head_dim, self.max_positions * 2 + 1)
         self.relative_positional_emnbeddings = self._init_parameter_bank(embeding_shape)
 
-    def __get_num_embeddings(self, cfg: "PositionalEmbeddingConfig") -> int:
+    def __get_num_embeddings(self, cfg: "RelativePositionalEmbeddingConfig") -> int:
         if self.cfg.padding_idx is None:
             return cfg.num_embeddings
         return cfg.num_embeddings + self.cfg.padding_idx + 1

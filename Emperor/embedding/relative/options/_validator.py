@@ -5,11 +5,8 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.transformer.utils.embedding.options.learned_embedding import (
-        LearnedPositionalEmbedding,
-    )
-    from Emperor.transformer.utils.embedding.options.sinusoidal_embedding import (
-        SinusoidalPositionalEmbedding,
+    from Emperor.embedding.relative.options.learned_embedding import (
+        LearnedPositionalBias,
     )
 
 
@@ -27,10 +24,10 @@ class PositionalEmbeddingValidator:
             )
 
 
-class LearnedPositionalEmbeddingValidator(PositionalEmbeddingValidator):
+class LearnedPositionalBiasValidator(PositionalEmbeddingValidator):
     def __init__(
         self,
-        model: "LearnedPositionalEmbedding",
+        model: "LearnedPositionalBias",
     ):
         self.model = model
 

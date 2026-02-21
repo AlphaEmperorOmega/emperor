@@ -4,16 +4,16 @@ from Emperor.base.utils import ConfigBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingOptions
+    from Emperor.embedding.options import RelativePositionalEmbeddingOptions
 
 
 @dataclass
-class PositionalEmbeddingConfig(ConfigBase):
+class RelativePositionalEmbeddingConfig(ConfigBase):
     text_processing_flag: bool = field(
         default=False,
         metadata={"help": ""},
     )
-    positional_embedding_option: "PositionalEmbeddingOptions | None" = field(
+    positional_embedding_option: "RelativePositionalEmbeddingOptions | None" = field(
         default=None,
         metadata={"help": ""},
     )
