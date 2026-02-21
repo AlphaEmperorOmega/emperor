@@ -1,37 +1,35 @@
 import torch
 import torch.nn as nn
 
-from torch import Tensor
 from typing import Dict
-from Emperor.base.utils import Module
-from Emperor.transformer.utils.embedding.options._validator import (
+from torch import Tensor
+from Emperor.embedding.absolute.options.base import AbsolutePositionalEmbeddingBase
+from Emperor.embedding.absolute.options._validator import (
     LearnedPositionalEmbeddingValidator,
 )
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingConfig
+    from Emperor.embedding.absolute.options.config import (
+        AbsolutePositionalEmbeddingConfig,
+    )
 
 
-class LearnedPositionalEmbedding(Module):
+class LearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     def __init__(
         self,
-        cfg: "PositionalEmbeddingConfig",
+        cfg: "AbsolutePositionalEmbeddingConfig",
     ):
-        super().__init__()
+        super().__init__(cfg)
         self.cfg = cfg
-        self.embedding_dim = self.cfg.embedding_dim
-        self.padding_idx = self.cfg.padding_idx
         self.num_embeddings = self._get_num_embeddings(cfg)
-        self.init_size = self.cfg.init_size
-        self.auto_expand_flag = self.cfg.auto_expand_flag
         self.embedding_model = self._initialize_embedding_model()
 
-    def _get_num_embeddings(self, cfg: "PositionalEmbeddingConfig") -> int:
-        if self.cfg.padding_idx is None:
-            return cfg.num_embeddings
-        return cfg.num_embeddings - self.cfg.padding_idx - 1
+    def _get_num_embeddings(self) -> int:
+        if self.padding_idx is None:
+            return self.num_embeddings
+        return self.num_embeddings - self.padding_idx - 1
 
     def _initialize_embedding_model(self) -> nn.Embedding:
         embeddings = nn.Embedding(
@@ -46,10 +44,10 @@ class LearnedPositionalEmbedding(Module):
         return embeddings
 
 
-class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
+class TextLearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     def __init__(
         self,
-        cfg: "PositionalEmbeddingConfig",
+        cfg: "AbsolutePositionalEmbeddingConfig",
     ):
         super().__init__(cfg)
         self.validator = LearnedPositionalEmbeddingValidator(self)
@@ -82,14 +80,18 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
     def __make_incremental_position(self, input: Tensor) -> Tensor:
         padding_idx: int = self.embedding_model.padding_idx
         current_decoding_step = int(padding_idx + input.size(1))
-        single_step_position = torch.zeros((1, 1), device=input.device, dtype=input.dtype)
+        single_step_position = torch.zeros(
+            (1, 1), device=input.device, dtype=input.dtype
+        )
         single_step_position = single_step_position.fill_(current_decoding_step)
         return single_step_position
 
     def __make_positions(self, tensor: Tensor) -> Tensor:
         padding_idx: int = self.embedding_model.padding_idx
         non_padding_mask = tensor.ne(padding_idx).int()
-        cumulative_positions = torch.cumsum(non_padding_mask, dim=1).type_as(non_padding_mask)
+        cumulative_positions = torch.cumsum(non_padding_mask, dim=1).type_as(
+            non_padding_mask
+        )
         cumulative_positions = cumulative_positions * non_padding_mask
         embedding_table_indices = cumulative_positions.long() + padding_idx
         return embedding_table_indices

@@ -1,39 +1,27 @@
-from dataclasses import dataclass, field
-from Emperor.base.utils import ConfigBase
+from Emperor.base.utils import Module
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingOptions
+    from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions
+    from Emperor.embedding.absolute.options.config import (
+        AbsolutePositionalEmbeddingConfig,
+    )
 
 
-@dataclass
-class PositionalEmbeddingConfig(ConfigBase):
-    text_processing_flag: bool = field(
-        default=False,
-        metadata={"help": ""},
-    )
-    positional_embedding_option: "PositionalEmbeddingOptions | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    num_embeddings: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    embedding_dim: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    init_size: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    padding_idx: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    auto_expand_flag: bool | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
+class AbsolutePositionalEmbeddingBase(Module):
+
+    def __init__(
+        self,
+        cfg: "AbsolutePositionalEmbeddingConfig",
+    ):
+        super().__init__()
+        self.cfg = cfg
+        self.positional_embedding_option: "AbsolutePositionalEmbeddingOptions" = (
+            self.cfg.positional_embedding_option
+        )
+        self.embedding_dim: int = self.cfg.embedding_dim
+        self.padding_idx: int = self.cfg.padding_idx
+        self.num_embeddings: int = self.cfg.num_embeddings
+        self.init_size: int = self.cfg.init_size
+        self.auto_expand_flag: bool = self.cfg.auto_expand_flag
