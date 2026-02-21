@@ -6,7 +6,7 @@ from Emperor.base.layer import Layer
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase, Module
 from Emperor.transformer.utils.feed_forward import FeedForward, FeedForwardConfig
-from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingOptions
+from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions
 from Emperor.attention.utils.layer import MultiHeadAttention, MultiHeadAttentionConfig
 from Emperor.transformer.utils.wrappers import (
     CrossAttentionLayer,
@@ -20,8 +20,8 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.base.enums import LayerNormPositionOptions
     from Emperor.transformer.utils.patch.options.base import PatchConfig
-    from Emperor.transformer.utils.embedding.options.base import (
-        PositionalEmbeddingConfig,
+    from Emperor.embedding.absolute.options.config import (
+        AbsolutePositionalEmbeddingConfig,
     )
 
 
@@ -67,7 +67,7 @@ class TransformerConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    positional_embedding_option: "PositionalEmbeddingOptions | None" = field(
+    positional_embedding_option: "AbsolutePositionalEmbeddingOptions | None" = field(
         default=None,
         metadata={"help": ""},
     )
@@ -75,7 +75,7 @@ class TransformerConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    positional_embedding_config: "PositionalEmbeddingConfig | None" = field(
+    positional_embedding_config: "AbsolutePositionalEmbeddingConfig | None" = field(
         default=None,
         metadata={"help": ""},
     )

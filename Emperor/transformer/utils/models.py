@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.linears.utils.stack import LinearLayerStack
-from Emperor.transformer.utils.embedding.options.base import PositionalEmbeddingConfig
-from Emperor.transformer.utils.embedding.selector import PositionalEmbeddingSelector
+from Emperor.embedding.absolute.options.config import AbsolutePositionalEmbeddingConfig
+from Emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
 from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.transformer.utils.patch.options.base import PatchConfig
 from Emperor.transformer.utils.patch.selector import PatchSelector
@@ -27,7 +27,7 @@ class VITExperimentConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    positional_embedding_config: "PositionalEmbeddingConfig | None" = field(
+    positional_embedding_config: "AbsolutePositionalEmbeddingConfig | None" = field(
         default=None,
         metadata={"help": ""},
     )
@@ -59,7 +59,9 @@ class TransformerBase(Module):
         self.output_config = self.main_cfg.output_config
 
         self.patch = PatchSelector(self.patch_config).build()
-        self.embedding = PositionalEmbeddingSelector(self.embedding_config).build()
+        self.embedding = AbsolutePositionalEmbeddingFactory(
+            self.embedding_config
+        ).build()
         self.output = LinearLayerStack(self.output_config).build_model()
 
 
@@ -77,7 +79,7 @@ class TransformerEncoderModel(TransformerBase):
         self.output_config = self.main_cfg.output_config
 
         self.patch = PatchSelector(self.patch_config).build()
-        self.positional_embedding = PositionalEmbeddingSelector(
+        self.positional_embedding = AbsolutePositionalEmbeddingFactory(
             self.embedding_config
         ).build()
         self.transformer = TransformerEncoderStack(self.encoder_config)
