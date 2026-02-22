@@ -15,10 +15,8 @@ from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from Emperor.transformer.utils.embedding.selector import (
-    PositionalEmbeddingConfig,
-    PositionalEmbeddingOptions,
-)
+from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions
+from Emperor.embedding.absolute.options.config import AbsolutePositionalEmbeddingConfig
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
@@ -41,14 +39,14 @@ class TransformerPresets:
     @staticmethod
     def transformer_positional_embedding_preset(
         text_processing_flag=False,
-        positional_embedding_option: PositionalEmbeddingOptions = PositionalEmbeddingOptions.LEARNED,
+        positional_embedding_option: AbsolutePositionalEmbeddingOptions = AbsolutePositionalEmbeddingOptions.LEARNED,
         num_embeddings: int = 24,
         embedding_dim: int = 8,
         padding_idx: int = 0,
         init_size: int = 1024,
         auto_expand_flag: bool = False,
-    ) -> "PositionalEmbeddingConfig":
-        return PositionalEmbeddingConfig(
+    ) -> "AbsolutePositionalEmbeddingConfig":
+        return AbsolutePositionalEmbeddingConfig(
             text_processing_flag=text_processing_flag,
             positional_embedding_option=positional_embedding_option,
             num_embeddings=num_embeddings,
@@ -407,7 +405,7 @@ class TransformerPresets:
         embedding_dim=8,
         source_sequence_length: int = 6,
         target_sequence_length: int = 6,
-        layer_norm_position: PositionalEmbeddingOptions = PositionalEmbeddingOptions.LEARNED,
+        layer_norm_position: AbsolutePositionalEmbeddingOptions = AbsolutePositionalEmbeddingOptions.LEARNED,
         dropout_probability: float = 0.0,
         causal_attention_mask_flag: bool = False,
         attention_model_type=LinearLayerStackOptions.ADAPTIVE,
