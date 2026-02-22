@@ -20,6 +20,7 @@ class AbsolutePositionalEmbeddingBase(Module):
         self.positional_embedding_option: "AbsolutePositionalEmbeddingOptions" = (
             self.cfg.positional_embedding_option
         )
+        self.class_token_flag: bool = self.cfg.class_token_flag
         self.embedding_dim: int = self.cfg.embedding_dim
         self.padding_idx: int = self.cfg.padding_idx
         self.num_embeddings: int = self.cfg.num_embeddings

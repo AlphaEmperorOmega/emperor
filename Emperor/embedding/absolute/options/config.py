@@ -37,3 +37,7 @@ class AbsolutePositionalEmbeddingConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
+    class_token_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )

@@ -45,6 +45,7 @@ class TransformerPresets:
         padding_idx: int = 0,
         init_size: int = 1024,
         auto_expand_flag: bool = False,
+        class_token_flag: bool = False,
     ) -> "AbsolutePositionalEmbeddingConfig":
         return AbsolutePositionalEmbeddingConfig(
             text_processing_flag=text_processing_flag,
@@ -54,6 +55,7 @@ class TransformerPresets:
             padding_idx=padding_idx,
             init_size=init_size,
             auto_expand_flag=auto_expand_flag,
+            class_token_flag=class_token_flag,
         )
 
     @staticmethod
@@ -540,8 +542,16 @@ class TransformerPresets:
             batch_size=batch_size,
             num_heads=attention_num_heads,
             embedding_dim=embedding_dim,
-            query_key_projection_dim=attention_query_key_projection_dim if attention_query_key_projection_dim > 0 else embedding_dim,
-            value_projection_dim=attention_value_projection_dim if attention_value_projection_dim > 0 else embedding_dim,
+            query_key_projection_dim=(
+                attention_query_key_projection_dim
+                if attention_query_key_projection_dim > 0
+                else embedding_dim
+            ),
+            value_projection_dim=(
+                attention_value_projection_dim
+                if attention_value_projection_dim > 0
+                else embedding_dim
+            ),
             target_sequence_length=attention_target_sequence_length,
             source_sequence_length=attention_source_sequence_length,
             target_dtype=attention_target_dtype,
