@@ -23,13 +23,11 @@ class LearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     ):
         super().__init__(cfg)
         self.cfg = cfg
-        self.num_embeddings = self._get_num_embeddings(cfg)
+        self.num_embeddings = self._get_num_embeddings()
         self.embedding_model = self._initialize_embedding_model()
 
     def _get_num_embeddings(self) -> int:
-        if self.padding_idx is None:
-            return self.num_embeddings
-        return self.num_embeddings - self.padding_idx - 1
+        return self.num_embeddings
 
     def _initialize_embedding_model(self) -> nn.Embedding:
         embeddings = nn.Embedding(
@@ -44,7 +42,7 @@ class LearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
         return embeddings
 
 
-class TextLearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
+class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
     def __init__(
         self,
         cfg: "AbsolutePositionalEmbeddingConfig",
@@ -52,18 +50,24 @@ class TextLearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
         super().__init__(cfg)
         self.validator = LearnedPositionalEmbeddingValidator(self)
 
+    def _get_num_embeddings(self) -> int:
+        return self.num_embeddings + 1
+
     def forward(
         self,
         input: Tensor,
         incremental_state: Dict[str, Dict[str, Tensor | None]] | None = None,
         positions: Tensor | None = None,
     ) -> Tensor:
-        self.validator.ensure_propper_input_shape(input)
-        self.validator.ensure_propper_input_type(input)
-        self.validator.ensure_padding_index_exists_for_positions(positions)
+        self.__validate_inputs(input, positions)
 
         positions = self.__resolve_positions(input, incremental_state, positions)
         return self.embedding_model(positions)
+
+    def __validate_inputs(self, input: Tensor, positions: Tensor | None = None) -> None:
+        self.validator.ensure_propper_input_shape(input)
+        self.validator.ensure_propper_input_type(input)
+        self.validator.ensure_padding_index_exists_for_positions(positions)
 
     def __resolve_positions(
         self,
@@ -98,5 +102,10 @@ class TextLearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
 
 
 class ImageLearnedPositionalEmbedding(LearnedPositionalEmbedding):
+    def _get_num_embeddings(self) -> int:
+        if not self.class_token_flag:
+            return self.num_embeddings
+        return self.num_embeddings + 1
+
     def forward(self, input: Tensor) -> Tensor:
         return self.embedding_model.weight + input
