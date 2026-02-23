@@ -10,12 +10,9 @@ from Emperor.attention.utils.handlers.processor import ProcessorBuilder
 from Emperor.attention.utils.handlers.projector import ProjectorBuilder
 from Emperor.attention.utils.handlers.batch import BatchDimensionManager
 from Emperor.attention.utils._validator import MultiHeadAttentionValidator
+from Emperor.embedding.relative.options.config import RelativePositionalEmbeddingConfig
 
 from typing import TYPE_CHECKING
-
-from Emperor.embedding.options import RelativePositionalEmbeddingOptions
-from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
-from Emperor.embedding.relative.options.config import RelativePositionalEmbeddingConfig
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -131,21 +128,13 @@ class MultiHeadAttentionConfig(ConfigBase):
             "help": "Type of model used to generate parameters query, key, and value projections"
         },
     )
-    relative_positional_embedding_option: (
-        "RelativePositionalEmbeddingOptions | None"
-    ) = field(
-        default=None,
-        metadata={
-            "help": "Type of model used to generate parameters query, key, and value projections"
-        },
-    )
-    relative_positional_embedding_config: (
-        "RelativePositionalEmbeddingConfig | None"
-    ) = field(
-        default=None,
-        metadata={
-            "help": "Configuration for the relative positional embedding module"
-        },
+    relative_positional_embedding_config: "RelativePositionalEmbeddingConfig | None" = (
+        field(
+            default=None,
+            metadata={
+                "help": "Configuration for the relative positional embedding module"
+            },
+        )
     )
 
 

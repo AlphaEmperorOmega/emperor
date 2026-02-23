@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from torch import Tensor
 from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
 from Emperor.attention.utils.handlers.validators._processor import ProcessorValidator
-from Emperor.embedding.options import RelativePositionalEmbeddingOptions
 from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
 
 from typing import TYPE_CHECKING
@@ -74,9 +73,6 @@ class ProcessorBase:
             self.cfg.return_attention_weights_flag
         )
         self.add_key_value_bias_flag: bool = self.cfg.add_key_value_bias_flag
-        self.relative_positional_embedding_option: (
-            "RelativePositionalEmbeddingOptions"
-        ) = self.cfg.relative_positional_embedding_option
         self.head_dim: int = self.embedding_dim // self.num_heads
         self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
         self.reshaper = ReshaperBuilder(self.cfg).build()
@@ -86,8 +82,7 @@ class ProcessorBase:
         )
 
     def __maybe_initialize_relative_positional_embedding(self):
-        disabled_option = RelativePositionalEmbeddingOptions.DISABLED
-        if self.relative_positional_embedding_option != disabled_option:
+        if self.cfg.relative_positional_embedding_config is not None:
             return RelativePositionalEmbeddingFactory(
                 self.cfg.relative_positional_embedding_config
             ).build()

@@ -9,6 +9,7 @@ from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.embedding.options import RelativePositionalEmbeddingOptions
+from Emperor.embedding.relative.options.config import RelativePositionalEmbeddingConfig
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
@@ -106,7 +107,13 @@ class MultiHeadAttentionPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-        relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
+        positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
+        relative_embedding_num_embeddings: int = 64,
+        relative_embedding_max_positions: int = 32,
+        relative_embedding_padding_idx: int = 0,
+        relative_embedding_init_size: int = 64,
+        relative_embedding_auto_expand_flag: bool = False,
+        relative_embedding_text_processing_flag: bool = False,
     ) -> "MultiHeadAttentionConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
@@ -240,6 +247,20 @@ class MultiHeadAttentionPresets:
             stack_dropout_probability=stack_dropout_probability,
         )
 
+        relative_positional_embedding_config = None
+        if positional_embedding_option != RelativePositionalEmbeddingOptions.DISABLED:
+            relative_positional_embedding_config = RelativePositionalEmbeddingConfig(
+                positional_embedding_option=positional_embedding_option,
+                num_heads=num_heads,
+                embedding_dim=embedding_dim,
+                num_embeddings=relative_embedding_num_embeddings,
+                max_positions=relative_embedding_max_positions,
+                padding_idx=relative_embedding_padding_idx,
+                init_size=relative_embedding_init_size,
+                auto_expand_flag=relative_embedding_auto_expand_flag,
+                text_processing_flag=relative_embedding_text_processing_flag,
+            )
+
         return MultiHeadAttentionConfig(
             model_type=model_type,
             batch_size=batch_size,
@@ -260,7 +281,7 @@ class MultiHeadAttentionPresets:
             return_attention_weights_flag=return_attention_weights_flag,
             experts_config=experts_config,
             use_kv_expert_models_flag=use_kv_expert_models_flag,
-            relative_positional_embedding_option=relative_positional_embedding_option,
+            relative_positional_embedding_config=relative_positional_embedding_config,
             override_config=projector_config,
         )
 
@@ -288,9 +309,29 @@ class MultiHeadAttentionPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-        relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
+        positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
+        relative_embedding_num_embeddings: int = 64,
+        relative_embedding_max_positions: int = 32,
+        relative_embedding_padding_idx: int = 0,
+        relative_embedding_init_size: int = 64,
+        relative_embedding_auto_expand_flag: bool = False,
+        relative_embedding_text_processing_flag: bool = False,
     ) -> "MultiHeadAttentionConfig":
         layer_stack_model_option = LinearLayerStackOptions.BASE
+
+        relative_positional_embedding_config = None
+        if positional_embedding_option != RelativePositionalEmbeddingOptions.DISABLED:
+            relative_positional_embedding_config = RelativePositionalEmbeddingConfig(
+                positional_embedding_option=positional_embedding_option,
+                num_heads=num_heads,
+                embedding_dim=embedding_dim,
+                num_embeddings=relative_embedding_num_embeddings,
+                max_positions=relative_embedding_max_positions,
+                padding_idx=relative_embedding_padding_idx,
+                init_size=relative_embedding_init_size,
+                auto_expand_flag=relative_embedding_auto_expand_flag,
+                text_processing_flag=relative_embedding_text_processing_flag,
+            )
 
         return MultiHeadAttentionConfig(
             batch_size=batch_size,
@@ -310,7 +351,7 @@ class MultiHeadAttentionPresets:
             add_key_value_bias_flag=add_key_value_bias_flag,
             average_attention_weights_flag=average_attention_weights_flag,
             return_attention_weights_flag=return_attention_weights_flag,
-            relative_positional_embedding_option=relative_positional_embedding_option,
+            relative_positional_embedding_config=relative_positional_embedding_config,
             override_config=LinearPresets.base_linear_layer_stack_preset(
                 input_dim=embedding_dim,
                 output_dim=embedding_dim,
@@ -357,9 +398,29 @@ class MultiHeadAttentionPresets:
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
         adaptive_behaviour_stack_num_layers: int = 2,
-        relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
+        positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
+        relative_embedding_num_embeddings: int = 64,
+        relative_embedding_max_positions: int = 32,
+        relative_embedding_padding_idx: int = 0,
+        relative_embedding_init_size: int = 64,
+        relative_embedding_auto_expand_flag: bool = False,
+        relative_embedding_text_processing_flag: bool = False,
     ) -> "MultiHeadAttentionConfig":
         layer_stack_model_option = LinearLayerStackOptions.ADAPTIVE
+
+        relative_positional_embedding_config = None
+        if positional_embedding_option != RelativePositionalEmbeddingOptions.DISABLED:
+            relative_positional_embedding_config = RelativePositionalEmbeddingConfig(
+                positional_embedding_option=positional_embedding_option,
+                num_heads=num_heads,
+                embedding_dim=embedding_dim,
+                num_embeddings=relative_embedding_num_embeddings,
+                max_positions=relative_embedding_max_positions,
+                padding_idx=relative_embedding_padding_idx,
+                init_size=relative_embedding_init_size,
+                auto_expand_flag=relative_embedding_auto_expand_flag,
+                text_processing_flag=relative_embedding_text_processing_flag,
+            )
 
         return MultiHeadAttentionConfig(
             batch_size=batch_size,
@@ -379,7 +440,7 @@ class MultiHeadAttentionPresets:
             add_key_value_bias_flag=add_key_value_bias_flag,
             average_attention_weights_flag=average_attention_weights_flag,
             return_attention_weights_flag=return_attention_weights_flag,
-            relative_positional_embedding_option=relative_positional_embedding_option,
+            relative_positional_embedding_config=relative_positional_embedding_config,
             override_config=LinearPresets.adaptive_linear_layer_stack_preset(
                 batch_size=batch_size,
                 input_dim=embedding_dim,
