@@ -15,8 +15,9 @@ from Emperor.attention.utils.presets import MultiHeadAttentionPresets
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions
+from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions, RelativePositionalEmbeddingOptions
 from Emperor.embedding.absolute.options.config import AbsolutePositionalEmbeddingConfig
+from Emperor.embedding.relative.options.config import RelativePositionalEmbeddingConfig
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
@@ -56,6 +57,28 @@ class TransformerPresets:
             init_size=init_size,
             auto_expand_flag=auto_expand_flag,
             class_token_flag=class_token_flag,
+        )
+
+    @staticmethod
+    def transformer_relative_positional_embedding_preset(
+        positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.LEARNED,
+        num_embeddings: int = 64,
+        embedding_dim: int = 8,
+        num_heads: int = 4,
+        max_positions: int = 32,
+        padding_idx: int = 0,
+        init_size: int = 64,
+        auto_expand_flag: bool = False,
+    ) -> "RelativePositionalEmbeddingConfig":
+        return RelativePositionalEmbeddingConfig(
+            positional_embedding_option=positional_embedding_option,
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            num_heads=num_heads,
+            max_positions=max_positions,
+            padding_idx=padding_idx,
+            init_size=init_size,
+            auto_expand_flag=auto_expand_flag,
         )
 
     @staticmethod
