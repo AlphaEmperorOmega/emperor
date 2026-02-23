@@ -17,6 +17,10 @@ class RelativePositionalEmbeddingConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
+    num_heads: int | None = field(
+        default=None,
+        metadata={"help": "Number of attention heads to use for multi-head attention."},
+    )
     num_embeddings: int | None = field(
         default=None,
         metadata={"help": ""},
@@ -34,6 +38,10 @@ class RelativePositionalEmbeddingConfig(ConfigBase):
         metadata={"help": ""},
     )
     auto_expand_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    max_positions: int | None = field(
         default=None,
         metadata={"help": ""},
     )
