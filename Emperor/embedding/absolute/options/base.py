@@ -1,3 +1,6 @@
+import torch
+
+from torch import Tensor
 from Emperor.base.utils import Module
 
 from typing import TYPE_CHECKING
@@ -10,7 +13,6 @@ if TYPE_CHECKING:
 
 
 class AbsolutePositionalEmbeddingBase(Module):
-
     def __init__(
         self,
         cfg: "AbsolutePositionalEmbeddingConfig",
@@ -26,3 +28,11 @@ class AbsolutePositionalEmbeddingBase(Module):
         self.num_embeddings: int = self.cfg.num_embeddings
         self.init_size: int = self.cfg.init_size
         self.auto_expand_flag: bool = self.cfg.auto_expand_flag
+
+    def _make_positions(self, input: Tensor) -> Tensor:
+        non_padding_mask = input.ne(self.padding_idx).int()
+        cumulative_positions = torch.cumsum(non_padding_mask, dim=1).type_as(
+            non_padding_mask
+        )
+        cumulative_positions = cumulative_positions * non_padding_mask
+        return cumulative_positions.long() + self.padding_idx
