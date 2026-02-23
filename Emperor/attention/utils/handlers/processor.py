@@ -88,7 +88,9 @@ class ProcessorBase:
     def __maybe_initialize_relative_positional_embedding(self):
         disabled_option = RelativePositionalEmbeddingOptions.DISABLED
         if self.relative_positional_embedding_option != disabled_option:
-            return RelativePositionalEmbeddingFactory(self.cfg).build()
+            return RelativePositionalEmbeddingFactory(
+                self.cfg.relative_positional_embedding_config
+            ).build()
         return None
 
     def __resolve_qkv_head_dim(self):
@@ -188,7 +190,16 @@ class SelfAttentionProcessor(ProcessorBase):
             query = query.contiguous().view(
                 self.batch_size, self.num_heads, -1, self.qk_head_dim
             )
-            positional_embedding = self.relative_positional_embedding(query)
+            target_sequence_length = query.size(-2)
+            positional_embedding = self.relative_positional_embedding(
+                query, sequence_length=target_sequence_length
+            )
+            source_sequence_length = positional_embedding.size(-1)
+            positional_embedding = positional_embedding.contiguous().view(
+                self.batch_size * self.num_heads,
+                target_sequence_length,
+                source_sequence_length,
+            )
             return positional_embedding + attention_weights
         return attention_weights
 
