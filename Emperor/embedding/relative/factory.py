@@ -21,5 +21,5 @@ class RelativePositionalEmbeddingFactory(Module):
                 return LearnedPositionalBias(self.cfg)
             case _:
                 raise ValueError(
-                    "If the `relative_positional_embedding_option` is set to `DISABLED`, this class should not be initialized"
+                    "If the `positional_embedding_option` is set to `DISABLED`, this class should not be initialized"
                 )
