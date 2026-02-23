@@ -63,10 +63,6 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     m = SelfAttentionProcessor(c, projector)
                     self.assertIsInstance(m, SelfAttentionProcessor)
                     self.assertIsInstance(m.projector, SelfAttentionProjector)
-                    self.assertEqual(
-                        m.relative_positional_embedding_option,
-                        RelativePositionalEmbeddingOptions.DISABLED,
-                    )
                     self.assertIsNone(m.relative_positional_embedding)
 
     def test__scale_query(self):
@@ -116,7 +112,7 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         attention_mask = create_attention_mask(c)
         attention_mask_options = [None, attention_mask]
 
-        for relative_positional_embedding_option in RelativePositionalEmbeddingOptions:
+        for positional_embedding_option in RelativePositionalEmbeddingOptions:
             for attention_mask_option in attention_mask_options:
                 message = f"Testing configuration: attention_mask_option: {type(attention_mask_option)}"
                 with self.subTest(i=message):
@@ -127,7 +123,7 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                         query_key_projection_dim=query_key_projection_dim,
                         value_projection_dim=value_projection_dim,
                         return_attention_weights_flag=return_attention_weights_flag,
-                        relative_positional_embedding_option=relative_positional_embedding_option,
+                        positional_embedding_option=positional_embedding_option,
                     )
                     projector = SelfAttentionProjector(c)
                     m = SelfAttentionProcessor(c, projector)
@@ -145,7 +141,11 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     self.assertIsInstance(raw_masked_weights, torch.Tensor)
                     self.assertEqual(raw_masked_weights.shape, expected_shape)
 
-                    if attention_mask_option is not None:
+                    if (
+                        attention_mask_option is not None
+                        and positional_embedding_option
+                        == RelativePositionalEmbeddingOptions.DISABLED
+                    ):
                         transposed_keys = key.transpose(-2, -1)
                         for idx in range(key.size(0)):
                             q = query[idx]
@@ -486,10 +486,6 @@ class TestIndependentProcessor(unittest.TestCase):
                     m = IndependentProcessor(c, projector)
                     self.assertIsInstance(m, IndependentProcessor)
                     self.assertIsInstance(m.projector, IndependentProjector)
-                    self.assertEqual(
-                        m.relative_positional_embedding_option,
-                        RelativePositionalEmbeddingOptions.DISABLED,
-                    )
                     self.assertIsNone(m.relative_positional_embedding)
 
     def test__prepare_attnetion_mask(self):
@@ -674,10 +670,6 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                     m = MixtureOfAttentionHeadsProcessor(c, projector)
                     self.assertIsInstance(m, MixtureOfAttentionHeadsProcessor)
                     self.assertIsInstance(m.projector, MixtureOfAttentionHeadsProjector)
-                    self.assertEqual(
-                        m.relative_positional_embedding_option,
-                        RelativePositionalEmbeddingOptions.DISABLED,
-                    )
                     self.assertIsNone(m.relative_positional_embedding)
 
     def test__scale_query(self):
@@ -987,10 +979,6 @@ class TestProcessorBuilder(unittest.TestCase):
                 m = ProcessorBuilder(c, projector).build()
                 self.assertIsInstance(m, processor_cls)
                 self.assertIsInstance(m.projector, projector_cls)
-                self.assertEqual(
-                    m.relative_positional_embedding_option,
-                    RelativePositionalEmbeddingOptions.DISABLED,
-                )
                 self.assertIsNone(m.relative_positional_embedding)
 
     def test_compute_attention__self_attention(self):

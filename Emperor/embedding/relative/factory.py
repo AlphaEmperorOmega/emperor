@@ -13,12 +13,10 @@ class RelativePositionalEmbeddingFactory(Module):
     ):
         super().__init__()
         self.cfg = cfg
-        self.relative_positional_embedding_option = (
-            self.cfg.relative_positional_embedding_option
-        )
+        self.positional_embedding_option = self.cfg.positional_embedding_option
 
     def build(self) -> Module:
-        match self.relative_positional_embedding_option:
+        match self.positional_embedding_option:
             case RelativePositionalEmbeddingOptions.LEARNED:
                 return LearnedPositionalBias(self.cfg)
             case _:
