@@ -553,6 +553,7 @@ class TransformerPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
+        attention_relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
     ) -> "TransformerConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
@@ -640,6 +641,7 @@ class TransformerPresets:
             stack_activation=stack_activation,
             stack_residual_flag=stack_residual_flag,
             stack_dropout_probability=stack_dropout_probability,
+            relative_positional_embedding_option=attention_relative_positional_embedding_option,
         )
 
         feed_forward_config = TransformerPresets.transformer_feed_forward_preset(
@@ -757,6 +759,7 @@ class TransformerPresets:
         ff_bias_flag: bool = False,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
+        attention_relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
     ) -> "TransformerConfig":
         config = TransformerConfig(
             num_layers=num_layers,
@@ -789,6 +792,7 @@ class TransformerPresets:
                 stack_activation=stack_activation,
                 stack_residual_flag=stack_residual_flag,
                 stack_dropout_probability=dropout_probability,
+                relative_positional_embedding_option=attention_relative_positional_embedding_option,
             ),
             feed_forward_config=TransformerPresets.transformer_feed_forward_linear_base_preset(
                 input_dim=embedding_dim,
@@ -854,6 +858,7 @@ class TransformerPresets:
         ff_behaviour_stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
+        attention_relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
     ) -> "TransformerConfig":
         config = TransformerConfig(
             num_layers=num_layers,
@@ -893,6 +898,7 @@ class TransformerPresets:
                 stack_residual_flag=stack_residual_flag,
                 stack_dropout_probability=dropout_probability,
                 adaptive_behaviour_stack_num_layers=attn_behaviour_stack_num_layers,
+                relative_positional_embedding_option=attention_relative_positional_embedding_option,
             ),
             feed_forward_config=TransformerPresets.transformer_feed_forward_linear_adaptive_preset(
                 batch_size=batch_size,

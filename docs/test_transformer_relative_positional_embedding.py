@@ -71,7 +71,7 @@ class TestLearnedPositionalBias(unittest.TestCase):
         seq_len = 6
         head_dim = embedding_dim // num_heads
         query = torch.randn(batch_size, num_heads, seq_len, head_dim)
-        output = m(query, length=seq_len)
+        output = m(query, sequence_length=seq_len)
 
         expected_shape = (batch_size, num_heads, seq_len, seq_len)
         self.assertIsInstance(output, Tensor)
@@ -101,7 +101,7 @@ class TestLearnedPositionalBias(unittest.TestCase):
         seq_len = 1
         head_dim = embedding_dim // num_heads
         query = torch.randn(batch_size, num_heads, seq_len, head_dim)
-        output = m(query, length=seq_len, last=True)
+        output = m(query, sequence_length=seq_len, last=True)
 
         expected_shape = (batch_size, num_heads, seq_len, seq_len)
         self.assertIsInstance(output, Tensor)

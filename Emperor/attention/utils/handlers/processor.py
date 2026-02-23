@@ -4,11 +4,10 @@ import torch.nn.functional as F
 from torch import Tensor
 from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
 from Emperor.attention.utils.handlers.validators._processor import ProcessorValidator
-
-from typing import TYPE_CHECKING
-
 from Emperor.embedding.options import RelativePositionalEmbeddingOptions
 from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
+
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
@@ -75,6 +74,9 @@ class ProcessorBase:
             self.cfg.return_attention_weights_flag
         )
         self.add_key_value_bias_flag: bool = self.cfg.add_key_value_bias_flag
+        self.relative_positional_embedding_option: (
+            "RelativePositionalEmbeddingOptions"
+        ) = self.cfg.relative_positional_embedding_option
         self.head_dim: int = self.embedding_dim // self.num_heads
         self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
         self.reshaper = ReshaperBuilder(self.cfg).build()
@@ -85,7 +87,7 @@ class ProcessorBase:
 
     def __maybe_initialize_relative_positional_embedding(self):
         disabled_option = RelativePositionalEmbeddingOptions.DISABLED
-        if self.relative_positional_embedding != disabled_option:
+        if self.relative_positional_embedding_option != disabled_option:
             return RelativePositionalEmbeddingFactory(self.cfg).build()
         return None
 
@@ -113,11 +115,6 @@ class ProcessorBase:
         return attention_output.view(
             target_sequence_length, self.batch_size, embedding_dim
         )
-
-    def _maybe_add_relative_positional_embedding(
-        self, query: Tensor, attention_weights: Tensor
-    ) -> Tensor:
-        return attention_weights
 
     def compute_attention(
         self,
@@ -179,15 +176,12 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_mask: Tensor | None = None,
     ) -> Tensor:
         key = key.transpose(-2, -1)
-        attention_weights = torch.bmm(query, key)
-        attention_weights = self._maybe_add_relative_positional_embedding(
-            query, attention_weights
-        )
-        if attention_mask is not None:
-            return attention_weights + attention_mask
-        return attention_weights
+        weights = torch.bmm(query, key)
+        weights = self.__maybe_add_relative_positional_embedding(query, weights)
+        weights = self.__maybe_add_attention_mask(weights, attention_mask)
+        return weights
 
-    def _maybe_add_relative_positional_embedding(
+    def __maybe_add_relative_positional_embedding(
         self, query: Tensor, attention_weights: Tensor
     ) -> Tensor:
         if self.relative_positional_embedding is not None:
@@ -197,6 +191,13 @@ class SelfAttentionProcessor(ProcessorBase):
             positional_embedding = self.relative_positional_embedding(query)
             return positional_embedding + attention_weights
         return attention_weights
+
+    def __maybe_add_attention_mask(
+        self, weights: Tensor, attention_mask: Tensor | None = None
+    ) -> Tensor:
+        if attention_mask is not None:
+            return weights + attention_mask
+        return weights
 
     def __compute_weighted_values(
         self,

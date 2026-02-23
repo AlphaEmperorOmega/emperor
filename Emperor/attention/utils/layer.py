@@ -13,6 +13,9 @@ from Emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 from typing import TYPE_CHECKING
 
+from Emperor.embedding.options import RelativePositionalEmbeddingOptions
+from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
+
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from torch.types import _dtype as DType
@@ -122,6 +125,14 @@ class MultiHeadAttentionConfig(ConfigBase):
         },
     )
     use_kv_expert_models_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "Type of model used to generate parameters query, key, and value projections"
+        },
+    )
+    relative_positional_embedding_option: (
+        "RelativePositionalEmbeddingOptions | None"
+    ) = field(
         default=None,
         metadata={
             "help": "Type of model used to generate parameters query, key, and value projections"
