@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from Emperor.embedding.options import RelativePositionalEmbeddingOptions
 from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
+from Emperor.embedding.relative.options.config import RelativePositionalEmbeddingConfig
 
 if TYPE_CHECKING:
     from Emperor.config import ModelConfig
@@ -136,6 +137,14 @@ class MultiHeadAttentionConfig(ConfigBase):
         default=None,
         metadata={
             "help": "Type of model used to generate parameters query, key, and value projections"
+        },
+    )
+    relative_positional_embedding_config: (
+        "RelativePositionalEmbeddingConfig | None"
+    ) = field(
+        default=None,
+        metadata={
+            "help": "Configuration for the relative positional embedding module"
         },
     )
 
