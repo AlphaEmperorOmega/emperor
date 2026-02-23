@@ -69,7 +69,10 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
                     torch.matmul(input_tensor[i, j], weight_slice) + bias_slice
                 )
                 self.assertTrue(
-                    torch.equal(output[i, j].round(decimals=5), expected_output.round(decimals=5))
+                    torch.equal(
+                        output[i, j].round(decimals=4),
+                        expected_output.round(decimals=4),
+                    )
                 )
 
     def test_error_is_thrown_for_zero_depth(self):

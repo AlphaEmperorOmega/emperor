@@ -8,6 +8,7 @@ from Emperor.attention.utils.layer import MultiHeadAttentionConfig
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from Emperor.embedding.options import RelativePositionalEmbeddingOptions
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
@@ -105,6 +106,7 @@ class MultiHeadAttentionPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
+        relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
     ) -> "MultiHeadAttentionConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
@@ -258,6 +260,7 @@ class MultiHeadAttentionPresets:
             return_attention_weights_flag=return_attention_weights_flag,
             experts_config=experts_config,
             use_kv_expert_models_flag=use_kv_expert_models_flag,
+            relative_positional_embedding_option=relative_positional_embedding_option,
             override_config=projector_config,
         )
 
@@ -285,6 +288,7 @@ class MultiHeadAttentionPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
+        relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
     ) -> "MultiHeadAttentionConfig":
         layer_stack_model_option = LinearLayerStackOptions.BASE
 
@@ -306,6 +310,7 @@ class MultiHeadAttentionPresets:
             add_key_value_bias_flag=add_key_value_bias_flag,
             average_attention_weights_flag=average_attention_weights_flag,
             return_attention_weights_flag=return_attention_weights_flag,
+            relative_positional_embedding_option=relative_positional_embedding_option,
             override_config=LinearPresets.base_linear_layer_stack_preset(
                 input_dim=embedding_dim,
                 output_dim=embedding_dim,
@@ -352,6 +357,7 @@ class MultiHeadAttentionPresets:
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
         adaptive_behaviour_stack_num_layers: int = 2,
+        relative_positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
     ) -> "MultiHeadAttentionConfig":
         layer_stack_model_option = LinearLayerStackOptions.ADAPTIVE
 
@@ -373,6 +379,7 @@ class MultiHeadAttentionPresets:
             add_key_value_bias_flag=add_key_value_bias_flag,
             average_attention_weights_flag=average_attention_weights_flag,
             return_attention_weights_flag=return_attention_weights_flag,
+            relative_positional_embedding_option=relative_positional_embedding_option,
             override_config=LinearPresets.adaptive_linear_layer_stack_preset(
                 batch_size=batch_size,
                 input_dim=embedding_dim,

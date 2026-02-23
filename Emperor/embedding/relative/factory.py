@@ -1,5 +1,6 @@
 from Emperor.base.utils import Module
 from Emperor.embedding.options import RelativePositionalEmbeddingOptions
+from Emperor.embedding.relative.options.config import RelativePositionalEmbeddingConfig
 from Emperor.embedding.relative.options.learned_embedding import (
     LearnedPositionalBias,
 )
@@ -8,14 +9,16 @@ from Emperor.embedding.relative.options.learned_embedding import (
 class RelativePositionalEmbeddingFactory(Module):
     def __init__(
         self,
-        cfg: "RelativePositionalEmbeddingOptions",
+        cfg: "RelativePositionalEmbeddingConfig",
     ):
         super().__init__()
         self.cfg = cfg
-        self.positional_embedding_option = self.cfg.positional_embedding_option
+        self.relative_positional_embedding_option = (
+            self.cfg.relative_positional_embedding_option
+        )
 
     def build(self) -> Module:
-        match self.positional_embedding_option:
+        match self.relative_positional_embedding_option:
             case RelativePositionalEmbeddingOptions.LEARNED:
                 return LearnedPositionalBias(self.cfg)
             case _:
