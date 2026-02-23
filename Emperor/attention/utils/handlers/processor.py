@@ -7,6 +7,9 @@ from Emperor.attention.utils.handlers.validators._processor import ProcessorVali
 
 from typing import TYPE_CHECKING
 
+from Emperor.embedding.options import RelativePositionalEmbeddingOptions
+from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
+
 if TYPE_CHECKING:
     from Emperor.attention.utils.layer import MultiHeadAttentionConfig
     from Emperor.attention.utils.handlers.projector import ProjectorBase
@@ -76,6 +79,15 @@ class ProcessorBase:
         self.qk_head_dim, self.v_head_dim = self.__resolve_qkv_head_dim()
         self.reshaper = ReshaperBuilder(self.cfg).build()
         self.validator = ProcessorValidator(self)
+        self.relative_positional_embedding = (
+            self.__maybe_initialize_relative_positional_embedding()
+        )
+
+    def __maybe_initialize_relative_positional_embedding(self):
+        disabled_option = RelativePositionalEmbeddingOptions.DISABLED
+        if self.relative_positional_embedding != disabled_option:
+            return RelativePositionalEmbeddingFactory(self.cfg).build()
+        return None
 
     def __resolve_qkv_head_dim(self):
         qk_head_dim = (
@@ -101,6 +113,11 @@ class ProcessorBase:
         return attention_output.view(
             target_sequence_length, self.batch_size, embedding_dim
         )
+
+    def _maybe_add_relative_positional_embedding(
+        self, query: Tensor, attention_weights: Tensor
+    ) -> Tensor:
+        return attention_weights
 
     def compute_attention(
         self,
@@ -162,9 +179,24 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_mask: Tensor | None = None,
     ) -> Tensor:
         key = key.transpose(-2, -1)
+        attention_weights = torch.bmm(query, key)
+        attention_weights = self._maybe_add_relative_positional_embedding(
+            query, attention_weights
+        )
         if attention_mask is not None:
-            return torch.baddbmm(attention_mask, query, key)
-        return torch.bmm(query, key)
+            return attention_weights + attention_mask
+        return attention_weights
+
+    def _maybe_add_relative_positional_embedding(
+        self, query: Tensor, attention_weights: Tensor
+    ) -> Tensor:
+        if self.relative_positional_embedding is not None:
+            query = query.contiguous().view(
+                self.batch_size, self.num_heads, -1, self.qk_head_dim
+            )
+            positional_embedding = self.relative_positional_embedding(query)
+            return positional_embedding + attention_weights
+        return attention_weights
 
     def __compute_weighted_values(
         self,
@@ -342,6 +374,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         if self.use_kv_expert_models_flag:
             einsum_equation = "bkhie,bkhej->bkhij"
         raw_weights = torch.einsum(einsum_equation, query, key)
+        raw_weights = self._maybe_add_relative_positional_embedding(query, raw_weights)
         raw_weights = raw_weights.contiguous().view(
             total_batch_size, self.target_sequence_length, source_sequence_length
         )
@@ -350,6 +383,21 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         if attention_mask is not None:
             return raw_weights + attention_mask
         return raw_weights
+
+    def _maybe_add_relative_positional_embedding(
+        self, query: Tensor, attention_weights: Tensor
+    ) -> Tensor:
+        if self.relative_positional_embedding is not None:
+            _, _, num_heads, target_sequence_length, head_dim = query.size()
+            query = attention_weights.contiguous().view(
+                -1, num_heads, target_sequence_length, head_dim
+            )
+            source_sequence_length = attention_weights.size(-1)
+            positional_embedding = self.relative_positional_embedding(
+                query, source_sequence_length
+            )
+            attention_weights = attention_weights + positional_embedding
+        return attention_weights
 
     def __compute_weighted_values(
         self,
