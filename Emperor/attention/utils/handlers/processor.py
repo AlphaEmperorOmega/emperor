@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from torch import Tensor
+from torch import Tensor, topk
 from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
 from Emperor.attention.utils.handlers.validators._processor import ProcessorValidator
 from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
@@ -380,31 +380,45 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
         einsum_equation = "bkhie,bhej->bkhij"
         if self.use_kv_expert_models_flag:
             einsum_equation = "bkhie,bkhej->bkhij"
-        raw_weights = torch.einsum(einsum_equation, query, key)
-        raw_weights = self._maybe_add_relative_positional_embedding(query, raw_weights)
-        raw_weights = raw_weights.contiguous().view(
+        weights = torch.einsum(einsum_equation, query, key)
+        weights = self.__maybe_add_relative_positional_embedding(query, weights)
+        weights = weights.contiguous().view(
             total_batch_size, self.target_sequence_length, source_sequence_length
         )
+        weights = self.__maybe_add_attention_mask(weights, attention_mask)
+        return weights
 
-        # TODO: Add relative positional encoding support here
-        if attention_mask is not None:
-            return raw_weights + attention_mask
-        return raw_weights
-
-    def _maybe_add_relative_positional_embedding(
+    def __maybe_add_relative_positional_embedding(
         self, query: Tensor, attention_weights: Tensor
     ) -> Tensor:
         if self.relative_positional_embedding is not None:
-            _, _, num_heads, target_sequence_length, head_dim = query.size()
-            query = attention_weights.contiguous().view(
+            batch_size, top_k, num_heads, target_sequence_length, head_dim = (
+                query.size()
+            )
+            query = query.contiguous().view(
                 -1, num_heads, target_sequence_length, head_dim
             )
             source_sequence_length = attention_weights.size(-1)
             positional_embedding = self.relative_positional_embedding(
                 query, source_sequence_length
             )
+            positional_embedding = positional_embedding.contiguous().view(
+                batch_size,
+                top_k,
+                num_heads,
+                target_sequence_length,
+                source_sequence_length,
+            )
+
             attention_weights = attention_weights + positional_embedding
         return attention_weights
+
+    def __maybe_add_attention_mask(
+        self, weights: Tensor, attention_mask: Tensor | None = None
+    ) -> Tensor:
+        if attention_mask is not None:
+            return weights + attention_mask
+        return weights
 
     def __compute_weighted_values(
         self,

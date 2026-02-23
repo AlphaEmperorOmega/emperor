@@ -696,13 +696,19 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
 
     def test__compute_raw_masked_attention_weights(self):
         top_k = 3
+        source_sequence_length = 8
+        target_sequence_length = 8
+        embedding_dim = 12
+        query_key_projection_dim = 12
+        value_projection_dim = 12
+        return_attention_weights_flag = True
         c = MultiHeadAttentionPresets.multi_head_attention_preset(
-            embedding_dim=12,
-            query_key_projection_dim=20,
-            value_projection_dim=16,
-            source_sequence_length=8,
-            target_sequence_length=12,
-            projector_adaptive_mixture_top_k=top_k,
+            source_sequence_length=source_sequence_length,
+            target_sequence_length=target_sequence_length,
+            embedding_dim=embedding_dim,
+            query_key_projection_dim=query_key_projection_dim,
+            value_projection_dim=value_projection_dim,
+            return_attention_weights_flag=return_attention_weights_flag,
         )
         head_dim = c.embedding_dim // c.num_heads
         query = torch.randn(
@@ -716,40 +722,52 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         attention_mask = create_attention_mask(c).repeat(top_k, 1, 1)
         attention_mask_options = [None, attention_mask]
         boolean_options = [True, False]
-        for use_kv_expert_models_flag in boolean_options:
-            for attention_mask_option in attention_mask_options:
-                message = f"Testing configuration: attention_mask_option: {type(attention_mask_option)}, use_kv_expert_models_flag: {use_kv_expert_models_flag}"
-                with self.subTest(i=message):
-                    c.use_kv_expert_models_flag = use_kv_expert_models_flag
-                    key_shape = (
-                        c.batch_size,
-                        c.num_heads,
-                        c.source_sequence_length,
-                        head_dim,
-                    )
-                    if use_kv_expert_models_flag:
+
+        for positional_embedding_option in RelativePositionalEmbeddingOptions:
+            for use_kv_expert_models_flag in boolean_options:
+                for attention_mask_option in attention_mask_options:
+                    message = f"Testing configuration: attention_mask_option: {type(attention_mask_option)}, use_kv_expert_models_flag: {use_kv_expert_models_flag}"
+                    with self.subTest(i=message):
+
+                        c = MultiHeadAttentionPresets.multi_head_attention_preset(
+                            source_sequence_length=source_sequence_length,
+                            target_sequence_length=target_sequence_length,
+                            embedding_dim=embedding_dim,
+                            query_key_projection_dim=query_key_projection_dim,
+                            value_projection_dim=value_projection_dim,
+                            return_attention_weights_flag=return_attention_weights_flag,
+                            positional_embedding_option=positional_embedding_option,
+                            use_kv_expert_models_flag=use_kv_expert_models_flag,
+                        )
                         key_shape = (
                             c.batch_size,
-                            top_k,
                             c.num_heads,
                             c.source_sequence_length,
                             head_dim,
                         )
-                    key = torch.randn(key_shape)
+                        if use_kv_expert_models_flag:
+                            key_shape = (
+                                c.batch_size,
+                                top_k,
+                                c.num_heads,
+                                c.source_sequence_length,
+                                head_dim,
+                            )
+                        key = torch.randn(key_shape)
 
-                    projector = MixtureOfAttentionHeadsProjector(c)
-                    m = MixtureOfAttentionHeadsProcessor(c, projector)
-                    raw_masked_weights = m._MixtureOfAttentionHeadsProcessor__compute_raw_masked_attention_weights(
-                        query, key, attention_mask_option
-                    )
+                        projector = MixtureOfAttentionHeadsProjector(c)
+                        m = MixtureOfAttentionHeadsProcessor(c, projector)
+                        raw_masked_weights = m._MixtureOfAttentionHeadsProcessor__compute_raw_masked_attention_weights(
+                            query, key, attention_mask_option
+                        )
 
-                    expected_shape = (
-                        c.batch_size * c.num_heads * top_k,
-                        c.target_sequence_length,
-                        c.source_sequence_length,
-                    )
-                    self.assertIsInstance(raw_masked_weights, torch.Tensor)
-                    self.assertEqual(raw_masked_weights.shape, expected_shape)
+                        expected_shape = (
+                            c.batch_size * c.num_heads * top_k,
+                            c.target_sequence_length,
+                            c.source_sequence_length,
+                        )
+                        self.assertIsInstance(raw_masked_weights, torch.Tensor)
+                        self.assertEqual(raw_masked_weights.shape, expected_shape)
 
     def test__compute_masked_attention_weights(self):
         top_k = 3
