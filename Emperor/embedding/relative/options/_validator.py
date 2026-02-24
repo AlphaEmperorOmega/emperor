@@ -5,8 +5,8 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.embedding.relative.options.learned_embedding import (
-        LearnedPositionalBias,
+    from Emperor.embedding.relative.options.dynamic_positional_bias import (
+        DynamicPostionalBias,
     )
 
 
@@ -24,10 +24,10 @@ class PositionalEmbeddingValidator:
             )
 
 
-class LearnedPositionalBiasValidator(PositionalEmbeddingValidator):
+class DynamicPostionalBiasValidator(PositionalEmbeddingValidator):
     def __init__(
         self,
-        model: "LearnedPositionalBias",
+        model: "DynamicPostionalBias",
     ):
         self.model = model
 
