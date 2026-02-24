@@ -10,7 +10,7 @@ from Emperor.attention.utils.handlers.processor import ProcessorBuilder
 from Emperor.attention.utils.handlers.projector import ProjectorBuilder
 from Emperor.attention.utils.handlers.batch import BatchDimensionManager
 from Emperor.attention.utils._validator import MultiHeadAttentionValidator
-from Emperor.embedding.relative.options.config import RelativePositionalEmbeddingConfig
+from Emperor.embedding.relative.utils.config import RelativePositionalEmbeddingConfig
 
 from typing import TYPE_CHECKING
 
