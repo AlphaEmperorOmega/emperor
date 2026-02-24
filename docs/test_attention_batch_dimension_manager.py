@@ -23,6 +23,8 @@ class TestBatchDimensionManager(unittest.TestCase):
             embedding_dim=12,
             query_key_projection_dim=12,
             value_projection_dim=12,
+            source_sequence_length=8,
+            target_sequence_length=8,
         )
         if config is not None:
             for k in asdict(config):
