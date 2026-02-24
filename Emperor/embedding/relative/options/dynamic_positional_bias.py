@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     )
 
 
-class LearnedPositionalBias(Module):
+class DynamicPostionalBias(Module):
     def __init__(
         self,
         cfg: "RelativePositionalEmbeddingConfig",

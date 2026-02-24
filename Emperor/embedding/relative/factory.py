@@ -1,8 +1,8 @@
 from Emperor.base.utils import Module
 from Emperor.embedding.options import RelativePositionalEmbeddingOptions
 from Emperor.embedding.relative.options.config import RelativePositionalEmbeddingConfig
-from Emperor.embedding.relative.options.learned_embedding import (
-    LearnedPositionalBias,
+from Emperor.embedding.relative.options.dynamic_positional_bias import (
+    DynamicPostionalBias,
 )
 
 
@@ -18,7 +18,7 @@ class RelativePositionalEmbeddingFactory(Module):
     def build(self) -> Module:
         match self.positional_embedding_option:
             case RelativePositionalEmbeddingOptions.LEARNED:
-                return LearnedPositionalBias(self.cfg)
+                return DynamicPostionalBias(self.cfg)
             case _:
                 raise ValueError(
                     "If the `positional_embedding_option` is set to `DISABLED`, this class should not be initialized"

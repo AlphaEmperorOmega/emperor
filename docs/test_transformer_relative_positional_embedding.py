@@ -4,12 +4,12 @@ import torch.nn as nn
 
 from torch import Tensor
 from Emperor.transformer.utils.presets import TransformerPresets
-from Emperor.embedding.relative.options.learned_embedding import LearnedPositionalBias
+from Emperor.embedding.relative.options.dynamic_positional_bias import DynamicPostionalBias
 from Emperor.embedding.options import RelativePositionalEmbeddingOptions
 from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
 
 
-class TestLearnedPositionalBias(unittest.TestCase):
+class TestDynamicPostionalBias(unittest.TestCase):
     def test_init(self):
         num_embeddings = 64
         embedding_dim = 8
@@ -28,7 +28,7 @@ class TestLearnedPositionalBias(unittest.TestCase):
             init_size=init_size,
             auto_expand_flag=auto_expand_flag,
         )
-        m = LearnedPositionalBias(c)
+        m = DynamicPostionalBias(c)
 
         expected_head_dim = embedding_dim // num_heads
         expected_num_embeddings = num_embeddings + padding_idx + 1
@@ -65,7 +65,7 @@ class TestLearnedPositionalBias(unittest.TestCase):
             init_size=init_size,
             auto_expand_flag=auto_expand_flag,
         )
-        m = LearnedPositionalBias(c)
+        m = DynamicPostionalBias(c)
 
         batch_size = 4
         seq_len = 6
@@ -95,7 +95,7 @@ class TestLearnedPositionalBias(unittest.TestCase):
             init_size=init_size,
             auto_expand_flag=auto_expand_flag,
         )
-        m = LearnedPositionalBias(c)
+        m = DynamicPostionalBias(c)
 
         batch_size = 4
         seq_len = 1
@@ -144,4 +144,4 @@ class TestRelativePositionalEmbeddingFactory(unittest.TestCase):
                     positional_embedding_option
                     == RelativePositionalEmbeddingOptions.LEARNED
                 ):
-                    self.assertIsInstance(m, LearnedPositionalBias)
+                    self.assertIsInstance(m, DynamicPostionalBias)
