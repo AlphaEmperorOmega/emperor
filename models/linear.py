@@ -1,9 +1,13 @@
 import copy
 import torch
 import itertools
+import torchmetrics
 
-from torch import Tensor
+from torch import Tensor, logit
+from torch import nn, optim
+from torchmetrics.functional.classification.f_beta import f1_score
 from models.parser import get_parser
+from lightning import LightningModule
 from dataclasses import dataclass, field
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
@@ -30,16 +34,32 @@ class ExperimentConfig(ConfigBase):
     )
 
 
-class Model(Module):
+class Model(LightningModule):
     def __init__(
         self,
         cfg: "ModelConfig",
     ):
         super().__init__()
         self.cfg = cfg
+        self.lr = 0.001
         self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
         self.model_config: LayerStackConfig = self.main_cfg.model_config
+        # self.num_classes: int = self.main_cfg.output_dim
+        self.num_classes: int = 10
+
         self.model = LayerStack(self.model_config).build_model()
+        self.classifier_function = nn.CrossEntropyLoss()
+
+        task = "multiclass"
+        self.accuracy = torchmetrics.Accuracy(task=task, num_classes=self.num_classes)
+        self.f1_score = torchmetrics.F1Score(task=task, num_classes=self.num_classes)
+
+    def _resolve_main_config(
+        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
+    ) -> None:
+        if sub_config.override_config is not None:
+            return sub_config.override_config
+        return main_cfg
 
     def forward(
         self,
@@ -49,6 +69,42 @@ class Model(Module):
         X = torch.flatten(X, start_dim=1)
         X = self.model(X)
         return X
+
+    def training_step(self, batch: Tensor, batch_idx: int) -> Tensor:
+        model_loss, logit_scores, Y = self.__model_step(batch)
+        self.__log_traning_step_data(model_loss, logit_scores, Y)
+        return model_loss
+
+    def __log_traning_step_data(
+        self, loss: Tensor, logit_scores: Tensor, Y: Tensor
+    ) -> None:
+        accuracy = self.accuracy(logit_scores, Y)
+        f1score = self.f1_score(logit_scores, Y)
+        self.log_dict(
+            {"train_loss": loss, "train_accuracy": accuracy, "train_f1_score": f1score},
+            prog_bar=True,
+        )
+
+    def validation_step(self, batch: Tensor, batch_idx: int) -> Tensor:
+        model_loss, logit_scores, Y = self.__model_step(batch)
+        self.log("val_loss", model_loss, prog_bar=True)
+        return model_loss
+
+    def test_step(self, batch: Tensor, batch_idx: int) -> Tensor:
+        model_loss, logit_scores, Y = self.__model_step(batch)
+        self.log("test_loss", model_loss)
+        return model_loss
+
+    def __model_step(self, batch: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        X, Y = batch
+        batch_size = X.size(0)
+        X = X.reshape(batch_size, -1)
+        logit_scores = self.forward(X)
+        model_loss = self.classifier_function(logit_scores, Y)
+        return model_loss, logit_scores, Y
+
+    def configure_optimizers(self) -> optim.Optimizer:
+        return optim.Adam(self.model.parameters(), lr=0.001)
 
 
 class ExperimentOptions(BaseOptions):
