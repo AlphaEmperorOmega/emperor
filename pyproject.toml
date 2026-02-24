@@ -19,6 +19,7 @@ dependencies = [
   "matplotlib",
   "ipython",
   "tensorboard",
+  "setuptools",
   "pandas",
   "ipykernel",
   "numpy",
