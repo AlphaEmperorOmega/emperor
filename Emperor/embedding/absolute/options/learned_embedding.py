@@ -86,7 +86,7 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
         padding_idx: int = self.embedding_model.padding_idx
         current_decoding_step = int(padding_idx + input_tokens.size(1))
         single_step_position = torch.zeros(
-            (1, 1), device=input.device, dtype=input.dtype
+            (1, 1), device=input_tokens.device, dtype=input_tokens.dtype
         )
         single_step_position = single_step_position.fill_(current_decoding_step)
         return single_step_position
