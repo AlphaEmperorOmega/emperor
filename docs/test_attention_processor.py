@@ -158,13 +158,6 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                                 (attention_mask[idx] == float("-inf")),
                                 torch.tensor(float("-inf")),
                             )
-                            print()
-                            print(raw_masked_weights[idx].round(decimals=4))
-                            print(single_head_qk_attention_weights.round(decimals=4))
-                            print(
-                                raw_masked_weights[idx].round(decimals=4)
-                                == single_head_qk_attention_weights.round(decimals=4),
-                            )
                             self.assertTrue(
                                 torch.allclose(
                                     raw_masked_weights[idx],
