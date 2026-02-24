@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from Emperor.config import ModelConfig
     from Emperor.base.enums import LayerNormPositionOptions
     from Emperor.transformer.utils.patch.options.base import PatchConfig
-    from Emperor.embedding.absolute.options.config import (
+    from Emperor.embedding.absolute.utils.config import (
         AbsolutePositionalEmbeddingConfig,
     )
 

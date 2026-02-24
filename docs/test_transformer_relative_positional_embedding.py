@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from torch import Tensor
 from Emperor.transformer.utils.presets import TransformerPresets
-from Emperor.embedding.relative.options.dynamic_positional_bias import DynamicPostionalBias
+from Emperor.embedding.relative.utils.options.dynamic_positional_bias import DynamicPostionalBias
 from Emperor.embedding.options import RelativePositionalEmbeddingOptions
 from Emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
 

@@ -3,15 +3,15 @@ import torch
 
 from torch import Tensor
 from typing import Any
-from Emperor.embedding.absolute.options.base import AbsolutePositionalEmbeddingBase
-from Emperor.embedding.absolute.options._validator import (
+from Emperor.embedding.absolute.utils.base import AbsolutePositionalEmbeddingBase
+from Emperor.embedding.absolute.utils.options._validator import (
     SinusoidalPositionalEmbeddingValidator,
 )
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.embedding.absolute.options.config import (
+    from Emperor.embedding.absolute.utils.config import (
         AbsolutePositionalEmbeddingConfig,
     )
 

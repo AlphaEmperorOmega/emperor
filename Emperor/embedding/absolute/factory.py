@@ -1,10 +1,10 @@
 from Emperor.base.utils import Module
 from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-from Emperor.embedding.absolute.options.sinusoidal_embedding import (
+from Emperor.embedding.absolute.utils.options.sinusoidal_embedding import (
     TextSinusoidalPositionalEmbedding,
     ImageSinusoidalPositionalEmbedding,
 )
-from Emperor.embedding.absolute.options.learned_embedding import (
+from Emperor.embedding.absolute.utils.options.learned_embedding import (
     TextLearnedPositionalEmbedding,
     ImageLearnedPositionalEmbedding,
 )
@@ -12,7 +12,7 @@ from Emperor.embedding.absolute.options.learned_embedding import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.embedding.absolute.options.config import (
+    from Emperor.embedding.absolute.utils.config import (
         AbsolutePositionalEmbeddingConfig,
     )
 
