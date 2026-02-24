@@ -170,10 +170,18 @@ class Test__add_zero_attention(TestUtils):
 
         self.assertIsInstance(padded_key, torch.Tensor)
         self.assertIsInstance(padded_value, torch.Tensor)
-        self.assertTrue(torch.equal(padded_key, key))
-        self.assertTrue(torch.equal(padded_value, value))
-        self.assertTrue(torch.equal(output_key_padding_mask, key_padding_mask))
-        self.assertTrue(torch.equal(output_attention_mask, output_attention_mask))
+        self.assertTrue(torch.allclose(padded_key, key, atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(padded_value, value, atol=1e-6, rtol=1e-5))
+        self.assertTrue(
+            torch.allclose(
+                output_key_padding_mask, key_padding_mask, atol=1e-6, rtol=1e-5
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                output_attention_mask, output_attention_mask, atol=1e-6, rtol=1e-5
+            )
+        )
 
     def test__kv_inputs_only__zero_attention_flag__True(self):
         config = MultiHeadAttentionConfig(

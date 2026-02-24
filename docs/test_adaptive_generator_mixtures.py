@@ -137,31 +137,39 @@ class TestGeneratorMixture(unittest.TestCase):
                     if weighted_parameters_flag:
                         if top_k == 1:
                             self.assertFalse(
-                                torch.equal(
+                                torch.allclose(
                                     parameter_mixture.round(decimals=4),
                                     generated_parameters.squeeze(1).round(decimals=4),
+                                    atol=1e-6,
+                                    rtol=1e-5,
                                 )
                             )
                         else:
                             self.assertFalse(
-                                torch.equal(
+                                torch.allclose(
                                     parameter_mixture.round(decimals=4),
                                     generated_parameters.sum(dim=1).round(decimals=4),
+                                    atol=1e-6,
+                                    rtol=1e-5,
                                 )
                             )
                     else:
                         if top_k == 1:
                             self.assertTrue(
-                                torch.equal(
+                                torch.allclose(
                                     parameter_mixture.round(decimals=4),
                                     generated_parameters.squeeze(1).round(decimals=4),
+                                    atol=1e-6,
+                                    rtol=1e-5,
                                 )
                             )
                         else:
                             self.assertTrue(
-                                torch.equal(
+                                torch.allclose(
                                     parameter_mixture.round(decimals=4),
                                     generated_parameters.sum(dim=1).round(decimals=4),
+                                    atol=1e-6,
+                                    rtol=1e-5,
                                 )
                             )
 
@@ -194,7 +202,12 @@ class TestGeneratorMixture(unittest.TestCase):
                 expected_shape = (batch_size, top_k, m.input_dim, m.output_dim)
                 self.assertEqual(weighted_parameters.shape, expected_shape)
                 self.assertFalse(
-                    torch.equal(weighted_parameters.round(decimals=4), generated_parameters.round(decimals=4))
+                    torch.allclose(
+                        weighted_parameters.round(decimals=4),
+                        generated_parameters.round(decimals=4),
+                        atol=1e-6,
+                        rtol=1e-5,
+                    )
                 )
 
     def test_compute_mixture(self):

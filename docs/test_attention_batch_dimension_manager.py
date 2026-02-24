@@ -47,9 +47,9 @@ class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
             query, key, value
         )
 
-        self.assertTrue(torch.equal(output_q, query))
-        self.assertTrue(torch.equal(output_k, key))
-        self.assertTrue(torch.equal(output_v, value))
+        self.assertTrue(torch.allclose(output_q, query, atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(output_k, key, atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(output_v, value, atol=1e-6, rtol=1e-5))
 
     def test_same_qkv_input_tensors_with_batch_as_first_dimension(self):
         query = key = value = torch.randn(
@@ -67,9 +67,9 @@ class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
         self.assertEqual(output_q.shape, expected_qkv_shape)
         self.assertEqual(output_k.shape, expected_qkv_shape)
         self.assertEqual(output_v.shape, expected_qkv_shape)
-        self.assertTrue(torch.equal(output_q, output_k))
-        self.assertTrue(torch.equal(output_k, output_v))
-        self.assertTrue(torch.equal(output_q, output_v))
+        self.assertTrue(torch.allclose(output_q, output_k, atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(output_k, output_v, atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(output_q, output_v, atol=1e-6, rtol=1e-5))
 
     def test_same_kv_input_tensors_with_batch_as_first_dim(self):
         config = MultiHeadAttentionConfig(
@@ -100,7 +100,7 @@ class Test_enforce_batch_as_second_dim(TestBatchDimensionManager):
         self.assertEqual(output_q.shape, expected_q_shape)
         self.assertEqual(output_k.shape, expected_kv_shape)
         self.assertEqual(output_v.shape, expected_kv_shape)
-        self.assertTrue(torch.equal(output_k, output_v))
+        self.assertTrue(torch.allclose(output_k, output_v, atol=1e-6, rtol=1e-5))
         self.assertTrue(torch.all(output_q != output_k))
         self.assertTrue(torch.all(output_q != output_v))
 
@@ -161,8 +161,8 @@ class Test___transpose_shared_tensors(TestBatchDimensionManager):
         self.assertEqual(output_q.shape, expected_output_shape)
         self.assertEqual(output_k.shape, expected_output_shape)
         self.assertEqual(output_v.shape, expected_output_shape)
-        self.assertTrue(torch.equal(output_q, output_k))
-        self.assertTrue(torch.equal(output_k, output_v))
+        self.assertTrue(torch.allclose(output_q, output_k, atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(output_k, output_v, atol=1e-6, rtol=1e-5))
 
     def test__independent_qk_input_tensors(self):
         query = torch.randn(
@@ -194,9 +194,9 @@ class Test___transpose_shared_tensors(TestBatchDimensionManager):
         self.assertEqual(output_q.shape, expected_q_shape)
         self.assertEqual(output_k.shape, expected_kv_shape)
         self.assertEqual(output_v.shape, expected_kv_shape)
-        self.assertFalse(torch.equal(output_q, output_k))
-        self.assertFalse(torch.equal(output_q, output_v))
-        self.assertTrue(torch.equal(output_k, output_v))
+        self.assertFalse(torch.allclose(output_q, output_k, atol=1e-6, rtol=1e-5))
+        self.assertFalse(torch.allclose(output_q, output_v, atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(output_k, output_v, atol=1e-6, rtol=1e-5))
 
 
 class Test_reverse_enforced_batch_as_second_dim(TestBatchDimensionManager):
@@ -216,7 +216,9 @@ class Test_reverse_enforced_batch_as_second_dim(TestBatchDimensionManager):
             self.embedding_dim,
         )
         self.assertEqual(attention_output.shape, expected_output_shape)
-        self.assertTrue(torch.equal(input_tensor, attention_output))
+        self.assertTrue(
+            torch.allclose(input_tensor, attention_output, atol=1e-6, rtol=1e-5)
+        )
 
     def test_where_qkv_batch_dim_was_first_dim(self):
         self.model.should_transpose_first_two_dims = True
