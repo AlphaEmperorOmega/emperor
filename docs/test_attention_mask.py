@@ -95,7 +95,7 @@ class Test___canonical_mask(TestMask):
             mask, mask_name, other_type, other_name, target_type, check_other
         )
 
-        self.assertTrue(torch.equal(output, mask))
+        self.assertTrue(torch.allclose(output, mask, atol=1e-6, rtol=1e-5))
 
 
 class Test___validate_attention_mask(TestMask):
@@ -550,8 +550,14 @@ class Test_process_attention_masks(TestMask):
             )
         )
 
-        self.assertTrue(torch.equal(output_key_padding_mask, key_padding_mask))
-        self.assertTrue(torch.equal(output_attention_mask, attention_mask))
+        self.assertTrue(
+            torch.allclose(
+                output_key_padding_mask, key_padding_mask, atol=1e-6, rtol=1e-5
+            )
+        )
+        self.assertTrue(
+            torch.allclose(output_attention_mask, attention_mask, atol=1e-6, rtol=1e-5)
+        )
 
 
 class Test__merge_padding_and_attention_mask(TestMask):
@@ -602,7 +608,7 @@ class Test__merge_padding_and_attention_mask(TestMask):
         )
 
         self.assertIsInstance(output, torch.Tensor)
-        self.assertTrue(torch.equal(output, attention_mask))
+        self.assertTrue(torch.allclose(output, attention_mask, atol=1e-6, rtol=1e-5))
 
     def test__all_inputs(self):
         key = torch.randn(

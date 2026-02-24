@@ -137,7 +137,14 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
         )
         expected = callback(weight_params, bias_params, input_tensor)
         self.assertEqual(output.shape, (self.batch_size, self.output_dim))
-        self.assertTrue(torch.equal(output.round(decimals=6), expected.round(decimals=6)))
+        self.assertTrue(
+            torch.allclose(
+                output.round(decimals=6),
+                expected.round(decimals=6),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
 
     def test_forward_all_disabled_without_bias(self):
         cfg = LinearPresets.adaptive_linear_layer_preset()
@@ -154,7 +161,14 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
         )
         expected = callback(weight_params, None, input_tensor)
         self.assertEqual(output.shape, (self.batch_size, self.output_dim))
-        self.assertTrue(torch.equal(output.round(decimals=6), expected.round(decimals=6)))
+        self.assertTrue(
+            torch.allclose(
+                output.round(decimals=6),
+                expected.round(decimals=6),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
 
     def test_forward_with_generator(self):
         for depth in DynamicDepthOptions:

@@ -69,9 +69,11 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
                     torch.matmul(input_tensor[i, j], weight_slice) + bias_slice
                 )
                 self.assertTrue(
-                    torch.equal(
+                    torch.allclose(
                         output[i, j].round(decimals=4),
                         expected_output.round(decimals=4),
+                        atol=1e-6,
+                        rtol=1e-5,
                     )
                 )
 

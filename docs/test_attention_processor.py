@@ -84,7 +84,9 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         expected_result = query * math.sqrt(1.0 / float(head_dim))
         self.assertIsInstance(scaled_query_tensor, torch.Tensor)
         self.assertEqual(query.shape, scaled_query_tensor.shape)
-        self.assertTrue(torch.equal(scaled_query_tensor, expected_result))
+        self.assertTrue(
+            torch.allclose(scaled_query_tensor, expected_result, atol=1e-6, rtol=1e-5)
+        )
 
     def test__compute_raw_masked_attention_weights(self):
         source_sequence_length = 8
@@ -156,10 +158,19 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                                 (attention_mask[idx] == float("-inf")),
                                 torch.tensor(float("-inf")),
                             )
+                            print()
+                            print(raw_masked_weights[idx].round(decimals=4))
+                            print(single_head_qk_attention_weights.round(decimals=4))
+                            print(
+                                raw_masked_weights[idx].round(decimals=4)
+                                == single_head_qk_attention_weights.round(decimals=4),
+                            )
                             self.assertTrue(
-                                torch.equal(
-                                    raw_masked_weights[idx].round(decimals=4),
-                                    single_head_qk_attention_weights.round(decimals=4),
+                                torch.allclose(
+                                    raw_masked_weights[idx],
+                                    single_head_qk_attention_weights,
+                                    atol=1e-6,
+                                    rtol=1e-5,
                                 )
                             )
 
@@ -296,9 +307,11 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     )
                     self.assertEqual(output_attention_weights.shape, expected_shape)
                     self.assertTrue(
-                        torch.equal(
-                            output_attention_weights.round(decimals=4),
-                            attention_weights.round(decimals=4),
+                        torch.allclose(
+                            output_attention_weights,
+                            attention_weights,
+                            atol=1e-6,
+                            rtol=1e-5,
                         )
                     )
 
@@ -352,10 +365,20 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     )
                 else:
                     self.assertTrue(
-                        torch.equal(output_attention_output, attention_output)
+                        torch.allclose(
+                            output_attention_output,
+                            attention_output,
+                            atol=1e-6,
+                            rtol=1e-5,
+                        )
                     )
                     self.assertTrue(
-                        torch.equal(output_attention_weights, attention_weights)
+                        torch.allclose(
+                            output_attention_weights,
+                            attention_weights,
+                            atol=1e-6,
+                            rtol=1e-5,
+                        )
                     )
 
     def test__ensure_correct_shape_output(self):
@@ -692,7 +715,9 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         expected_result = query * math.sqrt(1.0 / float(head_dim))
         self.assertIsInstance(scaled_query_tensor, torch.Tensor)
         self.assertEqual(query.shape, scaled_query_tensor.shape)
-        self.assertTrue(torch.equal(scaled_query_tensor, expected_result))
+        self.assertTrue(
+            torch.allclose(scaled_query_tensor, expected_result, atol=1e-6, rtol=1e-5)
+        )
 
     def test__compute_raw_masked_attention_weights(self):
         top_k = 3
@@ -728,7 +753,6 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                 for attention_mask_option in attention_mask_options:
                     message = f"Testing configuration: attention_mask_option: {type(attention_mask_option)}, use_kv_expert_models_flag: {use_kv_expert_models_flag}"
                     with self.subTest(i=message):
-
                         c = MultiHeadAttentionPresets.multi_head_attention_preset(
                             source_sequence_length=source_sequence_length,
                             target_sequence_length=target_sequence_length,

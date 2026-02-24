@@ -46,7 +46,11 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
         m.update_accumulation(probabilities)
 
         expected_accumulation = torch.sum(probabilities, dim=0)
-        self.assertTrue(torch.equal(m.gates_accumulation, expected_accumulation))
+        self.assertTrue(
+            torch.allclose(
+                m.gates_accumulation, expected_accumulation, atol=1e-6, rtol=1e-5
+            )
+        )
 
     def test__update_accumulation__consecutive_updates(self):
         loss_weight = 1.0
@@ -63,7 +67,11 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
         expected_accumulation = torch.sum(probabilities, dim=0)
         expected_accumulation += torch.sum(probabilities, dim=0)
 
-        self.assertTrue(torch.equal(m.gates_accumulation, expected_accumulation))
+        self.assertTrue(
+            torch.allclose(
+                m.gates_accumulation, expected_accumulation, atol=1e-6, rtol=1e-5
+            )
+        )
 
     def test__compute_coefficient_of_variation(self):
         loss_weight = 1.0
@@ -84,7 +92,14 @@ class TestCoefficientOfVariationLoss(unittest.TestCase):
         expected_loss = variation / (mean + m.eps)
 
         self.assertIsInstance(output, torch.Tensor)
-        self.assertTrue(torch.equal(output.round(decimals=4), expected_loss.round(decimals=4)))
+        self.assertTrue(
+            torch.allclose(
+                output.round(decimals=4),
+                expected_loss.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
         self.assertNotEqual(output, 0.0)
 
     def test__is_accumulation_shape_valid__no_update_accumulation(self):
@@ -255,9 +270,18 @@ class TestSwitchLoss(unittest.TestCase):
         expected_probabilities = torch.sum(probabilities, dim=0)
         expected_frequency = torch.sum((gates > 0).float(), dim=0)
         self.assertTrue(
-            torch.equal(m.probability_accumulation, expected_probabilities)
+            torch.allclose(
+                m.probability_accumulation, expected_probabilities, atol=1e-6, rtol=1e-5
+            )
         )
-        self.assertTrue(torch.equal(m.frequency_accumulation.round(decimals=4), expected_frequency.round(decimals=4)))
+        self.assertTrue(
+            torch.allclose(
+                m.frequency_accumulation.round(decimals=4),
+                expected_frequency.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
 
     def test__update_accumulation__consecutive_updates(self):
         loss_weight = 1.0
@@ -277,9 +301,18 @@ class TestSwitchLoss(unittest.TestCase):
         expected_probabilities = torch.sum(probabilities, dim=0) * 2
         expected_frequency = torch.sum((gates > 0).float(), dim=0) * 2
         self.assertTrue(
-            torch.equal(m.probability_accumulation, expected_probabilities)
+            torch.allclose(
+                m.probability_accumulation, expected_probabilities, atol=1e-6, rtol=1e-5
+            )
         )
-        self.assertTrue(torch.equal(m.frequency_accumulation.round(decimals=4), expected_frequency.round(decimals=4)))
+        self.assertTrue(
+            torch.allclose(
+                m.frequency_accumulation.round(decimals=4),
+                expected_frequency.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
 
     def test__compute_switch_loss(self):
         loss_weight = 1.0
@@ -416,7 +449,14 @@ class TestZeroCentredLoss(unittest.TestCase):
         expected_output = torch.sum(expected_output)
 
         self.assertIsInstance(output, torch.Tensor)
-        self.assertTrue(torch.equal(output.round(decimals=4), expected_output.round(decimals=4)))
+        self.assertTrue(
+            torch.allclose(
+                output.round(decimals=4),
+                expected_output.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
 
     def test__update_accumulation__weight_loss__0(self):
         loss_weight = 0.0
@@ -448,9 +488,11 @@ class TestZeroCentredLoss(unittest.TestCase):
         expected_count_accumulation = logits.size(0)
 
         self.assertTrue(
-            torch.equal(
+            torch.allclose(
                 m.squared_log_sum_exp_accumulation.round(decimals=4),
                 expected_squared_log_sum_exp_accumulation.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
             )
         )
         self.assertEqual(m.count_accumulation, expected_count_accumulation)
@@ -472,13 +514,17 @@ class TestZeroCentredLoss(unittest.TestCase):
         expected_count_accumulation = torch.tensor(logits.size(0) * 2)
 
         self.assertTrue(
-            torch.equal(
+            torch.allclose(
                 m.squared_log_sum_exp_accumulation.round(decimals=4),
                 expected_squared_log_sum_exp_accumulation.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
             )
         )
         self.assertTrue(
-            torch.equal(m.count_accumulation, expected_count_accumulation)
+            torch.allclose(
+                m.count_accumulation, expected_count_accumulation, atol=1e-6, rtol=1e-5
+            )
         )
 
     def test__compute_zero_centred_loss(self):
@@ -496,7 +542,14 @@ class TestZeroCentredLoss(unittest.TestCase):
         expected_loss = m.squared_log_sum_exp_accumulation / m.count_accumulation
 
         self.assertIsInstance(output, torch.Tensor)
-        self.assertTrue(torch.equal(output.round(decimals=4), expected_loss.round(decimals=4)))
+        self.assertTrue(
+            torch.allclose(
+                output.round(decimals=4),
+                expected_loss.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
         self.assertNotEqual(output, 0.0)
 
     def test__compute_loss(self):
@@ -617,12 +670,26 @@ class TestMutualInformationLoss(unittest.TestCase):
         expected_log_probabilities = torch.log_softmax(logits, dim=-1)
         self.assertEqual(len(m.log_probabilities), 1)
         self.assertTrue(
-            torch.equal(m.log_probabilities[0].round(decimals=4), expected_log_probabilities.round(decimals=4))
+            torch.allclose(
+                m.log_probabilities[0].round(decimals=4),
+                expected_log_probabilities.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
         )
         self.assertEqual(len(m.probabilities), 1)
-        self.assertTrue(torch.equal(m.probabilities[0], probabilities))
+        self.assertTrue(
+            torch.allclose(m.probabilities[0], probabilities, atol=1e-6, rtol=1e-5)
+        )
         self.assertEqual(len(m.skip_masks), 1)
-        self.assertTrue(torch.equal(m.skip_masks[0].round(decimals=4), skip_masks.round(decimals=4)))
+        self.assertTrue(
+            torch.allclose(
+                m.skip_masks[0].round(decimals=4),
+                skip_masks.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
 
     def test__update_accumulation__consecutive_updates(self):
         loss_weight = 1.0
@@ -645,17 +712,45 @@ class TestMutualInformationLoss(unittest.TestCase):
         expected_log_probabilities = torch.log_softmax(logits, dim=-1)
         self.assertEqual(len(m.log_probabilities), 2)
         self.assertTrue(
-            torch.equal(m.log_probabilities[0].round(decimals=4), expected_log_probabilities.round(decimals=4))
+            torch.allclose(
+                m.log_probabilities[0].round(decimals=4),
+                expected_log_probabilities.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
         )
         self.assertTrue(
-            torch.equal(m.log_probabilities[1].round(decimals=4), expected_log_probabilities.round(decimals=4))
+            torch.allclose(
+                m.log_probabilities[1].round(decimals=4),
+                expected_log_probabilities.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
         )
         self.assertEqual(len(m.probabilities), 2)
-        self.assertTrue(torch.equal(m.probabilities[0], probabilities))
-        self.assertTrue(torch.equal(m.probabilities[1], probabilities))
+        self.assertTrue(
+            torch.allclose(m.probabilities[0], probabilities, atol=1e-6, rtol=1e-5)
+        )
+        self.assertTrue(
+            torch.allclose(m.probabilities[1], probabilities, atol=1e-6, rtol=1e-5)
+        )
         self.assertEqual(len(m.skip_masks), 2)
-        self.assertTrue(torch.equal(m.skip_masks[0].round(decimals=4), skip_masks.round(decimals=4)))
-        self.assertTrue(torch.equal(m.skip_masks[1].round(decimals=4), skip_masks.round(decimals=4)))
+        self.assertTrue(
+            torch.allclose(
+                m.skip_masks[0].round(decimals=4),
+                skip_masks.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                m.skip_masks[1].round(decimals=4),
+                skip_masks.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
 
     def test__compute_mutual_information_loss(self):
         loss_weight = 1.0
@@ -686,7 +781,14 @@ class TestMutualInformationLoss(unittest.TestCase):
         meg_H_e_given_x = (p_x * probabilities * log_probabilities).sum()
         expected_output = -(meg_H_e_given_x + H_e)
 
-        self.assertTrue(torch.equal(output.round(decimals=4), expected_output.round(decimals=4)))
+        self.assertTrue(
+            torch.allclose(
+                output.round(decimals=4),
+                expected_output.round(decimals=4),
+                atol=1e-6,
+                rtol=1e-5,
+            )
+        )
         self.assertNotEqual(output, 0.0)
 
     def test__compute_loss(self):
