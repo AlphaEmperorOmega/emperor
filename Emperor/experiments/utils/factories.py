@@ -1,13 +1,13 @@
 import itertools
 
+from typing import Callable
 from lightning import Trainer
 from Emperor.config import ModelConfig
+from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
 from Emperor.datasets.image.cifar_10 import Cifar10
 from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
-
-from typing import Callable
 
 
 def create_search_space(
@@ -42,11 +42,20 @@ def create_search_space(
     return experiments
 
 
+class ExperimentPresetsBase:
+    def get_config(self, model_config_options, dataset) -> list["ModelConfig"]:
+        raise NotImplementedError(
+            "The method 'train_model' must be implemented in the subclass."
+        )
+
+
 class ExperimentBase:
     def __init__(self) -> None:
         self.num_epochs = self._get_num_epochs()
         self.dataset_options = self._get_dataset_options()
         self.model_type = self._get_model_type()
+        self.experiment_preset_generator = self._get_experiment_preset_generator()
+        self.accelerator = "auto"
 
     def _get_num_epochs(self) -> int:
         return 10
@@ -62,12 +71,25 @@ class ExperimentBase:
             "The method '_get_model_type' must be implemented in the subclass."
         )
 
-    def _run_experiment(self, config: ModelConfig) -> None:
+    def _get_experiment_preset_generator(self) -> ExperimentPresetsBase:
+        raise NotImplementedError(
+            "The method '_get_experiment_preset_generator' must be implemented in the subclass."
+        )
+
+    def _run_experiment(
+        self,
+        experiment_option: BaseOptions,
+    ) -> None:
         for dataset_type in self.dataset_options:
-            dataset = dataset_type(batch_size=config.batch_size)
-            model = self.model_type(cfg=config)
-            trainer = Trainer(max_epochs=self.num_epochs, accelerator="auto")
-            trainer.fit(model, datamodule=dataset)
+            for config in self.experiment_preset_generator.get_config(
+                experiment_option, dataset_type
+            ):
+                dataset = dataset_type(batch_size=config.batch_size)
+                model = self.model_type(cfg=config)
+                trainer = Trainer(
+                    max_epochs=self.num_epochs, accelerator=self.accelerator
+                )
+                trainer.fit(model, datamodule=dataset)
 
     def train_model(self) -> None:
         raise NotImplementedError(

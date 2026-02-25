@@ -11,7 +11,11 @@ from Emperor.datasets.image.cifar_10 import Cifar10
 from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.utils.factories import ExperimentBase, create_search_space
+from Emperor.experiments.utils.factories import (
+    ExperimentBase,
+    ExperimentPresetsBase,
+    create_search_space,
+)
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 
@@ -63,10 +67,11 @@ class ExperimentOptions(BaseOptions):
 class Experiment(ExperimentBase):
     def __init__(
         self,
-        model_config_option: ExperimentOptions | None = None,
+        experiment_option: ExperimentOptions | None = None,
     ) -> None:
-        self.model_config_option = model_config_option
+        self.experiment_option = experiment_option
         super().__init__()
+        self.accelerator = "cpu"
 
     def _get_num_epochs(self) -> int:
         return 20
@@ -77,20 +82,19 @@ class Experiment(ExperimentBase):
     def _get_model_type(self) -> type:
         return Model
 
+    def _get_experiment_preset_generator(self) -> ExperimentPresetsBase:
+        return ExperimentPresets()
+
     def train_model(self) -> None:
-        if self.model_config_option is not None:
-            for config in ExperimentPresets().get_config(self.model_config_option):
-                self._run_experiment(config)
+        if self.experiment_option is not None:
+            self._run_experiment(self.experiment_option)
             return
 
-        for config_option in ExperimentOptions:
-            for dataset_type in self.dataset_options:
-                self._set_dataset_option(dataset_type)
-                for config in ExperimentPresets().get_config(config_option, dataset_type):
-                    self._run_experiment(config)
+        for experiment_option in ExperimentOptions:
+            self._run_experiment(experiment_option)
 
 
-class ExperimentPresets:
+class ExperimentPresets(ExperimentPresetsBase):
     def __init__(self) -> None:
         self.dataset_specs = {
             Mnist: {
@@ -137,11 +141,12 @@ class ExperimentPresets:
         }
 
         search_space = {
-            "learning_rate": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1],
-            "hidden_dim": [128, 256],
-            "stack_num_layers": [3, 6],
-            "stack_dropout_probability": [0.0, 0.1],
-            "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU],
+            "learning_rate": [1e-3],
+            # "learning_rate": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1],
+            # "hidden_dim": [128, 256],
+            # "stack_num_layers": [3, 6],
+            # "stack_dropout_probability": [0.0, 0.1],
+            # "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU],
         }
 
         return create_search_space(
