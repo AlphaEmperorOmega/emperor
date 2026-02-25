@@ -7,6 +7,8 @@ import collections
 import IPython.display as display
 import matplotlib.pyplot as plt
 
+from lightning import LightningDataModule
+
 from typing_extensions import Dict
 from dataclasses import dataclass, fields, field, asdict
 from torch.nn import Parameter, Linear, Sequential
@@ -400,7 +402,7 @@ class ParameterBank(Module):
         return self.parameter_bank
 
 
-class DataModule(HyperParameters):
+class DataModule(LightningDataModule):
     """The base class of data."""
 
     def __init__(
@@ -410,7 +412,11 @@ class DataModule(HyperParameters):
         test_dataset_flag=False,
         test_dataset_num_samples=64,
     ):
-        self.save_hyperparameters()
+        super().__init__()
+        self.root = root
+        self.num_workers = num_workers
+        self.test_dataset_flag = test_dataset_flag
+        self.test_dataset_num_samples = test_dataset_num_samples
 
     def get_dataloader(self, train):
         raise NotImplementedError
