@@ -3,7 +3,6 @@ import torch
 from torch import Tensor
 from Emperor.experiments.utils.models import ClassifierExperiment
 from models.parser import get_parser
-from lightning import Trainer
 from dataclasses import dataclass, field
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
@@ -65,51 +64,30 @@ class Experiment(ExperimentBase):
     def __init__(
         self,
         model_config_option: ExperimentOptions | None = None,
-        mini_datasetset_flag: bool = False,
     ) -> None:
-        self.print_frequency = 50
         self.model_config_option = model_config_option
-        super().__init__(mini_datasetset_flag, self.print_frequency)
+        super().__init__()
 
     def _get_num_epochs(self) -> int:
         return 20
 
-    def _get_learning_rates(self) -> list:
-        return [1e-3]
-
     def _get_dataset_options(self) -> list:
         return [Mnist, FashionMNIST, Cifar10, Cifar100]
-
-    def _get_model_config(self):
-        if self.model_config_option is None:
-            return None
-        return ExperimentPresets().get_config(self.model_config_option)
 
     def _get_model_type(self) -> type:
         return Model
 
     def train_model(self) -> None:
         if self.model_config_option is not None:
-            self._run_experiment()
-            return None
+            for config in ExperimentPresets().get_config(self.model_config_option):
+                self._run_experiment(config)
+            return
 
         for config_option in ExperimentOptions:
-            self.model_config_option = config_option
             for dataset_type in self.dataset_options:
-                config_options = ExperimentPresets().get_config(
-                    config_option, dataset_type
-                )
                 self._set_dataset_option(dataset_type)
-                for config in config_options:
-                    self._set_model_config(config)
-                    self._run_experiment()
-
-    def _run_experiment(self) -> None:
-        for dataset_type in self.dataset_options:
-            dataset = dataset_type(batch_size=self.model_config.batch_size)
-            model = Model(cfg=self.model_config)
-            trainer = Trainer(max_epochs=self.num_epochs, accelerator="auto")
-            trainer.fit(model, datamodule=dataset)
+                for config in ExperimentPresets().get_config(config_option, dataset_type):
+                    self._run_experiment(config)
 
 
 class ExperimentPresets:
@@ -159,6 +137,7 @@ class ExperimentPresets:
         }
 
         search_space = {
+            "learning_rate": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1],
             "hidden_dim": [128, 256],
             "stack_num_layers": [3, 6],
             "stack_dropout_probability": [0.0, 0.1],
