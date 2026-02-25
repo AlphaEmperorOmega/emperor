@@ -1,17 +1,13 @@
-import copy
 import torch
-import itertools
-import torchmetrics
 
-from torch import Tensor, logit
-from torch import nn, optim
-from torchmetrics.functional.classification.f_beta import f1_score
+from torch import Tensor
+from Emperor.experiments.utils.models import ClassifierExperiment
 from models.parser import get_parser
-from lightning import LightningModule
+from lightning import Trainer
 from dataclasses import dataclass, field
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
-from Emperor.base.utils import ConfigBase, Module
+from Emperor.base.utils import ConfigBase
 from Emperor.datasets.image.cifar_10 import Cifar10
 from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.linears.utils.layers import LinearLayerConfig
@@ -34,25 +30,15 @@ class ExperimentConfig(ConfigBase):
     )
 
 
-class Model(LightningModule):
+class Model(ClassifierExperiment):
     def __init__(
         self,
         cfg: "ModelConfig",
     ):
-        super().__init__()
-        self.cfg = cfg
-        self.lr = 0.001
+        super().__init__(cfg)
         self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
         self.model_config: LayerStackConfig = self.main_cfg.model_config
-        # self.num_classes: int = self.main_cfg.output_dim
-        self.num_classes: int = 10
-
         self.model = LayerStack(self.model_config).build_model()
-        self.classifier_function = nn.CrossEntropyLoss()
-
-        task = "multiclass"
-        self.accuracy = torchmetrics.Accuracy(task=task, num_classes=self.num_classes)
-        self.f1_score = torchmetrics.F1Score(task=task, num_classes=self.num_classes)
 
     def _resolve_main_config(
         self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
@@ -69,42 +55,6 @@ class Model(LightningModule):
         X = torch.flatten(X, start_dim=1)
         X = self.model(X)
         return X
-
-    def training_step(self, batch: Tensor, batch_idx: int) -> Tensor:
-        model_loss, logit_scores, Y = self.__model_step(batch)
-        self.__log_traning_step_data(model_loss, logit_scores, Y)
-        return model_loss
-
-    def __log_traning_step_data(
-        self, loss: Tensor, logit_scores: Tensor, Y: Tensor
-    ) -> None:
-        accuracy = self.accuracy(logit_scores, Y)
-        f1score = self.f1_score(logit_scores, Y)
-        self.log_dict(
-            {"train_loss": loss, "train_accuracy": accuracy, "train_f1_score": f1score},
-            prog_bar=True,
-        )
-
-    def validation_step(self, batch: Tensor, batch_idx: int) -> Tensor:
-        model_loss, logit_scores, Y = self.__model_step(batch)
-        self.log("val_loss", model_loss, prog_bar=True)
-        return model_loss
-
-    def test_step(self, batch: Tensor, batch_idx: int) -> Tensor:
-        model_loss, logit_scores, Y = self.__model_step(batch)
-        self.log("test_loss", model_loss)
-        return model_loss
-
-    def __model_step(self, batch: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        X, Y = batch
-        batch_size = X.size(0)
-        X = X.reshape(batch_size, -1)
-        logit_scores = self.forward(X)
-        model_loss = self.classifier_function(logit_scores, Y)
-        return model_loss, logit_scores, Y
-
-    def configure_optimizers(self) -> optim.Optimizer:
-        return optim.Adam(self.model.parameters(), lr=0.001)
 
 
 class ExperimentOptions(BaseOptions):
@@ -140,7 +90,7 @@ class Experiment(ExperimentBase):
 
     def train_model(self) -> None:
         if self.model_config_option is not None:
-            super().train_model()
+            self._run_experiment()
             return None
 
         for config_option in ExperimentOptions:
@@ -152,7 +102,14 @@ class Experiment(ExperimentBase):
                 self._set_dataset_option(dataset_type)
                 for config in config_options:
                     self._set_model_config(config)
-                    super().train_model()
+                    self._run_experiment()
+
+    def _run_experiment(self) -> None:
+        for dataset_type in self.dataset_options:
+            dataset = dataset_type(batch_size=self.model_config.batch_size)
+            model = Model(cfg=self.model_config)
+            trainer = Trainer(max_epochs=self.num_epochs, accelerator="auto")
+            trainer.fit(model, datamodule=dataset)
 
 
 class ExperimentPresets:
@@ -215,6 +172,7 @@ class ExperimentPresets:
     def __preset(
         self,
         batch_size: int = 64,
+        learning_rate: float = 1e-3,
         input_dim: int = 28**2,
         hidden_dim: int = 256,
         output_dim: int = 10,
@@ -231,6 +189,7 @@ class ExperimentPresets:
         return ModelConfig(
             batch_size=batch_size,
             input_dim=input_dim,
+            learning_rate=learning_rate,
             hidden_dim=hidden_dim,
             output_dim=output_dim,
             override_config=ExperimentConfig(
