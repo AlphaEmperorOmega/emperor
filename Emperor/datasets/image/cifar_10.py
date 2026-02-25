@@ -14,22 +14,24 @@ class Cifar10(DataModule):
         resize=(32, 32),
     ):
         super().__init__()
-        self.save_hyperparameters()
+        self.batch_size = batch_size
+        self.resize = resize
 
+    def prepare_data(self) -> None:
+        datasets.CIFAR10(root=self.root, train=True, download=True)
+        datasets.CIFAR10(root=self.root, train=False, download=True)
+
+    def setup(self, stage: str) -> None:
         train = datasets.CIFAR10(
             root=self.root,
             train=True,
             transform=self.__get_train_transforms(),
-            download=True,
         )
-
         val = datasets.CIFAR10(
             root=self.root,
             train=False,
             transform=self.__get_test_transforms(),
-            download=True,
         )
-
         self.train = self.get_dataset(train)
         self.val = self.get_dataset(val)
 
@@ -57,24 +59,16 @@ class Cifar10(DataModule):
 
     def _text_labels(self, indices) -> list:
         labels = [
-            "airplane",
-            "automobile",
-            "bird",
-            "cat",
-            "deer",
-            "dog",
-            "frog",
-            "horse",
-            "ship",
-            "truck",
+            "airplane", "automobile", "bird", "cat", "deer",
+            "dog", "frog", "horse", "ship", "truck",
         ]
         return [labels[int(i)] for i in indices]
 
-    def get_dataloader(self, train):
+    def get_dataloader(self, train: bool):
         data = self.train if train else self.val
         return torch.utils.data.DataLoader(
             data,
-            self.batch_size,
+            batch_size=self.batch_size,
             shuffle=train,
             num_workers=self.num_workers,
             drop_last=True,

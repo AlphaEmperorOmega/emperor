@@ -15,21 +15,28 @@ class FashionMNIST(DataModule):
         test_dataset_flag=False,
         test_dataset_num_samples=64,
     ):
-        super().__init__()
-        self.save_hyperparameters()
+        super().__init__(
+            test_dataset_flag=test_dataset_flag,
+            test_dataset_num_samples=test_dataset_num_samples,
+        )
+        self.batch_size = batch_size
+        self.resize = resize
+
+    def prepare_data(self) -> None:
+        datasets.FashionMNIST(root=self.root, train=True, download=True)
+        datasets.FashionMNIST(root=self.root, train=False, download=True)
+
+    def setup(self, stage: str) -> None:
         train = datasets.FashionMNIST(
             root=self.root,
             train=True,
             transform=self.__get_train_transforms(),
-            download=True,
         )
         val = datasets.FashionMNIST(
             root=self.root,
             train=False,
             transform=self.__get_test_transforms(),
-            download=True,
         )
-
         self.train = self.get_dataset(train)
         self.val = self.get_dataset(val)
 
@@ -51,22 +58,14 @@ class FashionMNIST(DataModule):
             ]
         )
 
-    def _text_labels(self, indices):
+    def _text_labels(self, indices) -> list:
         labels = [
-            "t-shirt",
-            "trouser",
-            "pullover",
-            "dress",
-            "coat",
-            "sandal",
-            "shirt",
-            "sneaker",
-            "bag",
-            "ankle boot",
+            "t-shirt", "trouser", "pullover", "dress", "coat",
+            "sandal", "shirt", "sneaker", "bag", "ankle boot",
         ]
         return [labels[int(i)] for i in indices]
 
-    def get_dataloader(self, train):
+    def get_dataloader(self, train: bool):
         data = self.train if train else self.val
         return torch.utils.data.DataLoader(
             data,
