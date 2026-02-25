@@ -7,4 +7,5 @@ data/
 nul
 torchenv/
 logs
+lightning_logs/
 emperor.egg-info
