@@ -1,12 +1,11 @@
 import os
 import datetime
-
-from pprint import pprint
 import itertools
-from copy import deepcopy
-from dataclasses import asdict
-from Emperor.base.utils import Trainer
+
+from torch import Tensor
+from lightning import Trainer
 from Emperor.config import ModelConfig
+from Emperor.base.layer import LayerStack
 from Emperor.datasets.image.mnist import Mnist
 from Emperor.datasets.image.cifar_10 import Cifar10
 from Emperor.datasets.image.cifar_100 import Cifar100
@@ -14,9 +13,6 @@ from Emperor.datasets.image.fashion_mnist import FashionMNIST
 from Emperor.experiments.utils.models import ClassifierExperiment
 
 from typing import TYPE_CHECKING, Callable
-
-if TYPE_CHECKING:
-    from Emperor.experiments.utils.models import ClassifierExperiment
 
 
 def create_search_space(
@@ -107,13 +103,7 @@ class ExperimentBase:
                 trainer = Trainer(max_epochs=self.num_epochs)
                 parameter_count = self.__print_model_parameter_count(model)
                 self.__print_model_title(dataset_option, learning_rate, parameter_count)
-                self._initialize_monitor(dataset, model)
-                trainer.fit(
-                    model,
-                    dataset,
-                    self.print_loss_flag,
-                    self.print_loss_frequency,
-                )
+                trainer.fit(model, datamodule=dataset)
 
     def __print_model_parameter_count(self, model) -> int:
         return sum(p.numel() for p in model.parameters() if p.requires_grad)
