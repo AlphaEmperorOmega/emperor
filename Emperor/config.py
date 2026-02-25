@@ -27,6 +27,7 @@ from Emperor.neuron.neuron import (
 # MODEL WISE CONFI
 BATCH_SIZE = 10
 SEQUENCE_LENGTH = 5
+LEARNING_RATE = 1e-3
 INPUT_DIM = 16
 HIDDEN_DIM = 32
 OUTPUT_DIM = 64
@@ -81,6 +82,10 @@ PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG = True
 class ModelConfig(ConfigBase):
     batch_size: int = field(
         default=BATCH_SIZE,
+        metadata={"help": "Batch size for training and inference"},
+    )
+    learning_rate: float = field(
+        default=LEARNING_RATE,
         metadata={"help": "Batch size for training and inference"},
     )
     sequence_length: int = field(
