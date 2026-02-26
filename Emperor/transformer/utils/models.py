@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.linears.utils.stack import LinearLayerStack
-from Emperor.embedding.absolute.utils.config import AbsolutePositionalEmbeddingConfig
+from Emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from Emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
 from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.transformer.utils.patch.options.base import PatchConfig
