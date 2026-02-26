@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
+from dataclasses import dataclass, field
 from Emperor.base.utils import Module
 
 from typing import TYPE_CHECKING
@@ -12,7 +13,38 @@ if TYPE_CHECKING:
     from Emperor.halting.config import HaltingConfig
 
 
-STICK_BREAKING_STATE = tuple[Tensor, Tensor, Tensor, Tensor, int, Tensor]
+@dataclass
+class StickBreakingState:
+    halt_mask: Tensor = field(
+        metadata={
+            "help": "Boolean mask indicating which tokens have accumulated enough halt probability to stop computing"
+        },
+    )
+    log_never_halt: Tensor = field(
+        metadata={
+            "help": "Log probability of never having halted up to the current step; represents the remaining stick"
+        },
+    )
+    accumulated_hidden: Tensor = field(
+        metadata={
+            "help": "Weighted sum of hidden states accumulated so far, where each step contributes proportionally to its halt probability"
+        },
+    )
+    accumulated_halt_prob: Tensor = field(
+        metadata={
+            "help": "Total halt probability spent across all steps so far; halting is triggered when this exceeds the threshold"
+        },
+    )
+    step: int = field(
+        metadata={
+            "help": "Current step index, used to compute the expected number of steps for regularisation"
+        },
+    )
+    accumulated_expected_step: Tensor = field(
+        metadata={
+            "help": "Running sum of halt_prob * step across all steps; used to compute the expected computation depth"
+        },
+    )
 
 
 class StickBreaking(Module):
@@ -35,72 +67,84 @@ class StickBreaking(Module):
         return nn.Sequential(nn.Linear(self.input_dim, 2, bias=False))
 
     def __init_gate_weights(self) -> None:
-        nn.init.zeros_(self._gate[-1].weight)  # type: ignore[union-attr]
+        nn.init.zeros_(self._gate[-1].weight)
 
-    def _compute_gate_logits(self, hidden: Tensor) -> Tensor:
-        logits = self._gate(hidden)
+    def forward(
+        self,
+        previous_state: StickBreakingState | None,
+        previous_output: Tensor,
+    ) -> StickBreakingState:
+        current_log_gates = self.__compute_gate_logits(previous_output)
+        if previous_state is None:
+            return self.__init_state(current_log_gates, previous_output)
+        return self.__step_state(previous_state, current_log_gates, previous_output)
+
+    def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
+        logits = self._gate(hidden_state)
         if self.training:
             logits = logits + torch.randn_like(logits)
         return F.log_softmax(logits, dim=-1)
 
     def __init_state(
         self,
-        curr_log_g: Tensor,
-        prev_out: Tensor,
-    ) -> tuple[STICK_BREAKING_STATE, Tensor]:
-        g = torch.exp(curr_log_g[..., 1])
-        halt_mask = g >= self.threshold
-        state: STICK_BREAKING_STATE = (
-            halt_mask,
-            curr_log_g[..., 0],
-            g[..., None] * prev_out,
-            g,
-            0,
-            torch.tensor(0.0),
+        current_log_gates: Tensor,
+        previous_output: Tensor,
+    ) -> StickBreakingState:
+        log_continuation_probability = current_log_gates[..., 0]
+        log_halting_probability = current_log_gates[..., 1]
+        halting_probability = torch.exp(log_halting_probability)
+        return StickBreakingState(
+            halt_mask=halting_probability >= self.threshold,
+            log_never_halt=log_continuation_probability,
+            accumulated_hidden=halting_probability[..., None] * previous_output,
+            accumulated_halt_prob=halting_probability,
+            step=0,
+            accumulated_expected_step=torch.tensor(0.0),
         )
-        return state, halt_mask
 
     def __step_state(
         self,
-        state: STICK_BREAKING_STATE,
-        curr_log_g: Tensor,
-        prev_out: Tensor,
-    ) -> tuple[STICK_BREAKING_STATE, Tensor]:
-        prev_halt_mask, prev_log_never_halt, prev_acc_h, prev_acc_g, prev_step, prev_acc_expstep = state
-        step = prev_step + 1
-        curr_log_halt = prev_log_never_halt[..., None] + curr_log_g
-        g = torch.exp(curr_log_halt[..., 1])
-        g = g.masked_fill(prev_halt_mask, 0.0)
-        curr_acc_g = prev_acc_g + g
-        halt_mask = curr_acc_g >= self.threshold
-        new_state: STICK_BREAKING_STATE = (
-            halt_mask,
-            curr_log_halt[..., 0],
-            prev_acc_h + g[..., None] * prev_out,
-            curr_acc_g,
-            step,
-            prev_acc_expstep + g * step,
+        previous_state: StickBreakingState,
+        current_log_gates: Tensor,
+        previous_output: Tensor,
+    ) -> StickBreakingState:
+        step = previous_state.step + 1
+        current_log_halting = (
+            previous_state.log_never_halt[..., None] + current_log_gates
         )
-        return new_state, halt_mask
-
-    def forward(
-        self,
-        prev_state: STICK_BREAKING_STATE | None,
-        prev_out: Tensor,
-    ) -> tuple[STICK_BREAKING_STATE, Tensor]:
-        curr_log_g = self._compute_gate_logits(prev_out)
-        if prev_state is None:
-            return self.__init_state(curr_log_g, prev_out)
-        return self.__step_state(prev_state, curr_log_g, prev_out)
+        halting_probability = torch.exp(current_log_halting[..., 1])
+        halting_probability = halting_probability.masked_fill(
+            previous_state.halt_mask, 0.0
+        )
+        accumulated_halting_probability = (
+            previous_state.accumulated_halt_prob + halting_probability
+        )
+        return StickBreakingState(
+            halt_mask=accumulated_halting_probability >= self.threshold,
+            log_never_halt=current_log_halting[..., 0],
+            accumulated_hidden=previous_state.accumulated_hidden
+            + halting_probability[..., None] * previous_output,
+            accumulated_halt_prob=accumulated_halting_probability,
+            step=previous_state.step + 1,
+            accumulated_expected_step=previous_state.accumulated_expected_step
+            + halting_probability * step,
+        )
 
     def halt_gating(
         self,
-        state: STICK_BREAKING_STATE,
-        curr_h: Tensor,
+        state: StickBreakingState,
+        current_hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        halt_mask, _, curr_acc_h, curr_acc_g, step, curr_expstep = state
-        soft_halted_h = curr_acc_h + (1 - curr_acc_g)[..., None] * curr_h
-        expstep = curr_expstep + (step + 1) * (1 - curr_acc_g)
-        if halt_mask.any():
-            soft_halted_h.masked_scatter_(halt_mask[..., None], curr_acc_h[halt_mask])
-        return soft_halted_h, expstep
+        remaining_prob = 1 - state.accumulated_halt_prob
+        soft_halted_hidden = (
+            state.accumulated_hidden + remaining_prob[..., None] * current_hidden
+        )
+        expected_step = (
+            state.accumulated_expected_step + (state.step + 1) * remaining_prob
+        )
+        if state.halt_mask.any():
+            soft_halted_hidden.masked_scatter_(
+                state.halt_mask[..., None],
+                state.accumulated_hidden[state.halt_mask],
+            )
+        return soft_halted_hidden, expected_step
