@@ -1,5 +1,6 @@
 import itertools
 
+from abc import ABC, abstractmethod
 from typing import Callable
 from lightning import Trainer
 from Emperor.config import ModelConfig
@@ -50,48 +51,44 @@ class ExperimentPresetsBase:
 
 
 class ExperimentBase:
-    def __init__(self) -> None:
-        self.num_epochs = self._get_num_epochs()
-        self.dataset_options = self._get_dataset_options()
-        self.model_type = self._get_model_type()
-        self.experiment_preset_generator = self._get_experiment_preset_generator()
+    def __init__(self, option: BaseOptions | None = None) -> None:
+        self.option = option
+        self.num_epochs = self._num_epochs()
+        self.dataset_options = self._dataset_options()
+        self.model_type = self._model_type()
+        self.preset_generator = self._preset_generator_instance()
+        self.options_enumeration = self._experiment_enumeration()
         self.accelerator = "auto"
 
-    def _get_num_epochs(self) -> int:
+    def _num_epochs(self) -> int:
         return 10
 
-    def _get_dataset_options(self) -> list:
+    def _dataset_options(self) -> list:
         return [Mnist, FashionMNIST, Cifar10, Cifar100]
 
-    def _set_dataset_option(self, dataset_option) -> None:
-        self.dataset_options = [dataset_option]
-
-    def _get_model_type(self) -> type:
+    def _model_type(self) -> type:
         raise NotImplementedError(
-            "The method '_get_model_type' must be implemented in the subclass."
+            "The method '_model_type' must be implemented in the subclass."
         )
 
-    def _get_experiment_preset_generator(self) -> ExperimentPresetsBase:
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
         raise NotImplementedError(
-            "The method '_get_experiment_preset_generator' must be implemented in the subclass."
+            "The method '_preset_generator_instance' must be implemented in the subclass."
         )
 
-    def _run_experiment(
-        self,
-        experiment_option: BaseOptions,
-    ) -> None:
-        for dataset_type in self.dataset_options:
-            for config in self.experiment_preset_generator.get_config(
-                experiment_option, dataset_type
-            ):
-                dataset = dataset_type(batch_size=config.batch_size)
-                model = self.model_type(cfg=config)
-                trainer = Trainer(
-                    max_epochs=self.num_epochs, accelerator=self.accelerator
-                )
-                trainer.fit(model, datamodule=dataset)
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        raise NotImplementedError(
+            "The method '_experiment_enumeration' must be implemented in the subclass."
+        )
 
     def train_model(self) -> None:
-        raise NotImplementedError(
-            "The method 'train_model' must be implemented in the subclass."
-        )
+        options = [self.option] if self.option else self.options_enumeration
+        for option in options:
+            for dataset_type in self.dataset_options:
+                for config in self.preset_generator.get_config(option, dataset_type):
+                    dataset = dataset_type(batch_size=config.batch_size)
+                    model = self.model_type(cfg=config)
+                    trainer = Trainer(
+                        max_epochs=self.num_epochs, accelerator=self.accelerator
+                    )
+                    trainer.fit(model, datamodule=dataset)
