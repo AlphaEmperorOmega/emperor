@@ -16,8 +16,8 @@ from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
 from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions, RelativePositionalEmbeddingOptions
-from Emperor.embedding.absolute.utils.config import AbsolutePositionalEmbeddingConfig
-from Emperor.embedding.relative.utils.config import RelativePositionalEmbeddingConfig
+from Emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
+from Emperor.embedding.relative.config import RelativePositionalEmbeddingConfig
 from Emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
