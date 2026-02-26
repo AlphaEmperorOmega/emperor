@@ -12,7 +12,7 @@ from Emperor.datasets.image.cifar_10 import Cifar10
 from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.utils.factories import ExperimentBase, create_search_space
+from Emperor.experiments.utils.base import ExperimentBase, create_search_space
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 

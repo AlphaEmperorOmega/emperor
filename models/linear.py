@@ -1,23 +1,20 @@
 import torch
 
 from torch import Tensor
-from Emperor.experiments.utils.models import ClassifierExperiment
 from models.parser import get_parser
 from dataclasses import dataclass, field
+from Emperor.base.utils import ConfigBase
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
-from Emperor.base.utils import ConfigBase
-from Emperor.datasets.image.cifar_10 import Cifar10
-from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.utils.factories import (
+from Emperor.experiments.utils.classifier import ClassifierExperiment
+from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from Emperor.experiments.utils.base import (
     ExperimentBase,
     ExperimentPresetsBase,
     create_search_space,
 )
-from Emperor.datasets.image.fashion_mnist import FashionMNIST
-from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 
 from typing import TYPE_CHECKING
 
@@ -69,51 +66,22 @@ class Experiment(ExperimentBase):
         self,
         experiment_option: ExperimentOptions | None = None,
     ) -> None:
-        self.experiment_option = experiment_option
-        super().__init__()
+        super().__init__(experiment_option)
         self.accelerator = "cpu"
 
-    def _get_num_epochs(self) -> int:
-        return 20
-
-    def _get_dataset_options(self) -> list:
-        return [Mnist, FashionMNIST, Cifar10, Cifar100]
-
-    def _get_model_type(self) -> type:
+    def _model_type(self) -> type:
         return Model
 
-    def _get_experiment_preset_generator(self) -> ExperimentPresetsBase:
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
         return ExperimentPresets()
 
-    def train_model(self) -> None:
-        if self.experiment_option is not None:
-            self._run_experiment(self.experiment_option)
-            return
-
-        for experiment_option in ExperimentOptions:
-            self._run_experiment(experiment_option)
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        return ExperimentOptions
 
 
 class ExperimentPresets(ExperimentPresetsBase):
     def __init__(self) -> None:
-        self.dataset_specs = {
-            Mnist: {
-                "input_dim": 28 * 28,
-                "output_dim": 10,
-            },
-            FashionMNIST: {
-                "input_dim": 28 * 28,
-                "output_dim": 10,
-            },
-            Cifar10: {
-                "input_dim": 32 * 32 * 3,
-                "output_dim": 10,
-            },
-            Cifar100: {
-                "input_dim": 32 * 32 * 3,
-                "output_dim": 100,
-            },
-        }
+        super().__init__()
 
     def get_config(
         self,
@@ -133,11 +101,9 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        spec = self.dataset_specs[dataset]
-
         base_config = {
-            "input_dim": spec["input_dim"],
-            "output_dim": spec["output_dim"],
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
         }
 
         search_space = {
@@ -202,6 +168,5 @@ if __name__ == "__main__":
     parser = get_parser(ExperimentOptions.names())
     args = parser.parse_args()
     config_option = ExperimentOptions.get_option(args.config_name)
-
     experiment = Experiment(config_option)
     experiment.train_model()

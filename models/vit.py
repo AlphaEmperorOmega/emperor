@@ -11,7 +11,7 @@ from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.linears.utils.presets import LinearPresets
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.utils.factories import Experiments
+from Emperor.experiments.utils.base import Experiments
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
 from Emperor.transformer.utils.layers import TransformerConfig
 from Emperor.transformer.utils.presets import TransformerPresets
