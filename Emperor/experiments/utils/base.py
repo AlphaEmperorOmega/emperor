@@ -1,11 +1,15 @@
+import hashlib
+import inspect
 import itertools
+from datetime import datetime
+from pathlib import Path
 
-from abc import ABC, abstractmethod
 from typing import Callable
 from lightning import Trainer
 from Emperor.config import ModelConfig
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
+from lightning.pytorch.loggers import CSVLogger
 from Emperor.datasets.image.cifar_10 import Cifar10
 from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
@@ -88,7 +92,25 @@ class ExperimentBase:
                 for config in self.preset_generator.get_config(option, dataset_type):
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
+                    logger = CSVLogger(
+                        save_dir="logs",
+                        name=self._build_log_path(option, dataset_type, config),
+                    )
                     trainer = Trainer(
-                        max_epochs=self.num_epochs, accelerator=self.accelerator
+                        max_epochs=self.num_epochs,
+                        accelerator=self.accelerator,
+                        logger=logger,
                     )
                     trainer.fit(model, datamodule=dataset)
+
+    def _build_log_path(
+        self, option: BaseOptions, dataset_type: type, config: "ModelConfig"
+    ) -> str:
+        params = config.get_custom_parameters()
+        param_str = "_".join(f"{k}={v}" for k, v in params.items())
+        param_id = (
+            hashlib.md5(param_str.encode()).hexdigest()[:8] if param_str else "default"
+        )
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        source_file = Path(inspect.getfile(type(self))).stem
+        return f"{source_file}/{dataset_type.__name__}/{option.name}/{param_id}_{timestamp}"
