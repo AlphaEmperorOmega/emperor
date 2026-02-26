@@ -1,6 +1,6 @@
 from Emperor.base.enums import ActivationOptions
 from Emperor.linears.options import LinearLayerStackOptions
-from Emperor.experiments.utils.factories import Experiments
+from Emperor.experiments.utils.base import Experiments
 from Emperor.adaptive.utils.layers import AdaptiveRouterOptions
 from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
 from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions

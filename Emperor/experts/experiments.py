@@ -1,5 +1,5 @@
 from Emperor.base.enums import ActivationOptions
-from Emperor.experiments.utils.factories import Experiments
+from Emperor.experiments.utils.base import Experiments
 from Emperor.linears.options import LinearLayerStackOptions
 from Emperor.experts.utils.presets import MixtureOfExpertsPresets
 from Emperor.experts.utils.enums import ExpertWeightingPositionOptions
