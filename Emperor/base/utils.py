@@ -409,14 +409,27 @@ class DataModule(LightningDataModule):
         self,
         root="data",
         num_workers=4,
-        test_dataset_flag=False,
-        test_dataset_num_samples=64,
     ):
         super().__init__()
         self.root = root
         self.num_workers = num_workers
-        self.test_dataset_flag = test_dataset_flag
-        self.test_dataset_num_samples = test_dataset_num_samples
+
+    def setup(self, stage: str) -> None:
+        match stage:
+            case "fit":
+                self._setup_fit()
+            case "validate":
+                self._setup_validate()
+
+    def _setup_fit(self) -> None:
+        raise NotImplementedError(
+            "The method '_setup_fit' must be implemented in the subclass."
+        )
+
+    def _setup_validate(self) -> None:
+        raise NotImplementedError(
+            "The method '_setup_validate' must be implemented in the subclass."
+        )
 
     def get_dataloader(self, train):
         raise NotImplementedError
@@ -431,15 +444,6 @@ class DataModule(LightningDataModule):
         tensors = tuple(a[indices] for a in tensors)
         dataset = torch.utils.data.TensorDataset(*tensors)
         return torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=train)
-
-    def get_dataset(self, dataset):
-        if self.test_dataset_flag:
-            total_samples_range = range(len(dataset))
-            small_dataset_idxs = random.sample(
-                total_samples_range, self.test_dataset_num_samples
-            )
-            return torch.utils.data.Subset(dataset, small_dataset_idxs)
-        return dataset
 
     def visualize(self, batch, nrows=1, ncols=8, labels=[]):
         X, y = batch
