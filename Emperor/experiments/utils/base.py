@@ -9,7 +9,7 @@ from lightning import Trainer
 from Emperor.config import ModelConfig
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
-from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.loggers import TensorBoardLogger
 from Emperor.datasets.image.cifar_10 import Cifar10
 from Emperor.datasets.image.cifar_100 import Cifar100
 from Emperor.datasets.image.fashion_mnist import FashionMNIST
@@ -92,7 +92,7 @@ class ExperimentBase:
                 for config in self.preset_generator.get_config(option, dataset_type):
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
-                    logger = CSVLogger(
+                    logger = TensorBoardLogger(
                         save_dir="logs",
                         name=self._build_log_path(option, dataset_type, config),
                     )
