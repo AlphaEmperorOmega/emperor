@@ -5,15 +5,17 @@ from models.parser import get_parser
 from dataclasses import dataclass, field
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
-from Emperor.base.utils import ConfigBase, Module
-from Emperor.datasets.image.cifar_10 import Cifar10
-from Emperor.datasets.image.cifar_100 import Cifar100
+from Emperor.base.utils import ConfigBase
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.datasets.image.fashion_mnist import FashionMNIST
-from Emperor.experiments.utils.base import ExperimentBase, create_search_space
-from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+from Emperor.experiments.utils.classifier import ClassifierExperiment
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from Emperor.experiments.utils.base import (
+    ExperimentBase,
+    ExperimentPresetsBase,
+    create_search_space,
+)
+from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -37,16 +39,22 @@ class ExperimentConfig(ConfigBase):
     )
 
 
-class Model(Module):
+class Model(ClassifierExperiment):
     def __init__(
         self,
         cfg: "ModelConfig",
     ):
-        super().__init__()
-        self.cfg = cfg
+        super().__init__(cfg)
         self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
         self.model_config: LayerStackConfig = self.main_cfg.model_config
         self.model = LayerStack(self.model_config).build_model()
+
+    def _resolve_main_config(
+        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
+    ) -> None:
+        if sub_config.override_config is not None:
+            return sub_config.override_config
+        return main_cfg
 
     def forward(
         self,
@@ -65,76 +73,46 @@ class ExperimentOptions(BaseOptions):
 class Experiment(ExperimentBase):
     def __init__(
         self,
-        model_config_option: ExperimentOptions | None = None,
-        mini_datasetset_flag: bool = False,
+        experiment_option: ExperimentOptions | None = None,
     ) -> None:
-        self.print_frequency = 50
-        self.model_config_option = model_config_option
-        super().__init__(mini_datasetset_flag, self.print_frequency)
+        super().__init__(experiment_option)
+        self.accelerator = "cpu"
 
-    def _get_num_epochs(self) -> int:
+    def _num_epochs(self) -> int:
         return 20
 
-    def _get_learning_rates(self) -> list:
-        return [1e-3]
-
-    def _get_dataset_options(self) -> list:
-        return [Mnist, FashionMNIST, Cifar10, Cifar100]
-
-    def _get_model_config(self):
-        if self.model_config_option is None:
-            return None
-        return ExperimentPresets().get_config(self.model_config_option)
-
-    def _get_model_type(self) -> type:
+    def _model_type(self) -> type:
         return Model
 
-    def train_model(self) -> None:
-        if self.model_config_option is not None:
-            super().train_model()
-            return None
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
+        return ExperimentPresets()
 
-        for config_option in ExperimentOptions:
-            self.model_config_option = config_option
-            for dataset_type in self.dataset_options:
-                config_options = ExperimentPresets().get_config(dataset_type)
-                self._set_dataset_option(dataset_type)
-                for config in config_options:
-                    self._set_model_config(config)
-                    super().train_model()
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        return ExperimentOptions
 
 
-class ExperimentPresets:
-    def __init__(self) -> None:
-        self.dataset_specs = {
-            Mnist: {
-                "input_dim": 28 * 28,
-                "output_dim": 10,
-            },
-            FashionMNIST: {
-                "input_dim": 28 * 28,
-                "output_dim": 10,
-            },
-            Cifar10: {
-                "input_dim": 32 * 32 * 3,
-                "output_dim": 10,
-            },
-            Cifar100: {
-                "input_dim": 32 * 32 * 3,
-                "output_dim": 100,
-            },
-        }
-
+class ExperimentPresets(ExperimentPresetsBase):
     def get_config(
+        self,
+        model_config_options: ExperimentOptions = ExperimentOptions.BASE,
+        dataset: type = Mnist,
+    ) -> list["ModelConfig"]:
+        match model_config_options:
+            case ExperimentOptions.BASE:
+                return self.__base_grid_search_config(dataset)
+            case _:
+                raise ValueError(
+                    "The specified option is not supported. Please choose a valid `ExperimentOptions`."
+                )
+
+    def __base_grid_search_config(
         self,
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        spec = self.dataset_specs[dataset]
-
         base_config = {
-            "input_dim": spec["input_dim"],
-            "output_dim": spec["output_dim"],
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
         }
 
         search_space = {
