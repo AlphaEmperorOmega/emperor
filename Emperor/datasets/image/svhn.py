@@ -8,32 +8,43 @@ from torchvision.transforms.transforms import Compose
 
 
 class SVHN(DataModule):
+    default_width: int = 32
+    default_height: int = 32
+    num_classes: int = 10
+    num_channels: int = 3
+    flattened_input_dim: int = default_width * default_height * num_channels
+
     def __init__(
         self,
         batch_size,
         resize=(32, 32),
-        test_dataset_flag=False,
-        test_dataset_num_samples=64,
     ):
         super().__init__()
-        self.save_hyperparameters()
+        self.batch_size = batch_size
+        self.resize = resize
 
-        train = datasets.SVHN(
+    def prepare_data(self) -> None:
+        datasets.SVHN(root=self.root, split="train", download=True)
+        datasets.SVHN(root=self.root, split="test", download=True)
+
+    def _setup_fit(self) -> None:
+        self.train = datasets.SVHN(
             root=self.root,
             split="train",
             transform=self.__get_train_transforms(),
-            download=True,
         )
-
-        val = datasets.SVHN(
+        self.val = datasets.SVHN(
             root=self.root,
             split="test",
             transform=self.__get_test_transforms(),
-            download=True,
         )
 
-        self.train = self.get_dataset(train)
-        self.val = self.get_dataset(val)
+    def _setup_validate(self) -> None:
+        self.val = datasets.SVHN(
+            root=self.root,
+            split="test",
+            transform=self.__get_test_transforms(),
+        )
 
     def __get_train_transforms(self) -> Compose:
         mean = (0.4377, 0.4438, 0.4728)

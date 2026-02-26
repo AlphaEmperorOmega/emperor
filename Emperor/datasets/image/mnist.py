@@ -8,17 +8,18 @@ from torchvision.transforms.transforms import Compose
 
 
 class Mnist(DataModule):
+    default_width: int = 28
+    default_height: int = 28
+    num_classes: int = 10
+    num_channels: int = 1
+    flattened_input_dim: int = default_width * default_height * num_channels
+
     def __init__(
         self,
         batch_size,
         resize=(28, 28),
-        test_dataset_flag=False,
-        test_dataset_num_samples=64,
     ):
-        super().__init__(
-            test_dataset_flag=test_dataset_flag,
-            test_dataset_num_samples=test_dataset_num_samples,
-        )
+        super().__init__()
         self.batch_size = batch_size
         self.resize = resize
 
@@ -26,19 +27,24 @@ class Mnist(DataModule):
         datasets.MNIST(root=self.root, train=True, download=True)
         datasets.MNIST(root=self.root, train=False, download=True)
 
-    def setup(self, stage: str) -> None:
-        train = datasets.MNIST(
+    def _setup_fit(self) -> None:
+        self.train = datasets.MNIST(
             root=self.root,
             train=True,
             transform=self.__get_train_transforms(),
         )
-        val = datasets.MNIST(
+        self.val = datasets.MNIST(
             root=self.root,
             train=False,
             transform=self.__get_test_transforms(),
         )
-        self.train = self.get_dataset(train)
-        self.val = self.get_dataset(val)
+
+    def _setup_validate(self) -> None:
+        self.val = datasets.MNIST(
+            root=self.root,
+            train=False,
+            transform=self.__get_test_transforms(),
+        )
 
     def __get_train_transforms(self) -> Compose:
         return transforms.Compose(

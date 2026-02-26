@@ -8,32 +8,45 @@ from Emperor.base.utils import DataModule
 
 
 class Cifar10(DataModule):
+    default_width: int = 32
+    default_height: int = 32
+    num_classes: int = 10
+    num_channels: int = 3
+    flattened_input_dim: int = default_width * default_height * num_channels
+
     def __init__(
         self,
         batch_size=64,
-        resize=(32, 32),
+        resize: tuple = (32, 32),
     ):
         super().__init__()
         self.batch_size = batch_size
         self.resize = resize
+        width, height = resize
+        self.flattened_input_dim: int = width * height * 3
 
     def prepare_data(self) -> None:
         datasets.CIFAR10(root=self.root, train=True, download=True)
         datasets.CIFAR10(root=self.root, train=False, download=True)
 
-    def setup(self, stage: str) -> None:
-        train = datasets.CIFAR10(
+    def _setup_fit(self) -> None:
+        self.train = datasets.CIFAR10(
             root=self.root,
             train=True,
             transform=self.__get_train_transforms(),
         )
-        val = datasets.CIFAR10(
+        self.val = datasets.CIFAR10(
             root=self.root,
             train=False,
             transform=self.__get_test_transforms(),
         )
-        self.train = self.get_dataset(train)
-        self.val = self.get_dataset(val)
+
+    def _setup_validate(self) -> None:
+        self.val = datasets.CIFAR10(
+            root=self.root,
+            train=False,
+            transform=self.__get_test_transforms(),
+        )
 
     def __get_train_transforms(self) -> Compose:
         mean = (0.4914, 0.4822, 0.4465)
@@ -59,8 +72,16 @@ class Cifar10(DataModule):
 
     def _text_labels(self, indices) -> list:
         labels = [
-            "airplane", "automobile", "bird", "cat", "deer",
-            "dog", "frog", "horse", "ship", "truck",
+            "airplane",
+            "automobile",
+            "bird",
+            "cat",
+            "deer",
+            "dog",
+            "frog",
+            "horse",
+            "ship",
+            "truck",
         ]
         return [labels[int(i)] for i in indices]
 
