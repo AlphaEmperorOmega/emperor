@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-    from Emperor.embedding.absolute.utils.config import (
+    from Emperor.embedding.absolute.config import (
         AbsolutePositionalEmbeddingConfig,
     )
 
