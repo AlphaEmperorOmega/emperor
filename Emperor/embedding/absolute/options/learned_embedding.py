@@ -3,15 +3,15 @@ import torch.nn as nn
 
 from typing import Dict
 from torch import Tensor
-from Emperor.embedding.absolute.utils.base import AbsolutePositionalEmbeddingBase
-from Emperor.embedding.absolute.utils.options._validator import (
+from Emperor.embedding.absolute.options.base import AbsolutePositionalEmbeddingBase
+from Emperor.embedding.absolute.options._validator import (
     LearnedPositionalEmbeddingValidator,
 )
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.embedding.absolute.utils.config import (
+    from Emperor.embedding.absolute.config import (
         AbsolutePositionalEmbeddingConfig,
     )
 

@@ -5,10 +5,10 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.embedding.absolute.utils.options.learned_embedding import (
+    from Emperor.embedding.absolute.options.learned_embedding import (
         LearnedPositionalEmbedding,
     )
-    from Emperor.embedding.absolute.utils.options.sinusoidal_embedding import (
+    from Emperor.embedding.absolute.options.sinusoidal_embedding import (
         SinusoidalPositionalEmbedding,
     )
 
