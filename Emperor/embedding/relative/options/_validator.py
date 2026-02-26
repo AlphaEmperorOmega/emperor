@@ -5,7 +5,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.embedding.relative.utils.options.dynamic_positional_bias import (
+    from Emperor.embedding.relative.options.dynamic_positional_bias import (
         DynamicPostionalBias,
     )
 
