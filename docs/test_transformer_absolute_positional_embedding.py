@@ -4,11 +4,11 @@ import torch.nn as nn
 
 from torch import Tensor
 from Emperor.transformer.utils.presets import TransformerPresets
-from Emperor.embedding.absolute.utils.options.learned_embedding import (
+from Emperor.embedding.absolute.options.learned_embedding import (
     TextLearnedPositionalEmbedding,
     ImageLearnedPositionalEmbedding,
 )
-from Emperor.embedding.absolute.utils.options.sinusoidal_embedding import (
+from Emperor.embedding.absolute.options.sinusoidal_embedding import (
     TextSinusoidalPositionalEmbedding,
     ImageSinusoidalPositionalEmbedding,
 )
