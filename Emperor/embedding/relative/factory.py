@@ -1,7 +1,7 @@
 from Emperor.base.utils import Module
 from Emperor.embedding.options import RelativePositionalEmbeddingOptions
-from Emperor.embedding.relative.utils.config import RelativePositionalEmbeddingConfig
-from Emperor.embedding.relative.utils.options.dynamic_positional_bias import (
+from Emperor.embedding.relative.config import RelativePositionalEmbeddingConfig
+from Emperor.embedding.relative.options.dynamic_positional_bias import (
     DynamicPostionalBias,
 )
 
