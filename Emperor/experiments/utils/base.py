@@ -1,3 +1,4 @@
+import random
 import hashlib
 import inspect
 import itertools
@@ -38,7 +39,7 @@ def create_search_space(
         all_combinations = (create_single_sample() for _ in range(num_samples))
 
     for parameter_values in all_combinations:
-        updated_params = base_config
+        updated_params = {**base_config}
         for param_name, param_value in zip(parameter_names, parameter_values):
             updated_params[param_name] = param_value
         preset = base_preset_callback(**updated_params)
