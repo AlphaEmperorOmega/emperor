@@ -56,7 +56,7 @@ class ClassifierMetricsLogger(nn.Module):
         super().__init__()
         task = "multiclass"
         self.train_accuracy = torchmetrics.Accuracy(task=task, num_classes=num_classes)
-        self.train_f1_score = torchmetrics.F1Score(task=task, num_classes=num_classes)
+        self.train_f1_score = torchmetrics.F1Score(task=task, num_classes=num_classes, average="macro")
 
         self.validation_accuracy = torchmetrics.Accuracy(
             task=task, num_classes=num_classes
@@ -66,7 +66,7 @@ class ClassifierMetricsLogger(nn.Module):
         )
 
         self.test_accuracy = torchmetrics.Accuracy(task=task, num_classes=num_classes)
-        self.test_f1_score = torchmetrics.F1Score(task=task, num_classes=num_classes)
+        self.test_f1_score = torchmetrics.F1Score(task=task, num_classes=num_classes, average="macro")
 
     def log_training_step(
         self, log_fn: Callable, loss: Tensor, logits: Tensor, Y: Tensor
