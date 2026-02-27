@@ -113,4 +113,4 @@ class ExperimentBase:
         )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         source_file = Path(inspect.getfile(type(self))).stem
-        return f"{source_file}/{dataset_type.__name__}/{option.name}/{param_id}_{timestamp}"
+        return f"{source_file}/{option.name}/{dataset_type.__name__}/{param_id}_{timestamp}"
