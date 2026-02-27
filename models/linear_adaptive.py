@@ -3,19 +3,19 @@ import torch
 from torch import Tensor
 from models.parser import get_parser
 from dataclasses import dataclass, field
+from Emperor.base.utils import ConfigBase
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
-from Emperor.base.utils import ConfigBase
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
 from Emperor.experiments.utils.classifier import ClassifierExperiment
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from Emperor.experiments.utils.base import (
     ExperimentBase,
     ExperimentPresetsBase,
     create_search_space,
 )
-from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from Emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -67,11 +67,13 @@ class Model(ClassifierExperiment):
 
 
 class ExperimentOptions(BaseOptions):
-    BASE = 0
-    GENERATOR_DEPTH = 1
+    DEFAULT = 0
+    BASE = 1
+    GENERATOR_DEPTH = 2
     DIAGONAL = 3
     BIAS = 4
     MEMORY = 5
+    COMBINED = 6
 
 
 class Experiment(ExperimentBase):
@@ -81,9 +83,6 @@ class Experiment(ExperimentBase):
     ) -> None:
         super().__init__(experiment_option)
         self.accelerator = "cpu"
-
-    def _num_epochs(self) -> int:
-        return 20
 
     def _model_type(self) -> type:
         return Model
@@ -98,43 +97,41 @@ class Experiment(ExperimentBase):
 class ExperimentPresets(ExperimentPresetsBase):
     def get_config(
         self,
-        model_config_options: ExperimentOptions = ExperimentOptions.BASE,
+        model_config_options: ExperimentOptions = ExperimentOptions.DEFAULT,
         dataset: type = Mnist,
     ) -> list["ModelConfig"]:
         match model_config_options:
-            case ExperimentOptions.BASE:
-                return self.__base_grid_search_config(dataset)
+            case ExperimentOptions.DEFAULT:
+                return self.__single_config(dataset)
             case ExperimentOptions.GENERATOR_DEPTH:
                 return self.__generator_depth_grid_search_config(dataset)
+            case ExperimentOptions.BASE:
+                return self.__base_grid_search_config(dataset)
             case ExperimentOptions.DIAGONAL:
                 return self.__diagonal_grid_search_config(dataset)
             case ExperimentOptions.BIAS:
                 return self.__bias_grid_search_config(dataset)
             case ExperimentOptions.MEMORY:
                 return self.__memory_grid_search_config(dataset)
+            case ExperimentOptions.COMBINED:
+                return self.__combined_grid_search_config(dataset)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
                 )
 
-    def __base_search_space(self) -> dict:
-        return {
-            "learning_rate": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1],
-            "hidden_dim": [128, 256],
-            "stack_num_layers": [3, 6],
-            "stack_dropout_probability": [0.0, 0.1],
-            "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU],
-        }
+    def __single_config(
+        self,
+        dataset: type = Mnist,
+    ) -> list["ModelConfig"]:
+        return [self.__preset(**self.__base_config(dataset))]
 
     def __base_grid_search_config(
         self,
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = {
-            "input_dim": dataset.flattened_input_dim,
-            "output_dim": dataset.num_classes,
-        }
+        base_config = self.__base_config(dataset)
 
         return create_search_space(
             self.__preset,
@@ -148,10 +145,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = {
-            "input_dim": dataset.flattened_input_dim,
-            "output_dim": dataset.num_classes,
-        }
+        base_config = self.__base_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -171,10 +165,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = {
-            "input_dim": dataset.flattened_input_dim,
-            "output_dim": dataset.num_classes,
-        }
+        base_config = self.__base_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -195,10 +186,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = {
-            "input_dim": dataset.flattened_input_dim,
-            "output_dim": dataset.num_classes,
-        }
+        base_config = self.__base_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -219,10 +207,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = {
-            "input_dim": dataset.flattened_input_dim,
-            "output_dim": dataset.num_classes,
-        }
+        base_config = self.__base_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -233,12 +218,82 @@ class ExperimentPresets(ExperimentPresetsBase):
             "memory_size_option": [
                 LinearMemorySizeOptions.SMALL,
                 LinearMemorySizeOptions.MEDIUM,
+                LinearMemorySizeOptions.LARGE,
+                LinearMemorySizeOptions.MAX,
+            ],
+            "memory_position_option": [
+                LinearMemoryPositionOptions.BEFORE_AFFINE,
+                LinearMemoryPositionOptions.AFTER_AFFINE,
             ],
         }
 
         return create_search_space(
             self.__preset, base_config, search_space, num_random_search_samples
         )
+
+    def __combined_grid_search_config(
+        self,
+        dataset: type = Mnist,
+        num_random_search_samples: int | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = self.__base_config(dataset)
+
+        search_space = {
+            **self.__base_search_space(),
+            "generator_depth": [
+                DynamicDepthOptions.DEPTH_OF_ONE,
+                DynamicDepthOptions.DEPTH_OF_TWO,
+                DynamicDepthOptions.DEPTH_OF_THREE,
+            ],
+            "diagonal_option": [
+                DynamicDiagonalOptions.DISABLED,
+                DynamicDiagonalOptions.DIAGONAL,
+                DynamicDiagonalOptions.ANTI_DIAGONAL,
+                DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
+            ],
+            "bias_option": [
+                DynamicBiasOptions.DISABLED,
+                DynamicBiasOptions.SCALE_AND_OFFSET,
+                DynamicBiasOptions.ELEMENT_WISE_OFFSET,
+                DynamicBiasOptions.DYNAMIC_PARAMETERS,
+            ],
+            "memory_option": [
+                LinearMemoryOptions.FUSION,
+                LinearMemoryOptions.WEIGHTED,
+            ],
+            "memory_size_option": [
+                LinearMemorySizeOptions.SMALL,
+                LinearMemorySizeOptions.MEDIUM,
+                LinearMemorySizeOptions.LARGE,
+                LinearMemorySizeOptions.MAX,
+            ],
+            "memory_position_option": [
+                LinearMemoryPositionOptions.BEFORE_AFFINE,
+                LinearMemoryPositionOptions.AFTER_AFFINE,
+            ],
+        }
+
+        return create_search_space(
+            self.__preset, base_config, search_space, num_random_search_samples
+        )
+
+    def __base_config(self, dataset: type) -> dict:
+        return {
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
+        }
+
+    def __base_search_space(self) -> dict:
+        return {
+            "learning_rate": [1e-4, 1e-3, 1e-2],
+            "hidden_dim": [64, 128, 256],
+            "stack_num_layers": [3, 6],
+            "stack_dropout_probability": [0.0, 0.1],
+            "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU, ActivationOptions.GELU, ActivationOptions.LEAKY_RELU],
+            "adaptive_generator_stack_num_layers": [1, 2, 3],
+            "adaptive_generator_stack_hidden_dim": [64, 128, 256],
+            "adaptive_generator_stack_dropout_probability": [0.0, 0.1],
+        }
 
     def __preset(
         self,
@@ -248,8 +303,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         output_dim: int = 10,
         bias_flag: bool = True,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT,
-        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
-        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL,
+        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE,
+        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DYNAMIC_PARAMETERS,
         memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
         memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
