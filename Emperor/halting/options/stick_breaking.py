@@ -77,7 +77,7 @@ class StickBreaking(Module):
         current_log_gates = self.__compute_gate_logits(previous_output)
         if previous_state is None:
             return self.__init_state(current_log_gates, previous_output)
-        return self.__step_state(previous_state, current_log_gates, previous_output)
+        return self.__update_state(previous_state, current_log_gates, previous_output)
 
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
         logits = self._gate(hidden_state)
@@ -102,13 +102,13 @@ class StickBreaking(Module):
             accumulated_expected_step=torch.tensor(0.0),
         )
 
-    def __step_state(
+    def __update_state(
         self,
         previous_state: StickBreakingState,
         current_log_gates: Tensor,
         previous_output: Tensor,
     ) -> StickBreakingState:
-        step = previous_state.step + 1
+        updated_step = previous_state.step + 1
         current_log_halting = (
             previous_state.log_never_halt[..., None] + current_log_gates
         )
@@ -125,9 +125,9 @@ class StickBreaking(Module):
             accumulated_hidden=previous_state.accumulated_hidden
             + halting_probability[..., None] * previous_output,
             accumulated_halt_prob=accumulated_halting_probability,
-            step=previous_state.step + 1,
+            step=updated_step,
             accumulated_expected_step=previous_state.accumulated_expected_step
-            + halting_probability * step,
+            + halting_probability * updated_step,
         )
 
     def halt_gating(
@@ -135,12 +135,13 @@ class StickBreaking(Module):
         state: StickBreakingState,
         current_hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        remaining_prob = 1 - state.accumulated_halt_prob
+        remaining_probabilities = 1 - state.accumulated_halt_prob
         soft_halted_hidden = (
-            state.accumulated_hidden + remaining_prob[..., None] * current_hidden
+            state.accumulated_hidden
+            + remaining_probabilities[..., None] * current_hidden
         )
         expected_step = (
-            state.accumulated_expected_step + (state.step + 1) * remaining_prob
+            state.accumulated_expected_step + (state.step + 1) * remaining_probabilities
         )
         if state.halt_mask.any():
             soft_halted_hidden.masked_scatter_(
