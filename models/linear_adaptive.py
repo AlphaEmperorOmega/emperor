@@ -8,10 +8,10 @@ from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.utils.classifier import ClassifierExperiment
+from Emperor.experiments.classifier import ClassifierExperiment
 from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
-from Emperor.experiments.utils.base import (
+from Emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,
     create_search_space,
