@@ -68,6 +68,11 @@ class Model(ClassifierExperiment):
 
 class ExperimentOptions(BaseOptions):
     BASE = 0
+    LAYER_NORM = 1
+    GENERATOR_DEPTH = 2
+    DIAGONAL = 3
+    BIAS = 4
+    MEMORY = 5
 
 
 class Experiment(ExperimentBase):
@@ -100,10 +105,28 @@ class ExperimentPresets(ExperimentPresetsBase):
         match model_config_options:
             case ExperimentOptions.BASE:
                 return self.__base_grid_search_config(dataset)
+            case ExperimentOptions.LAYER_NORM:
+                return self.__layer_norm_grid_search_config(dataset)
+            case ExperimentOptions.GENERATOR_DEPTH:
+                return self.__generator_depth_grid_search_config(dataset)
+            case ExperimentOptions.DIAGONAL:
+                return self.__diagonal_grid_search_config(dataset)
+            case ExperimentOptions.BIAS:
+                return self.__bias_grid_search_config(dataset)
+            case ExperimentOptions.MEMORY:
+                return self.__memory_grid_search_config(dataset)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
                 )
+
+    def __base_search_space(self) -> dict:
+        return {
+            "hidden_dim": [128, 256],
+            "stack_num_layers": [3, 6],
+            "stack_dropout_probability": [0.0, 0.1],
+            "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU],
+        }
 
     def __base_grid_search_config(
         self,
@@ -115,11 +138,125 @@ class ExperimentPresets(ExperimentPresetsBase):
             "output_dim": dataset.num_classes,
         }
 
+        return create_search_space(
+            self.__preset, base_config, self.__base_search_space(), num_random_search_samples
+        )
+
+    def __layer_norm_grid_search_config(
+        self,
+        dataset: type = Mnist,
+        num_random_search_samples: int | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
+        }
+
         search_space = {
-            "hidden_dim": [128, 256],
-            "stack_num_layers": [3, 6],
-            "stack_dropout_probability": [0.0, 0.1],
-            "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU],
+            **self.__base_search_space(),
+            "layer_norm_position": [
+                LayerNormPositionOptions.NONE,
+                LayerNormPositionOptions.DEFAULT,
+                LayerNormPositionOptions.BEFORE,
+                LayerNormPositionOptions.AFTER,
+            ],
+        }
+
+        return create_search_space(
+            self.__preset, base_config, search_space, num_random_search_samples
+        )
+
+    def __generator_depth_grid_search_config(
+        self,
+        dataset: type = Mnist,
+        num_random_search_samples: int | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
+        }
+
+        search_space = {
+            **self.__base_search_space(),
+            "generator_depth": [
+                DynamicDepthOptions.DEPTH_OF_ONE,
+                DynamicDepthOptions.DEPTH_OF_TWO,
+                DynamicDepthOptions.DEPTH_OF_THREE,
+            ],
+        }
+
+        return create_search_space(
+            self.__preset, base_config, search_space, num_random_search_samples
+        )
+
+    def __diagonal_grid_search_config(
+        self,
+        dataset: type = Mnist,
+        num_random_search_samples: int | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
+        }
+
+        search_space = {
+            **self.__base_search_space(),
+            "diagonal_option": [
+                DynamicDiagonalOptions.DISABLED,
+                DynamicDiagonalOptions.DIAGONAL,
+                DynamicDiagonalOptions.ANTI_DIAGONAL,
+                DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
+            ],
+        }
+
+        return create_search_space(
+            self.__preset, base_config, search_space, num_random_search_samples
+        )
+
+    def __bias_grid_search_config(
+        self,
+        dataset: type = Mnist,
+        num_random_search_samples: int | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
+        }
+
+        search_space = {
+            **self.__base_search_space(),
+            "bias_option": [
+                DynamicBiasOptions.DISABLED,
+                DynamicBiasOptions.SCALE_AND_OFFSET,
+                DynamicBiasOptions.ELEMENT_WISE_OFFSET,
+                DynamicBiasOptions.DYNAMIC_PARAMETERS,
+            ],
+        }
+
+        return create_search_space(
+            self.__preset, base_config, search_space, num_random_search_samples
+        )
+
+    def __memory_grid_search_config(
+        self,
+        dataset: type = Mnist,
+        num_random_search_samples: int | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
+        }
+
+        search_space = {
+            **self.__base_search_space(),
+            "memory_option": [
+                LinearMemoryOptions.FUSION,
+                LinearMemoryOptions.WEIGHTED,
+            ],
+            "memory_size_option": [
+                LinearMemorySizeOptions.SMALL,
+                LinearMemorySizeOptions.MEDIUM,
+            ],
         }
 
         return create_search_space(
