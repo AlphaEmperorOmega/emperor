@@ -68,8 +68,7 @@ class Model(ClassifierExperiment):
 
 class ExperimentOptions(BaseOptions):
     BASE = 0
-    LAYER_NORM = 1
-    GENERATOR_DEPTH = 2
+    GENERATOR_DEPTH = 1
     DIAGONAL = 3
     BIAS = 4
     MEMORY = 5
@@ -105,8 +104,6 @@ class ExperimentPresets(ExperimentPresetsBase):
         match model_config_options:
             case ExperimentOptions.BASE:
                 return self.__base_grid_search_config(dataset)
-            case ExperimentOptions.LAYER_NORM:
-                return self.__layer_norm_grid_search_config(dataset)
             case ExperimentOptions.GENERATOR_DEPTH:
                 return self.__generator_depth_grid_search_config(dataset)
             case ExperimentOptions.DIAGONAL:
@@ -122,6 +119,7 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def __base_search_space(self) -> dict:
         return {
+            "learning_rate": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1],
             "hidden_dim": [128, 256],
             "stack_num_layers": [3, 6],
             "stack_dropout_probability": [0.0, 0.1],
@@ -139,31 +137,10 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self.__preset, base_config, self.__base_search_space(), num_random_search_samples
-        )
-
-    def __layer_norm_grid_search_config(
-        self,
-        dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
-    ) -> list["ModelConfig"]:
-        base_config = {
-            "input_dim": dataset.flattened_input_dim,
-            "output_dim": dataset.num_classes,
-        }
-
-        search_space = {
-            **self.__base_search_space(),
-            "layer_norm_position": [
-                LayerNormPositionOptions.NONE,
-                LayerNormPositionOptions.DEFAULT,
-                LayerNormPositionOptions.BEFORE,
-                LayerNormPositionOptions.AFTER,
-            ],
-        }
-
-        return create_search_space(
-            self.__preset, base_config, search_space, num_random_search_samples
+            self.__preset,
+            base_config,
+            self.__base_search_space(),
+            num_random_search_samples,
         )
 
     def __generator_depth_grid_search_config(
