@@ -90,12 +90,12 @@ class StickBreaking(Module):
         current_log_gates: Tensor,
         previous_output: Tensor,
     ) -> StickBreakingState:
-        log_continuation_probability = current_log_gates[..., 0]
-        log_halting_probability = current_log_gates[..., 1]
-        halting_probability = torch.exp(log_halting_probability)
+        log_continuation = current_log_gates[..., 0]
+        log_halting = current_log_gates[..., 1]
+        halting_probability = torch.exp(log_halting)
         return StickBreakingState(
             halt_mask=halting_probability >= self.threshold,
-            log_never_halt=log_continuation_probability,
+            log_never_halt=log_continuation,
             accumulated_hidden=halting_probability[..., None] * previous_output,
             accumulated_halt_prob=halting_probability,
             step=0,
