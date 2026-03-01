@@ -54,6 +54,18 @@ class ExperimentPresetsBase:
             "The method 'train_model' must be implemented in the subclass."
         )
 
+    def _dataset_config(self, dataset: type) -> dict:
+        return {
+            "input_dim": dataset.flattened_input_dim,
+            "output_dim": dataset.num_classes,
+        }
+
+    def _default_config(
+        self,
+        dataset: type = Mnist,
+    ) -> list["ModelConfig"]:
+        return [self.__preset(**self._dataset_config(dataset))]
+
 
 class ExperimentBase:
     def __init__(self, option: BaseOptions | None = None) -> None:

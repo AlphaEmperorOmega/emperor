@@ -7,7 +7,7 @@ def get_parser(config_choices: list | None = None) -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "--config-name",
+        "--name",
         type=str,
         help="Name of the config options used to build the model.",
         choices=config_choices,
