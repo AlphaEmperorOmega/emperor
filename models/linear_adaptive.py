@@ -102,7 +102,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
-                return self.__single_config(dataset)
+                return self._default_config(dataset)
             case ExperimentOptions.GENERATOR_DEPTH:
                 return self.__generator_depth_grid_search_config(dataset)
             case ExperimentOptions.BASE:
@@ -120,18 +120,12 @@ class ExperimentPresets(ExperimentPresetsBase):
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
                 )
 
-    def __single_config(
-        self,
-        dataset: type = Mnist,
-    ) -> list["ModelConfig"]:
-        return [self.__preset(**self.__base_config(dataset))]
-
     def __base_grid_search_config(
         self,
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self.__base_config(dataset)
+        base_config = self._dataset_config(dataset)
 
         return create_search_space(
             self.__preset,
@@ -145,7 +139,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self.__base_config(dataset)
+        base_config = self._dataset_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -165,7 +159,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self.__base_config(dataset)
+        base_config = self._dataset_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -186,7 +180,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self.__base_config(dataset)
+        base_config = self._dataset_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -207,7 +201,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self.__base_config(dataset)
+        base_config = self._dataset_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -236,7 +230,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self.__base_config(dataset)
+        base_config = self._dataset_config(dataset)
 
         search_space = {
             **self.__base_search_space(),
@@ -277,19 +271,18 @@ class ExperimentPresets(ExperimentPresetsBase):
             self.__preset, base_config, search_space, num_random_search_samples
         )
 
-    def __base_config(self, dataset: type) -> dict:
-        return {
-            "input_dim": dataset.flattened_input_dim,
-            "output_dim": dataset.num_classes,
-        }
-
     def __base_search_space(self) -> dict:
         return {
             "learning_rate": [1e-4, 1e-3, 1e-2],
             "hidden_dim": [64, 128, 256],
             "stack_num_layers": [3, 6],
             "stack_dropout_probability": [0.0, 0.1],
-            "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU, ActivationOptions.GELU, ActivationOptions.LEAKY_RELU],
+            "stack_activation": [
+                ActivationOptions.RELU,
+                ActivationOptions.SILU,
+                ActivationOptions.GELU,
+                ActivationOptions.LEAKY_RELU,
+            ],
             "adaptive_generator_stack_num_layers": [1, 2, 3],
             "adaptive_generator_stack_hidden_dim": [64, 128, 256],
             "adaptive_generator_stack_dropout_probability": [0.0, 0.1],

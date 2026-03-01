@@ -91,7 +91,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
-                return self.__single_config(dataset)
+                return self._default_config(dataset)
             case ExperimentOptions.BASE:
                 return self.__base_grid_search_config(dataset)
             case _:
@@ -99,18 +99,12 @@ class ExperimentPresets(ExperimentPresetsBase):
                     "The specified option is not supported. Please choose a valid `LinearExperimentOptions`."
                 )
 
-    def __single_config(
-        self,
-        dataset: type = Mnist,
-    ) -> list["ModelConfig"]:
-        return [self.__preset(**self.__base_config(dataset))]
-
     def __base_grid_search_config(
         self,
         dataset: type = Mnist,
         num_random_search_samples: int | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self.__base_config(dataset)
+        base_config = self._dataset_config(dataset)
 
         return create_search_space(
             self.__preset,
@@ -125,13 +119,12 @@ class ExperimentPresets(ExperimentPresetsBase):
             "hidden_dim": [64, 128, 256, 512],
             "stack_num_layers": [3, 6],
             "stack_dropout_probability": [0.0, 0.1],
-            "stack_activation": [ActivationOptions.RELU, ActivationOptions.SILU, ActivationOptions.GELU, ActivationOptions.LEAKY_RELU],
-        }
-
-    def __base_config(self, dataset: type) -> dict:
-        return {
-            "input_dim": dataset.flattened_input_dim,
-            "output_dim": dataset.num_classes,
+            "stack_activation": [
+                ActivationOptions.RELU,
+                ActivationOptions.SILU,
+                ActivationOptions.GELU,
+                ActivationOptions.LEAKY_RELU,
+            ],
         }
 
     def __preset(
