@@ -1,7 +1,7 @@
 import torch
 
 from torch import Tensor
-from models.parser import get_parser
+from models.parser import get_experiment_parser
 from Emperor.config import ModelConfig
 from dataclasses import dataclass, field
 from Emperor.datasets.image.mnist import Mnist
@@ -488,9 +488,9 @@ class VITExperimentPresets:
 
 
 if __name__ == "__main__":
-    parser = get_parser(VITExperimentOptions.names())
+    parser = get_experiment_parser(VITExperimentOptions.names())
     args = parser.parse_args()
-    config_option = VITExperimentOptions.get_option(args.config_name)
+    config_option = VITExperimentOptions.get_option(args.name)
 
     experiment = VITExperiment(config_option)
     experiment.train_model()

@@ -1,11 +1,11 @@
 import torch
 
 from torch import Tensor
-from models.parser import get_parser
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase
 from Emperor.base.enums import BaseOptions
 from Emperor.datasets.image.mnist import Mnist
+from models.parser import get_experiment_parser
 from Emperor.linears.utils.layers import LinearLayerConfig
 from Emperor.base.layer import LayerStack, LayerStackConfig
 from Emperor.experiments.classifier import ClassifierExperiment
@@ -128,7 +128,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         return create_search_space(
-            self.__preset,
+            self._preset,
             base_config,
             self.__base_search_space(),
             num_random_search_samples,
@@ -151,7 +151,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self.__preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, num_random_search_samples
         )
 
     def __diagonal_grid_search_config(
@@ -172,7 +172,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self.__preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, num_random_search_samples
         )
 
     def __bias_grid_search_config(
@@ -193,7 +193,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self.__preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, num_random_search_samples
         )
 
     def __memory_grid_search_config(
@@ -222,7 +222,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self.__preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, num_random_search_samples
         )
 
     def __combined_grid_search_config(
@@ -268,7 +268,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self.__preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, num_random_search_samples
         )
 
     def __base_search_space(self) -> dict:
@@ -288,7 +288,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             "adaptive_generator_stack_dropout_probability": [0.0, 0.1],
         }
 
-    def __preset(
+    def _preset(
         self,
         batch_size: int = 64,
         input_dim: int = 28**2,
@@ -377,9 +377,9 @@ class ExperimentPresets(ExperimentPresetsBase):
 
 
 if __name__ == "__main__":
-    parser = get_parser(ExperimentOptions.names())
+    parser = get_experiment_parser(ExperimentOptions.names())
     args = parser.parse_args()
-    config_option = ExperimentOptions.get_option(args.config_name)
+    config_option = ExperimentOptions.get_option(args.name)
 
     experiment = Experiment(config_option)
     experiment.train_model()

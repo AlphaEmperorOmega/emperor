@@ -1,5 +1,5 @@
 from torch import Tensor
-from models.parser import get_parser
+from models.parser import get_experiment_parser
 from dataclasses import dataclass, field
 from Emperor.base.utils import ConfigBase
 from Emperor.base.enums import BaseOptions
@@ -123,7 +123,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         dataset: type = Mnist,
     ) -> list["ModelConfig"]:
-        return [self.__preset(**self._dataset_config(dataset))]
+        return [self._preset(**self._dataset_config(dataset))]
 
     def __base_grid_search_config(
         self,
@@ -133,7 +133,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         return create_search_space(
-            self.__preset,
+            self._preset,
             base_config,
             self.__base_search_space(),
             num_random_search_samples,
@@ -168,7 +168,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self.__preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, num_random_search_samples
         )
 
     def __base_search_space(self) -> dict:
@@ -187,7 +187,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             "experts_num_experts": [4, 6, 8],
         }
 
-    def __preset(
+    def _preset(
         self,
         batch_size: int = 64,
         input_dim: int = 28**2,
@@ -371,9 +371,9 @@ class ExperimentPresets(ExperimentPresetsBase):
 
 
 if __name__ == "__main__":
-    parser = get_parser(ExperimentOptions.names())
+    parser = get_experiment_parser(ExperimentOptions.names())
     args = parser.parse_args()
-    config_option = ExperimentOptions.get_option(args.config_name)
+    config_option = ExperimentOptions.get_option(args.name)
 
     experiment = Experiment(config_option)
     experiment.train_model()
