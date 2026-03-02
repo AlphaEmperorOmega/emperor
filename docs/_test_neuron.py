@@ -4,7 +4,7 @@ import unittest
 from dataclasses import asdict
 
 from torch.types import Tensor
-from Emperor.neuron.neuron import Axons, Neuron, NeuronConfig, Nucleus, Terminal
+from emperor.neuron.neuron import Axons, Neuron, NeuronConfig, Nucleus, Terminal
 from docs.config import default_unittest_config
 
 

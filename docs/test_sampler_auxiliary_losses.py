@@ -2,15 +2,15 @@ import torch
 import unittest
 from math import prod
 
-from Emperor.sampler.utils.presets import SamplerPresets
-from Emperor.sampler.utils.losses import (
+from emperor.sampler.utils.presets import SamplerPresets
+from emperor.sampler.utils.losses import (
     CoefficientOfVariationLoss,
     MutualInformationLoss,
     SamplerAuxiliaryLosses,
     SwitchLoss,
     ZeroCentredLoss,
 )
-from Emperor.sampler.utils.samplers import SamplerConfig
+from emperor.sampler.utils.samplers import SamplerConfig
 
 
 class TestSamplerAuxiliaryLosses(unittest.TestCase):

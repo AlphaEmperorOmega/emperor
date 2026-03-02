@@ -2,20 +2,20 @@ import torch
 import unittest
 
 from torch.nn import Sequential
-from Emperor.base.layer import Layer
-from Emperor.sampler.model import SamplerModel
-from Emperor.sampler.utils.routers import RouterModel
-from Emperor.experts.utils.layers import (
+from emperor.base.layer import Layer
+from emperor.sampler.model import SamplerModel
+from emperor.sampler.utils.routers import RouterModel
+from emperor.experts.utils.layers import (
     MixtureOfExperts,
     MixtureOfExpertsMap,
     MixtureOfExpertsReduce,
 )
-from Emperor.linears.options import LinearLayerStackOptions
-from Emperor.experts.utils.model import MixtureOfExpertsModel
-from Emperor.experts.utils.stack import MixtureOfExpertsStack
-from Emperor.experts.utils.presets import MixtureOfExpertsPresets
-from Emperor.sampler.utils.samplers import SamplerFull, SamplerSparse, SamplerTopk
-from Emperor.experts.utils.enums import (
+from emperor.linears.options import LinearLayerStackOptions
+from emperor.experts.utils.model import MixtureOfExpertsModel
+from emperor.experts.utils.stack import MixtureOfExpertsStack
+from emperor.experts.utils.presets import MixtureOfExpertsPresets
+from emperor.sampler.utils.samplers import SamplerFull, SamplerSparse, SamplerTopk
+from emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )

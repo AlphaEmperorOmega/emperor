@@ -2,15 +2,15 @@ import torch
 import unittest
 
 from dataclasses import asdict
-from Emperor.config import ModelConfig
-from Emperor.linears.utils.presets import LinearPresets
-from Emperor.behaviours.utils.behaviours import DynamicMemorySelector
-from Emperor.behaviours.utils.enums import (
+from emperor.config import ModelConfig
+from emperor.linears.utils.presets import LinearPresets
+from emperor.behaviours.utils.behaviours import DynamicMemorySelector
+from emperor.behaviours.utils.enums import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from Emperor.behaviours.utils.handlers.memory import (
+from emperor.behaviours.utils.handlers.memory import (
     MemoryFusionHandler,
     MemoryHandlerAbstract,
     WeightedMemoryHandler,

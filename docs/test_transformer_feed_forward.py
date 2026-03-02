@@ -1,12 +1,12 @@
 import torch
 import unittest
 
-from Emperor.experts.utils.enums import InitSamplerOptions
-from Emperor.linears.options import LinearLayerStackOptions
-from Emperor.transformer.utils.feed_forward import FeedForward
-from Emperor.adaptive.options import AdaptiveLayerStackOptions
-from Emperor.experts.options import MixtureOfExpertsStackOptions
-from Emperor.transformer.utils.presets import TransformerPresets
+from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.linears.options import LinearLayerStackOptions
+from emperor.transformer.utils.feed_forward import FeedForward
+from emperor.adaptive.options import AdaptiveLayerStackOptions
+from emperor.experts.options import MixtureOfExpertsStackOptions
+from emperor.transformer.utils.presets import TransformerPresets
 
 
 class TestFeedForward(unittest.TestCase):

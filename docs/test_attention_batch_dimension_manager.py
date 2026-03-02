@@ -1,9 +1,9 @@
 import torch
 import unittest
 from dataclasses import asdict
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.attention.utils.handlers.batch import BatchDimensionManager
+from emperor.attention.utils.presets import MultiHeadAttentionPresets
+from emperor.attention.utils.layer import MultiHeadAttentionConfig
+from emperor.attention.utils.handlers.batch import BatchDimensionManager
 
 
 class TestBatchDimensionManager(unittest.TestCase):

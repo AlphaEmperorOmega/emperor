@@ -3,14 +3,14 @@ import torch
 from torch import Tensor
 from models.parser import get_experiment_parser
 from dataclasses import dataclass, field
-from Emperor.base.utils import ConfigBase
-from Emperor.base.enums import BaseOptions
-from Emperor.datasets.image.mnist import Mnist
-from Emperor.linears.utils.layers import LinearLayerConfig
-from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.classifier import ClassifierExperiment
-from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.experiments.base import (
+from emperor.base.utils import ConfigBase
+from emperor.base.enums import BaseOptions
+from emperor.datasets.image.mnist import Mnist
+from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.base.layer import LayerStack, LayerStackConfig
+from emperor.experiments.classifier import ClassifierExperiment
+from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,
     create_search_space,
@@ -19,7 +19,7 @@ from Emperor.experiments.base import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
+    from emperor.config import ModelConfig
 
 
 @dataclass
@@ -142,8 +142,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
     ) -> "ModelConfig":
-        from Emperor.config import ModelConfig
-        from Emperor.linears.options import LinearLayerOptions
+        from emperor.config import ModelConfig
+        from emperor.linears.options import LinearLayerOptions
 
         return ModelConfig(
             batch_size=batch_size,

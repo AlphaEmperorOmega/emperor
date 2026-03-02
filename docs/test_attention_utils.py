@@ -2,10 +2,10 @@ import torch
 import unittest
 
 from dataclasses import asdict
-from Emperor.attention.utils.utils import Utils
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from Emperor.attention.utils._validator import MultiHeadAttentionValidator
+from emperor.attention.utils.utils import Utils
+from emperor.attention.utils.layer import MultiHeadAttentionConfig
+from emperor.attention.utils.presets import MultiHeadAttentionPresets
+from emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 
 class TestUtils(unittest.TestCase):

@@ -3,7 +3,7 @@ import unittest
 
 from dataclasses import asdict
 
-from Emperor.neuron.neuron import Axons, AxonsConfig
+from emperor.neuron.neuron import Axons, AxonsConfig
 from docs.config import default_unittest_config
 
 

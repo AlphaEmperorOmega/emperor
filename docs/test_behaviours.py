@@ -2,11 +2,11 @@ import torch
 import unittest
 import torch.nn as nn
 
-from Emperor.base.utils import Module
-from Emperor.config import ModelConfig
-from Emperor.linears.utils.presets import LinearPresets
-from Emperor.behaviours.model import AdaptiveParameterBehaviour
-from Emperor.behaviours.utils.enums import (
+from emperor.base.utils import Module
+from emperor.config import ModelConfig
+from emperor.linears.utils.presets import LinearPresets
+from emperor.behaviours.model import AdaptiveParameterBehaviour
+from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -14,7 +14,7 @@ from Emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from Emperor.behaviours.utils.behaviours import (
+from emperor.behaviours.utils.behaviours import (
     DynamicBiasSelector,
     DynamicDiagonalSelector,
     DynamicMemorySelector,

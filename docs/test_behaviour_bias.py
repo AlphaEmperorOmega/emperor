@@ -2,12 +2,12 @@ import torch
 import unittest
 import torch.nn as nn
 
-from Emperor.base.utils import Module
-from Emperor.config import ModelConfig
-from Emperor.behaviours.utils.behaviours import DynamicBiasSelector
-from Emperor.linears.utils.presets import LinearPresets
-from Emperor.behaviours.utils.enums import DynamicBiasOptions
-from Emperor.behaviours.utils.handlers.bias import (
+from emperor.base.utils import Module
+from emperor.config import ModelConfig
+from emperor.behaviours.utils.behaviours import DynamicBiasSelector
+from emperor.linears.utils.presets import LinearPresets
+from emperor.behaviours.utils.enums import DynamicBiasOptions
+from emperor.behaviours.utils.handlers.bias import (
     AffineBiasTransformHandler,
     BiasGeneratorHandler,
     BiasHandlerAbstract,

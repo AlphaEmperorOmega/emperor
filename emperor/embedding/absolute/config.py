@@ -1,0 +1,43 @@
+from dataclasses import dataclass, field
+from emperor.base.utils import ConfigBase
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
+
+
+@dataclass
+class AbsolutePositionalEmbeddingConfig(ConfigBase):
+    positional_embedding_option: "AbsolutePositionalEmbeddingOptions | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    num_embeddings: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    embedding_dim: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    init_size: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    padding_idx: int | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    auto_expand_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    text_processing_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    class_token_flag: bool | None = field(
+        default=None,
+        metadata={"help": ""},
+    )

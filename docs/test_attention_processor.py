@@ -3,19 +3,19 @@ import torch
 import unittest
 
 from torch.types import Tensor
-from Emperor.attention.utils.enums import AttentionOptions
-from Emperor.attention.utils.handlers.reshaper import ReshaperBuilder
-from Emperor.linears.options import LinearLayerStackOptions
-from Emperor.adaptive.options import AdaptiveLayerStackOptions
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from Emperor.embedding.options import RelativePositionalEmbeddingOptions
-from Emperor.attention.utils.handlers.projector import (
+from emperor.attention.utils.enums import AttentionOptions
+from emperor.attention.utils.handlers.reshaper import ReshaperBuilder
+from emperor.linears.options import LinearLayerStackOptions
+from emperor.adaptive.options import AdaptiveLayerStackOptions
+from emperor.attention.utils.layer import MultiHeadAttentionConfig
+from emperor.attention.utils.presets import MultiHeadAttentionPresets
+from emperor.embedding.options import RelativePositionalEmbeddingOptions
+from emperor.attention.utils.handlers.projector import (
     IndependentProjector,
     MixtureOfAttentionHeadsProjector,
     SelfAttentionProjector,
 )
-from Emperor.attention.utils.handlers.processor import (
+from emperor.attention.utils.handlers.processor import (
     IndependentProcessor,
     MixtureOfAttentionHeadsProcessor,
     ProcessorBuilder,

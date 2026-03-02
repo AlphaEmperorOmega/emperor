@@ -4,8 +4,8 @@ import unittest
 
 from dataclasses import asdict
 from docs.config import default_unittest_config
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.attention.utils._validator import MultiHeadAttentionValidator
+from emperor.attention.utils.layer import MultiHeadAttentionConfig
+from emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 
 class TestValidator(unittest.TestCase):

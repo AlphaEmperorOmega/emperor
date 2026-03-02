@@ -1,8 +1,8 @@
 import torch
 import unittest
 
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from Emperor.attention.utils.handlers.bias import KeyValueBias
+from emperor.attention.utils.presets import MultiHeadAttentionPresets
+from emperor.attention.utils.handlers.bias import KeyValueBias
 
 
 class TestKeyValueBias(unittest.TestCase):

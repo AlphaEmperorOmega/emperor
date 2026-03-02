@@ -2,30 +2,30 @@ import torch
 
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.base.utils import ConfigBase
-from Emperor.datasets.image.mnist import Mnist
+from emperor.base.utils import ConfigBase
+from emperor.datasets.image.mnist import Mnist
 from models.parser import get_experiment_parser
-from Emperor.linears.utils.layers import LinearLayerConfig
-from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.classifier import ClassifierExperiment
-from Emperor.transformer.utils.layers import TransformerConfig
-from Emperor.transformer.utils.presets import TransformerPresets
-from Emperor.transformer.utils.patch.selector import PatchOptions
-from Emperor.transformer.utils.patch.selector import PatchSelector
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.transformer.utils.stack import TransformerEncoderStack
-from Emperor.transformer.utils.patch.options.base import PatchConfig
-from Emperor.transformer.utils.feed_forward import FeedForwardConfig
-from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-from Emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
-from Emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
-from Emperor.base.enums import ActivationOptions, BaseOptions, LayerNormPositionOptions
-from Emperor.experiments.base import (
+from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.base.layer import LayerStack, LayerStackConfig
+from emperor.experiments.classifier import ClassifierExperiment
+from emperor.transformer.utils.layers import TransformerConfig
+from emperor.transformer.utils.presets import TransformerPresets
+from emperor.transformer.utils.patch.selector import PatchOptions
+from emperor.transformer.utils.patch.selector import PatchSelector
+from emperor.attention.utils.layer import MultiHeadAttentionConfig
+from emperor.transformer.utils.stack import TransformerEncoderStack
+from emperor.transformer.utils.patch.options.base import PatchConfig
+from emperor.transformer.utils.feed_forward import FeedForwardConfig
+from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
+from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
+from emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
+from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
+from emperor.base.enums import ActivationOptions, BaseOptions, LayerNormPositionOptions
+from emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,
 )
-from Emperor.behaviours.utils.enums import (
+from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -34,7 +34,7 @@ from Emperor.behaviours.utils.enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
+    from emperor.config import ModelConfig
 
 
 @dataclass
@@ -161,7 +161,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         input_channels: int = 3,
         image_height: int = 32,
     ) -> "ModelConfig":
-        from Emperor.config import ModelConfig
+        from emperor.config import ModelConfig
 
         class_token_length = 1
         padding_size = 0
@@ -342,8 +342,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         input_channels: int = 3,
         image_height: int = 32,
     ) -> "ModelConfig":
-        from Emperor.config import ModelConfig
-        from Emperor.linears.utils.presets import LinearPresets
+        from emperor.config import ModelConfig
+        from emperor.linears.utils.presets import LinearPresets
 
         class_token_length = 1
         padding_size = 0

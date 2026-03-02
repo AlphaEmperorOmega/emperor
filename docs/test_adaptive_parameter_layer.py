@@ -3,30 +3,30 @@ import unittest
 
 from torch.types import Tensor
 from torch.nn import Sequential
-from Emperor.base.layer import Layer
-from Emperor.config import ModelConfig
-from Emperor.behaviours.model import AdaptiveParameterBehaviour
-from Emperor.adaptive.utils.stack import AdaptiveParameterLayerStack
-from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
-from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
-from Emperor.adaptive.utils.mixtures.types.vector import VectorWeightsMixture
-from Emperor.adaptive.utils.layers import (
+from emperor.base.layer import Layer
+from emperor.config import ModelConfig
+from emperor.behaviours.model import AdaptiveParameterBehaviour
+from emperor.adaptive.utils.stack import AdaptiveParameterLayerStack
+from emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
+from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
+from emperor.adaptive.utils.mixtures.types.vector import VectorWeightsMixture
+from emperor.adaptive.utils.layers import (
     AdaptiveRouterOptions,
     AdaptiveParameterLayer,
 )
-from Emperor.adaptive.utils.mixtures.options import (
+from emperor.adaptive.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from Emperor.adaptive.utils.mixtures.types.generator import (
+from emperor.adaptive.utils.mixtures.types.generator import (
     GeneratorBiasMixture,
     GeneratorWeightsMixture,
 )
-from Emperor.adaptive.utils.mixtures.types.matrix import (
+from emperor.adaptive.utils.mixtures.types.matrix import (
     MatrixBiasMixture,
     MatrixWeightsMixture,
 )
-from Emperor.experts.utils.enums import InitSamplerOptions
+from emperor.experts.utils.enums import InitSamplerOptions
 
 
 class TestAdaptiveParameterLayer(unittest.TestCase):
