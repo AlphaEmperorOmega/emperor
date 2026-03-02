@@ -101,7 +101,7 @@ class ExperimentBase:
             "The method '_experiment_enumeration' must be implemented in the subclass."
         )
 
-    def train_model(self, num_samples: int | None = None) -> None:
+    def train_model(self, num_samples: int | None = None, log_folder: str | None = None) -> None:
         options = [self.option] if self.option else self.options_enumeration
         for option in options:
             for dataset_type in self.dataset_options:
@@ -110,7 +110,7 @@ class ExperimentBase:
                     model = self.model_type(cfg=config)
                     logger = TensorBoardLogger(
                         save_dir="logs",
-                        name=self._build_log_path(option, dataset_type, config),
+                        name=self._build_log_path(option, dataset_type, config, log_folder),
                     )
                     trainer = Trainer(
                         max_epochs=self.num_epochs,
@@ -120,7 +120,7 @@ class ExperimentBase:
                     trainer.fit(model, datamodule=dataset)
 
     def _build_log_path(
-        self, option: BaseOptions, dataset_type: type, config: "ModelConfig"
+        self, option: BaseOptions, dataset_type: type, config: "ModelConfig", log_folder: str | None = None
     ) -> str:
         params = config.get_custom_parameters()
         param_str = "_".join(f"{k}={v}" for k, v in params.items())
@@ -129,4 +129,5 @@ class ExperimentBase:
         )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         source_file = Path(inspect.getfile(type(self))).stem
-        return f"{source_file}/{option.name}/{dataset_type.__name__}/{param_id}_{timestamp}"
+        folder = f"{log_folder}/{source_file}" if log_folder is not None else source_file
+        return f"{folder}/{option.name}/{dataset_type.__name__}/{param_id}_{timestamp}"
