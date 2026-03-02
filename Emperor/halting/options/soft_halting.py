@@ -79,51 +79,15 @@ class SoftHalting(Module):
         halting_probability = torch.exp(log_halt[..., 1])
         return halting_probability, log_never_halt
 
-    def __init_state(
-        self,
-        previous_output: Tensor,
-        pad_mask: Tensor,
-    ) -> tuple[SoftHaltingState, Tensor]:
-        state = SoftHaltingState(
-            step=0,
-            log_never_halt=torch.zeros_like(previous_output[..., 0]),
-            accumulated_hidden=torch.zeros_like(previous_output),
-            accumulated_expected_step=torch.zeros_like(previous_output[..., 0]),
-        )
-        return state, pad_mask
-
-    def __update_state(
-        self,
-        previous_state: SoftHaltingState,
-        previous_output: Tensor,
-        pad_mask: Tensor,
-    ) -> tuple[SoftHaltingState, Tensor]:
-        current_log_gates = self.__compute_gate_logits(previous_output)
-        halting_probability, log_never_halt = self.__update_halting_probs(
-            current_log_gates, previous_state.log_never_halt
-        )
-        p_never_halt = log_never_halt.exp()
-        p_never_halt = (
-            p_never_halt.masked_fill(p_never_halt < (1 - self.threshold), 0)
-            * pad_mask
-        ).contiguous()
-        state = SoftHaltingState(
-            step=previous_state.step + 1,
-            log_never_halt=log_never_halt,
-            accumulated_hidden=previous_state.accumulated_hidden
-            + halting_probability[..., None] * previous_output,
-            accumulated_expected_step=previous_state.accumulated_expected_step
-            + previous_state.step * halting_probability,
-        )
-        return state, p_never_halt
-
     def __compute_act_loss(
         self,
         state: SoftHaltingState,
         p_never_halt: Tensor,
         pad_mask: Tensor,
     ) -> Tensor:
-        act_loss = (state.accumulated_expected_step + p_never_halt * state.step) * pad_mask
+        act_loss = (
+            state.accumulated_expected_step + p_never_halt * state.step
+        ) * pad_mask
         return act_loss.sum() / pad_mask.sum()
 
     def __blend_attn_input(
@@ -152,6 +116,43 @@ class SoftHalting(Module):
             return self.__init_state(previous_output, pad_mask)
         return self.__update_state(previous_state, previous_output, pad_mask)
 
+    def __init_state(
+        self,
+        previous_output: Tensor,
+        pad_mask: Tensor,
+    ) -> tuple[SoftHaltingState, Tensor]:
+        state = SoftHaltingState(
+            step=0,
+            log_never_halt=torch.zeros_like(previous_output[..., 0]),
+            accumulated_hidden=torch.zeros_like(previous_output),
+            accumulated_expected_step=torch.zeros_like(previous_output[..., 0]),
+        )
+        return state, pad_mask
+
+    def __update_state(
+        self,
+        previous_state: SoftHaltingState,
+        previous_output: Tensor,
+        pad_mask: Tensor,
+    ) -> tuple[SoftHaltingState, Tensor]:
+        current_log_gates = self.__compute_gate_logits(previous_output)
+        halting_probability, log_never_halt = self.__update_halting_probs(
+            current_log_gates, previous_state.log_never_halt
+        )
+        p_never_halt = log_never_halt.exp()
+        p_never_halt = (
+            p_never_halt.masked_fill(p_never_halt < (1 - self.threshold), 0) * pad_mask
+        ).contiguous()
+        state = SoftHaltingState(
+            step=previous_state.step + 1,
+            log_never_halt=log_never_halt,
+            accumulated_hidden=previous_state.accumulated_hidden
+            + halting_probability[..., None] * previous_output,
+            accumulated_expected_step=previous_state.accumulated_expected_step
+            + previous_state.step * halting_probability,
+        )
+        return state, p_never_halt
+
     def compute_output(
         self,
         state: SoftHaltingState,
@@ -162,6 +163,8 @@ class SoftHalting(Module):
     ) -> tuple[Tensor, Tensor]:
         if state.step == 0:
             return current_hidden, torch.tensor(0.0)
-        self_attn_input = self.__blend_attn_input(state, current_hidden, self_attn_input, p_never_halt)
+        self_attn_input = self.__blend_attn_input(
+            state, current_hidden, self_attn_input, p_never_halt
+        )
         act_loss = self.__compute_act_loss(state, p_never_halt, pad_mask)
         return self_attn_input, act_loss
