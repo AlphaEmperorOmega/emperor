@@ -1,10 +1,10 @@
 import torch
 
 from torch import Tensor
-from emperor.adaptive.utils.mixtures.types.utils._validator import (
+from emperor.parametric.utils.mixtures.types.utils._validator import (
     _VectorMixtureValidator,
 )
-from emperor.adaptive.utils.mixtures.base import (
+from emperor.parametric.utils.mixtures.base import (
     AdaptiveMixtureBase,
     AdaptiveMixtureConfig,
 )

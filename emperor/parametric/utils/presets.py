@@ -1,4 +1,4 @@
-from emperor.adaptive.options import AdaptiveLayerOptions
+from emperor.parametric.options import AdaptiveLayerOptions
 from emperor.config import ModelConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.linears.utils.presets import LinearPresets
@@ -6,18 +6,18 @@ from emperor.sampler.utils.presets import SamplerPresets
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
-from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
+from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
-from emperor.adaptive.utils.mixtures.options import (
+from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.adaptive.utils.layers import (
+from emperor.parametric.utils.layers import (
     AdaptiveParameterLayerConfig,
     AdaptiveRouterOptions,
 )

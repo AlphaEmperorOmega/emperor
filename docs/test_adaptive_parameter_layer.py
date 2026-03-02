@@ -6,23 +6,23 @@ from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.config import ModelConfig
 from emperor.behaviours.model import AdaptiveParameterBehaviour
-from emperor.adaptive.utils.stack import AdaptiveParameterLayerStack
-from emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
-from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
-from emperor.adaptive.utils.mixtures.types.vector import VectorWeightsMixture
-from emperor.adaptive.utils.layers import (
+from emperor.parametric.utils.stack import AdaptiveParameterLayerStack
+from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
+from emperor.parametric.utils.mixtures.types.vector import VectorWeightsMixture
+from emperor.parametric.utils.layers import (
     AdaptiveRouterOptions,
     AdaptiveParameterLayer,
 )
-from emperor.adaptive.utils.mixtures.options import (
+from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.adaptive.utils.mixtures.types.generator import (
+from emperor.parametric.utils.mixtures.types.generator import (
     GeneratorBiasMixture,
     GeneratorWeightsMixture,
 )
-from emperor.adaptive.utils.mixtures.types.matrix import (
+from emperor.parametric.utils.mixtures.types.matrix import (
     MatrixBiasMixture,
     MatrixWeightsMixture,
 )

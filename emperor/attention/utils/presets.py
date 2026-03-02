@@ -2,19 +2,19 @@ from torch import float32
 from emperor.linears.utils.presets import LinearPresets
 from emperor.attention.utils.enums import AttentionOptions
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.adaptive.utils.layers import AdaptiveRouterOptions
+from emperor.parametric.utils.layers import AdaptiveRouterOptions
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
-from emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.embedding.options import RelativePositionalEmbeddingOptions
 from emperor.embedding.relative.config import RelativePositionalEmbeddingConfig
 from emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
-from emperor.adaptive.utils.mixtures.options import (
+from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )

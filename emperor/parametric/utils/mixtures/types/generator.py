@@ -3,11 +3,11 @@ import torch
 from torch import Tensor
 from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.experts.utils.layers import MixtureOfExperts, MixtureOfExpertsConfig
-from emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from emperor.adaptive.utils.mixtures.types.utils._validator import (
+from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.utils.mixtures.types.utils._validator import (
     _GeneratorMixtureValidator,
 )
-from emperor.adaptive.utils.mixtures.base import (
+from emperor.parametric.utils.mixtures.base import (
     AdaptiveMixtureBase,
     AdaptiveMixtureConfig,
 )

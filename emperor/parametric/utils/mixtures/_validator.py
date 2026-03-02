@@ -1,9 +1,9 @@
-from emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
+    from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
 
 
 class _AdaptiveMixtureBaseValidator:

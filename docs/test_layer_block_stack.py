@@ -3,13 +3,13 @@ import unittest
 import torch.nn as nn
 
 from dataclasses import asdict
-from emperor.adaptive.options import (
+from emperor.parametric.options import (
     AdaptiveLayerOptions,
     AdaptiveLayerStackOptions,
     AdaptiveParameterLayerOptions,
 )
-from emperor.adaptive.utils.layers import AdaptiveParameterLayer
-from emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.layers import AdaptiveParameterLayer
+from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
 from emperor.linears.utils.presets import LinearPresets
 from docs.config import default_unittest_config
 from emperor.base.enums import ActivationOptions

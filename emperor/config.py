@@ -9,9 +9,9 @@ from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig
+from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig
 from emperor.base.layer import LayerStackConfig
-from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
+from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.sampler.utils.samplers import SamplerConfig

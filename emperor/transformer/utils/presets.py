@@ -3,18 +3,18 @@ from emperor.attention.utils.enums import AttentionOptions
 from emperor.config import ModelConfig
 from emperor.linears.utils.presets import LinearPresets
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.adaptive.options import AdaptiveLayerStackOptions
+from emperor.parametric.options import AdaptiveLayerStackOptions
 from emperor.transformer.utils.layers import TransformerConfig
-from emperor.adaptive.utils.layers import AdaptiveRouterOptions
+from emperor.parametric.utils.layers import AdaptiveRouterOptions
 from emperor.experts.options import MixtureOfExpertsStackOptions
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
 from emperor.transformer.utils.patch.selector import PatchOptions
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.transformer.utils.patch.options.base import PatchConfig
 from emperor.attention.utils.presets import MultiHeadAttentionPresets
-from emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.embedding.options import AbsolutePositionalEmbeddingOptions, RelativePositionalEmbeddingOptions
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.embedding.relative.config import RelativePositionalEmbeddingConfig
@@ -22,7 +22,7 @@ from emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
-from emperor.adaptive.utils.mixtures.options import (
+from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )

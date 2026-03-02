@@ -1,5 +1,5 @@
 from torch import Tensor
-from emperor.adaptive.utils.mixtures.base import (
+from emperor.parametric.utils.mixtures.base import (
     AdaptiveMixtureBase,
     AdaptiveMixtureConfig,
 )

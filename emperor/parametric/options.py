@@ -1,6 +1,6 @@
 from emperor.base.enums import BaseOptions
-from emperor.adaptive.utils.layers import AdaptiveParameterLayer
-from emperor.adaptive.utils.stack import AdaptiveParameterLayerStack
+from emperor.parametric.utils.layers import AdaptiveParameterLayer
+from emperor.parametric.utils.stack import AdaptiveParameterLayerStack
 
 
 class AdaptiveParameterLayerOptions(BaseOptions):
