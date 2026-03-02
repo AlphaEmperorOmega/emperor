@@ -1,4 +1,4 @@
-from emperor.adaptive.utils.mixtures.options import (
+from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from emperor.adaptive.utils.layers import AdaptiveParameterLayer
-    from emperor.adaptive.utils.handlers import ParameterHanlderBase
+    from emperor.parametric.utils.layers import AdaptiveParameterLayer
+    from emperor.parametric.utils.handlers import ParameterHanlderBase
 
 
 class _AdaptiveParameterLayerValidator:
@@ -34,7 +34,7 @@ class _AdaptiveParameterLayerValidator:
                 raise ValueError(f"Configuration Error: '{attr_name}' is None.")
 
     def __ensure_correct_input_types(self) -> None:
-        from emperor.adaptive.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.layers import AdaptiveRouterOptions
 
         required_types = {
             "input_dim": int,
@@ -85,7 +85,7 @@ class _AdaptiveParameterLayerValidator:
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:
-        from emperor.adaptive.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.layers import AdaptiveRouterOptions
 
         is_vector_option = (
             self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
@@ -116,7 +116,7 @@ class _AdaptiveParameterHandlerValidator:
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:
-        from emperor.adaptive.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.layers import AdaptiveRouterOptions
 
         is_vector_option = (
             self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
@@ -131,7 +131,7 @@ class _AdaptiveParameterHandlerValidator:
             )
 
     def ensure_shared_sampler_is_disabled(self) -> None:
-        from emperor.adaptive.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.layers import AdaptiveRouterOptions
 
         is_shared_router = (
             self.model.init_sampler_model_option == AdaptiveRouterOptions.SHARED_ROUTER

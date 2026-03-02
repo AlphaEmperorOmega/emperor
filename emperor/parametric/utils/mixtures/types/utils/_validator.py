@@ -1,12 +1,12 @@
 from torch import Tensor
 
-from emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.adaptive.utils.mixtures.types.vector import VectorMixtureBase
-    from emperor.adaptive.utils.mixtures.types.generator import GeneratorMixtureBase
+    from emperor.parametric.utils.mixtures.types.vector import VectorMixtureBase
+    from emperor.parametric.utils.mixtures.types.generator import GeneratorMixtureBase
 
 
 class _VectorMixtureValidator:

@@ -6,7 +6,7 @@ from torch.types import Tensor
 from emperor.attention.utils.enums import AttentionOptions
 from emperor.attention.utils.handlers.reshaper import ReshaperBuilder
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.adaptive.options import AdaptiveLayerStackOptions
+from emperor.parametric.options import AdaptiveLayerStackOptions
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.attention.utils.presets import MultiHeadAttentionPresets
 from emperor.embedding.options import RelativePositionalEmbeddingOptions

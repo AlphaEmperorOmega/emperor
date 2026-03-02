@@ -7,10 +7,10 @@ from emperor.sampler.model import SamplerModel
 from emperor.sampler.utils.routers import RouterModel
 from emperor.sampler.utils.presets import SamplerPresets
 from emperor.experts.utils.layers import MixtureOfExperts
-from emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
-from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
-from emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from emperor.adaptive.utils.mixtures.types.generator import (
+from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
+from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.utils.mixtures.types.generator import (
     GeneratorBiasMixture,
     GeneratorMixtureBase,
     GeneratorWeightsMixture,

@@ -5,7 +5,7 @@ from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase, Module
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.adaptive.options import AdaptiveLayerStackOptions
+from emperor.parametric.options import AdaptiveLayerStackOptions
 from emperor.experts.options import MixtureOfExpertsStackOptions
 from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from emperor.transformer.utils._validator import FeedForwardValidator

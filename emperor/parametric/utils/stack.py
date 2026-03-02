@@ -21,7 +21,7 @@ class AdaptiveParameterLayerStack(LayerStack):
     def __get_model_type(
         self, overrides: "LayerStackConfig | None"
     ) -> "LinearLayerOptions":
-        from emperor.adaptive.options import AdaptiveLayerOptions
+        from emperor.parametric.options import AdaptiveLayerOptions
 
         model = AdaptiveLayerOptions.BASE
         layer = AdaptiveParameterLayerHandler

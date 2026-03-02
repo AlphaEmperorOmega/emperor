@@ -5,8 +5,8 @@ from torch.types import Tensor
 from torch.nn import ModuleDict
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase, Module
-from emperor.adaptive.options import AdaptiveLayerOptions
-from emperor.adaptive.utils.routers import RouterModel
+from emperor.parametric.options import AdaptiveLayerOptions
+from emperor.parametric.utils.routers import RouterModel
 from emperor.linears.options import LinearLayerOptions
 from emperor.sampler.model import SamplerModel
 

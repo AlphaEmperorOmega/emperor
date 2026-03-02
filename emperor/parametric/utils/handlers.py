@@ -1,13 +1,13 @@
 from emperor.base.utils import Module
 from emperor.sampler.model import SamplerModel
 from emperor.sampler.utils.routers import RouterConfig, RouterModel
-from emperor.adaptive.utils.routers import VectorRouterModel
-from emperor.adaptive.utils._validator import _AdaptiveParameterHandlerValidator
+from emperor.parametric.utils.routers import VectorRouterModel
+from emperor.parametric.utils._validator import _AdaptiveParameterHandlerValidator
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig
+    from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig
 
 
 class ParameterHanlderBase(Module):
@@ -30,7 +30,7 @@ class ParameterHanlderBase(Module):
     def build_sampler_models(
         self,
     ) -> tuple[RouterModel | None, RouterModel | None, SamplerModel | None]:
-        from emperor.adaptive.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.layers import AdaptiveRouterOptions
 
         shared_option = AdaptiveRouterOptions.SHARED_ROUTER
         if self.init_sampler_model_option == shared_option:
@@ -48,7 +48,7 @@ class ParameterHanlderBase(Module):
         )
 
     def _init_bias_router_model(self):
-        from emperor.adaptive.utils.mixtures.options import AdaptiveBiasOptions
+        from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions
 
         if self.adaptive_bias_option == AdaptiveBiasOptions.GENERATOR:
             return None

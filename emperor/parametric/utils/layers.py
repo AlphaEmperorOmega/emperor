@@ -7,9 +7,9 @@ from emperor.base.decorators import timer
 from emperor.base.utils import ConfigBase, Module
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.sampler.utils.routers import RouterConfig
-from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
-from emperor.adaptive.utils._validator import _AdaptiveParameterLayerValidator
-from emperor.adaptive.utils.mixtures.selectors import (
+from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
+from emperor.parametric.utils._validator import _AdaptiveParameterLayerValidator
+from emperor.parametric.utils.mixtures.selectors import (
     AdaptiveWeightSelector,
     AdaptiveBiasSelector,
 )
@@ -17,11 +17,11 @@ from emperor.behaviours.model import (
     AdaptiveParameterBehaviour,
     AdaptiveParameterBehaviourConfig,
 )
-from emperor.adaptive.utils.mixtures.options import (
+from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.adaptive.utils.handlers import (
+from emperor.parametric.utils.handlers import (
     GeneratorParameterHandler,
     MatrixParameterHandler,
     VectorParameterHandler,
@@ -134,7 +134,7 @@ class AdaptiveParameterLayer(Module):
         return AdaptiveWeightSelector(self.cfg, overrides).build_model()
 
     def __init_bias_model(self) -> AdaptiveMixtureBase | None:
-        from emperor.adaptive.utils.mixtures.options import AdaptiveBiasOptions
+        from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions
 
         if self.adaptive_bias_option == AdaptiveBiasOptions.DISABLED:
             return None
