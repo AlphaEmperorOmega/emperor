@@ -1,24 +1,24 @@
 import torch
 import torch.nn as nn
 
-from Emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig
-from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
-from Emperor.attention.utils.layer import MultiHeadAttentionConfig
-from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.base.layer import LayerStackConfig
-from Emperor.config import ModelConfig
-from Emperor.experts.utils.enums import InitSamplerOptions
-from Emperor.experts.utils.layers import MixtureOfExpertsConfig
-from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from Emperor.linears.utils.layers import LinearLayerConfig
-from Emperor.sampler.utils.routers import RouterConfig
-from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.transformer.utils.layers import TransformerConfig
-from Emperor.transformer.utils.feed_forward import (
+from emperor.adaptive.utils.layers import AdaptiveParameterLayerConfig
+from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureConfig
+from emperor.attention.utils.layer import MultiHeadAttentionConfig
+from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.layer import LayerStackConfig
+from emperor.config import ModelConfig
+from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.experts.utils.layers import MixtureOfExpertsConfig
+from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
+from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.sampler.utils.routers import RouterConfig
+from emperor.sampler.utils.samplers import SamplerConfig
+from emperor.transformer.utils.layers import TransformerConfig
+from emperor.transformer.utils.feed_forward import (
     FeedForwardConfig,
     # MixtureOfExpertsFeedForwardConfig,
 )
-from Emperor.neuron.neuron import (
+from emperor.neuron.neuron import (
     AxonsConfig,
     NeuronClusterConfig,
     NucleusConfig,

@@ -3,10 +3,10 @@ import torch
 import unittest
 from math import prod
 
-from Emperor.config import ModelConfig
-from Emperor.sampler.model import SamplerModel
-from Emperor.sampler.utils.presets import SamplerPresets
-from Emperor.sampler.utils.samplers import (
+from emperor.config import ModelConfig
+from emperor.sampler.model import SamplerModel
+from emperor.sampler.utils.presets import SamplerPresets
+from emperor.sampler.utils.samplers import (
     SamplerBase,
     SamplerFull,
     SamplerSparse,

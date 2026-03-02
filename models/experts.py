@@ -1,27 +1,27 @@
 from torch import Tensor
 from models.parser import get_experiment_parser
 from dataclasses import dataclass, field
-from Emperor.base.utils import ConfigBase
-from Emperor.base.enums import BaseOptions
-from Emperor.datasets.image.mnist import Mnist
-from Emperor.experts.utils.model import MixtureOfExpertsModel
-from Emperor.experts.utils.layers import MixtureOfExpertsConfig
-from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.linears.utils.layers import LinearLayerConfig
-from Emperor.sampler.utils.routers import RouterConfig
-from Emperor.sampler.utils.samplers import SamplerConfig
-from Emperor.experiments.classifier import ClassifierExperiment
-from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.experts.utils.enums import (
+from emperor.base.utils import ConfigBase
+from emperor.base.enums import BaseOptions
+from emperor.datasets.image.mnist import Mnist
+from emperor.experts.utils.model import MixtureOfExpertsModel
+from emperor.experts.utils.layers import MixtureOfExpertsConfig
+from emperor.base.layer import LayerStack, LayerStackConfig
+from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.sampler.utils.routers import RouterConfig
+from emperor.sampler.utils.samplers import SamplerConfig
+from emperor.experiments.classifier import ClassifierExperiment
+from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
-from Emperor.experiments.base import (
+from emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,
     create_search_space,
 )
-from Emperor.behaviours.utils.enums import (
+from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -33,7 +33,7 @@ from Emperor.behaviours.utils.enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
+    from emperor.config import ModelConfig
 
 
 @dataclass
@@ -225,9 +225,9 @@ class ExperimentPresets(ExperimentPresetsBase):
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
     ) -> "ModelConfig":
-        from Emperor.config import ModelConfig
-        from Emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-        from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+        from emperor.config import ModelConfig
+        from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
+        from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 
         experts_layer_stack_option = LinearLayerStackOptions.BASE
         if experts_model_generator_depth != DynamicDepthOptions.DISABLED:

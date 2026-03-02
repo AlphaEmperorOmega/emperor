@@ -3,12 +3,12 @@ import unittest
 
 from dataclasses import asdict
 
-from Emperor.generators.utils.enums import (
+from emperor.generators.utils.enums import (
     LayerTypes,
     LinearLayerTypes,
     ParameterGeneratorTypes,
 )
-from Emperor.neuron.neuron import Nucleus, NucleusConfig
+from emperor.neuron.neuron import Nucleus, NucleusConfig
 from docs.config import default_unittest_config
 
 

@@ -3,7 +3,7 @@ import unittest
 import torch.nn as nn
 
 from dataclasses import asdict
-from Emperor.neuron.neuron import NeuronCluster, NeuronClusterConfig
+from emperor.neuron.neuron import NeuronCluster, NeuronClusterConfig
 from docs.config import default_unittest_config
 
 

@@ -2,10 +2,10 @@ import torch
 import itertools
 import unittest
 
-from Emperor.base.layer import Layer
-from Emperor.linears.options import LinearLayerStackOptions
-from Emperor.transformer.utils.presets import TransformerPresets
-from Emperor.transformer.utils.layers import (
+from emperor.base.layer import Layer
+from emperor.linears.options import LinearLayerStackOptions
+from emperor.transformer.utils.presets import TransformerPresets
+from emperor.transformer.utils.layers import (
     TransformerDecoderLayer,
     TransformerEncoderLayer,
 )

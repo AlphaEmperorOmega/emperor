@@ -2,12 +2,12 @@ import torch
 import unittest
 import torch.nn as nn
 
-from Emperor.transformer.utils.presets import TransformerPresets
-from Emperor.transformer.utils.patch.selector import PatchOptions
-from Emperor.transformer.utils.patch.options.patch_embedding_conv import (
+from emperor.transformer.utils.presets import TransformerPresets
+from emperor.transformer.utils.patch.selector import PatchOptions
+from emperor.transformer.utils.patch.options.patch_embedding_conv import (
     PatchEmbeddingConv,
 )
-from Emperor.transformer.utils.patch.options.patch_embedding_linear import (
+from emperor.transformer.utils.patch.options.patch_embedding_linear import (
     PatchEmbeddingLinear,
 )
 

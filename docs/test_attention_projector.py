@@ -2,14 +2,14 @@ import torch
 import unittest
 
 from torch.nn import Sequential
-from Emperor.experts.utils.layers import MixtureOfExperts
-from Emperor.attention.utils.enums import AttentionOptions
-from Emperor.experts.utils.enums import InitSamplerOptions
-from Emperor.linears.options import LinearLayerStackOptions
-from Emperor.adaptive.options import AdaptiveLayerStackOptions
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from Emperor.adaptive.utils.mixtures.options import AdaptiveWeightOptions
-from Emperor.attention.utils.handlers.projector import (
+from emperor.experts.utils.layers import MixtureOfExperts
+from emperor.attention.utils.enums import AttentionOptions
+from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.linears.options import LinearLayerStackOptions
+from emperor.adaptive.options import AdaptiveLayerStackOptions
+from emperor.attention.utils.presets import MultiHeadAttentionPresets
+from emperor.adaptive.utils.mixtures.options import AdaptiveWeightOptions
+from emperor.attention.utils.handlers.projector import (
     IndependentProjector,
     MixtureOfAttentionHeadsProjector,
     ProjectorBuilder,

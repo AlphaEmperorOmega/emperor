@@ -2,21 +2,21 @@ import torch
 
 from torch import Tensor
 from dataclasses import dataclass, field
-from Emperor.base.utils import ConfigBase
-from Emperor.base.enums import BaseOptions
-from Emperor.datasets.image.mnist import Mnist
+from emperor.base.utils import ConfigBase
+from emperor.base.enums import BaseOptions
+from emperor.datasets.image.mnist import Mnist
 from models.parser import get_experiment_parser
-from Emperor.linears.utils.layers import LinearLayerConfig
-from Emperor.base.layer import LayerStack, LayerStackConfig
-from Emperor.experiments.classifier import ClassifierExperiment
-from Emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from Emperor.behaviours.model import AdaptiveParameterBehaviourConfig
-from Emperor.experiments.base import (
+from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.base.layer import LayerStack, LayerStackConfig
+from emperor.experiments.classifier import ClassifierExperiment
+from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+from emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,
     create_search_space,
 )
-from Emperor.behaviours.utils.enums import (
+from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -28,7 +28,7 @@ from Emperor.behaviours.utils.enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from Emperor.config import ModelConfig
+    from emperor.config import ModelConfig
 
 
 @dataclass
@@ -313,8 +313,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         adaptive_generator_stack_residual_flag: bool = False,
         adaptive_generator_stack_dropout_probability: float = 0.0,
     ) -> "ModelConfig":
-        from Emperor.config import ModelConfig
-        from Emperor.linears.options import LinearLayerOptions
+        from emperor.config import ModelConfig
+        from emperor.linears.options import LinearLayerOptions
 
         return ModelConfig(
             batch_size=batch_size,

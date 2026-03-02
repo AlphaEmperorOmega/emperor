@@ -3,17 +3,17 @@ import unittest
 import torch.nn as nn
 
 from torch import Tensor
-from Emperor.transformer.utils.presets import TransformerPresets
-from Emperor.embedding.absolute.options.learned_embedding import (
+from emperor.transformer.utils.presets import TransformerPresets
+from emperor.embedding.absolute.options.learned_embedding import (
     TextLearnedPositionalEmbedding,
     ImageLearnedPositionalEmbedding,
 )
-from Emperor.embedding.absolute.options.sinusoidal_embedding import (
+from emperor.embedding.absolute.options.sinusoidal_embedding import (
     TextSinusoidalPositionalEmbedding,
     ImageSinusoidalPositionalEmbedding,
 )
-from Emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-from Emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
+from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
+from emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
 
 
 class TestTextLearnedPositionalEmbedding(unittest.TestCase):

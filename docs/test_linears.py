@@ -2,15 +2,15 @@ import torch
 import unittest
 
 from torch.nn import Sequential
-from Emperor.base.layer import Layer
-from Emperor.linears.utils.presets import LinearPresets
-from Emperor.linears.utils.stack import AdaptiveLinearLayerStack, LinearLayerStack
-from Emperor.behaviours.utils.enums import (
+from emperor.base.layer import Layer
+from emperor.linears.utils.presets import LinearPresets
+from emperor.linears.utils.stack import AdaptiveLinearLayerStack, LinearLayerStack
+from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
 )
-from Emperor.linears.utils.layers import (
+from emperor.linears.utils.layers import (
     AdaptiveLinearLayer,
     LinearLayer,
     LinearLayerConfig,

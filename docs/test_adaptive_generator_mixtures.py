@@ -2,15 +2,15 @@ import torch
 import unittest
 
 from torch.types import Tensor
-from Emperor.experts.utils.enums import InitSamplerOptions
-from Emperor.sampler.model import SamplerModel
-from Emperor.sampler.utils.routers import RouterModel
-from Emperor.sampler.utils.presets import SamplerPresets
-from Emperor.experts.utils.layers import MixtureOfExperts
-from Emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
-from Emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
-from Emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
-from Emperor.adaptive.utils.mixtures.types.generator import (
+from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.sampler.model import SamplerModel
+from emperor.sampler.utils.routers import RouterModel
+from emperor.sampler.utils.presets import SamplerPresets
+from emperor.experts.utils.layers import MixtureOfExperts
+from emperor.adaptive.utils.presets import AdaptiveParameterLayerPresets
+from emperor.adaptive.utils.mixtures.base import AdaptiveMixtureBase
+from emperor.adaptive.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.adaptive.utils.mixtures.types.generator import (
     GeneratorBiasMixture,
     GeneratorMixtureBase,
     GeneratorWeightsMixture,

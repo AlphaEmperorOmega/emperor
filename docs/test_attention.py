@@ -1,17 +1,17 @@
 import torch
 import unittest
 
-from Emperor.attention.utils.utils import Utils
-from Emperor.attention.utils.handlers.maks import Mask
-from Emperor.attention.utils.enums import AttentionOptions
-from Emperor.linears.options import LinearLayerStackOptions
-from Emperor.attention.utils.layer import MultiHeadAttention
-from Emperor.attention.utils.handlers.bias import KeyValueBias
-from Emperor.attention.utils.handlers.processor import ProcessorBase
-from Emperor.attention.utils.handlers.projector import ProjectorBase
-from Emperor.attention.utils.presets import MultiHeadAttentionPresets
-from Emperor.attention.utils.handlers.batch import BatchDimensionManager
-from Emperor.attention.utils._validator import MultiHeadAttentionValidator
+from emperor.attention.utils.utils import Utils
+from emperor.attention.utils.handlers.maks import Mask
+from emperor.attention.utils.enums import AttentionOptions
+from emperor.linears.options import LinearLayerStackOptions
+from emperor.attention.utils.layer import MultiHeadAttention
+from emperor.attention.utils.handlers.bias import KeyValueBias
+from emperor.attention.utils.handlers.processor import ProcessorBase
+from emperor.attention.utils.handlers.projector import ProjectorBase
+from emperor.attention.utils.presets import MultiHeadAttentionPresets
+from emperor.attention.utils.handlers.batch import BatchDimensionManager
+from emperor.attention.utils._validator import MultiHeadAttentionValidator
 
 
 def create_key_padding_mask(
