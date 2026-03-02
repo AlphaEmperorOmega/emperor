@@ -33,10 +33,8 @@ def create_search_space(
     if is_grid_search:
         all_combinations = itertools.product(*parameter_value_options)
     else:
-        create_single_sample = lambda: (
-            random.choice(value_options) for value_options in parameter_value_options
-        )
-        all_combinations = (create_single_sample() for _ in range(num_samples))
+        all_combinations_list = list(itertools.product(*parameter_value_options))
+        all_combinations = random.sample(all_combinations_list, min(num_samples, len(all_combinations_list)))
 
     for parameter_values in all_combinations:
         updated_params = {**base_config}
