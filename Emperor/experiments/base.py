@@ -47,7 +47,7 @@ def create_search_space(
 
 
 class ExperimentPresetsBase:
-    def get_config(self, model_config_options, dataset) -> list["ModelConfig"]:
+    def get_config(self, model_config_options, dataset, num_samples: int | None = None) -> list["ModelConfig"]:
         raise NotImplementedError(
             "The method 'train_model' must be implemented in the subclass."
         )
@@ -101,11 +101,11 @@ class ExperimentBase:
             "The method '_experiment_enumeration' must be implemented in the subclass."
         )
 
-    def train_model(self) -> None:
+    def train_model(self, num_samples: int | None = None) -> None:
         options = [self.option] if self.option else self.options_enumeration
         for option in options:
             for dataset_type in self.dataset_options:
-                for config in self.preset_generator.get_config(option, dataset_type):
+                for config in self.preset_generator.get_config(option, dataset_type, num_samples):
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
                     logger = TensorBoardLogger(

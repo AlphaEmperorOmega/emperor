@@ -106,14 +106,15 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         model_config_options: ExperimentOptions = ExperimentOptions.DEFAULT,
         dataset: type = Mnist,
+        num_samples: int | None = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
                 return self._default_config(dataset)
             case ExperimentOptions.BASE:
-                return self.__base_grid_search_config(dataset)
+                return self.__base_grid_search_config(dataset, num_samples)
             case ExperimentOptions.ADAPTIVE:
-                return self.__adaptive_grid_search_config(dataset)
+                return self.__adaptive_grid_search_config(dataset, num_samples)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
@@ -376,4 +377,4 @@ if __name__ == "__main__":
     config_option = ExperimentOptions.get_option(args.name)
 
     experiment = Experiment(config_option)
-    experiment.train_model()
+    experiment.train_model(num_samples=args.num_samples)

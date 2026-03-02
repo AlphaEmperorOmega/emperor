@@ -99,22 +99,23 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         model_config_options: ExperimentOptions = ExperimentOptions.DEFAULT,
         dataset: type = Mnist,
+        num_samples: int | None = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
                 return self._default_config(dataset)
             case ExperimentOptions.GENERATOR_DEPTH:
-                return self.__generator_depth_grid_search_config(dataset)
+                return self.__generator_depth_grid_search_config(dataset, num_samples)
             case ExperimentOptions.BASE:
-                return self.__base_grid_search_config(dataset)
+                return self.__base_grid_search_config(dataset, num_samples)
             case ExperimentOptions.DIAGONAL:
-                return self.__diagonal_grid_search_config(dataset)
+                return self.__diagonal_grid_search_config(dataset, num_samples)
             case ExperimentOptions.BIAS:
-                return self.__bias_grid_search_config(dataset)
+                return self.__bias_grid_search_config(dataset, num_samples)
             case ExperimentOptions.MEMORY:
-                return self.__memory_grid_search_config(dataset)
+                return self.__memory_grid_search_config(dataset, num_samples)
             case ExperimentOptions.COMBINED:
-                return self.__combined_grid_search_config(dataset)
+                return self.__combined_grid_search_config(dataset, num_samples)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
@@ -382,4 +383,4 @@ if __name__ == "__main__":
     config_option = ExperimentOptions.get_option(args.name)
 
     experiment = Experiment(config_option)
-    experiment.train_model()
+    experiment.train_model(num_samples=args.num_samples)
