@@ -50,4 +50,11 @@ def get_experiment_parser(
         help="Number of random search samples. If not provided, grid search is performed over all combinations defined in __base_search_space.",
     )
 
+    parser.add_argument(
+        "--log-folder",
+        type=str,
+        default=None,
+        help="Custom folder name for storing experiment logs. If not provided, the model file name is used. Use the same folder across models to compare them in TensorBoard.",
+    )
+
     return parser
