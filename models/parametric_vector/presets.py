@@ -22,6 +22,7 @@ from emperor.behaviours.utils.enums import (
 from emperor.experiments.base import ExperimentPresetsBase
 import models.parametric_vector.config as config
 from models.parametric_vector.config import ExperimentConfig
+from emperor.experiments.base import SearchMode
 
 from typing import TYPE_CHECKING
 
@@ -42,13 +43,13 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         model_config_options: ExperimentOptions = ExperimentOptions.DEFAULT,
         dataset: type = Mnist,
-        num_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
                 return self._default_config(dataset)
             case ExperimentOptions.BASE:
-                return self._create_search_space_configs(dataset, num_samples)
+                return self._create_search_space_configs(dataset, search_mode)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."

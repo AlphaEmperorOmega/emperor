@@ -3,6 +3,7 @@ import hashlib
 import inspect
 import itertools
 import importlib
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -17,11 +18,24 @@ from emperor.datasets.image.cifar_100 import Cifar100
 from emperor.datasets.image.fashion_mnist import FashionMNIST
 
 
+@dataclass
+class GridSearch:
+    pass
+
+
+@dataclass
+class RandomSearch:
+    num_samples: int
+
+
+SearchMode = GridSearch | RandomSearch | None
+
+
 def create_search_space(
     base_preset_callback: Callable,
     base_config: dict,
     search_space: dict,
-    num_samples: int | None = None,
+    search_mode: SearchMode = None,
 ) -> list["ModelConfig"]:
     if search_space == {}:
         return [base_preset_callback(**base_config)]
@@ -30,12 +44,11 @@ def create_search_space(
     parameter_names = list(search_space.keys())
     parameter_value_options = list(search_space.values())
 
-    is_grid_search = num_samples is None
-    if is_grid_search:
-        all_combinations = itertools.product(*parameter_value_options)
-    else:
+    if isinstance(search_mode, RandomSearch):
         all_combinations_list = list(itertools.product(*parameter_value_options))
-        all_combinations = random.sample(all_combinations_list, min(num_samples, len(all_combinations_list)))
+        all_combinations = random.sample(all_combinations_list, min(search_mode.num_samples, len(all_combinations_list)))
+    else:
+        all_combinations = itertools.product(*parameter_value_options)
 
     for parameter_values in all_combinations:
         updated_params = {**base_config}
@@ -48,7 +61,7 @@ def create_search_space(
 
 
 class ExperimentPresetsBase:
-    def get_config(self, model_config_options, dataset, num_samples: int | None = None) -> list["ModelConfig"]:
+    def get_config(self, model_config_options, dataset, search_mode: SearchMode = None) -> list["ModelConfig"]:
         raise NotImplementedError(
             "The method 'train_model' must be implemented in the subclass."
         )
@@ -83,14 +96,14 @@ class ExperimentPresetsBase:
     def _create_search_space_configs(
         self,
         dataset: type = Mnist,
-        num_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         base_config = self._dataset_config(dataset)
         return create_search_space(
             self._preset,
             base_config,
             self._build_search_space(),
-            num_samples,
+            search_mode,
         )
 
 
@@ -125,11 +138,11 @@ class ExperimentBase:
             "The method '_experiment_enumeration' must be implemented in the subclass."
         )
 
-    def train_model(self, num_samples: int | None = None, log_folder: str | None = None) -> None:
+    def train_model(self, search_mode: SearchMode = None, log_folder: str | None = None) -> None:
         options = [self.option] if self.option else self.options_enumeration
         for option in options:
             for dataset_type in self.dataset_options:
-                for config in self.preset_generator.get_config(option, dataset_type, num_samples):
+                for config in self.preset_generator.get_config(option, dataset_type, search_mode):
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
                     logger = TensorBoardLogger(
