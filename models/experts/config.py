@@ -1,0 +1,60 @@
+from dataclasses import dataclass, field
+from emperor.base.utils import ConfigBase
+from emperor.base.layer import LayerStackConfig
+from emperor.base.enums import ActivationOptions
+from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
+from emperor.behaviours.utils.enums import (
+    DynamicBiasOptions,
+    DynamicDepthOptions,
+    DynamicDiagonalOptions,
+    LinearMemoryOptions,
+    LinearMemoryPositionOptions,
+    LinearMemorySizeOptions,
+)
+
+BATCH_SIZE: int = 64
+INPUT_DIM: int = 28**2
+HIDDEN_DIM: int = 256
+OUTPUT_DIM: int = 10
+LEARNING_RATE: float = 1e-3
+BIAS_FLAG: bool = True
+OUTPUT_NUM_LAYERS: int = 2
+OUTPUT_ACTIVATION: ActivationOptions = ActivationOptions.SILU
+OUTPUT_DROPOUT_PROBABILITY: float = 0.1
+ROUTER_NOISY_TOPK_FLAG: bool = False
+SAMPLER_THRESHOLD: float = 0.0
+SAMPLER_FILTER_ABOVE_THRESHOLD: bool = False
+SAMPLER_NUM_TOPK_SAMPLES: int = 0
+SAMPLER_NORMALIZE_PROBABILITIES_FLAG: bool = False
+SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.0
+SAMPLER_SWITCH_LOSS_WEIGHT: float = 0.0
+SAMPLER_ZERO_CENTRED_LOSS_WEIGHT: float = 0.0
+SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
+EXPERTS_TOP_K: int = 3
+EXPERTS_NUM_EXPERTS: int = 6
+EXPERTS_COMPUTE_EXPERT_MIXTURE_FLAG: bool = False
+EXPERTS_WEIGHTED_PARAMETERS_FLAG: bool = False
+EXPERTS_WEIGHTING_POSITION_OPTION: ExpertWeightingPositionOptions = ExpertWeightingPositionOptions.BEFORE_EXPERTS
+EXPERTS_INIT_SAMPLER_OPTION: InitSamplerOptions = InitSamplerOptions.DISABLED
+EXPERTS_MODEL_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DISABLED
+EXPERTS_MODEL_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED
+EXPERTS_MODEL_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
+EXPERTS_MODEL_MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
+EXPERTS_MODEL_MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
+EXPERTS_MODEL_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE
+STACK_NUM_LAYERS: int = 3
+STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+STACK_RESIDUAL_FLAG: bool = False
+STACK_DROPOUT_PROBABILITY: float = 0.0
+
+
+@dataclass
+class ExperimentConfig(ConfigBase):
+    experts_config: "LayerStackConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    output_config: "LayerStackConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )

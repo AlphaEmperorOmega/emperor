@@ -1,26 +1,12 @@
-from torch import Tensor
-from models.parser import get_experiment_parser
-from dataclasses import dataclass, field
-from emperor.base.utils import ConfigBase
-from emperor.base.enums import BaseOptions
+from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
-from emperor.experts.utils.model import MixtureOfExpertsModel
-from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.base.layer import LayerStack, LayerStackConfig
 from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.base.layer import LayerStackConfig
+from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
-from emperor.experiments.classifier import ClassifierExperiment
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from emperor.experts.utils.enums import (
-    ExpertWeightingPositionOptions,
-    InitSamplerOptions,
-)
-from emperor.experiments.base import (
-    ExperimentBase,
-    ExperimentPresetsBase,
-    create_search_space,
-)
+from emperor.experiments.base import ExperimentPresetsBase, create_search_space
+from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -29,6 +15,43 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
+from models.experts.config import (
+    ExperimentConfig,
+    BATCH_SIZE,
+    INPUT_DIM,
+    HIDDEN_DIM,
+    OUTPUT_DIM,
+    LEARNING_RATE,
+    BIAS_FLAG,
+    OUTPUT_NUM_LAYERS,
+    OUTPUT_ACTIVATION,
+    OUTPUT_DROPOUT_PROBABILITY,
+    ROUTER_NOISY_TOPK_FLAG,
+    SAMPLER_THRESHOLD,
+    SAMPLER_FILTER_ABOVE_THRESHOLD,
+    SAMPLER_NUM_TOPK_SAMPLES,
+    SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
+    SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
+    SAMPLER_SWITCH_LOSS_WEIGHT,
+    SAMPLER_ZERO_CENTRED_LOSS_WEIGHT,
+    SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT,
+    EXPERTS_TOP_K,
+    EXPERTS_NUM_EXPERTS,
+    EXPERTS_COMPUTE_EXPERT_MIXTURE_FLAG,
+    EXPERTS_WEIGHTED_PARAMETERS_FLAG,
+    EXPERTS_WEIGHTING_POSITION_OPTION,
+    EXPERTS_INIT_SAMPLER_OPTION,
+    EXPERTS_MODEL_GENERATOR_DEPTH,
+    EXPERTS_MODEL_DIAGONAL_OPTION,
+    EXPERTS_MODEL_BIAS_OPTION,
+    EXPERTS_MODEL_MEMORY_OPTION,
+    EXPERTS_MODEL_MEMORY_SIZE_OPTION,
+    EXPERTS_MODEL_MEMORY_POSITION_OPTION,
+    STACK_NUM_LAYERS,
+    STACK_ACTIVATION,
+    STACK_RESIDUAL_FLAG,
+    STACK_DROPOUT_PROBABILITY,
+)
 
 from typing import TYPE_CHECKING
 
@@ -36,69 +59,10 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-@dataclass
-class ExperimentConfig(ConfigBase):
-    experts_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    output_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-
-
-class Model(ClassifierExperiment):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-    ):
-        super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
-
-        self.experts_config = self.main_cfg.experts_config
-        self.output_config = self.main_cfg.output_config
-
-        self.experts = MixtureOfExpertsModel(self.experts_config)
-        self.output = LayerStack(self.output_config).build_model()
-
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> "ExperimentConfig":
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
-
-    def forward(
-        self,
-        X: Tensor,
-    ) -> Tensor:
-        X = X.to(self.device)
-        X = self.experts(X)
-        return self.output(X)
-
-
 class ExperimentOptions(BaseOptions):
     DEFAULT = 0
     BASE = 1
     ADAPTIVE = 2
-
-
-class Experiment(ExperimentBase):
-    def __init__(
-        self,
-        experiment_option: ExperimentOptions | None = None,
-    ) -> None:
-        super().__init__(experiment_option)
-
-    def _model_type(self) -> type:
-        return Model
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        return ExperimentPresets()
-
-    def _experiment_enumeration(self) -> type[BaseOptions]:
-        return ExperimentOptions
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -190,40 +154,40 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def _preset(
         self,
-        batch_size: int = 64,
-        input_dim: int = 28**2,
-        hidden_dim: int = 256,
-        output_dim: int = 10,
-        learning_rate: float = 1e-3,
-        bias_flag: bool = True,
-        output_num_layers: int = 2,
-        output_activation: ActivationOptions = ActivationOptions.SILU,
-        output_dropout_probability: float = 0.1,
-        router_noisy_topk_flag: bool = False,
-        sampler_threshold: float = 0.0,
-        sampler_filter_above_threshold: bool = False,
-        sampler_num_topk_samples: int = 0,
-        sampler_normalize_probabilities_flag: bool = False,
-        sampler_coefficient_of_variation_loss_weight: float = 0.0,
-        sampler_switch_loss_weight: float = 0.0,
-        sampler_zero_centred_loss_weight: float = 0.0,
-        sampler_mutual_information_loss_weight: float = 0.0,
-        experts_top_k: int = 3,
-        experts_num_experts: int = 6,
-        experts_compute_expert_mixture_flag: bool = False,
-        experts_weighted_parameters_flag: bool = False,
-        experts_weighting_position_option: ExpertWeightingPositionOptions = ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        experts_init_sampler_option: InitSamplerOptions = InitSamplerOptions.DISABLED,
-        experts_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        experts_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        experts_model_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
-        experts_model_memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
-        experts_model_memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
-        experts_model_memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
-        stack_num_layers: int = 3,
-        stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_flag: bool = False,
-        stack_dropout_probability: float = 0.0,
+        batch_size: int = BATCH_SIZE,
+        input_dim: int = INPUT_DIM,
+        hidden_dim: int = HIDDEN_DIM,
+        output_dim: int = OUTPUT_DIM,
+        learning_rate: float = LEARNING_RATE,
+        bias_flag: bool = BIAS_FLAG,
+        output_num_layers: int = OUTPUT_NUM_LAYERS,
+        output_activation: ActivationOptions = OUTPUT_ACTIVATION,
+        output_dropout_probability: float = OUTPUT_DROPOUT_PROBABILITY,
+        router_noisy_topk_flag: bool = ROUTER_NOISY_TOPK_FLAG,
+        sampler_threshold: float = SAMPLER_THRESHOLD,
+        sampler_filter_above_threshold: bool = SAMPLER_FILTER_ABOVE_THRESHOLD,
+        sampler_num_topk_samples: int = SAMPLER_NUM_TOPK_SAMPLES,
+        sampler_normalize_probabilities_flag: bool = SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
+        sampler_coefficient_of_variation_loss_weight: float = SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
+        sampler_switch_loss_weight: float = SAMPLER_SWITCH_LOSS_WEIGHT,
+        sampler_zero_centred_loss_weight: float = SAMPLER_ZERO_CENTRED_LOSS_WEIGHT,
+        sampler_mutual_information_loss_weight: float = SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT,
+        experts_top_k: int = EXPERTS_TOP_K,
+        experts_num_experts: int = EXPERTS_NUM_EXPERTS,
+        experts_compute_expert_mixture_flag: bool = EXPERTS_COMPUTE_EXPERT_MIXTURE_FLAG,
+        experts_weighted_parameters_flag: bool = EXPERTS_WEIGHTED_PARAMETERS_FLAG,
+        experts_weighting_position_option: ExpertWeightingPositionOptions = EXPERTS_WEIGHTING_POSITION_OPTION,
+        experts_init_sampler_option: InitSamplerOptions = EXPERTS_INIT_SAMPLER_OPTION,
+        experts_model_generator_depth: DynamicDepthOptions = EXPERTS_MODEL_GENERATOR_DEPTH,
+        experts_model_diagonal_option: DynamicDiagonalOptions = EXPERTS_MODEL_DIAGONAL_OPTION,
+        experts_model_bias_option: DynamicBiasOptions = EXPERTS_MODEL_BIAS_OPTION,
+        experts_model_memory_option: LinearMemoryOptions = EXPERTS_MODEL_MEMORY_OPTION,
+        experts_model_memory_size_option: LinearMemorySizeOptions = EXPERTS_MODEL_MEMORY_SIZE_OPTION,
+        experts_model_memory_position_option: LinearMemoryPositionOptions = EXPERTS_MODEL_MEMORY_POSITION_OPTION,
+        stack_num_layers: int = STACK_NUM_LAYERS,
+        stack_activation: ActivationOptions = STACK_ACTIVATION,
+        stack_residual_flag: bool = STACK_RESIDUAL_FLAG,
+        stack_dropout_probability: float = STACK_DROPOUT_PROBABILITY,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
@@ -369,12 +333,3 @@ class ExperimentPresets(ExperimentPresetsBase):
                 ),
             ),
         )
-
-
-if __name__ == "__main__":
-    parser = get_experiment_parser(ExperimentOptions.names())
-    args = parser.parse_args()
-    config_option = ExperimentOptions.get_option(args.name)
-
-    experiment = Experiment(config_option)
-    experiment.train_model(num_samples=args.num_samples, log_folder=args.log_folder)
