@@ -34,7 +34,7 @@ SearchMode = GridSearch | RandomSearch | None
 def create_search_space(
     base_preset_callback: Callable,
     base_config: dict,
-    search_space: dict,
+    search_space: dict = {},
     search_mode: SearchMode = None,
 ) -> list["ModelConfig"]:
     if search_space == {}:
@@ -82,13 +82,28 @@ class ExperimentPresetsBase:
             "output_dim": dataset.num_classes,
         }
 
-    def _default_config(
+    def _create_default_preset_configs(
         self,
         dataset: type = Mnist,
     ) -> list["ModelConfig"]:
-        return [self._preset(**self._dataset_config(dataset))]
+        base_config = self._dataset_config(dataset)
 
-    def _build_search_space(self, search_mode: SearchMode = None) -> dict:
+        return create_search_space(self._preset, base_config)
+
+    def _create_default_search_space_configs(
+        self,
+        dataset: type = Mnist,
+        search_mode: SearchMode = None,
+    ) -> list["ModelConfig"]:
+        base_config = self._dataset_config(dataset)
+        return create_search_space(
+            self._preset,
+            base_config,
+            self._extract_search_space_from_config(search_mode),
+            search_mode,
+        )
+
+    def _extract_search_space_from_config(self, search_mode: SearchMode = None) -> dict:
         if search_mode is None:
             return {}
         package = type(self).__module__.rsplit(".", 1)[0]
@@ -99,19 +114,6 @@ class ExperimentPresetsBase:
             for key, value in vars(config).items()
             if key.startswith(prefix)
         }
-
-    def _create_search_space_configs(
-        self,
-        dataset: type = Mnist,
-        search_mode: SearchMode = None,
-    ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
-        return create_search_space(
-            self._preset,
-            base_config,
-            self._build_search_space(search_mode),
-            search_mode,
-        )
 
 
 class ExperimentBase:

@@ -1,3 +1,5 @@
+import models.linear_adaptive.config as config
+
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
@@ -17,7 +19,6 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-import models.linear_adaptive.config as config
 from models.linear_adaptive.config import ExperimentConfig
 from models.linear_adaptive.model import Model
 
@@ -46,25 +47,25 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
-                return self._default_config(dataset)
-            case ExperimentOptions.GENERATOR_DEPTH:
-                return self.__generator_depth_grid_search_config(dataset, search_mode)
+                return self._create_default_preset_configs(dataset)
             case ExperimentOptions.BASE:
-                return self._create_search_space_configs(dataset, search_mode)
+                return self._create_default_search_space_configs(dataset, search_mode)
+            case ExperimentOptions.GENERATOR_DEPTH:
+                return self.__generator_depth_search_space_configs(dataset, search_mode)
             case ExperimentOptions.DIAGONAL:
-                return self.__diagonal_grid_search_config(dataset, search_mode)
+                return self.__diagonal_search_space_configs(dataset, search_mode)
             case ExperimentOptions.BIAS:
-                return self.__bias_grid_search_config(dataset, search_mode)
+                return self.__bias_search_space_configs(dataset, search_mode)
             case ExperimentOptions.MEMORY:
-                return self.__memory_grid_search_config(dataset, search_mode)
+                return self.__memory_search_space_configs(dataset, search_mode)
             case ExperimentOptions.COMBINED:
-                return self.__combined_grid_search_config(dataset, search_mode)
+                return self.__combined_search_space_configs(dataset, search_mode)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
                 )
 
-    def __generator_depth_grid_search_config(
+    def __generator_depth_search_space_configs(
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
@@ -72,7 +73,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(search_mode),
+            **self._extract_search_space_from_config(search_mode),
             "generator_depth": [
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
@@ -82,7 +83,7 @@ class ExperimentPresets(ExperimentPresetsBase):
 
         return create_search_space(self._preset, base_config, search_space, search_mode)
 
-    def __diagonal_grid_search_config(
+    def __diagonal_search_space_configs(
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
@@ -90,7 +91,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(search_mode),
+            **self._extract_search_space_from_config(search_mode),
             "diagonal_option": [
                 DynamicDiagonalOptions.DISABLED,
                 DynamicDiagonalOptions.DIAGONAL,
@@ -101,7 +102,7 @@ class ExperimentPresets(ExperimentPresetsBase):
 
         return create_search_space(self._preset, base_config, search_space, search_mode)
 
-    def __bias_grid_search_config(
+    def __bias_search_space_configs(
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
@@ -109,7 +110,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(search_mode),
+            **self._extract_search_space_from_config(search_mode),
             "bias_option": [
                 DynamicBiasOptions.DISABLED,
                 DynamicBiasOptions.SCALE_AND_OFFSET,
@@ -120,7 +121,7 @@ class ExperimentPresets(ExperimentPresetsBase):
 
         return create_search_space(self._preset, base_config, search_space, search_mode)
 
-    def __memory_grid_search_config(
+    def __memory_search_space_configs(
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
@@ -128,7 +129,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(search_mode),
+            **self._extract_search_space_from_config(search_mode),
             "memory_option": [
                 LinearMemoryOptions.FUSION,
                 LinearMemoryOptions.WEIGHTED,
@@ -147,7 +148,7 @@ class ExperimentPresets(ExperimentPresetsBase):
 
         return create_search_space(self._preset, base_config, search_space, search_mode)
 
-    def __combined_grid_search_config(
+    def __combined_search_space_configs(
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
@@ -155,7 +156,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(search_mode),
+            **self._extract_search_space_from_config(search_mode),
             "generator_depth": [
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,

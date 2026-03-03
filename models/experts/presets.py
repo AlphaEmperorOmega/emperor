@@ -1,3 +1,5 @@
+import models.experts.config as config
+
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
@@ -5,8 +7,16 @@ from emperor.base.layer import LayerStackConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
-from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, create_search_space, SearchMode
-from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
+from emperor.experiments.base import (
+    ExperimentBase,
+    ExperimentPresetsBase,
+    create_search_space,
+    SearchMode,
+)
+from emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    InitSamplerOptions,
+)
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -15,7 +25,6 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-import models.experts.config as config
 from models.experts.config import ExperimentConfig
 from models.experts.model import Model
 
@@ -40,17 +49,17 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
-                return self._default_config(dataset)
+                return self._create_default_preset_configs(dataset)
             case ExperimentOptions.BASE:
-                return self._create_search_space_configs(dataset, search_mode)
+                return self._create_default_search_space_configs(dataset, search_mode)
             case ExperimentOptions.ADAPTIVE:
-                return self.__adaptive_grid_search_config(dataset, search_mode)
+                return self.__adaptive_search_space_configs(dataset, search_mode)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
                 )
 
-    def __adaptive_grid_search_config(
+    def __adaptive_search_space_configs(
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
@@ -58,7 +67,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(search_mode),
+            **self._extract_search_space_from_config(search_mode),
             "experts_model_generator_depth": [
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
@@ -78,9 +87,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ],
         }
 
-        return create_search_space(
-            self._preset, base_config, search_space, search_mode
-        )
+        return create_search_space(self._preset, base_config, search_space, search_mode)
 
     def _preset(
         self,

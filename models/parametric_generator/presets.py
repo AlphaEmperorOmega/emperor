@@ -5,13 +5,22 @@ from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions
-from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig, AdaptiveRouterOptions
+from emperor.parametric.utils.layers import (
+    AdaptiveParameterLayerConfig,
+    AdaptiveRouterOptions,
+)
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
-from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions, AdaptiveWeightOptions
+from emperor.parametric.utils.mixtures.options import (
+    AdaptiveBiasOptions,
+    AdaptiveWeightOptions,
+)
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
+from emperor.experts.utils.enums import (
+    ExpertWeightingPositionOptions,
+    InitSamplerOptions,
+)
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -49,9 +58,9 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
-                return self._default_config(dataset)
+                return self._create_default_preset_configs(dataset)
             case ExperimentOptions.BASE:
-                return self._create_search_space_configs(dataset, search_mode)
+                return self._create_default_search_space_configs(dataset, search_mode)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
@@ -231,7 +240,9 @@ class ExperimentPresets(ExperimentPresetsBase):
                                     override_config=LayerStackConfig(
                                         model_type=LinearLayerOptions.BASE,
                                         input_dim=input_dim,
-                                        hidden_dim=max(input_dim, adaptive_mixture_num_experts),
+                                        hidden_dim=max(
+                                            input_dim, adaptive_mixture_num_experts
+                                        ),
                                         output_dim=adaptive_mixture_num_experts,
                                         num_layers=2,
                                         activation=stack_activation,

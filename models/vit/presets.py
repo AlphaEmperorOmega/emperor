@@ -45,7 +45,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
-                return self._default_config(dataset)
+                return self._create_default_preset_configs(dataset)
             case ExperimentOptions.BASE:
                 return [self._preset(**self._dataset_config(dataset))]
             case ExperimentOptions.ADAPTIVE:

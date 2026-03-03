@@ -1,9 +1,10 @@
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
+import models.linear.config as config
+
 from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
-import models.linear.config as config
+from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from models.linear.config import ExperimentConfig
 from models.linear.model import Model
 from emperor.experiments.base import SearchMode
@@ -31,9 +32,9 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
-                return self._default_config(dataset)
+                return self._create_default_preset_configs(dataset)
             case ExperimentOptions.BASE:
-                return self._create_search_space_configs(dataset, search_mode)
+                return self._create_default_search_space_configs(dataset, search_mode)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `LinearExperimentOptions`."
