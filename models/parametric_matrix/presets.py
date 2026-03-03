@@ -11,24 +11,8 @@ from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions, Adapt
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from emperor.experiments.base import ExperimentPresetsBase
-from models.parametric_matrix.config import (
-    ExperimentConfig,
-    BATCH_SIZE,
-    LEARNING_RATE,
-    INPUT_DIM,
-    HIDDEN_DIM,
-    OUTPUT_DIM,
-    STACK_NUM_LAYERS,
-    STACK_ACTIVATION,
-    STACK_RESIDUAL_FLAG,
-    STACK_DROPOUT_PROBABILITY,
-    ADAPTIVE_MIXTURE_TOP_K,
-    ADAPTIVE_MIXTURE_NUM_EXPERTS,
-    ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG,
-    ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION,
-    ADAPTIVE_MIXTURE_CLIP_RANGE,
-    ADAPTIVE_BIAS_OPTION,
-)
+import models.parametric_matrix.config as config
+from models.parametric_matrix.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
 
@@ -63,21 +47,21 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def _preset(
         self,
-        batch_size: int = BATCH_SIZE,
-        learning_rate: float = LEARNING_RATE,
-        input_dim: int = INPUT_DIM,
-        hidden_dim: int = HIDDEN_DIM,
-        output_dim: int = OUTPUT_DIM,
-        stack_num_layers: int = STACK_NUM_LAYERS,
-        stack_activation: ActivationOptions = STACK_ACTIVATION,
-        stack_residual_flag: bool = STACK_RESIDUAL_FLAG,
-        stack_dropout_probability: float = STACK_DROPOUT_PROBABILITY,
-        adaptive_mixture_top_k: int = ADAPTIVE_MIXTURE_TOP_K,
-        adaptive_mixture_num_experts: int = ADAPTIVE_MIXTURE_NUM_EXPERTS,
-        adaptive_mixture_weighted_parameters_flag: bool = ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG,
-        adaptive_mixture_clip_parameter_option: ClipParameterOptions = ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION,
-        adaptive_mixture_clip_range: float = ADAPTIVE_MIXTURE_CLIP_RANGE,
-        adaptive_bias_option: AdaptiveBiasOptions = ADAPTIVE_BIAS_OPTION,
+        batch_size: int = config.BATCH_SIZE,
+        learning_rate: float = config.LEARNING_RATE,
+        input_dim: int = config.INPUT_DIM,
+        hidden_dim: int = config.HIDDEN_DIM,
+        output_dim: int = config.OUTPUT_DIM,
+        stack_num_layers: int = config.STACK_NUM_LAYERS,
+        stack_activation: ActivationOptions = config.STACK_ACTIVATION,
+        stack_residual_flag: bool = config.STACK_RESIDUAL_FLAG,
+        stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
+        adaptive_mixture_top_k: int = config.ADAPTIVE_MIXTURE_TOP_K,
+        adaptive_mixture_num_experts: int = config.ADAPTIVE_MIXTURE_NUM_EXPERTS,
+        adaptive_mixture_weighted_parameters_flag: bool = config.ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG,
+        adaptive_mixture_clip_parameter_option: ClipParameterOptions = config.ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION,
+        adaptive_mixture_clip_range: float = config.ADAPTIVE_MIXTURE_CLIP_RANGE,
+        adaptive_bias_option: AdaptiveBiasOptions = config.ADAPTIVE_BIAS_OPTION,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
