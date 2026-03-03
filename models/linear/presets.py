@@ -59,23 +59,9 @@ class ExperimentPresets(ExperimentPresetsBase):
         return create_search_space(
             self._preset,
             base_config,
-            self.__base_search_space(),
+            self._build_search_space(),
             num_random_search_samples,
         )
-
-    def __base_search_space(self) -> dict:
-        return {
-            "learning_rate": [1e-4, 1e-3, 1e-2],
-            "hidden_dim": [64, 128, 256, 512],
-            "stack_num_layers": [3, 6],
-            "stack_dropout_probability": [0.0, 0.1],
-            "stack_activation": [
-                ActivationOptions.RELU,
-                ActivationOptions.SILU,
-                ActivationOptions.GELU,
-                ActivationOptions.LEAKY_RELU,
-            ],
-        }
 
     def _preset(
         self,

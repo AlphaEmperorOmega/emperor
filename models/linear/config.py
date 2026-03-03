@@ -15,6 +15,17 @@ STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
 STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.0
 
+SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
+SEARCH_SPACE_HIDDEN_DIM: list = [64, 128, 256, 512]
+SEARCH_SPACE_STACK_NUM_LAYERS: list = [3, 6]
+SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1]
+SEARCH_SPACE_STACK_ACTIVATION: list = [
+    ActivationOptions.RELU,
+    ActivationOptions.SILU,
+    ActivationOptions.GELU,
+    ActivationOptions.LEAKY_RELU,
+]
+
 
 @dataclass
 class ExperimentConfig(ConfigBase):
