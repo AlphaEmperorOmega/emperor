@@ -1,0 +1,37 @@
+from emperor.base.enums import BaseOptions
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
+from models.parametric_generator.config import ExperimentConfig
+from models.parametric_generator.model import Model
+from models.parametric_generator.presets import ExperimentOptions, ExperimentPresets
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emperor.config import ModelConfig
+
+
+class Experiment(ExperimentBase):
+    def __init__(
+        self,
+        experiment_option: ExperimentOptions | None = None,
+    ) -> None:
+        super().__init__(experiment_option)
+        self.accelerator = "cpu"
+
+    def _model_type(self) -> type:
+        return Model
+
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
+        return ExperimentPresets()
+
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        return ExperimentOptions
+
+
+__all__ = [
+    "Experiment",
+    "ExperimentOptions",
+    "ExperimentPresets",
+    "ExperimentConfig",
+    "Model",
+]
