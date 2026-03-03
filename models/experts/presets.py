@@ -57,7 +57,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(),
+            **self._build_search_space(search_mode),
             "experts_model_generator_depth": [
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
