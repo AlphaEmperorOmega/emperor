@@ -2,7 +2,11 @@ from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPosition
 from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
-from emperor.experiments.base import ExperimentPresetsBase, create_search_space, SearchMode
+from emperor.experiments.base import (
+    ExperimentPresetsBase,
+    create_search_space,
+    SearchMode,
+)
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -66,7 +70,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(),
+            **self._build_search_space(search_mode),
             "generator_depth": [
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
@@ -74,9 +78,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ],
         }
 
-        return create_search_space(
-            self._preset, base_config, search_space, search_mode
-        )
+        return create_search_space(self._preset, base_config, search_space, search_mode)
 
     def __diagonal_grid_search_config(
         self,
@@ -86,7 +88,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(),
+            **self._build_search_space(search_mode),
             "diagonal_option": [
                 DynamicDiagonalOptions.DISABLED,
                 DynamicDiagonalOptions.DIAGONAL,
@@ -95,9 +97,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ],
         }
 
-        return create_search_space(
-            self._preset, base_config, search_space, search_mode
-        )
+        return create_search_space(self._preset, base_config, search_space, search_mode)
 
     def __bias_grid_search_config(
         self,
@@ -107,7 +107,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(),
+            **self._build_search_space(search_mode),
             "bias_option": [
                 DynamicBiasOptions.DISABLED,
                 DynamicBiasOptions.SCALE_AND_OFFSET,
@@ -116,9 +116,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ],
         }
 
-        return create_search_space(
-            self._preset, base_config, search_space, search_mode
-        )
+        return create_search_space(self._preset, base_config, search_space, search_mode)
 
     def __memory_grid_search_config(
         self,
@@ -128,7 +126,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(),
+            **self._build_search_space(search_mode),
             "memory_option": [
                 LinearMemoryOptions.FUSION,
                 LinearMemoryOptions.WEIGHTED,
@@ -145,9 +143,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ],
         }
 
-        return create_search_space(
-            self._preset, base_config, search_space, search_mode
-        )
+        return create_search_space(self._preset, base_config, search_space, search_mode)
 
     def __combined_grid_search_config(
         self,
@@ -157,7 +153,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self._build_search_space(),
+            **self._build_search_space(search_mode),
             "generator_depth": [
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
@@ -191,9 +187,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ],
         }
 
-        return create_search_space(
-            self._preset, base_config, search_space, search_mode
-        )
+        return create_search_space(self._preset, base_config, search_space, search_mode)
 
     def _preset(
         self,
