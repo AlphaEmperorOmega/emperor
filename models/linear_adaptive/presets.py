@@ -2,7 +2,7 @@ from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPosition
 from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
-from emperor.experiments.base import ExperimentPresetsBase, create_search_space
+from emperor.experiments.base import ExperimentPresetsBase, create_search_space, SearchMode
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -36,23 +36,23 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         model_config_options: ExperimentOptions = ExperimentOptions.DEFAULT,
         dataset: type = Mnist,
-        num_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
                 return self._default_config(dataset)
             case ExperimentOptions.GENERATOR_DEPTH:
-                return self.__generator_depth_grid_search_config(dataset, num_samples)
+                return self.__generator_depth_grid_search_config(dataset, search_mode)
             case ExperimentOptions.BASE:
-                return self._create_search_space_configs(dataset, num_samples)
+                return self._create_search_space_configs(dataset, search_mode)
             case ExperimentOptions.DIAGONAL:
-                return self.__diagonal_grid_search_config(dataset, num_samples)
+                return self.__diagonal_grid_search_config(dataset, search_mode)
             case ExperimentOptions.BIAS:
-                return self.__bias_grid_search_config(dataset, num_samples)
+                return self.__bias_grid_search_config(dataset, search_mode)
             case ExperimentOptions.MEMORY:
-                return self.__memory_grid_search_config(dataset, num_samples)
+                return self.__memory_grid_search_config(dataset, search_mode)
             case ExperimentOptions.COMBINED:
-                return self.__combined_grid_search_config(dataset, num_samples)
+                return self.__combined_grid_search_config(dataset, search_mode)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
@@ -61,7 +61,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     def __generator_depth_grid_search_config(
         self,
         dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         base_config = self._dataset_config(dataset)
 
@@ -75,13 +75,13 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self._preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, search_mode
         )
 
     def __diagonal_grid_search_config(
         self,
         dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         base_config = self._dataset_config(dataset)
 
@@ -96,13 +96,13 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self._preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, search_mode
         )
 
     def __bias_grid_search_config(
         self,
         dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         base_config = self._dataset_config(dataset)
 
@@ -117,13 +117,13 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self._preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, search_mode
         )
 
     def __memory_grid_search_config(
         self,
         dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         base_config = self._dataset_config(dataset)
 
@@ -146,13 +146,13 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self._preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, search_mode
         )
 
     def __combined_grid_search_config(
         self,
         dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         base_config = self._dataset_config(dataset)
 
@@ -192,7 +192,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self._preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, search_mode
         )
 
     def _preset(
