@@ -47,6 +47,19 @@ STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
 STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.0
 
+SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
+SEARCH_SPACE_HIDDEN_DIM: list = [64, 128, 256]
+SEARCH_SPACE_STACK_NUM_LAYERS: list = [3, 6]
+SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1]
+SEARCH_SPACE_STACK_ACTIVATION: list = [
+    ActivationOptions.RELU,
+    ActivationOptions.SILU,
+    ActivationOptions.GELU,
+    ActivationOptions.LEAKY_RELU,
+]
+SEARCH_SPACE_EXPERTS_TOP_K: list = [1, 2, 3]
+SEARCH_SPACE_EXPERTS_NUM_EXPERTS: list = [4, 6, 8]
+
 
 @dataclass
 class ExperimentConfig(ConfigBase):
