@@ -1,60 +1,69 @@
 import argparse
-from argparse import Namespace
+from emperor.base.enums import BaseOptions
 
 
 class _ExperimentParser(argparse.ArgumentParser):
-    def parse_args(self, args=None, namespace=None):
-        parsed = super().parse_args(args, namespace)
-        self.__validate_num_samples(parsed)
-        return parsed
-
-    def __validate_num_samples(self, parsed: Namespace) -> None:
-        if parsed.num_samples is not None and parsed.run_all:
-            self.error("--num-samples can only be used with --name, not --run-all")
+    pass
 
 
 def get_experiment_parser(
     config_choices: list | None = None,
 ) -> _ExperimentParser:
     parser = _ExperimentParser(
-        description="Run an experiment with a specific configuration or all available configurations.",
+        description="Run an experiment with a named configuration.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
-    group = parser.add_mutually_exclusive_group(required=True)
-
     choices_text = ""
     if config_choices:
-        choices_text = "Available configurations:\n" + "\n".join(
+        choices_text = "\nAvailable configurations:\n" + "\n".join(
             f"  {c}" for c in config_choices
         )
 
-    group.add_argument(
+    name_group = parser.add_mutually_exclusive_group(required=True)
+
+    name_group.add_argument(
         "--name",
         type=str,
-        help="Name of the experiment configuration to run.\n" + choices_text,
+        help="Name of the experiment configuration to run." + choices_text,
         choices=config_choices,
         metavar="CONFIG_NAME",
     )
 
-    group.add_argument(
-        "--run-all",
+    name_group.add_argument(
+        "--all-options",
         action="store_true",
-        help="Run grid search over all available experiment configurations.",
+        help="Run all experiment configurations sequentially.",
     )
 
-    parser.add_argument(
-        "--num-samples",
+    search_group = parser.add_mutually_exclusive_group()
+
+    search_group.add_argument(
+        "--grid-search",
+        action="store_true",
+        help="Run grid search over all combinations in the search space.",
+    )
+
+    search_group.add_argument(
+        "--random-search",
         type=int,
-        default=None,
-        help="Number of random search samples. If not provided, grid search is performed over all combinations defined in __base_search_space.",
+        metavar="N",
+        help="Run random search with N sampled combinations from the search space.",
     )
 
     parser.add_argument(
         "--log-folder",
         type=str,
         default=None,
-        help="Custom folder name for storing experiment logs. If not provided, the model file name is used. Use the same folder across models to compare them in TensorBoard.",
+        help="Custom folder name for storing experiment logs. If not provided, the model file name is used.\nUse the same folder across models to compare them in TensorBoard.",
     )
 
     return parser
+
+
+def resolve_experiment_mode(
+    args: argparse.Namespace,
+    options_enum: type[BaseOptions],
+) -> tuple[BaseOptions | None, int | None]:
+    config_option = None if args.all_options else options_enum.get_option(args.name)
+    return config_option, args.random_search
