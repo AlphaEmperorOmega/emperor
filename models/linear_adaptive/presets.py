@@ -66,7 +66,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             case ExperimentOptions.GENERATOR_DEPTH:
                 return self.__generator_depth_grid_search_config(dataset, num_samples)
             case ExperimentOptions.BASE:
-                return self.__base_grid_search_config(dataset, num_samples)
+                return self._create_search_space_configs(dataset, num_samples)
             case ExperimentOptions.DIAGONAL:
                 return self.__diagonal_grid_search_config(dataset, num_samples)
             case ExperimentOptions.BIAS:
@@ -80,20 +80,6 @@ class ExperimentPresets(ExperimentPresetsBase):
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
                 )
 
-    def __base_grid_search_config(
-        self,
-        dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
-    ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
-
-        return create_search_space(
-            self._preset,
-            base_config,
-            self.__base_search_space(),
-            num_random_search_samples,
-        )
-
     def __generator_depth_grid_search_config(
         self,
         dataset: type = Mnist,
@@ -102,7 +88,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self.__base_search_space(),
+            **self._build_search_space(),
             "generator_depth": [
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
@@ -122,7 +108,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self.__base_search_space(),
+            **self._build_search_space(),
             "diagonal_option": [
                 DynamicDiagonalOptions.DISABLED,
                 DynamicDiagonalOptions.DIAGONAL,
@@ -143,7 +129,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self.__base_search_space(),
+            **self._build_search_space(),
             "bias_option": [
                 DynamicBiasOptions.DISABLED,
                 DynamicBiasOptions.SCALE_AND_OFFSET,
@@ -164,7 +150,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self.__base_search_space(),
+            **self._build_search_space(),
             "memory_option": [
                 LinearMemoryOptions.FUSION,
                 LinearMemoryOptions.WEIGHTED,
@@ -193,7 +179,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         base_config = self._dataset_config(dataset)
 
         search_space = {
-            **self.__base_search_space(),
+            **self._build_search_space(),
             "generator_depth": [
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
@@ -230,23 +216,6 @@ class ExperimentPresets(ExperimentPresetsBase):
         return create_search_space(
             self._preset, base_config, search_space, num_random_search_samples
         )
-
-    def __base_search_space(self) -> dict:
-        return {
-            "learning_rate": [1e-4, 1e-3, 1e-2],
-            "hidden_dim": [64, 128, 256],
-            "stack_num_layers": [3, 6],
-            "stack_dropout_probability": [0.0, 0.1],
-            "stack_activation": [
-                ActivationOptions.RELU,
-                ActivationOptions.SILU,
-                ActivationOptions.GELU,
-                ActivationOptions.LEAKY_RELU,
-            ],
-            "adaptive_generator_stack_num_layers": [1, 2, 3],
-            "adaptive_generator_stack_hidden_dim": [64, 128, 256],
-            "adaptive_generator_stack_dropout_probability": [0.0, 0.1],
-        }
 
     def _preset(
         self,
