@@ -5,7 +5,7 @@ from emperor.base.layer import LayerStackConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
-from emperor.experiments.base import ExperimentPresetsBase, create_search_space
+from emperor.experiments.base import ExperimentPresetsBase, create_search_space, SearchMode
 from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -35,15 +35,15 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         model_config_options: ExperimentOptions = ExperimentOptions.DEFAULT,
         dataset: type = Mnist,
-        num_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
                 return self._default_config(dataset)
             case ExperimentOptions.BASE:
-                return self._create_search_space_configs(dataset, num_samples)
+                return self._create_search_space_configs(dataset, search_mode)
             case ExperimentOptions.ADAPTIVE:
-                return self.__adaptive_grid_search_config(dataset, num_samples)
+                return self.__adaptive_grid_search_config(dataset, search_mode)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
@@ -52,7 +52,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     def __adaptive_grid_search_config(
         self,
         dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         base_config = self._dataset_config(dataset)
 
@@ -78,7 +78,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         }
 
         return create_search_space(
-            self._preset, base_config, search_space, num_random_search_samples
+            self._preset, base_config, search_space, search_mode
         )
 
     def _preset(

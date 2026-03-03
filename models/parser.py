@@ -1,5 +1,6 @@
 import argparse
 from emperor.base.enums import BaseOptions
+from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
 
 
 class _ExperimentParser(argparse.ArgumentParser):
@@ -64,6 +65,12 @@ def get_experiment_parser(
 def resolve_experiment_mode(
     args: argparse.Namespace,
     options_enum: type[BaseOptions],
-) -> tuple[BaseOptions | None, int | None]:
+) -> tuple[BaseOptions | None, SearchMode]:
     config_option = None if args.all_options else options_enum.get_option(args.name)
-    return config_option, args.random_search
+    if args.random_search is not None:
+        search_mode: SearchMode = RandomSearch(args.random_search)
+    elif args.grid_search:
+        search_mode = GridSearch()
+    else:
+        search_mode = None
+    return config_option, search_mode

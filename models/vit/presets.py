@@ -21,6 +21,7 @@ from emperor.behaviours.utils.enums import (
 )
 import models.vit.config as config
 from models.vit.config import ExperimentConfig
+from emperor.experiments.base import SearchMode
 
 from typing import TYPE_CHECKING
 
@@ -39,7 +40,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         model_config_options: ExperimentOptions = ExperimentOptions.DEFAULT,
         dataset: type = Mnist,
-        num_samples: int | None = None,
+        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.DEFAULT:
