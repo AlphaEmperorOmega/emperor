@@ -1,0 +1,81 @@
+from dataclasses import dataclass, field
+from emperor.base.utils import ConfigBase
+from emperor.base.layer import LayerStackConfig
+from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.linears.options import LinearLayerStackOptions
+from emperor.behaviours.utils.enums import (
+    DynamicBiasOptions,
+    DynamicDepthOptions,
+    DynamicDiagonalOptions,
+    LinearMemoryOptions,
+    LinearMemoryPositionOptions,
+    LinearMemorySizeOptions,
+)
+
+BATCH_SIZE: int = 64
+LEARNING_RATE: float = 1e-3
+INPUT_DIM: int = 28**2
+HIDDEN_DIM: int = 256
+OUTPUT_DIM: int = 10
+STACK_NUM_LAYERS: int = 3
+STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+STACK_RESIDUAL_FLAG: bool = False
+STACK_DROPOUT_PROBABILITY: float = 0.0
+ADAPTIVE_MIXTURE_TOP_K: int = 3
+ADAPTIVE_MIXTURE_NUM_EXPERTS: int = 6
+ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG: bool = False
+ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION: ClipParameterOptions = ClipParameterOptions.BEFORE
+ADAPTIVE_MIXTURE_CLIP_RANGE: float = 5.0
+ROUTER_LAYER_STACK_OPTION: LinearLayerStackOptions = LinearLayerStackOptions.BASE
+ROUTER_HIDDEN_DIM: int = 0
+ROUTER_NUM_LAYERS: int = 2
+ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+ROUTER_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.NONE
+ROUTER_RESIDUAL_FLAG: bool = False
+ROUTER_DROPOUT_PROBABILITY: float = 0.0
+ROUTER_BIAS_FLAG: bool = False
+ROUTER_NOISY_TOPK_FLAG: bool = False
+ROUTER_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DISABLED
+ROUTER_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED
+ROUTER_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
+ROUTER_MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
+ROUTER_MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
+ROUTER_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE
+ROUTER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = 0
+ROUTER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
+ROUTER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+ROUTER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG: bool = False
+ROUTER_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
+SAMPLER_NUM_EXPERTS: int = 6
+SAMPLER_TOP_K: int = 3
+SAMPLER_THRESHOLD: float = 0.0
+SAMPLER_FILTER_ABOVE_THRESHOLD: bool = False
+SAMPLER_NUM_TOPK_SAMPLES: int = 0
+SAMPLER_NORMALIZE_PROBABILITIES_FLAG: bool = False
+SAMPLER_NOISY_TOPK_FLAG: bool = False
+SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.0
+SAMPLER_SWITCH_LOSS_WEIGHT: float = 0.0
+SAMPLER_ZERO_CENTRED_LOSS_WEIGHT: float = 0.0
+SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
+
+SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
+SEARCH_SPACE_HIDDEN_DIM: list = [64, 128, 256]
+SEARCH_SPACE_STACK_NUM_LAYERS: list = [3, 6]
+SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1]
+SEARCH_SPACE_STACK_ACTIVATION: list = [
+    ActivationOptions.RELU,
+    ActivationOptions.SILU,
+    ActivationOptions.GELU,
+    ActivationOptions.LEAKY_RELU,
+]
+SEARCH_SPACE_ADAPTIVE_MIXTURE_TOP_K: list = [1, 3]
+SEARCH_SPACE_ADAPTIVE_MIXTURE_NUM_EXPERTS: list = [4, 6, 8]
+
+
+@dataclass
+class ExperimentConfig(ConfigBase):
+    model_config: "LayerStackConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
