@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 
 
 class ExperimentOptions(BaseOptions):
-    DEFAULT = 0
-    BASE = 1
+    PRESET = 0
+    CONFIG = 1
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -40,14 +40,14 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def get_config(
         self,
-        model_config_options: ExperimentOptions = ExperimentOptions.DEFAULT,
+        model_config_options: ExperimentOptions = ExperimentOptions.PRESET,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
-            case ExperimentOptions.DEFAULT:
+            case ExperimentOptions.PRESET:
                 return self._create_default_preset_configs(dataset)
-            case ExperimentOptions.BASE:
+            case ExperimentOptions.CONFIG:
                 return self._create_default_search_space_configs(dataset, search_mode)
             case _:
                 raise ValueError(
