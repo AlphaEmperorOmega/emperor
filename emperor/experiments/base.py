@@ -2,6 +2,7 @@ import random
 import hashlib
 import inspect
 import itertools
+import importlib
 from datetime import datetime
 from pathlib import Path
 
@@ -68,6 +69,29 @@ class ExperimentPresetsBase:
         dataset: type = Mnist,
     ) -> list["ModelConfig"]:
         return [self._preset(**self._dataset_config(dataset))]
+
+    def _build_search_space(self) -> dict:
+        package = type(self).__module__.rsplit(".", 1)[0]
+        config = importlib.import_module(f"{package}.config")
+        prefix = "SEARCH_SPACE_"
+        return {
+            key[len(prefix):].lower(): value
+            for key, value in vars(config).items()
+            if key.startswith(prefix)
+        }
+
+    def _create_search_space_configs(
+        self,
+        dataset: type = Mnist,
+        num_samples: int | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = self._dataset_config(dataset)
+        return create_search_space(
+            self._preset,
+            base_config,
+            self._build_search_space(),
+            num_samples,
+        )
 
 
 class ExperimentBase:
