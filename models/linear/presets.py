@@ -2,9 +2,10 @@ from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPosition
 from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
-from emperor.experiments.base import ExperimentPresetsBase
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 import models.linear.config as config
 from models.linear.config import ExperimentConfig
+from models.linear.model import Model
 from emperor.experiments.base import SearchMode
 
 from typing import TYPE_CHECKING
@@ -81,3 +82,21 @@ class ExperimentPresets(ExperimentPresetsBase):
                 )
             ),
         )
+
+
+class Experiment(ExperimentBase):
+    def __init__(
+        self,
+        experiment_option: ExperimentOptions | None = None,
+    ) -> None:
+        super().__init__(experiment_option)
+        self.accelerator = "cpu"
+
+    def _model_type(self) -> type:
+        return Model
+
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
+        return ExperimentPresets()
+
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        return ExperimentOptions

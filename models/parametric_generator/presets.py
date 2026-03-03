@@ -12,7 +12,7 @@ from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOpt
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
-from emperor.experiments.base import ExperimentPresetsBase
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -23,6 +23,7 @@ from emperor.behaviours.utils.enums import (
 )
 import models.parametric_generator.config as config
 from models.parametric_generator.config import ExperimentConfig
+from models.parametric_generator.model import Model
 from emperor.experiments.base import SearchMode
 
 from typing import TYPE_CHECKING
@@ -266,3 +267,21 @@ class ExperimentPresets(ExperimentPresetsBase):
                 ),
             ),
         )
+
+
+class Experiment(ExperimentBase):
+    def __init__(
+        self,
+        experiment_option: ExperimentOptions | None = None,
+    ) -> None:
+        super().__init__(experiment_option)
+        self.accelerator = "cpu"
+
+    def _model_type(self) -> type:
+        return Model
+
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
+        return ExperimentPresets()
+
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        return ExperimentOptions

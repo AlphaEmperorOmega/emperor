@@ -19,9 +19,10 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.experiments.base import ExperimentPresetsBase
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 import models.parametric_vector.config as config
 from models.parametric_vector.config import ExperimentConfig
+from models.parametric_vector.model import Model
 from emperor.experiments.base import SearchMode
 
 from typing import TYPE_CHECKING
@@ -309,3 +310,21 @@ class ExperimentPresets(ExperimentPresetsBase):
                 bias_flag=bias_flag,
             ),
         )
+
+
+class Experiment(ExperimentBase):
+    def __init__(
+        self,
+        experiment_option: ExperimentOptions | None = None,
+    ) -> None:
+        super().__init__(experiment_option)
+        self.accelerator = "cpu"
+
+    def _model_type(self) -> type:
+        return Model
+
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
+        return ExperimentPresets()
+
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        return ExperimentOptions

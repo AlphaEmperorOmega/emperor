@@ -13,7 +13,7 @@ from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
-from emperor.experiments.base import ExperimentPresetsBase
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -21,6 +21,7 @@ from emperor.behaviours.utils.enums import (
 )
 import models.vit.config as config
 from models.vit.config import ExperimentConfig
+from models.vit.model import Model
 from emperor.experiments.base import SearchMode
 
 from typing import TYPE_CHECKING
@@ -367,3 +368,20 @@ class ExperimentPresets(ExperimentPresetsBase):
                 ),
             ),
         )
+
+
+class Experiment(ExperimentBase):
+    def __init__(
+        self,
+        experiment_option: ExperimentOptions | None = None,
+    ) -> None:
+        super().__init__(experiment_option)
+
+    def _model_type(self) -> type:
+        return Model
+
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
+        return ExperimentPresets()
+
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        return ExperimentOptions

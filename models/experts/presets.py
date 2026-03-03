@@ -5,7 +5,7 @@ from emperor.base.layer import LayerStackConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
-from emperor.experiments.base import ExperimentPresetsBase, create_search_space, SearchMode
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, create_search_space, SearchMode
 from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
@@ -17,6 +17,7 @@ from emperor.behaviours.utils.enums import (
 )
 import models.experts.config as config
 from models.experts.config import ExperimentConfig
+from models.experts.model import Model
 
 from typing import TYPE_CHECKING
 
@@ -262,3 +263,20 @@ class ExperimentPresets(ExperimentPresetsBase):
                 ),
             ),
         )
+
+
+class Experiment(ExperimentBase):
+    def __init__(
+        self,
+        experiment_option: ExperimentOptions | None = None,
+    ) -> None:
+        super().__init__(experiment_option)
+
+    def _model_type(self) -> type:
+        return Model
+
+    def _preset_generator_instance(self) -> ExperimentPresetsBase:
+        return ExperimentPresets()
+
+    def _experiment_enumeration(self) -> type[BaseOptions]:
+        return ExperimentOptions
