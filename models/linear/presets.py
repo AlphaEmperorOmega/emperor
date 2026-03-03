@@ -2,7 +2,7 @@ from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPosition
 from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
-from emperor.experiments.base import ExperimentPresetsBase, create_search_space
+from emperor.experiments.base import ExperimentPresetsBase
 from models.linear.config import (
     ExperimentConfig,
     BATCH_SIZE,
@@ -43,25 +43,11 @@ class ExperimentPresets(ExperimentPresetsBase):
             case ExperimentOptions.DEFAULT:
                 return self._default_config(dataset)
             case ExperimentOptions.BASE:
-                return self.__base_grid_search_config(dataset, num_samples)
+                return self._create_search_space_configs(dataset, num_samples)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `LinearExperimentOptions`."
                 )
-
-    def __base_grid_search_config(
-        self,
-        dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
-    ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
-
-        return create_search_space(
-            self._preset,
-            base_config,
-            self._build_search_space(),
-            num_random_search_samples,
-        )
 
     def _preset(
         self,
