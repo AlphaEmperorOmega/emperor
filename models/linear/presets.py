@@ -1,19 +1,21 @@
-import torch
-
-from torch import Tensor
-from models.parser import get_experiment_parser
-from dataclasses import dataclass, field
-from emperor.base.utils import ConfigBase
-from emperor.base.enums import BaseOptions
+from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
-from emperor.base.layer import LayerStack, LayerStackConfig
-from emperor.experiments.classifier import ClassifierExperiment
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from emperor.experiments.base import (
-    ExperimentBase,
-    ExperimentPresetsBase,
-    create_search_space,
+from emperor.base.layer import LayerStackConfig
+from emperor.experiments.base import ExperimentPresetsBase, create_search_space
+from models.linear.config import (
+    ExperimentConfig,
+    BATCH_SIZE,
+    LEARNING_RATE,
+    INPUT_DIM,
+    HIDDEN_DIM,
+    OUTPUT_DIM,
+    BIAS_FLAG,
+    LAYER_NORM_POSITION,
+    STACK_NUM_LAYERS,
+    STACK_ACTIVATION,
+    STACK_RESIDUAL_FLAG,
+    STACK_DROPOUT_PROBABILITY,
 )
 
 from typing import TYPE_CHECKING
@@ -22,62 +24,9 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-@dataclass
-class ExperimentConfig(ConfigBase):
-    model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-
-
-class Model(ClassifierExperiment):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-    ):
-        super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
-        self.model_config: LayerStackConfig = self.main_cfg.model_config
-        self.model = LayerStack(self.model_config).build_model()
-
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> None:
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
-
-    def forward(
-        self,
-        X: Tensor,
-    ) -> Tensor:
-        X = X.to(self.device)
-        X = torch.flatten(X, start_dim=1)
-        X = self.model(X)
-        return X
-
-
 class ExperimentOptions(BaseOptions):
     DEFAULT = 0
     BASE = 1
-
-
-class Experiment(ExperimentBase):
-    def __init__(
-        self,
-        experiment_option: ExperimentOptions | None = None,
-    ) -> None:
-        super().__init__(experiment_option)
-        self.accelerator = "cpu"
-
-    def _model_type(self) -> type:
-        return Model
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        return ExperimentPresets()
-
-    def _experiment_enumeration(self) -> type[BaseOptions]:
-        return ExperimentOptions
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -130,17 +79,17 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def _preset(
         self,
-        batch_size: int = 64,
-        learning_rate: float = 1e-3,
-        input_dim: int = 28**2,
-        hidden_dim: int = 256,
-        output_dim: int = 10,
-        bias_flag: bool = True,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT,
-        stack_num_layers: int = 3,
-        stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_flag: bool = False,
-        stack_dropout_probability: float = 0.0,
+        batch_size: int = BATCH_SIZE,
+        learning_rate: float = LEARNING_RATE,
+        input_dim: int = INPUT_DIM,
+        hidden_dim: int = HIDDEN_DIM,
+        output_dim: int = OUTPUT_DIM,
+        bias_flag: bool = BIAS_FLAG,
+        layer_norm_position: LayerNormPositionOptions = LAYER_NORM_POSITION,
+        stack_num_layers: int = STACK_NUM_LAYERS,
+        stack_activation: ActivationOptions = STACK_ACTIVATION,
+        stack_residual_flag: bool = STACK_RESIDUAL_FLAG,
+        stack_dropout_probability: float = STACK_DROPOUT_PROBABILITY,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions
@@ -171,11 +120,3 @@ class ExperimentPresets(ExperimentPresetsBase):
                 )
             ),
         )
-
-
-if __name__ == "__main__":
-    parser = get_experiment_parser(ExperimentOptions.names())
-    args = parser.parse_args()
-    config_option = ExperimentOptions.get_option(args.name)
-    experiment = Experiment(config_option)
-    experiment.train_model(num_samples=args.num_samples, log_folder=args.log_folder)
