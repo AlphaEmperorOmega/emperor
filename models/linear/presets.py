@@ -3,20 +3,8 @@ from emperor.datasets.image.mnist import Mnist
 from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.experiments.base import ExperimentPresetsBase
-from models.linear.config import (
-    ExperimentConfig,
-    BATCH_SIZE,
-    LEARNING_RATE,
-    INPUT_DIM,
-    HIDDEN_DIM,
-    OUTPUT_DIM,
-    BIAS_FLAG,
-    LAYER_NORM_POSITION,
-    STACK_NUM_LAYERS,
-    STACK_ACTIVATION,
-    STACK_RESIDUAL_FLAG,
-    STACK_DROPOUT_PROBABILITY,
-)
+import models.linear.config as config
+from models.linear.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
 
@@ -51,17 +39,17 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def _preset(
         self,
-        batch_size: int = BATCH_SIZE,
-        learning_rate: float = LEARNING_RATE,
-        input_dim: int = INPUT_DIM,
-        hidden_dim: int = HIDDEN_DIM,
-        output_dim: int = OUTPUT_DIM,
-        bias_flag: bool = BIAS_FLAG,
-        layer_norm_position: LayerNormPositionOptions = LAYER_NORM_POSITION,
-        stack_num_layers: int = STACK_NUM_LAYERS,
-        stack_activation: ActivationOptions = STACK_ACTIVATION,
-        stack_residual_flag: bool = STACK_RESIDUAL_FLAG,
-        stack_dropout_probability: float = STACK_DROPOUT_PROBABILITY,
+        batch_size: int = config.BATCH_SIZE,
+        learning_rate: float = config.LEARNING_RATE,
+        input_dim: int = config.INPUT_DIM,
+        hidden_dim: int = config.HIDDEN_DIM,
+        output_dim: int = config.OUTPUT_DIM,
+        bias_flag: bool = config.BIAS_FLAG,
+        layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
+        stack_num_layers: int = config.STACK_NUM_LAYERS,
+        stack_activation: ActivationOptions = config.STACK_ACTIVATION,
+        stack_residual_flag: bool = config.STACK_RESIDUAL_FLAG,
+        stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions
