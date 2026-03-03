@@ -1,12 +1,6 @@
-import torch
-
-from torch import Tensor
-from models.parser import get_experiment_parser
-from dataclasses import dataclass, field
-from emperor.base.utils import ConfigBase
-from emperor.base.enums import BaseOptions
+from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
-from emperor.base.layer import LayerStack, LayerStackConfig
+from emperor.base.layer import LayerStackConfig
 from emperor.linears.utils.layers import LinearLayerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
@@ -17,12 +11,8 @@ from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions, Adapt
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.experiments.classifier import ClassifierExperiment
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from emperor.experts.utils.enums import (
-    ExpertWeightingPositionOptions,
-    InitSamplerOptions,
-)
+from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
+from emperor.experiments.base import ExperimentPresetsBase
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -31,10 +21,34 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.experiments.base import (
-    ExperimentBase,
-    ExperimentPresetsBase,
-    create_search_space,
+from models.parametric_generator.config import (
+    ExperimentConfig,
+    BATCH_SIZE,
+    LEARNING_RATE,
+    INPUT_DIM,
+    HIDDEN_DIM,
+    OUTPUT_DIM,
+    STACK_NUM_LAYERS,
+    STACK_ACTIVATION,
+    STACK_RESIDUAL_FLAG,
+    STACK_DROPOUT_PROBABILITY,
+    ADAPTIVE_MIXTURE_TOP_K,
+    ADAPTIVE_MIXTURE_NUM_EXPERTS,
+    ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG,
+    ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION,
+    ADAPTIVE_MIXTURE_CLIP_RANGE,
+    ADAPTIVE_BIAS_OPTION,
+    ADAPTIVE_BEHAVIOUR_GENERATOR_DEPTH,
+    ADAPTIVE_BEHAVIOUR_DIAGONAL_OPTION,
+    ADAPTIVE_BEHAVIOUR_BIAS_OPTION,
+    ADAPTIVE_BEHAVIOUR_MEMORY_OPTION,
+    ADAPTIVE_BEHAVIOUR_MEMORY_SIZE_OPTION,
+    ADAPTIVE_BEHAVIOUR_MEMORY_POSITION_OPTION,
+    ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
+    ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
+    ADAPTIVE_GENERATOR_STACK_ACTIVATION,
+    ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG,
+    ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
 )
 
 from typing import TYPE_CHECKING
@@ -43,62 +57,9 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-@dataclass
-class ExperimentConfig(ConfigBase):
-    model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-
-
-class Model(ClassifierExperiment):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-    ):
-        super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
-        self.model_config: LayerStackConfig = self.main_cfg.model_config
-        self.model = LayerStack(self.model_config).build_model()
-
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> None:
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
-
-    def forward(
-        self,
-        X: Tensor,
-    ) -> Tensor:
-        X = X.to(self.device)
-        X = torch.flatten(X, start_dim=1)
-        X = self.model(X)
-        return X
-
-
 class ExperimentOptions(BaseOptions):
     DEFAULT = 0
     BASE = 1
-
-
-class Experiment(ExperimentBase):
-    def __init__(
-        self,
-        experiment_option: ExperimentOptions | None = None,
-    ) -> None:
-        super().__init__(experiment_option)
-        self.accelerator = "cpu"
-
-    def _model_type(self) -> type:
-        return Model
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        return ExperimentPresets()
-
-    def _experiment_enumeration(self) -> type[BaseOptions]:
-        return ExperimentOptions
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -115,84 +76,40 @@ class ExperimentPresets(ExperimentPresetsBase):
             case ExperimentOptions.DEFAULT:
                 return self._default_config(dataset)
             case ExperimentOptions.BASE:
-                return self.__base_grid_search_config(dataset, num_samples)
+                return self._create_search_space_configs(dataset, num_samples)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
                 )
 
-    def __base_grid_search_config(
-        self,
-        dataset: type = Mnist,
-        num_random_search_samples: int | None = None,
-    ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
-
-        return create_search_space(
-            self._preset,
-            base_config,
-            self.__base_search_space(),
-            num_random_search_samples,
-        )
-
-    def __base_search_space(self) -> dict:
-        return {
-            "learning_rate": [1e-4, 1e-3, 1e-2],
-            "hidden_dim": [64, 128, 256],
-            "stack_num_layers": [3, 6],
-            "stack_dropout_probability": [0.0, 0.1],
-            "stack_activation": [
-                ActivationOptions.RELU,
-                ActivationOptions.SILU,
-                ActivationOptions.GELU,
-                ActivationOptions.LEAKY_RELU,
-            ],
-            "adaptive_mixture_top_k": [1, 3],
-            "adaptive_mixture_num_experts": [4, 6, 8],
-            "adaptive_bias_option": [
-                AdaptiveBiasOptions.DISABLED,
-                AdaptiveBiasOptions.GENERATOR,
-            ],
-            "adaptive_mixture_clip_parameter_option": [
-                ClipParameterOptions.NONE,
-                ClipParameterOptions.BEFORE,
-                ClipParameterOptions.AFTER,
-            ],
-            "adaptive_behaviour_generator_depth": [
-                DynamicDepthOptions.DISABLED,
-                DynamicDepthOptions.DEPTH_OF_ONE,
-                DynamicDepthOptions.DEPTH_OF_TWO,
-            ],
-        }
-
     def _preset(
         self,
-        batch_size: int = 64,
-        learning_rate: float = 1e-3,
-        input_dim: int = 28**2,
-        hidden_dim: int = 256,
-        output_dim: int = 10,
-        stack_num_layers: int = 3,
-        stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_flag: bool = False,
-        stack_dropout_probability: float = 0.0,
-        adaptive_mixture_top_k: int = 3,
-        adaptive_mixture_num_experts: int = 6,
-        adaptive_mixture_weighted_parameters_flag: bool = False,
-        adaptive_mixture_clip_parameter_option: ClipParameterOptions = ClipParameterOptions.BEFORE,
-        adaptive_mixture_clip_range: float = 5.0,
-        adaptive_bias_option: AdaptiveBiasOptions = AdaptiveBiasOptions.DISABLED,
-        adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        adaptive_behaviour_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        adaptive_behaviour_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
-        adaptive_behaviour_memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
-        adaptive_behaviour_memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
-        adaptive_behaviour_memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
-        adaptive_generator_stack_num_layers: int = 2,
-        adaptive_generator_stack_hidden_dim: int = 256,
-        adaptive_generator_stack_activation: ActivationOptions = ActivationOptions.RELU,
-        adaptive_generator_stack_residual_flag: bool = False,
-        adaptive_generator_stack_dropout_probability: float = 0.0,
+        batch_size: int = BATCH_SIZE,
+        learning_rate: float = LEARNING_RATE,
+        input_dim: int = INPUT_DIM,
+        hidden_dim: int = HIDDEN_DIM,
+        output_dim: int = OUTPUT_DIM,
+        stack_num_layers: int = STACK_NUM_LAYERS,
+        stack_activation: ActivationOptions = STACK_ACTIVATION,
+        stack_residual_flag: bool = STACK_RESIDUAL_FLAG,
+        stack_dropout_probability: float = STACK_DROPOUT_PROBABILITY,
+        adaptive_mixture_top_k: int = ADAPTIVE_MIXTURE_TOP_K,
+        adaptive_mixture_num_experts: int = ADAPTIVE_MIXTURE_NUM_EXPERTS,
+        adaptive_mixture_weighted_parameters_flag: bool = ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG,
+        adaptive_mixture_clip_parameter_option: ClipParameterOptions = ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION,
+        adaptive_mixture_clip_range: float = ADAPTIVE_MIXTURE_CLIP_RANGE,
+        adaptive_bias_option: AdaptiveBiasOptions = ADAPTIVE_BIAS_OPTION,
+        adaptive_behaviour_generator_depth: DynamicDepthOptions = ADAPTIVE_BEHAVIOUR_GENERATOR_DEPTH,
+        adaptive_behaviour_diagonal_option: DynamicDiagonalOptions = ADAPTIVE_BEHAVIOUR_DIAGONAL_OPTION,
+        adaptive_behaviour_bias_option: DynamicBiasOptions = ADAPTIVE_BEHAVIOUR_BIAS_OPTION,
+        adaptive_behaviour_memory_option: LinearMemoryOptions = ADAPTIVE_BEHAVIOUR_MEMORY_OPTION,
+        adaptive_behaviour_memory_size_option: LinearMemorySizeOptions = ADAPTIVE_BEHAVIOUR_MEMORY_SIZE_OPTION,
+        adaptive_behaviour_memory_position_option: LinearMemoryPositionOptions = ADAPTIVE_BEHAVIOUR_MEMORY_POSITION_OPTION,
+        adaptive_generator_stack_num_layers: int = ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
+        adaptive_generator_stack_hidden_dim: int = ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
+        adaptive_generator_stack_activation: ActivationOptions = ADAPTIVE_GENERATOR_STACK_ACTIVATION,
+        adaptive_generator_stack_residual_flag: bool = ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG,
+        adaptive_generator_stack_dropout_probability: float = ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
@@ -375,11 +292,3 @@ class ExperimentPresets(ExperimentPresetsBase):
                 ),
             ),
         )
-
-
-if __name__ == "__main__":
-    parser = get_experiment_parser(ExperimentOptions.names())
-    args = parser.parse_args()
-    config_option = ExperimentOptions.get_option(args.name)
-    experiment = Experiment(config_option)
-    experiment.train_model(num_samples=args.num_samples, log_folder=args.log_folder)
