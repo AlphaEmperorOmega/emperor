@@ -1,34 +1,59 @@
 import torch
 
-from torch import Tensor
-from dataclasses import dataclass, field
-from emperor.base.utils import ConfigBase
+from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
-from models.parser import get_experiment_parser
 from emperor.linears.utils.layers import LinearLayerConfig
-from emperor.base.layer import LayerStack, LayerStackConfig
-from emperor.experiments.classifier import ClassifierExperiment
+from emperor.base.layer import LayerStackConfig
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.presets import TransformerPresets
 from emperor.transformer.utils.patch.selector import PatchOptions
-from emperor.transformer.utils.patch.selector import PatchSelector
-from emperor.attention.utils.layer import MultiHeadAttentionConfig
-from emperor.transformer.utils.stack import TransformerEncoderStack
 from emperor.transformer.utils.patch.options.base import PatchConfig
+from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-from emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
-from emperor.base.enums import ActivationOptions, BaseOptions, LayerNormPositionOptions
-from emperor.experiments.base import (
-    ExperimentBase,
-    ExperimentPresetsBase,
-)
+from emperor.experiments.base import ExperimentPresetsBase
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
+)
+from models.vit.config import (
+    ExperimentConfig,
+    BATCH_SIZE,
+    INPUT_DIM,
+    HIDDEN_DIM,
+    OUTPUT_DIM,
+    DROPOUT_PROBABILITY,
+    ACTIVATION_FUNCTION,
+    TRANSFORMER_NUM_LAYERS,
+    ATTN_NUM_LAYERS,
+    FF_BIAS_FLAG,
+    FF_NUM_LAYERS,
+    OUTPUT_BIAS_FLAG,
+    IMAGE_PATCH_SIZE,
+    INPUT_CHANNELS,
+    IMAGE_HEIGHT,
+    ATTN_BIAS_FLAG,
+    ATTN_NUM_HEADS,
+    ATTN_MODEL_TYPE,
+    FF_MODEL_TYPE,
+    OUTPUT_NUM_LAYERS,
+    ADAPTIVE_ATTN_BIAS_FLAG,
+    ADAPTIVE_ATTN_GENERATOR_DEPTH,
+    ADAPTIVE_ATTN_DIAGONAL_OPTION,
+    ADAPTIVE_ATTN_BIAS_OPTION,
+    ADAPTIVE_ATTN_BEHAVIOUR_STACK_NUM_LAYERS,
+    ADAPTIVE_FF_GENERATOR_DEPTH,
+    ADAPTIVE_FF_DIAGONAL_OPTION,
+    ADAPTIVE_FF_BIAS_OPTION,
+    ADAPTIVE_FF_BEHAVIOUR_STACK_NUM_LAYERS,
+    ADAPTIVE_OUTPUT_NUM_LAYERS,
+    ADAPTIVE_OUTPUT_GENERATOR_DEPTH,
+    ADAPTIVE_OUTPUT_DIAGONAL_OPTION,
+    ADAPTIVE_OUTPUT_BIAS_OPTION,
+    ADAPTIVE_OUTPUT_BEHAVIOUR_STACK_NUM_LAYERS,
 )
 
 from typing import TYPE_CHECKING
@@ -37,87 +62,10 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-@dataclass
-class ExperimentConfig(ConfigBase):
-    patch_config: "PatchConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    positional_embedding_config: "AbsolutePositionalEmbeddingConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    encoder_config: "TransformerConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    output_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-
-
-class Model(ClassifierExperiment):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-    ):
-        super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
-
-        self.patch_config = self.main_cfg.patch_config
-        self.embedding_config = self.main_cfg.positional_embedding_config
-        self.encoder_config = self.main_cfg.encoder_config
-        self.output_config = self.main_cfg.output_config
-
-        self.patch = PatchSelector(self.patch_config).build()
-        self.positional_embedding = AbsolutePositionalEmbeddingFactory(
-            self.embedding_config
-        ).build()
-        self.transformer = TransformerEncoderStack(self.encoder_config)
-        self.output = LayerStack(self.output_config).build_model()
-
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> "ExperimentConfig":
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
-
-    def forward(
-        self,
-        X: Tensor,
-    ) -> Tensor:
-        X = X.to(self.device)
-        X = self.patch(X)
-        X = self.positional_embedding(X)
-        X, loss = self.transformer(X)
-        X = X[:, 0, :]
-        X = self.output(X)
-        return X
-
-
 class ExperimentOptions(BaseOptions):
     DEFAULT = 0
     BASE = 1
     ADAPTIVE = 2
-
-
-class Experiment(ExperimentBase):
-    def __init__(
-        self,
-        experiment_option: ExperimentOptions | None = None,
-    ) -> None:
-        super().__init__(experiment_option)
-
-    def _model_type(self) -> type:
-        return Model
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        return ExperimentPresets()
-
-    def _experiment_enumeration(self) -> type[BaseOptions]:
-        return ExperimentOptions
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -141,25 +89,25 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def _preset(
         self,
-        batch_size: int = 64,
-        input_dim: int = 32,
-        hidden_dim: int = 32,
-        output_dim: int = 10,
-        dropout_probability: float = 0.1,
-        activation_function: ActivationOptions = ActivationOptions.SILU,
-        output_num_layers: int = 2,
-        transformer_num_layers: int = 1,
-        attn_bias_flag: bool = False,
-        attn_num_heads: int = 4,
-        attn_model_type: LinearLayerStackOptions = LinearLayerStackOptions.BASE,
-        attn_num_layers: int = 1,
-        ff_bias_flag: bool = True,
-        ff_model_type: LinearLayerStackOptions = LinearLayerStackOptions.BASE,
-        ff_num_layers: int = 2,
-        output_bias_flag: bool = True,
-        image_patch_size: int = 4,
-        input_channels: int = 3,
-        image_height: int = 32,
+        batch_size: int = BATCH_SIZE,
+        input_dim: int = INPUT_DIM,
+        hidden_dim: int = HIDDEN_DIM,
+        output_dim: int = OUTPUT_DIM,
+        dropout_probability: float = DROPOUT_PROBABILITY,
+        activation_function: ActivationOptions = ACTIVATION_FUNCTION,
+        output_num_layers: int = OUTPUT_NUM_LAYERS,
+        transformer_num_layers: int = TRANSFORMER_NUM_LAYERS,
+        attn_bias_flag: bool = ATTN_BIAS_FLAG,
+        attn_num_heads: int = ATTN_NUM_HEADS,
+        attn_model_type: LinearLayerStackOptions = ATTN_MODEL_TYPE,
+        attn_num_layers: int = ATTN_NUM_LAYERS,
+        ff_bias_flag: bool = FF_BIAS_FLAG,
+        ff_model_type: LinearLayerStackOptions = FF_MODEL_TYPE,
+        ff_num_layers: int = FF_NUM_LAYERS,
+        output_bias_flag: bool = OUTPUT_BIAS_FLAG,
+        image_patch_size: int = IMAGE_PATCH_SIZE,
+        input_channels: int = INPUT_CHANNELS,
+        image_height: int = IMAGE_HEIGHT,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
 
@@ -313,34 +261,34 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def __adaptive_preset(
         self,
-        batch_size: int = 64,
-        input_dim: int = 32,
-        hidden_dim: int = 32,
-        output_dim: int = 10,
-        dropout_probability: float = 0.1,
-        activation_function: ActivationOptions = ActivationOptions.SILU,
-        transformer_num_layers: int = 1,
-        attn_bias_flag: bool = True,
-        attn_num_layers: int = 1,
-        attn_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
-        attn_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL,
-        attn_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
-        attn_behaviour_stack_num_layers: int = 2,
-        ff_bias_flag: bool = True,
-        ff_num_layers: int = 2,
-        ff_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
-        ff_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL,
-        ff_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
-        ff_behaviour_stack_num_layers: int = 2,
-        output_bias_flag: bool = True,
-        output_num_layers: int = 1,
-        output_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
-        output_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL,
-        output_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
-        output_behaviour_stack_num_layers: int = 2,
-        image_patch_size: int = 4,
-        input_channels: int = 3,
-        image_height: int = 32,
+        batch_size: int = BATCH_SIZE,
+        input_dim: int = INPUT_DIM,
+        hidden_dim: int = HIDDEN_DIM,
+        output_dim: int = OUTPUT_DIM,
+        dropout_probability: float = DROPOUT_PROBABILITY,
+        activation_function: ActivationOptions = ACTIVATION_FUNCTION,
+        transformer_num_layers: int = TRANSFORMER_NUM_LAYERS,
+        attn_bias_flag: bool = ADAPTIVE_ATTN_BIAS_FLAG,
+        attn_num_layers: int = ATTN_NUM_LAYERS,
+        attn_generator_depth: DynamicDepthOptions = ADAPTIVE_ATTN_GENERATOR_DEPTH,
+        attn_diagonal_option: DynamicDiagonalOptions = ADAPTIVE_ATTN_DIAGONAL_OPTION,
+        attn_bias_option: DynamicBiasOptions = ADAPTIVE_ATTN_BIAS_OPTION,
+        attn_behaviour_stack_num_layers: int = ADAPTIVE_ATTN_BEHAVIOUR_STACK_NUM_LAYERS,
+        ff_bias_flag: bool = FF_BIAS_FLAG,
+        ff_num_layers: int = FF_NUM_LAYERS,
+        ff_generator_depth: DynamicDepthOptions = ADAPTIVE_FF_GENERATOR_DEPTH,
+        ff_diagonal_option: DynamicDiagonalOptions = ADAPTIVE_FF_DIAGONAL_OPTION,
+        ff_bias_option: DynamicBiasOptions = ADAPTIVE_FF_BIAS_OPTION,
+        ff_behaviour_stack_num_layers: int = ADAPTIVE_FF_BEHAVIOUR_STACK_NUM_LAYERS,
+        output_bias_flag: bool = OUTPUT_BIAS_FLAG,
+        output_num_layers: int = ADAPTIVE_OUTPUT_NUM_LAYERS,
+        output_generator_depth: DynamicDepthOptions = ADAPTIVE_OUTPUT_GENERATOR_DEPTH,
+        output_diagonal_option: DynamicDiagonalOptions = ADAPTIVE_OUTPUT_DIAGONAL_OPTION,
+        output_bias_option: DynamicBiasOptions = ADAPTIVE_OUTPUT_BIAS_OPTION,
+        output_behaviour_stack_num_layers: int = ADAPTIVE_OUTPUT_BEHAVIOUR_STACK_NUM_LAYERS,
+        image_patch_size: int = IMAGE_PATCH_SIZE,
+        input_channels: int = INPUT_CHANNELS,
+        image_height: int = IMAGE_HEIGHT,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.utils.presets import LinearPresets
@@ -452,12 +400,3 @@ class ExperimentPresets(ExperimentPresetsBase):
                 ),
             ),
         )
-
-
-if __name__ == "__main__":
-    parser = get_experiment_parser(ExperimentOptions.names())
-    args = parser.parse_args()
-    config_option = ExperimentOptions.get_option(args.name)
-
-    experiment = Experiment(config_option)
-    experiment.train_model(num_samples=args.num_samples, log_folder=args.log_folder)
