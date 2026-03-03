@@ -1,21 +1,9 @@
-import torch
-
-from torch import Tensor
-from dataclasses import dataclass, field
-from emperor.base.utils import ConfigBase
-from emperor.base.enums import BaseOptions
+from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
-from models.parser import get_experiment_parser
 from emperor.linears.utils.layers import LinearLayerConfig
-from emperor.base.layer import LayerStack, LayerStackConfig
-from emperor.experiments.classifier import ClassifierExperiment
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.layer import LayerStackConfig
+from emperor.experiments.base import ExperimentPresetsBase, create_search_space
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
-from emperor.experiments.base import (
-    ExperimentBase,
-    ExperimentPresetsBase,
-    create_search_space,
-)
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -24,46 +12,35 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
+from models.linear_adaptive.config import (
+    ExperimentConfig,
+    BATCH_SIZE,
+    INPUT_DIM,
+    HIDDEN_DIM,
+    OUTPUT_DIM,
+    BIAS_FLAG,
+    LAYER_NORM_POSITION,
+    GENERATOR_DEPTH,
+    DIAGONAL_OPTION,
+    BIAS_OPTION,
+    MEMORY_OPTION,
+    MEMORY_SIZE_OPTION,
+    MEMORY_POSITION_OPTION,
+    STACK_NUM_LAYERS,
+    STACK_ACTIVATION,
+    STACK_RESIDUAL_FLAG,
+    STACK_DROPOUT_PROBABILITY,
+    ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
+    ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
+    ADAPTIVE_GENERATOR_STACK_ACTIVATION,
+    ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG,
+    ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
+)
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-
-
-@dataclass
-class ExperimentConfig(ConfigBase):
-    model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-
-
-class Model(ClassifierExperiment):
-    def __init__(
-        self,
-        cfg: "ModelConfig",
-    ):
-        super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
-        self.model_config: LayerStackConfig = self.main_cfg.model_config
-        self.model = LayerStack(self.model_config).build_model()
-
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> None:
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
-
-    def forward(
-        self,
-        X: Tensor,
-    ) -> Tensor:
-        X = X.to(self.device)
-        X = torch.flatten(X, start_dim=1)
-        X = self.model(X)
-        return X
 
 
 class ExperimentOptions(BaseOptions):
@@ -74,24 +51,6 @@ class ExperimentOptions(BaseOptions):
     BIAS = 4
     MEMORY = 5
     COMBINED = 6
-
-
-class Experiment(ExperimentBase):
-    def __init__(
-        self,
-        experiment_option: ExperimentOptions | None = None,
-    ) -> None:
-        super().__init__(experiment_option)
-        self.accelerator = "cpu"
-
-    def _model_type(self) -> type:
-        return Model
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        return ExperimentPresets()
-
-    def _experiment_enumeration(self) -> type[BaseOptions]:
-        return ExperimentOptions
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -291,27 +250,27 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def _preset(
         self,
-        batch_size: int = 64,
-        input_dim: int = 28**2,
-        hidden_dim: int = 256,
-        output_dim: int = 10,
-        bias_flag: bool = True,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT,
-        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE,
-        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
-        bias_option: DynamicBiasOptions = DynamicBiasOptions.DYNAMIC_PARAMETERS,
-        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
-        memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
-        memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
-        stack_num_layers: int = 3,
-        stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_flag: bool = False,
-        stack_dropout_probability: float = 0.0,
-        adaptive_generator_stack_num_layers: int = 2,
-        adaptive_generator_stack_hidden_dim: int = 256,
-        adaptive_generator_stack_activation: ActivationOptions = ActivationOptions.RELU,
-        adaptive_generator_stack_residual_flag: bool = False,
-        adaptive_generator_stack_dropout_probability: float = 0.0,
+        batch_size: int = BATCH_SIZE,
+        input_dim: int = INPUT_DIM,
+        hidden_dim: int = HIDDEN_DIM,
+        output_dim: int = OUTPUT_DIM,
+        bias_flag: bool = BIAS_FLAG,
+        layer_norm_position: LayerNormPositionOptions = LAYER_NORM_POSITION,
+        generator_depth: DynamicDepthOptions = GENERATOR_DEPTH,
+        diagonal_option: DynamicDiagonalOptions = DIAGONAL_OPTION,
+        bias_option: DynamicBiasOptions = BIAS_OPTION,
+        memory_option: LinearMemoryOptions = MEMORY_OPTION,
+        memory_size_option: LinearMemorySizeOptions = MEMORY_SIZE_OPTION,
+        memory_position_option: LinearMemoryPositionOptions = MEMORY_POSITION_OPTION,
+        stack_num_layers: int = STACK_NUM_LAYERS,
+        stack_activation: ActivationOptions = STACK_ACTIVATION,
+        stack_residual_flag: bool = STACK_RESIDUAL_FLAG,
+        stack_dropout_probability: float = STACK_DROPOUT_PROBABILITY,
+        adaptive_generator_stack_num_layers: int = ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
+        adaptive_generator_stack_hidden_dim: int = ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
+        adaptive_generator_stack_activation: ActivationOptions = ADAPTIVE_GENERATOR_STACK_ACTIVATION,
+        adaptive_generator_stack_residual_flag: bool = ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG,
+        adaptive_generator_stack_dropout_probability: float = ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions
@@ -375,12 +334,3 @@ class ExperimentPresets(ExperimentPresetsBase):
                 )
             ),
         )
-
-
-if __name__ == "__main__":
-    parser = get_experiment_parser(ExperimentOptions.names())
-    args = parser.parse_args()
-    config_option = ExperimentOptions.get_option(args.name)
-
-    experiment = Experiment(config_option)
-    experiment.train_model(num_samples=args.num_samples, log_folder=args.log_folder)
