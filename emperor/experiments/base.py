@@ -46,7 +46,10 @@ def create_search_space(
 
     if isinstance(search_mode, RandomSearch):
         all_combinations_list = list(itertools.product(*parameter_value_options))
-        all_combinations = random.sample(all_combinations_list, min(search_mode.num_samples, len(all_combinations_list)))
+        all_combinations = random.sample(
+            all_combinations_list,
+            min(search_mode.num_samples, len(all_combinations_list)),
+        )
     else:
         all_combinations = itertools.product(*parameter_value_options)
 
@@ -61,7 +64,9 @@ def create_search_space(
 
 
 class ExperimentPresetsBase:
-    def get_config(self, model_config_options, dataset, search_mode: SearchMode = None) -> list["ModelConfig"]:
+    def get_config(
+        self, model_config_options, dataset, search_mode: SearchMode = None
+    ) -> list["ModelConfig"]:
         raise NotImplementedError(
             "The method 'train_model' must be implemented in the subclass."
         )
@@ -83,12 +88,14 @@ class ExperimentPresetsBase:
     ) -> list["ModelConfig"]:
         return [self._preset(**self._dataset_config(dataset))]
 
-    def _build_search_space(self) -> dict:
+    def _build_search_space(self, search_mode: SearchMode = None) -> dict:
+        if search_mode is None:
+            return {}
         package = type(self).__module__.rsplit(".", 1)[0]
         config = importlib.import_module(f"{package}.config")
         prefix = "SEARCH_SPACE_"
         return {
-            key[len(prefix):].lower(): value
+            key[len(prefix) :].lower(): value
             for key, value in vars(config).items()
             if key.startswith(prefix)
         }
@@ -102,7 +109,7 @@ class ExperimentPresetsBase:
         return create_search_space(
             self._preset,
             base_config,
-            self._build_search_space(),
+            self._build_search_space(search_mode),
             search_mode,
         )
 
@@ -138,16 +145,22 @@ class ExperimentBase:
             "The method '_experiment_enumeration' must be implemented in the subclass."
         )
 
-    def train_model(self, search_mode: SearchMode = None, log_folder: str | None = None) -> None:
+    def train_model(
+        self, search_mode: SearchMode = None, log_folder: str | None = None
+    ) -> None:
         options = [self.option] if self.option else self.options_enumeration
         for option in options:
             for dataset_type in self.dataset_options:
-                for config in self.preset_generator.get_config(option, dataset_type, search_mode):
+                for config in self.preset_generator.get_config(
+                    option, dataset_type, search_mode
+                ):
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
                     logger = TensorBoardLogger(
                         save_dir="logs",
-                        name=self._build_log_path(option, dataset_type, config, log_folder),
+                        name=self._build_log_path(
+                            option, dataset_type, config, log_folder
+                        ),
                     )
                     trainer = Trainer(
                         max_epochs=self.num_epochs,
@@ -157,7 +170,11 @@ class ExperimentBase:
                     trainer.fit(model, datamodule=dataset)
 
     def _build_log_path(
-        self, option: BaseOptions, dataset_type: type, config: "ModelConfig", log_folder: str | None = None
+        self,
+        option: BaseOptions,
+        dataset_type: type,
+        config: "ModelConfig",
+        log_folder: str | None = None,
     ) -> str:
         params = config.get_custom_parameters()
         param_str = "_".join(f"{k}={v}" for k, v in params.items())
@@ -166,5 +183,7 @@ class ExperimentBase:
         )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         source_file = Path(inspect.getfile(type(self))).stem
-        folder = f"{log_folder}/{source_file}" if log_folder is not None else source_file
+        folder = (
+            f"{log_folder}/{source_file}" if log_folder is not None else source_file
+        )
         return f"{folder}/{option.name}/{dataset_type.__name__}/{param_id}_{timestamp}"
