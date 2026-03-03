@@ -1,7 +1,7 @@
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
 from emperor.base.layer import LayerStack, LayerStackConfig
-from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.linears.utils.config import LinearLayerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions

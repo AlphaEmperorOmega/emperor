@@ -7,7 +7,7 @@ from emperor.base.layer import LayerStack, LayerStackConfig
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.linears.utils.layers import LinearLayerConfig
+    from emperor.linears.utils.config import LinearLayerConfig
     from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 
 

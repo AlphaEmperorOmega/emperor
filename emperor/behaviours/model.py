@@ -112,7 +112,7 @@ class AdaptiveParameterBehaviour(Module):
     def __init_model(
         self, is_valid_flag: bool, model_class: type[ModuleType]
     ) -> ModuleType | None:
-        from emperor.linears.utils.layers import LinearLayerConfig
+        from emperor.linears.utils.config import LinearLayerConfig
 
         if not is_valid_flag:
             return None

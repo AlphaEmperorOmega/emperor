@@ -13,7 +13,7 @@ from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.linears.utils.config import LinearLayerConfig
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.neuron.neuron import (

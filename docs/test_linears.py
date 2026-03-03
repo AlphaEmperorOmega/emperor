@@ -10,10 +10,10 @@ from emperor.behaviours.utils.enums import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
 )
+from emperor.linears.utils.config import LinearLayerConfig
 from emperor.linears.utils.layers import (
     AdaptiveLinearLayer,
     LinearLayer,
-    LinearLayerConfig,
 )
 
 

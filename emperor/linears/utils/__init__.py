@@ -1,6 +1,7 @@
 from .presets import LinearPresets
 from .stack import LinearLayerStack, AdaptiveLinearLayerStack
-from .layers import LinearLayer, AdaptiveLinearLayer, LinearLayerConfig, LinearBase
+from .config import LinearLayerConfig
+from .layers import LinearLayer, AdaptiveLinearLayer, LinearBase
 
 __all__ = [
     'LinearLayer',

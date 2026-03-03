@@ -10,7 +10,7 @@ from emperor.config import ModelConfig
 from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.linears.utils.config import LinearLayerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.transformer.utils.layers import TransformerConfig

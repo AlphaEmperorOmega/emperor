@@ -2,7 +2,7 @@ import torch
 
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.mnist import Mnist
-from emperor.linears.utils.layers import LinearLayerConfig
+from emperor.linears.utils.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.presets import TransformerPresets
