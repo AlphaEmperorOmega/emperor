@@ -279,6 +279,12 @@ class Experiment(ExperimentBase):
     ) -> None:
         super().__init__(experiment_option)
 
+    def _num_epochs(self) -> int:
+        return config.NUM_EPOCHS
+
+    def _dataset_options(self) -> list:
+        return config.DATASET_OPTIONS
+
     def _model_type(self) -> type:
         return Model
 
