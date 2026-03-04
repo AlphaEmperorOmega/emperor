@@ -1,7 +1,7 @@
 import models.linear_adaptive.config as config
 
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
-from emperor.datasets.image.mnist import Mnist
+from emperor.datasets.image.classification.mnist import Mnist
 from emperor.linears.utils.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.experiments.base import (

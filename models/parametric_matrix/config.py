@@ -4,10 +4,10 @@ from emperor.base.layer import LayerStackConfig
 from emperor.base.enums import ActivationOptions
 from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
-from emperor.datasets.image.mnist import Mnist
-from emperor.datasets.image.cifar_10 import Cifar10
-from emperor.datasets.image.cifar_100 import Cifar100
-from emperor.datasets.image.fashion_mnist import FashionMNIST
+from emperor.datasets.image.classification.mnist import Mnist
+from emperor.datasets.image.classification.cifar_10 import Cifar10
+from emperor.datasets.image.classification.cifar_100 import Cifar100
+from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 
 # Global
 BATCH_SIZE: int = 64

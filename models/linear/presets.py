@@ -1,6 +1,6 @@
 import models.linear.config as config
 
-from emperor.datasets.image.mnist import Mnist
+from emperor.datasets.image.classification.mnist import Mnist
 from emperor.linears.utils.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
