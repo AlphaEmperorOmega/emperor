@@ -27,6 +27,7 @@ dependencies = [
   "numpy",
   "lightning",
   "torchinfo",
+  "gymnasium",
 ]
 
 [project.urls]
