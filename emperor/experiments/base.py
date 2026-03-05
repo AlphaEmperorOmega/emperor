@@ -184,7 +184,7 @@ class ExperimentBase:
             hashlib.md5(param_str.encode()).hexdigest()[:8] if param_str else "default"
         )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        source_file = Path(inspect.getfile(type(self))).stem
+        source_file = Path(inspect.getfile(type(self))).parent.name
         folder = (
             f"{log_folder}/{source_file}" if log_folder is not None else source_file
         )
