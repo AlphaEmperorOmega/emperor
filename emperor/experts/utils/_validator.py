@@ -96,6 +96,12 @@ class _Validator:
             raise TypeError(
                 f"Configuration Error: 'sampler_model_config' must be of type SamplerConfig, received type {type(self.model.sampler_model_config).__name__}"
             )
+        if self.model.capacity_factor is not None and not isinstance(
+            self.model.capacity_factor, float
+        ):
+            raise TypeError(
+                f"Configuration Error: 'capacity_factor' must be of type float or None, received type {type(self.model.capacity_factor).__name__}"
+            )
 
     def ensure_sampler_is_initialized(self) -> None:
         options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
