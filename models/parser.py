@@ -53,7 +53,7 @@ def get_experiment_parser(
     )
 
     parser.add_argument(
-        "--log-dir",
+        "--logdir",
         type=str,
         default=None,
         help="Custom folder name for storing experiment logs. If not provided, the model file name is used.\nUse the same folder across models to compare them in TensorBoard.",
