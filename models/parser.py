@@ -65,6 +65,7 @@ def get_experiment_parser(
 def resolve_experiment_mode(
     args: argparse.Namespace,
     options_enum: type[BaseOptions],
+    no_search_options: list[str] = ["PRESET"],
 ) -> tuple[BaseOptions | None, SearchMode]:
     config_option = None if args.all_options else options_enum.get_option(args.name)
     if args.random_search is not None:
@@ -73,4 +74,8 @@ def resolve_experiment_mode(
         search_mode = GridSearch()
     else:
         search_mode = None
+    if not args.all_options and search_mode is not None and args.name in no_search_options:
+        raise ValueError(
+            f"'{args.name}' does not support --grid-search or --random-search. Use CONFIG instead."
+        )
     return config_option, search_mode

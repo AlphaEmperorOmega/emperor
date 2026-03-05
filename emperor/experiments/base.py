@@ -85,12 +85,7 @@ class ExperimentPresetsBase:
     def _create_default_preset_configs(
         self,
         dataset: type = Mnist,
-        search_mode: SearchMode = None,
     ) -> list["ModelConfig"]:
-        if search_mode is not None:
-            raise ValueError(
-                "PRESET does not support --grid-search or --random-search. Use CONFIG instead."
-            )
         base_config = self._dataset_config(dataset)
         return create_search_space(self._preset, base_config)
 
