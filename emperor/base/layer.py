@@ -98,7 +98,7 @@ class Layer(Module):
         assert self.layer_norm_dim > 0, (
             f"expected layer_norm_dim must be greater than 0, received {self.layer_norm_dim}"
         )
-        return nn.LayerNorm(self.layer_norm_dim, device=self.device)
+        return nn.LayerNorm(self.layer_norm_dim)
 
     def create_adaptive_computation_module(self):
         # TODO: Create a wrapper that first decides

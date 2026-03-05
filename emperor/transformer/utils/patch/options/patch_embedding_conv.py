@@ -26,7 +26,7 @@ class PatchEmbeddingConv(PatchBase):
                 stride=self.cfg.patch_size,
             ),
             nn.Flatten(2),
-        ).to(self.device)
+        )
 
     def forward(self, X: Tensor):
         X = self.patch_model(X)

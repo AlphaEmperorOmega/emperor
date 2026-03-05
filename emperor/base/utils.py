@@ -7,7 +7,7 @@ import collections
 import IPython.display as display
 import matplotlib.pyplot as plt
 
-from lightning import LightningDataModule
+from lightning import LightningDataModule, LightningModule
 
 from typing_extensions import Dict
 from dataclasses import dataclass, fields, field, asdict
@@ -208,7 +208,7 @@ class ProgressBoard(HyperParameters):
         display.clear_output(wait=True)
 
 
-class Module(nn.Module, HyperParameters):
+class Module(LightningModule, HyperParameters):
     """The base class of models."""
 
     def __init__(
@@ -216,8 +216,6 @@ class Module(nn.Module, HyperParameters):
     ):
         super().__init__()
         self.save_hyperparameters()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.device = "cpu"
         self.board = ProgressBoard()
 
     def loss(self, y_hat, y):
@@ -393,7 +391,7 @@ class ParameterBank(Module):
         self.parameter_bank = self.__create_bank()
 
     def __create_bank(self) -> Parameter:
-        default_params = randn(*self.shape, device=self.device)
+        default_params = randn(*self.shape)
         parameter_bank = Parameter(default_params)
         self.initializer(parameter_bank)
         return parameter_bank

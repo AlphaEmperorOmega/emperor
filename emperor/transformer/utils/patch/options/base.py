@@ -68,7 +68,7 @@ class PatchBase(Module):
     def _create_class_token(self, shape: tuple | None = None) -> Parameter:
         if shape is None:
             shape = (1, 1, self.embedding_dim)
-        class_token_init = torch.randn(shape, device=self.device)
+        class_token_init = torch.randn(shape)
         return Parameter(class_token_init, requires_grad=True)
 
     def _concatenate_class_token(self, X: Tensor) -> Tensor:

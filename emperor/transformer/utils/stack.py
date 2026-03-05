@@ -47,7 +47,7 @@ class TransformerBase(Module):
         assert self.layer_norm_dim > 0, (
             f"Expected layer_norm_dim must be greater than 0, received {self.layer_norm_dim}"
         )
-        return nn.LayerNorm(self.layer_norm_dim, device=self.device)
+        return nn.LayerNorm(self.layer_norm_dim)
 
     def _is_attention_mask_causal(
         self,
