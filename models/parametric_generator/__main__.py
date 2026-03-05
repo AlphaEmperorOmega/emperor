@@ -6,4 +6,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config_option, search_mode = resolve_experiment_mode(args, ExperimentOptions)
     experiment = Experiment(config_option)
-    experiment.train_model(search_mode=search_mode, log_folder=args.log_folder)
+    experiment.train_model(search_mode=search_mode, log_folder=args.log_dir)
