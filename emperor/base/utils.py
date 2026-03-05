@@ -208,7 +208,7 @@ class ProgressBoard(HyperParameters):
         display.clear_output(wait=True)
 
 
-class Module(LightningModule, HyperParameters):
+class Module(LightningModule):
     """The base class of models."""
 
     def __init__(
