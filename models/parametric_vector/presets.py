@@ -5,9 +5,15 @@ from emperor.linears.utils.config import LinearLayerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions
-from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig, AdaptiveRouterOptions
+from emperor.parametric.utils.layers import (
+    AdaptiveParameterLayerConfig,
+    AdaptiveRouterOptions,
+)
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
-from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions, AdaptiveWeightOptions
+from emperor.parametric.utils.mixtures.options import (
+    AdaptiveBiasOptions,
+    AdaptiveWeightOptions,
+)
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
@@ -318,7 +324,7 @@ class Experiment(ExperimentBase):
         experiment_option: ExperimentOptions | None = None,
     ) -> None:
         super().__init__(experiment_option)
-        self.accelerator = "cpu"
+        # self.accelerator = "cpu"
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS

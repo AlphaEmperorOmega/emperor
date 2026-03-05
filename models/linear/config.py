@@ -10,7 +10,7 @@ from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 # Global
 BATCH_SIZE: int = 64
 LEARNING_RATE: float = 1e-3
-NUM_EPOCHS: int = 10
+NUM_EPOCHS: int = 1  # 10
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Model

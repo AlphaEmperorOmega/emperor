@@ -184,7 +184,7 @@ class Experiment(ExperimentBase):
         experiment_option: ExperimentOptions | None = None,
     ) -> None:
         super().__init__(experiment_option)
-        self.accelerator = "cpu"
+        # self.accelerator = "cpu"
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
