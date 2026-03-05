@@ -215,7 +215,9 @@ class Module(LightningModule, HyperParameters):
         self, plot_train_per_epoch=2, plot_valid_per_epoch=1, plotProgress=True
     ):
         super().__init__()
-        self.save_hyperparameters()
+        self.plot_train_per_epoch = plot_train_per_epoch
+        self.plot_valid_per_epoch = plot_valid_per_epoch
+        self.plotProgress = plotProgress
         self.board = ProgressBoard()
 
     def loss(self, y_hat, y):
