@@ -47,7 +47,9 @@ class MixtureOfExpertsConfig(ConfigBase):
     )
     capacity_factor: float | None = field(
         default=None,
-        metadata={"help": "Capacity factor for expert load balancing. Expert capacity = (batch_size / num_experts) * capacity_factor. None disables capacity limiting."},
+        metadata={
+            "help": "Limits tokens per expert to prevent load imbalance. Tokens over capacity are dropped. 0.0=disabled, 1.0=fair share, >1.0=buffer."
+        },
     )
     compute_expert_mixture_flag: bool | None = field(
         default=None,
@@ -97,7 +99,7 @@ class MixtureOfExperts(Module):
         self.layer_stack_model: "LinearLayerStackOptions" = self.cfg.layer_stack_option
         self.top_k: int = self.cfg.top_k
         self.num_experts: int = self.cfg.num_experts
-        self.capacity_factor: float | None = self.cfg.capacity_factor
+        self.capacity_factor: float = self.cfg.capacity_factor
         self.compute_expert_mixture_flag: bool = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag: bool = self.cfg.weighted_parameters_flag
         self.init_sampler_option: "InitSamplerOptions" = self.cfg.init_sampler_option
@@ -196,9 +198,7 @@ class MixtureOfExperts(Module):
         expert_outputs_list = []
         sample_indices_for_expert_list = []
         total_loss = torch.tensor(0.0)
-        expert_capacity = None
-        if self.capacity_factor is not None:
-            expert_capacity = int((input_batch.size(0) / self.num_experts) * self.capacity_factor)
+        expert_capacity = self._maybe_compute_expert_capacity(input_batch)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
             sample_indices_for_expert = self._get_sample_indices_for_expert(
@@ -235,6 +235,12 @@ class MixtureOfExperts(Module):
             probabilities = probabilities.flatten()[sample_indices_for_all_experts]
 
         return expert_outputs, sample_indices_for_all_experts, probabilities, total_loss
+
+    def _maybe_compute_expert_capacity(self, input_batch: Tensor) -> int | None:
+        if self.capacity_factor > 0:
+            batch_size = input_batch.size(0)
+            return int((batch_size / self.num_experts) * self.capacity_factor)
+        return None
 
     def __get_expert_indices(
         self,
@@ -445,9 +451,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         expert_outputs_list = []
         sample_indices_for_expert_list = []
         total_loss = torch.tensor(0.0)
-        expert_capacity = None
-        if self.capacity_factor is not None:
-            expert_capacity = int((input_batch.size(0) / self.num_experts) * self.capacity_factor)
+        expert_capacity = self._maybe_compute_expert_capacity(input_batch)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_indices = self._get_sample_indices_for_expert(indices, expert_index)
             if expert_capacity is not None:

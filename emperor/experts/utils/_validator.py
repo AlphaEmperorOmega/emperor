@@ -43,6 +43,8 @@ class _Validator:
             raise ValueError("Configuration Error: 'router_model_config' is None")
         if self.model.sampler_model_config is None:
             raise ValueError("Configuration Error: 'sampler_model_config' is None")
+        if self.model.capacity_factor is None:
+            raise ValueError("Configuration Error: 'capacity_factor' is None")
 
     def __ensure_values_have_correct_types(self):
         from emperor.linears.options import LinearLayerStackOptions
@@ -96,11 +98,9 @@ class _Validator:
             raise TypeError(
                 f"Configuration Error: 'sampler_model_config' must be of type SamplerConfig, received type {type(self.model.sampler_model_config).__name__}"
             )
-        if self.model.capacity_factor is not None and not isinstance(
-            self.model.capacity_factor, float
-        ):
+        if not isinstance(self.model.capacity_factor, float):
             raise TypeError(
-                f"Configuration Error: 'capacity_factor' must be of type float or None, received type {type(self.model.capacity_factor).__name__}"
+                f"Configuration Error: 'capacity_factor' must be of type float, received type {type(self.model.capacity_factor).__name__}"
             )
 
     def ensure_sampler_is_initialized(self) -> None:
