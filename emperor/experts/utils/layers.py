@@ -233,6 +233,11 @@ class MixtureOfExperts(Module):
 
         if expert_capacity is not None and sample_indices_for_all_experts is not None:
             probabilities = probabilities.flatten()[sample_indices_for_all_experts]
+            flat_size = input_batch.size(0) * self.top_k
+            expert_outputs, probabilities = self.__scatter_back(
+                expert_outputs, probabilities, sample_indices_for_all_experts, flat_size
+            )
+            sample_indices_for_all_experts = None
 
         return expert_outputs, sample_indices_for_all_experts, probabilities, total_loss
 
@@ -241,6 +246,31 @@ class MixtureOfExperts(Module):
             batch_size = input_batch.size(0)
             return max(1, int((batch_size / self.num_experts) * self.capacity_factor))
         return None
+
+    def __scatter_back(
+        self,
+        expert_outputs: Tensor,
+        probabilities: Tensor,
+        indices: Tensor,
+        full_size: int,
+    ) -> tuple[Tensor, Tensor]:
+        output_dim = expert_outputs.size(-1)
+
+        full_expert_outputs = torch.zeros(full_size, output_dim,
+                                           device=expert_outputs.device,
+                                           dtype=expert_outputs.dtype)
+        full_expert_outputs.scatter_(
+            0,
+            indices.unsqueeze(1).expand(-1, output_dim),
+            expert_outputs,
+        )
+
+        full_probs = torch.zeros(full_size,
+                                  device=probabilities.device,
+                                  dtype=probabilities.dtype)
+        full_probs[indices] = probabilities
+
+        return full_expert_outputs, full_probs
 
     def __get_expert_indices(
         self,
@@ -474,6 +504,11 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
 
         if expert_capacity is not None:
             probabilities = probabilities.flatten()[sample_indices_for_expert_tensor]
+            full_size = input_batch.size(0)
+            expert_outputs, probabilities = self._MixtureOfExperts__scatter_back(
+                expert_outputs, probabilities, sample_indices_for_expert_tensor, full_size
+            )
+            sample_indices_for_expert_tensor = None
 
         return (
             expert_outputs,
