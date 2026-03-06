@@ -378,16 +378,16 @@ class TestMixtureOfExperts(unittest.TestCase):
 
 
 class TestExpertCapacity(unittest.TestCase):
-    def test_capacity_factor_none_unchanged(self):
-        """With capacity_factor=None, behavior is unchanged."""
+    def test_capacity_factor_zero_unchanged(self):
         c = MixtureOfExpertsPresets.experts_preset(
             return_model_config_flag=True,
             batch_size=10,
             experts_num_experts=6,
             experts_top_k=3,
+            experts_capacity_factor=0.0,
         )
         m = MixtureOfExperts(c)
-        self.assertIsNone(m.capacity_factor)
+        self.assertEqual(m.capacity_factor, 0.0)
 
         input_batch = torch.randn(c.batch_size, c.input_dim)
         router_cfg = c.mixture_of_experts_config.router_model_config
@@ -402,10 +402,10 @@ class TestExpertCapacity(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
     def test_capacity_factor_truncates_tokens(self):
-        """With capacity_factor set, experts are capped and output may be smaller."""
         capacity_factors = [1.0, 1.5]
         for capacity_factor in capacity_factors:
-            with self.subTest(capacity_factor=capacity_factor):
+            message = f"Testing capacity factor truncation with capacity_factor={capacity_factor}"
+            with self.subTest(msg=message):
                 c = MixtureOfExpertsPresets.experts_preset(
                     return_model_config_flag=True,
                     batch_size=10,
@@ -422,7 +422,9 @@ class TestExpertCapacity(unittest.TestCase):
                 router = RouterModel(router_cfg)
                 sampler = SamplerModel(sampler_cfg)
                 logits = router.compute_logit_scores(input_batch)
-                probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
+                probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(
+                    logits
+                )
 
                 output, loss = m.forward(input_batch, probabilities, indices)
                 expert_capacity = int((c.batch_size / 6) * capacity_factor)
@@ -430,10 +432,10 @@ class TestExpertCapacity(unittest.TestCase):
                 self.assertLessEqual(output.size(0), max_total_tokens)
 
     def test_capacity_factor_reduce(self):
-        """Capacity factor works with MixtureOfExpertsReduce (top_k=1)."""
         capacity_factors = [1.0, 1.5]
         for capacity_factor in capacity_factors:
-            with self.subTest(capacity_factor=capacity_factor):
+            message = f"Testing capacity factor reduce with capacity_factor={capacity_factor}"
+            with self.subTest(msg=message):
                 mc = MixtureOfExpertsPresets.experts_preset(
                     input_dim=8,
                     output_dim=6,
@@ -462,7 +464,9 @@ class TestExpertCapacity(unittest.TestCase):
                 router = RouterModel(router_cfg)
                 sampler = SamplerModel(sampler_cfg)
                 logits = router.compute_logit_scores(input_batch)
-                probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
+                probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(
+                    logits
+                )
 
                 map_output, _ = m.forward(input_batch, probabilities, indices)
                 output, loss = r.forward(map_output, probabilities, indices)
