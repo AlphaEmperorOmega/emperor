@@ -102,6 +102,8 @@ class _Validator:
             raise TypeError(
                 f"Configuration Error: 'capacity_factor' must be of type float, received type {type(self.model.capacity_factor).__name__}"
             )
+        if self.model.capacity_factor < 0.0:
+            raise ValueError("Configuration Error: 'capacity_factor' must be >= 0.0")
 
     def ensure_sampler_is_initialized(self) -> None:
         options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]

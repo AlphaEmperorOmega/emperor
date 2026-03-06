@@ -204,7 +204,7 @@ class MixtureOfExperts(Module):
             sample_indices_for_expert = self._get_sample_indices_for_expert(
                 indices, expert_index
             )
-            if expert_capacity is not None:
+            if expert_capacity is not None and expert_sample_indices is not None:
                 expert_sample_indices = expert_sample_indices[:expert_capacity]
                 sample_indices_for_expert = sample_indices_for_expert[:expert_capacity]
             expert_samples_probabilities = self.__get_expert_probabilities(
@@ -239,7 +239,7 @@ class MixtureOfExperts(Module):
     def _maybe_compute_expert_capacity(self, input_batch: Tensor) -> int | None:
         if self.capacity_factor > 0:
             batch_size = input_batch.size(0)
-            return int((batch_size / self.num_experts) * self.capacity_factor)
+            return max(1, int((batch_size / self.num_experts) * self.capacity_factor))
         return None
 
     def __get_expert_indices(
@@ -336,7 +336,7 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None = None,
     ) -> Tensor:
         output_dim = experts_output.size(-1)
-        if self.top_k != self.num_experts:
+        if self.top_k != self.num_experts and indices is not None:
             _, _index_sorted_indices = indices.sort(dim=0)
             experts_output = experts_output[_index_sorted_indices]
 
@@ -454,7 +454,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         expert_capacity = self._maybe_compute_expert_capacity(input_batch)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_indices = self._get_sample_indices_for_expert(indices, expert_index)
-            if expert_capacity is not None:
+            if expert_capacity is not None and expert_indices is not None:
                 expert_indices = expert_indices[:expert_capacity]
 
             if expert_indices is not None and expert_indices.numel() == 0:
@@ -504,7 +504,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         probabilities: Tensor | None = None,
     ) -> Tensor:
         output_dim = experts_output.size(-1)
-        if self.top_k != self.num_experts:
+        if self.top_k != self.num_experts and indices is not None:
             _, _index_sorted_indices = indices.sort(dim=0)
             experts_output = experts_output[_index_sorted_indices]
 
