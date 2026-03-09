@@ -227,12 +227,12 @@ class MixtureOfExperts(Module):
         if self.top_k != self.num_experts:
             sample_indices_for_all_experts = torch.cat(sample_indices_for_expert_list)
 
-        expert_outputs, probabilities = (
+        expert_outputs, probabilities, sample_indices_for_all_experts = (
             self._maybe_scatter_capacity_filtered_outputs_to_full_batch(
                 expert_outputs,
                 probabilities,
                 sample_indices_for_all_experts,
-                input_batch,
+                input_batch.size(0) * self.top_k,
             )
         )
 
@@ -276,7 +276,10 @@ class MixtureOfExperts(Module):
         batch_size = input.size(0)
         tokens_per_expert = batch_size / self.num_experts
         expert_capacity = max(1, int(tokens_per_expert * self.capacity_factor))
-        return input[:expert_capacity]
+        if input.size(0) <= expert_capacity:
+            return input
+        shuffled = input[torch.randperm(input.size(0), device=input.device)]
+        return shuffled[:expert_capacity]
 
     def __get_expert_probabilities(
         self,
@@ -321,14 +324,12 @@ class MixtureOfExperts(Module):
         expert_outputs: Tensor,
         probabilities: Tensor,
         indices: Tensor | None,
-        input_batch: Tensor,
-    ) -> tuple[Tensor, Tensor]:
+        full_size: int,
+    ) -> tuple[Tensor, Tensor, Tensor | None]:
         if self.capacity_factor == 0.0 or indices is None:
-            return expert_outputs, probabilities
+            return expert_outputs, probabilities, indices
 
-        batch_size = input_batch.size(0)
         probabilities = probabilities.flatten()[indices]
-        full_size = batch_size * self.top_k
         output_dim = expert_outputs.size(-1)
 
         indices_expanded = indices.unsqueeze(1).expand(-1, output_dim)
@@ -344,7 +345,7 @@ class MixtureOfExperts(Module):
         )
         full_probs[indices] = probabilities
 
-        return full_expert_outputs, full_probs
+        return full_expert_outputs, full_probs, None
 
     def _maybe_apply_probabilities_before(
         self,
@@ -509,12 +510,12 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         expert_outputs = torch.cat(expert_outputs_list, dim=0)
         sample_indices_for_expert_tensor = torch.cat(sample_indices_for_expert_list)
 
-        expert_outputs, probabilities = (
+        expert_outputs, probabilities, sample_indices_for_expert_tensor = (
             self._maybe_scatter_capacity_filtered_outputs_to_full_batch(
                 expert_outputs,
                 probabilities,
                 sample_indices_for_expert_tensor,
-                input_batch,
+                input_batch.size(0),
             )
         )
 
