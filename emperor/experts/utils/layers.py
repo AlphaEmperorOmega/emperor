@@ -198,15 +198,11 @@ class MixtureOfExperts(Module):
         expert_outputs_list = []
         sample_indices_for_expert_list = []
         total_loss = torch.tensor(0.0)
-        expert_capacity = self._maybe_compute_expert_capacity(input_batch)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
             sample_indices_for_expert = self._get_sample_indices_for_expert(
                 indices, expert_index
             )
-            if expert_capacity is not None and expert_sample_indices is not None:
-                expert_sample_indices = expert_sample_indices[:expert_capacity]
-                sample_indices_for_expert = sample_indices_for_expert[:expert_capacity]
             expert_samples_probabilities = self.__get_expert_probabilities(
                 sample_indices_for_expert, probabilities, expert_index
             )
@@ -231,46 +227,16 @@ class MixtureOfExperts(Module):
         if self.top_k != self.num_experts:
             sample_indices_for_all_experts = torch.cat(sample_indices_for_expert_list)
 
-        if expert_capacity is not None and sample_indices_for_all_experts is not None:
-            probabilities = probabilities.flatten()[sample_indices_for_all_experts]
-            flat_size = input_batch.size(0) * self.top_k
-            expert_outputs, probabilities = self.__scatter_back(
-                expert_outputs, probabilities, sample_indices_for_all_experts, flat_size
+        expert_outputs, probabilities = (
+            self._maybe_scatter_capacity_filtered_outputs_to_full_batch(
+                expert_outputs,
+                probabilities,
+                sample_indices_for_all_experts,
+                input_batch,
             )
-            sample_indices_for_all_experts = None
-
-        return expert_outputs, sample_indices_for_all_experts, probabilities, total_loss
-
-    def _maybe_compute_expert_capacity(self, input_batch: Tensor) -> int | None:
-        if self.capacity_factor > 0:
-            batch_size = input_batch.size(0)
-            return max(1, int((batch_size / self.num_experts) * self.capacity_factor))
-        return None
-
-    def __scatter_back(
-        self,
-        expert_outputs: Tensor,
-        probabilities: Tensor,
-        indices: Tensor,
-        full_size: int,
-    ) -> tuple[Tensor, Tensor]:
-        output_dim = expert_outputs.size(-1)
-
-        full_expert_outputs = torch.zeros(full_size, output_dim,
-                                           device=expert_outputs.device,
-                                           dtype=expert_outputs.dtype)
-        full_expert_outputs.scatter_(
-            0,
-            indices.unsqueeze(1).expand(-1, output_dim),
-            expert_outputs,
         )
 
-        full_probs = torch.zeros(full_size,
-                                  device=probabilities.device,
-                                  dtype=probabilities.dtype)
-        full_probs[indices] = probabilities
-
-        return full_expert_outputs, full_probs
+        return expert_outputs, sample_indices_for_all_experts, probabilities, total_loss
 
     def __get_expert_indices(
         self,
@@ -280,11 +246,12 @@ class MixtureOfExperts(Module):
         if self.top_k == self.num_experts:
             return None
 
+        batch_size = indices.size(0)
         samples_for_current_expert = indices == expert_index
         if self.top_k > 1:
             samples_for_current_expert = samples_for_current_expert.sum(dim=-1)
-        sample_indices_for_expert = samples_for_current_expert.nonzero()
-        return sample_indices_for_expert.flatten()
+        sample_indices_for_expert = samples_for_current_expert.nonzero().flatten()
+        return self.__maybe_apply_capacity_limit(sample_indices_for_expert, batch_size)
 
     def _get_sample_indices_for_expert(
         self,
@@ -293,10 +260,23 @@ class MixtureOfExperts(Module):
     ) -> Tensor | None:
         if self.top_k == self.num_experts:
             return None
+        batch_size = indices.size(0)
         boolean_tensor = indices == expert_index
         expert_sample_indices = boolean_tensor.flatten()
-        expert_sample_indices = expert_sample_indices.nonzero()
-        return expert_sample_indices.squeeze(dim=-1)
+        expert_sample_indices = expert_sample_indices.nonzero().squeeze(dim=-1)
+        return self.__maybe_apply_capacity_limit(expert_sample_indices, batch_size)
+
+    def __maybe_apply_capacity_limit(
+        self,
+        input: Tensor,
+        batch_size: int,
+    ) -> Tensor:
+        if self.capacity_factor == 0:
+            return input
+        batch_size = input.size(0)
+        tokens_per_expert = batch_size / self.num_experts
+        expert_capacity = max(1, int(tokens_per_expert * self.capacity_factor))
+        return input[:expert_capacity]
 
     def __get_expert_probabilities(
         self,
@@ -335,6 +315,36 @@ class MixtureOfExperts(Module):
         if isinstance(output, tuple):
             return output
         return output, torch.tensor(0.0)
+
+    def _maybe_scatter_capacity_filtered_outputs_to_full_batch(
+        self,
+        expert_outputs: Tensor,
+        probabilities: Tensor,
+        indices: Tensor | None,
+        input_batch: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        if self.capacity_factor == 0.0 or indices is None:
+            return expert_outputs, probabilities
+
+        batch_size = input_batch.size(0)
+        probabilities = probabilities.flatten()[indices]
+        full_size = batch_size * self.top_k
+        output_dim = expert_outputs.size(-1)
+
+        indices_expanded = indices.unsqueeze(1).expand(-1, output_dim)
+        full_expert_outputs = torch.zeros(
+            full_size,
+            output_dim,
+            device=expert_outputs.device,
+            dtype=expert_outputs.dtype,
+        )
+        full_expert_outputs.scatter_(0, indices_expanded, expert_outputs)
+        full_probs = torch.zeros(
+            full_size, device=probabilities.device, dtype=probabilities.dtype
+        )
+        full_probs[indices] = probabilities
+
+        return full_expert_outputs, full_probs
 
     def _maybe_apply_probabilities_before(
         self,
@@ -481,11 +491,8 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         expert_outputs_list = []
         sample_indices_for_expert_list = []
         total_loss = torch.tensor(0.0)
-        expert_capacity = self._maybe_compute_expert_capacity(input_batch)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_indices = self._get_sample_indices_for_expert(indices, expert_index)
-            if expert_capacity is not None and expert_indices is not None:
-                expert_indices = expert_indices[:expert_capacity]
 
             if expert_indices is not None and expert_indices.numel() == 0:
                 continue
@@ -502,13 +509,14 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         expert_outputs = torch.cat(expert_outputs_list, dim=0)
         sample_indices_for_expert_tensor = torch.cat(sample_indices_for_expert_list)
 
-        if expert_capacity is not None:
-            probabilities = probabilities.flatten()[sample_indices_for_expert_tensor]
-            full_size = input_batch.size(0)
-            expert_outputs, probabilities = self._MixtureOfExperts__scatter_back(
-                expert_outputs, probabilities, sample_indices_for_expert_tensor, full_size
+        expert_outputs, probabilities = (
+            self._maybe_scatter_capacity_filtered_outputs_to_full_batch(
+                expert_outputs,
+                probabilities,
+                sample_indices_for_expert_tensor,
+                input_batch,
             )
-            sample_indices_for_expert_tensor = None
+        )
 
         return (
             expert_outputs,
