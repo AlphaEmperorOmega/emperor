@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from emperor.experts.utils.model import MixtureOfExpertsModel
 
 
-class _Validator:
+class _ValidatorHandler:
     def __init__(self, model: "MixtureOfExperts"):
         self.model = model
         self.__ensure_values_are_not_none()

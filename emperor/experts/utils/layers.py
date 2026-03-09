@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from emperor.sampler.model import SamplerModel
 from emperor.base.layer import LayerStackConfig
 from emperor.base.utils import ConfigBase, Module
-from emperor.experts.utils._validator import _Validator
+from emperor.experts.utils._expert_capacity import _ExpertCapacityHandler
+from emperor.experts.utils._expert_weighting import _ExpertWeightingHandler
+from emperor.experts.utils._validator import _ValidatorHandler
 from emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
@@ -109,7 +111,15 @@ class MixtureOfExperts(Module):
         self.router_model_config: "RouterConfig" = self.cfg.router_model_config
         self.sampler_model_config: "SamplerConfig" = self.cfg.sampler_model_config
 
-        self.validator = _Validator(self)
+        self.validator_handler = _ValidatorHandler(self)
+        self.expert_capacity_handler = _ExpertCapacityHandler(self.capacity_factor, self.num_experts)
+        self.expert_weighting_handler = _ExpertWeightingHandler(
+            self.weighted_parameters_flag,
+            self.weighting_position_option,
+            self.top_k,
+            self.num_experts,
+            self.validator_handler,
+        )
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
         self.expert_modules = self.__create_experts()
 
@@ -123,8 +133,8 @@ class MixtureOfExperts(Module):
 
         if self.init_sampler_option != InitSamplerOptions.LAYER:
             return None, None
-        self.validator.ensure_router_config_exists()
-        self.validator.ensure_sampler_config_exists()
+        self.validator_handler.ensure_router_config_exists()
+        self.validator_handler.ensure_sampler_config_exists()
         router_overrides = RouterConfig(input_dim=self.input_dim)
         router = RouterModel(self.router_model_config, router_overrides)
         sampler = SamplerModel(self.sampler_model_config)
@@ -149,9 +159,9 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        self.validator.ensure_tensor_is_vector_or_matrix(input_batch)
-        self.validator.ensure_tensor_is_vector_or_matrix(probabilities)
-        self.validator.ensure_tensor_is_vector_or_matrix(indices)
+        self.validator_handler.ensure_tensor_is_vector_or_matrix(input_batch)
+        self.validator_handler.ensure_tensor_is_vector_or_matrix(probabilities)
+        self.validator_handler.ensure_tensor_is_vector_or_matrix(indices)
         probabilities, indices, sampler_loss = self._maybe_compute_expert_indices(
             input_batch, probabilities, indices
         )
@@ -177,8 +187,8 @@ class MixtureOfExperts(Module):
             indices is not None or probabilities is not None
         ):
             return probabilities, indices, torch.tensor(0.0)
-        self.validator.ensure_sampler_is_initialized()
-        self.validator.ensure_external_probabilities_are_not_given(
+        self.validator_handler.ensure_sampler_is_initialized()
+        self.validator_handler.ensure_external_probabilities_are_not_given(
             probabilities, indices
         )
         logits = self.router.compute_logit_scores(inputs)
@@ -203,7 +213,7 @@ class MixtureOfExperts(Module):
             sample_indices_for_expert = self._get_sample_indices_for_expert(
                 indices, expert_index
             )
-            expert_samples_probabilities = self.__get_expert_probabilities(
+            expert_samples_probabilities = self.expert_weighting_handler.get_expert_probabilities(
                 sample_indices_for_expert, probabilities, expert_index
             )
             if expert_sample_indices is not None and expert_sample_indices.numel() == 0:
@@ -228,7 +238,7 @@ class MixtureOfExperts(Module):
             sample_indices_for_all_experts = torch.cat(sample_indices_for_expert_list)
 
         expert_outputs, probabilities, sample_indices_for_all_experts = (
-            self._maybe_scatter_capacity_filtered_outputs_to_full_batch(
+            self.expert_capacity_handler.maybe_scatter_to_full_batch(
                 expert_outputs,
                 probabilities,
                 sample_indices_for_all_experts,
@@ -251,7 +261,7 @@ class MixtureOfExperts(Module):
         if self.top_k > 1:
             samples_for_current_expert = samples_for_current_expert.sum(dim=-1)
         sample_indices_for_expert = samples_for_current_expert.nonzero().flatten()
-        return self.__maybe_apply_capacity_limit(sample_indices_for_expert, batch_size)
+        return self.expert_capacity_handler.maybe_apply_capacity_limit(sample_indices_for_expert, batch_size)
 
     def _get_sample_indices_for_expert(
         self,
@@ -264,40 +274,7 @@ class MixtureOfExperts(Module):
         boolean_tensor = indices == expert_index
         expert_sample_indices = boolean_tensor.flatten()
         expert_sample_indices = expert_sample_indices.nonzero().squeeze(dim=-1)
-        return self.__maybe_apply_capacity_limit(expert_sample_indices, batch_size)
-
-    def __maybe_apply_capacity_limit(
-        self,
-        input: Tensor,
-        batch_size: int,
-    ) -> Tensor:
-        if self.capacity_factor == 0:
-            return input
-        batch_size = input.size(0)
-        tokens_per_expert = batch_size / self.num_experts
-        expert_capacity = max(1, int(tokens_per_expert * self.capacity_factor))
-        if input.size(0) <= expert_capacity:
-            return input
-        shuffled = input[torch.randperm(input.size(0), device=input.device)]
-        return shuffled[:expert_capacity]
-
-    def __get_expert_probabilities(
-        self,
-        indices: Tensor,
-        probabilities: Tensor,
-        expert_index: int,
-    ) -> Tensor:
-        if self._should_apply_probabilities_before():
-            if self.top_k == self.num_experts:
-                return probabilities[:, expert_index]
-            probabilities = probabilities.flatten()
-            probabilities = probabilities[indices]
-
-        return probabilities
-
-    def _should_apply_probabilities_before(self) -> bool:
-        position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
-        return self.weighting_position_option == position_option
+        return self.expert_capacity_handler.maybe_apply_capacity_limit(expert_sample_indices, batch_size)
 
     def __compute_expert_output(
         self,
@@ -310,7 +287,7 @@ class MixtureOfExperts(Module):
         if indices is not None:
             expert_samples = input_batch[indices]
 
-        expert_samples = self._maybe_apply_probabilities_before(
+        expert_samples = self.expert_weighting_handler.maybe_apply_before(
             expert_samples, probabilities
         )
 
@@ -318,57 +295,6 @@ class MixtureOfExperts(Module):
         if isinstance(output, tuple):
             return output
         return output, torch.tensor(0.0)
-
-    def _maybe_scatter_capacity_filtered_outputs_to_full_batch(
-        self,
-        expert_outputs: Tensor,
-        probabilities: Tensor,
-        indices: Tensor | None,
-        full_size: int,
-    ) -> tuple[Tensor, Tensor, Tensor | None]:
-        if self.capacity_factor == 0.0 or indices is None:
-            return expert_outputs, probabilities, indices
-
-        probabilities = probabilities.flatten()[indices]
-        output_dim = expert_outputs.size(-1)
-
-        indices_expanded = indices.unsqueeze(1).expand(-1, output_dim)
-        full_expert_outputs = torch.zeros(
-            full_size,
-            output_dim,
-            device=expert_outputs.device,
-            dtype=expert_outputs.dtype,
-        )
-        full_expert_outputs.scatter_(0, indices_expanded, expert_outputs)
-        full_probs = torch.zeros(
-            full_size, device=probabilities.device, dtype=probabilities.dtype
-        )
-        full_probs[indices] = probabilities
-
-        return full_expert_outputs, full_probs, None
-
-    def _maybe_apply_probabilities_before(
-        self,
-        experts_output: Tensor,
-        probabilities: Tensor | None = None,
-    ) -> Tensor:
-        position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
-        if self.weighting_position_option == position_option:
-            experts_output = self.__maybe_apply_probabilities(
-                experts_output, probabilities
-            )
-        return experts_output
-
-    def __maybe_apply_probabilities(
-        self,
-        logits: Tensor,
-        probabilities: Tensor | None = None,
-    ) -> Tensor:
-        if not self.weighted_parameters_flag:
-            return logits
-
-        self.validator.ensure_probabilities_exist(probabilities)
-        return logits * probabilities.reshape(-1, 1)
 
     def __compute_expert_mixture(
         self,
@@ -381,7 +307,7 @@ class MixtureOfExperts(Module):
             _, _index_sorted_indices = indices.sort(dim=0)
             experts_output = experts_output[_index_sorted_indices]
 
-        experts_output = self._maybe_apply_probabilities_after(
+        experts_output = self.expert_weighting_handler.maybe_apply_after(
             experts_output, probabilities
         )
 
@@ -391,18 +317,6 @@ class MixtureOfExperts(Module):
         if self.top_k > 1:
             experts_output = experts_output.view(-1, self.top_k, output_dim)
         return experts_output.sum(dim=1)
-
-    def _maybe_apply_probabilities_after(
-        self,
-        experts_output: Tensor,
-        probabilities: Tensor | None = None,
-    ) -> Tensor:
-        position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
-        if self.weighting_position_option == position_option:
-            experts_output = self.__maybe_apply_probabilities(
-                experts_output, probabilities
-            )
-        return experts_output
 
 
 class MixtureOfExpertsMap(MixtureOfExperts):
@@ -468,9 +382,9 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        self.validator.ensure_tensor_is_vector_or_matrix(input_batch)
-        self.validator.ensure_tensor_is_vector_or_matrix(probabilities)
-        self.validator.ensure_tensor_is_vector_or_matrix(indices)
+        self.validator_handler.ensure_tensor_is_vector_or_matrix(input_batch)
+        self.validator_handler.ensure_tensor_is_vector_or_matrix(probabilities)
+        self.validator_handler.ensure_tensor_is_vector_or_matrix(indices)
 
         expert_outputs, sample_indices_for_all_experts, probabilities, expert_loss = (
             self._compute_experts(input_batch, probabilities, indices)
@@ -511,7 +425,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         sample_indices_for_expert_tensor = torch.cat(sample_indices_for_expert_list)
 
         expert_outputs, probabilities, sample_indices_for_expert_tensor = (
-            self._maybe_scatter_capacity_filtered_outputs_to_full_batch(
+            self.expert_capacity_handler.maybe_scatter_to_full_batch(
                 expert_outputs,
                 probabilities,
                 sample_indices_for_expert_tensor,
@@ -552,7 +466,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
             _, _index_sorted_indices = indices.sort(dim=0)
             experts_output = experts_output[_index_sorted_indices]
 
-        experts_output = self._maybe_apply_probabilities_after(
+        experts_output = self.expert_weighting_handler.maybe_apply_after(
             experts_output, probabilities
         )
 
