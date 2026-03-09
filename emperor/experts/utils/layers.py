@@ -112,7 +112,9 @@ class MixtureOfExperts(Module):
         self.sampler_model_config: "SamplerConfig" = self.cfg.sampler_model_config
 
         self.validator_handler = _ValidatorHandler(self)
-        self.expert_capacity_handler = _ExpertCapacityHandler(self.capacity_factor, self.num_experts)
+        self.expert_capacity_handler = _ExpertCapacityHandler(
+            self.capacity_factor, self.num_experts
+        )
         self.expert_weighting_handler = _ExpertWeightingHandler(
             self.weighted_parameters_flag,
             self.weighting_position_option,
@@ -204,7 +206,7 @@ class MixtureOfExperts(Module):
         input_batch: Tensor,
         probabilities: Tensor,
         indices: Tensor,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None]:
         expert_outputs_list = []
         sample_indices_for_expert_list = []
         total_loss = torch.tensor(0.0)
@@ -213,13 +215,16 @@ class MixtureOfExperts(Module):
             sample_indices_for_expert = self._get_sample_indices_for_expert(
                 indices, expert_index
             )
-            expert_samples_probabilities = self.expert_weighting_handler.get_expert_probabilities(
-                sample_indices_for_expert, probabilities, expert_index
-            )
             if expert_sample_indices is not None and expert_sample_indices.numel() == 0:
                 empty_tensor = torch.tensor([], dtype=torch.int16)
                 sample_indices_for_expert_list.append(empty_tensor)
                 continue
+
+            expert_samples_probabilities = (
+                self.expert_weighting_handler.get_expert_probabilities(
+                    sample_indices_for_expert, probabilities, expert_index
+                )
+            )
 
             expert_output, loss = self.__compute_expert_output(
                 expert_model,
@@ -261,7 +266,9 @@ class MixtureOfExperts(Module):
         if self.top_k > 1:
             samples_for_current_expert = samples_for_current_expert.sum(dim=-1)
         sample_indices_for_expert = samples_for_current_expert.nonzero().flatten()
-        return self.expert_capacity_handler.maybe_apply_capacity_limit(sample_indices_for_expert, batch_size)
+        return self.expert_capacity_handler.maybe_apply_capacity_limit(
+            sample_indices_for_expert, batch_size
+        )
 
     def _get_sample_indices_for_expert(
         self,
@@ -274,7 +281,9 @@ class MixtureOfExperts(Module):
         boolean_tensor = indices == expert_index
         expert_sample_indices = boolean_tensor.flatten()
         expert_sample_indices = expert_sample_indices.nonzero().squeeze(dim=-1)
-        return self.expert_capacity_handler.maybe_apply_capacity_limit(expert_sample_indices, batch_size)
+        return self.expert_capacity_handler.maybe_apply_capacity_limit(
+            expert_sample_indices, batch_size
+        )
 
     def __compute_expert_output(
         self,
