@@ -317,7 +317,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         flag_options = [True, False]
         init_sampler_options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
         num_layers_options = [1, 2, 3]
-        capacity_factor_options = [0.0, 1.0]
+        capacity_factor_options = [0.0, 1.0, 1.5]
 
         for num_layers in num_layers_options:
             for layer_stack_option in LinearLayerStackOptions:
@@ -345,18 +345,26 @@ class TestMixtureOfExperts(unittest.TestCase):
 
                                             m = MixtureOfExperts(c)
 
-                                            input = torch.randn(c.batch_size, c.input_dim)
+                                            input = torch.randn(
+                                                c.batch_size, c.input_dim
+                                            )
                                             indices = probabilities = None
                                             if (
                                                 init_sampler_option
                                                 == InitSamplerOptions.DISABLED
                                             ):
-                                                router_cfg = c.mixture_of_experts_config.router_model_config
-                                                sampler_cfg = c.mixture_of_experts_config.sampler_model_config
+                                                router_cfg = (
+                                                    c.mixture_of_experts_config.router_model_config
+                                                )
+                                                sampler_cfg = (
+                                                    c.mixture_of_experts_config.sampler_model_config
+                                                )
                                                 router = RouterModel(router_cfg)
                                                 sampler = SamplerModel(sampler_cfg)
 
-                                                logits = router.compute_logit_scores(input)
+                                                logits = router.compute_logit_scores(
+                                                    input
+                                                )
                                                 probabilities, indices, _, _ = (
                                                     sampler.sample_probabilities_and_indices(
                                                         logits
@@ -376,7 +384,9 @@ class TestMixtureOfExperts(unittest.TestCase):
                                                     c.batch_size,
                                                     c.output_dim,
                                                 )
-                                            self.assertEqual(output.shape, expected_shape)
+                                            self.assertEqual(
+                                                output.shape, expected_shape
+                                            )
                                             self.assertEqual(total_loss.item(), 0.0)
 
 
@@ -482,7 +492,9 @@ class TestExpertCapacity(unittest.TestCase):
     def test_capacity_factor_reduce(self):
         capacity_factors = [1.0, 1.5]
         for capacity_factor in capacity_factors:
-            message = f"Testing capacity factor reduce with capacity_factor={capacity_factor}"
+            message = (
+                f"Testing capacity factor reduce with capacity_factor={capacity_factor}"
+            )
             with self.subTest(msg=message):
                 mc = MixtureOfExpertsPresets.experts_preset(
                     input_dim=8,
@@ -585,7 +597,10 @@ class TestExpertCapacity(unittest.TestCase):
 
     def test_capacity_with_all_options(self):
         num_experts = 6
-        top_k_options = [1, 3]  # exclude top_k==num_experts (capacity is bypassed there)
+        top_k_options = [
+            1,
+            3,
+        ]  # exclude top_k==num_experts (capacity is bypassed there)
         flag_options = [True, False]
         init_sampler_options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
 
@@ -619,15 +634,30 @@ class TestExpertCapacity(unittest.TestCase):
 
                                     input_batch = torch.randn(10, c.input_dim)
                                     indices = probabilities = None
-                                    if init_sampler_option == InitSamplerOptions.DISABLED:
-                                        router_cfg = c.mixture_of_experts_config.router_model_config
-                                        sampler_cfg = c.mixture_of_experts_config.sampler_model_config
+                                    if (
+                                        init_sampler_option
+                                        == InitSamplerOptions.DISABLED
+                                    ):
+                                        router_cfg = (
+                                            c.mixture_of_experts_config.router_model_config
+                                        )
+                                        sampler_cfg = (
+                                            c.mixture_of_experts_config.sampler_model_config
+                                        )
                                         router = RouterModel(router_cfg)
                                         sampler = SamplerModel(sampler_cfg)
-                                        logits = router.compute_logit_scores(input_batch)
-                                        probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
+                                        logits = router.compute_logit_scores(
+                                            input_batch
+                                        )
+                                        probabilities, indices, _, _ = (
+                                            sampler.sample_probabilities_and_indices(
+                                                logits
+                                            )
+                                        )
 
-                                    output, loss = m.forward(input_batch, probabilities, indices)
+                                    output, loss = m.forward(
+                                        input_batch, probabilities, indices
+                                    )
 
                                     expected_shape = (10 * top_k, c.output_dim)
                                     if compute_expert_mixture_flag:
@@ -689,8 +719,12 @@ class TestMixtureOfExpertsStack(unittest.TestCase):
                                             init_sampler_option
                                             == InitSamplerOptions.DISABLED
                                         ):
-                                            router_cfg = c.layer_stack_config.override_config.router_model_config
-                                            sampler_cfg = c.layer_stack_config.override_config.sampler_model_config
+                                            router_cfg = (
+                                                c.layer_stack_config.override_config.router_model_config
+                                            )
+                                            sampler_cfg = (
+                                                c.layer_stack_config.override_config.sampler_model_config
+                                            )
                                             router = RouterModel(router_cfg)
                                             sampler = SamplerModel(sampler_cfg)
 
@@ -805,8 +839,12 @@ class TestMixtureOfExpertsModel(unittest.TestCase):
                                             init_sampler_option
                                             == InitSamplerOptions.DISABLED
                                         ):
-                                            router_cfg = c.layer_stack_config.override_config.router_model_config
-                                            sampler_cfg = c.layer_stack_config.override_config.sampler_model_config
+                                            router_cfg = (
+                                                c.layer_stack_config.override_config.router_model_config
+                                            )
+                                            sampler_cfg = (
+                                                c.layer_stack_config.override_config.sampler_model_config
+                                            )
                                             router = RouterModel(router_cfg)
                                             sampler = SamplerModel(sampler_cfg)
 
