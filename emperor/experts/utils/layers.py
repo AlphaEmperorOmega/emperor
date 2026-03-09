@@ -212,13 +212,15 @@ class MixtureOfExperts(Module):
         total_loss = torch.tensor(0.0)
         for expert_index, expert_model in enumerate(self.expert_modules):
             expert_sample_indices = self.__get_expert_indices(indices, expert_index)
-            sample_indices_for_expert = self._get_sample_indices_for_expert(
-                indices, expert_index
-            )
+
             if expert_sample_indices is not None and expert_sample_indices.numel() == 0:
                 empty_tensor = torch.tensor([], dtype=torch.int16)
                 sample_indices_for_expert_list.append(empty_tensor)
                 continue
+
+            sample_indices_for_expert = self._get_sample_indices_for_expert(
+                indices, expert_index
+            )
 
             expert_samples_probabilities = (
                 self.expert_weighting_handler.get_expert_probabilities(
