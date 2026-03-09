@@ -202,7 +202,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
                 indices = torch.randint(0, m.num_experts, (10, top_k))
                 probabilities = torch.randn(10, top_k)
-                probabilities = m._MixtureOfExperts__get_expert_probabilities(
+                probabilities = m.expert_weighting_handler.get_expert_probabilities(
                     indices, probabilities, expert_index
                 )
 
@@ -260,7 +260,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     m = MixtureOfExperts(c)
                     logits = torch.randn(10 * top_k, c.input_dim)
                     pribabilities = torch.randn(10 * top_k)
-                    output = m._MixtureOfExperts__maybe_apply_probabilities(
+                    output = m.expert_weighting_handler._maybe_apply(
                         logits, pribabilities
                     )
 
