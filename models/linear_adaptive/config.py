@@ -18,6 +18,7 @@ from emperor.behaviours.utils.enums import (
 # Global
 BATCH_SIZE: int = 64
 NUM_EPOCHS: int = 10
+LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Model
@@ -35,11 +36,15 @@ STACK_DROPOUT_PROBABILITY: float = 0.0
 
 # Adaptive behaviour
 GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
-DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL
+DIAGONAL_OPTION: DynamicDiagonalOptions = (
+    DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL
+)
 BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DYNAMIC_PARAMETERS
 MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
 MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
-MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE
+MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
+    LinearMemoryPositionOptions.BEFORE_AFFINE
+)
 
 # Adaptive generator stack
 ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
