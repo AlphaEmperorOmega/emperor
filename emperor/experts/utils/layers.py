@@ -10,6 +10,7 @@ from emperor.experts.utils._expert_capacity import _ExpertCapacityHandler
 from emperor.experts.utils._expert_weighting import _ExpertWeightingHandler
 from emperor.experts.utils._validator import _ValidatorHandler
 from emperor.experts.utils.enums import (
+    DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
@@ -51,6 +52,12 @@ class MixtureOfExpertsConfig(ConfigBase):
         default=None,
         metadata={
             "help": "Limits tokens per expert to prevent load imbalance. Tokens over capacity are dropped. 0.0=disabled, 1.0=fair share, >1.0=buffer."
+        },
+    )
+    dropped_token_behavior: DroppedTokenOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Controls dropped tokens. ZERO: become zero vectors (default). IDENTITY: retain original input."
         },
     )
     compute_expert_mixture_flag: bool | None = field(
@@ -102,6 +109,9 @@ class MixtureOfExperts(Module):
         self.top_k: int = self.cfg.top_k
         self.num_experts: int = self.cfg.num_experts
         self.capacity_factor: float = self.cfg.capacity_factor
+        self.dropped_token_behavior: DroppedTokenOptions = (
+            self.cfg.dropped_token_behavior or DroppedTokenOptions.ZERO
+        )
         self.compute_expert_mixture_flag: bool = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag: bool = self.cfg.weighted_parameters_flag
         self.init_sampler_option: "InitSamplerOptions" = self.cfg.init_sampler_option
@@ -113,7 +123,7 @@ class MixtureOfExperts(Module):
 
         self.validator_handler = _ValidatorHandler(self)
         self.expert_capacity_handler = _ExpertCapacityHandler(
-            self.capacity_factor, self.num_experts
+            self.capacity_factor, self.num_experts, self.dropped_token_behavior
         )
         self.expert_weighting_handler = _ExpertWeightingHandler(
             self.weighted_parameters_flag,
@@ -250,6 +260,7 @@ class MixtureOfExperts(Module):
                 probabilities,
                 sample_indices_for_all_experts,
                 input_batch.size(0) * self.top_k,
+                input_batch=input_batch,
             )
         )
 
@@ -441,6 +452,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
                 probabilities,
                 sample_indices_for_expert_tensor,
                 input_batch.size(0),
+                input_batch=input_batch,
             )
         )
 

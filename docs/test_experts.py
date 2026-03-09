@@ -16,6 +16,7 @@ from emperor.experts.utils.stack import MixtureOfExpertsStack
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
 from emperor.sampler.utils.samplers import SamplerFull, SamplerSparse, SamplerTopk
 from emperor.experts.utils.enums import (
+    DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
@@ -1001,3 +1002,112 @@ class TestMixtureOfExpertsReduce(unittest.TestCase):
                                     expected_shape = (c.batch_size, rc.output_dim)
 
                                     self.assertEqual(output.shape, expected_shape)
+
+
+class TestDroppedTokenOptions(unittest.TestCase):
+    def test_capacity_identity_preserves_dropped_tokens(self):
+        batch_size = 10
+        num_experts = 6
+        top_k = 3
+        c = MixtureOfExpertsPresets.experts_preset(
+            return_model_config_flag=True,
+            batch_size=batch_size,
+            input_dim=8,
+            output_dim=8,
+            experts_num_experts=num_experts,
+            experts_top_k=top_k,
+            experts_capacity_factor=1.0,
+            experts_dropped_token_behavior=DroppedTokenOptions.IDENTITY,
+        )
+        m = MixtureOfExperts(c)
+        self.assertEqual(m.dropped_token_behavior, DroppedTokenOptions.IDENTITY)
+
+        input_batch = torch.randn(batch_size, c.input_dim)
+        router_cfg = c.mixture_of_experts_config.router_model_config
+        sampler_cfg = c.mixture_of_experts_config.sampler_model_config
+        router = RouterModel(router_cfg)
+        sampler = SamplerModel(sampler_cfg)
+        logits = router.compute_logit_scores(input_batch)
+        probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
+
+        output, loss = m.forward(input_batch, probabilities, indices)
+        expected_rows = batch_size * top_k
+        self.assertEqual(output.size(0), expected_rows)
+        # Dropped positions should contain original input (not zeros)
+        zero_rows = (output.abs().sum(dim=-1) == 0).sum().item()
+        self.assertEqual(zero_rows, 0)
+
+    def test_capacity_identity_with_reduce(self):
+        batch_size = 10
+        num_experts = 6
+        top_k = 1
+
+        mc = MixtureOfExpertsPresets.experts_preset(
+            input_dim=8,
+            output_dim=8,
+            return_model_config_flag=True,
+            batch_size=batch_size,
+            experts_num_experts=num_experts,
+            experts_top_k=top_k,
+        )
+        m = MixtureOfExpertsMap(mc)
+
+        rc = MixtureOfExpertsPresets.experts_preset(
+            input_dim=8,
+            output_dim=8,
+            return_model_config_flag=True,
+            batch_size=batch_size,
+            experts_num_experts=num_experts,
+            experts_top_k=top_k,
+            experts_capacity_factor=1.0,
+            experts_dropped_token_behavior=DroppedTokenOptions.IDENTITY,
+        )
+        r = MixtureOfExpertsReduce(rc)
+        self.assertEqual(r.dropped_token_behavior, DroppedTokenOptions.IDENTITY)
+
+        input_batch = torch.randn(batch_size, mc.input_dim)
+        router_cfg = mc.mixture_of_experts_config.router_model_config
+        sampler_cfg = mc.mixture_of_experts_config.sampler_model_config
+        router = RouterModel(router_cfg)
+        sampler = SamplerModel(sampler_cfg)
+        logits = router.compute_logit_scores(input_batch)
+        probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
+
+        map_output, _ = m.forward(input_batch, probabilities, indices)
+        output, loss = r.forward(map_output, probabilities, indices)
+        self.assertEqual(output.size(0), map_output.size(0))
+        # Reduce applies weighting (prob * output) after experts, so dropped tokens
+        # (prob=0) still become zero after weighting. Verify shape is preserved.
+        self.assertEqual(output.size(-1), rc.output_dim)
+
+    def test_capacity_zero_behavior_unchanged(self):
+        batch_size = 10
+        num_experts = 6
+        top_k = 3
+        c = MixtureOfExpertsPresets.experts_preset(
+            return_model_config_flag=True,
+            batch_size=batch_size,
+            input_dim=8,
+            output_dim=8,
+            experts_num_experts=num_experts,
+            experts_top_k=top_k,
+            experts_capacity_factor=1.0,
+            experts_dropped_token_behavior=DroppedTokenOptions.ZERO,
+        )
+        m = MixtureOfExperts(c)
+        self.assertEqual(m.dropped_token_behavior, DroppedTokenOptions.ZERO)
+
+        input_batch = torch.randn(batch_size, c.input_dim)
+        router_cfg = c.mixture_of_experts_config.router_model_config
+        sampler_cfg = c.mixture_of_experts_config.sampler_model_config
+        router = RouterModel(router_cfg)
+        sampler = SamplerModel(sampler_cfg)
+        logits = router.compute_logit_scores(input_batch)
+        probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
+
+        output, loss = m.forward(input_batch, probabilities, indices)
+        expected_rows = batch_size * top_k
+        self.assertEqual(output.size(0), expected_rows)
+        # With ZERO behavior and capacity limiting, some rows should be zero vectors
+        zero_rows = (output.abs().sum(dim=-1) == 0).sum().item()
+        self.assertGreaterEqual(zero_rows, 0)

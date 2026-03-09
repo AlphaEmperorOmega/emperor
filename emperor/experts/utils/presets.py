@@ -6,6 +6,7 @@ from emperor.linears.options import LinearLayerStackOptions
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from emperor.experts.utils.enums import (
+    DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
@@ -51,6 +52,7 @@ class MixtureOfExpertsPresets:
         experts_init_sampler_option=InitSamplerOptions.DISABLED,
         experts_weighted_parameters_flag=False,
         experts_capacity_factor: float = 0.0,
+        experts_dropped_token_behavior: DroppedTokenOptions = DroppedTokenOptions.ZERO,
         experts_model_bias_flag: bool = False,
         experts_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         experts_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
@@ -106,6 +108,7 @@ class MixtureOfExpertsPresets:
             compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
             weighted_parameters_flag=experts_weighted_parameters_flag,
             capacity_factor=experts_capacity_factor,
+            dropped_token_behavior=experts_dropped_token_behavior,
             weighting_position_option=experts_weighting_position_option,
             init_sampler_option=experts_init_sampler_option,
             override_config=expert_model_config,
@@ -182,6 +185,7 @@ class MixtureOfExpertsPresets:
         experts_init_sampler_option=InitSamplerOptions.DISABLED,
         experts_weighted_parameters_flag=False,
         experts_capacity_factor: float = 0.0,
+        experts_dropped_token_behavior: DroppedTokenOptions = DroppedTokenOptions.ZERO,
         experts_model_bias_flag: bool = False,
         experts_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         experts_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
@@ -240,6 +244,7 @@ class MixtureOfExpertsPresets:
                 experts_init_sampler_option=experts_init_sampler_option,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_capacity_factor=experts_capacity_factor,
+                experts_dropped_token_behavior=experts_dropped_token_behavior,
                 experts_model_bias_flag=experts_model_bias_flag,
                 experts_model_generator_depth=experts_model_generator_depth,
                 experts_model_diagonal_option=experts_model_diagonal_option,
