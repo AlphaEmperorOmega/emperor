@@ -38,8 +38,7 @@ class _ExpertWeightingHandler:
         experts_output: Tensor,
         probabilities: Tensor | None = None,
     ) -> Tensor:
-        position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
-        if self.weighting_position_option == position_option:
+        if self._should_apply_before():
             experts_output = self._maybe_apply(experts_output, probabilities)
         return experts_output
 
@@ -48,13 +47,16 @@ class _ExpertWeightingHandler:
         experts_output: Tensor,
         probabilities: Tensor | None = None,
     ) -> Tensor:
-        position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
-        if self.weighting_position_option == position_option:
+        if self._should_apply_after():
             experts_output = self._maybe_apply(experts_output, probabilities)
         return experts_output
 
     def _should_apply_before(self) -> bool:
         position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
+        return self.weighting_position_option == position_option
+
+    def _should_apply_after(self) -> bool:
+        position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
         return self.weighting_position_option == position_option
 
     def _maybe_apply(
