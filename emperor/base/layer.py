@@ -114,16 +114,16 @@ class Layer(Module):
     ) -> Tensor | tuple[Tensor | None]:
         # TODO: Ensure that the skip_maks will be used
         # in the future.
-        model_input = self._handle_model_input(model_input)
-        output = self.__apply_layer_norm_before(model_input)
-        output = self._handle_model_processing(output)
-        output = self.__apply_layer_norm_default(output)
-        output = self.__apply_activation(output)
-        output = self.__apply_gates(output)
-        output = self.__apply_dropout(output)
-        output = self.__apply_residual_connection(output, model_input)
-        output = self.__apply_layer_norm_after(output)
-        return self._handle_model_output(output)
+        X = self._handle_model_input(model_input)
+        X = self.__apply_layer_norm_before(X)
+        X = self._handle_model_processing(X)
+        X = self.__apply_layer_norm_default(X)
+        X = self.__apply_activation(X)
+        X = self.__apply_gates(X)
+        X = self.__apply_dropout(X)
+        X = self.__apply_residual_connection(X, model_input)
+        X = self.__apply_layer_norm_after(X)
+        return self._handle_model_output(X)
 
     def _handle_model_input(self, input: Tensor) -> Tensor:
         return input
