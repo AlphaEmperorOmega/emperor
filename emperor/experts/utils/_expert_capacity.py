@@ -15,12 +15,12 @@ class _ExpertCapacityHandler:
     ) -> Tensor:
         if self.capacity_factor == 0:
             return input
-        batch_size = input.size(0)
+        tokens_assigned = input.size(0)
         tokens_per_expert = batch_size / self.num_experts
         expert_capacity = max(1, int(tokens_per_expert * self.capacity_factor))
-        if batch_size <= expert_capacity:
+        if tokens_assigned <= expert_capacity:
             return input
-        shuffled = input[torch.randperm(batch_size, device=input.device)]
+        shuffled = input[torch.randperm(tokens_assigned, device=input.device)]
         return shuffled[:expert_capacity]
 
     def maybe_scatter_to_full_batch(
