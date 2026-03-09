@@ -19,7 +19,9 @@ from emperor.behaviours.utils.enums import (
 # Global
 BATCH_SIZE: int = 64
 NUM_EPOCHS: int = 10
+LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
+SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 
 # Model
 INPUT_DIM: int = 32
