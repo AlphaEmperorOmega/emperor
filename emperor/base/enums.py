@@ -35,6 +35,7 @@ class ActivationOptions(BaseOptions):
     SOFTPLUS = F.softplus
     SOFTSIGN = F.softsign
     SILU = F.silu
+    MISH = F.mish
 
 
 class LayerNormPositionOptions(BaseOptions):
