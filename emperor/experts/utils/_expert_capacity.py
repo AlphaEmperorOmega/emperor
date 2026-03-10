@@ -14,44 +14,74 @@ class _ExpertCapacityHandler:
         self.capacity_factor = capacity_factor
         self.num_experts = num_experts
         self.dropped_token_behavior = dropped_token_behavior
+        self.shuffle_indices: Tensor | None = None
 
-    def maybe_apply_capacity_limit(
+    def maybe_apply_capacity_limit_token_indices(
         self,
         input: Tensor,
         batch_size: int,
+    ) -> tuple[Tensor, Tensor]:
+        return self.__maybe_apply_capacity_limit(input, batch_size)
+
+    def maybe_apply_capacity_limit_routing_positions(
+        self,
+        input: Tensor,
+        batch_size: int,
+    ) -> tuple[Tensor, Tensor]:
+        if not isinstance(self.shuffle_indices, Tensor):
+            raise RuntimeError(
+                "shuffle_indices has not been initialized. maybe_apply_capacity_limit_token_indices must be called first."
+            )
+        return self.__maybe_apply_capacity_limit(
+            input, batch_size, self.shuffle_indices
+        )
+
+    def _generate_shuffle_indices(
+        self,
+        tokens_assigned: int,
+        shuffle_indices: Tensor | None,
+        device: torch.device,
     ) -> Tensor:
-        # ) -> tuple[Tensor, Tensor]:
+        if shuffle_indices is None:
+            shuffle_indices = torch.randperm(tokens_assigned, device=device)
+            self.shuffle_indices = shuffle_indices
+        return shuffle_indices
+
+    def __maybe_apply_capacity_limit(
+        self,
+        input: Tensor,
+        batch_size: int,
+        shuffle_indices: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        empty = torch.tensor([], dtype=input.dtype, device=input.device)
         if self.capacity_factor == 0:
-            return input
+            return input, empty
         tokens_assigned = input.size(0)
         tokens_per_expert = batch_size / self.num_experts
         expert_capacity = max(1, int(tokens_per_expert * self.capacity_factor))
         if tokens_assigned <= expert_capacity:
-            return input
-        # BUG: applying random shuffleing does not work
-        # see if you can see what happends step by step in both situations
-        # and if can be somehow avoided, it is importat that this will work
-        # see switch transformer implementation:
-        # https://github.com/labmlai/annotated_deep_learning_paper_implementations/blob/master/labml_nn/transformers/switch/__init__.py
-        # shuffled = input[torch.randperm(tokens_assigned, device=input.device)]
-        # return shuffled[:expert_capacity]
-
-        expert_tokens = input[:expert_capacity]
-        droped_tokens = input[expert_capacity:]
-        # return expert_tokens, droped_tokens
-        return expert_tokens
+            return input, empty
+        shuffled = input[
+            self._generate_shuffle_indices(
+                tokens_assigned, shuffle_indices, input.device
+            )
+        ]
+        expert_tokens = shuffled[:expert_capacity]
+        dropped_tokens = shuffled[expert_capacity:]
+        return expert_tokens, dropped_tokens
 
     def maybe_scatter_to_full_batch(
         self,
         expert_outputs: Tensor,
         probabilities: Tensor,
         indices: Tensor | None,
-        full_size: int,
-        input_batch: Tensor | None = None,
+        input_batch: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor | None]:
-        if self.capacity_factor == 0.0 or indices is None:
+        if self.capacity_factor == 0 or indices is None:
             return expert_outputs, probabilities, indices
 
+        batch_size = input_batch.size(0)
+        full_size = batch_size * self.top_k
         all_probabilities = probabilities.flatten()
         probabilities = all_probabilities[indices]
         output_dim = expert_outputs.size(-1)
