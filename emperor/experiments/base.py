@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from typing import Callable
-from lightning import Trainer
+from lightning import Trainer, seed_everything
 from emperor.config import ModelConfig
 from emperor.base.enums import BaseOptions
 from emperor.datasets.image.classification.mnist import Mnist
@@ -155,6 +155,7 @@ class ExperimentBase:
                 for config in self.preset_generator.get_config(
                     option, dataset_type, search_mode
                 ):
+                    seed_everything(42, workers=True)
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
                     logger = TensorBoardLogger(
