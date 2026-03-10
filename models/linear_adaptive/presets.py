@@ -1,16 +1,12 @@
 import models.linear_adaptive.config as config
 
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
-from emperor.datasets.image.classification.mnist import Mnist
-from emperor.linears.utils.config import LinearLayerConfig
+from models.linear_adaptive.model import Model
 from emperor.base.layer import LayerStackConfig
-from emperor.experiments.base import (
-    ExperimentBase,
-    ExperimentPresetsBase,
-    create_search_space,
-    SearchMode,
-)
+from emperor.linears.utils.config import LinearLayerConfig
+from models.linear_adaptive.config import ExperimentConfig
+from emperor.datasets.image.classification.mnist import Mnist
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -19,8 +15,12 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from models.linear_adaptive.config import ExperimentConfig
-from models.linear_adaptive.model import Model
+from emperor.experiments.base import (
+    ExperimentBase,
+    ExperimentPresetsBase,
+    create_search_space,
+    SearchMode,
+)
 
 from typing import TYPE_CHECKING
 
@@ -75,6 +75,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         search_space = {
             **self._extract_search_space_from_config(search_mode),
             "generator_depth": [
+                DynamicDepthOptions.DISABLED,
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
                 DynamicDepthOptions.DEPTH_OF_THREE,
@@ -131,10 +132,12 @@ class ExperimentPresets(ExperimentPresetsBase):
         search_space = {
             **self._extract_search_space_from_config(search_mode),
             "memory_option": [
+                LinearMemoryOptions.DISABLED,
                 LinearMemoryOptions.FUSION,
                 LinearMemoryOptions.WEIGHTED,
             ],
             "memory_size_option": [
+                LinearMemorySizeOptions.DISABLED,
                 LinearMemorySizeOptions.SMALL,
                 LinearMemorySizeOptions.MEDIUM,
                 LinearMemorySizeOptions.LARGE,
@@ -158,6 +161,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         search_space = {
             **self._extract_search_space_from_config(search_mode),
             "generator_depth": [
+                DynamicDepthOptions.DISABLED,
                 DynamicDepthOptions.DEPTH_OF_ONE,
                 DynamicDepthOptions.DEPTH_OF_TWO,
                 DynamicDepthOptions.DEPTH_OF_THREE,
@@ -175,10 +179,12 @@ class ExperimentPresets(ExperimentPresetsBase):
                 DynamicBiasOptions.DYNAMIC_PARAMETERS,
             ],
             "memory_option": [
+                LinearMemoryOptions.DISABLED,
                 LinearMemoryOptions.FUSION,
                 LinearMemoryOptions.WEIGHTED,
             ],
             "memory_size_option": [
+                LinearMemorySizeOptions.DISABLED,
                 LinearMemorySizeOptions.SMALL,
                 LinearMemorySizeOptions.MEDIUM,
                 LinearMemorySizeOptions.LARGE,
@@ -216,6 +222,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
         adaptive_generator_stack_residual_flag: bool = config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG,
         adaptive_generator_stack_dropout_probability: float = config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
+        adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions
@@ -260,7 +267,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                                 output_dim=output_dim,
                                 num_layers=adaptive_generator_stack_num_layers,
                                 activation=adaptive_generator_stack_activation,
-                                layer_norm_position=layer_norm_position,
+                                layer_norm_position=adaptive_generator_stack_layer_norm_position,
                                 residual_flag=adaptive_generator_stack_residual_flag,
                                 adaptive_computation_flag=False,
                                 dropout_probability=adaptive_generator_stack_dropout_probability,
