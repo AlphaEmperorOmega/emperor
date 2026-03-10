@@ -35,7 +35,7 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.RELU,
     ActivationOptions.SILU,
     ActivationOptions.GELU,
-    ActivationOptions.LEAKY_RELU,
+    ActivationOptions.MISH,
 ]
 
 
