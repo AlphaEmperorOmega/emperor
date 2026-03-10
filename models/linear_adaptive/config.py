@@ -56,7 +56,7 @@ ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
 # Hyperparameter search space
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [64, 128, 256]
-SEARCH_SPACE_STACK_NUM_LAYERS: list = [3, 6]
+SEARCH_SPACE_STACK_NUM_LAYERS: list = [1, 3, 5, 7]
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2]
 SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.RELU,
@@ -85,6 +85,28 @@ SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+
+# TODO:
+# 1. No validation/test evaluation
+# train_model only calls trainer.fit(). There's no trainer.test() or
+# trainer.validate() after training. You're logging training metrics but never
+# measuring generalization.
+#
+# 2. No early stopping or checkpointing
+# The Trainer is configured with just max_epochs, accelerator, and logger. No
+# callbacks for:
+# - EarlyStopping — stop wasting compute on bad configs
+# - ModelCheckpoint — save the best model per run
+#
+# This matters a lot for grid/random search where most configs will be bad.
+#
+# 3. No cross-experiment comparison
+# Each config trains independently. There's no mechanism to:
+# - Rank configs by performance after a search completes
+# - Carry forward the best config from one search to the next
+#
+# For example, you'd ideally find the best activation first (ACTIVATION search),
+#  then use that as the default when searching GENERATOR_DEPTH.
 
 
 @dataclass
