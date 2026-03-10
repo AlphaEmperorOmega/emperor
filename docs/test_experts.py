@@ -166,7 +166,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     self.assertIsNone(probabilities)
                     self.assertEqual(sampler_loss.item(), 0.0)
 
-    def test__get_expert_indices(self):
+    def test_get_expert_token_indices(self):
         top_k = 3
         num_experts = 6
 
@@ -181,7 +181,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 m = MixtureOfExperts(c)
 
                 indices = torch.randint(0, m.num_experts, (10, top_k))
-                sample_indices_for_expert = m._MixtureOfExperts__get_expert_indices(
+                sample_indices_for_expert = m._get_expert_token_indices(
                     indices, expert_index
                 )
 
