@@ -27,20 +27,36 @@ class FashionMNIST(DataModule):
         datasets.FashionMNIST(root=self.root, train=True, download=True)
         datasets.FashionMNIST(root=self.root, train=False, download=True)
 
+    val_split: float = 0.1
+
     def _setup_fit(self) -> None:
-        self.train = datasets.FashionMNIST(
+        full_train = datasets.FashionMNIST(
             root=self.root,
             train=True,
             transform=self.__get_train_transforms(),
         )
-        self.val = datasets.FashionMNIST(
-            root=self.root,
-            train=False,
-            transform=self.__get_test_transforms(),
+        val_size = int(len(full_train) * self.val_split)
+        train_size = len(full_train) - val_size
+        self.train, self.val = torch.utils.data.random_split(
+            full_train, [train_size, val_size],
+            generator=torch.Generator().manual_seed(42),
         )
 
     def _setup_validate(self) -> None:
-        self.val = datasets.FashionMNIST(
+        full_train = datasets.FashionMNIST(
+            root=self.root,
+            train=True,
+            transform=self.__get_test_transforms(),
+        )
+        val_size = int(len(full_train) * self.val_split)
+        train_size = len(full_train) - val_size
+        _, self.val = torch.utils.data.random_split(
+            full_train, [train_size, val_size],
+            generator=torch.Generator().manual_seed(42),
+        )
+
+    def _setup_test(self) -> None:
+        self.test = datasets.FashionMNIST(
             root=self.root,
             train=False,
             transform=self.__get_test_transforms(),
@@ -85,6 +101,15 @@ class FashionMNIST(DataModule):
             data,
             self.batch_size,
             shuffle=train,
+            num_workers=self.num_workers,
+            drop_last=True,
+        )
+
+    def _get_test_dataloader(self):
+        return torch.utils.data.DataLoader(
+            self.test,
+            self.batch_size,
+            shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,
         )

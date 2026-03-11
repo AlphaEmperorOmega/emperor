@@ -262,6 +262,12 @@ class Module(LightningModule):
             loss += auxilaryLoss
         self.plot("loss", loss, train=False)
 
+    def test_step(self, batch):
+        modelOutput, auxilaryLoss = self(*batch[:-1])
+        loss = self.loss(modelOutput, batch[-1])
+        if auxilaryLoss is not None:
+            loss += auxilaryLoss
+
     def configure_optimizers(self):
         return torch.optim.SGD(self.parameters(), lr=self.lr)
 
@@ -420,6 +426,8 @@ class DataModule(LightningDataModule):
                 self._setup_fit()
             case "validate":
                 self._setup_validate()
+            case "test":
+                self._setup_test()
 
     def _setup_fit(self) -> None:
         raise NotImplementedError(
@@ -431,6 +439,11 @@ class DataModule(LightningDataModule):
             "The method '_setup_validate' must be implemented in the subclass."
         )
 
+    def _setup_test(self) -> None:
+        raise NotImplementedError(
+            "The method '_setup_test' must be implemented in the subclass."
+        )
+
     def get_dataloader(self, train):
         raise NotImplementedError
 
@@ -439,6 +452,9 @@ class DataModule(LightningDataModule):
 
     def val_dataloader(self):
         return self.get_dataloader(train=False)
+
+    def test_dataloader(self):
+        return self._get_test_dataloader()
 
     def get_tensorloader(self, tensors, train, indices=slice(0, None)):
         tensors = tuple(a[indices] for a in tensors)
