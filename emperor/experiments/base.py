@@ -1,3 +1,4 @@
+import json
 import random
 import hashlib
 import inspect
@@ -150,6 +151,7 @@ class ExperimentBase:
         self, search_mode: SearchMode = None, log_folder: str | None = None
     ) -> None:
         options = [self.option] if self.option else self.options_enumeration
+        top5 = self._load_best_results(log_folder)
         for option in options:
             for dataset_type in self.dataset_options:
                 for config in self.preset_generator.get_config(
@@ -170,6 +172,57 @@ class ExperimentBase:
                         logger=logger,
                     )
                     trainer.fit(model, datamodule=dataset)
+
+                    if search_mode is not None:
+                        result = {
+                            "dataset": dataset_type.__name__,
+                            "option": option.name,
+                            "params": config.get_custom_parameters(),
+                            "metrics": {
+                                k: v.item()
+                                for k, v in trainer.callback_metrics.items()
+                            },
+                        }
+                        Path(logger.log_dir).mkdir(parents=True, exist_ok=True)
+                        (Path(logger.log_dir) / "result.json").write_text(
+                            json.dumps(result, indent=2, default=str)
+                        )
+                        self._update_best_results(result, top5, log_folder)
+
+    def _load_best_results(self, log_folder: str | None = None) -> dict:
+        source_file = Path(inspect.getfile(type(self))).parent.name
+        folder = f"{log_folder}/{source_file}" if log_folder is not None else source_file
+        summary_path = Path("logs") / folder / "best_results.json"
+        if summary_path.exists():
+            return json.loads(summary_path.read_text())
+        return {}
+
+    def _update_best_results(
+        self, result: dict, top5: dict, log_folder: str | None = None
+    ) -> None:
+        dataset = result["dataset"]
+        runs = top5.get(dataset, [])
+        new_acc = result["metrics"].get("val_accuracy", 0)
+        worst_acc = min((r["metrics"].get("val_accuracy", 0) for r in runs), default=-1)
+
+        if len(runs) < 5 or new_acc > worst_acc:
+            runs.append(result)
+            top5[dataset] = [
+                {**run, "rank": i + 1}
+                for i, run in enumerate(
+                    sorted(
+                        runs,
+                        key=lambda r: r["metrics"].get("val_accuracy", 0),
+                        reverse=True,
+                    )[:5]
+                )
+            ]
+
+            source_file = Path(inspect.getfile(type(self))).parent.name
+            folder = f"{log_folder}/{source_file}" if log_folder is not None else source_file
+            summary_path = Path("logs") / folder / "best_results.json"
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            summary_path.write_text(json.dumps(top5, indent=2, default=str))
 
     def _build_log_path(
         self,
