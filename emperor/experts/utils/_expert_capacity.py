@@ -9,10 +9,12 @@ class _ExpertCapacityHandler:
         self,
         capacity_factor: float,
         num_experts: int,
+        top_k: int,
         dropped_token_behavior: DroppedTokenOptions = DroppedTokenOptions.ZERO,
     ):
         self.capacity_factor = capacity_factor
         self.num_experts = num_experts
+        self.top_k = top_k
         self.dropped_token_behavior = dropped_token_behavior
         self.shuffle_indices: Tensor | None = None
 
@@ -29,9 +31,8 @@ class _ExpertCapacityHandler:
         batch_size: int,
     ) -> tuple[Tensor, Tensor]:
         if not isinstance(self.shuffle_indices, Tensor):
-            raise RuntimeError(
-                "shuffle_indices has not been initialized. maybe_apply_capacity_limit_token_indices must be called first."
-            )
+            empty = torch.tensor([], dtype=input.dtype, device=input.device)
+            return input, empty
         return self.__maybe_apply_capacity_limit(
             input, batch_size, self.shuffle_indices
         )
