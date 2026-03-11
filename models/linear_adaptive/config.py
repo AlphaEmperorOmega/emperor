@@ -17,7 +17,7 @@ from emperor.behaviours.utils.enums import (
 
 # Global
 BATCH_SIZE: int = 64
-NUM_EPOCHS: int = 10
+NUM_EPOCHS: int = 1
 LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
