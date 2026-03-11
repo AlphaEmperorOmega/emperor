@@ -240,6 +240,7 @@ class ExperimentBase:
                         **trainer_config["trainer_args"],
                     )
                     trainer.fit(model, datamodule=dataset)
+                    trainer.test(model, datamodule=dataset)
 
                     result = {
                         "dataset": dataset_type.__name__,
