@@ -4,6 +4,8 @@
 
 A PyTorch-based deep learning framework for experimenting with neural network architectures including Mixture of Experts (MoE), Vision Transformers (ViT), adaptive computation, and linear classifiers. Built on PyTorch Lightning for streamlined training across multiple image datasets.
 
+Built as a personal research framework for exploring how architectural choices affect model behaviour, and for learning how to design extensible deep learning software.
+
 ## Quick Start
 
 ```bash
@@ -69,7 +71,12 @@ pip install -e .
 
 ## Running Experiments
 
-Use `run_experiment.sh` to train models. Each experiment runs across all four image datasets by default.
+Use `run_experiment.sh` to train models. Each experiment runs across all four image datasets by default (MNIST, FashionMNIST, CIFAR-10, CIFAR-100). To change which datasets are used, edit the `DATASET_OPTIONS` list in the model's `config.py`:
+
+```python
+# models/linear_adaptive/config.py
+DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
+```
 
 ### List available experiments
 
@@ -95,7 +102,24 @@ source run_experiment.sh linear --name DEFAULT
 source run_experiment.sh vit --name ADAPTIVE
 ```
 
-`--name` selects which preset to run. Each model exposes its own set of named options (e.g. `DEFAULT`, `BASE`, `ADAPTIVE`). Use `--name` or `--all-options` — one is required.
+`--name` selects which experiment option to run. Each model exposes its own set of named options. Use `--name` or `--all-options` — one is required.
+
+Available options per model:
+
+| Model                  | Options                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `linear`               | `PRESET`, `CONFIG`                                                              |
+| `linear_adaptive`      | `PRESET`, `CONFIG`, `GENERATOR_DEPTH`, `DIAGONAL`, `BIAS`, `MEMORY`, `COMBINED` |
+| `experts`              | `PRESET`, `CONFIG`, `ADAPTIVE`                                                  |
+| `vit`                  | `PRESET`, `CONFIG`, `ADAPTIVE`                                                  |
+| `parametric_generator` | `PRESET`, `CONFIG`                                                              |
+| `parametric_matrix`    | `PRESET`, `CONFIG`                                                              |
+| `parametric_vector`    | `PRESET`, `CONFIG`                                                              |
+
+For `linear_adaptive`, each option is a focused ablation experiment:
+
+- `PRESET` — runs a single configuration using the default values defined in `config.py`
+- `CONFIG` — searches over general hyperparameters (learning rate, hidden dim, activation, etc.)
 
 ### Run all configurations
 
@@ -113,6 +137,16 @@ source run_experiment.sh linear_adaptive --all-options --grid-search
 ```
 
 Exhaustively runs every combination in the search space across all datasets.
+
+The search space is defined in each model's `config.py` as variables prefixed with `SEARCH_SPACE_`:
+
+```python
+# models/linear/config.py
+SEARCH_SPACE_LEARNING_RATE = [1e-4, 1e-3, 1e-2]
+SEARCH_SPACE_HIDDEN_DIM = [64, 128, 256]
+SEARCH_SPACE_STACK_ACTIVATION = [RELU, SILU, GELU, MISH]
+...
+```
 
 ### Run random search
 
@@ -140,42 +174,24 @@ Training metrics are logged to `logs/`. Launch TensorBoard to visualize them:
 tensorboard --logdir logs/
 ```
 
-Or scope to a specific experiment:
+### Search results
 
-```bash
-tensorboard --logdir logs/linear
+When running `--grid-search` or `--random-search`, two additional files are written:
+
+- **`result.json`** — saved inside each run's log directory with the exact parameters and final metrics for that run
+- **`best_results.json`** — saved at `logs/{model}/best_results.json`, updated after every run that makes the top 5
+
+`best_results.json` tracks the top 5 configurations per dataset ranked by `val_accuracy`:
+
+```json
+{
+  "Mnist": [
+    {"rank": 1, "option": "CONFIG", "params": {"learning_rate": "0.001", ...}, "metrics": {"val_accuracy": 0.984, "val_loss": 0.051, ...}},
+    {"rank": 2, ...},
+    ...
+  ],
+  "Cifar10": [...]
+}
 ```
 
-## Project Structure
-
-```
-emperor/              Main package
-  attention/          Multi-head attention with masking, bias, and projection
-  experts/            Mixture of Experts routing and expert selection
-  parametric/         Adaptive parameter generation and dynamic mixtures
-  transformer/        Transformer encoder/decoder, positional embeddings, feed-forward
-  linears/            Linear layer variants (diagonal, matrix, anti-diagonal)
-  datasets/image/     Image dataset loaders (MNIST, CIFAR-10, CIFAR-100, FashionMNIST, SVHN)
-  experiments/        Base experiment and classifier framework (PyTorch Lightning)
-  halting/            Adaptive computation halting mechanisms
-  behaviours/         Dynamic depth, bias, and diagonal options
-  sampler/            Expert routing and sampling strategies
-  neuron/             Biological neuron-inspired components
-  embedding/          Positional embeddings (absolute, relative)
-  base/               Core layer abstractions, config base classes, activations
-  config.py           Global ModelConfig dataclass
-
-models/               Experiment definitions (each is a Python package)
-  linear/             Linear classifier experiment
-  linear_adaptive/    Adaptive linear experiment
-  experts/            Mixture of Experts experiment
-  vit/                Vision Transformer experiment
-  parametric_generator/  Parametric experiment with generator-based expert weights
-  parametric_matrix/     Parametric experiment with matrix-mixed expert weights
-  parametric_vector/     Parametric experiment with vector-mixed expert weights
-  parser.py           CLI argument parser and resolve_experiment_mode helper
-
-docs/                 Unit tests (31 test files)
-logs/                 TensorBoard logs (generated during training)
-data/                 Cached datasets
-```
+The file is updated in place as the search runs — if the process is interrupted, the top 5 found so far is preserved.
