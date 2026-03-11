@@ -44,22 +44,23 @@ class ExperimentPresets(ExperimentPresetsBase):
         model_config_options: ExperimentOptions = ExperimentOptions.PRESET,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.PRESET:
                 return self._create_default_preset_configs(dataset)
             case ExperimentOptions.CONFIG:
-                return self._create_default_search_space_configs(dataset, search_mode)
+                return self._create_default_search_space_configs(dataset, search_mode, log_folder)
             case ExperimentOptions.GENERATOR_DEPTH:
-                return self.__generator_depth_search_space_configs(dataset, search_mode)
+                return self.__generator_depth_search_space_configs(dataset, search_mode, log_folder)
             case ExperimentOptions.DIAGONAL:
-                return self.__diagonal_search_space_configs(dataset, search_mode)
+                return self.__diagonal_search_space_configs(dataset, search_mode, log_folder)
             case ExperimentOptions.BIAS:
-                return self.__bias_search_space_configs(dataset, search_mode)
+                return self.__bias_search_space_configs(dataset, search_mode, log_folder)
             case ExperimentOptions.MEMORY:
-                return self.__memory_search_space_configs(dataset, search_mode)
+                return self.__memory_search_space_configs(dataset, search_mode, log_folder)
             case ExperimentOptions.COMBINED:
-                return self.__combined_search_space_configs(dataset, search_mode)
+                return self.__combined_search_space_configs(dataset, search_mode, log_folder)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
@@ -69,8 +70,12 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
 
         search_space = {
             **self._extract_search_space_from_config(search_mode),
@@ -88,8 +93,12 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
 
         search_space = {
             **self._extract_search_space_from_config(search_mode),
@@ -107,8 +116,12 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
 
         search_space = {
             **self._extract_search_space_from_config(search_mode),
@@ -126,8 +139,12 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
 
         search_space = {
             **self._extract_search_space_from_config(search_mode),
@@ -137,7 +154,6 @@ class ExperimentPresets(ExperimentPresetsBase):
                 LinearMemoryOptions.WEIGHTED,
             ],
             "memory_size_option": [
-                LinearMemorySizeOptions.DISABLED,
                 LinearMemorySizeOptions.SMALL,
                 LinearMemorySizeOptions.MEDIUM,
                 LinearMemorySizeOptions.LARGE,
@@ -155,8 +171,12 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
 
         search_space = {
             **self._extract_search_space_from_config(search_mode),
@@ -184,7 +204,6 @@ class ExperimentPresets(ExperimentPresetsBase):
                 LinearMemoryOptions.WEIGHTED,
             ],
             "memory_size_option": [
-                LinearMemorySizeOptions.DISABLED,
                 LinearMemorySizeOptions.SMALL,
                 LinearMemorySizeOptions.MEDIUM,
                 LinearMemorySizeOptions.LARGE,
