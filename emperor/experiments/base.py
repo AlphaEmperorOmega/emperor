@@ -10,6 +10,7 @@ from pathlib import Path
 
 from typing import Callable
 from lightning import Trainer, seed_everything
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from emperor.config import ModelConfig
 from emperor.base.enums import BaseOptions
 from emperor.datasets.image.classification.mnist import Mnist
@@ -167,11 +168,56 @@ class ExperimentBase:
             "The method '_experiment_enumeration' must be implemented in the subclass."
         )
 
+    def _load_trainer_config(self) -> dict:
+        package = type(self.preset_generator).__module__.rsplit(".", 1)[0]
+        config = importlib.import_module(f"{package}.config")
+
+        early_stopping_patience = getattr(config, "EARLY_STOPPING_PATIENCE", 0)
+        early_stopping_metric = getattr(config, "EARLY_STOPPING_METRIC", "val_loss")
+        checkpoint_flag = getattr(config, "CHECKPOINT_FLAG", False)
+
+        callbacks = []
+        if early_stopping_patience > 0:
+            callbacks.append(EarlyStopping(
+                monitor=early_stopping_metric,
+                patience=early_stopping_patience,
+                mode="min" if "loss" in early_stopping_metric else "max",
+            ))
+        if checkpoint_flag:
+            callbacks.append(ModelCheckpoint(
+                monitor=early_stopping_metric,
+                save_top_k=1,
+                mode="min" if "loss" in early_stopping_metric else "max",
+            ))
+
+        return {
+            "trainer_args": {k: v for k, v in {
+                "gradient_clip_val": getattr(config, "GRADIENT_CLIP_VAL", 0.0),
+                "gradient_clip_algorithm": getattr(config, "GRADIENT_CLIP_ALGORITHM", "norm"),
+                "accumulate_grad_batches": getattr(config, "ACCUMULATE_GRAD_BATCHES", 1),
+                "precision": getattr(config, "PRECISION", "32-true"),
+                "deterministic": getattr(config, "DETERMINISTIC", False),
+                "benchmark": getattr(config, "BENCHMARK", True),
+                "max_steps": getattr(config, "MAX_STEPS", -1),
+                "max_time": getattr(config, "MAX_TIME", None),
+                "val_check_interval": getattr(config, "VAL_CHECK_INTERVAL", 1.0),
+                "limit_train_batches": getattr(config, "LIMIT_TRAIN_BATCHES", 1.0),
+                "limit_val_batches": getattr(config, "LIMIT_VAL_BATCHES", 1.0),
+                "overfit_batches": getattr(config, "OVERFIT_BATCHES", 0.0),
+                "num_sanity_val_steps": getattr(config, "NUM_SANITY_VAL_STEPS", 2),
+                "log_every_n_steps": getattr(config, "LOG_EVERY_N_STEPS", 50),
+                "enable_progress_bar": getattr(config, "ENABLE_PROGRESS_BAR", True),
+                "profiler": getattr(config, "PROFILER", None),
+            }.items() if v is not None},
+            "callbacks": callbacks,
+        }
+
     def train_model(
         self, search_mode: SearchMode = None, log_folder: str | None = None
     ) -> None:
         options = [self.option] if self.option else self.options_enumeration
         top5 = self._load_best_results(log_folder)
+        trainer_config = self._load_trainer_config()
         for option in options:
             for dataset_type in self.dataset_options:
                 for config in self.preset_generator.get_config(
@@ -190,6 +236,8 @@ class ExperimentBase:
                         max_epochs=self.num_epochs,
                         accelerator=self.accelerator,
                         logger=logger,
+                        callbacks=trainer_config["callbacks"],
+                        **trainer_config["trainer_args"],
                     )
                     trainer.fit(model, datamodule=dataset)
 
