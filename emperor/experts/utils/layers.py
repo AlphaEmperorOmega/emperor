@@ -123,7 +123,7 @@ class MixtureOfExperts(Module):
 
         self.validator_handler = _ValidatorHandler(self)
         self.expert_capacity_handler = _ExpertCapacityHandler(
-            self.capacity_factor, self.num_experts, self.dropped_token_behavior
+            self.capacity_factor, self.num_experts, self.top_k, self.dropped_token_behavior
         )
         self.expert_weighting_handler = _ExpertWeightingHandler(
             self.weighted_parameters_flag,
@@ -458,8 +458,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
                 expert_outputs,
                 probabilities,
                 sample_indices_for_expert_tensor,
-                input_batch.size(0),
-                input_batch=input_batch,
+                input_batch,
             )
         )
 
