@@ -66,7 +66,8 @@ def create_search_space(
 
 class ExperimentPresetsBase:
     def get_config(
-        self, model_config_options, dataset, search_mode: SearchMode = None
+        self, model_config_options, dataset, search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
         raise NotImplementedError(
             "The method 'train_model' must be implemented in the subclass."
@@ -94,14 +95,33 @@ class ExperimentPresetsBase:
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
         return create_search_space(
             self._preset,
             base_config,
             self._extract_search_space_from_config(search_mode),
             search_mode,
         )
+
+    def _best_params(self, dataset: type, log_folder: str | None = None) -> dict:
+        package = type(self).__module__.rsplit(".", 1)[0]
+        source_name = package.rsplit(".", 1)[-1]
+        folder = f"{log_folder}/{source_name}" if log_folder else source_name
+        path = Path("logs") / folder / "best_results.json"
+        if not path.exists():
+            return {}
+        data = json.loads(path.read_text())
+        runs = data.get(dataset.__name__, [])
+        if not runs:
+            return {}
+        best = min(runs, key=lambda r: r.get("rank", 999))
+        return {k: v for k, v in best.get("params", {}).items()
+                if type(v) in (int, float, bool)}
 
     def _extract_search_space_from_config(self, search_mode: SearchMode = None) -> dict:
         if search_mode is None:
@@ -155,7 +175,7 @@ class ExperimentBase:
         for option in options:
             for dataset_type in self.dataset_options:
                 for config in self.preset_generator.get_config(
-                    option, dataset_type, search_mode
+                    option, dataset_type, search_mode, log_folder
                 ):
                     seed_everything(42, workers=True)
                     dataset = dataset_type(batch_size=config.batch_size)
@@ -173,21 +193,20 @@ class ExperimentBase:
                     )
                     trainer.fit(model, datamodule=dataset)
 
-                    if search_mode is not None:
-                        result = {
-                            "dataset": dataset_type.__name__,
-                            "option": option.name,
-                            "params": config.get_custom_parameters(),
-                            "metrics": {
-                                k: v.item()
-                                for k, v in trainer.callback_metrics.items()
-                            },
-                        }
-                        Path(logger.log_dir).mkdir(parents=True, exist_ok=True)
-                        (Path(logger.log_dir) / "result.json").write_text(
-                            json.dumps(result, indent=2, default=str)
-                        )
-                        self._update_best_results(result, top5, log_folder)
+                    result = {
+                        "dataset": dataset_type.__name__,
+                        "option": option.name,
+                        "params": config.get_custom_parameters(),
+                        "metrics": {
+                            k: v.item()
+                            for k, v in trainer.callback_metrics.items()
+                        },
+                    }
+                    Path(logger.log_dir).mkdir(parents=True, exist_ok=True)
+                    (Path(logger.log_dir) / "result.json").write_text(
+                        json.dumps(result, indent=2, default=str)
+                    )
+                    self._update_best_results(result, top5, log_folder)
 
     def _load_best_results(self, log_folder: str | None = None) -> dict:
         source_file = Path(inspect.getfile(type(self))).parent.name
