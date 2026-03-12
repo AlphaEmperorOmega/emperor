@@ -3,21 +3,22 @@ from torch import Tensor
 from emperor.experts.utils._validator import _ValidatorHandler
 from emperor.experts.utils.enums import ExpertWeightingPositionOptions
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emperor.experts.utils.layers import MixtureOfExpertsConfig
+
 
 class _ExpertWeightingHandler:
     def __init__(
         self,
-        weighted_parameters_flag: bool,
-        weighting_position_option: ExpertWeightingPositionOptions,
-        top_k: int,
-        num_experts: int,
-        validator: _ValidatorHandler,
+        cfg: "MixtureOfExpertsConfig",
     ):
-        self.weighted_parameters_flag = weighted_parameters_flag
-        self.weighting_position_option = weighting_position_option
-        self.top_k = top_k
-        self.num_experts = num_experts
-        self.validator = validator
+        self.cfg = cfg
+        self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
+        self.weighting_position_option = self.cfg.weighting_position_option
+        self.top_k = self.cfg.top_k
+        self.num_experts = self.cfg.num_experts
 
     def get_expert_probabilities(
         self,

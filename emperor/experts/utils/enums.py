@@ -13,5 +13,5 @@ class InitSamplerOptions(Enum):
 
 
 class DroppedTokenOptions(Enum):
-    ZERO = 1
+    ZEROS = 1
     IDENTITY = 2
