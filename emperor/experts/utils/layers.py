@@ -122,16 +122,8 @@ class MixtureOfExperts(Module):
         self.sampler_model_config: "SamplerConfig" = self.cfg.sampler_model_config
 
         self.validator_handler = _ValidatorHandler(self)
-        self.expert_capacity_handler = _ExpertCapacityHandler(
-            self.capacity_factor, self.num_experts, self.top_k, self.dropped_token_behavior
-        )
-        self.expert_weighting_handler = _ExpertWeightingHandler(
-            self.weighted_parameters_flag,
-            self.weighting_position_option,
-            self.top_k,
-            self.num_experts,
-            self.validator_handler,
-        )
+        self.expert_capacity_handler = _ExpertCapacityHandler(self.cfg)
+        self.expert_weighting_handler = _ExpertWeightingHandler(self.cfg)
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
         self.expert_modules = self.__create_experts()
 
@@ -257,7 +249,7 @@ class MixtureOfExperts(Module):
             sample_indices_for_all_experts = torch.cat(sample_indices_for_expert_list)
 
         expert_outputs, probabilities, sample_indices_for_all_experts = (
-            self.expert_capacity_handler.maybe_scatter_to_full_batch(
+            self.expert_capacity_handler.maybe_reconstruct_full_batch_from_expert_outputs(
                 expert_outputs,
                 probabilities,
                 sample_indices_for_all_experts,
@@ -454,7 +446,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         sample_indices_for_expert_tensor = torch.cat(sample_indices_for_expert_list)
 
         expert_outputs, probabilities, sample_indices_for_expert_tensor = (
-            self.expert_capacity_handler.maybe_scatter_to_full_batch(
+            self.expert_capacity_handler.maybe_reconstruct_full_batch_from_expert_outputs(
                 expert_outputs,
                 probabilities,
                 sample_indices_for_expert_tensor,
