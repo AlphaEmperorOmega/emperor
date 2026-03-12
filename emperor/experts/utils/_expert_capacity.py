@@ -34,7 +34,9 @@ class _ExpertCapacityHandler:
         batch_size: int,
     ) -> tuple[Tensor, Tensor]:
         if not isinstance(self.shuffle_indices, Tensor):
-            empty_tensor = torch.tensor([], dtype=token_indices.dtype, device=token_indices.device)
+            empty_tensor = torch.tensor(
+                [], dtype=token_indices.dtype, device=token_indices.device
+            )
             return token_indices, empty_tensor
         return self.__maybe_apply_capacity_limit(
             token_indices, batch_size, self.shuffle_indices
@@ -56,7 +58,9 @@ class _ExpertCapacityHandler:
         shuffled_indices = self.__resolve_shuffle_indices(
             assigned_tokens_count, shuffle_indices, token_indices.device
         )
-        return self.__maybe_split_by_capacity(token_indices, expert_capacity, shuffled_indices)
+        return self.__maybe_split_by_capacity(
+            token_indices, expert_capacity, shuffled_indices
+        )
 
     def __compute_expert_capacity(self, batch_size: int) -> int:
         tokens_per_expert = batch_size / self.num_experts
@@ -84,7 +88,7 @@ class _ExpertCapacityHandler:
         dropped_tokens = shuffled_input_tokens[expert_capacity:]
         return expert_tokens, dropped_tokens
 
-    def maybe_scatter_to_full_batch(
+    def maybe_reconstruct_full_batch_from_expert_outputs(
         self,
         expert_outputs: Tensor,
         probabilities: Tensor,
@@ -94,39 +98,74 @@ class _ExpertCapacityHandler:
         if self.capacity_factor == 0 or indices is None:
             return expert_outputs, probabilities, indices
 
-        batch_size = input_batch.size(0)
-        full_size = batch_size * self.top_k
-        all_probabilities = probabilities.flatten()
-        probabilities = all_probabilities[indices]
-        output_dim = expert_outputs.size(-1)
-
-        indices_expanded = indices.unsqueeze(1).expand(-1, output_dim)
-        is_identity = (
-            self.dropped_token_behavior == DroppedTokenOptions.IDENTITY
-            and input_batch is not None
-            and input_batch.size(-1) == output_dim
-        )
-        if is_identity:
-            if batch_size != full_size:
-                repeat_factor = full_size // batch_size
-                full_expert_outputs = input_batch.repeat(repeat_factor, 1)
-            else:
-                full_expert_outputs = input_batch
-        else:
-            full_expert_outputs = torch.zeros(
-                full_size,
-                output_dim,
-                device=expert_outputs.device,
-                dtype=expert_outputs.dtype,
-            )
-        full_expert_outputs.scatter_(0, indices_expanded, expert_outputs)
-
-        if is_identity:
-            full_probs = all_probabilities
-        else:
-            full_probs = torch.zeros(
-                full_size, device=probabilities.device, dtype=probabilities.dtype
-            )
-        full_probs[indices] = probabilities
+        match self.dropped_token_behavior:
+            case DroppedTokenOptions.IDENTITY:
+                full_expert_outputs, full_probs = (
+                    self.__scatter_expert_outputs_keeping_dropped_tokens(
+                        expert_outputs, probabilities, indices, input_batch
+                    )
+                )
+            case DroppedTokenOptions.ZEROS:
+                full_expert_outputs, full_probs = (
+                    self.__scatter_expert_outputs_zeroing_dropped_tokens(
+                        expert_outputs, probabilities, indices
+                    )
+                )
 
         return full_expert_outputs, full_probs, None
+
+    def __scatter_expert_outputs_keeping_dropped_tokens(
+        self,
+        expert_outputs: Tensor,
+        probabilities: Tensor,
+        indices: Tensor,
+        input_batch: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        batch_size = input_batch.size(0)
+        flat_routing_probabilities = probabilities.flatten()
+        sampled_routing_probabilities = flat_routing_probabilities[indices]
+        total_routing_slots = flat_routing_probabilities.size(0)
+        sample_indices_expanded = indices.unsqueeze(1).expand(
+            -1, expert_outputs.size(-1)
+        )
+
+        full_expert_outputs = input_batch
+        if batch_size != total_routing_slots:
+            full_expert_outputs = input_batch.repeat(
+                total_routing_slots // batch_size, 1
+            )
+        full_expert_outputs.scatter_(0, sample_indices_expanded, expert_outputs)
+
+        full_probs = flat_routing_probabilities
+        full_probs[indices] = sampled_routing_probabilities
+
+        return full_expert_outputs, full_probs
+
+    def __scatter_expert_outputs_zeroing_dropped_tokens(
+        self,
+        expert_outputs: Tensor,
+        probabilities: Tensor,
+        indices: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        flat_routing_probabilities = probabilities.flatten()
+        sampled_routing_probabilities = flat_routing_probabilities[indices]
+        total_routing_slots = flat_routing_probabilities.size(0)
+        output_dim = expert_outputs.size(-1)
+        sample_indices_expanded = indices.unsqueeze(1).expand(-1, output_dim)
+
+        full_expert_outputs = torch.zeros(
+            total_routing_slots,
+            output_dim,
+            device=expert_outputs.device,
+            dtype=expert_outputs.dtype,
+        )
+        full_expert_outputs.scatter_(0, sample_indices_expanded, expert_outputs)
+
+        full_probs = torch.zeros(
+            total_routing_slots,
+            device=sampled_routing_probabilities.device,
+            dtype=sampled_routing_probabilities.dtype,
+        )
+        full_probs[indices] = sampled_routing_probabilities
+
+        return full_expert_outputs, full_probs
