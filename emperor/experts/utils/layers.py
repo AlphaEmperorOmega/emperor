@@ -208,13 +208,13 @@ class MixtureOfExperts(Module):
         input_batch: Tensor,
         probabilities: Tensor,
         indices: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None]:
+    ) -> tuple[Tensor, Tensor | None, Tensor, Tensor | None]:
         expert_outputs_list = []
         sample_indices_for_expert_list = []
         total_loss = torch.tensor(0.0)
         for expert_index, expert_model in enumerate(self.expert_modules):
-            expert_sample_indices = self._get_expert_token_indices(
-                indices, expert_index
+            expert_sample_indices, dropped_sample_indices = (
+                self._get_expert_token_indices(indices, expert_index)
             )
 
             if expert_sample_indices is not None and expert_sample_indices.numel() == 0:
@@ -222,22 +222,33 @@ class MixtureOfExperts(Module):
                 sample_indices_for_expert_list.append(empty_tensor)
                 continue
 
-            sample_indices_for_expert = self._get_expert_routing_positions(
-                indices, expert_index
+            sample_indices_for_expert, dropped_sample_indices_for_expert = (
+                self._get_expert_routing_positions(indices, expert_index)
             )
 
             expert_samples_probabilities = (
-                self.expert_weighting_handler.get_expert_probabilities(
+                self.expert_weighting_handler.maybe_get_expert_probabilities(
                     sample_indices_for_expert, probabilities, expert_index
                 )
             )
 
+            expert_samples = self.__get_expert_samples(
+                expert_sample_indices, input_batch
+            )
+            dropped_samples = self.__get_expert_samples(
+                dropped_sample_indices, input_batch
+            )
+
             expert_output, loss = self.__compute_expert_output(
                 expert_model,
-                input_batch,
-                expert_sample_indices,
+                expert_samples,
                 expert_samples_probabilities,
             )
+            expert_output = torch.cat([expert_output, dropped_samples], dim=0)
+            sample_indices_for_expert = torch.cat(
+                [sample_indices_for_expert, dropped_sample_indices_for_expert], dim=0
+            )
+
             total_loss = total_loss + loss
             expert_outputs_list.append(expert_output)
             if self.top_k != self.num_experts:
@@ -248,7 +259,7 @@ class MixtureOfExperts(Module):
         if self.top_k != self.num_experts:
             sample_indices_for_all_experts = torch.cat(sample_indices_for_expert_list)
 
-        expert_outputs, probabilities, sample_indices_for_all_experts = (
+        expert_outputs, probabilities = (
             self.expert_capacity_handler.maybe_reconstruct_full_batch_from_expert_outputs(
                 expert_outputs,
                 probabilities,
@@ -263,52 +274,51 @@ class MixtureOfExperts(Module):
         self,
         indices: Tensor,
         expert_index: int,
-    ) -> Tensor | None:
+    ) -> tuple[Tensor | None, Tensor | None]:
         if self.top_k == self.num_experts:
-            return None
+            return None, None
 
         batch_size = indices.size(0)
         samples_for_current_expert = indices == expert_index
         if self.top_k > 1:
             samples_for_current_expert = samples_for_current_expert.sum(dim=-1)
         sample_indices_for_expert = samples_for_current_expert.nonzero().flatten()
-        expert_tokens, dropped_tokens = (
-            self.expert_capacity_handler.maybe_apply_capacity_limit_token_indices(
-                sample_indices_for_expert, batch_size
-            )
+        return self.expert_capacity_handler.maybe_apply_capacity_limit_token_indices(
+            sample_indices_for_expert, batch_size
         )
-        return expert_tokens
 
     def _get_expert_routing_positions(
         self,
         indices: Tensor,
         expert_index: int,
-    ) -> Tensor | None:
+    ) -> tuple[Tensor | None, Tensor | None]:
         if self.top_k == self.num_experts:
-            return None
+            return None, None
         batch_size = indices.size(0)
         boolean_tensor = indices == expert_index
         expert_sample_indices = boolean_tensor.flatten()
         expert_sample_indices = expert_sample_indices.nonzero().squeeze(dim=-1)
-        expert_tokens, dropped_tokens = (
+        return (
             self.expert_capacity_handler.maybe_apply_capacity_limit_routing_positions(
                 expert_sample_indices, batch_size
             )
         )
-        return expert_tokens
+
+    def __get_expert_samples(
+        self, indices: Tensor | None, input_batch: Tensor
+    ) -> Tensor:
+        if indices is not None:
+            return input_batch[indices]
+        return input_batch
 
     def __compute_expert_output(
         self,
         expert_model: Callable,
-        input_batch: Tensor,
-        indices: Tensor,
+        expert_samples: Tensor,
         probabilities: Tensor | None,
     ) -> tuple[list[Tensor], Tensor]:
-        expert_samples = input_batch
-        if indices is not None:
-            expert_samples = input_batch[indices]
 
-        expert_samples = self.expert_weighting_handler.maybe_apply_before(
+        expert_samples = self.expert_weighting_handler.maybe_apply_probabilities_before(
             expert_samples, probabilities
         )
 
@@ -467,9 +477,9 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         input_batch: Tensor,
         indices: Tensor,
     ) -> tuple[list[Tensor], Tensor]:
-        expert_samples = input_batch
-        if indices is not None:
-            expert_samples = input_batch[indices]
+        expert_samples = self.__maybe_get_expert_token_representation(
+            indices, input_batch
+        )
 
         output = expert_model(expert_samples)
         if isinstance(output, tuple):
