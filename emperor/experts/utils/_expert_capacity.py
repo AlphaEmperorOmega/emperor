@@ -69,13 +69,13 @@ class _ExpertCapacityHandler:
     def __resolve_shuffle_indices(
         self,
         assigned_tokens_count: int,
-        shuffle_indices: Tensor | None,
+        indices: Tensor | None,
         device: torch.device,
     ) -> Tensor:
-        if shuffle_indices is None:
-            shuffle_indices = torch.randperm(assigned_tokens_count, device=device)
-            self.shuffle_indices = shuffle_indices
-        return shuffle_indices
+        if indices is None:
+            indices = torch.randperm(assigned_tokens_count, device=device)
+            self.shuffle_indices = indices
+        return indices
 
     def __maybe_split_by_capacity(
         self,
@@ -94,9 +94,9 @@ class _ExpertCapacityHandler:
         probabilities: Tensor,
         indices: Tensor | None,
         input_batch: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor | None]:
+    ) -> tuple[Tensor, Tensor]:
         if self.capacity_factor == 0 or indices is None:
-            return expert_outputs, probabilities, indices
+            return expert_outputs, probabilities
 
         match self.dropped_token_behavior:
             case DroppedTokenOptions.IDENTITY:
@@ -112,7 +112,7 @@ class _ExpertCapacityHandler:
                     )
                 )
 
-        return full_expert_outputs, full_probs, None
+        return full_expert_outputs, full_probs
 
     def __scatter_expert_outputs_keeping_dropped_tokens(
         self,
