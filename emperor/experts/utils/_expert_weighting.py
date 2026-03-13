@@ -20,7 +20,7 @@ class _ExpertWeightingHandler:
         self.top_k = self.cfg.top_k
         self.num_experts = self.cfg.num_experts
 
-    def get_expert_probabilities(
+    def maybe_get_expert_probabilities(
         self,
         indices: Tensor,
         probabilities: Tensor,
@@ -34,7 +34,7 @@ class _ExpertWeightingHandler:
 
         return probabilities
 
-    def maybe_apply_before(
+    def maybe_apply_probabilities_before(
         self,
         experts_output: Tensor,
         probabilities: Tensor | None = None,
