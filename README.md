@@ -195,3 +195,138 @@ When running `--grid-search` or `--random-search`, two additional files are writ
 ```
 
 The file is updated in place as the search runs — if the process is interrupted, the top 5 found so far is preserved.
+
+### Feature Roadmap
+
+- **Wrappers**
+  - [x] `Layer` — single layer wrapper
+    - [x] `Activation` — post-output activation function
+    - [x] `LayerNorm` — normalization at configurable positions
+      - [x] `BEFORE` — before model processing
+      - [x] `DEFAULT` — after model output
+      - [x] `AFTER` — after residual connection
+    - [x] `Dropout` — regularization via dropout
+    - [x] `ResidualConnection` — skip connection around the layer
+    - [ ] Dynamic gate option
+  - [x] `LayerStack` — chains multiple Layer modules sequentially
+- **Linear transformation**
+  - [x] `LinearLayer` — standard affine transform
+  - [x] `AdaptiveLinearLayer` — adaptive affine transform
+    - [x] `DynamicDepth` — input-dependent weight updates
+      - [x] `DEPTH_OF_ONE` — single-component update
+      - [x] `DEPTH_OF_TWO` — two-component update
+      - [x] `DEPTH_OF_THREE` — three-component update
+      - [ ] Single or dual parameter generators
+      - [ ] Default weight parameters decay option
+      - [ ] Input dependent depth options
+    - [x] `DynamicDiagonal` — input-dependent diagonal adjustments
+      - [x] `DIAGONAL` — main diagonal
+      - [x] `ANTI_DIAGONAL` — flipped diagonal
+      - [x] `DIAGONAL_AND_ANTI_DIAGONAL` — both combined
+    - [x] `DynamicBias` — input-dependent bias modification
+      - [x] `SCALE_AND_OFFSET` — scalar scaling and offset
+      - [x] `ELEMENT_WISE_OFFSET` — per-element offset
+      - [x] `DYNAMIC_PARAMETERS` — fully generated bias
+      - [ ] Bias weight bank with router option
+    - [x] `Memory` — input augmentation via learned memory
+      - [x] `FUSION` — compress concatenated input and memory
+      - [x] `WEIGHTED` — softmax-weighted blend
+      - [x] `MemorySize` — memory dimensionality
+      - [x] `MemoryPosition` — before or after the affine transform
+    - [ ] Input-dependent weight mask for weight masking
+    - [ ] Dynamic parameters batch sub-set
+- **Per-sample parameter generation**
+  - [x] `AdaptiveParameterLayer` — per-sample weight and bias generation
+    - [x] `AdaptiveWeight` — weight parameter generation
+      - [x] `VECTOR` — vector-based routing per input dimension
+      - [x] `MATRIX` — matrix-based expert selection
+      - [x] `GENERATOR` — MoE-backed weight generation
+    - [x] `AdaptiveBias` — bias parameter generation
+      - [x] `MATRIX` — expert-selected bias
+      - [x] `GENERATOR` — MoE-backed bias generation
+- **Sampling and routing**
+  - [x] `RouterModel` — routes tokens to experts via learned projections
+    - [x] `NoisyTopK` — adds noise to logit scores
+  - [x] `SamplerModel` — selects experts from router scores
+    - [x] `SamplerSparse` — single expert per token
+    - [x] `SamplerTopk` — top-k expert selection
+    - [x] `SamplerFull` — all experts (dense routing)
+    - [x] `ThresholdMasking` — skip tokens below a probability threshold
+    - [x] `RandomSampling` — random samples mixed into top-k candidates
+    - [x] `ProbabilityNormalization` — normalize sampled probabilities
+  - [x] `AuxiliaryLosses` — load balancing losses
+    - [x] `CoefficientOfVariation` — penalizes uneven expert usage
+    - [x] `SwitchLoss` — encourages discrete expert selection
+    - [x] `ZeroCentred` — keeps logit scores centered
+    - [x] `MutualInformation` — promotes diverse expert selection
+- **Mixture of Experts**
+  - [x] `MixtureOfExperts` — routes tokens to selected experts
+    - [x] `ExpertWeighting` — probability-weighted expert outputs
+      - [x] `BEFORE_EXPERTS` — weight inputs before experts
+      - [x] `AFTER_EXPERTS` — weight outputs after experts
+    - [x] `ExpertCapacity` — limits tokens per expert
+      - [x] `ZEROS` — dropped tokens become zeros
+      - [x] `IDENTITY` — dropped tokens keep original values
+    - [x] `InitSampler` — router and sampler strategy
+      - [x] `SHARED` — single router across all layers
+      - [x] `LAYER` — independent router per layer
+      - [x] `DISABLED` — no routing, external routing used
+  - [x] `MixtureOfExpertsMap` — routing without mixing
+  - [x] `MixtureOfExpertsReduce` — weighted aggregation of experts
+  - [] Soft mixture of experts from [From sparse to soft mixtures of experts](https://arxiv.org/pdf/2308.00951)
+- **Attention**
+  - [x] `MultiHeadAttention` — multi-head attention mechanism
+    - [x] `SELF_ATTENTION` — shared Q/K/V projection
+    - [x] `INDEPENDENT` — separate Q, K, V projections
+    - [x] `MIXTURE_OF_ATTENTION_HEADS` — expert-routed attention heads
+  - [x] `Projectors` — Q/K/V projection strategies
+    - [x] `SelfAttentionProjector` — single model for Q/K/V
+    - [x] `IndependentProjector` — separate models for Q, K, V
+    - [x] `MixtureOfAttentionHeadsProjector` — MoE-based projections
+  - [x] `KeyValueBias` — learnable bias vectors for K/V
+  - [x] `ZeroAttention` — zero padding for non-attending positions
+  - [x] `CausalMask` — autoregressive masking
+  - [x] `AttentionDropout` — dropout on attention weights
+  - [ ] Implement [MLP-Mixer - An all-MLP Architecture for Vision](https://arxiv.org/pdf/2105.01601) but with `AdaptiveLinearLayer`
+  - [ ] Implement [Atlas: Learning to Optimally Memorize the Context at Test Time](https://arxiv.org/pdf/2505.23735)
+  - [ ] Add experience matrix-based similar to rnn hidden state
+- **Transformer**
+  - [x] `PatchEmbedding` — image to patch tokens
+    - [x] `LINEAR` — unfold and project patches
+    - [x] `CONV` — convolutional patch extraction
+  - [x] `FeedForward` — configurable feed-forward block
+    - [x] `Linear` — standard layer stack
+    - [x] `Adaptive` — adaptive layer stack
+    - [x] `MixtureOfExperts` — MoE layer stack
+  - [x] `TransformerEncoderLayer` — self-attention and feed-forward
+  - [x] `TransformerDecoderLayer` — self-attention, cross-attention, and feed-forward
+  - [x] `TransformerEncoderStack` — stacked encoder layers
+  - [x] `TransformerDecoderStack` — stacked decoder layers
+  - [x] `Transformer` — full encoder-decoder model
+  - [ ] Latent space reasoning similar to [Less is More: Recursive Reasoning with Tiny Networks](https://arxiv.org/pdf/2510.04871)
+- **Positional embeddings**
+  - [x] `AbsolutePositionalEmbedding` — position encoding added to input
+    - [x] `SINUSOIDAL` — fixed sin/cos frequency encoding
+      - [x] `Text` — for token sequences with incremental decoding
+      - [x] `Image` — for patch embeddings
+    - [x] `LEARNED` — trainable position embeddings
+      - [x] `Text` — for token sequences with padding support
+      - [x] `Image` — for patch embeddings with class token
+  - [x] `RelativePositionalEmbedding` — position bias in attention scores
+    - [x] `DynamicPositionalBias` — learned multi-head relative bias
+- **Halting**
+  - [x] `SoftHalting` — learned gate with ACT regularization loss
+  - [x] `StickBreaking` — accumulative halt probability with hard masking
+- **Neuron**
+  - [x] `Nucleus` — core processing unit per neuron
+  - [x] `Axons` — output modifiers for nucleus signal
+  - [x] `Terminal` — 3D spatial routing to neighboring neurons
+  - [x] `Neuron` — combines nucleus, axons, and terminal
+  - [x] `NeuronCluster` — 3D grid of interconnected neurons
+  - [ ] Wrap `Neuron` or into `halting` mechanism
+  - [ ] Grow new neurons based on neighboring neurons' training maturity
+  - [ ] Freeze lower neurons and only train the top of the stack
+  - [ ] Sparse-train neurons that have been disconnected from the gradient
+    - [ ] Select the most salient representation from the batch
+    - [ ] Write the selected representation to a memory matrix via single-head attention
+    - [ ] Flush the memory matrix to the neuron once a gating model determines sufficient information has accumulated
