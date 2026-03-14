@@ -29,43 +29,35 @@ class AdaptiveParameterBehaviourConfig(ConfigBase):
     )
     output_dim: int | None = field(
         default=None,
-        metadata={"help": "Output dimension of the linera layer"},
+        metadata={"help": "Output dimension of the linear layer"},
     )
     generator_depth: DynamicDepthOptions | None = field(
         default=None,
         metadata={
-            "help": "",
+            "help": "Depth of the generator network that produces input-dependent weight adjustments."
         },
     )
     diagonal_option: DynamicDiagonalOptions | None = field(
         default=None,
-        metadata={
-            "help": "",
-        },
+        metadata={"help": "Input-dependent adjustment of the weight matrix diagonal."},
     )
     bias_option: DynamicBiasOptions | None = field(
         default=None,
-        metadata={
-            "help": "",
-        },
+        metadata={"help": "Input-dependent adjustment of the bias vector."},
     )
     memory_option: LinearMemoryOptions | None = field(
         default=None,
         metadata={
-            "help": "",
+            "help": "Blends a learned memory representation with the linear layer input or output."
         },
     )
     memory_size_option: LinearMemorySizeOptions | None = field(
         default=None,
-        metadata={
-            "help": "",
-        },
+        metadata={"help": "Size of the learned memory representation."},
     )
     memory_position_option: LinearMemoryPositionOptions | None = field(
         default=None,
-        metadata={
-            "help": "",
-        },
+        metadata={"help": "Controls when memory is applied in the computation."},
     )
 
 
