@@ -88,71 +88,34 @@ class _ExpertCapacityHandler:
         dropped_tokens = shuffled_input_tokens[expert_capacity:]
         return expert_tokens, dropped_tokens
 
+    def select_expert_and_dropped_samples(
+        self,
+        input_batch: Tensor,
+        indices: Tensor | None,
+        dropped_indices: Tensor | None,
+    ) -> tuple[Tensor, Tensor]:
+        if indices is not None:
+            dropped_tokens = input_batch[dropped_indices]
+            if self.dropped_token_behavior == DroppedTokenOptions.ZEROS:
+                dropped_tokens = torch.zeros_like(dropped_tokens)
+            return input_batch[indices], dropped_tokens
+        empty_tensor = torch.tensor([], dtype=torch.int16, device=input_batch.device)
+        return input_batch, empty_tensor
+
     def maybe_reconstruct_full_batch_from_expert_outputs(
         self,
         expert_outputs: Tensor,
         probabilities: Tensor,
         indices: Tensor | None,
-        input_batch: Tensor,
     ) -> tuple[Tensor, Tensor]:
         if self.capacity_factor == 0 or indices is None:
             return expert_outputs, probabilities
 
-        match self.dropped_token_behavior:
-            case DroppedTokenOptions.IDENTITY:
-                full_expert_outputs, full_probs = (
-                    self.__scatter_expert_outputs_keeping_dropped_tokens(
-                        expert_outputs, probabilities, indices, input_batch
-                    )
-                )
-            case DroppedTokenOptions.ZEROS:
-                full_expert_outputs, full_probs = (
-                    self.__scatter_expert_outputs_zeroing_dropped_tokens(
-                        expert_outputs, probabilities, indices
-                    )
-                )
-
-        return full_expert_outputs, full_probs
-
-    def __scatter_expert_outputs_keeping_dropped_tokens(
-        self,
-        expert_outputs: Tensor,
-        probabilities: Tensor,
-        indices: Tensor,
-        input_batch: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        batch_size = input_batch.size(0)
-        flat_routing_probabilities = probabilities.flatten()
-        sampled_routing_probabilities = flat_routing_probabilities[indices]
-        total_routing_slots = flat_routing_probabilities.size(0)
-        sample_indices_expanded = indices.unsqueeze(1).expand(
-            -1, expert_outputs.size(-1)
-        )
-
-        full_expert_outputs = input_batch
-        if batch_size != total_routing_slots:
-            full_expert_outputs = input_batch.repeat(
-                total_routing_slots // batch_size, 1
-            )
-        full_expert_outputs.scatter_(0, sample_indices_expanded, expert_outputs)
-
-        full_probs = flat_routing_probabilities
-        full_probs[indices] = sampled_routing_probabilities
-
-        return full_expert_outputs, full_probs
-
-    def __scatter_expert_outputs_zeroing_dropped_tokens(
-        self,
-        expert_outputs: Tensor,
-        probabilities: Tensor,
-        indices: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        flat_routing_probabilities = probabilities.flatten()
-        sampled_routing_probabilities = flat_routing_probabilities[indices]
-        total_routing_slots = flat_routing_probabilities.size(0)
+        flat_probs = probabilities.flatten()
+        total_routing_slots = flat_probs.size(0)
         output_dim = expert_outputs.size(-1)
-        sample_indices_expanded = indices.unsqueeze(1).expand(-1, output_dim)
 
+        sample_indices_expanded = indices.unsqueeze(1).expand(-1, output_dim)
         full_expert_outputs = torch.zeros(
             total_routing_slots,
             output_dim,
@@ -161,11 +124,12 @@ class _ExpertCapacityHandler:
         )
         full_expert_outputs.scatter_(0, sample_indices_expanded, expert_outputs)
 
+        sampled_probs = flat_probs[indices]
         full_probs = torch.zeros(
             total_routing_slots,
-            device=sampled_routing_probabilities.device,
-            dtype=sampled_routing_probabilities.dtype,
+            device=sampled_probs.device,
+            dtype=sampled_probs.dtype,
         )
-        full_probs[indices] = sampled_routing_probabilities
+        full_probs[indices] = sampled_probs
 
         return full_expert_outputs, full_probs

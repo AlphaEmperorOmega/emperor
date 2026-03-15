@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from torch import Tensor
+from torch import Tensor, device
 from dataclasses import dataclass, field
 from emperor.sampler.model import SamplerModel
 from emperor.base.layer import LayerStackConfig
@@ -218,7 +218,7 @@ class MixtureOfExperts(Module):
             )
 
             if expert_sample_indices is not None and expert_sample_indices.numel() == 0:
-                empty_tensor = torch.tensor([], dtype=torch.int16)
+                empty_tensor = torch.tensor([], dtype=torch.int16, device=self.device)
                 sample_indices_for_expert_list.append(empty_tensor)
                 continue
 
@@ -232,11 +232,10 @@ class MixtureOfExperts(Module):
                 )
             )
 
-            expert_samples = self.__get_expert_samples(
-                expert_sample_indices, input_batch
-            )
-            dropped_samples = self.__get_expert_samples(
-                dropped_sample_indices, input_batch
+            expert_samples, dropped_samples = (
+                self.expert_capacity_handler.select_expert_and_dropped_samples(
+                    input_batch, expert_sample_indices, dropped_sample_indices
+                )
             )
 
             expert_output, loss = self.__compute_expert_output(
@@ -244,14 +243,15 @@ class MixtureOfExperts(Module):
                 expert_samples,
                 expert_samples_probabilities,
             )
-            expert_output = torch.cat([expert_output, dropped_samples], dim=0)
-            sample_indices_for_expert = torch.cat(
-                [sample_indices_for_expert, dropped_sample_indices_for_expert], dim=0
-            )
 
             total_loss = total_loss + loss
+            expert_output = torch.cat([expert_output, dropped_samples], dim=0)
             expert_outputs_list.append(expert_output)
             if self.top_k != self.num_experts:
+                sample_indices_for_expert = torch.cat(
+                    [sample_indices_for_expert, dropped_sample_indices_for_expert],
+                    dim=0,
+                )
                 sample_indices_for_expert_list.append(sample_indices_for_expert)
 
         expert_outputs = torch.cat(expert_outputs_list, dim=0)
@@ -264,7 +264,6 @@ class MixtureOfExperts(Module):
                 expert_outputs,
                 probabilities,
                 sample_indices_for_all_experts,
-                input_batch,
             )
         )
 
@@ -303,13 +302,6 @@ class MixtureOfExperts(Module):
                 expert_sample_indices, batch_size
             )
         )
-
-    def __get_expert_samples(
-        self, indices: Tensor | None, input_batch: Tensor
-    ) -> Tensor:
-        if indices is not None:
-            return input_batch[indices]
-        return input_batch
 
     def __compute_expert_output(
         self,
@@ -455,12 +447,11 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         expert_outputs = torch.cat(expert_outputs_list, dim=0)
         sample_indices_for_expert_tensor = torch.cat(sample_indices_for_expert_list)
 
-        expert_outputs, probabilities, sample_indices_for_expert_tensor = (
+        expert_outputs, probabilities = (
             self.expert_capacity_handler.maybe_reconstruct_full_batch_from_expert_outputs(
                 expert_outputs,
                 probabilities,
                 sample_indices_for_expert_tensor,
-                input_batch,
             )
         )
 
