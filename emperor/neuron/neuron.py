@@ -241,8 +241,12 @@ class Neuron(Module):
         self.nucleus = Nucleus(cfg)
         self.axons = Axons(cfg)
         self.terminal = Terminal(cfg)
+        self.register_buffer(
+            "batch_counter", torch.tensor(0, dtype=torch.int64), persistent=True
+        )
 
     def forward(self, input: Tensor) -> tuple[Tensor, float]:
+        self.batch_counter += 1
         processed_signal = self.nucleus(input)
         augmented_signal = self.axons(processed_signal)
         output, probabilities, selected_neurons = self.terminal(augmented_signal)
@@ -264,6 +268,12 @@ class NeuronClusterConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
+    growth_threshold: int | None = field(
+        default=None,
+        metadata={
+            "help": "Number of forward passes a neuron must process before a new neuron is added at the closest empty connection slot. Set to None to disable."
+        },
+    )
 
 
 class NeuronCluster(Module):
@@ -276,12 +286,12 @@ class NeuronCluster(Module):
         config = getattr(cfg, "neuron_cluster_config", cfg)
         self.cfg: "NeuronClusterConfig" = self._overwrite_config(config, overrides)
         self.main_config = cfg
-        self.x_axis_total_neurons = self.cfg.x_axis_total_neurons
-        self.y_axis_total_neurons = self.cfg.y_axis_total_neurons
-        self.z_axis_total_neurons = self.cfg.z_axis_total_neurons
+        self.x_axis_total_neurons: int = self.cfg.x_axis_total_neurons
+        self.y_axis_total_neurons: int = self.cfg.y_axis_total_neurons
+        self.z_axis_total_neurons: int = self.cfg.z_axis_total_neurons
+        self.growth_threshold: int | None = self.cfg.growth_threshold
 
         self.cluster = self.__initialize_cluster()
-        print(self.cluster)
 
     def __initialize_cluster(self) -> ModuleDict:
         cluster = ModuleDict()
@@ -302,12 +312,56 @@ class NeuronCluster(Module):
     def __initialize_neuron(self) -> Neuron:
         return Neuron(self.main_config)
 
+    def __check_neuron_growth(self) -> None:
+        if self.cfg.growth_threshold is None or self.cfg.growth_threshold <= 0:
+            return
+
+        for name, neuron in self.cluster.items():
+            if neuron.batch_counter >= self.cfg.growth_threshold:
+                neuron.batch_counter.zero_()
+                position = self.__find_closest_empty_connection(name)
+                if position is not None:
+                    x, y, z = position
+                    new_name = self.__neuron_name(x, y, z)
+                    instance = self.__initialize_neuron()
+                    self.__add_neuron(self.cluster, new_name, instance)
+                    return
+
+    def __find_closest_empty_connection(
+        self, neuron_name: str
+    ) -> tuple[int, int, int] | None:
+        neuron = self.cluster[neuron_name]
+        connections = neuron.terminal.neuron_connections
+
+        parts = neuron_name.split("_")
+        origin_x, origin_y, origin_z = int(parts[1]), int(parts[2]), int(parts[3])
+
+        empty_positions = []
+        for connection in connections:
+            x, y, z = connection[0].item(), connection[1].item(), connection[2].item()
+            candidate_name = self.__neuron_name(x, y, z)
+            if candidate_name not in self.cluster:
+                empty_positions.append((x, y, z))
+
+        if not empty_positions:
+            return None
+
+        closest = min(
+            empty_positions,
+            key=lambda pos: abs(pos[0] - origin_x)
+            + abs(pos[1] - origin_y)
+            + abs(pos[2] - origin_z),
+        )
+        return closest
+
     def forward(self, input: Tensor) -> Tensor:
         should_process_neurons = True
 
         while should_process_neurons:
             selected_neuron = self.__select_enuron(data)
             output, loss = selected_neuron(input)
+
+        self.__check_neuron_growth()
 
         return output
 
