@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStackConfig
 from emperor.base.enums import ActivationOptions
-from emperor.experts.utils.enums import ExpertWeightingPositionOptions, InitSamplerOptions
+from emperor.experts.utils.enums import DroppedTokenOptions, ExpertWeightingPositionOptions, InitSamplerOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
@@ -71,6 +71,8 @@ EXPERTS_COMPUTE_EXPERT_MIXTURE_FLAG: bool = False
 EXPERTS_WEIGHTED_PARAMETERS_FLAG: bool = False
 EXPERTS_WEIGHTING_POSITION_OPTION: ExpertWeightingPositionOptions = ExpertWeightingPositionOptions.BEFORE_EXPERTS
 EXPERTS_INIT_SAMPLER_OPTION: InitSamplerOptions = InitSamplerOptions.DISABLED
+EXPERTS_CAPACITY_FACTOR: float = 0.0
+EXPERTS_DROPPED_TOKEN_BEHAVIOR: DroppedTokenOptions = DroppedTokenOptions.ZEROS
 EXPERTS_MODEL_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DISABLED
 EXPERTS_MODEL_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED
 EXPERTS_MODEL_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
