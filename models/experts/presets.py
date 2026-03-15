@@ -14,6 +14,7 @@ from emperor.experiments.base import (
     SearchMode,
 )
 from emperor.experts.utils.enums import (
+    DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
@@ -115,6 +116,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         experts_weighted_parameters_flag: bool = config.EXPERTS_WEIGHTED_PARAMETERS_FLAG,
         experts_weighting_position_option: ExpertWeightingPositionOptions = config.EXPERTS_WEIGHTING_POSITION_OPTION,
         experts_init_sampler_option: InitSamplerOptions = config.EXPERTS_INIT_SAMPLER_OPTION,
+        experts_capacity_factor: float = config.EXPERTS_CAPACITY_FACTOR,
+        experts_dropped_token_behavior: DroppedTokenOptions = config.EXPERTS_DROPPED_TOKEN_BEHAVIOR,
         experts_model_generator_depth: DynamicDepthOptions = config.EXPERTS_MODEL_GENERATOR_DEPTH,
         experts_model_diagonal_option: DynamicDiagonalOptions = config.EXPERTS_MODEL_DIAGONAL_OPTION,
         experts_model_bias_option: DynamicBiasOptions = config.EXPERTS_MODEL_BIAS_OPTION,
@@ -161,6 +164,8 @@ class ExperimentPresets(ExperimentPresetsBase):
                         weighted_parameters_flag=experts_weighted_parameters_flag,
                         weighting_position_option=experts_weighting_position_option,
                         init_sampler_option=experts_init_sampler_option,
+                        capacity_factor=experts_capacity_factor,
+                        dropped_token_behavior=experts_dropped_token_behavior,
                         override_config=LayerStackConfig(
                             model_type=LinearLayerOptions.BASE,
                             input_dim=input_dim,
