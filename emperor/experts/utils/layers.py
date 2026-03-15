@@ -259,13 +259,15 @@ class MixtureOfExperts(Module):
         if self.top_k != self.num_experts:
             sample_indices_for_all_experts = torch.cat(sample_indices_for_expert_list)
 
-        expert_outputs, probabilities = (
-            self.expert_capacity_handler.maybe_reconstruct_full_batch_from_expert_outputs(
-                expert_outputs,
-                probabilities,
-                sample_indices_for_all_experts,
-            )
-        )
+        if self.capacity_factor > 0:
+            probabilities = probabilities[sample_indices_for_all_experts]
+        # expert_outputs, probabilities = (
+        #     self.expert_capacity_handler.maybe_reconstruct_full_batch_from_expert_outputs(
+        #         expert_outputs,
+        #         probabilities,
+        #         sample_indices_for_all_experts,
+        #     )
+        # )
 
         return expert_outputs, sample_indices_for_all_experts, probabilities, total_loss
 
