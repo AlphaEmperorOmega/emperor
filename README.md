@@ -200,28 +200,22 @@ The file is updated in place as the search runs — if the process is interrupte
 
 - **Wrappers**
   - [x] `Layer` — single layer wrapper
-    - [x] `Activation` — post-output activation function
-    - [x] `LayerNorm` — normalization at configurable positions
-      - [x] `BEFORE` — before model processing
-      - [x] `DEFAULT` — after model output
-      - [x] `AFTER` — after residual connection
+    - [x] `Activation` — dynamic activation function
+    - [x] `LayerNorm` — normalization at different positions
     - [x] `Dropout` — regularization via dropout
     - [x] `ResidualConnection` — skip connection around the layer
     - [ ] Dynamic gate option
-  - [x] `LayerStack` — chains multiple Layer modules sequentially
+  - [x] `LayerStack` — chains multiple `Layer` modules sequentially
 - **Linear transformation**
   - [x] `LinearLayer` — standard affine transform
   - [x] `AdaptiveLinearLayer` — adaptive affine transform
-    - [x] `DynamicDepth` — input-dependent weight updates
-      - [x] `DEPTH_OF_ONE` — single-component update
-      - [x] `DEPTH_OF_TWO` — two-component update
-      - [x] `DEPTH_OF_THREE` — three-component update
-      - [ ] Single or dual parameter generators
-      - [ ] Default weight parameters decay option
-      - [ ] Input dependent depth options
-    - [x] `DynamicDiagonal` — input-dependent diagonal adjustments
-      - [x] `DIAGONAL` — main diagonal
-      - [x] `ANTI_DIAGONAL` — flipped diagonal
+    - [x] `DynamicDepth` — number of input-dependent parameters added to default parameters
+    - [ ] Single or dual parameter generators
+    - [ ] Default weight parameters decay option
+    - [ ] Input dependent depth options
+    - [x] `DynamicDiagonal` — input-dependent diagonal parameter options
+      - [x] `DIAGONAL` — main diagonal parameters
+      - [x] `ANTI_DIAGONAL` — flipped diagonal parameters
       - [x] `DIAGONAL_AND_ANTI_DIAGONAL` — both combined
     - [x] `DynamicBias` — input-dependent bias modification
       - [x] `SCALE_AND_OFFSET` — scalar scaling and offset
@@ -235,15 +229,15 @@ The file is updated in place as the search runs — if the process is interrupte
       - [x] `MemoryPosition` — before or after the affine transform
     - [ ] Input-dependent weight mask for weight masking
     - [ ] Dynamic parameters batch sub-set
-- **Per-sample parameter generation**
-  - [x] `AdaptiveParameterLayer` — per-sample weight and bias generation
-    - [x] `AdaptiveWeight` — weight parameter generation
-      - [x] `VECTOR` — vector-based routing per input dimension
-      - [x] `MATRIX` — matrix-based expert selection
-      - [x] `GENERATOR` — MoE-backed weight generation
-    - [x] `AdaptiveBias` — bias parameter generation
-      - [x] `MATRIX` — expert-selected bias
-      - [x] `GENERATOR` — MoE-backed bias generation
+- **Input-dependent parameter generation**
+  - [x] `AdaptiveParameterLayer` — input-dependent weight and bias generation
+    - [x] `AdaptiveWeight` — weight parameters for each sample
+      - [x] `VECTOR` — parameters as mixture of weight vectors
+      - [x] `MATRIX` — parameters as mixture of weight matrices
+      - [x] `GENERATOR` — parameters as mixture of generated weight matrices matrices
+    - [x] `AdaptiveBias` — bias parameters for each sample
+      - [x] `MATRIX` — parameters as mixture of weight vectors
+      - [x] `GENERATOR` — parameters as mixture of weight vectors generated
 - **Sampling and routing**
   - [x] `RouterModel` — routes tokens to experts via learned projections
     - [x] `NoisyTopK` — adds noise to logit scores
@@ -253,7 +247,6 @@ The file is updated in place as the search runs — if the process is interrupte
     - [x] `SamplerFull` — all experts (dense routing)
     - [x] `ThresholdMasking` — skip tokens below a probability threshold
     - [x] `RandomSampling` — random samples mixed into top-k candidates
-    - [x] `ProbabilityNormalization` — normalize sampled probabilities
   - [x] `AuxiliaryLosses` — load balancing losses
     - [x] `CoefficientOfVariation` — penalizes uneven expert usage
     - [x] `SwitchLoss` — encourages discrete expert selection
@@ -268,25 +261,17 @@ The file is updated in place as the search runs — if the process is interrupte
       - [x] `ZEROS` — dropped tokens become zeros
       - [x] `IDENTITY` — dropped tokens keep original values
     - [x] `InitSampler` — router and sampler strategy
-      - [x] `SHARED` — single router across all layers
-      - [x] `LAYER` — independent router per layer
-      - [x] `DISABLED` — no routing, external routing used
-  - [x] `MixtureOfExpertsMap` — routing without mixing
-  - [x] `MixtureOfExpertsReduce` — weighted aggregation of experts
-  - [] Soft mixture of experts from [From sparse to soft mixtures of experts](https://arxiv.org/pdf/2308.00951)
+      - [x] `SHARED` — single router across all `MixtureOfExperts` layers
+      - [x] `LAYER` — independent router per `MixtureOfExperts` layer
+  - [x] `MixtureOfAttentionHeads` module used in `MultiHeadAttention`
+    - [x] `MixtureOfExpertsMap` — used to map input tokens to top-k
+    - [x] `MixtureOfExpertsReduce` — used to convert the top-k tokens back to the original shape
+  - [ ] Soft mixture of experts from [From sparse to soft mixtures of experts](https://arxiv.org/pdf/2308.00951)
 - **Attention**
   - [x] `MultiHeadAttention` — multi-head attention mechanism
     - [x] `SELF_ATTENTION` — shared Q/K/V projection
     - [x] `INDEPENDENT` — separate Q, K, V projections
     - [x] `MIXTURE_OF_ATTENTION_HEADS` — expert-routed attention heads
-  - [x] `Projectors` — Q/K/V projection strategies
-    - [x] `SelfAttentionProjector` — single model for Q/K/V
-    - [x] `IndependentProjector` — separate models for Q, K, V
-    - [x] `MixtureOfAttentionHeadsProjector` — MoE-based projections
-  - [x] `KeyValueBias` — learnable bias vectors for K/V
-  - [x] `ZeroAttention` — zero padding for non-attending positions
-  - [x] `CausalMask` — autoregressive masking
-  - [x] `AttentionDropout` — dropout on attention weights
   - [ ] Implement [MLP-Mixer - An all-MLP Architecture for Vision](https://arxiv.org/pdf/2105.01601) but with `AdaptiveLinearLayer`
   - [ ] Implement [Atlas: Learning to Optimally Memorize the Context at Test Time](https://arxiv.org/pdf/2505.23735)
   - [ ] Add experience matrix-based similar to rnn hidden state
@@ -307,11 +292,7 @@ The file is updated in place as the search runs — if the process is interrupte
 - **Positional embeddings**
   - [x] `AbsolutePositionalEmbedding` — position encoding added to input
     - [x] `SINUSOIDAL` — fixed sin/cos frequency encoding
-      - [x] `Text` — for token sequences with incremental decoding
-      - [x] `Image` — for patch embeddings
     - [x] `LEARNED` — trainable position embeddings
-      - [x] `Text` — for token sequences with padding support
-      - [x] `Image` — for patch embeddings with class token
   - [x] `RelativePositionalEmbedding` — position bias in attention scores
     - [x] `DynamicPositionalBias` — learned multi-head relative bias
 - **Halting**
