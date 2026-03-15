@@ -61,7 +61,7 @@ class MixtureOfExpertsModel(Module):
         input: Tensor,
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
+    ) -> tuple[Tensor, Tensor]:
         probabilities, indices, sampler_loss = self._maybe_compute_expert_indices(
             input, probabilities, indices
         )
