@@ -17,6 +17,7 @@ class _ValidatorHandler:
         self.model = model
         self.__ensure_values_are_not_none()
         self.__ensure_values_have_correct_types()
+        self.__ensure_propper_main_config()
 
     def __ensure_values_are_not_none(self):
         if self.model.input_dim is None:
@@ -104,6 +105,15 @@ class _ValidatorHandler:
             )
         if self.model.capacity_factor < 0.0:
             raise ValueError("Configuration Error: 'capacity_factor' must be >= 0.0")
+
+    def __ensure_propper_main_config(self) -> None:
+        is_propper_dim_flag = self.model.input_dim != self.model.output_dim
+        if self.model.capacity_factor > 0.0 and is_propper_dim_flag:
+            raise ValueError(
+                f"Configuration Error: 'input_dim' must equal 'output_dim' when 'capacity_factor' > 0.0, "
+                f"because dropped tokens pass through as identity and must match the expert output shape. "
+                f"Got input_dim={self.model.input_dim}, output_dim={self.model.output_dim}"
+            )
 
     def ensure_sampler_is_initialized(self) -> None:
         options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
