@@ -22,16 +22,17 @@ class _ExpertWeightingHandler:
 
     def maybe_get_expert_probabilities(
         self,
-        indices: Tensor,
-        probabilities: Tensor,
+        indices: Tensor | None,
+        probabilities: Tensor | None,
         expert_index: int,
-    ) -> Tensor:
-        if self._should_apply_before():
+    ) -> Tensor | None:
+        if self.__should_apply_before():
+            assert probabilities is not None
             if self.top_k == self.num_experts:
                 return probabilities[:, expert_index]
+            assert indices is not None
             probabilities = probabilities.flatten()
             probabilities = probabilities[indices]
-
         return probabilities
 
     def maybe_apply_probabilities_before(
@@ -40,7 +41,9 @@ class _ExpertWeightingHandler:
         probabilities: Tensor | None = None,
     ) -> Tensor:
         if self.__should_apply_before():
-            experts_output = self.__maybe_apply(experts_output, probabilities)
+            experts_output = self.__maybe_apply_probabilities(
+                experts_output, probabilities
+            )
         return experts_output
 
     def maybe_apply_after(
@@ -49,7 +52,9 @@ class _ExpertWeightingHandler:
         probabilities: Tensor | None = None,
     ) -> Tensor:
         if self.__should_apply_after():
-            experts_output = self.__maybe_apply(experts_output, probabilities)
+            experts_output = self.__maybe_apply_probabilities(
+                experts_output, probabilities
+            )
         return experts_output
 
     def __should_apply_before(self) -> bool:
@@ -60,7 +65,7 @@ class _ExpertWeightingHandler:
         position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
         return self.weighting_position_option == position_option
 
-    def __maybe_apply(
+    def __maybe_apply_probabilities(
         self,
         logits: Tensor,
         probabilities: Tensor | None = None,
@@ -68,5 +73,9 @@ class _ExpertWeightingHandler:
         if not self.weighted_parameters_flag:
             return logits
 
-        self.validator.ensure_probabilities_exist(probabilities)
+        if probabilities is None:
+            raise ValueError(
+                "Missing input: `probabilities` must be supplied when `indices` are used "
+                "to ensure accurate weighting and processing of inputs."
+            )
         return logits * probabilities.reshape(-1, 1)
