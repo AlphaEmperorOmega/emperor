@@ -18,6 +18,7 @@ class _ValidatorHandler:
         self.__ensure_values_are_not_none()
         self.__ensure_values_have_correct_types()
         self.__ensure_propper_main_config()
+        self.__ensure_capacity_factor_is_valid_with_top_k()
 
     def __ensure_values_are_not_none(self):
         if self.model.input_dim is None:
@@ -105,6 +106,14 @@ class _ValidatorHandler:
             )
         if self.model.capacity_factor < 0.0:
             raise ValueError("Configuration Error: 'capacity_factor' must be >= 0.0")
+
+    def __ensure_capacity_factor_is_valid_with_top_k(self) -> None:
+        if self.model.capacity_factor > 0.0 and self.model.top_k == self.model.num_experts:
+            raise ValueError(
+                "Configuration Error: 'capacity_factor' cannot be > 0.0 when 'top_k' equals 'num_experts'. "
+                "When top_k == num_experts all tokens pass through all experts unconditionally, "
+                "so capacity limiting has no effect and dropped tokens cannot occur."
+            )
 
     def __ensure_propper_main_config(self) -> None:
         is_propper_dim_flag = self.model.input_dim != self.model.output_dim
