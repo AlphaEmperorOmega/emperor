@@ -253,33 +253,6 @@ class MixtureOfExperts(Module):
             )
         return expert_input_data
 
-    def _compute_experts(
-        self,
-        experts_input_data: list[_ExpertInputData],
-        full_probabilities: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
-        expert_outputs_list = []
-        sample_indices_for_expert_list = []
-        total_loss = torch.tensor(0.0)
-
-        for expert_data in experts_input_data:
-            expert_output, loss = self.__compute_expert_output(expert_data)
-            self.__append_expert_output(expert_outputs_list, expert_output, expert_data)
-            self.__append_sample_indices(sample_indices_for_expert_list, expert_data)
-            total_loss = total_loss + loss
-
-        expert_outputs = torch.cat(expert_outputs_list, dim=0)
-        routing_positions, reindexed_probs = self.__aggregate_sample_indices(
-            sample_indices_for_expert_list, full_probabilities
-        )
-
-        return (
-            expert_outputs,
-            routing_positions,
-            reindexed_probs,
-            total_loss,
-        )
-
     def _get_expert_token_indices(
         self,
         indices: Tensor | None,
@@ -316,43 +289,32 @@ class MixtureOfExperts(Module):
             )
         )
 
-    def __aggregate_sample_indices(
+    def _compute_experts(
         self,
-        sample_indices_for_expert_list: list[Tensor],
-        full_probabilities: Tensor | None,
-    ) -> tuple[Tensor | None, Tensor | None]:
-        if self.top_k == self.num_experts:
-            return None, full_probabilities
-        routing_positions = torch.cat(sample_indices_for_expert_list)
-        reindexed_probs = full_probabilities
-        if self.capacity_factor > 0:
-            assert full_probabilities is not None
-            reindexed_probs = full_probabilities.flatten()[routing_positions]
-        return routing_positions, reindexed_probs
+        experts_input_data: list[_ExpertInputData],
+        full_probabilities: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
+        expert_outputs_list = []
+        sample_indices_for_expert_list = []
+        total_loss = torch.tensor(0.0)
 
-    def __append_sample_indices(
-        self,
-        sample_indices_for_expert_list: list[Tensor],
-        expert_data: _ExpertInputData,
-    ) -> None:
-        if self.top_k != self.num_experts:
-            sample_indices = torch.cat(
-                [expert_data.sample_indices, expert_data.dropped_sample_indices],
-                dim=0,
-            )
-            sample_indices_for_expert_list.append(sample_indices)
+        for expert_data in experts_input_data:
+            expert_output, loss = self.__compute_expert_output(expert_data)
+            self.__append_expert_output(expert_outputs_list, expert_output, expert_data)
+            self.__append_sample_indices(sample_indices_for_expert_list, expert_data)
+            total_loss = total_loss + loss
 
-    def __append_expert_output(
-        self,
-        expert_outputs_list: list[Tensor],
-        expert_output: Tensor,
-        expert_data: _ExpertInputData,
-    ) -> None:
-        if expert_data.dropped_samples.numel() > 0:
-            expert_output = torch.cat(
-                [expert_output, expert_data.dropped_samples], dim=0
-            )
-        expert_outputs_list.append(expert_output)
+        expert_outputs = torch.cat(expert_outputs_list, dim=0)
+        routing_positions, reindexed_probs = self.__aggregate_sample_indices(
+            sample_indices_for_expert_list, full_probabilities
+        )
+
+        return (
+            expert_outputs,
+            routing_positions,
+            reindexed_probs,
+            total_loss,
+        )
 
     def __compute_expert_output(
         self,
@@ -367,6 +329,44 @@ class MixtureOfExperts(Module):
         if isinstance(output, tuple):
             return output
         return output, torch.tensor(0.0)
+
+    def __append_expert_output(
+        self,
+        expert_outputs_list: list[Tensor],
+        expert_output: Tensor,
+        expert_data: _ExpertInputData,
+    ) -> None:
+        if expert_data.dropped_samples.numel() > 0:
+            expert_output = torch.cat(
+                [expert_output, expert_data.dropped_samples], dim=0
+            )
+        expert_outputs_list.append(expert_output)
+
+    def __append_sample_indices(
+        self,
+        sample_indices_for_expert_list: list[Tensor],
+        expert_data: _ExpertInputData,
+    ) -> None:
+        if self.top_k != self.num_experts:
+            sample_indices = torch.cat(
+                [expert_data.sample_indices, expert_data.dropped_sample_indices],
+                dim=0,
+            )
+            sample_indices_for_expert_list.append(sample_indices)
+
+    def __aggregate_sample_indices(
+        self,
+        sample_indices_for_expert_list: list[Tensor],
+        full_probabilities: Tensor | None,
+    ) -> tuple[Tensor | None, Tensor | None]:
+        if self.top_k == self.num_experts:
+            return None, full_probabilities
+        routing_positions = torch.cat(sample_indices_for_expert_list)
+        reindexed_probs = full_probabilities
+        if self.capacity_factor > 0:
+            assert full_probabilities is not None
+            reindexed_probs = full_probabilities.flatten()[routing_positions]
+        return routing_positions, reindexed_probs
 
     def __compute_expert_mixture(
         self,
@@ -510,8 +510,8 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         expert_input_data: list[_ExpertInputData],
         full_probabilities: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
-        expert_outputs, routing_positions, _, total_loss = (
-            super()._compute_experts(expert_input_data, full_probabilities)
+        expert_outputs, routing_positions, _, total_loss = super()._compute_experts(
+            expert_input_data, full_probabilities
         )
         expert_outputs, probabilities = (
             self.expert_capacity_handler.maybe_reconstruct_full_batch_from_expert_outputs(
