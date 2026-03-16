@@ -9,6 +9,7 @@ from emperor.experts.utils.layers import (
     MixtureOfExperts,
     MixtureOfExpertsMap,
     MixtureOfExpertsReduce,
+    _ExpertInputData,
 )
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.experts.utils.model import MixtureOfExpertsModel
@@ -181,7 +182,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 m = MixtureOfExperts(c)
 
                 indices = torch.randint(0, m.num_experts, (10, top_k))
-                sample_indices_for_expert = m._get_expert_token_indices(
+                sample_indices_for_expert, _ = m._get_expert_token_indices(
                     indices, expert_index
                 )
 
@@ -203,7 +204,7 @@ class TestMixtureOfExperts(unittest.TestCase):
 
                 indices = torch.randint(0, m.num_experts, (10, top_k))
                 probabilities = torch.randn(10, top_k)
-                probabilities = m.expert_weighting_handler.get_expert_probabilities(
+                probabilities = m.expert_weighting_handler.maybe_get_expert_probabilities(
                     indices, probabilities, expert_index
                 )
 
@@ -229,14 +230,19 @@ class TestMixtureOfExperts(unittest.TestCase):
 
                         m = MixtureOfExperts(c)
 
-                        expert_model = m.expert_modules[0]
                         input_batch = torch.randn(10, c.input_dim)
                         indices = torch.randint(0, m.num_experts, (10 * top_k,))
                         pribabilities = torch.randn(10 * top_k)
-
-                        output, loss = m._MixtureOfExperts__compute_expert_output(
-                            expert_model, input_batch, indices, pribabilities
+                        expert_input_slice = _ExpertInputData(
+                            expert_index=0,
+                            expert_samples=input_batch[indices],
+                            dropped_samples=torch.zeros(0),
+                            sample_indices=None,
+                            dropped_sample_indices=None,
+                            probabilities=pribabilities,
                         )
+
+                        output, loss = m._MixtureOfExperts__compute_expert_output(expert_input_slice)
 
                         self.assertIsInstance(output, torch.Tensor)
                         self.assertEqual(output.shape, (10 * top_k, c.output_dim))
@@ -261,7 +267,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     m = MixtureOfExperts(c)
                     logits = torch.randn(10 * top_k, c.input_dim)
                     pribabilities = torch.randn(10 * top_k)
-                    output = m.expert_weighting_handler._maybe_apply(
+                    output = m.expert_weighting_handler._ExpertWeightingHandler__maybe_apply_probabilities(
                         logits, pribabilities
                     )
 
@@ -330,9 +336,14 @@ class TestMixtureOfExperts(unittest.TestCase):
                                     for capacity_factor in capacity_factor_options:
                                         message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, init_sampler_option={init_sampler_option}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}, capacity_factor={capacity_factor}"
                                         with self.subTest(msg=message):
+                                            if capacity_factor > 0 and top_k == num_experts:
+                                                continue  # validator rejects capacity + top_k==num_experts
+                                            output_dim = 8 if capacity_factor > 0 else 6
                                             c = MixtureOfExpertsPresets.experts_preset(
                                                 return_model_config_flag=True,
                                                 batch_size=10,
+                                                input_dim=8,
+                                                output_dim=output_dim,
                                                 experts_layer_stack_option=layer_stack_option,
                                                 experts_top_k=top_k,
                                                 experts_weighting_position_option=weighting_position_option,
@@ -423,6 +434,8 @@ class TestExpertCapacity(unittest.TestCase):
                 c = MixtureOfExpertsPresets.experts_preset(
                     return_model_config_flag=True,
                     batch_size=10,
+                    input_dim=8,
+                    output_dim=8,
                     experts_num_experts=6,
                     experts_top_k=3,
                     experts_capacity_factor=capacity_factor,
@@ -445,28 +458,26 @@ class TestExpertCapacity(unittest.TestCase):
                 self.assertEqual(output.size(0), c.batch_size * 3)
 
     def test_capacity_factor_top_k_equals_num_experts(self):
+        # capacity_factor > 0 with top_k == num_experts is invalid (all tokens
+        # pass through all experts unconditionally, so capacity has no effect).
         c = MixtureOfExpertsPresets.experts_preset(
             return_model_config_flag=True,
             batch_size=10,
+            input_dim=8,
+            output_dim=8,
             experts_num_experts=6,
             experts_top_k=6,
             experts_capacity_factor=1.0,
         )
-        m = MixtureOfExperts(c)
-        input_batch = torch.randn(c.batch_size, c.input_dim)
-        router_cfg = c.mixture_of_experts_config.router_model_config
-        sampler_cfg = c.mixture_of_experts_config.sampler_model_config
-        router = RouterModel(router_cfg)
-        sampler = SamplerModel(sampler_cfg)
-        logits = router.compute_logit_scores(input_batch)
-        probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
-        output, loss = m.forward(input_batch, probabilities, indices)
-        self.assertIsInstance(output, torch.Tensor)
+        with self.assertRaises(ValueError):
+            MixtureOfExperts(c)
 
     def test_capacity_factor_small_batch(self):
         c = MixtureOfExpertsPresets.experts_preset(
             return_model_config_flag=True,
             batch_size=4,
+            input_dim=8,
+            output_dim=8,
             experts_num_experts=6,
             experts_top_k=3,
             experts_capacity_factor=1.0,
@@ -509,7 +520,7 @@ class TestExpertCapacity(unittest.TestCase):
 
                 rc = MixtureOfExpertsPresets.experts_preset(
                     input_dim=6,
-                    output_dim=8,
+                    output_dim=6,
                     return_model_config_flag=True,
                     batch_size=10,
                     experts_num_experts=6,
@@ -542,6 +553,8 @@ class TestExpertCapacity(unittest.TestCase):
         c = MixtureOfExpertsPresets.experts_preset(
             return_model_config_flag=True,
             batch_size=batch_size,
+            input_dim=8,
+            output_dim=8,
             experts_num_experts=num_experts,
             experts_top_k=top_k,
             experts_capacity_factor=1.0,
@@ -575,7 +588,7 @@ class TestExpertCapacity(unittest.TestCase):
 
         rc = MixtureOfExpertsPresets.experts_preset(
             input_dim=6,
-            output_dim=8,
+            output_dim=6,
             return_model_config_flag=True,
             batch_size=batch_size,
             experts_num_experts=num_experts,
@@ -622,6 +635,8 @@ class TestExpertCapacity(unittest.TestCase):
                                     c = MixtureOfExpertsPresets.experts_preset(
                                         return_model_config_flag=True,
                                         batch_size=10,
+                                        input_dim=8,
+                                        output_dim=8,
                                         experts_layer_stack_option=layer_stack_option,
                                         experts_top_k=top_k,
                                         experts_num_experts=num_experts,
@@ -1092,10 +1107,10 @@ class TestDroppedTokenOptions(unittest.TestCase):
             experts_num_experts=num_experts,
             experts_top_k=top_k,
             experts_capacity_factor=1.0,
-            experts_dropped_token_behavior=DroppedTokenOptions.ZERO,
+            experts_dropped_token_behavior=DroppedTokenOptions.ZEROS,
         )
         m = MixtureOfExperts(c)
-        self.assertEqual(m.dropped_token_behavior, DroppedTokenOptions.ZERO)
+        self.assertEqual(m.dropped_token_behavior, DroppedTokenOptions.ZEROS)
 
         input_batch = torch.randn(batch_size, c.input_dim)
         router_cfg = c.mixture_of_experts_config.router_model_config
@@ -1111,3 +1126,158 @@ class TestDroppedTokenOptions(unittest.TestCase):
         # With ZERO behavior and capacity limiting, some rows should be zero vectors
         zero_rows = (output.abs().sum(dim=-1) == 0).sum().item()
         self.assertGreaterEqual(zero_rows, 0)
+
+
+class TestSplitTokensPerExpert(unittest.TestCase):
+    def _make_model_and_inputs(
+        self,
+        top_k,
+        num_experts,
+        input_dim=8,
+        output_dim=8,
+        capacity_factor=0.0,
+        batch_size=10,
+    ):
+        c = MixtureOfExpertsPresets.experts_preset(
+            return_model_config_flag=True,
+            batch_size=batch_size,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            experts_num_experts=num_experts,
+            experts_top_k=top_k,
+            experts_capacity_factor=capacity_factor,
+        )
+        m = MixtureOfExperts(c)
+        input_batch = torch.randn(batch_size, input_dim)
+        router_cfg = c.mixture_of_experts_config.router_model_config
+        sampler_cfg = c.mixture_of_experts_config.sampler_model_config
+        router = RouterModel(router_cfg)
+        sampler = SamplerModel(sampler_cfg)
+        logits = router.compute_logit_scores(input_batch)
+        probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
+        return m, input_batch, probabilities, indices
+
+    def test_returns_list_of_expert_input_data(self):
+        m, input_batch, probabilities, indices = self._make_model_and_inputs(
+            top_k=1, num_experts=6
+        )
+        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        self.assertIsInstance(expert_input_data, list)
+        for s in expert_input_data:
+            self.assertIsInstance(s, _ExpertInputData)
+
+    def test_skips_empty_experts(self):
+        num_experts = 6
+        c = MixtureOfExpertsPresets.experts_preset(
+            return_model_config_flag=True,
+            experts_num_experts=num_experts,
+            experts_top_k=1,
+        )
+        m = MixtureOfExperts(c)
+        input_batch = torch.randn(4, c.input_dim)
+        # Only experts 0 and 1 receive tokens
+        indices = torch.tensor([0, 1, 0, 1])
+        probabilities = torch.rand(4)
+        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        self.assertEqual(len(expert_input_data), 2)
+        expert_indices_used = {s.expert_index for s in expert_input_data}
+        self.assertEqual(expert_indices_used, {0, 1})
+
+    def test_expert_samples_shape(self):
+        input_dim = 8
+        m, input_batch, probabilities, indices = self._make_model_and_inputs(
+            top_k=1, num_experts=6, input_dim=input_dim
+        )
+        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        for s in expert_input_data:
+            self.assertEqual(s.expert_samples.shape[-1], input_dim)
+
+    def test_top_k_equals_num_experts(self):
+        num_experts = 6
+        c = MixtureOfExpertsPresets.experts_preset(
+            return_model_config_flag=True,
+            experts_num_experts=num_experts,
+            experts_top_k=num_experts,
+        )
+        m = MixtureOfExperts(c)
+        batch_size = 8
+        input_batch = torch.randn(batch_size, c.input_dim)
+        probabilities = torch.rand(batch_size, num_experts)
+        indices = None
+        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        self.assertEqual(len(expert_input_data), num_experts)
+        for s in expert_input_data:
+            self.assertIsNone(s.sample_indices)
+            self.assertTrue(torch.equal(s.expert_samples, input_batch))
+
+    def test_with_capacity_factor(self):
+        # With capacity_factor > 0, an expert over capacity produces non-empty dropped_samples.
+        # capacity = max(1, int(4/2 * 0.5)) = 1; expert 0 gets 3 tokens → 2 dropped.
+        num_experts = 2
+        input_dim = 4
+        c = MixtureOfExpertsPresets.experts_preset(
+            return_model_config_flag=True,
+            experts_num_experts=num_experts,
+            experts_top_k=1,
+            experts_capacity_factor=0.5,
+            input_dim=input_dim,
+            output_dim=input_dim,
+        )
+        m = MixtureOfExperts(c)
+        input_batch = torch.randn(4, input_dim)
+        indices = torch.tensor([0, 0, 0, 1])
+        probabilities = torch.rand(4)
+        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        expert_0_slice = next(s for s in expert_input_data if s.expert_index == 0)
+        self.assertGreater(expert_0_slice.dropped_samples.numel(), 0)
+
+    def test_reduce_override(self):
+        num_experts = 6
+        rc = MixtureOfExpertsPresets.experts_preset(
+            return_model_config_flag=True,
+            experts_num_experts=num_experts,
+            experts_top_k=1,
+        )
+        r = MixtureOfExpertsReduce(rc)
+        input_batch = torch.randn(6, rc.input_dim)
+        indices = torch.tensor([0, 1, 2, 3, 4, 5])
+        probabilities = torch.rand(6)
+        expert_input_data = r._split_tokens_per_expert(input_batch, probabilities, indices)
+        for s in expert_input_data:
+            self.assertEqual(s.dropped_samples.numel(), 0)
+            self.assertIsNone(s.probabilities)
+
+    def test_split_then_compute_matches_forward(self):
+        torch.manual_seed(42)
+        num_experts = 6
+        top_k = 1
+        c = MixtureOfExpertsPresets.experts_preset(
+            return_model_config_flag=True,
+            batch_size=8,
+            experts_num_experts=num_experts,
+            experts_top_k=top_k,
+        )
+        m = MixtureOfExperts(c)
+        m.eval()
+        input_batch = torch.randn(8, c.input_dim)
+        router_cfg = c.mixture_of_experts_config.router_model_config
+        sampler_cfg = c.mixture_of_experts_config.sampler_model_config
+        router = RouterModel(router_cfg)
+        sampler = SamplerModel(sampler_cfg)
+        logits = router.compute_logit_scores(input_batch)
+        probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
+
+        with torch.no_grad():
+            expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+            expert_outputs, routing_positions, reindexed_probs, expert_loss = (
+                m._compute_experts(expert_input_data, probabilities)
+            )
+            manual_output = m._MixtureOfExperts__compute_expert_mixture(
+                expert_outputs, routing_positions, reindexed_probs
+            )
+
+        with torch.no_grad():
+            forward_output, forward_loss = m.forward(input_batch, probabilities, indices)
+
+        self.assertTrue(torch.allclose(forward_output, manual_output))
+        self.assertTrue(torch.allclose(forward_loss, expert_loss))
