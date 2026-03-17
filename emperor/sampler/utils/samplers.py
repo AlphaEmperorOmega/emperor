@@ -5,11 +5,18 @@ from dataclasses import dataclass, field
 from emperor.base.utils import expand_dims
 from emperor.base.utils import Module, ConfigBase
 from emperor.sampler.utils.losses import SamplerAuxiliaryLosses
+from emperor.sampler.utils._validator import (
+    SamplerBaseValidator,
+    SamplerSparseValidator,
+    SamplerTopkValidator,
+    SamplerFullValidator,
+)
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from emperor.sampler.utils.routers import RouterConfig
 
 
 @dataclass
@@ -78,6 +85,12 @@ class SamplerConfig(ConfigBase):
             "help": "Scaling factor for the mutual information loss which promotes diversity and independence between parameters. Higher values reduce redundancy in parameter space. Set to `0.0` to disable."
         },
     )
+    router_config: "RouterConfig | None" = field(
+        default=None,
+        metadata={
+            "help": "Router configuration. When provided, the SamplerModel will create and manage a RouterModel internally."
+        },
+    )
 
 
 class SamplerBase(Module):
@@ -104,23 +117,13 @@ class SamplerBase(Module):
         self.switch_loss_weight = self.cfg.switch_loss_weight
         self.zero_centred_loss_weight = self.cfg.zero_centred_loss_weight
         self.mutual_information_loss_weight = self.cfg.mutual_information_loss_weight
-        self.__validate_input_parameters()
+        self.validator = SamplerBaseValidator(self)
 
         self.noise_epsilon = 1e-2
         self.auxiliary_loss_model = SamplerAuxiliaryLosses(self.cfg)
         self.register_buffer("default_loss", torch.tensor(0.0))
         self.updated_skip_mask = None
         self.auxiliary_loss = self.default_loss
-
-    def __validate_input_parameters(self):
-        # self._validate_fields(self.cfg, SamplerConfig)
-        assert self.top_k >= 0, f"top_k must be non-negative, got {self.top_k}"
-        assert self.num_topk_samples <= self.top_k, (
-            f"num_topk_samples ({self.num_topk_samples}) cannot exceed top_k ({self.top_k})"
-        )
-        assert 0.0 <= self.threshold <= 1.0, (
-            f"threshold must be between 0.0 and 1.0 (inclusive), got {self.threshold}"
-        )
 
     def get_probabilities_and_indices(
         self,
@@ -241,23 +244,7 @@ class SamplerSparse(SamplerBase):
     ) -> None:
         super().__init__(cfg, overrides)
         self.top_k = 1
-
-        self.__validate_init_parameters()
-
-    def __validate_init_parameters(self):
-        assert self.top_k == 1, "`top_k` must be 1 when using `SamplerSparse`."
-        assert not self.normalize_probabilities_flag, (
-            "`normalize_probabilities_flag` must be False when using `SamplerSparse`."
-        )
-        assert self.num_topk_samples == 0, (
-            "`num_topk_samples` must be 0 when using `SamplerSparse`."
-        )
-        assert self.num_topk_samples == 0, (
-            "`num_topk_samples` must be 0 when using `SamplerSparse`."
-        )
-        assert self.mutual_information_loss_weight == 0.0, (
-            "`mutual_information_loss_weight` must be 0.0 when using `SamplerSparse`."
-        )
+        self.validator = SamplerSparseValidator(self)
 
     def _sample_probabilities_and_indices(
         self, probabilities: Tensor
@@ -311,12 +298,7 @@ class SamplerTopk(SamplerBase):
         overrides: "SamplerConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.__validate_init_parameters()
-
-    def __validate_init_parameters(self):
-        assert self.top_k > 0 and self.top_k < self.num_experts, (
-            "`top_k` must be greater than 0 and less than `num_experts` in `SamplerTopk`."
-        )
+        self.validator = SamplerTopkValidator(self)
 
     def _sample_probabilities_and_indices(
         self, probabilities: Tensor
@@ -394,25 +376,7 @@ class SamplerFull(SamplerBase):
         overrides: "SamplerConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.__validate_init_parameters()
-
-    def __validate_init_parameters(self):
-        assert self.top_k == self.num_experts, (
-            "When `SamplerFull` is used, `top_k` must be equal to `num_experts`"
-        )
-        assert self.num_topk_samples == 0, (
-            "`SamplerFull` does not randomly sample `top_k` experts"
-        )
-        assert self.coefficient_of_variation_loss_weight == 0.0, (
-            "`SamplerFull` does not use `CoefficientOfVariationLoss`"
-        )
-        assert self.switch_loss_weight == 0.0, "`SamplerFull` does not use `SwitchLoss`"
-        assert self.zero_centred_loss_weight == 0.0, (
-            "`SamplerFull` does not use `ZeroCentredLoss`"
-        )
-        assert self.mutual_information_loss_weight == 0.0, (
-            "`SamplerFull` does not use `MutualInformationLoss`"
-        )
+        self.validator = SamplerFullValidator(self)
 
     def _sample_probabilities_and_indices(
         self, probability_matrix: Tensor
