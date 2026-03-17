@@ -1,6 +1,4 @@
 from torch import Tensor
-
-from emperor.experts.utils._validator import _ValidatorHandler
 from emperor.experts.utils.enums import ExpertWeightingPositionOptions
 
 from typing import TYPE_CHECKING
@@ -23,45 +21,45 @@ class _ExpertWeightingHandler:
     def maybe_get_expert_probabilities(
         self,
         indices: Tensor | None,
-        probabilities: Tensor | None,
+        probabilities: Tensor,
         expert_index: int,
     ) -> Tensor | None:
-        if self.__should_apply_before():
+        if self.__should_probabilities_apply_before():
             assert probabilities is not None
             if self.top_k == self.num_experts:
                 return probabilities[:, expert_index]
             assert indices is not None
             probabilities = probabilities.flatten()
             probabilities = probabilities[indices]
-        return probabilities
+        return None
 
     def maybe_apply_probabilities_before(
         self,
         experts_output: Tensor,
         probabilities: Tensor | None = None,
     ) -> Tensor:
-        if self.__should_apply_before():
+        if self.__should_probabilities_apply_before():
             experts_output = self.__maybe_apply_probabilities(
                 experts_output, probabilities
             )
         return experts_output
 
-    def maybe_apply_after(
+    def maybe_apply_probabilities_after(
         self,
         experts_output: Tensor,
         probabilities: Tensor | None = None,
     ) -> Tensor:
-        if self.__should_apply_after():
+        if self.__should_probabilities_apply_after():
             experts_output = self.__maybe_apply_probabilities(
                 experts_output, probabilities
             )
         return experts_output
 
-    def __should_apply_before(self) -> bool:
+    def __should_probabilities_apply_before(self) -> bool:
         position_option = ExpertWeightingPositionOptions.BEFORE_EXPERTS
         return self.weighting_position_option == position_option
 
-    def __should_apply_after(self) -> bool:
+    def __should_probabilities_apply_after(self) -> bool:
         position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
         return self.weighting_position_option == position_option
 
