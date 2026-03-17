@@ -11,7 +11,7 @@ from emperor.experts.utils.layers import (
     MixtureOfExpertsReduce,
     _ExpertInputData,
 )
-from emperor.linears.options import LinearLayerStackOptions
+from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.experts.utils.model import MixtureOfExpertsModel
 from emperor.experts.utils.stack import MixtureOfExpertsStack
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
@@ -75,7 +75,9 @@ class TestMixtureOfExperts(unittest.TestCase):
                         )
 
     def test__create_experts(self):
-        for layer_stack_option in LinearLayerStackOptions:
+        for layer_stack_option, linear_option in zip(
+            LinearLayerStackOptions, LinearLayerOptions
+        ):
             message = f"Testing configuration with layer_stack_option={layer_stack_option.name}"
             with self.subTest(msg=message):
                 c = MixtureOfExpertsPresets.experts_preset(
@@ -85,12 +87,12 @@ class TestMixtureOfExperts(unittest.TestCase):
 
                 m = MixtureOfExperts(c)
                 expert_models = m._MixtureOfExperts__create_experts()
-
                 self.assertEqual(len(m.expert_modules), m.num_experts)
                 for expert in expert_models:
                     self.assertIsInstance(expert, Sequential)
                     for layer in expert:
                         self.assertIsInstance(layer, Layer)
+                        self.assertIsInstance(layer.model, linear_option)
 
     def test__maybe_create_router_and_sampler(self):
         num_experts = 6
@@ -211,8 +213,10 @@ class TestMixtureOfExperts(unittest.TestCase):
 
                 indices = torch.randint(0, m.num_experts, (10, top_k))
                 probabilities = torch.randn(10, top_k)
-                probabilities = m.expert_weighting_handler.maybe_get_expert_probabilities(
-                    indices, probabilities, expert_index
+                probabilities = (
+                    m.expert_weighting_handler.maybe_get_expert_probabilities(
+                        indices, probabilities, expert_index
+                    )
                 )
 
                 self.assertIsInstance(probabilities, torch.Tensor)
@@ -249,7 +253,9 @@ class TestMixtureOfExperts(unittest.TestCase):
                             probabilities=pribabilities,
                         )
 
-                        output, loss = m._MixtureOfExperts__compute_expert_output(expert_input_slice)
+                        output, loss = m._MixtureOfExperts__compute_expert_output(
+                            expert_input_slice
+                        )
 
                         self.assertIsInstance(output, torch.Tensor)
                         self.assertEqual(output.shape, (10 * top_k, c.output_dim))
@@ -343,7 +349,10 @@ class TestMixtureOfExperts(unittest.TestCase):
                                     for capacity_factor in capacity_factor_options:
                                         message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, init_sampler_option={init_sampler_option}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}, capacity_factor={capacity_factor}"
                                         with self.subTest(msg=message):
-                                            if capacity_factor > 0 and top_k == num_experts:
+                                            if (
+                                                capacity_factor > 0
+                                                and top_k == num_experts
+                                            ):
                                                 continue  # validator rejects capacity + top_k==num_experts
                                             output_dim = 8 if capacity_factor > 0 else 6
                                             c = MixtureOfExpertsPresets.experts_preset(
@@ -1168,7 +1177,9 @@ class TestSplitTokensPerExpert(unittest.TestCase):
         m, input_batch, probabilities, indices = self._make_model_and_inputs(
             top_k=1, num_experts=6
         )
-        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        expert_input_data = m._split_tokens_per_expert(
+            input_batch, probabilities, indices
+        )
         self.assertIsInstance(expert_input_data, list)
         for s in expert_input_data:
             self.assertIsInstance(s, _ExpertInputData)
@@ -1185,7 +1196,9 @@ class TestSplitTokensPerExpert(unittest.TestCase):
         # Only experts 0 and 1 receive tokens
         indices = torch.tensor([0, 1, 0, 1])
         probabilities = torch.rand(4)
-        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        expert_input_data = m._split_tokens_per_expert(
+            input_batch, probabilities, indices
+        )
         self.assertEqual(len(expert_input_data), 2)
         expert_indices_used = {s.expert_index for s in expert_input_data}
         self.assertEqual(expert_indices_used, {0, 1})
@@ -1195,7 +1208,9 @@ class TestSplitTokensPerExpert(unittest.TestCase):
         m, input_batch, probabilities, indices = self._make_model_and_inputs(
             top_k=1, num_experts=6, input_dim=input_dim
         )
-        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        expert_input_data = m._split_tokens_per_expert(
+            input_batch, probabilities, indices
+        )
         for s in expert_input_data:
             self.assertEqual(s.expert_samples.shape[-1], input_dim)
 
@@ -1211,7 +1226,9 @@ class TestSplitTokensPerExpert(unittest.TestCase):
         input_batch = torch.randn(batch_size, c.input_dim)
         probabilities = torch.rand(batch_size, num_experts)
         indices = None
-        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        expert_input_data = m._split_tokens_per_expert(
+            input_batch, probabilities, indices
+        )
         self.assertEqual(len(expert_input_data), num_experts)
         for s in expert_input_data:
             self.assertIsNone(s.sample_indices)
@@ -1234,7 +1251,9 @@ class TestSplitTokensPerExpert(unittest.TestCase):
         input_batch = torch.randn(4, input_dim)
         indices = torch.tensor([0, 0, 0, 1])
         probabilities = torch.rand(4)
-        expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+        expert_input_data = m._split_tokens_per_expert(
+            input_batch, probabilities, indices
+        )
         expert_0_slice = next(s for s in expert_input_data if s.expert_index == 0)
         self.assertGreater(expert_0_slice.dropped_samples.numel(), 0)
 
@@ -1249,7 +1268,9 @@ class TestSplitTokensPerExpert(unittest.TestCase):
         input_batch = torch.randn(6, rc.input_dim)
         indices = torch.tensor([0, 1, 2, 3, 4, 5])
         probabilities = torch.rand(6)
-        expert_input_data = r._split_tokens_per_expert(input_batch, probabilities, indices)
+        expert_input_data = r._split_tokens_per_expert(
+            input_batch, probabilities, indices
+        )
         for s in expert_input_data:
             self.assertEqual(s.dropped_samples.numel(), 0)
             self.assertIsNone(s.probabilities)
@@ -1275,7 +1296,9 @@ class TestSplitTokensPerExpert(unittest.TestCase):
         probabilities, indices, _, _ = sampler.sample_probabilities_and_indices(logits)
 
         with torch.no_grad():
-            expert_input_data = m._split_tokens_per_expert(input_batch, probabilities, indices)
+            expert_input_data = m._split_tokens_per_expert(
+                input_batch, probabilities, indices
+            )
             expert_outputs, routing_positions, reindexed_probs, expert_loss = (
                 m._compute_experts(expert_input_data, probabilities)
             )
@@ -1284,7 +1307,9 @@ class TestSplitTokensPerExpert(unittest.TestCase):
             )
 
         with torch.no_grad():
-            forward_output, forward_loss = m.forward(input_batch, probabilities, indices)
+            forward_output, forward_loss = m.forward(
+                input_batch, probabilities, indices
+            )
 
         self.assertTrue(torch.allclose(forward_output, manual_output))
         self.assertTrue(torch.allclose(forward_loss, expert_loss))
