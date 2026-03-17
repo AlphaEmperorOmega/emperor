@@ -29,12 +29,13 @@ class ExperimentPresets(ExperimentPresetsBase):
         model_config_options: ExperimentOptions = ExperimentOptions.PRESET,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.PRESET:
                 return self._create_default_preset_configs(dataset)
             case ExperimentOptions.CONFIG:
-                return self._create_default_search_space_configs(dataset, search_mode)
+                return self._create_default_search_space_configs(dataset, search_mode, log_folder)
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `LinearExperimentOptions`."
