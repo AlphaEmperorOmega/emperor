@@ -67,7 +67,10 @@ def create_search_space(
 
 class ExperimentPresetsBase:
     def get_config(
-        self, model_config_options, dataset, search_mode: SearchMode = None,
+        self,
+        model_config_options,
+        dataset,
+        search_mode: SearchMode = None,
         log_folder: str | None = None,
     ) -> list["ModelConfig"]:
         raise NotImplementedError(
@@ -121,8 +124,11 @@ class ExperimentPresetsBase:
         if not runs:
             return {}
         best = min(runs, key=lambda r: r.get("rank", 999))
-        return {k: v for k, v in best.get("params", {}).items()
-                if type(v) in (int, float, bool)}
+        return {
+            k: v
+            for k, v in best.get("params", {}).items()
+            if type(v) in (int, float, bool)
+        }
 
     def _extract_search_space_from_config(self, search_mode: SearchMode = None) -> dict:
         if search_mode is None:
@@ -178,37 +184,49 @@ class ExperimentBase:
 
         callbacks = []
         if early_stopping_patience > 0:
-            callbacks.append(EarlyStopping(
-                monitor=early_stopping_metric,
-                patience=early_stopping_patience,
-                mode="min" if "loss" in early_stopping_metric else "max",
-            ))
+            callbacks.append(
+                EarlyStopping(
+                    monitor=early_stopping_metric,
+                    patience=early_stopping_patience,
+                    mode="min" if "loss" in early_stopping_metric else "max",
+                )
+            )
         if checkpoint_flag:
-            callbacks.append(ModelCheckpoint(
-                monitor=early_stopping_metric,
-                save_top_k=1,
-                mode="min" if "loss" in early_stopping_metric else "max",
-            ))
+            callbacks.append(
+                ModelCheckpoint(
+                    monitor=early_stopping_metric,
+                    save_top_k=1,
+                    mode="min" if "loss" in early_stopping_metric else "max",
+                )
+            )
 
         return {
-            "trainer_args": {k: v for k, v in {
-                "gradient_clip_val": getattr(config, "GRADIENT_CLIP_VAL", 0.0),
-                "gradient_clip_algorithm": getattr(config, "GRADIENT_CLIP_ALGORITHM", "norm"),
-                "accumulate_grad_batches": getattr(config, "ACCUMULATE_GRAD_BATCHES", 1),
-                "precision": getattr(config, "PRECISION", "32-true"),
-                "deterministic": getattr(config, "DETERMINISTIC", False),
-                "benchmark": getattr(config, "BENCHMARK", True),
-                "max_steps": getattr(config, "MAX_STEPS", -1),
-                "max_time": getattr(config, "MAX_TIME", None),
-                "val_check_interval": getattr(config, "VAL_CHECK_INTERVAL", 1.0),
-                "limit_train_batches": getattr(config, "LIMIT_TRAIN_BATCHES", 1.0),
-                "limit_val_batches": getattr(config, "LIMIT_VAL_BATCHES", 1.0),
-                "overfit_batches": getattr(config, "OVERFIT_BATCHES", 0.0),
-                "num_sanity_val_steps": getattr(config, "NUM_SANITY_VAL_STEPS", 2),
-                "log_every_n_steps": getattr(config, "LOG_EVERY_N_STEPS", 50),
-                "enable_progress_bar": getattr(config, "ENABLE_PROGRESS_BAR", True),
-                "profiler": getattr(config, "PROFILER", None),
-            }.items() if v is not None},
+            "trainer_args": {
+                k: v
+                for k, v in {
+                    "gradient_clip_val": getattr(config, "GRADIENT_CLIP_VAL", 0.0),
+                    "gradient_clip_algorithm": getattr(
+                        config, "GRADIENT_CLIP_ALGORITHM", "norm"
+                    ),
+                    "accumulate_grad_batches": getattr(
+                        config, "ACCUMULATE_GRAD_BATCHES", 1
+                    ),
+                    "precision": getattr(config, "PRECISION", "32-true"),
+                    "deterministic": getattr(config, "DETERMINISTIC", False),
+                    "benchmark": getattr(config, "BENCHMARK", True),
+                    "max_steps": getattr(config, "MAX_STEPS", -1),
+                    "max_time": getattr(config, "MAX_TIME", None),
+                    "val_check_interval": getattr(config, "VAL_CHECK_INTERVAL", 1.0),
+                    "limit_train_batches": getattr(config, "LIMIT_TRAIN_BATCHES", 1.0),
+                    "limit_val_batches": getattr(config, "LIMIT_VAL_BATCHES", 1.0),
+                    "overfit_batches": getattr(config, "OVERFIT_BATCHES", 0.0),
+                    "num_sanity_val_steps": getattr(config, "NUM_SANITY_VAL_STEPS", 2),
+                    "log_every_n_steps": getattr(config, "LOG_EVERY_N_STEPS", 50),
+                    "enable_progress_bar": getattr(config, "ENABLE_PROGRESS_BAR", True),
+                    "profiler": getattr(config, "PROFILER", None),
+                }.items()
+                if v is not None
+            },
             "callbacks": callbacks,
         }
 
@@ -247,8 +265,7 @@ class ExperimentBase:
                         "option": option.name,
                         "params": config.get_custom_parameters(),
                         "metrics": {
-                            k: v.item()
-                            for k, v in trainer.callback_metrics.items()
+                            k: v.item() for k, v in trainer.callback_metrics.items()
                         },
                     }
                     Path(logger.log_dir).mkdir(parents=True, exist_ok=True)
@@ -259,7 +276,9 @@ class ExperimentBase:
 
     def _load_best_results(self, log_folder: str | None = None) -> dict:
         source_file = Path(inspect.getfile(type(self))).parent.name
-        folder = f"{log_folder}/{source_file}" if log_folder is not None else source_file
+        folder = (
+            f"{log_folder}/{source_file}" if log_folder is not None else source_file
+        )
         summary_path = Path("logs") / folder / "best_results.json"
         if summary_path.exists():
             return json.loads(summary_path.read_text())
@@ -287,7 +306,9 @@ class ExperimentBase:
             ]
 
             source_file = Path(inspect.getfile(type(self))).parent.name
-            folder = f"{log_folder}/{source_file}" if log_folder is not None else source_file
+            folder = (
+                f"{log_folder}/{source_file}" if log_folder is not None else source_file
+            )
             summary_path = Path("logs") / folder / "best_results.json"
             summary_path.parent.mkdir(parents=True, exist_ok=True)
             summary_path.write_text(json.dumps(top5, indent=2, default=str))
