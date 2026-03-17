@@ -366,7 +366,7 @@ class TestSamplerSparse(unittest.TestCase):
                             )
                             with self.subTest(msg=message):
                                 if normalize_flag:
-                                    with self.assertRaises(AssertionError):
+                                    with self.assertRaises(ValueError):
                                         cfg = SamplerPresets.sampler_preset(
                                             return_model_config_flag=True,
                                             normalize_probabilities_flag=normalize_flag,
@@ -396,7 +396,7 @@ class TestSamplerSparse(unittest.TestCase):
                                     mask = torch.ones(
                                         batch_size, sequence_length
                                     ).reshape(-1, 1)
-                                    probabilities, selected_indices, skip_mask, loss = (
+                                    probabilities, selected_indices, skip_mask, sampler_loss = (
                                         m.get_probabilities_and_indices(logits, mask)
                                     )
                                     self.assertEqual(
@@ -407,8 +407,8 @@ class TestSamplerSparse(unittest.TestCase):
                                         selected_indices.shape,
                                         (batch_size * sequence_length,),
                                     )
-                                    if loss > 0:
-                                        self.assertTrue(loss >= 0)
+                                    if sampler_loss > 0:
+                                        self.assertTrue(sampler_loss >= 0)
 
     def test__prepare_loss_skip_mask(self):
         input_options = [None, torch.ones(3, 4)]
@@ -592,7 +592,7 @@ class TestSamplerTopk(unittest.TestCase):
                                 mask = torch.ones(batch_size, sequence_length).reshape(
                                     -1, 1
                                 )
-                                probabilities, selected_indices, skip_mask, loss = (
+                                probabilities, selected_indices, skip_mask, sampler_loss = (
                                     m.get_probabilities_and_indices(logits, mask)
                                 )
                                 self.assertEqual(
@@ -603,8 +603,8 @@ class TestSamplerTopk(unittest.TestCase):
                                     selected_indices.shape,
                                     (batch_size * sequence_length, m.top_k),
                                 )
-                                if loss > 0:
-                                    self.assertTrue(loss >= 0)
+                                if sampler_loss > 0:
+                                    self.assertTrue(sampler_loss >= 0)
 
     def test__prepare_loss_skip_mask(self):
         input_options = [None, torch.ones(3, 4)]
