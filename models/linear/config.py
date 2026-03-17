@@ -18,7 +18,7 @@ GRADIENT_CLIP_VAL: float = 1.0
 GRADIENT_CLIP_ALGORITHM: str = "norm"
 ACCUMULATE_GRAD_BATCHES: int = 1
 PRECISION: str = "32-true"
-DETERMINISTIC: bool = True
+DETERMINISTIC: bool = False
 BENCHMARK: bool = True
 MAX_STEPS: int = -1
 MAX_TIME: str | None = None
@@ -30,8 +30,8 @@ NUM_SANITY_VAL_STEPS: int = 2
 LOG_EVERY_N_STEPS: int = 50
 ENABLE_PROGRESS_BAR: bool = True
 PROFILER: str | None = None
-EARLY_STOPPING_PATIENCE: int = 3
-EARLY_STOPPING_METRIC: str = "val_loss"
+EARLY_STOPPING_PATIENCE: int = 0
+EARLY_STOPPING_METRIC: str = "validation_loss"
 CHECKPOINT_FLAG: bool = False
 
 # Model
@@ -51,13 +51,13 @@ STACK_DROPOUT_PROBABILITY: float = 0.2
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [64, 128, 256]
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [3, 6, 9]
-SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2]
-SEARCH_SPACE_STACK_ACTIVATION: list = [
-    ActivationOptions.RELU,
-    ActivationOptions.SILU,
-    ActivationOptions.GELU,
-    ActivationOptions.MISH,
-]
+# SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2]
+# SEARCH_SPACE_STACK_ACTIVATION: list = [
+#     ActivationOptions.RELU,
+#     ActivationOptions.SILU,
+#     ActivationOptions.GELU,
+#     ActivationOptions.MISH,
+# ]
 
 
 @dataclass
