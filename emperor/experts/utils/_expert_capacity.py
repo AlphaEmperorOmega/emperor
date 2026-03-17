@@ -80,8 +80,8 @@ class _ExpertCapacityHandler:
     def __maybe_split_by_capacity(
         self,
         token_indices: Tensor,
-        expert_capacity,
-        shuffled_indices,
+        expert_capacity: int,
+        shuffled_indices: Tensor,
     ) -> tuple[Tensor, Tensor]:
         shuffled_input_tokens = token_indices[shuffled_indices]
         expert_tokens = shuffled_input_tokens[:expert_capacity]
@@ -94,13 +94,10 @@ class _ExpertCapacityHandler:
         indices: Tensor | None,
         dropped_indices: Tensor | None,
     ) -> tuple[Tensor, Tensor]:
-        if indices is not None:
-            dropped_tokens = input_batch[dropped_indices]
-            if self.dropped_token_behavior == DroppedTokenOptions.ZEROS:
-                dropped_tokens = torch.zeros_like(dropped_tokens)
-            return input_batch[indices], dropped_tokens
-        empty_tensor = torch.tensor([], dtype=torch.int16, device=input_batch.device)
-        return input_batch, empty_tensor
+        dropped_tokens = input_batch[dropped_indices]
+        if self.dropped_token_behavior == DroppedTokenOptions.ZEROS:
+            dropped_tokens = torch.zeros_like(dropped_tokens)
+        return input_batch[indices], dropped_tokens
 
     def maybe_reconstruct_full_batch_from_expert_outputs(
         self,
