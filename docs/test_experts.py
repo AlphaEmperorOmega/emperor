@@ -45,11 +45,18 @@ class TestMixtureOfExperts(unittest.TestCase):
                         m = MixtureOfExperts(c)
                         cfg = m.cfg
                         self.assertIsInstance(m, MixtureOfExperts)
+                        self.assertEqual(m.input_dim, cfg.input_dim)
+                        self.assertEqual(m.output_dim, cfg.output_dim)
                         self.assertEqual(
                             m.layer_stack_model.value, layer_stack_option.value
                         )
                         self.assertEqual(m.top_k, top_k)
                         self.assertEqual(m.num_experts, num_experts)
+                        self.assertEqual(m.capacity_factor, cfg.capacity_factor)
+                        self.assertEqual(
+                            m.dropped_token_behavior,
+                            cfg.dropped_token_behavior or DroppedTokenOptions.ZEROS,
+                        )
                         self.assertEqual(
                             m.compute_expert_mixture_flag,
                             cfg.compute_expert_mixture_flag,
