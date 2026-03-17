@@ -177,25 +177,44 @@ class TestMixtureOfExperts(unittest.TestCase):
                     self.assertEqual(sampler_loss.item(), 0.0)
 
     def test_get_expert_token_indices(self):
-        top_k = 3
         num_experts = 6
+        top_k_options = [1, 3]
+        capacity_factor_options = [0.0, 0.5, 1.0, 2.0]
 
-        for expert_index in range(num_experts):
-            message = f"Testing configuration with expert_index={expert_index}"
-            with self.subTest(msg=message):
-                c = MixtureOfExpertsPresets.experts_preset(
-                    return_model_config_flag=True,
-                    experts_num_experts=num_experts,
-                )
+        for top_k in top_k_options:
+            for capacity_factor in capacity_factor_options:
+                for expert_index in range(num_experts):
+                    message = f"Testing with top_k={top_k}, capacity_factor={capacity_factor}, expert_index={expert_index}"
+                    with self.subTest(msg=message):
+                        dim = 8
+                        c = MixtureOfExpertsPresets.experts_preset(
+                            return_model_config_flag=True,
+                            input_dim=dim,
+                            output_dim=dim,
+                            experts_num_experts=num_experts,
+                            experts_top_k=top_k,
+                            experts_capacity_factor=capacity_factor,
+                        )
 
-                m = MixtureOfExperts(c)
+                        m = MixtureOfExperts(c)
 
-                indices = torch.randint(0, m.num_experts, (10, top_k))
-                sample_indices_for_expert, _ = m._get_expert_token_indices(
-                    indices, expert_index
-                )
+                        batch_size = 30
+                        rows = []
+                        for _ in range(batch_size):
+                            row = torch.randperm(m.num_experts)[:top_k]
+                            rows.append(row)
+                        indices = torch.stack(rows)
 
-                self.assertIsInstance(sample_indices_for_expert, torch.Tensor)
+                        sample_indices, dropped_indices = m._get_expert_token_indices(
+                            indices, expert_index
+                        )
+
+                        self.assertIsInstance(sample_indices, torch.Tensor)
+                        self.assertIsInstance(dropped_indices, torch.Tensor)
+
+                        total = sample_indices.size(0) + dropped_indices.size(0)
+                        if capacity_factor > 0 and dropped_indices.size(0) > 0:
+                            self.assertLess(sample_indices.size(0), total)
 
     def test__get_expert_probabilities(self):
         top_k = 3
