@@ -311,6 +311,8 @@ class LayerStack(Module):
         layer_norm_dim = None
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
             layer_norm_dim = output_dim
+            if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
+                layer_norm_dim = input_dim
         config = self.__resolve_model_type_overrides(input_dim, output_dim)
         model = self.__get_model_type()(config)
 
