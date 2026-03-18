@@ -91,8 +91,8 @@ class _ExpertCapacityHandler:
     def select_expert_and_dropped_samples(
         self,
         input_batch: Tensor,
-        indices: Tensor | None,
-        dropped_indices: Tensor | None,
+        indices: Tensor,
+        dropped_indices: Tensor,
     ) -> tuple[Tensor, Tensor]:
         dropped_tokens = input_batch[dropped_indices]
         if self.dropped_token_behavior == DroppedTokenOptions.ZEROS:
