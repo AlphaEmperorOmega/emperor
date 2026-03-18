@@ -25,12 +25,11 @@ class _ExpertWeightingHandler:
         expert_index: int,
     ) -> Tensor | None:
         if self.__should_probabilities_apply_before():
-            assert probabilities is not None
             if self.top_k == self.num_experts:
                 return probabilities[:, expert_index]
-            assert indices is not None
             probabilities = probabilities.flatten()
             probabilities = probabilities[indices]
+            return probabilities
         return None
 
     def maybe_apply_probabilities_before(
