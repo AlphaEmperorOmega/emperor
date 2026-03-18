@@ -656,79 +656,40 @@ class TestMixtureOfExperts(unittest.TestCase):
                                 )
                                 self.assertTrue(torch.allclose(zero_output, expected))
 
-    def test__maybe_apply_probabilities(self):
+    def test__compute_expert_mixture(self):
         num_experts = 6
         top_k_options = [1, 3, 6]
 
         for top_k in top_k_options:
-            for weighted_parameters_flag in [True, False]:
-                message = f"Testing configuration with weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}"
-                with self.subTest(msg=message):
-                    c = MixtureOfExpertsPresets.experts_preset(
-                        return_model_config_flag=True,
-                        experts_weighted_parameters_flag=weighted_parameters_flag,
-                        experts_num_experts=num_experts,
-                        experts_top_k=top_k,
-                    )
-
-                    m = MixtureOfExperts(c)
-
-                    assert c.input_dim is not None
-
-                    logits = torch.randn(10 * top_k, c.input_dim)
-                    probabilities = torch.randn(10 * top_k)
-                    output = m.expert_weighting_handler._ExpertWeightingHandler__maybe_apply_probabilities(  # type: ignore[attr-defined]
-                        logits, probabilities
-                    )
-
-                    if weighted_parameters_flag:
-                        self.assertIsInstance(output, torch.Tensor)
-                        expected_output = logits * probabilities.view(-1, 1)
-                        self.assertTrue(
-                            torch.allclose(
-                                output, expected_output, atol=1e-6, rtol=1e-5
-                            )
+            for compute_expert_mixture_flag in [True, False]:
+                for weighted_parameters_flag in [True, False]:
+                    message = f"Testing with weighted_parameters_flag={weighted_parameters_flag}, compute_expert_mixture_flag={compute_expert_mixture_flag}, top_k={top_k}"
+                    with self.subTest(msg=message):
+                        c = MixtureOfExpertsPresets.experts_preset(
+                            return_model_config_flag=True,
+                            experts_weighted_parameters_flag=weighted_parameters_flag,
+                            experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
+                            experts_num_experts=num_experts,
+                            experts_top_k=top_k,
                         )
-                        continue
-                    self.assertIsInstance(output, torch.Tensor)
-                    self.assertTrue(
-                        torch.allclose(output, logits, atol=1e-6, rtol=1e-5)
-                    )
+
+                        m = MixtureOfExperts(c)
+
+                        batch_size = 8
+                        experts_output = torch.randn(batch_size * top_k, c.output_dim)
+                        sample_indices = torch.randint(0, top_k, (batch_size * top_k,))
+                        probabilities = torch.randn(batch_size * top_k)
+
+                        output = m._MixtureOfExperts__compute_expert_mixture(
+                            experts_output, sample_indices, probabilities
+                        )
+
+                        expected_shape = (batch_size * top_k, c.output_dim)
+                        if compute_expert_mixture_flag:
+                            expected_shape = (batch_size, c.output_dim)
+                        self.assertEqual(output.shape, expected_shape)
 
 
-#     def test__compute_expert_mixture(self):
-#         num_experts = 6
-#         top_k_options = [1, 3, 6]
-#
-#         for top_k in top_k_options:
-#             for compute_expert_mixture_flag in [True, False]:
-#                 for weighted_parameters_flag in [True, False]:
-#                     message = f"Testing with weighted_parameters_flag={weighted_parameters_flag}, compute_expert_mixture_flag={compute_expert_mixture_flag}, top_k={top_k}"
-#                     with self.subTest(msg=message):
-#                         c = MixtureOfExpertsPresets.experts_preset(
-#                             return_model_config_flag=True,
-#                             experts_weighted_parameters_flag=weighted_parameters_flag,
-#                             experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
-#                             experts_num_experts=num_experts,
-#                             experts_top_k=top_k,
-#                         )
-#
-#                         m = MixtureOfExperts(c)
-#
-#                         batch_size = 8
-#                         experts_output = torch.randn(batch_size * top_k, c.output_dim)
-#                         sample_indices = torch.randint(0, top_k, (batch_size * top_k,))
-#                         probabilities = torch.randn(batch_size * top_k)
-#
-#                         output = m._MixtureOfExperts__compute_expert_mixture(
-#                             experts_output, sample_indices, probabilities
-#                         )
-#
-#                         expected_shape = (batch_size * top_k, c.output_dim)
-#                         if compute_expert_mixture_flag:
-#                             expected_shape = (batch_size, c.output_dim)
-#                         self.assertEqual(output.shape, expected_shape)
-#
 #     def test_forward(self):
 #         num_experts = 6
 #         top_k_options = [1, 3, 6]
