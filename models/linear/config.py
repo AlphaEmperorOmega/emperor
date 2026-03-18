@@ -10,7 +10,7 @@ from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 # Global
 BATCH_SIZE: int = 128
 LEARNING_RATE: float = 1e-3
-NUM_EPOCHS: int = 10
+NUM_EPOCHS: int = 20
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Trainer
@@ -30,8 +30,8 @@ NUM_SANITY_VAL_STEPS: int = 2
 LOG_EVERY_N_STEPS: int = 50
 ENABLE_PROGRESS_BAR: bool = True
 PROFILER: str | None = None
-EARLY_STOPPING_PATIENCE: int = 0
-EARLY_STOPPING_METRIC: str = "validation_loss"
+EARLY_STOPPING_PATIENCE: int = 5
+EARLY_STOPPING_METRIC: str = "train_loss"  # "validation_loss"
 CHECKPOINT_FLAG: bool = False
 
 # Model
