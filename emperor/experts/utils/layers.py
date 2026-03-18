@@ -233,6 +233,11 @@ class MixtureOfExperts(Module):
         empty = torch.tensor([], dtype=input_batch.dtype, device=input_batch.device)
         expert_input_data = []
         for expert_index in range(self.num_experts):
+            expert_probabilities = (
+                self.expert_weighting_handler.maybe_get_expert_probabilities(
+                    None, probabilities, expert_index
+                )
+            )
             expert_input_data.append(
                 _ExpertInputData(
                     expert_index=expert_index,
@@ -240,9 +245,7 @@ class MixtureOfExperts(Module):
                     dropped_samples=empty,
                     expert_routing_positions=None,
                     dropped_routing_positions=None,
-                    probabilities=self.expert_weighting_handler.maybe_get_expert_probabilities(
-                        None, probabilities, expert_index
-                    ),
+                    probabilities=expert_probabilities,
                 )
             )
         return expert_input_data
@@ -268,6 +271,11 @@ class MixtureOfExperts(Module):
                     input_batch, expert_sample_indices, dropped_sample_indices
                 )
             )
+            expert_probabilities = (
+                self.expert_weighting_handler.maybe_get_expert_probabilities(
+                    expert_routing_positions, probabilities, expert_index
+                )
+            )
             expert_input_data.append(
                 _ExpertInputData(
                     expert_index=expert_index,
@@ -275,9 +283,7 @@ class MixtureOfExperts(Module):
                     dropped_samples=dropped_samples,
                     expert_routing_positions=expert_routing_positions,
                     dropped_routing_positions=dropped_routing_positions,
-                    probabilities=self.expert_weighting_handler.maybe_get_expert_probabilities(
-                        expert_routing_positions, probabilities, expert_index
-                    ),
+                    probabilities=expert_probabilities,
                 )
             )
         return expert_input_data
@@ -340,14 +346,12 @@ class MixtureOfExperts(Module):
         self,
         expert_data: _ExpertInputData,
     ) -> tuple[Tensor, Tensor]:
-        expert_model = self.expert_modules[expert_data.expert_index]
         expert_samples = self.expert_weighting_handler.maybe_apply_probabilities_before(
             expert_data.expert_samples, expert_data.probabilities
         )
 
+        expert_model = self.expert_modules[expert_data.expert_index]
         output = expert_model(expert_samples)
-        if isinstance(output, tuple):
-            return output
         return output, torch.tensor(0.0)
 
     def __append_expert_output(
