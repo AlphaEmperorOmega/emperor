@@ -658,37 +658,106 @@ class TestMixtureOfExperts(unittest.TestCase):
 
     def test__compute_expert_mixture(self):
         num_experts = 6
-        top_k_options = [1, 3, 6]
+        top_k_options = [1, 3, num_experts]
+        flag_options = [True, False]
 
         for top_k in top_k_options:
-            for compute_expert_mixture_flag in [True, False]:
-                for weighted_parameters_flag in [True, False]:
-                    message = f"Testing with weighted_parameters_flag={weighted_parameters_flag}, compute_expert_mixture_flag={compute_expert_mixture_flag}, top_k={top_k}"
-                    with self.subTest(msg=message):
-                        c = MixtureOfExpertsPresets.experts_preset(
-                            return_model_config_flag=True,
-                            experts_weighted_parameters_flag=weighted_parameters_flag,
-                            experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
-                            experts_num_experts=num_experts,
-                            experts_top_k=top_k,
+            for compute_expert_mixture_flag in flag_options:
+                for weighted_parameters_flag in flag_options:
+                    for weighting_position_option in ExpertWeightingPositionOptions:
+                        message = (
+                            f"Testing with weighted_parameters_flag={weighted_parameters_flag}, "
+                            f"compute_expert_mixture_flag={compute_expert_mixture_flag}, "
+                            f"top_k={top_k}, "
+                            f"weighting_position_option={weighting_position_option}"
                         )
+                        with self.subTest(msg=message):
+                            c = MixtureOfExpertsPresets.experts_preset(
+                                return_model_config_flag=True,
+                                experts_weighted_parameters_flag=weighted_parameters_flag,
+                                experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
+                                experts_weighting_position_option=weighting_position_option,
+                                experts_num_experts=num_experts,
+                                experts_top_k=top_k,
+                            )
 
-                        m = MixtureOfExperts(c)
+                            m = MixtureOfExperts(c)
 
-                        batch_size = 8
-                        experts_output = torch.randn(batch_size * top_k, c.output_dim)
-                        sample_indices = torch.randint(0, top_k, (batch_size * top_k,))
-                        probabilities = torch.randn(batch_size * top_k)
+                            batch_size = 8
+                            experts_output = torch.randn(
+                                batch_size * top_k, c.output_dim
+                            )
+                            sample_indices = torch.cat(
+                                [
+                                    torch.randperm(num_experts)[:top_k]
+                                    for _ in range(batch_size)
+                                ]
+                            )
+                            probabilities = torch.softmax(
+                                torch.randn(batch_size * top_k), dim=-1
+                            )
 
-                        output = m._MixtureOfExperts__compute_expert_mixture(
-                            experts_output, sample_indices, probabilities
-                        )
+                            output = m._MixtureOfExperts__compute_expert_mixture(
+                                experts_output, sample_indices, probabilities
+                            )
 
-                        expected_shape = (batch_size * top_k, c.output_dim)
-                        if compute_expert_mixture_flag:
-                            expected_shape = (batch_size, c.output_dim)
-                        self.assertEqual(output.shape, expected_shape)
+                            expected = experts_output.clone()
+                            if top_k != num_experts:
+                                _, sort_order = sample_indices.sort(dim=0)
+                                expected = expected[sort_order]
 
+                            applies_after = (
+                                weighted_parameters_flag
+                                and weighting_position_option
+                                == ExpertWeightingPositionOptions.AFTER_EXPERTS
+                            )
+                            if applies_after:
+                                expected = expected * probabilities.reshape(-1, 1)
+
+                            if compute_expert_mixture_flag and top_k > 1:
+                                expected = expected.view(-1, top_k, c.output_dim).sum(
+                                    dim=1
+                                )
+
+                            self.assertEqual(output.shape, expected.shape)
+                            self.assertTrue(torch.allclose(output, expected))
+
+    def test__compute_expert_mixture_sorting_correctness(self):
+        output_dim = 4
+        batch_size = 2
+        top_k = 3
+        indices = torch.tensor([2, 0, 1, 1, 2, 0])
+        num_experts_options = [6, 3]
+
+        for num_experts in num_experts_options:
+            should_sort = top_k != num_experts
+            with self.subTest(
+                msg=f"sorting num_experts={num_experts}, should_sort={should_sort}"
+            ):
+                c = MixtureOfExpertsPresets.experts_preset(
+                    return_model_config_flag=True,
+                    experts_weighted_parameters_flag=False,
+                    experts_compute_expert_mixture_flag=False,
+                    experts_num_experts=num_experts,
+                    experts_top_k=top_k,
+                    output_dim=output_dim,
+                )
+                m = MixtureOfExperts(c)
+
+                experts_output = torch.arange(
+                    batch_size * top_k * output_dim, dtype=torch.float
+                ).view(batch_size * top_k, output_dim)
+
+                output = m._MixtureOfExperts__compute_expert_mixture(
+                    experts_output, indices, probabilities=None
+                )
+
+                if should_sort:
+                    _, sort_order = indices.sort(dim=0)
+                    expected_output = experts_output[sort_order]
+                else:
+                    expected_output = experts_output
+                self.assertTrue(torch.equal(output, expected_output))
 
 #     def test_forward(self):
 #         num_experts = 6
