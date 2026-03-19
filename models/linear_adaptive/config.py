@@ -18,9 +18,14 @@ from models.trainer_config import *
 
 # Global
 BATCH_SIZE: int = 64
-NUM_EPOCHS: int = 1
+NUM_EPOCHS: int = 2
 LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
+
+# Trainer
+# ACCELERATOR: str = "cpu"
+GRADIENT_CLIP_VAL: float = 1.0
+EARLY_STOPPING_PATIENCE: int = 5
 
 # Model
 INPUT_DIM: int = 28**2

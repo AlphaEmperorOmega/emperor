@@ -17,7 +17,9 @@ DATASET_OPTIONS: list = [PennTreebank, WikiText2]
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 
 # Trainer
+# ACCELERATOR: str = "cpu"
 GRADIENT_CLIP_VAL: float = 1.0
+EARLY_STOPPING_PATIENCE: int = 5
 
 # Model
 SEQUENCE_LENGTH: int = 35

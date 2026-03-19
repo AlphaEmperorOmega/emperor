@@ -11,10 +11,11 @@ from models.trainer_config import *
 # Global
 BATCH_SIZE: int = 128
 LEARNING_RATE: float = 1e-3
-NUM_EPOCHS: int = 20
+NUM_EPOCHS: int = 2
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Trainer
+# ACCELERATOR: str = "cpu"
 GRADIENT_CLIP_VAL: float = 1.0
 EARLY_STOPPING_PATIENCE: int = 5
 
@@ -35,13 +36,13 @@ STACK_DROPOUT_PROBABILITY: float = 0.2
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [64, 128, 256]
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [3, 6, 9]
-# SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2]
-# SEARCH_SPACE_STACK_ACTIVATION: list = [
-#     ActivationOptions.RELU,
-#     ActivationOptions.SILU,
-#     ActivationOptions.GELU,
-#     ActivationOptions.MISH,
-# ]
+SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2]
+SEARCH_SPACE_STACK_ACTIVATION: list = [
+    ActivationOptions.RELU,
+    ActivationOptions.SILU,
+    ActivationOptions.GELU,
+    ActivationOptions.MISH,
+]
 
 
 @dataclass

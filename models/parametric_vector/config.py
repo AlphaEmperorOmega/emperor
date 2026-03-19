@@ -21,8 +21,13 @@ from models.trainer_config import *
 # Global
 BATCH_SIZE: int = 64
 LEARNING_RATE: float = 1e-3
-NUM_EPOCHS: int = 10
+NUM_EPOCHS: int = 2
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
+
+# Trainer
+# ACCELERATOR: str = "cpu"
+GRADIENT_CLIP_VAL: float = 1.0
+EARLY_STOPPING_PATIENCE: int = 5
 
 # Model
 INPUT_DIM: int = 28**2
@@ -39,7 +44,9 @@ STACK_DROPOUT_PROBABILITY: float = 0.0
 ADAPTIVE_MIXTURE_TOP_K: int = 3
 ADAPTIVE_MIXTURE_NUM_EXPERTS: int = 6
 ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG: bool = False
-ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION: ClipParameterOptions = ClipParameterOptions.BEFORE
+ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION: ClipParameterOptions = (
+    ClipParameterOptions.BEFORE
+)
 ADAPTIVE_MIXTURE_CLIP_RANGE: float = 5.0
 
 # Router
@@ -57,7 +64,9 @@ ROUTER_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED
 ROUTER_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
 ROUTER_MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
 ROUTER_MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
-ROUTER_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE
+ROUTER_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
+    LinearMemoryPositionOptions.BEFORE_AFFINE
+)
 ROUTER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = 0
 ROUTER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
 ROUTER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
