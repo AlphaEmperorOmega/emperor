@@ -107,28 +107,6 @@ SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.AFTER,
 ]
 
-# TODO:
-# 1. No validation/test evaluation
-# train_model only calls trainer.fit(). There's no trainer.test() or
-# trainer.validate() after training. You're logging training metrics but never
-# measuring generalization.
-#
-# 2. No early stopping or checkpointing
-# The Trainer is configured with just max_epochs, accelerator, and logger. No
-# callbacks for:
-# - EarlyStopping — stop wasting compute on bad configs
-# - ModelCheckpoint — save the best model per run
-#
-# This matters a lot for grid/random search where most configs will be bad.
-#
-# 3. No cross-experiment comparison
-# Each config trains independently. There's no mechanism to:
-# - Rank configs by performance after a search completes
-# - Carry forward the best config from one search to the next
-#
-# For example, you'd ideally find the best activation first (ACTIVATION search),
-#  then use that as the default when searching GENERATOR_DEPTH.
-
 
 @dataclass
 class ExperimentConfig(ConfigBase):
