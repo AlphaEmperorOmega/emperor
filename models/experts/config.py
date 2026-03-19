@@ -23,6 +23,11 @@ LEARNING_RATE: float = 1e-3
 NUM_EPOCHS: int = 10
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
+# Trainer
+# ACCELERATOR: str = "cpu"
+GRADIENT_CLIP_VAL: float = 1.0
+EARLY_STOPPING_PATIENCE: int = 5
+
 # Model
 INPUT_DIM: int = 28**2
 OUTPUT_DIM: int = 10
