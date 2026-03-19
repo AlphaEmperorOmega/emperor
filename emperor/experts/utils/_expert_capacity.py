@@ -33,7 +33,7 @@ class _ExpertCapacityHandler:
         token_indices: Tensor,
         batch_size: int,
     ) -> tuple[Tensor, Tensor]:
-        if not isinstance(self.shuffle_indices, Tensor):
+        if self.shuffle_indices is None:
             empty_tensor = torch.tensor(
                 [], dtype=token_indices.dtype, device=token_indices.device
             )
@@ -98,35 +98,3 @@ class _ExpertCapacityHandler:
         if self.dropped_token_behavior == DroppedTokenOptions.ZEROS:
             dropped_tokens = torch.zeros_like(dropped_tokens)
         return input_batch[indices], dropped_tokens
-
-    def maybe_reconstruct_full_batch_from_expert_outputs(
-        self,
-        expert_outputs: Tensor,
-        probabilities: Tensor,
-        indices: Tensor | None,
-    ) -> tuple[Tensor, Tensor]:
-        if self.capacity_factor == 0 or indices is None:
-            return expert_outputs, probabilities
-
-        flat_probs = probabilities.flatten()
-        total_routing_slots = flat_probs.size(0)
-        output_dim = expert_outputs.size(-1)
-
-        sample_indices_expanded = indices.unsqueeze(1).expand(-1, output_dim)
-        full_expert_outputs = torch.zeros(
-            total_routing_slots,
-            output_dim,
-            device=expert_outputs.device,
-            dtype=expert_outputs.dtype,
-        )
-        full_expert_outputs.scatter_(0, sample_indices_expanded, expert_outputs)
-
-        sampled_probs = flat_probs[indices]
-        full_probs = torch.zeros(
-            total_routing_slots,
-            device=sampled_probs.device,
-            dtype=sampled_probs.dtype,
-        )
-        full_probs[indices] = sampled_probs
-
-        return full_expert_outputs, full_probs
