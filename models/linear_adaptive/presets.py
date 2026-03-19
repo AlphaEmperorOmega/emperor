@@ -50,17 +50,29 @@ class ExperimentPresets(ExperimentPresetsBase):
             case ExperimentOptions.PRESET:
                 return self._create_default_preset_configs(dataset)
             case ExperimentOptions.CONFIG:
-                return self._create_default_search_space_configs(dataset, search_mode, log_folder)
+                return self._create_default_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
             case ExperimentOptions.GENERATOR_DEPTH:
-                return self.__generator_depth_search_space_configs(dataset, search_mode, log_folder)
+                return self.__generator_depth_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
             case ExperimentOptions.DIAGONAL:
-                return self.__diagonal_search_space_configs(dataset, search_mode, log_folder)
+                return self.__diagonal_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
             case ExperimentOptions.BIAS:
-                return self.__bias_search_space_configs(dataset, search_mode, log_folder)
+                return self.__bias_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
             case ExperimentOptions.MEMORY:
-                return self.__memory_search_space_configs(dataset, search_mode, log_folder)
+                return self.__memory_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
             case ExperimentOptions.COMBINED:
-                return self.__combined_search_space_configs(dataset, search_mode, log_folder)
+                return self.__combined_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."
@@ -314,7 +326,6 @@ class Experiment(ExperimentBase):
         experiment_option: ExperimentOptions | None = None,
     ) -> None:
         super().__init__(experiment_option)
-        # self.accelerator = "cpu"
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
