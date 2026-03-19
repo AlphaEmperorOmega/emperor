@@ -6,6 +6,7 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
+from models.trainer_config import *
 
 # Global
 BATCH_SIZE: int = 128
@@ -15,24 +16,7 @@ DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Trainer
 GRADIENT_CLIP_VAL: float = 1.0
-GRADIENT_CLIP_ALGORITHM: str = "norm"
-ACCUMULATE_GRAD_BATCHES: int = 1
-PRECISION: str = "32-true"
-DETERMINISTIC: bool = False
-BENCHMARK: bool = True
-MAX_STEPS: int = -1
-MAX_TIME: str | None = None
-VAL_CHECK_INTERVAL: float = 1.0
-LIMIT_TRAIN_BATCHES: float = 1.0
-LIMIT_VAL_BATCHES: float = 1.0
-OVERFIT_BATCHES: int | float = 0.0
-NUM_SANITY_VAL_STEPS: int = 2
-LOG_EVERY_N_STEPS: int = 50
-ENABLE_PROGRESS_BAR: bool = True
-PROFILER: str | None = None
 EARLY_STOPPING_PATIENCE: int = 5
-EARLY_STOPPING_METRIC: str = "validation_loss"
-CHECKPOINT_FLAG: bool = False
 
 # Model
 INPUT_DIM: int = 28**2
