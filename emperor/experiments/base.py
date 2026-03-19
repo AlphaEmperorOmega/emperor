@@ -151,7 +151,9 @@ class ExperimentBase:
         self.model_type = self._model_type()
         self.preset_generator = self._preset_generator_instance()
         self.options_enumeration = self._experiment_enumeration()
-        self.accelerator = "auto"
+        package = type(self.preset_generator).__module__.rsplit(".", 1)[0]
+        config = importlib.import_module(f"{package}.config")
+        self.accelerator = getattr(config, "ACCELERATOR", "auto")
 
     def _num_epochs(self) -> int:
         return 10
@@ -179,7 +181,7 @@ class ExperimentBase:
         config = importlib.import_module(f"{package}.config")
 
         early_stopping_patience = getattr(config, "EARLY_STOPPING_PATIENCE", 0)
-        early_stopping_metric = getattr(config, "EARLY_STOPPING_METRIC", "val_loss")
+        early_stopping_metric = getattr(config, "EARLY_STOPPING_METRIC", "validation/loss")
         checkpoint_flag = getattr(config, "CHECKPOINT_FLAG", False)
 
         callbacks = []
