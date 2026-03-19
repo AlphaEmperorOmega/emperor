@@ -54,17 +54,17 @@ class LanguageModelMetricsLogger(nn.Module):
 
     def log_training_step(self, log_fn: Callable, loss: Tensor) -> None:
         log_fn(
-            {"train_loss": loss, "train_perplexity": math.exp(loss.item())},
+            {"train/loss": loss, "train/perplexity": math.exp(loss.item())},
             prog_bar=True,
         )
 
     def log_validation_step(self, log_fn: Callable, loss: Tensor) -> None:
         log_fn(
-            {"validation_loss": loss, "validation_perplexity": math.exp(loss.item())},
+            {"validation/loss": loss, "validation/perplexity": math.exp(loss.item())},
             prog_bar=True,
         )
 
     def log_test_step(self, log_fn: Callable, loss: Tensor) -> None:
         log_fn(
-            {"test_loss": loss, "test_perplexity": math.exp(loss.item())},
+            {"test/loss": loss, "test/perplexity": math.exp(loss.item())},
         )
