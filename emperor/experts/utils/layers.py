@@ -532,21 +532,6 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         )
         return output, expert_loss
 
-    def _compute_experts(
-        self,
-        expert_input_data: list[_ExpertInputData],
-        full_probabilities: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
-        expert_outputs, routing_positions, _, total_loss = super()._compute_experts(
-            expert_input_data, full_probabilities
-        )
-        expert_outputs, probabilities = (
-            self.capacity_handler.maybe_reconstruct_full_batch_from_expert_outputs(
-                expert_outputs, full_probabilities, routing_positions
-            )
-        )
-        return expert_outputs, routing_positions, probabilities, total_loss
-
     def __compute_expert_mixture(
         self,
         experts_output: Tensor,
