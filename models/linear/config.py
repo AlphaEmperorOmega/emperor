@@ -31,7 +31,7 @@ LOG_EVERY_N_STEPS: int = 50
 ENABLE_PROGRESS_BAR: bool = True
 PROFILER: str | None = None
 EARLY_STOPPING_PATIENCE: int = 5
-EARLY_STOPPING_METRIC: str = "train_loss"  # "validation_loss"
+EARLY_STOPPING_METRIC: str = "validation_loss"
 CHECKPOINT_FLAG: bool = False
 
 # Model

@@ -235,12 +235,12 @@ class ExperimentBase:
     ) -> None:
         options = [self.option] if self.option else self.options_enumeration
         top5 = self._load_best_results(log_folder)
-        trainer_config = self._load_trainer_config()
         for option in options:
             for dataset_type in self.dataset_options:
                 for config in self.preset_generator.get_config(
                     option, dataset_type, search_mode, log_folder
                 ):
+                    trainer_config = self._load_trainer_config()
                     seed_everything(42, workers=True)
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
@@ -289,8 +289,8 @@ class ExperimentBase:
     ) -> None:
         dataset = result["dataset"]
         runs = top5.get(dataset, [])
-        new_acc = result["metrics"].get("val_accuracy", 0)
-        worst_acc = min((r["metrics"].get("val_accuracy", 0) for r in runs), default=-1)
+        new_acc = result["metrics"].get("validation_accuracy", 0)
+        worst_acc = min((r["metrics"].get("validation_accuracy", 0) for r in runs), default=-1)
 
         if len(runs) < 5 or new_acc > worst_acc:
             runs.append(result)
@@ -299,7 +299,7 @@ class ExperimentBase:
                 for i, run in enumerate(
                     sorted(
                         runs,
-                        key=lambda r: r["metrics"].get("val_accuracy", 0),
+                        key=lambda r: r["metrics"].get("validation_accuracy", 0),
                         reverse=True,
                     )[:5]
                 )
