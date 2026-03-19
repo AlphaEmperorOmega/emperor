@@ -71,7 +71,7 @@ class SequenceClassifierMetricsLogger(nn.Module):
         accuracy = self.train_accuracy(logits, Y)
         f1score = self.train_f1_score(logits, Y)
         log_fn(
-            {"train_loss": loss, "train_accuracy": accuracy, "train_f1_score": f1score},
+            {"train/loss": loss, "train/accuracy": accuracy, "train/f1_score": f1score},
             prog_bar=True,
         )
 
@@ -82,9 +82,9 @@ class SequenceClassifierMetricsLogger(nn.Module):
         f1score = self.validation_f1_score(logits, Y)
         log_fn(
             {
-                "validation_loss": loss,
-                "validation_accuracy": accuracy,
-                "validation_f1_score": f1score,
+                "validation/loss": loss,
+                "validation/accuracy": accuracy,
+                "validation/f1_score": f1score,
             },
             prog_bar=True,
         )
@@ -95,5 +95,5 @@ class SequenceClassifierMetricsLogger(nn.Module):
         accuracy = self.test_accuracy(logits, Y)
         f1score = self.test_f1_score(logits, Y)
         log_fn(
-            {"test_loss": loss, "test_accuracy": accuracy, "test_f1_score": f1score},
+            {"test/loss": loss, "test/accuracy": accuracy, "test/f1_score": f1score},
         )
