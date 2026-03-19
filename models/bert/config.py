@@ -7,6 +7,7 @@ from emperor.datasets.text.language_modeling.wiki_text_2 import WikiText2
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.linears.options import LinearLayerStackOptions
+from models.trainer_config import *
 
 # Global
 BATCH_SIZE: int = 64
@@ -17,24 +18,6 @@ SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 
 # Trainer
 GRADIENT_CLIP_VAL: float = 1.0
-GRADIENT_CLIP_ALGORITHM: str = "norm"
-ACCUMULATE_GRAD_BATCHES: int = 1
-PRECISION: str = "32-true"
-DETERMINISTIC: bool = False
-BENCHMARK: bool = True
-MAX_STEPS: int = -1
-MAX_TIME: str | None = None
-VAL_CHECK_INTERVAL: float = 1.0
-LIMIT_TRAIN_BATCHES: float = 1.0
-LIMIT_VAL_BATCHES: float = 1.0
-OVERFIT_BATCHES: int | float = 0.0
-NUM_SANITY_VAL_STEPS: int = 2
-LOG_EVERY_N_STEPS: int = 50
-ENABLE_PROGRESS_BAR: bool = True
-PROFILER: str | None = None
-EARLY_STOPPING_PATIENCE: int = 0
-EARLY_STOPPING_METRIC: str = "val_loss"
-CHECKPOINT_FLAG: bool = False
 
 # Model
 SEQUENCE_LENGTH: int = 35
