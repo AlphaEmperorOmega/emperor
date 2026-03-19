@@ -1,4 +1,5 @@
 # Shared trainer configuration defaults for all models
+ACCELERATOR: str = "auto"
 GRADIENT_CLIP_VAL: float = 0.0
 GRADIENT_CLIP_ALGORITHM: str = "norm"
 ACCUMULATE_GRAD_BATCHES: int = 1
@@ -16,5 +17,5 @@ LOG_EVERY_N_STEPS: int = 50
 ENABLE_PROGRESS_BAR: bool = True
 PROFILER: str | None = None
 EARLY_STOPPING_PATIENCE: int = 0
-EARLY_STOPPING_METRIC: str = "validation_loss"
+EARLY_STOPPING_METRIC: str = "validation/loss"
 CHECKPOINT_FLAG: bool = False
