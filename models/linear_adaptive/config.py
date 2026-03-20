@@ -17,7 +17,7 @@ from emperor.behaviours.utils.enums import (
 from models.trainer_config import *
 
 # Global
-BATCH_SIZE: int = 64
+BATCH_SIZE: int = 128
 NUM_EPOCHS: int = 2
 LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
@@ -34,11 +34,11 @@ BIAS_FLAG: bool = True
 
 # Layer stack options
 HIDDEN_DIM: int = 256
-LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT
+LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 3
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
-STACK_DROPOUT_PROBABILITY: float = 0.0
+STACK_DROPOUT_PROBABILITY: float = 0.1
 
 # Adaptive behaviour
 GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
@@ -57,7 +57,7 @@ ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
 ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = 256
 ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG: bool = False
-ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
+ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.1
 
 # Hyperparameter search space
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
