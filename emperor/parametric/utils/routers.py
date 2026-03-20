@@ -17,22 +17,13 @@ class VectorRouterModel(RouterModel):
         self,
         cfg: "RouterConfig | ModelConfig",
         overrides: "RouterConfig | None" = None,
-        bias_parameters_flag: bool = False,
-        bias_output_dim: int | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.bias_parameters_flag = bias_parameters_flag
-        self.bias_num_experts = bias_output_dim
-        self.parameter_bank = self.__generate_parameter_bank()
+        self.parameter_bank = self._create_router_model()
 
-    def __generate_parameter_bank(self) -> Parameter:
-        # This is required for `VectorRouterModel` in case `feature_dim`
-        # you find this wierd in the future
-        feature_dim = (
-            self.bias_num_experts if self.bias_parameters_flag else self.input_dim
-        )
+    def _create_router_model(self) -> Parameter:
         parameters = Parameter(
-            torch.randn(feature_dim, self.input_dim, self.num_experts)
+            torch.randn(self.input_dim, self.input_dim, self.num_experts)
         )
         self._initialize_parameters(parameters)
         return parameters
