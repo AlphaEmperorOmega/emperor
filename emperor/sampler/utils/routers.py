@@ -51,9 +51,9 @@ class RouterModel(Module):
             2 * self.num_experts if self.noisy_topk_flag else self.num_experts
         )
         self.__assert_input_requirements()
-        self.model = self.__create_router_model()
+        self.model = self._create_router_model()
 
-    def __create_router_model(self):
+    def _create_router_model(self):
         overrides = LayerStackConfig(
             input_dim=self.input_dim, output_dim=self.num_experts
         )
