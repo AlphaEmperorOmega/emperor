@@ -1,21 +1,12 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStackConfig
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.enums import ActivationOptions
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
-from emperor.linears.options import LinearLayerStackOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
-from emperor.behaviours.utils.enums import (
-    DynamicBiasOptions,
-    DynamicDepthOptions,
-    DynamicDiagonalOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
-)
 from models.trainer_config import *
 
 # Global
@@ -38,7 +29,12 @@ HIDDEN_DIM: int = 256
 STACK_NUM_LAYERS: int = 3
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
-STACK_DROPOUT_PROBABILITY: float = 0.0
+STACK_DROPOUT_PROBABILITY: float = 0.1
+
+# Output layer
+OUTPUT_NUM_LAYERS: int = 1
+OUTPUT_ACTIVATION: ActivationOptions = ActivationOptions.GELU
+OUTPUT_DROPOUT_PROBABILITY: float = 0.1
 
 # Adaptive mixture
 ADAPTIVE_MIXTURE_TOP_K: int = 3
@@ -48,30 +44,6 @@ ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION: ClipParameterOptions = (
     ClipParameterOptions.BEFORE
 )
 ADAPTIVE_MIXTURE_CLIP_RANGE: float = 5.0
-
-# Router
-ROUTER_LAYER_STACK_OPTION: LinearLayerStackOptions = LinearLayerStackOptions.BASE
-ROUTER_HIDDEN_DIM: int = 0
-ROUTER_NUM_LAYERS: int = 2
-ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-ROUTER_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.NONE
-ROUTER_RESIDUAL_FLAG: bool = False
-ROUTER_DROPOUT_PROBABILITY: float = 0.0
-ROUTER_BIAS_FLAG: bool = False
-ROUTER_NOISY_TOPK_FLAG: bool = False
-ROUTER_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DISABLED
-ROUTER_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED
-ROUTER_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
-ROUTER_MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
-ROUTER_MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
-ROUTER_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
-    LinearMemoryPositionOptions.BEFORE_AFFINE
-)
-ROUTER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = 0
-ROUTER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
-ROUTER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-ROUTER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG: bool = False
-ROUTER_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
 
 # Sampler
 SAMPLER_NUM_EXPERTS: int = 6
@@ -101,9 +73,21 @@ SEARCH_SPACE_ADAPTIVE_MIXTURE_TOP_K: list = [1, 3]
 SEARCH_SPACE_ADAPTIVE_MIXTURE_NUM_EXPERTS: list = [4, 6, 8]
 
 
+# This model requires input_dim == output_dim this is why
+# this requieres first a model that maps the hight dimensional input
+# to a lower dimensional space and then the output of the mixture
+# is mapped back to the output logits
 @dataclass
 class ExperimentConfig(ConfigBase):
+    input_model_config: "LayerStackConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
     model_config: "LayerStackConfig | None" = field(
+        default=None,
+        metadata={"help": ""},
+    )
+    output_model_config: "LayerStackConfig | None" = field(
         default=None,
         metadata={"help": ""},
     )

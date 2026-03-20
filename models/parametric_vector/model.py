@@ -4,6 +4,7 @@ from torch import Tensor
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStack, LayerStackConfig
 from emperor.experiments.classifier import ClassifierExperiment
+from emperor.parametric.utils.stack import AdaptiveParameterLayerStack
 from models.parametric_vector.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
@@ -18,9 +19,14 @@ class Model(ClassifierExperiment):
         cfg: "ModelConfig",
     ):
         super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
-        self.model_config: LayerStackConfig = self.main_cfg.model_config
-        self.model = LayerStack(self.model_config).build_model()
+        self.cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
+        self.input_config: LayerStackConfig = self.cfg.input_model_config
+        self.model_config: LayerStackConfig = self.cfg.model_config
+        self.output_config: LayerStackConfig = self.cfg.output_model_config
+
+        self.input_model = LayerStack(self.input_config).build_model()
+        self.model = AdaptiveParameterLayerStack(self.model_config).build_model()
+        self.output_model = LayerStack(self.output_config).build_model()
 
     def _resolve_main_config(
         self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
@@ -33,7 +39,8 @@ class Model(ClassifierExperiment):
         self,
         X: Tensor,
     ) -> Tensor:
-        X = X.to(self.device)
-        X = torch.flatten(X, start_dim=1)
-        X = self.model(X)
+        X = torch.flatten(X.to(self.device), start_dim=1)
+        X = self.input_model(X)
+        X, _, _ = self.model(X)
+        X = self.output_model(X)
         return X
