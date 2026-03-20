@@ -81,7 +81,7 @@ class _AdaptiveParameterLayerValidator:
             )
             if is_generator_depth_disabled:
                 raise ValueError(
-                    "Configuration Error: 'adaptive_behaviour_config.generator_depth' needs to be disabled for `AdaptiveParameterLayer`"
+                    f"Configuration Error: 'adaptive_behaviour_config.generator_depth' needs to be disabled for `AdaptiveParameterLayer`, got: {self.model.adaptive_behaviour_config.generator_depth}"
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:
