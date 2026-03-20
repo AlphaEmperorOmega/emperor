@@ -35,7 +35,7 @@ BIAS_FLAG: bool = True
 
 # Output layer stack
 OUTPUT_NUM_LAYERS: int = 2
-OUTPUT_ACTIVATION: ActivationOptions = ActivationOptions.SILU
+OUTPUT_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 OUTPUT_DROPOUT_PROBABILITY: float = 0.1
 
 # Sampler
@@ -68,7 +68,7 @@ EXPERTS_MODEL_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = LinearMemory
 # Layer stack options
 HIDDEN_DIM: int = 256
 STACK_NUM_LAYERS: int = 3
-STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.0
 

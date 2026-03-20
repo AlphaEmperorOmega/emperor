@@ -36,7 +36,7 @@ BIAS_FLAG: bool = True
 HIDDEN_DIM: int = 256
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT
 STACK_NUM_LAYERS: int = 3
-STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.0
 
@@ -55,7 +55,7 @@ MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
 # Adaptive generator stack
 ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
 ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = 256
-ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG: bool = False
 ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
 

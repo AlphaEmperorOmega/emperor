@@ -40,7 +40,7 @@ IMAGE_HEIGHT: int = 32
 # Shared
 HIDDEN_DIM: int = 32
 DROPOUT_PROBABILITY: float = 0.1
-ACTIVATION_FUNCTION: ActivationOptions = ActivationOptions.SILU
+ACTIVATION_FUNCTION: ActivationOptions = ActivationOptions.GELU
 TRANSFORMER_NUM_LAYERS: int = 1
 ATTN_NUM_LAYERS: int = 1
 FF_BIAS_FLAG: bool = True

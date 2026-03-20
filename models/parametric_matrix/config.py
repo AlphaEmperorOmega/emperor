@@ -28,7 +28,7 @@ OUTPUT_DIM: int = 10
 # Layer stack options
 HIDDEN_DIM: int = 256
 STACK_NUM_LAYERS: int = 3
-STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.0
 
