@@ -55,6 +55,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         model_config_options: ExperimentOptions = ExperimentOptions.PRESET,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
+        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.PRESET:
