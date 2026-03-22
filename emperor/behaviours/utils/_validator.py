@@ -29,6 +29,9 @@ class AdaptiveParameterBehaviourValidator:
         "bias_option": {
             "type": "DynamicBiasOptions",
         },
+        "row_mask_option": {
+            "type": "RowMaskOptions",
+        },
         "memory_option": {
             "type": "LinearMemoryOptions",
         },
@@ -54,6 +57,7 @@ class AdaptiveParameterBehaviourValidator:
             LinearMemoryOptions,
             LinearMemoryPositionOptions,
             LinearMemorySizeOptions,
+            RowMaskOptions,
             WeightNormalizationOptions,
         )
 
@@ -65,6 +69,7 @@ class AdaptiveParameterBehaviourValidator:
             "LinearMemoryOptions": LinearMemoryOptions,
             "LinearMemorySizeOptions": LinearMemorySizeOptions,
             "LinearMemoryPositionOptions": LinearMemoryPositionOptions,
+            "RowMaskOptions": RowMaskOptions,
             "WeightNormalizationOptions": WeightNormalizationOptions,
         }
 

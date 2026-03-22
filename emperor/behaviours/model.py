@@ -16,8 +16,10 @@ from emperor.behaviours.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+    RowMaskOptions,
     WeightNormalizationOptions,
 )
+from emperor.behaviours.utils.handlers.row_mask import RowMaskHandler
 from emperor.behaviours.utils._validator import AdaptiveParameterBehaviourValidator
 
 @dataclass
@@ -56,6 +58,12 @@ class AdaptiveParameterBehaviourConfig(ConfigBase):
         default=None,
         metadata={"help": "Input-dependent adjustment of the bias vector."},
     )
+    row_mask_option: RowMaskOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Input-dependent row masking of the weight matrix after weight updates."
+        },
+    )
     memory_option: LinearMemoryOptions | None = field(
         default=None,
         metadata={
@@ -92,11 +100,13 @@ class AdaptiveParameterBehaviour(Module):
         self.memory_size_option = self.cfg.memory_size_option
         self.memory_position_option = self.cfg.memory_position_option
         self.bias_option = self.cfg.bias_option
+        self.row_mask_option = self.cfg.row_mask_option
         self.validator = AdaptiveParameterBehaviourValidator(self)
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
         self.memory_model = self.__init_memory_model()
         self.bias_model = self.__init_bias_model()
+        self.row_mask_model = self.__init_row_mask_model()
 
     def __init_generator_model(self) -> Module | None:
         is_valid_flag = self.generator_depth != DynamicDepthOptions.DISABLED
@@ -113,6 +123,11 @@ class AdaptiveParameterBehaviour(Module):
     def __init_bias_model(self) -> Module | None:
         is_valid_flag = self.bias_option != DynamicBiasOptions.DISABLED
         return self.__build_model(is_valid_flag, DynamicBiasFactory)
+
+    def __init_row_mask_model(self) -> RowMaskHandler | None:
+        if self.row_mask_option == RowMaskOptions.DISABLED:
+            return None
+        return RowMaskHandler(self.cfg)
 
     def __build_model(
         self, is_valid_flag: bool, factory_class: type[Module]
@@ -136,6 +151,7 @@ class AdaptiveParameterBehaviour(Module):
     ) -> Tensor:
         input = self.__apply_memory(input, LinearMemoryPositionOptions.BEFORE_AFFINE)
         weights, bias = self.__update_parameters(weight_params, bias_params, input)
+        weights = self.__call_model(self.row_mask_model, weights, input)
         output = affine_transform_callback(weights, bias, input)
         output = self.__apply_memory(output, LinearMemoryPositionOptions.AFTER_AFFINE)
         return output
