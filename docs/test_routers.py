@@ -5,7 +5,7 @@ from emperor.config import ModelConfig
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.sampler.utils.presets import SamplerPresets
 from emperor.sampler.utils.routers import RouterModel
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

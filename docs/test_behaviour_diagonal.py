@@ -6,7 +6,7 @@ from emperor.base.utils import Module
 from emperor.config import ModelConfig
 from emperor.behaviours.utils.behaviours import DynamicDiagonalFactory
 from emperor.linears.utils.presets import LinearPresets
-from emperor.behaviours.utils.enums import DynamicDiagonalOptions
+from emperor.behaviours.options import DynamicDiagonalOptions
 from emperor.behaviours.utils.handlers.diagonal import (
     DiagonalHandlerAbstract,
     DiagonalHandler,

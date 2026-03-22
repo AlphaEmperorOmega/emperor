@@ -5,7 +5,7 @@ import torch.nn as nn
 from emperor.base.utils import Module
 from emperor.behaviours.utils.handlers.weight import DualModelWeightHandler
 from emperor.linears.utils.presets import LinearPresets
-from emperor.behaviours.utils.enums import DynamicDepthOptions
+from emperor.behaviours.options import DynamicDepthOptions
 from emperor.behaviours.utils.handlers.parameter import (
     DepthMappingLayer,
     DepthMappingLayerStack,

@@ -8,7 +8,7 @@ from emperor.behaviours.utils.behaviours import (
     DynamicMemoryFactory,
     DynamicWeightFactory,
 )
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

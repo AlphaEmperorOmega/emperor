@@ -21,7 +21,7 @@ from emperor.parametric.utils.layers import (
     AdaptiveParameterLayerConfig,
     AdaptiveRouterOptions,
 )
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
