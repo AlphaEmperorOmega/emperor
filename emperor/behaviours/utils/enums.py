@@ -15,6 +15,12 @@ class DynamicBiasOptions(Enum):
     DYNAMIC_PARAMETERS = 3
 
 
+class DynamicWeightOptions(Enum):
+    DISABLED = 0
+    DUAL_MODEL = 1
+    SINGLE_MODEL = 2
+
+
 class DynamicDepthOptions(Enum):
     DISABLED = 0
     DEPTH_OF_ONE = 1

@@ -2,6 +2,7 @@ from emperor.base.utils import Module
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDiagonalOptions,
+    DynamicWeightOptions,
     LinearMemoryOptions,
 )
 from emperor.behaviours.utils.handlers.bias import (
@@ -21,12 +22,41 @@ from emperor.behaviours.utils.handlers.memory import (
     MemoryHandlerAbstract,
     WeightedMemoryHandler,
 )
+from emperor.behaviours.utils.handlers.weight import (
+    DualModelWeightHandler,
+    SingleModelWeightHandler,
+    WeightHandlerAbstract,
+)
 
 from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
     from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+
+
+class DynamicWeightFactory(Module):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+    ):
+        super().__init__()
+        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+            cfg, overrides
+        )
+        self.weight_option = self.cfg.weight_option
+
+    def build(self) -> WeightHandlerAbstract:
+        match self.weight_option:
+            case DynamicWeightOptions.DUAL_MODEL:
+                return DualModelWeightHandler(self.cfg)
+            case DynamicWeightOptions.SINGLE_MODEL:
+                return SingleModelWeightHandler(self.cfg)
+            case DynamicWeightOptions.DISABLED:
+                raise ValueError(
+                    "If the `weight_option` is set to `DISABLED`, this class should not be initialized"
+                )
 
 
 # TODO: Add option for a kernel to take the context

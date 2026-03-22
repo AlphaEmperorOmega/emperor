@@ -1,25 +1,23 @@
 from torch import Tensor
 from dataclasses import dataclass, field
-from typing import Callable, TypeVar
+from typing import Callable
 from emperor.base.utils import ConfigBase, Module
 from emperor.behaviours.utils.behaviours import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
+    DynamicWeightFactory,
 )
-from emperor.behaviours.utils.handlers.weight import OuterProductWeightHandler
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
+    DynamicWeightOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
 from emperor.behaviours.utils._validator import AdaptiveParameterBehaviourValidator
-
-ModuleType = TypeVar("ModuleType", bound=Module)
-
 
 @dataclass
 class AdaptiveParameterBehaviourConfig(ConfigBase):
@@ -30,6 +28,12 @@ class AdaptiveParameterBehaviourConfig(ConfigBase):
     output_dim: int | None = field(
         default=None,
         metadata={"help": "Output dimension of the linear layer"},
+    )
+    weight_option: DynamicWeightOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Selects the weight handler type for input-dependent weight adjustments."
+        },
     )
     generator_depth: DynamicDepthOptions | None = field(
         default=None,
@@ -73,6 +77,7 @@ class AdaptiveParameterBehaviour(Module):
         )
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
+        self.weight_option = self.cfg.weight_option
         self.generator_depth = self.cfg.generator_depth
         self.diagonal_option = self.cfg.diagonal_option
         self.memory_option = self.cfg.memory_option
@@ -87,7 +92,7 @@ class AdaptiveParameterBehaviour(Module):
 
     def __init_generator_model(self) -> Module | None:
         is_valid_flag = self.generator_depth != DynamicDepthOptions.DISABLED
-        return self.__init_model(is_valid_flag, OuterProductWeightHandler)
+        return self.__build_model(is_valid_flag, DynamicWeightFactory)
 
     def __init_diagonal_model(self) -> Module | None:
         is_valid_flag = self.diagonal_option != DynamicDiagonalOptions.DISABLED
@@ -100,19 +105,6 @@ class AdaptiveParameterBehaviour(Module):
     def __init_bias_model(self) -> Module | None:
         is_valid_flag = self.bias_option != DynamicBiasOptions.DISABLED
         return self.__build_model(is_valid_flag, DynamicBiasFactory)
-
-    def __init_model(
-        self, is_valid_flag: bool, model_class: type[ModuleType]
-    ) -> ModuleType | None:
-        from emperor.linears.utils.config import LinearLayerConfig
-
-        if not is_valid_flag:
-            return None
-
-        overrides = LinearLayerConfig(
-            input_dim=self.input_dim, output_dim=self.output_dim
-        )
-        return model_class(self.cfg, overrides)
 
     def __build_model(
         self, is_valid_flag: bool, factory_class: type[Module]
