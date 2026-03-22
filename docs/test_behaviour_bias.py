@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from emperor.base.utils import Module
 from emperor.config import ModelConfig
-from emperor.behaviours.utils.behaviours import DynamicBiasFactory
+from emperor.behaviours.utils.factory import DynamicBiasFactory
 from emperor.linears.utils.presets import LinearPresets
 from emperor.behaviours.options import DynamicBiasOptions
 from emperor.behaviours.utils.handlers.bias import (
