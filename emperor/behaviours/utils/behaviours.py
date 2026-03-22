@@ -111,7 +111,7 @@ class DynamicParametersBehaviour(Module):
 
 # TODO: Add option for a kernel to take the context
 # of every token into account when computing the dynamic parameters
-class DynamicDiagonalSelector(Module):
+class DynamicDiagonalFactory(Module):
     def __init__(
         self,
         cfg: "AdaptiveParameterBehaviourConfig",
@@ -123,9 +123,8 @@ class DynamicDiagonalSelector(Module):
             config, overrides
         )
         self.diagonal_option = self.cfg.diagonal_option
-        self.model = self.__init_bias_model()
 
-    def __init_bias_model(self) -> DiagonalHandlerAbstract:
+    def build(self) -> DiagonalHandlerAbstract:
         match self.diagonal_option:
             case DynamicDiagonalOptions.DIAGONAL:
                 return DiagonalHandler(self.cfg)
@@ -138,15 +137,8 @@ class DynamicDiagonalSelector(Module):
                     "If the `diagonal_option` is set to `DISABLED`, this class should not be initialized"
                 )
 
-    def forward(
-        self,
-        weight_params: Tensor,
-        logits: Tensor,
-    ) -> Tensor | None:
-        return self.model(weight_params, logits)
 
-
-class DynamicBiasSelector(Module):
+class DynamicBiasFactory(Module):
     def __init__(
         self,
         cfg: "AdaptiveParameterBehaviourConfig",
@@ -157,9 +149,8 @@ class DynamicBiasSelector(Module):
             cfg, overrides
         )
         self.bias_option = self.cfg.bias_option
-        self.model = self.__init_bias_model()
 
-    def __init_bias_model(self) -> BiasHandlerAbstract:
+    def build(self) -> BiasHandlerAbstract:
         match self.bias_option:
             case DynamicBiasOptions.SCALE_AND_OFFSET:
                 return AffineBiasTransformHandler(self.cfg)
@@ -172,15 +163,8 @@ class DynamicBiasSelector(Module):
                     "If the `bias_option` is set to `DISABLED`, this class should not be initialized"
                 )
 
-    def forward(
-        self,
-        bias_params: Tensor,
-        logits: Tensor,
-    ) -> Tensor | None:
-        return self.model(bias_params, logits)
 
-
-class DynamicMemorySelector(Module):
+class DynamicMemoryFactory(Module):
     def __init__(
         self,
         cfg: "AdaptiveParameterBehaviourConfig",
@@ -191,9 +175,8 @@ class DynamicMemorySelector(Module):
             cfg, overrides
         )
         self.memory_option = self.cfg.memory_option
-        self.model = self.__init_memory_model()
 
-    def __init_memory_model(self) -> MemoryHandlerAbstract:
+    def build(self) -> MemoryHandlerAbstract:
         match self.memory_option:
             case LinearMemoryOptions.FUSION:
                 return MemoryFusionHandler(self.cfg)
@@ -203,9 +186,3 @@ class DynamicMemorySelector(Module):
                 raise ValueError(
                     "If the `memory_option` is set to `DISABLED`, this class should not be initialized"
                 )
-
-    def forward(
-        self,
-        logits: Tensor,
-    ) -> Tensor | None:
-        return self.model(logits)

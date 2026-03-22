@@ -14,12 +14,10 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.behaviours.utils.behaviours import (
-    DynamicBiasSelector,
-    DynamicDiagonalSelector,
-    DynamicMemorySelector,
-    DynamicParametersBehaviour,
-)
+from emperor.behaviours.utils.behaviours import DynamicParametersBehaviour
+from emperor.behaviours.utils.handlers.diagonal import DiagonalHandlerAbstract
+from emperor.behaviours.utils.handlers.bias import BiasHandlerAbstract
+from emperor.behaviours.utils.handlers.memory import MemoryHandlerAbstract
 
 
 class TestAdaptiveParameterBehaviour(unittest.TestCase):
@@ -84,7 +82,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
         diagonal_cases = [
             (
                 "diagonal_model",
-                DynamicDiagonalSelector,
+                DiagonalHandlerAbstract,
                 {"diagonal_option": option},
             )
             for option in DynamicDiagonalOptions
@@ -93,7 +91,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
         bias_cases = [
             (
                 "bias_model",
-                DynamicBiasSelector,
+                BiasHandlerAbstract,
                 {"bias_option": option},
             )
             for option in DynamicBiasOptions
@@ -102,7 +100,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
         memory_cases = [
             (
                 "memory_model",
-                DynamicMemorySelector,
+                MemoryHandlerAbstract,
                 {
                     "memory_option": option,
                     "memory_size_option": LinearMemorySizeOptions.SMALL,
