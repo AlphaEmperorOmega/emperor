@@ -4,6 +4,11 @@ from emperor.behaviours.options import (
     DynamicDiagonalOptions,
     DynamicWeightOptions,
     LinearMemoryOptions,
+    RowMaskOptions,
+)
+from emperor.behaviours.utils.handlers.mask import (
+    PerRowMaskHandler,
+    RowMaskHandler,
 )
 from emperor.behaviours.utils.handlers.bias import (
     AffineBiasTransformHandler,
@@ -147,4 +152,28 @@ class DynamicMemoryFactory(Module):
             case LinearMemoryOptions.DISABLED:
                 raise ValueError(
                     "If the `memory_option` is set to `DISABLED`, this class should not be initialized"
+                )
+
+
+class RowMaskFactory(Module):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+    ):
+        super().__init__()
+        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+            cfg, overrides
+        )
+        self.row_mask_option = self.cfg.row_mask_option
+
+    def build(self) -> Module:
+        match self.row_mask_option:
+            case RowMaskOptions.GLOBAL_SCORE:
+                return RowMaskHandler(self.cfg)
+            case RowMaskOptions.PER_ROW_SCORE:
+                return PerRowMaskHandler(self.cfg)
+            case RowMaskOptions.DISABLED:
+                raise ValueError(
+                    "If the `row_mask_option` is set to `DISABLED`, this class should not be initialized"
                 )
