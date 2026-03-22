@@ -24,6 +24,7 @@ from emperor.behaviours.utils.handlers.memory import (
 )
 from emperor.behaviours.utils.handlers.weight import (
     DualModelWeightHandler,
+    LowRankWeightHandler,
     SingleModelWeightHandler,
     WeightHandlerAbstract,
 )
@@ -53,6 +54,8 @@ class DynamicWeightFactory(Module):
                 return DualModelWeightHandler(self.cfg)
             case DynamicWeightOptions.SINGLE_MODEL:
                 return SingleModelWeightHandler(self.cfg)
+            case DynamicWeightOptions.LOW_RANK:
+                return LowRankWeightHandler(self.cfg)
             case DynamicWeightOptions.DISABLED:
                 raise ValueError(
                     "If the `weight_option` is set to `DISABLED`, this class should not be initialized"
