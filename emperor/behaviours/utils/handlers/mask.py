@@ -58,3 +58,39 @@ class RowMaskHandler(Module):
             -1, (k_per_sample - 1).unsqueeze(-1)
         )
         return (row_norms >= thresholds).float()
+
+
+class PerRowMaskHandler(Module):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+    ):
+        super().__init__()
+        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+            cfg, overrides
+        )
+        self.input_dim = self.cfg.input_dim
+        self.score_generator = self.__init_score_generator()
+
+    def __init_score_generator(self):
+        from emperor.linears.utils.stack import LinearLayerStack
+
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.input_dim,
+        )
+        main_cfg = self._resolve_main_config(self.cfg, self.cfg)
+        return LinearLayerStack(main_cfg, overrides).build_model()
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        scores = torch.sigmoid(self.score_generator(logits))
+        hard_mask = (scores >= 0.5).float()
+        masked = weight_params * hard_mask.unsqueeze(-1)
+        if self.training:
+            return masked + (weight_params - weight_params.detach())
+        return masked
