@@ -2,7 +2,7 @@ from torch import Tensor
 from dataclasses import dataclass, field
 from typing import Callable
 from emperor.base.utils import ConfigBase, Module
-from emperor.behaviours.utils.behaviours import (
+from emperor.behaviours.utils.factory import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
