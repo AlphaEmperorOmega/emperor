@@ -1,3 +1,5 @@
+import torch
+
 from torch import Tensor
 from torch.nn import Sequential
 from emperor.base.utils import Module
@@ -62,6 +64,23 @@ class ElementwiseBiasHandler(BiasHandlerAbstract):
         self.validator.ensure_parameters_exist(bias_params)
         parameters = self.generator_model(logits)
         return bias_params + parameters
+
+
+class GatedBiasHandler(BiasHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterBehaviourConfig",
+    ):
+        super().__init__(cfg)
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim, output_dim=self.output_dim
+        )
+        self.gate_generator = self._init_model(overrides)
+
+    def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
+        self.validator.ensure_parameters_exist(bias_params)
+        gate = torch.sigmoid(self.gate_generator(logits))
+        return bias_params * gate
 
 
 class BiasGeneratorHandler(BiasHandlerAbstract):
