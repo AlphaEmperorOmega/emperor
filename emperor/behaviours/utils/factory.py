@@ -24,9 +24,11 @@ from emperor.behaviours.utils.handlers.memory import (
 )
 from emperor.behaviours.utils.handlers.weight import (
     DualModelWeightHandler,
+    HypernetworkWeightHandler,
     LowRankWeightHandler,
     SingleModelWeightHandler,
     WeightHandlerAbstract,
+    WeightMaskHandler,
 )
 
 from typing import TYPE_CHECKING
@@ -56,6 +58,10 @@ class DynamicWeightFactory(Module):
                 return SingleModelWeightHandler(self.cfg)
             case DynamicWeightOptions.LOW_RANK:
                 return LowRankWeightHandler(self.cfg)
+            case DynamicWeightOptions.WEIGHT_MASK:
+                return WeightMaskHandler(self.cfg)
+            case DynamicWeightOptions.HYPERNETWORK:
+                return HypernetworkWeightHandler(self.cfg)
             case DynamicWeightOptions.DISABLED:
                 raise ValueError(
                     "If the `weight_option` is set to `DISABLED`, this class should not be initialized"
