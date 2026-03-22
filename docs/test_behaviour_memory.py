@@ -4,7 +4,7 @@ import unittest
 from dataclasses import asdict
 from emperor.config import ModelConfig
 from emperor.linears.utils.presets import LinearPresets
-from emperor.behaviours.utils.behaviours import DynamicMemorySelector
+from emperor.behaviours.utils.behaviours import DynamicMemoryFactory
 from emperor.behaviours.utils.enums import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
@@ -95,8 +95,8 @@ class TestWeightedMemoryHandler(TestLinearsMemoryBehaviour):
                         self.assertIsInstance(output, torch.Tensor)
 
 
-class TestDynamicDiagonalSelector(TestLinearsMemoryBehaviour):
-    def test_forward(self):
+class TestDynamicMemoryFactory(TestLinearsMemoryBehaviour):
+    def test_build(self):
         for memory_option in LinearMemoryOptions:
             for position_option in LinearMemoryPositionOptions:
                 for size_option in LinearMemorySizeOptions:
@@ -118,12 +118,12 @@ class TestDynamicDiagonalSelector(TestLinearsMemoryBehaviour):
                             or size_option == LinearMemorySizeOptions.DISABLED
                         ):
                             with self.assertRaises(ValueError):
-                                model = DynamicMemorySelector(cfg)
+                                DynamicMemoryFactory(cfg).build()
                         else:
                             input_tensor = torch.randn(self.batch_size, dim)
-                            model = DynamicMemorySelector(cfg)
-                            output = model(input_tensor)
+                            handler = DynamicMemoryFactory(cfg).build()
+                            output = handler(input_tensor)
                             expected_weight_shape = (self.batch_size, dim)
                             self.assertEqual(output.shape, expected_weight_shape)
-                            self.assertIsInstance(model.model, MemoryHandlerAbstract)
+                            self.assertIsInstance(handler, MemoryHandlerAbstract)
                             self.assertIsInstance(output, torch.Tensor)

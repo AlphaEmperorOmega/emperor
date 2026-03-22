@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 from typing import Callable, TypeVar
 from emperor.base.utils import ConfigBase, Module
 from emperor.behaviours.utils.behaviours import (
-    DynamicBiasSelector,
-    DynamicDiagonalSelector,
-    DynamicMemorySelector,
+    DynamicBiasFactory,
+    DynamicDiagonalFactory,
+    DynamicMemoryFactory,
     DynamicParametersBehaviour,
 )
 from emperor.behaviours.utils.enums import (
@@ -85,21 +85,21 @@ class AdaptiveParameterBehaviour(Module):
         self.memory_model = self.__init_memory_model()
         self.bias_model = self.__init_bias_model()
 
-    def __init_generator_model(self) -> DynamicParametersBehaviour | None:
+    def __init_generator_model(self) -> Module | None:
         is_valid_flag = self.generator_depth != DynamicDepthOptions.DISABLED
         return self.__init_model(is_valid_flag, DynamicParametersBehaviour)
 
-    def __init_diagonal_model(self) -> DynamicDiagonalSelector | None:
+    def __init_diagonal_model(self) -> Module | None:
         is_valid_flag = self.diagonal_option != DynamicDiagonalOptions.DISABLED
-        return self.__init_model(is_valid_flag, DynamicDiagonalSelector)
+        return self.__build_model(is_valid_flag, DynamicDiagonalFactory)
 
-    def __init_memory_model(self) -> DynamicMemorySelector | None:
+    def __init_memory_model(self) -> Module | None:
         is_valid_flag = self.memory_option != LinearMemoryOptions.DISABLED
-        return self.__init_model(is_valid_flag, DynamicMemorySelector)
+        return self.__build_model(is_valid_flag, DynamicMemoryFactory)
 
-    def __init_bias_model(self) -> DynamicBiasSelector | None:
+    def __init_bias_model(self) -> Module | None:
         is_valid_flag = self.bias_option != DynamicBiasOptions.DISABLED
-        return self.__init_model(is_valid_flag, DynamicBiasSelector)
+        return self.__build_model(is_valid_flag, DynamicBiasFactory)
 
     def __init_model(
         self, is_valid_flag: bool, model_class: type[ModuleType]
@@ -113,6 +113,19 @@ class AdaptiveParameterBehaviour(Module):
             input_dim=self.input_dim, output_dim=self.output_dim
         )
         return model_class(self.cfg, overrides)
+
+    def __build_model(
+        self, is_valid_flag: bool, factory_class: type[Module]
+    ) -> Module | None:
+        from emperor.linears.utils.config import LinearLayerConfig
+
+        if not is_valid_flag:
+            return None
+
+        overrides = LinearLayerConfig(
+            input_dim=self.input_dim, output_dim=self.output_dim
+        )
+        return factory_class(self.cfg, overrides).build()
 
     def compute_adaptive_parameters(
         self,

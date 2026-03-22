@@ -4,7 +4,7 @@ import unittest
 
 from emperor.base.utils import Module
 from emperor.config import ModelConfig
-from emperor.behaviours.utils.behaviours import DynamicDiagonalSelector
+from emperor.behaviours.utils.behaviours import DynamicDiagonalFactory
 from emperor.linears.utils.presets import LinearPresets
 from emperor.behaviours.utils.enums import DynamicDiagonalOptions
 from emperor.behaviours.utils.handlers.diagonal import (
@@ -80,8 +80,8 @@ class TestDiagonalAndAntiDiagonalHandler(TestLinearsDiagonalBehaviour):
         self.assertIsInstance(output, torch.Tensor)
 
 
-class TestDynamicDiagonalSelector(TestLinearsDiagonalBehaviour):
-    def test_forward(self):
+class TestDynamicDiagonalFactory(TestLinearsDiagonalBehaviour):
+    def test_build(self):
         for option in DynamicDiagonalOptions:
             message = f"Test failed for diagonal option: {option}"
             with self.subTest(message):
@@ -90,9 +90,9 @@ class TestDynamicDiagonalSelector(TestLinearsDiagonalBehaviour):
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 if option == DynamicDiagonalOptions.DISABLED:
                     with self.assertRaises(ValueError):
-                        model = DynamicDiagonalSelector(cfg)
+                        DynamicDiagonalFactory(cfg).build()
                 else:
-                    model = DynamicDiagonalSelector(cfg)
-                    output = model(self.weight_params, input_tensor)
-                    self.assertIsInstance(model.model, DiagonalHandlerAbstract)
+                    handler = DynamicDiagonalFactory(cfg).build()
+                    output = handler(self.weight_params, input_tensor)
+                    self.assertIsInstance(handler, DiagonalHandlerAbstract)
                     self.assertIsInstance(output, torch.Tensor)

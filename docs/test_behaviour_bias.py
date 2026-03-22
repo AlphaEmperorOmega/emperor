@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from emperor.base.utils import Module
 from emperor.config import ModelConfig
-from emperor.behaviours.utils.behaviours import DynamicBiasSelector
+from emperor.behaviours.utils.behaviours import DynamicBiasFactory
 from emperor.linears.utils.presets import LinearPresets
 from emperor.behaviours.utils.enums import DynamicBiasOptions
 from emperor.behaviours.utils.handlers.bias import (
@@ -82,8 +82,8 @@ class TestBiasGeneratorHandler(TestLinearsBiasBehaviour):
         self.assertFalse(torch.all(output == 0))
 
 
-class TestDynamicBiasSelector(TestLinearsBiasBehaviour):
-    def test_forward(self):
+class TestDynamicBiasFactory(TestLinearsBiasBehaviour):
+    def test_build(self):
         for option in DynamicBiasOptions:
             message = f"Test failed for bias option: {option}"
             with self.subTest(message):
@@ -92,9 +92,9 @@ class TestDynamicBiasSelector(TestLinearsBiasBehaviour):
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 if option == DynamicBiasOptions.DISABLED:
                     with self.assertRaises(ValueError):
-                        model = DynamicBiasSelector(cfg)
+                        DynamicBiasFactory(cfg).build()
                 else:
-                    model = DynamicBiasSelector(cfg)
-                    output = model(self.bias_params, input_tensor)
-                    self.assertIsInstance(model.model, BiasHandlerAbstract)
+                    handler = DynamicBiasFactory(cfg).build()
+                    output = handler(self.bias_params, input_tensor)
+                    self.assertIsInstance(handler, BiasHandlerAbstract)
                     self.assertIsInstance(output, torch.Tensor)
