@@ -13,6 +13,7 @@ class DynamicBiasOptions(Enum):
     SCALE_AND_OFFSET = 1
     ELEMENT_WISE_OFFSET = 2
     DYNAMIC_PARAMETERS = 3
+    GATED = 4
 
 
 class DynamicWeightOptions(Enum):

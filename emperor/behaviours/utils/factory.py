@@ -10,6 +10,7 @@ from emperor.behaviours.utils.handlers.bias import (
     BiasGeneratorHandler,
     BiasHandlerAbstract,
     ElementwiseBiasHandler,
+    GatedBiasHandler,
 )
 from emperor.behaviours.utils.handlers.diagonal import (
     AntiDiagonalHandler,
@@ -117,6 +118,8 @@ class DynamicBiasFactory(Module):
                 return ElementwiseBiasHandler(self.cfg)
             case DynamicBiasOptions.DYNAMIC_PARAMETERS:
                 return BiasGeneratorHandler(self.cfg)
+            case DynamicBiasOptions.GATED:
+                return GatedBiasHandler(self.cfg)
             case DynamicBiasOptions.DISABLED:
                 raise ValueError(
                     "If the `bias_option` is set to `DISABLED`, this class should not be initialized"
