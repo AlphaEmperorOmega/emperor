@@ -7,6 +7,7 @@ from emperor.behaviours.utils.factory import (
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
     DynamicWeightFactory,
+    RowMaskFactory,
 )
 from emperor.behaviours.options import (
     DynamicBiasOptions,
@@ -19,7 +20,6 @@ from emperor.behaviours.options import (
     RowMaskOptions,
     WeightNormalizationOptions,
 )
-from emperor.behaviours.utils.handlers.mask import PerRowMaskHandler, RowMaskHandler
 from emperor.behaviours.utils._validator import AdaptiveParameterBehaviourValidator
 
 @dataclass
@@ -125,13 +125,8 @@ class AdaptiveParameterBehaviour(Module):
         return self.__build_model(is_valid_flag, DynamicBiasFactory)
 
     def __init_row_mask_model(self) -> Module | None:
-        match self.row_mask_option:
-            case RowMaskOptions.GLOBAL_SCORE:
-                return RowMaskHandler(self.cfg)
-            case RowMaskOptions.PER_ROW_SCORE:
-                return PerRowMaskHandler(self.cfg)
-            case RowMaskOptions.DISABLED:
-                return None
+        is_valid_flag = self.row_mask_option != RowMaskOptions.DISABLED
+        return self.__build_model(is_valid_flag, RowMaskFactory)
 
     def __build_model(
         self, is_valid_flag: bool, factory_class: type[Module]
