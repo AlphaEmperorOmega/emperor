@@ -19,7 +19,7 @@ from emperor.behaviours.options import (
     RowMaskOptions,
     WeightNormalizationOptions,
 )
-from emperor.behaviours.utils.handlers.row_mask import RowMaskHandler
+from emperor.behaviours.utils.handlers.mask import RowMaskHandler
 from emperor.behaviours.utils._validator import AdaptiveParameterBehaviourValidator
 
 @dataclass
