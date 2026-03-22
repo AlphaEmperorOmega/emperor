@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from emperor.base.utils import Module
-from emperor.behaviours.utils.enums import WeightNormalizationOptions
+from emperor.behaviours.options import WeightNormalizationOptions
 from emperor.behaviours.utils.handlers.parameter import DepthMappingLayerStack
 from emperor.base.layer import (
     LayerStackConfig,

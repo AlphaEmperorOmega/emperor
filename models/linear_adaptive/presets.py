@@ -7,7 +7,7 @@ from models.linear_adaptive.config import ExperimentConfig
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

@@ -5,7 +5,7 @@ from dataclasses import asdict
 from emperor.config import ModelConfig
 from emperor.linears.utils.presets import LinearPresets
 from emperor.behaviours.utils.behaviours import DynamicMemoryFactory
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,

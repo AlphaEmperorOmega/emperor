@@ -1,5 +1,5 @@
 from emperor.base.utils import Module
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     DynamicBiasOptions,
     DynamicDiagonalOptions,
     DynamicWeightOptions,

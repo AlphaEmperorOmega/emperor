@@ -2,9 +2,9 @@ from emperor.base.layer import LayerStackConfig
 from emperor.linears.options import LinearLayerOptions
 from emperor.linears.utils.config import LinearLayerConfig
 from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
-from emperor.behaviours.utils.behaviours import DynamicDiagonalOptions
+from emperor.behaviours.options import DynamicDiagonalOptions
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicWeightOptions,

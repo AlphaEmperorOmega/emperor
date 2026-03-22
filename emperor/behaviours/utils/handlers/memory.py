@@ -3,7 +3,7 @@ from torch import Tensor
 from torch.nn import Sequential
 from emperor.base.utils import Module
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )

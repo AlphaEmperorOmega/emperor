@@ -5,7 +5,7 @@ from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.linears.utils.presets import LinearPresets
 from emperor.linears.utils.stack import AdaptiveLinearLayerStack, LinearLayerStack
-from emperor.behaviours.utils.enums import (
+from emperor.behaviours.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

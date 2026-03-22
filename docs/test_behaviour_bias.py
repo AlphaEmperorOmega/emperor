@@ -6,7 +6,7 @@ from emperor.base.utils import Module
 from emperor.config import ModelConfig
 from emperor.behaviours.utils.behaviours import DynamicBiasFactory
 from emperor.linears.utils.presets import LinearPresets
-from emperor.behaviours.utils.enums import DynamicBiasOptions
+from emperor.behaviours.options import DynamicBiasOptions
 from emperor.behaviours.utils.handlers.bias import (
     AffineBiasTransformHandler,
     BiasGeneratorHandler,
