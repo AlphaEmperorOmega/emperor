@@ -19,6 +19,7 @@ class DynamicWeightOptions(Enum):
     DISABLED = 0
     DUAL_MODEL = 1
     SINGLE_MODEL = 2
+    LOW_RANK = 3
 
 
 class WeightNormalizationOptions(Enum):

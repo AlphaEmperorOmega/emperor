@@ -103,6 +103,41 @@ class SingleModelWeightHandler(WeightHandlerAbstract):
         return weight_params + dynamic_params
 
 
+class LowRankWeightHandler(WeightHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.model_a = self.__init_model_a()
+        self.model_b = self.__init_model_b()
+
+    def __init_model_a(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.input_dim,
+        )
+        return self._init_generator_model(overrides)
+
+    def __init_model_b(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
+        return self._init_generator_model(overrides)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        a = self._normalize_vectors(self.model_a(logits))
+        b = self._normalize_vectors(self.model_b(logits))
+        update = torch.bmm(a.transpose(1, 2), b)
+        return weight_params + update
+
+
 class DualModelWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
