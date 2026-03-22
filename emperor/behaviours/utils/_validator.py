@@ -17,6 +17,9 @@ class AdaptiveParameterBehaviourValidator:
         "weight_option": {
             "type": "DynamicWeightOptions",
         },
+        "weight_normalization": {
+            "type": "WeightNormalizationOptions",
+        },
         "generator_depth": {
             "type": "DynamicDepthOptions",
         },
@@ -51,6 +54,7 @@ class AdaptiveParameterBehaviourValidator:
             LinearMemoryOptions,
             LinearMemoryPositionOptions,
             LinearMemorySizeOptions,
+            WeightNormalizationOptions,
         )
 
         self._TYPES = {
@@ -61,6 +65,7 @@ class AdaptiveParameterBehaviourValidator:
             "LinearMemoryOptions": LinearMemoryOptions,
             "LinearMemorySizeOptions": LinearMemorySizeOptions,
             "LinearMemoryPositionOptions": LinearMemoryPositionOptions,
+            "WeightNormalizationOptions": WeightNormalizationOptions,
         }
 
     def validate(self) -> None:

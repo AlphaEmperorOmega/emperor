@@ -21,6 +21,15 @@ class DynamicWeightOptions(Enum):
     SINGLE_MODEL = 2
 
 
+class WeightNormalizationOptions(Enum):
+    DISABLED = 0
+    CLAMP = 1
+    L2_SCALE = 2
+    SOFT_CLAMP = 3
+    RMS = 4
+    SIGMOID_SCALE = 5
+
+
 class DynamicDepthOptions(Enum):
     DISABLED = 0
     DEPTH_OF_ONE = 1
