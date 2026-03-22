@@ -6,8 +6,8 @@ from emperor.behaviours.utils.behaviours import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
-    DynamicParametersBehaviour,
 )
+from emperor.behaviours.utils.handlers.weight import OuterProductWeightHandler
 from emperor.behaviours.utils.enums import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -87,7 +87,7 @@ class AdaptiveParameterBehaviour(Module):
 
     def __init_generator_model(self) -> Module | None:
         is_valid_flag = self.generator_depth != DynamicDepthOptions.DISABLED
-        return self.__init_model(is_valid_flag, DynamicParametersBehaviour)
+        return self.__init_model(is_valid_flag, OuterProductWeightHandler)
 
     def __init_diagonal_model(self) -> Module | None:
         is_valid_flag = self.diagonal_option != DynamicDiagonalOptions.DISABLED

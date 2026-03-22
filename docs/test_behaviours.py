@@ -14,7 +14,7 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.behaviours.utils.behaviours import DynamicParametersBehaviour
+from emperor.behaviours.utils.handlers.weight import OuterProductWeightHandler
 from emperor.behaviours.utils.handlers.diagonal import DiagonalHandlerAbstract
 from emperor.behaviours.utils.handlers.bias import BiasHandlerAbstract
 from emperor.behaviours.utils.handlers.memory import MemoryHandlerAbstract
@@ -73,7 +73,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
         generator_cases = [
             (
                 "generator_model",
-                DynamicParametersBehaviour,
+                OuterProductWeightHandler,
                 {"generator_depth": depth},
             )
             for depth in DynamicDepthOptions

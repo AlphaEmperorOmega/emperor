@@ -3,7 +3,7 @@ import unittest
 import torch.nn as nn
 
 from emperor.base.utils import Module
-from emperor.behaviours.utils.behaviours import DynamicParametersBehaviour
+from emperor.behaviours.utils.handlers.weight import OuterProductWeightHandler
 from emperor.linears.utils.presets import LinearPresets
 from emperor.behaviours.utils.enums import DynamicDepthOptions
 from emperor.behaviours.utils.handlers.parameter import (
@@ -99,7 +99,7 @@ class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
         self.assertEqual(output.shape, expected_shape)
 
 
-class TestDynamicParametersBehaviour(TestDepthMappingBehaviour):
+class TestOuterProductWeightHandler(TestDepthMappingBehaviour):
     def test_initial_layer_computation(self):
         input_dims = [4, 8]
         for input_dim in input_dims:
@@ -120,7 +120,7 @@ class TestDynamicParametersBehaviour(TestDepthMappingBehaviour):
                         generator_depth=generators_depth,
                     )
                     cfg = cfg.override_config
-                    model = DynamicParametersBehaviour(cfg)
+                    model = OuterProductWeightHandler(cfg)
                     output = model(self.weight_params, input_tensor)
                     expected_shape = (batch_size, input_dim, output_dim)
                     self.assertEqual(output.shape, expected_shape)
