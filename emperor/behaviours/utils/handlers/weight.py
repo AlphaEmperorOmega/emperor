@@ -12,6 +12,8 @@ from emperor.base.layer import (
 
 from typing import TYPE_CHECKING
 
+from emperor.embedding.relative.options import dynamic_positional_bias
+
 if TYPE_CHECKING:
     from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
 
@@ -103,41 +105,6 @@ class SingleModelWeightHandler(WeightHandlerAbstract):
         return weight_params + dynamic_params
 
 
-class LowRankWeightHandler(WeightHandlerAbstract):
-    def __init__(
-        self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
-    ):
-        super().__init__(cfg, overrides)
-        self.model_a = self.__init_model_a()
-        self.model_b = self.__init_model_b()
-
-    def __init_model_a(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
-            input_dim=self.input_dim,
-            output_dim=self.input_dim,
-        )
-        return self._init_generator_model(overrides)
-
-    def __init_model_b(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-        )
-        return self._init_generator_model(overrides)
-
-    def forward(
-        self,
-        weight_params: Tensor,
-        logits: Tensor,
-    ) -> Tensor:
-        a = self._normalize_vectors(self.model_a(logits))
-        b = self._normalize_vectors(self.model_b(logits))
-        update = torch.bmm(a.transpose(1, 2), b)
-        return weight_params + update
-
-
 class DualModelWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
@@ -172,3 +139,104 @@ class DualModelWeightHandler(WeightHandlerAbstract):
         outer_product = self._compute_outer_product(input_vectors, output_vectors)
         dynamic_params = self._compute_dynamic_weights(outer_product)
         return weight_params + dynamic_params
+
+
+class LowRankWeightHandler(WeightHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.input_model = self.__init_input_model()
+        self.output_model = self.__init_output_model()
+
+    def __init_input_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.input_dim,
+        )
+        return self._init_generator_model(overrides)
+
+    def __init_output_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
+        return self._init_generator_model(overrides)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        input_lowrank_matrix = self.input_model(logits)
+        output_lowrank_matrix = self.output_model(logits)
+        input_matrix = self._normalize_vectors(input_lowrank_matrix)
+        input_matrix_transposed = input_matrix.transpose(1, 2)
+        output_matrix = self._normalize_vectors(output_lowrank_matrix)
+        dynamic_params = torch.bmm(input_matrix_transposed, output_matrix)
+        return weight_params + dynamic_params
+
+
+class WeightMaskHandler(WeightHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.input_model = self.__init_input_model()
+        self.output_model = self.__init_output_model()
+
+    def __init_input_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.input_dim,
+        )
+        return self._init_generator_model(overrides)
+
+    def __init_output_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
+        return self._init_generator_model(overrides)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        input_vectors = self.input_model(logits)
+        output_vectors = self.output_model(logits)
+        outer_product = self._compute_outer_product(input_vectors, output_vectors)
+        mask = self._compute_dynamic_weights(outer_product)
+        return weight_params * mask
+
+
+class HypernetworkWeightHandler(WeightHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterBehaviourConfig",
+        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.model = self.__init_model()
+
+    def __init_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.input_dim * self.output_dim,
+        )
+        return self._init_generator_model(overrides)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        flat = self._normalize_vectors(self.model(logits))
+        flat = self._compute_dynamic_weights(flat)
+        update = flat.view(-1, self.input_dim, self.output_dim)
+        return weight_params + update

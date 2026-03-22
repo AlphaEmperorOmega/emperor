@@ -20,6 +20,8 @@ class DynamicWeightOptions(Enum):
     DUAL_MODEL = 1
     SINGLE_MODEL = 2
     LOW_RANK = 3
+    WEIGHT_MASK = 4
+    HYPERNETWORK = 5
 
 
 class WeightNormalizationOptions(Enum):
