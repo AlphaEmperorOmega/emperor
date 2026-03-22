@@ -14,6 +14,9 @@ class AdaptiveParameterBehaviourValidator:
             "type": int,
             "validate": lambda v: v > 0 or "must be > 0",
         },
+        "weight_option": {
+            "type": "DynamicWeightOptions",
+        },
         "generator_depth": {
             "type": "DynamicDepthOptions",
         },
@@ -44,6 +47,7 @@ class AdaptiveParameterBehaviourValidator:
             DynamicBiasOptions,
             DynamicDepthOptions,
             DynamicDiagonalOptions,
+            DynamicWeightOptions,
             LinearMemoryOptions,
             LinearMemoryPositionOptions,
             LinearMemorySizeOptions,
@@ -53,6 +57,7 @@ class AdaptiveParameterBehaviourValidator:
             "DynamicBiasOptions": DynamicBiasOptions,
             "DynamicDepthOptions": DynamicDepthOptions,
             "DynamicDiagonalOptions": DynamicDiagonalOptions,
+            "DynamicWeightOptions": DynamicWeightOptions,
             "LinearMemoryOptions": LinearMemoryOptions,
             "LinearMemorySizeOptions": LinearMemorySizeOptions,
             "LinearMemoryPositionOptions": LinearMemoryPositionOptions,
