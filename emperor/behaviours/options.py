@@ -55,6 +55,11 @@ class LinearMemoryOptions(Enum):
     WEIGHTED = 2
 
 
+class RowMaskOptions(Enum):
+    DISABLED = 0
+    ENABLED = 1
+
+
 class LinearMemoryPositionOptions(Enum):
     BEFORE_AFFINE = 1
     AFTER_AFFINE = 2
