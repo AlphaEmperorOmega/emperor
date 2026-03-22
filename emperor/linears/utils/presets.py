@@ -11,6 +11,7 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+    WeightNormalizationOptions,
 )
 
 
@@ -52,6 +53,7 @@ class LinearPresets:
         bias_flag: bool = True,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
         weight_option: DynamicWeightOptions = DynamicWeightOptions.DUAL_MODEL,
+        weight_normalization: WeightNormalizationOptions = WeightNormalizationOptions.CLAMP,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
@@ -79,6 +81,7 @@ class LinearPresets:
                 input_dim=input_dim,
                 output_dim=output_dim,
                 weight_option=weight_option,
+                weight_normalization=weight_normalization,
                 generator_depth=generator_depth,
                 diagonal_option=diagonal_option,
                 bias_option=bias_option,
@@ -178,6 +181,7 @@ class LinearPresets:
         bias_flag: bool = True,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
         weight_option: DynamicWeightOptions = DynamicWeightOptions.DUAL_MODEL,
+        weight_normalization: WeightNormalizationOptions = WeightNormalizationOptions.CLAMP,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
@@ -212,6 +216,7 @@ class LinearPresets:
                 output_dim=output_dim,
                 bias_flag=bias_flag,
                 weight_option=weight_option,
+                weight_normalization=weight_normalization,
                 generator_depth=generator_depth,
                 diagonal_option=diagonal_option,
                 bias_option=bias_option,

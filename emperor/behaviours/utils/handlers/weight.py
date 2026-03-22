@@ -1,8 +1,10 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
 from emperor.base.utils import Module
+from emperor.behaviours.utils.enums import WeightNormalizationOptions
 from emperor.behaviours.utils.handlers.parameter import DepthMappingLayerStack
 from emperor.base.layer import (
     LayerStackConfig,
@@ -26,6 +28,9 @@ class WeightHandlerAbstract(Module):
         )
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
+        self.normalization_option = self.cfg.weight_normalization
+        self.scale = nn.Parameter(torch.tensor(1.0))
+        self.clamp_limit = nn.Parameter(torch.tensor(1.0))
 
     def _init_generator_model(
         self, overrides: "LayerStackConfig"
@@ -46,21 +51,29 @@ class WeightHandlerAbstract(Module):
         self,
         input_vectors: Tensor,
         output_vectors: Tensor,
-        normalize_flag: bool = True,
     ) -> Tensor:
         input_vectors = self._normalize_vectors(input_vectors)
         output_vectors = self._normalize_vectors(output_vectors)
-        outer_product = torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
-        return self._normalize_vectors(outer_product, normalize_flag)
+        return torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
 
     def _normalize_vectors(
         self,
-        outer_product: Tensor,
-        normalize_flag: bool = False,
+        vectors: Tensor,
     ) -> Tensor:
-        if not normalize_flag:
-            return outer_product
-        return F.tanh(outer_product)
+        match self.normalization_option:
+            case WeightNormalizationOptions.CLAMP:
+                return torch.clamp(vectors, -self.clamp_limit, self.clamp_limit)
+            case WeightNormalizationOptions.L2_SCALE:
+                return F.normalize(vectors, dim=-1) * self.scale
+            case WeightNormalizationOptions.SOFT_CLAMP:
+                return self.clamp_limit * torch.tanh(vectors / self.clamp_limit)
+            case WeightNormalizationOptions.RMS:
+                rms = vectors.pow(2).mean(dim=-1, keepdim=True).sqrt()
+                return vectors / (rms + 1e-8) * self.scale
+            case WeightNormalizationOptions.SIGMOID_SCALE:
+                return (torch.sigmoid(vectors) * 2 - 1) * self.scale
+            case WeightNormalizationOptions.DISABLED:
+                return vectors
 
 
 class SingleModelWeightHandler(WeightHandlerAbstract):

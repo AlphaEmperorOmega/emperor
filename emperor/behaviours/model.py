@@ -16,6 +16,7 @@ from emperor.behaviours.utils.enums import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+    WeightNormalizationOptions,
 )
 from emperor.behaviours.utils._validator import AdaptiveParameterBehaviourValidator
 
@@ -33,6 +34,12 @@ class AdaptiveParameterBehaviourConfig(ConfigBase):
         default=None,
         metadata={
             "help": "Selects the weight handler type for input-dependent weight adjustments."
+        },
+    )
+    weight_normalization: WeightNormalizationOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Normalization applied to vectors before the outer product computation."
         },
     )
     generator_depth: DynamicDepthOptions | None = field(
@@ -78,6 +85,7 @@ class AdaptiveParameterBehaviour(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.weight_option = self.cfg.weight_option
+        self.weight_normalization = self.cfg.weight_normalization
         self.generator_depth = self.cfg.generator_depth
         self.diagonal_option = self.cfg.diagonal_option
         self.memory_option = self.cfg.memory_option
