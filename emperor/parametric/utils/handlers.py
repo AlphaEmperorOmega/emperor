@@ -2,18 +2,18 @@ from emperor.base.utils import Module
 from emperor.sampler.model import SamplerModel
 from emperor.sampler.utils.routers import RouterConfig, RouterModel
 from emperor.parametric.utils.routers import VectorRouterModel
-from emperor.parametric.utils._validator import _AdaptiveParameterHandlerValidator
+from emperor.parametric.utils._validator import _ParametricHandlerValidator
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig
+    from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 
 
 class ParameterHanlderBase(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterLayerConfig",
+        cfg: "ParametricLayerConfig",
     ):
         super().__init__()
         self.cfg = cfg
@@ -25,12 +25,12 @@ class ParameterHanlderBase(Module):
         self.router_config = self.cfg.router_config
         self.router_overrides = RouterConfig(input_dim=self.input_dim)
         self.sampler_config = self.cfg.sampler_config
-        self.validator = _AdaptiveParameterHandlerValidator(self)
+        self.validator = _ParametricHandlerValidator(self)
 
     def build_sampler_models(
         self,
     ) -> tuple[RouterModel | None, RouterModel | None, SamplerModel | None]:
-        from emperor.parametric.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.config import AdaptiveRouterOptions
 
         shared_option = AdaptiveRouterOptions.SHARED_ROUTER
         if self.init_sampler_model_option == shared_option:
@@ -58,7 +58,7 @@ class ParameterHanlderBase(Module):
 class VectorParameterHandler(ParameterHanlderBase):
     def __init__(
         self,
-        cfg: "AdaptiveParameterLayerConfig",
+        cfg: "ParametricLayerConfig",
     ):
         super().__init__(cfg)
 
@@ -78,7 +78,7 @@ class VectorParameterHandler(ParameterHanlderBase):
 class MatrixParameterHandler(ParameterHanlderBase):
     def __init__(
         self,
-        cfg: "AdaptiveParameterLayerConfig",
+        cfg: "ParametricLayerConfig",
     ):
         super().__init__(cfg)
 
@@ -101,7 +101,7 @@ class MatrixParameterHandler(ParameterHanlderBase):
 class GeneratorParameterHandler(ParameterHanlderBase):
     def __init__(
         self,
-        cfg: "AdaptiveParameterLayerConfig",
+        cfg: "ParametricLayerConfig",
     ):
         super().__init__(cfg)
 
