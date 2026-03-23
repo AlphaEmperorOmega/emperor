@@ -7,17 +7,17 @@ from emperor.base.layer import LayerStackConfig
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 
 
 class RowMaskHandler(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.input_dim = self.cfg.input_dim
@@ -63,11 +63,11 @@ class RowMaskHandler(Module):
 class PerRowMaskHandler(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.input_dim = self.cfg.input_dim
@@ -99,11 +99,11 @@ class PerRowMaskHandler(Module):
 class TopSliceMaskHandler(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.input_dim = self.cfg.input_dim

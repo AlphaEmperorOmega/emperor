@@ -13,7 +13,7 @@ from emperor.augmentations.adaptive_parameters.options import (
 )
 
 @dataclass
-class AdaptiveParameterBehaviourConfig(ConfigBase):
+class AdaptiveParameterAugmentationConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Input dimension of the linear layer"},

@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviour
+    from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterAugmentation
 
 
-class AdaptiveParameterBehaviourValidator:
+class AdaptiveParameterAugmentationValidator:
     _FIELDS = {
         "input_dim": {
             "type": int,
@@ -43,7 +43,7 @@ class AdaptiveParameterBehaviourValidator:
         },
     }
 
-    def __init__(self, model: "AdaptiveParameterBehaviour"):
+    def __init__(self, model: "AdaptiveParameterAugmentation"):
         self.model = model
         self._resolve_enum_types()
         self.validate()

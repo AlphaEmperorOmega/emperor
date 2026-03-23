@@ -5,27 +5,31 @@ import torch.nn.functional as F
 from torch import Tensor
 from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.options import WeightNormalizationOptions
-from emperor.augmentations.adaptive_parameters.utils.handlers.parameter import DepthMappingLayerStack
+from emperor.augmentations.adaptive_parameters.utils.handlers.parameter import (
+    DepthMappingLayerStack,
+)
 from emperor.base.layer import (
     LayerStackConfig,
 )
+from emperor.embedding.relative.options import dynamic_positional_bias
 
 from typing import TYPE_CHECKING
 
-from emperor.embedding.relative.options import dynamic_positional_bias
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.config import (
+        AdaptiveParameterAugmentationConfig,
+    )
 
 
 class WeightHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.input_dim = self.cfg.input_dim
@@ -81,8 +85,8 @@ class WeightHandlerAbstract(Module):
 class SingleModelWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self.__init_model()
@@ -108,8 +112,8 @@ class SingleModelWeightHandler(WeightHandlerAbstract):
 class DualModelWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.input_model = self.__init_input_model()
@@ -144,8 +148,8 @@ class DualModelWeightHandler(WeightHandlerAbstract):
 class LowRankWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.input_model = self.__init_input_model()
@@ -182,8 +186,8 @@ class LowRankWeightHandler(WeightHandlerAbstract):
 class WeightMaskHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.input_model = self.__init_input_model()
@@ -218,8 +222,8 @@ class WeightMaskHandler(WeightHandlerAbstract):
 class HypernetworkWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self.__init_model()
