@@ -10,9 +10,12 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
+    DynamicWeightOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+    RowMaskOptions,
+    WeightNormalizationOptions,
 )
 from models.trainer_config import *
 
@@ -51,6 +54,9 @@ MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
 MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
     LinearMemoryPositionOptions.BEFORE_AFFINE
 )
+WEIGHT_OPTION: DynamicWeightOptions = DynamicWeightOptions.DISABLED
+WEIGHT_NORMALIZATION: WeightNormalizationOptions = WeightNormalizationOptions.DISABLED
+ROW_MASK_OPTION: RowMaskOptions = RowMaskOptions.DISABLED
 
 # Adaptive generator stack
 ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2

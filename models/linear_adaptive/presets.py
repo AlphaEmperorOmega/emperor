@@ -11,9 +11,12 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
+    DynamicWeightOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+    RowMaskOptions,
+    WeightNormalizationOptions,
 )
 from emperor.experiments.base import (
     ExperimentBase,
@@ -36,6 +39,9 @@ class ExperimentOptions(BaseOptions):
     BIAS = 4
     MEMORY = 5
     COMBINED = 6
+    WEIGHT = 7
+    WEIGHT_NORMALIZATION = 8
+    ROW_MASK = 9
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -71,6 +77,18 @@ class ExperimentPresets(ExperimentPresetsBase):
                 )
             case ExperimentOptions.COMBINED:
                 return self.__combined_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
+            case ExperimentOptions.WEIGHT:
+                return self.__weight_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
+            case ExperimentOptions.WEIGHT_NORMALIZATION:
+                return self.__weight_normalization_search_space_configs(
+                    dataset, search_mode, log_folder
+                )
+            case ExperimentOptions.ROW_MASK:
+                return self.__row_mask_search_space_configs(
                     dataset, search_mode, log_folder
                 )
             case _:
@@ -142,6 +160,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                 DynamicBiasOptions.SCALE_AND_OFFSET,
                 DynamicBiasOptions.ELEMENT_WISE_OFFSET,
                 DynamicBiasOptions.DYNAMIC_PARAMETERS,
+                DynamicBiasOptions.GATED,
             ],
         }
 
@@ -179,6 +198,79 @@ class ExperimentPresets(ExperimentPresetsBase):
 
         return create_search_space(self._preset, base_config, search_space, search_mode)
 
+    def __weight_search_space_configs(
+        self,
+        dataset: type = Mnist,
+        search_mode: SearchMode = None,
+        log_folder: str | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
+
+        search_space = {
+            **self._extract_search_space_from_config(search_mode),
+            "weight_option": [
+                DynamicWeightOptions.DISABLED,
+                DynamicWeightOptions.SINGLE_MODEL,
+                DynamicWeightOptions.DUAL_MODEL,
+                DynamicWeightOptions.LOW_RANK,
+                DynamicWeightOptions.WEIGHT_MASK,
+                DynamicWeightOptions.HYPERNETWORK,
+            ],
+        }
+
+        return create_search_space(self._preset, base_config, search_space, search_mode)
+
+    def __weight_normalization_search_space_configs(
+        self,
+        dataset: type = Mnist,
+        search_mode: SearchMode = None,
+        log_folder: str | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
+
+        search_space = {
+            **self._extract_search_space_from_config(search_mode),
+            "weight_normalization": [
+                WeightNormalizationOptions.DISABLED,
+                WeightNormalizationOptions.CLAMP,
+                WeightNormalizationOptions.L2_SCALE,
+                WeightNormalizationOptions.SOFT_CLAMP,
+                WeightNormalizationOptions.RMS,
+                WeightNormalizationOptions.SIGMOID_SCALE,
+            ],
+        }
+
+        return create_search_space(self._preset, base_config, search_space, search_mode)
+
+    def __row_mask_search_space_configs(
+        self,
+        dataset: type = Mnist,
+        search_mode: SearchMode = None,
+        log_folder: str | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._best_params(dataset, log_folder),
+        }
+
+        search_space = {
+            **self._extract_search_space_from_config(search_mode),
+            "row_mask_option": [
+                RowMaskOptions.DISABLED,
+                RowMaskOptions.GLOBAL_SCORE,
+                RowMaskOptions.PER_ROW_SCORE,
+                RowMaskOptions.TOP_SLICE,
+            ],
+        }
+
+        return create_search_space(self._preset, base_config, search_space, search_mode)
+
     def __combined_search_space_configs(
         self,
         dataset: type = Mnist,
@@ -209,6 +301,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                 DynamicBiasOptions.SCALE_AND_OFFSET,
                 DynamicBiasOptions.ELEMENT_WISE_OFFSET,
                 DynamicBiasOptions.DYNAMIC_PARAMETERS,
+                DynamicBiasOptions.GATED,
             ],
             "memory_option": [
                 LinearMemoryOptions.DISABLED,
@@ -224,6 +317,28 @@ class ExperimentPresets(ExperimentPresetsBase):
             "memory_position_option": [
                 LinearMemoryPositionOptions.BEFORE_AFFINE,
                 LinearMemoryPositionOptions.AFTER_AFFINE,
+            ],
+            "weight_option": [
+                DynamicWeightOptions.DISABLED,
+                DynamicWeightOptions.SINGLE_MODEL,
+                DynamicWeightOptions.DUAL_MODEL,
+                DynamicWeightOptions.LOW_RANK,
+                DynamicWeightOptions.WEIGHT_MASK,
+                DynamicWeightOptions.HYPERNETWORK,
+            ],
+            "weight_normalization": [
+                WeightNormalizationOptions.DISABLED,
+                WeightNormalizationOptions.CLAMP,
+                WeightNormalizationOptions.L2_SCALE,
+                WeightNormalizationOptions.SOFT_CLAMP,
+                WeightNormalizationOptions.RMS,
+                WeightNormalizationOptions.SIGMOID_SCALE,
+            ],
+            "row_mask_option": [
+                RowMaskOptions.DISABLED,
+                RowMaskOptions.GLOBAL_SCORE,
+                RowMaskOptions.PER_ROW_SCORE,
+                RowMaskOptions.TOP_SLICE,
             ],
         }
 
@@ -244,6 +359,9 @@ class ExperimentPresets(ExperimentPresetsBase):
         memory_option: LinearMemoryOptions = config.MEMORY_OPTION,
         memory_size_option: LinearMemorySizeOptions = config.MEMORY_SIZE_OPTION,
         memory_position_option: LinearMemoryPositionOptions = config.MEMORY_POSITION_OPTION,
+        weight_option: DynamicWeightOptions = config.WEIGHT_OPTION,
+        weight_normalization: WeightNormalizationOptions = config.WEIGHT_NORMALIZATION,
+        row_mask_option: RowMaskOptions = config.ROW_MASK_OPTION,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
         stack_residual_flag: bool = config.STACK_RESIDUAL_FLAG,
@@ -291,6 +409,9 @@ class ExperimentPresets(ExperimentPresetsBase):
                             memory_option=memory_option,
                             memory_size_option=memory_size_option,
                             memory_position_option=memory_position_option,
+                            weight_option=weight_option,
+                            weight_normalization=weight_normalization,
+                            row_mask_option=row_mask_option,
                             override_config=LayerStackConfig(
                                 model_type=LinearLayerOptions.BASE,
                                 input_dim=input_dim,
