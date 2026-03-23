@@ -17,7 +17,7 @@ from emperor.augmentations.adaptive_parameters.utils.handlers.memory import (
 )
 
 
-class TestLinearsMemoryBehaviour(unittest.TestCase):
+class TestLinearsAugmentationMemory(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -42,7 +42,7 @@ class TestLinearsMemoryBehaviour(unittest.TestCase):
         self.output_dim = self.cfg.output_dim
 
 
-class TestMemoryFusionHandler(TestLinearsMemoryBehaviour):
+class TestMemoryFusionHandler(TestLinearsAugmentationMemory):
     def test_forward(self):
         for position_option in LinearMemoryPositionOptions:
             for size_option in LinearMemorySizeOptions:
@@ -68,7 +68,7 @@ class TestMemoryFusionHandler(TestLinearsMemoryBehaviour):
                         self.assertIsInstance(output, torch.Tensor)
 
 
-class TestWeightedMemoryHandler(TestLinearsMemoryBehaviour):
+class TestWeightedMemoryHandler(TestLinearsAugmentationMemory):
     def test_forward(self):
         for size_option in LinearMemorySizeOptions:
             for position_option in LinearMemoryPositionOptions:
@@ -95,7 +95,7 @@ class TestWeightedMemoryHandler(TestLinearsMemoryBehaviour):
                         self.assertIsInstance(output, torch.Tensor)
 
 
-class TestDynamicMemoryFactory(TestLinearsMemoryBehaviour):
+class TestDynamicMemoryFactory(TestLinearsAugmentationMemory):
     def test_build(self):
         for memory_option in LinearMemoryOptions:
             for position_option in LinearMemoryPositionOptions:

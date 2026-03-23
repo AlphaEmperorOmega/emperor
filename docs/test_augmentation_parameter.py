@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class TestDepthMappingBehaviour(unittest.TestCase):
+class TestDepthMappingAugmentation(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -48,7 +48,7 @@ class TestDepthMappingBehaviour(unittest.TestCase):
         self.weight_params = Module()._init_parameter_bank(weight_shape, nn.init.zeros_)
 
 
-class TestDepthMappingLayer(TestDepthMappingBehaviour):
+class TestDepthMappingLayer(TestDepthMappingAugmentation):
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(
             self.batch_size, self.generator_depth, self.input_dim
@@ -86,7 +86,7 @@ class TestDepthMappingLayer(TestDepthMappingBehaviour):
             model = DepthMappingLayer(cfg)
 
 
-class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
+class TestDepthMappingLayerStack(TestDepthMappingAugmentation):
     def test_initial_layer_computation(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset(
@@ -99,7 +99,7 @@ class TestDepthMappingLayerStack(TestDepthMappingBehaviour):
         self.assertEqual(output.shape, expected_shape)
 
 
-class TestDualModelWeightHandler(TestDepthMappingBehaviour):
+class TestDualModelWeightHandler(TestDepthMappingAugmentation):
     def test_initial_layer_computation(self):
         input_dims = [4, 8]
         for input_dim in input_dims:
