@@ -7,7 +7,7 @@ from emperor.sampler.model import SamplerModel
 from emperor.sampler.utils.routers import RouterModel
 from emperor.sampler.utils.presets import SamplerPresets
 from emperor.experts.utils.layers import MixtureOfExperts
-from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.presets import ParametricLayerPresets
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.parametric.utils.mixtures.types.generator import (
@@ -20,7 +20,7 @@ from emperor.parametric.utils.mixtures.types.generator import (
 class TestGeneratorMixture(unittest.TestCase):
     def setUp(self):
         self.cfg = (
-            AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset()
+            ParametricLayerPresets.adaptive_generator_mixture_generator_preset()
         )
 
     def tearDown(self):
@@ -60,7 +60,7 @@ class TestGeneratorMixture(unittest.TestCase):
             for init_sampler_model_option in init_sampler_model_options:
                 message = f"Testing top_k value: {top_k}, init_sampler_model_option: {init_sampler_model_option}"
                 with self.subTest(msg=message):
-                    c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+                    c = ParametricLayerPresets.adaptive_generator_mixture_generator_preset(
                         top_k=top_k,
                         experts_init_sampler_option=init_sampler_model_option,
                         experts_weighted_parameters_flag=True,
@@ -109,7 +109,7 @@ class TestGeneratorMixture(unittest.TestCase):
                 with self.subTest(msg=message):
                     if top_k == num_experts:
                         weighted_parameters_flag = True
-                    c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+                    c = ParametricLayerPresets.adaptive_generator_mixture_generator_preset(
                         top_k=top_k,
                         weighted_parameters_flag=weighted_parameters_flag,
                     )
@@ -178,7 +178,7 @@ class TestGeneratorMixture(unittest.TestCase):
         for top_k in top_k_values:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+                c = ParametricLayerPresets.adaptive_generator_mixture_generator_preset(
                     top_k=top_k,
                     weighted_parameters_flag=True,
                 )
@@ -226,7 +226,7 @@ class TestGeneratorMixture(unittest.TestCase):
                     for clip_parameter_option in ClipParameterOptions:
                         message = f"Testing top_k={top_k}, init_sampler_model_option={init_sampler_model_option}, weighted_parameters_flag={weighted_parameters_flag}, clip_parameter_option={clip_parameter_option}"
                         with self.subTest(msg=message):
-                            c = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+                            c = ParametricLayerPresets.adaptive_generator_mixture_generator_preset(
                                 top_k=top_k,
                                 num_experts=num_experts,
                                 experts_init_sampler_option=init_sampler_model_option,

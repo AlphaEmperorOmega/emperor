@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig
+from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
@@ -106,7 +106,7 @@ def default_unittest_config():
             weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
             num_experts=MIXTURE_ROUTER_OUTPUT_DIM,
         ),
-        parameter_generator_model_config=AdaptiveParameterLayerConfig(
+        parameter_generator_model_config=ParametricLayerConfig(
             time_tracker_flag=False,
         ),
         linear_layer_config=LinearLayerConfig(

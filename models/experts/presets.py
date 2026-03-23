@@ -132,7 +132,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-        from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+        from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 
         experts_layer_stack_option = LinearLayerStackOptions.BASE
         if experts_model_generator_depth != DynamicDepthOptions.DISABLED:
@@ -184,7 +184,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                                 bias_flag=bias_flag,
                                 data_monitor=None,
                                 parameter_monitor=None,
-                                override_config=AdaptiveParameterBehaviourConfig(
+                                override_config=AdaptiveParameterAugmentationConfig(
                                     input_dim=input_dim,
                                     output_dim=output_dim,
                                     generator_depth=experts_model_generator_depth,

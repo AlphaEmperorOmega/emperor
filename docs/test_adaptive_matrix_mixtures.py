@@ -3,7 +3,7 @@ import unittest
 import torch.nn.functional as F
 
 from torch.nn import Parameter
-from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.presets import ParametricLayerPresets
 from emperor.parametric.utils.mixtures.base import (
     AdaptiveMixtureBase,
     AdaptiveMixtureConfig,
@@ -17,7 +17,7 @@ from emperor.parametric.utils.mixtures.types.matrix import (
 
 class TestMatrixMixture(unittest.TestCase):
     def setUp(self):
-        self.cfg = AdaptiveParameterLayerPresets.adaptive_generator_mixture_preset()
+        self.cfg = ParametricLayerPresets.adaptive_generator_mixture_preset()
 
     def test_init(self):
         model_types = [MatrixWeightsMixture, MatrixBiasMixture]

@@ -1,5 +1,5 @@
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -14,10 +14,7 @@ from emperor.linears.utils.config import LinearLayerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions
-from emperor.parametric.utils.layers import (
-    AdaptiveParameterLayerConfig,
-    AdaptiveRouterOptions,
-)
+from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
@@ -125,14 +122,14 @@ class ExperimentPresets(ExperimentPresetsBase):
                     residual_flag=stack_residual_flag,
                     adaptive_computation_flag=False,
                     dropout_probability=stack_dropout_probability,
-                    override_config=AdaptiveParameterLayerConfig(
+                    override_config=ParametricLayerConfig(
                         input_dim=hidden_dim,
                         output_dim=hidden_dim,
                         adaptive_weight_option=AdaptiveWeightOptions.VECTOR,
                         adaptive_bias_option=AdaptiveBiasOptions.DISABLED,
                         init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
                         time_tracker_flag=False,
-                        adaptive_behaviour_config=AdaptiveParameterBehaviourConfig(
+                        adaptive_behaviour_config=AdaptiveParameterAugmentationConfig(
                             input_dim=hidden_dim,
                             output_dim=hidden_dim,
                             generator_depth=DynamicDepthOptions.DISABLED,
@@ -299,7 +296,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                 bias_flag=bias_flag,
                 data_monitor=None,
                 parameter_monitor=None,
-                override_config=AdaptiveParameterBehaviourConfig(
+                override_config=AdaptiveParameterAugmentationConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     generator_depth=generator_depth,
@@ -325,7 +322,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                             bias_flag=bias_flag,
                             data_monitor=None,
                             parameter_monitor=None,
-                            override_config=AdaptiveParameterBehaviourConfig(
+                            override_config=AdaptiveParameterAugmentationConfig(
                                 generator_depth=generator_depth,
                             ),
                         ),

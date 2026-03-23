@@ -1,17 +1,17 @@
 from emperor.base.enums import BaseOptions
-from emperor.parametric.utils.layers import AdaptiveParameterLayer
-from emperor.parametric.utils.stack import AdaptiveParameterLayerStack
+from emperor.parametric.utils.layers import ParametricLayer
+from emperor.parametric.utils.stack import ParametricLayerStack
 
 
-class AdaptiveParameterLayerOptions(BaseOptions):
+class ParametricLayerOptions(BaseOptions):
     VECTOR = 0
     MATRIX = 1
     GENERATOR = 2
 
 
 class AdaptiveLayerOptions(BaseOptions):
-    BASE = AdaptiveParameterLayer
+    BASE = ParametricLayer
 
 
 class AdaptiveLayerStackOptions(BaseOptions):
-    BASE = AdaptiveParameterLayerStack
+    BASE = ParametricLayerStack

@@ -77,7 +77,7 @@ class LinearBaseValidator(BaseModelValidator):
         }
 
 
-class AdaptiveParameterBehaviourValidator(BaseModelValidator):
+class AdaptiveParameterAugmentationValidator(BaseModelValidator):
     _FIELDS = {
         "input_dim": {"type": int, "validate": lambda v: v > 0 or "must be > 0"},
         "output_dim": {"type": int, "validate": lambda v: v > 0 or "must be > 0"},

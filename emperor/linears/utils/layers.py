@@ -8,8 +8,8 @@ from emperor.base.utils import Module
 from emperor.linears.utils._validator import LinearBaseValidator
 from emperor.linears.utils._monitors import TensorMonitor, StatisticsMonitor
 from emperor.linears.utils.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviour
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterAugmentation
+from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 
 from typing import TYPE_CHECKING
 
@@ -26,7 +26,7 @@ class LinearBase(Module):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
         self.cfg: "LinearLayerConfig" = self._overwrite_config(config, overrides)
-        self.main_cfg: "AdaptiveParameterBehaviourConfig" = self._resolve_main_config(
+        self.main_cfg: "AdaptiveParameterAugmentationConfig" = self._resolve_main_config(
             self.cfg, cfg
         )
         self.input_dim: int = self.cfg.input_dim
@@ -88,11 +88,11 @@ class AdaptiveLinearLayer(LinearBase):
         self.adaptive_behaviour = self.__init_behaviour()
 
     def __init_behaviour(self):
-        overrides = AdaptiveParameterBehaviourConfig(
+        overrides = AdaptiveParameterAugmentationConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return AdaptiveParameterBehaviour(self.main_cfg, overrides)
+        return AdaptiveParameterAugmentation(self.main_cfg, overrides)
 
     def forward(self, X: Tensor) -> Tensor:
         return self.adaptive_behaviour.compute_adaptive_parameters(

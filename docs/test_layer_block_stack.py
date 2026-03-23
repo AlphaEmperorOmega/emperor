@@ -6,10 +6,10 @@ from dataclasses import asdict
 from emperor.parametric.options import (
     AdaptiveLayerOptions,
     AdaptiveLayerStackOptions,
-    AdaptiveParameterLayerOptions,
+    ParametricLayerOptions,
 )
-from emperor.parametric.utils.layers import AdaptiveParameterLayer
-from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.layers import ParametricLayer
+from emperor.parametric.utils.presets import ParametricLayerPresets
 from emperor.linears.utils.presets import LinearPresets
 from docs.config import default_unittest_config
 from emperor.base.enums import ActivationOptions
@@ -111,7 +111,7 @@ class Test___resolve_model_type_overrides(TestLayerStack):
         self.assertEqual(updated_config.output_dim, output_dim)
 
     def test_if_config_is_updated_for_parameter_generator_model(self):
-        config = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset()
+        config = ParametricLayerPresets.parametric_layer_stack_preset()
 
         model = LayerStack(config)
 

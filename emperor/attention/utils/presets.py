@@ -2,10 +2,10 @@ from torch import float32
 from emperor.linears.utils.presets import LinearPresets
 from emperor.attention.utils.enums import AttentionOptions
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.parametric.utils.layers import AdaptiveRouterOptions
+from emperor.parametric.utils.config import AdaptiveRouterOptions
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
-from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.presets import ParametricLayerPresets
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.embedding.options import RelativePositionalEmbeddingOptions
@@ -118,7 +118,7 @@ class MultiHeadAttentionPresets:
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
-        projector_config = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
+        projector_config = ParametricLayerPresets.parametric_layer_stack_preset(
             input_dim=input_dim,
             output_dim=output_dim,
             hidden_dim=hidden_dim,

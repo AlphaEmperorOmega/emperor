@@ -5,7 +5,7 @@ from emperor.base.layer import LayerStackConfig
 from emperor.linears.utils.config import LinearLayerConfig
 from models.linear_adaptive.config import ExperimentConfig
 from emperor.datasets.image.classification.mnist import Mnist
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
@@ -282,7 +282,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                         bias_flag=bias_flag,
                         data_monitor=None,
                         parameter_monitor=None,
-                        override_config=AdaptiveParameterBehaviourConfig(
+                        override_config=AdaptiveParameterAugmentationConfig(
                             input_dim=input_dim,
                             output_dim=output_dim,
                             generator_depth=generator_depth,
@@ -308,7 +308,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                                     bias_flag=bias_flag,
                                     data_monitor=None,
                                     parameter_monitor=None,
-                                    override_config=AdaptiveParameterBehaviourConfig(
+                                    override_config=AdaptiveParameterAugmentationConfig(
                                         generator_depth=generator_depth,
                                     ),
                                 ),

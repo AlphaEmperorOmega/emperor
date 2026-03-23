@@ -5,7 +5,7 @@ from emperor.linears.utils.presets import LinearPresets
 from emperor.sampler.utils.presets import SamplerPresets
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
@@ -17,21 +17,19 @@ from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.parametric.utils.layers import (
-    AdaptiveParameterLayerConfig,
-    AdaptiveRouterOptions,
-)
+from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
+    DynamicWeightOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
 
 
-class AdaptiveParameterLayerPresets:
+class ParametricLayerPresets:
     @staticmethod
     def adaptive_generator_mixture_preset(
         input_dim=8,
@@ -152,7 +150,7 @@ class AdaptiveParameterLayerPresets:
         )
 
     @staticmethod
-    def adaptive_parameter_layer_preset(
+    def parametric_layer_preset(
         return_model_config_flag: bool = False,
         batch_size=8,
         input_dim=8,
@@ -166,6 +164,7 @@ class AdaptiveParameterLayerPresets:
         adaptive_mixture_weighted_parameters_flag=False,
         adaptive_mixture_clip_parameter_option=ClipParameterOptions.BEFORE,
         adaptive_mixture_clip_range=5.0,
+        adaptive_behaviour_weight_option: DynamicWeightOptions = DynamicWeightOptions.DISABLED,
         adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         adaptive_behaviour_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         adaptive_behaviour_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
@@ -207,7 +206,7 @@ class AdaptiveParameterLayerPresets:
         stack_activation: ActivationOptions = ActivationOptions.RELU,
         stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.0,
-    ) -> "AdaptiveParameterLayerConfig":
+    ) -> "ParametricLayerConfig":
         _hidden_dim = max(input_dim, output_dim)
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
@@ -215,7 +214,7 @@ class AdaptiveParameterLayerPresets:
             adaptive_weight_option == AdaptiveWeightOptions.GENERATOR
             or adaptive_bias_option == AdaptiveBiasOptions.GENERATOR
         ):
-            override_config = AdaptiveParameterLayerPresets.adaptive_generator_mixture_generator_preset(
+            override_config = ParametricLayerPresets.adaptive_generator_mixture_generator_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 top_k=adaptive_mixture_top_k,
@@ -260,7 +259,7 @@ class AdaptiveParameterLayerPresets:
             )
         else:
             override_config = (
-                AdaptiveParameterLayerPresets.adaptive_generator_mixture_preset(
+                ParametricLayerPresets.adaptive_generator_mixture_preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     top_k=adaptive_mixture_top_k,
@@ -271,16 +270,17 @@ class AdaptiveParameterLayerPresets:
                 )
             )
 
-        config = AdaptiveParameterLayerConfig(
+        config = ParametricLayerConfig(
             input_dim=input_dim,
             output_dim=output_dim,
             adaptive_weight_option=adaptive_weight_option,
             adaptive_bias_option=adaptive_bias_option,
             init_sampler_model_option=init_sampler_model_option,
             time_tracker_flag=time_tracker_flag,
-            adaptive_behaviour_config=AdaptiveParameterBehaviourConfig(
+            adaptive_behaviour_config=AdaptiveParameterAugmentationConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
+                weight_option=adaptive_behaviour_weight_option,
                 generator_depth=adaptive_behaviour_generator_depth,
                 diagonal_option=adaptive_behaviour_diagonal_option,
                 bias_option=adaptive_behaviour_bias_option,
@@ -344,7 +344,7 @@ class AdaptiveParameterLayerPresets:
         )
 
     @staticmethod
-    def adaptive_parameter_layer_stack_preset(
+    def parametric_layer_stack_preset(
         return_model_config_flag: bool = False,
         batch_size=4,
         input_dim=8,
@@ -419,7 +419,7 @@ class AdaptiveParameterLayerPresets:
             residual_flag=residual_flag,
             adaptive_computation_flag=False,
             dropout_probability=dropout_probability,
-            override_config=AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+            override_config=ParametricLayerPresets.parametric_layer_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 adaptive_weight_option=adaptive_weight_option,
