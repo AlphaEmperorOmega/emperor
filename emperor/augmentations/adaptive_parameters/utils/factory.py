@@ -1,35 +1,35 @@
 from emperor.base.utils import Module
-from emperor.augmentations.options import (
+from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDiagonalOptions,
     DynamicWeightOptions,
     LinearMemoryOptions,
     RowMaskOptions,
 )
-from emperor.augmentations.utils.handlers.mask import (
+from emperor.augmentations.adaptive_parameters.utils.handlers.mask import (
     PerRowMaskHandler,
     RowMaskHandler,
     TopSliceMaskHandler,
 )
-from emperor.augmentations.utils.handlers.bias import (
+from emperor.augmentations.adaptive_parameters.utils.handlers.bias import (
     AffineBiasTransformHandler,
     BiasGeneratorHandler,
     BiasHandlerAbstract,
     ElementwiseBiasHandler,
     GatedBiasHandler,
 )
-from emperor.augmentations.utils.handlers.diagonal import (
+from emperor.augmentations.adaptive_parameters.utils.handlers.diagonal import (
     AntiDiagonalHandler,
     DiagonalAndAntiDiagonalHandler,
     DiagonalHandler,
     DiagonalHandlerAbstract,
 )
-from emperor.augmentations.utils.handlers.memory import (
+from emperor.augmentations.adaptive_parameters.utils.handlers.memory import (
     MemoryFusionHandler,
     MemoryHandlerAbstract,
     WeightedMemoryHandler,
 )
-from emperor.augmentations.utils.handlers.weight import (
+from emperor.augmentations.adaptive_parameters.utils.handlers.weight import (
     DualModelWeightHandler,
     HypernetworkWeightHandler,
     LowRankWeightHandler,
@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviourConfig
 
 
 class DynamicWeightFactory(Module):
