@@ -80,6 +80,8 @@ class WeightHandlerAbstract(Module):
                 return (torch.sigmoid(vectors) * 2 - 1) * self.scale
             case WeightNormalizationOptions.DISABLED:
                 return vectors
+            case _:
+                raise ValueError(f"Unknown weight normalization option: {self.normalization_option}")
 
 
 class SingleModelWeightHandler(WeightHandlerAbstract):
