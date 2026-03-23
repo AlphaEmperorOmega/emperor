@@ -289,6 +289,7 @@ class ParametricLayerPresets:
                 row_mask_option=adaptive_behaviour_row_mask_option,
                 generator_depth=adaptive_behaviour_generator_depth,
                 diagonal_option=adaptive_behaviour_diagonal_option,
+                bias_flag=stack_bias_flag,
                 bias_option=adaptive_behaviour_bias_option,
                 memory_option=adaptive_behaviour_memory_option,
                 memory_size_option=adaptive_behaviour_memory_size_option,

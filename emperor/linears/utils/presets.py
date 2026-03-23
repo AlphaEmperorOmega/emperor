@@ -86,6 +86,7 @@ class LinearPresets:
                 weight_normalization=weight_normalization,
                 generator_depth=generator_depth,
                 diagonal_option=diagonal_option,
+                bias_flag=bias_flag,
                 bias_option=bias_option,
                 row_mask_option=row_mask_option,
                 memory_option=memory_option,

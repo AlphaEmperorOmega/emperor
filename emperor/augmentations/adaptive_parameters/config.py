@@ -44,6 +44,10 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
         default=None,
         metadata={"help": "Input-dependent adjustment of the weight matrix diagonal."},
     )
+    bias_flag: bool | None = field(
+        default=None,
+        metadata={"help": "Whether the linear layer has a bias parameter."},
+    )
     bias_option: DynamicBiasOptions | None = field(
         default=None,
         metadata={"help": "Input-dependent adjustment of the bias vector."},
