@@ -1,7 +1,9 @@
 from torch import Tensor
 from typing import Callable
 from emperor.base.utils import Module
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
+from emperor.augmentations.adaptive_parameters.config import (
+    AdaptiveParameterAugmentationConfig,
+)
 from emperor.augmentations.adaptive_parameters.utils.factory import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
@@ -17,7 +19,9 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryPositionOptions,
     RowMaskOptions,
 )
-from emperor.augmentations.adaptive_parameters.utils._validator import AdaptiveParameterAugmentationValidator
+from emperor.augmentations.adaptive_parameters.utils._validator import (
+    AdaptiveParameterAugmentationValidator,
+)
 
 
 class AdaptiveParameterAugmentation(Module):
@@ -39,6 +43,7 @@ class AdaptiveParameterAugmentation(Module):
         self.memory_option = self.cfg.memory_option
         self.memory_size_option = self.cfg.memory_size_option
         self.memory_position_option = self.cfg.memory_position_option
+        self.bias_flag = self.cfg.bias_flag
         self.bias_option = self.cfg.bias_option
         self.row_mask_option = self.cfg.row_mask_option
         self.validator = AdaptiveParameterAugmentationValidator(self)
@@ -61,7 +66,8 @@ class AdaptiveParameterAugmentation(Module):
         return self.__build_model(is_valid_flag, DynamicMemoryFactory)
 
     def __init_bias_model(self) -> Module | None:
-        is_valid_flag = self.bias_option != DynamicBiasOptions.DISABLED
+        is_valid_not_disabled_flag = self.bias_option != DynamicBiasOptions.DISABLED
+        is_valid_flag = self.bias_flag and is_valid_not_disabled_flag
         return self.__build_model(is_valid_flag, DynamicBiasFactory)
 
     def __init_row_mask_model(self) -> Module | None:
@@ -88,11 +94,17 @@ class AdaptiveParameterAugmentation(Module):
         bias_params: Tensor | None,
         input: Tensor,
     ) -> Tensor:
-        input = self.__maybe_apply_memory(input, LinearMemoryPositionOptions.BEFORE_AFFINE)
-        weights, bias = self.__apply_adaptive_adjustments(weight_params, bias_params, input)
+        input = self.__maybe_apply_memory(
+            input, LinearMemoryPositionOptions.BEFORE_AFFINE
+        )
+        weights, bias = self.__apply_adaptive_adjustments(
+            weight_params, bias_params, input
+        )
         weights = self.__maybe_apply_weight_mask(weights, input)
         output = affine_transform_callback(weights, bias, input)
-        output = self.__maybe_apply_memory(output, LinearMemoryPositionOptions.AFTER_AFFINE)
+        output = self.__maybe_apply_memory(
+            output, LinearMemoryPositionOptions.AFTER_AFFINE
+        )
         return output
 
     def __maybe_apply_weight_mask(self, weights: Tensor, input: Tensor) -> Tensor:
