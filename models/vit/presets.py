@@ -14,7 +14,7 @@ from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
-from emperor.behaviours.options import (
+from emperor.augmentations.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

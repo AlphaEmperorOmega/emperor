@@ -3,7 +3,7 @@ from torch import Tensor
 from torch.nn import Sequential
 from emperor.base.utils import Module
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.behaviours.options import (
+from emperor.augmentations.options import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
@@ -11,7 +11,7 @@ from emperor.behaviours.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
 
 
 class MemoryHandlerAbstract(Module):

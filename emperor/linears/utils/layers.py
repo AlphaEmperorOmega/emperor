@@ -8,7 +8,7 @@ from emperor.base.utils import Module
 from emperor.linears.utils._validator import LinearBaseValidator
 from emperor.linears.utils._monitors import TensorMonitor, StatisticsMonitor
 from emperor.linears.utils.config import LinearLayerConfig
-from emperor.behaviours.model import (
+from emperor.augmentations.model import (
     AdaptiveParameterBehaviour,
     AdaptiveParameterBehaviourConfig,
 )

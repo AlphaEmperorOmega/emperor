@@ -18,7 +18,7 @@ from emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
-from emperor.behaviours.options import (
+from emperor.augmentations.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -132,7 +132,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
         from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-        from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+        from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
 
         experts_layer_stack_option = LinearLayerStackOptions.BASE
         if experts_model_generator_depth != DynamicDepthOptions.DISABLED:

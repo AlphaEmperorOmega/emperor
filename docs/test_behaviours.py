@@ -5,8 +5,8 @@ import torch.nn as nn
 from emperor.base.utils import Module
 from emperor.config import ModelConfig
 from emperor.linears.utils.presets import LinearPresets
-from emperor.behaviours.model import AdaptiveParameterBehaviour
-from emperor.behaviours.options import (
+from emperor.augmentations.model import AdaptiveParameterBehaviour
+from emperor.augmentations.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -14,10 +14,10 @@ from emperor.behaviours.options import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.behaviours.utils.handlers.weight import WeightHandlerAbstract
-from emperor.behaviours.utils.handlers.diagonal import DiagonalHandlerAbstract
-from emperor.behaviours.utils.handlers.bias import BiasHandlerAbstract
-from emperor.behaviours.utils.handlers.memory import MemoryHandlerAbstract
+from emperor.augmentations.utils.handlers.weight import WeightHandlerAbstract
+from emperor.augmentations.utils.handlers.diagonal import DiagonalHandlerAbstract
+from emperor.augmentations.utils.handlers.bias import BiasHandlerAbstract
+from emperor.augmentations.utils.handlers.memory import MemoryHandlerAbstract
 
 
 class TestAdaptiveParameterBehaviour(unittest.TestCase):

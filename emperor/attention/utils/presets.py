@@ -18,7 +18,7 @@ from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.behaviours.options import (
+from emperor.augmentations.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

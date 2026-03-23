@@ -3,7 +3,7 @@ from torch.types import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.behaviours.utils.handlers.bias import BiasHandlerAbstract
+    from emperor.augmentations.utils.handlers.bias import BiasHandlerAbstract
 
 
 class BiasHandlerAbstractValidator:

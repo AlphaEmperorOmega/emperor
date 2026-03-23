@@ -90,7 +90,7 @@ class AdaptiveParameterBehaviourValidator(BaseModelValidator):
     }
 
     def _resolve_types(self) -> None:
-        from emperor.behaviours.options import (
+        from emperor.augmentations.options import (
             DynamicBiasOptions,
             DynamicDepthOptions,
             DynamicDiagonalOptions,
