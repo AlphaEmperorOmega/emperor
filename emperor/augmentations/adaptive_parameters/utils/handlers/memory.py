@@ -11,13 +11,13 @@ from emperor.augmentations.adaptive_parameters.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 
 
 class MemoryHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__()
         self.cfg = cfg
@@ -47,7 +47,7 @@ class MemoryHandlerAbstract(Module):
 class MemoryFusionHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
         self.memory_model = self.__init_memory_model()
@@ -79,7 +79,7 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
 class WeightedMemoryHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
 

@@ -1,7 +1,7 @@
 from torch import Tensor
 from typing import Callable
 from emperor.base.utils import Module
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.augmentations.adaptive_parameters.utils.factory import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
@@ -17,17 +17,17 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryPositionOptions,
     RowMaskOptions,
 )
-from emperor.augmentations.adaptive_parameters.utils._validator import AdaptiveParameterBehaviourValidator
+from emperor.augmentations.adaptive_parameters.utils._validator import AdaptiveParameterAugmentationValidator
 
 
-class AdaptiveParameterBehaviour(Module):
+class AdaptiveParameterAugmentation(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.input_dim = self.cfg.input_dim
@@ -41,7 +41,7 @@ class AdaptiveParameterBehaviour(Module):
         self.memory_position_option = self.cfg.memory_position_option
         self.bias_option = self.cfg.bias_option
         self.row_mask_option = self.cfg.row_mask_option
-        self.validator = AdaptiveParameterBehaviourValidator(self)
+        self.validator = AdaptiveParameterAugmentationValidator(self)
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
         self.memory_model = self.__init_memory_model()

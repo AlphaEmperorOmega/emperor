@@ -9,13 +9,13 @@ from emperor.augmentations.adaptive_parameters.utils.handlers._validator import 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 
 
 class BiasHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__()
         self.cfg = cfg
@@ -36,7 +36,7 @@ class BiasHandlerAbstract(Module):
 class AffineBiasTransformHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
         overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=2)
@@ -52,7 +52,7 @@ class AffineBiasTransformHandler(BiasHandlerAbstract):
 class ElementwiseBiasHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
         overrides = LayerStackConfig(
@@ -69,7 +69,7 @@ class ElementwiseBiasHandler(BiasHandlerAbstract):
 class GatedBiasHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
         overrides = LayerStackConfig(
@@ -86,7 +86,7 @@ class GatedBiasHandler(BiasHandlerAbstract):
 class BiasGeneratorHandler(BiasHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
         overrides = LayerStackConfig(

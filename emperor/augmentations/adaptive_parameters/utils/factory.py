@@ -42,17 +42,17 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 
 
 class DynamicWeightFactory(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.weight_option = self.cfg.weight_option
@@ -80,12 +80,12 @@ class DynamicWeightFactory(Module):
 class DynamicDiagonalFactory(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             config, overrides
         )
         self.diagonal_option = self.cfg.diagonal_option
@@ -107,11 +107,11 @@ class DynamicDiagonalFactory(Module):
 class DynamicBiasFactory(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.bias_option = self.cfg.bias_option
@@ -135,11 +135,11 @@ class DynamicBiasFactory(Module):
 class DynamicMemoryFactory(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.memory_option = self.cfg.memory_option
@@ -159,11 +159,11 @@ class DynamicMemoryFactory(Module):
 class RowMaskFactory(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
-        overrides: "AdaptiveParameterBehaviourConfig | None" = None,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterBehaviourConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.row_mask_option = self.cfg.row_mask_option

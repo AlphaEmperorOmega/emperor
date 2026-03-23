@@ -9,13 +9,13 @@ from emperor.base.layer import Layer, LayerStackConfig
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 
 
 class DiagonalHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__()
         self.cfg = cfg
@@ -65,7 +65,7 @@ class DiagonalHandlerAbstract(Module):
 class DiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = self._init_model()
@@ -78,7 +78,7 @@ class DiagonalHandler(DiagonalHandlerAbstract):
 class AntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = self._init_model()
@@ -92,7 +92,7 @@ class AntiDiagonalHandler(DiagonalHandlerAbstract):
 class DiagonalAndAntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterBehaviourConfig",
+        cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
         self.diagonal_generator = DiagonalHandler(cfg)
