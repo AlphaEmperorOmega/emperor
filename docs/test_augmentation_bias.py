@@ -15,7 +15,7 @@ from emperor.augmentations.adaptive_parameters.utils.handlers.bias import (
 )
 
 
-class TestLinearsBiasBehaviour(unittest.TestCase):
+class TestLinearsAugmentationBias(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -43,7 +43,7 @@ class TestLinearsBiasBehaviour(unittest.TestCase):
         self.bias_params = Module()._init_parameter_bank(bias_shape, nn.init.zeros_)
 
 
-class TestAffineBiasTransformHandler(TestLinearsBiasBehaviour):
+class TestAffineBiasTransformHandler(TestLinearsAugmentationBias):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
@@ -56,7 +56,7 @@ class TestAffineBiasTransformHandler(TestLinearsBiasBehaviour):
         self.assertFalse(torch.all(output == 0))
 
 
-class TestElementwiseBiasHandler(TestLinearsBiasBehaviour):
+class TestElementwiseBiasHandler(TestLinearsAugmentationBias):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
@@ -69,7 +69,7 @@ class TestElementwiseBiasHandler(TestLinearsBiasBehaviour):
         self.assertFalse(torch.all(output == 0))
 
 
-class TestBiasGeneratorHandler(TestLinearsBiasBehaviour):
+class TestBiasGeneratorHandler(TestLinearsAugmentationBias):
     def test_forward(self):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
@@ -82,7 +82,7 @@ class TestBiasGeneratorHandler(TestLinearsBiasBehaviour):
         self.assertFalse(torch.all(output == 0))
 
 
-class TestDynamicBiasFactory(TestLinearsBiasBehaviour):
+class TestDynamicBiasFactory(TestLinearsAugmentationBias):
     def test_build(self):
         for option in DynamicBiasOptions:
             message = f"Test failed for bias option: {option}"
