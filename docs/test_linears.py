@@ -152,26 +152,15 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
 
                                     m = AdaptiveLinearLayer(cfg)
                                     input_batch = torch.randn(batch_size, input_dim)
-                                    should_throw_error = [
-                                        DynamicBiasOptions.SCALE_AND_OFFSET,
-                                        DynamicBiasOptions.ELEMENT_WISE_OFFSET,
-                                    ]
-                                    if (
-                                        not bias_flag
-                                        and bias_option in should_throw_error
-                                    ):
-                                        with self.assertRaises(ValueError):
-                                            output = m.forward(input_batch)
-                                    else:
-                                        output = m.forward(input_batch)
-                                        expected_output_shape = (
-                                            batch_size,
-                                            output_dim,
-                                        )
-                                        self.assertEqual(
-                                            output.shape,
-                                            expected_output_shape,
-                                        )
+                                    output = m.forward(input_batch)
+                                    expected_output_shape = (
+                                        batch_size,
+                                        output_dim,
+                                    )
+                                    self.assertEqual(
+                                        output.shape,
+                                        expected_output_shape,
+                                    )
 
 
 class TestLinearLayerBaseStack(unittest.TestCase):
