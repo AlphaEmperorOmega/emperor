@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.behaviours.model import AdaptiveParameterBehaviour
+    from emperor.augmentations.model import AdaptiveParameterBehaviour
 
 
 class AdaptiveParameterBehaviourValidator:
@@ -49,7 +49,7 @@ class AdaptiveParameterBehaviourValidator:
         self.validate()
 
     def _resolve_enum_types(self) -> None:
-        from emperor.behaviours.options import (
+        from emperor.augmentations.options import (
             DynamicBiasOptions,
             DynamicDepthOptions,
             DynamicDiagonalOptions,

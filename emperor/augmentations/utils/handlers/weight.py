@@ -4,8 +4,8 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from emperor.base.utils import Module
-from emperor.behaviours.options import WeightNormalizationOptions
-from emperor.behaviours.utils.handlers.parameter import DepthMappingLayerStack
+from emperor.augmentations.options import WeightNormalizationOptions
+from emperor.augmentations.utils.handlers.parameter import DepthMappingLayerStack
 from emperor.base.layer import (
     LayerStackConfig,
 )
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from emperor.embedding.relative.options import dynamic_positional_bias
 
 if TYPE_CHECKING:
-    from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
 
 
 class WeightHandlerAbstract(Module):

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 # TODO: In the future move those selectors in the
-# `behaviours` modules
+# `augmentations` modules
 class AdaptiveWeightSelector(Module):
     def __init__(
         self,

@@ -10,7 +10,7 @@ from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.patch.options.base import PatchConfig
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.behaviours.options import (
+from emperor.augmentations.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

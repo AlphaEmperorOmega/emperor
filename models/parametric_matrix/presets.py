@@ -17,7 +17,7 @@ from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from models.parametric_matrix.config import ExperimentConfig
 from models.parametric_matrix.model import Model

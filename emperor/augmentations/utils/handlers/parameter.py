@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.linears.utils.config import LinearLayerConfig
-    from emperor.behaviours.model import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
 
 
 class DepthMappingLayer(Module):

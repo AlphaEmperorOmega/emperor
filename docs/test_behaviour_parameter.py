@@ -3,10 +3,10 @@ import unittest
 import torch.nn as nn
 
 from emperor.base.utils import Module
-from emperor.behaviours.utils.handlers.weight import DualModelWeightHandler
+from emperor.augmentations.utils.handlers.weight import DualModelWeightHandler
 from emperor.linears.utils.presets import LinearPresets
-from emperor.behaviours.options import DynamicDepthOptions
-from emperor.behaviours.utils.handlers.parameter import (
+from emperor.augmentations.options import DynamicDepthOptions
+from emperor.augmentations.utils.handlers.parameter import (
     DepthMappingLayer,
     DepthMappingLayerStack,
 )

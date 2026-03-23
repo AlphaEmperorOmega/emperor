@@ -54,7 +54,7 @@ class _AdaptiveParameterLayerValidator:
     def __ensure_adaptive_bias_option_is_disabled_for_behaviour_bias(
         self,
     ) -> None:
-        from emperor.behaviours.options import DynamicBiasOptions
+        from emperor.augmentations.options import DynamicBiasOptions
 
         if self.model.adaptive_behaviour_config is not None:
             is_bias_disabled = (
@@ -72,7 +72,7 @@ class _AdaptiveParameterLayerValidator:
     def __ensure_no_parameter_depth_mapping_can_be_used(
         self,
     ) -> None:
-        from emperor.behaviours.options import DynamicDepthOptions
+        from emperor.augmentations.options import DynamicDepthOptions
 
         if self.model.adaptive_behaviour_config is not None:
             is_generator_depth_disabled = (
