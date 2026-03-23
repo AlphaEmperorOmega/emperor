@@ -17,7 +17,7 @@ from emperor.parametric.utils.mixtures.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig
+    from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
     from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
 
 
@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 class AdaptiveWeightSelector(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterLayerConfig",
-        overrides: "AdaptiveParameterLayerConfig | None" = None,
+        cfg: "ParametricLayerConfig",
+        overrides: "ParametricLayerConfig | None" = None,
     ):
         super().__init__()
         self.cfg = self._overwrite_config(cfg, overrides)
@@ -57,11 +57,11 @@ class AdaptiveWeightSelector(Module):
 class AdaptiveBiasSelector(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterLayerConfig",
-        overrides: "AdaptiveParameterLayerConfig | None" = None,
+        cfg: "ParametricLayerConfig",
+        overrides: "ParametricLayerConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterLayerConfig" = self._overwrite_config(
+        self.cfg: "ParametricLayerConfig" = self._overwrite_config(
             cfg, overrides
         )
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)

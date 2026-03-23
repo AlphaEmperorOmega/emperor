@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from emperor.parametric.utils.layers import AdaptiveParameterLayer
+    from emperor.parametric.utils.layers import ParametricLayer
     from emperor.parametric.utils.handlers import ParameterHanlderBase
 
 
-class _AdaptiveParameterLayerValidator:
-    def __init__(self, model: "AdaptiveParameterLayer"):
+class _ParametricLayerValidator:
+    def __init__(self, model: "ParametricLayer"):
         self.model = model
         self.__ensure_values_are_not_none()
         self.__ensure_correct_input_types()
@@ -34,7 +34,7 @@ class _AdaptiveParameterLayerValidator:
                 raise ValueError(f"Configuration Error: '{attr_name}' is None.")
 
     def __ensure_correct_input_types(self) -> None:
-        from emperor.parametric.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.config import AdaptiveRouterOptions
 
         required_types = {
             "input_dim": int,
@@ -66,7 +66,7 @@ class _AdaptiveParameterLayerValidator:
             )
             if is_bias_disabled and is_behaviour_bias_enabled:
                 raise ValueError(
-                    "Configuration Error: 'adaptive_behaviour_config.bias_option' can be used for `AdaptiveParameterLayer` only when 'adaptive_bias_option' is `DISABLED`"
+                    "Configuration Error: 'adaptive_behaviour_config.bias_option' can be used for `ParametricLayer` only when 'adaptive_bias_option' is `DISABLED`"
                 )
 
     def __ensure_no_parameter_depth_mapping_can_be_used(
@@ -81,11 +81,11 @@ class _AdaptiveParameterLayerValidator:
             )
             if is_generator_depth_disabled:
                 raise ValueError(
-                    f"Configuration Error: 'adaptive_behaviour_config.generator_depth' needs to be disabled for `AdaptiveParameterLayer`, got: {self.model.adaptive_behaviour_config.generator_depth}"
+                    f"Configuration Error: 'adaptive_behaviour_config.generator_depth' needs to be disabled for `ParametricLayer`, got: {self.model.adaptive_behaviour_config.generator_depth}"
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:
-        from emperor.parametric.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.config import AdaptiveRouterOptions
 
         is_vector_option = (
             self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
@@ -100,7 +100,7 @@ class _AdaptiveParameterLayerValidator:
             )
 
 
-class _AdaptiveParameterHandlerValidator:
+class _ParametricHandlerValidator:
     def __init__(self, model: "ParameterHanlderBase"):
         self.model = model
 
@@ -112,11 +112,11 @@ class _AdaptiveParameterHandlerValidator:
         for attr_name in required_types:
             if getattr(self.model, attr_name) is None:
                 raise ValueError(
-                    f"Ensure that both `router_config` and `sampler_config` are provided when `init_sampler_model_flag` is `True` in `AdaptiveParameterLayer`. Current value: {getattr(self.model, attr_name)}."
+                    f"Ensure that both `router_config` and `sampler_config` are provided when `init_sampler_model_flag` is `True` in `ParametricLayer`. Current value: {getattr(self.model, attr_name)}."
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:
-        from emperor.parametric.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.config import AdaptiveRouterOptions
 
         is_vector_option = (
             self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
@@ -131,7 +131,7 @@ class _AdaptiveParameterHandlerValidator:
             )
 
     def ensure_shared_sampler_is_disabled(self) -> None:
-        from emperor.parametric.utils.layers import AdaptiveRouterOptions
+        from emperor.parametric.utils.config import AdaptiveRouterOptions
 
         is_shared_router = (
             self.model.init_sampler_model_option == AdaptiveRouterOptions.SHARED_ROUTER

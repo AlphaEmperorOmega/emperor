@@ -1,20 +1,19 @@
 import torch
 
-from enum import Enum
 from torch import Tensor
-from dataclasses import dataclass, field
 from emperor.base.decorators import timer
-from emperor.base.utils import ConfigBase, Module
+from emperor.base.utils import Module
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
-from emperor.parametric.utils._validator import _AdaptiveParameterLayerValidator
+from emperor.parametric.utils._validator import _ParametricLayerValidator
 from emperor.parametric.utils.mixtures.selectors import (
     AdaptiveWeightSelector,
     AdaptiveBiasSelector,
 )
-from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviour
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterAugmentation
+from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
+from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
@@ -31,68 +30,15 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class AdaptiveRouterOptions(Enum):
-    SHARED_ROUTER = 1
-    INDEPENTENT_ROUTER = 2
-
-
-@dataclass
-class AdaptiveParameterLayerConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input dimensionality for weight parameters."},
-    )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output dimensionality for weight parameters."},
-    )
-    adaptive_weight_option: "AdaptiveWeightOptions | None" = field(
-        default=None,
-        metadata={
-            "help": "Specifies options for generating weight parameters for individual input samples."
-        },
-    )
-    adaptive_bias_option: "AdaptiveBiasOptions | None" = field(
-        default=None,
-        metadata={
-            "help": "Specifies options for generating bias parameters for individual input samples."
-        },
-    )
-    init_sampler_model_option: "AdaptiveRouterOptions | None" = field(
-        default=None,
-        metadata={
-            "help": "When `True` the `RouterModel `and `SamplerModel` will be added to the current layer."
-        },
-    )
-    time_tracker_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When `True` it will generate bias parameters for each input sample."
-        },
-    )
-    router_config: "RouterConfig | None" = field(
-        default=None,
-        metadata={"help": "Configuration for the router model."},
-    )
-    sampler_config: "SamplerConfig | None" = field(
-        default=None,
-        metadata={"help": "Configuration for the sampler model."},
-    )
-    adaptive_behaviour_config: "AdaptiveParameterBehaviourConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-
-
-class AdaptiveParameterLayer(Module):
+class ParametricLayer(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterLayerConfig | ModelConfig",
-        overrides: "AdaptiveParameterLayerConfig | None" = None,
+        cfg: "ParametricLayerConfig | ModelConfig",
+        overrides: "ParametricLayerConfig | None" = None,
     ):
         super().__init__()
         config = getattr(cfg, "parameter_generator_model_config", cfg)
-        self.cfg: "AdaptiveParameterLayerConfig" = self._overwrite_config(
+        self.cfg: "ParametricLayerConfig" = self._overwrite_config(
             config, overrides
         )
         self.input_dim = self.cfg.input_dim
@@ -106,7 +52,7 @@ class AdaptiveParameterLayer(Module):
         self.router_config = self.cfg.router_config
         self.sampler_config = self.cfg.sampler_config
 
-        self.validator = _AdaptiveParameterLayerValidator(self)
+        self.validator = _ParametricLayerValidator(self)
         self.adaptive_behaviour = self.__init_adaptive_behaviour()
         self.weight_parameter_model = self.__init_weight_model()
         self.bias_parameter_model = self.__init_bias_model()
@@ -119,14 +65,14 @@ class AdaptiveParameterLayer(Module):
     def __init_adaptive_behaviour(self):
         if self.adaptive_behaviour_config is None:
             return None
-        overrides = AdaptiveParameterBehaviourConfig(
+        overrides = AdaptiveParameterAugmentationConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return AdaptiveParameterBehaviour(self.adaptive_behaviour_config, overrides)
+        return AdaptiveParameterAugmentation(self.adaptive_behaviour_config, overrides)
 
     def __init_weight_model(self) -> AdaptiveMixtureBase:
-        overrides = AdaptiveParameterLayerConfig(
+        overrides = ParametricLayerConfig(
             input_dim=self.input_dim, output_dim=self.output_dim
         )
         return AdaptiveWeightSelector(self.cfg, overrides).build_model()
@@ -137,7 +83,7 @@ class AdaptiveParameterLayer(Module):
         if self.adaptive_bias_option == AdaptiveBiasOptions.DISABLED:
             return None
 
-        overrides = AdaptiveParameterLayerConfig(
+        overrides = ParametricLayerConfig(
             input_dim=self.input_dim, output_dim=self.output_dim
         )
         return AdaptiveBiasSelector(self.cfg, overrides).build_model()
