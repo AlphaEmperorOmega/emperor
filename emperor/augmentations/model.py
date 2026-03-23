@@ -2,14 +2,14 @@ from torch import Tensor
 from dataclasses import dataclass, field
 from typing import Callable
 from emperor.base.utils import ConfigBase, Module
-from emperor.behaviours.utils.factory import (
+from emperor.augmentations.utils.factory import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
     DynamicWeightFactory,
     RowMaskFactory,
 )
-from emperor.behaviours.options import (
+from emperor.augmentations.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -20,7 +20,7 @@ from emperor.behaviours.options import (
     RowMaskOptions,
     WeightNormalizationOptions,
 )
-from emperor.behaviours.utils._validator import AdaptiveParameterBehaviourValidator
+from emperor.augmentations.utils._validator import AdaptiveParameterBehaviourValidator
 
 @dataclass
 class AdaptiveParameterBehaviourConfig(ConfigBase):
@@ -148,14 +148,17 @@ class AdaptiveParameterBehaviour(Module):
         bias_params: Tensor | None,
         input: Tensor,
     ) -> Tensor:
-        input = self.__apply_memory(input, LinearMemoryPositionOptions.BEFORE_AFFINE)
-        weights, bias = self.__update_parameters(weight_params, bias_params, input)
-        weights = self.__call_model(self.row_mask_model, weights, input)
+        input = self.__maybe_apply_memory(input, LinearMemoryPositionOptions.BEFORE_AFFINE)
+        weights, bias = self.__apply_adaptive_adjustments(weight_params, bias_params, input)
+        weights = self.__maybe_apply_weight_mask(weights, input)
         output = affine_transform_callback(weights, bias, input)
-        output = self.__apply_memory(output, LinearMemoryPositionOptions.AFTER_AFFINE)
+        output = self.__maybe_apply_memory(output, LinearMemoryPositionOptions.AFTER_AFFINE)
         return output
 
-    def __apply_memory(
+    def __maybe_apply_weight_mask(self, weights: Tensor, input: Tensor) -> Tensor:
+        return self.__call_model(self.row_mask_model, weights, input)
+
+    def __maybe_apply_memory(
         self,
         input: Tensor,
         position: LinearMemoryPositionOptions,
@@ -164,7 +167,7 @@ class AdaptiveParameterBehaviour(Module):
             return self.__call_model(self.memory_model, None, input)
         return input
 
-    def __update_parameters(
+    def __apply_adaptive_adjustments(
         self, weights: Tensor, bias: Tensor | None, input: Tensor
     ) -> tuple[Tensor, Tensor | None]:
         weights = self.__call_model(self.generator_model, weights, input)
