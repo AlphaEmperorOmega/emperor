@@ -4,12 +4,12 @@ from torch import Tensor
 from torch.nn import Sequential
 from emperor.base.utils import Module
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.augmentations.utils.handlers._validator import BiasHandlerAbstractValidator
+from emperor.augmentations.adaptive_parameters.utils.handlers._validator import BiasHandlerAbstractValidator
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviourConfig
 
 
 class BiasHandlerAbstract(Module):

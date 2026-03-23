@@ -2,14 +2,14 @@ from torch import Tensor
 from dataclasses import dataclass, field
 from typing import Callable
 from emperor.base.utils import ConfigBase, Module
-from emperor.augmentations.utils.factory import (
+from emperor.augmentations.adaptive_parameters.utils.factory import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
     DynamicWeightFactory,
     RowMaskFactory,
 )
-from emperor.augmentations.options import (
+from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -20,7 +20,7 @@ from emperor.augmentations.options import (
     RowMaskOptions,
     WeightNormalizationOptions,
 )
-from emperor.augmentations.utils._validator import AdaptiveParameterBehaviourValidator
+from emperor.augmentations.adaptive_parameters.utils._validator import AdaptiveParameterBehaviourValidator
 
 @dataclass
 class AdaptiveParameterBehaviourConfig(ConfigBase):

@@ -7,7 +7,7 @@ from emperor.base.layer import LayerStackConfig
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviourConfig
 
 
 class RowMaskHandler(Module):
