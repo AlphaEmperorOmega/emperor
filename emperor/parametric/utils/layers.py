@@ -13,7 +13,7 @@ from emperor.parametric.utils.mixtures.selectors import (
     AdaptiveWeightSelector,
     AdaptiveBiasSelector,
 )
-from emperor.augmentations.model import (
+from emperor.augmentations.adaptive_parameters.model import (
     AdaptiveParameterBehaviour,
     AdaptiveParameterBehaviourConfig,
 )

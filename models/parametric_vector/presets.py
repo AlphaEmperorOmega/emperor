@@ -1,6 +1,6 @@
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
-from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
-from emperor.augmentations.options import (
+from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

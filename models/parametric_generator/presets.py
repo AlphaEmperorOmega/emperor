@@ -15,14 +15,14 @@ from emperor.parametric.utils.mixtures.options import (
     AdaptiveWeightOptions,
 )
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
-from emperor.augmentations.model import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviourConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.experts.utils.enums import (
     ExpertWeightingPositionOptions,
     InitSamplerOptions,
 )
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
-from emperor.augmentations.options import (
+from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

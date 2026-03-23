@@ -4,7 +4,7 @@ from emperor.linears.utils.presets import LinearPresets
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.base.enums import ActivationOptions
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.augmentations.options import (
+from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,

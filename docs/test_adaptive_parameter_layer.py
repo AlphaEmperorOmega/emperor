@@ -5,7 +5,7 @@ from torch.types import Tensor
 from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.config import ModelConfig
-from emperor.augmentations.model import AdaptiveParameterBehaviour
+from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviour
 from emperor.parametric.utils.stack import AdaptiveParameterLayerStack
 from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
