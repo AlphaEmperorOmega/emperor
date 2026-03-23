@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from emperor.embedding.relative.options import dynamic_positional_bias
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
 
 
 class WeightHandlerAbstract(Module):
