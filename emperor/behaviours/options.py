@@ -59,6 +59,7 @@ class RowMaskOptions(Enum):
     DISABLED = 0
     GLOBAL_SCORE = 1
     PER_ROW_SCORE = 2
+    TOP_SLICE = 3
 
 
 class LinearMemoryPositionOptions(Enum):

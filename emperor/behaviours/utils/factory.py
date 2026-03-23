@@ -9,6 +9,7 @@ from emperor.behaviours.options import (
 from emperor.behaviours.utils.handlers.mask import (
     PerRowMaskHandler,
     RowMaskHandler,
+    TopSliceMaskHandler,
 )
 from emperor.behaviours.utils.handlers.bias import (
     AffineBiasTransformHandler,
@@ -173,6 +174,8 @@ class RowMaskFactory(Module):
                 return RowMaskHandler(self.cfg)
             case RowMaskOptions.PER_ROW_SCORE:
                 return PerRowMaskHandler(self.cfg)
+            case RowMaskOptions.TOP_SLICE:
+                return TopSliceMaskHandler(self.cfg)
             case RowMaskOptions.DISABLED:
                 raise ValueError(
                     "If the `row_mask_option` is set to `DISABLED`, this class should not be initialized"
