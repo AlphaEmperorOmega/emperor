@@ -1,7 +1,7 @@
 from emperor.base.layer import LayerStackConfig
 from emperor.linears.options import LinearLayerOptions
 from emperor.linears.utils.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from emperor.augmentations.adaptive_parameters.options import (

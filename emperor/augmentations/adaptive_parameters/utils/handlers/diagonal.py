@@ -9,7 +9,7 @@ from emperor.base.layer import Layer, LayerStackConfig
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviourConfig
+    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
 
 
 class DiagonalHandlerAbstract(Module):
