@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from emperor.linears.options import LinearLayerOptions
 
 
-class AdaptiveParameterLayerStack(LayerStack):
+class ParametricLayerStack(LayerStack):
     def __init__(
         self,
         cfg: "LayerStackConfig",
@@ -24,11 +24,11 @@ class AdaptiveParameterLayerStack(LayerStack):
         from emperor.parametric.options import AdaptiveLayerOptions
 
         model = AdaptiveLayerOptions.BASE
-        layer = AdaptiveParameterLayerHandler
+        layer = ParametricLayerHandler
         return super()._override_model_type(overrides, model, layer)
 
 
-class AdaptiveParameterLayerHandler(Layer):
+class ParametricLayerHandler(Layer):
     def __init__(
         self,
         model: "Module",

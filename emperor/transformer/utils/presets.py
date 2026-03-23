@@ -5,14 +5,14 @@ from emperor.linears.utils.presets import LinearPresets
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.parametric.options import AdaptiveLayerStackOptions
 from emperor.transformer.utils.layers import TransformerConfig
-from emperor.parametric.utils.layers import AdaptiveRouterOptions
+from emperor.parametric.utils.config import AdaptiveRouterOptions
 from emperor.experts.options import MixtureOfExpertsStackOptions
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
 from emperor.transformer.utils.patch.selector import PatchOptions
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.transformer.utils.patch.options.base import PatchConfig
 from emperor.attention.utils.presets import MultiHeadAttentionPresets
-from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
+from emperor.parametric.utils.presets import ParametricLayerPresets
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.embedding.options import AbsolutePositionalEmbeddingOptions, RelativePositionalEmbeddingOptions
@@ -238,7 +238,7 @@ class TransformerPresets:
             )
 
         if layer_stack_option == AdaptiveLayerStackOptions.BASE:
-            projector_config = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
+            projector_config = ParametricLayerPresets.parametric_layer_stack_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 hidden_dim=hidden_dim,

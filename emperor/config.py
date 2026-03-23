@@ -9,7 +9,7 @@ from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.parametric.utils.layers import AdaptiveParameterLayerConfig
+from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.base.layer import LayerStackConfig
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
@@ -143,8 +143,8 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`MixtureConfig` configuration"},
     )
-    parameter_generator_model_config: AdaptiveParameterLayerConfig = field(
-        default_factory=lambda: AdaptiveParameterLayerConfig(
+    parameter_generator_model_config: ParametricLayerConfig = field(
+        default_factory=lambda: ParametricLayerConfig(
             time_tracker_flag=PARAMETER_GENERATOR_TRACK_TIME_FLAG,
             # dynamic_diagonal_params_flag=PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG,
         ),

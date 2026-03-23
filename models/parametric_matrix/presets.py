@@ -9,15 +9,12 @@ from emperor.parametric.options import AdaptiveLayerOptions
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
-from emperor.parametric.utils.layers import (
-    AdaptiveParameterLayerConfig,
-    AdaptiveRouterOptions,
-)
+from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterBehaviourConfig
+from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from models.parametric_matrix.config import ExperimentConfig
 from models.parametric_matrix.model import Model
@@ -96,14 +93,14 @@ class ExperimentPresets(ExperimentPresetsBase):
                     residual_flag=stack_residual_flag,
                     adaptive_computation_flag=False,
                     dropout_probability=stack_dropout_probability,
-                    override_config=AdaptiveParameterLayerConfig(
+                    override_config=ParametricLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
                         adaptive_weight_option=AdaptiveWeightOptions.MATRIX,
                         adaptive_bias_option=adaptive_bias_option,
                         init_sampler_model_option=AdaptiveRouterOptions.SHARED_ROUTER,
                         time_tracker_flag=False,
-                        adaptive_behaviour_config=AdaptiveParameterBehaviourConfig(
+                        adaptive_behaviour_config=AdaptiveParameterAugmentationConfig(
                             input_dim=input_dim,
                             output_dim=output_dim,
                             override_config=LayerStackConfig(

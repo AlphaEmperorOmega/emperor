@@ -5,7 +5,7 @@ import torch.nn as nn
 from emperor.base.utils import Module
 from emperor.config import ModelConfig
 from emperor.linears.utils.presets import LinearPresets
-from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviour
+from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterAugmentation
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
@@ -20,7 +20,7 @@ from emperor.augmentations.adaptive_parameters.utils.handlers.bias import BiasHa
 from emperor.augmentations.adaptive_parameters.utils.handlers.memory import MemoryHandlerAbstract
 
 
-class TestAdaptiveParameterBehaviour(unittest.TestCase):
+class TestAdaptiveParameterAugmentation(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -63,7 +63,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
     def test_init_all_disabled(self):
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = AdaptiveParameterBehaviour(cfg)
+        model = AdaptiveParameterAugmentation(cfg)
         self.assertIsNone(model.generator_model)
         self.assertIsNone(model.diagonal_model)
         self.assertIsNone(model.memory_model)
@@ -116,7 +116,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
             with self.subTest(message):
                 cfg = LinearPresets.adaptive_linear_layer_preset(**preset_kwargs)
                 cfg = cfg.override_config
-                model = AdaptiveParameterBehaviour(cfg)
+                model = AdaptiveParameterAugmentation(cfg)
                 sub_model = getattr(model, attr)
                 self.assertIsNotNone(sub_model)
                 self.assertIsInstance(sub_model, expected_type)
@@ -124,7 +124,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
     def test_forward_all_disabled(self):
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = AdaptiveParameterBehaviour(cfg)
+        model = AdaptiveParameterAugmentation(cfg)
 
         weight_params, bias_params = self._make_weight_and_bias_params()
         input_tensor = torch.randn(self.batch_size, self.input_dim)
@@ -147,7 +147,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
     def test_forward_all_disabled_without_bias(self):
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = AdaptiveParameterBehaviour(cfg)
+        model = AdaptiveParameterAugmentation(cfg)
 
         weight_shape = (self.input_dim, self.output_dim)
         weight_params = Module()._init_parameter_bank(weight_shape)
@@ -177,7 +177,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
                     generator_depth=depth,
                 )
                 cfg = cfg.override_config
-                model = AdaptiveParameterBehaviour(cfg)
+                model = AdaptiveParameterAugmentation(cfg)
 
                 weight_params, bias_params = self._make_weight_and_bias_params()
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
@@ -199,7 +199,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
                     diagonal_option=option,
                 )
                 cfg = cfg.override_config
-                model = AdaptiveParameterBehaviour(cfg)
+                model = AdaptiveParameterAugmentation(cfg)
 
                 weight_params, bias_params = self._make_weight_and_bias_params()
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
@@ -221,7 +221,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
                     bias_option=option,
                 )
                 cfg = cfg.override_config
-                model = AdaptiveParameterBehaviour(cfg)
+                model = AdaptiveParameterAugmentation(cfg)
 
                 weight_params, bias_params = self._make_weight_and_bias_params()
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
@@ -249,7 +249,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
                         memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
                     )
                     cfg = cfg.override_config
-                    model = AdaptiveParameterBehaviour(cfg)
+                    model = AdaptiveParameterAugmentation(cfg)
 
                     weight_params, bias_params = self._make_weight_and_bias_params()
                     input_tensor = torch.randn(self.batch_size, self.input_dim)
@@ -277,7 +277,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
                         memory_position_option=LinearMemoryPositionOptions.AFTER_AFFINE,
                     )
                     cfg = cfg.override_config
-                    model = AdaptiveParameterBehaviour(cfg)
+                    model = AdaptiveParameterAugmentation(cfg)
 
                     weight_params, bias_params = self._make_weight_and_bias_params()
                     input_tensor = torch.randn(self.batch_size, self.input_dim)
@@ -321,7 +321,7 @@ class TestAdaptiveParameterBehaviour(unittest.TestCase):
                                     **memory_kwargs,
                                 )
                                 cfg = cfg.override_config
-                                model = AdaptiveParameterBehaviour(cfg)
+                                model = AdaptiveParameterAugmentation(cfg)
 
                                 weight_params, bias_params = (
                                     self._make_weight_and_bias_params()

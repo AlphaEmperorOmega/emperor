@@ -5,15 +5,13 @@ from torch.types import Tensor
 from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.config import ModelConfig
-from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterBehaviour
-from emperor.parametric.utils.stack import AdaptiveParameterLayerStack
-from emperor.parametric.utils.presets import AdaptiveParameterLayerPresets
+from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterAugmentation
+from emperor.parametric.utils.stack import ParametricLayerStack
+from emperor.parametric.utils.presets import ParametricLayerPresets
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.utils.mixtures.types.vector import VectorWeightsMixture
-from emperor.parametric.utils.layers import (
-    AdaptiveRouterOptions,
-    AdaptiveParameterLayer,
-)
+from emperor.parametric.utils.layers import ParametricLayer
+from emperor.parametric.utils.config import AdaptiveRouterOptions
 from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
@@ -29,9 +27,9 @@ from emperor.parametric.utils.mixtures.types.matrix import (
 from emperor.experts.utils.enums import InitSamplerOptions
 
 
-class TestAdaptiveParameterLayer(unittest.TestCase):
+class TestParametricLayer(unittest.TestCase):
     def setUp(self):
-        self.cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()
+        self.cfg = ParametricLayerPresets.parametric_layer_preset()
 
     def test_init(self):
         for adaptive_router_otpion in AdaptiveRouterOptions:
@@ -45,7 +43,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                 "input_dim": 8,
                                 "output_dim": 8,
                             }
-                        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                        cfg = ParametricLayerPresets.parametric_layer_preset(
                             adaptive_weight_option=adaptive_weight_otpion,
                             adaptive_bias_option=adaptive_bias_option,
                             init_sampler_model_option=adaptive_router_otpion,
@@ -61,12 +59,12 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                 ValueError,
                                 msg="Router option is disabled, but weight option cannot be disabled.",
                             ):
-                                AdaptiveParameterLayer(cfg)
+                                ParametricLayer(cfg)
                             continue
 
-                        m = AdaptiveParameterLayer(cfg)
+                        m = ParametricLayer(cfg)
 
-                        self.assertIsInstance(m, AdaptiveParameterLayer)
+                        self.assertIsInstance(m, ParametricLayer)
                         self.assertEqual(m.input_dim, cfg.input_dim)
                         self.assertEqual(m.output_dim, cfg.output_dim)
                         self.assertEqual(
@@ -79,7 +77,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                             m.init_sampler_model_option, cfg.init_sampler_model_option
                         )
                         self.assertIsInstance(
-                            m.adaptive_behaviour, AdaptiveParameterBehaviour
+                            m.adaptive_behaviour, AdaptiveParameterAugmentation
                         )
                         self.assertIsInstance(
                             m.weight_parameter_model, AdaptiveMixtureBase
@@ -97,13 +95,13 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
         for adaptive_behaviour_config in behaviour_config_options:
             message = f"Test failed for the inputs: adaptive_behaviour_config: {adaptive_behaviour_config}"
             with self.subTest(error=message):
-                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()
+                cfg = ParametricLayerPresets.parametric_layer_preset()
                 cfg.adaptive_behaviour_config = adaptive_behaviour_config
-                m = AdaptiveParameterLayer(cfg)
-                behaviour_model = m._AdaptiveParameterLayer__init_adaptive_behaviour()
+                m = ParametricLayer(cfg)
+                behaviour_model = m._ParametricLayer__init_adaptive_behaviour()
 
                 if adaptive_behaviour_config is not None:
-                    self.assertIsInstance(behaviour_model, AdaptiveParameterBehaviour)
+                    self.assertIsInstance(behaviour_model, AdaptiveParameterAugmentation)
                     continue
                 self.assertIsNone(behaviour_model)
 
@@ -118,12 +116,12 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                         "output_dim": 8,
                         "init_sampler_model_option": AdaptiveRouterOptions.INDEPENTENT_ROUTER,
                     }
-                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                cfg = ParametricLayerPresets.parametric_layer_preset(
                     adaptive_weight_option=adaptive_weight_option,
                     **options,
                 )
-                m = AdaptiveParameterLayer(cfg)
-                model = m._AdaptiveParameterLayer__init_weight_model()
+                m = ParametricLayer(cfg)
+                model = m._ParametricLayer__init_weight_model()
 
                 self.assertIsInstance(model, AdaptiveMixtureBase)
                 if adaptive_weight_option == AdaptiveWeightOptions.VECTOR:
@@ -137,11 +135,11 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
         for adaptive_bias_option in AdaptiveBiasOptions:
             message = f"Test failed for the inputs: adaptive_bias_option: {adaptive_bias_option}"
             with self.subTest(error=message):
-                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                cfg = ParametricLayerPresets.parametric_layer_preset(
                     adaptive_bias_option=adaptive_bias_option,
                 )
-                m = AdaptiveParameterLayer(cfg)
-                model = m._AdaptiveParameterLayer__init_bias_model()
+                m = ParametricLayer(cfg)
+                model = m._ParametricLayer__init_bias_model()
 
                 if adaptive_bias_option == AdaptiveBiasOptions.MATRIX:
                     self.assertIsInstance(model, MatrixBiasMixture)
@@ -161,7 +159,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                             "input_dim": 8,
                             "output_dim": 8,
                         }
-                    cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                    cfg = ParametricLayerPresets.parametric_layer_preset(
                         init_sampler_model_option=init_sampler_model_flag,
                         adaptive_weight_option=adaptive_weight_option,
                         **options,
@@ -179,12 +177,12 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                             ValueError,
                             msg="Router option is disabled, but weight option cannot be disabled.",
                         ):
-                            AdaptiveParameterLayer(cfg)
+                            ParametricLayer(cfg)
                         continue
 
-                    m = AdaptiveParameterLayer(cfg)
+                    m = ParametricLayer(cfg)
                     probabilities, indices, skip_mask, loss = (
-                        m._AdaptiveParameterLayer__sample_weight_probabilities_and_indices(
+                        m._ParametricLayer__sample_weight_probabilities_and_indices(
                             input_tensor
                         )
                     )
@@ -203,7 +201,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             for adaptive_bias_option in AdaptiveBiasOptions:
                 message = f"Testing inputs: init_sampler_model_flag: {init_sampler_model_flag}, adaptive_bias_option: {adaptive_bias_option}"
                 with self.subTest(error=message):
-                    cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                    cfg = ParametricLayerPresets.parametric_layer_preset(
                         init_sampler_model_option=init_sampler_model_flag,
                         adaptive_bias_option=adaptive_bias_option,
                     )
@@ -211,9 +209,9 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                     batch_size = 5
                     input_tensor = torch.randn(batch_size, cfg.input_dim)
 
-                    m = AdaptiveParameterLayer(cfg)
+                    m = ParametricLayer(cfg)
                     probabilities, indices, skip_mask, loss = (
-                        m._AdaptiveParameterLayer__sample_bias_probabilities_and_indices(
+                        m._ParametricLayer__sample_bias_probabilities_and_indices(
                             input_tensor
                         )
                     )
@@ -232,7 +230,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             message = f"Test failed for the inputs: adaptive_weight_option: {adaptive_weight_option}"
             with self.subTest(error=message):
                 options = {}
-                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                cfg = ParametricLayerPresets.parametric_layer_preset(
                     input_dim=8,
                     output_dim=8,
                     experts_compute_expert_mixture_flag=True,
@@ -244,14 +242,14 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
 
                 batch_size = 5
                 input_tensor = torch.randn(batch_size, cfg.input_dim)
-                m = AdaptiveParameterLayer(cfg)
+                m = ParametricLayer(cfg)
                 probabilities, indices, skip_mask, loss = (
-                    m._AdaptiveParameterLayer__sample_weight_probabilities_and_indices(
+                    m._ParametricLayer__sample_weight_probabilities_and_indices(
                         input_tensor
                     )
                 )
                 weight_parameters, loss = (
-                    m._AdaptiveParameterLayer__generate_weight_parameters(
+                    m._ParametricLayer__generate_weight_parameters(
                         probabilities, indices, input_tensor
                     )
                 )
@@ -266,7 +264,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             message = f"Test failed for the inputs: adaptive_bias_option: {adaptive_bias_option}"
             with self.subTest(error=message):
                 options = {}
-                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                cfg = ParametricLayerPresets.parametric_layer_preset(
                     input_dim=8,
                     output_dim=8,
                     adaptive_bias_option=adaptive_bias_option,
@@ -278,14 +276,14 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
 
                 batch_size = 5
                 input_tensor = torch.randn(batch_size, cfg.output_dim)
-                m = AdaptiveParameterLayer(cfg)
+                m = ParametricLayer(cfg)
                 probabilities, indices, skip_mask, loss = (
-                    m._AdaptiveParameterLayer__sample_bias_probabilities_and_indices(
+                    m._ParametricLayer__sample_bias_probabilities_and_indices(
                         input_tensor
                     )
                 )
                 bias_parameters, loss = (
-                    m._AdaptiveParameterLayer__generate_bias_parameters(
+                    m._ParametricLayer__generate_bias_parameters(
                         input_tensor, skip_mask, probabilities, indices
                     )
                 )
@@ -315,7 +313,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
 
                             shared_option = AdaptiveRouterOptions.SHARED_ROUTER
                             if init_sampler_model_option == shared_option:
-                                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                                cfg = ParametricLayerPresets.parametric_layer_preset(
                                     experts_compute_expert_mixture_flag=True,
                                     adaptive_weight_option=adaptive_weight_option,
                                     adaptive_bias_option=adaptive_bias_option,
@@ -324,7 +322,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                     **options,
                                 )
                                 with self.assertRaises(ValueError):
-                                    AdaptiveParameterLayer(cfg)
+                                    ParametricLayer(cfg)
                                 continue
 
                         if (
@@ -339,7 +337,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                     InitSamplerOptions.LAYER
                                 )
 
-                        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                        cfg = ParametricLayerPresets.parametric_layer_preset(
                             experts_compute_expert_mixture_flag=True,
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
@@ -349,7 +347,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                         batch_size = 5
                         input_tensor = torch.randn(batch_size, cfg.input_dim)
 
-                        m = AdaptiveParameterLayer(cfg)
+                        m = ParametricLayer(cfg)
                         weight_parameters, bias_parameters, loss = (
                             m._generate_parameters(
                                 input_tensor,
@@ -372,14 +370,14 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                         self.assertIsInstance(loss, Tensor)
 
     def test__apply_generated_parameters(self):
-        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()
-        m = AdaptiveParameterLayer(cfg)
+        cfg = ParametricLayerPresets.parametric_layer_preset()
+        m = ParametricLayer(cfg)
 
         batch_size = 5
         input = torch.randn(batch_size, cfg.input_dim)
         weight_parameters = torch.randn(batch_size, cfg.input_dim, cfg.output_dim)
 
-        output = m._AdaptiveParameterLayer__apply_generated_weights(
+        output = m._ParametricLayer__apply_generated_weights(
             input, weight_parameters
         )
 
@@ -400,14 +398,14 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
             )
 
     def test__apply_generated_biases(self):
-        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset()
-        m = AdaptiveParameterLayer(cfg)
+        cfg = ParametricLayerPresets.parametric_layer_preset()
+        m = ParametricLayer(cfg)
 
         batch_size = 5
         input = torch.ones(batch_size, cfg.output_dim)
         bias_parameters = torch.randn(batch_size, cfg.output_dim)
 
-        output = m._AdaptiveParameterLayer__apply_generated_biases(
+        output = m._ParametricLayer__apply_generated_biases(
             input, bias_parameters
         )
 
@@ -430,7 +428,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
 
                             shared_option = AdaptiveRouterOptions.SHARED_ROUTER
                             if init_sampler_model_option == shared_option:
-                                cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                                cfg = ParametricLayerPresets.parametric_layer_preset(
                                     experts_compute_expert_mixture_flag=True,
                                     adaptive_weight_option=adaptive_weight_option,
                                     adaptive_bias_option=adaptive_bias_option,
@@ -439,7 +437,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                     **options,
                                 )
                                 with self.assertRaises(ValueError):
-                                    AdaptiveParameterLayer(cfg)
+                                    ParametricLayer(cfg)
                                 continue
 
                         if (
@@ -454,14 +452,14 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                                     InitSamplerOptions.LAYER
                                 )
 
-                        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_preset(
+                        cfg = ParametricLayerPresets.parametric_layer_preset(
                             experts_compute_expert_mixture_flag=True,
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
                             init_sampler_model_option=init_sampler_model_option,
                             **options,
                         )
-                        m = AdaptiveParameterLayer(cfg)
+                        m = ParametricLayer(cfg)
 
                         batch_size = 5
                         input_tensor = torch.randn(batch_size, cfg.input_dim)
@@ -474,7 +472,7 @@ class TestAdaptiveParameterLayer(unittest.TestCase):
                         self.assertIsInstance(loss, Tensor)
 
 
-class TestAdaptiveParameterLayerStack(unittest.TestCase):
+class TestParametricLayerStack(unittest.TestCase):
     def setUp(self):
         self.rebuild_presets()
 
@@ -487,7 +485,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
 
     def rebuild_presets(self, config: ModelConfig | None = None):
         self.cfg = (
-            AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
+            ParametricLayerPresets.parametric_layer_stack_preset(
                 return_model_config_flag=True,
             )
             if config is None
@@ -506,7 +504,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                 for num_layers in num_layer_options:
                     message = f"Testing configuration with num_layers={num_layers}"
                     with self.subTest(msg=message):
-                        cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
+                        cfg = ParametricLayerPresets.parametric_layer_stack_preset(
                             input_dim=8,
                             hidden_dim=8,
                             output_dim=8,
@@ -516,7 +514,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                             adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
                             experts_init_sampler_option=InitSamplerOptions.LAYER,
                         )
-                        m = AdaptiveParameterLayerStack(cfg).build_model()
+                        m = ParametricLayerStack(cfg).build_model()
 
                         if num_layers == 1:
                             self.assertIsInstance(m, Layer)
@@ -534,7 +532,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                     for top_k in top_k_options:
                         message = f"Testing with layer_stack_option={adaptive_weight_option.name}, weighting_position_option={adaptive_bias_option.name}, init_sampler_model_flag={AdaptiveRouterOptions.__members__}, compute_expert_mixture_flag={True or False}, weighted_parameters_flag={True or False}, top_k={top_k}, num_layers={num_layers}"
                         with self.subTest(msg=message):
-                            cfg = AdaptiveParameterLayerPresets.adaptive_parameter_layer_stack_preset(
+                            cfg = ParametricLayerPresets.parametric_layer_stack_preset(
                                 input_dim=8,
                                 hidden_dim=8,
                                 output_dim=8,
@@ -545,7 +543,7 @@ class TestAdaptiveParameterLayerStack(unittest.TestCase):
                                 adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
                                 experts_init_sampler_option=InitSamplerOptions.LAYER,
                             )
-                            m = AdaptiveParameterLayerStack(cfg).build_model()
+                            m = ParametricLayerStack(cfg).build_model()
 
                             batch_size = 10
 

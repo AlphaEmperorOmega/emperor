@@ -4,7 +4,7 @@ from torch import Tensor
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStack, LayerStackConfig
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.parametric.utils.stack import AdaptiveParameterLayerStack
+from emperor.parametric.utils.stack import ParametricLayerStack
 from models.parametric_vector.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
@@ -25,7 +25,7 @@ class Model(ClassifierExperiment):
         self.output_config: LayerStackConfig = self.cfg.output_model_config
 
         self.input_model = LayerStack(self.input_config).build_model()
-        self.model = AdaptiveParameterLayerStack(self.model_config).build_model()
+        self.model = ParametricLayerStack(self.model_config).build_model()
         self.output_model = LayerStack(self.output_config).build_model()
 
     def _resolve_main_config(
