@@ -43,3 +43,9 @@ class LayerNormPositionOptions(BaseOptions):
     DEFAULT = "layer_norm_after_model_output"
     BEFORE = "layer_norm_before_model_processing"
     AFTER = "layer_norm_after_residual_connection"
+
+
+class LastLayerBiasOptions(BaseOptions):
+    DEFAULT = "inherit_bias_flag"
+    DISABLED = "disable_bias_on_last_layer"
+    ENABLED = "enable_bias_on_last_layer"

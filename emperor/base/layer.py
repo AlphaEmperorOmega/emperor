@@ -6,7 +6,12 @@ from torch.types import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase, Module
-from emperor.base.enums import ActivationOptions, BaseOptions, LayerNormPositionOptions
+from emperor.base.enums import (
+    ActivationOptions,
+    BaseOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 
 from typing import TYPE_CHECKING
 
@@ -208,6 +213,10 @@ class LayerStackConfig(LayerConfig):
         default=None,
         metadata={"help": "Number of layers in the model"},
     )
+    last_layer_bias_option: LastLayerBiasOptions | None = field(
+        default=None,
+        metadata={"help": "Override bias on the last layer regardless of bias_flag"},
+    )
 
 
 class LayerStack(Module):
@@ -234,6 +243,7 @@ class LayerStack(Module):
         self.adaptive_computation_flag = self.cfg.adaptive_computation_flag
         self.dropout_probability = self.cfg.dropout_probability
         self.layer_norm_position = self.cfg.layer_norm_position
+        self.last_layer_bias_option = self.cfg.last_layer_bias_option
         self.callback_function = None
 
         self.layer_block_model = self.cfg.layer_type or Layer
@@ -294,8 +304,16 @@ class LayerStack(Module):
     def __add_output_layer(self, layers: list) -> None:
         layer_input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
         config = self.__resolve_model_type_overrides(layer_input_dim, self.output_dim)
+        self.__apply_last_layer_bias_override(config)
         layer = self.layer_block_model(model=self.__get_model_type()(config))
         layers.append(layer)
+
+    def __apply_last_layer_bias_override(self, config) -> None:
+        match self.last_layer_bias_option:
+            case LastLayerBiasOptions.DISABLED:
+                config.bias_flag = False
+            case LastLayerBiasOptions.ENABLED:
+                config.bias_flag = True
 
     def __get_model_type(self):
         if isinstance(self.model_type, BaseOptions):
