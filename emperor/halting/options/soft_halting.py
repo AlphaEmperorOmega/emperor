@@ -3,8 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
+from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.utils import Module
+from emperor.base.layer import Layer, LayerStackConfig
+from emperor.base.enums import LastLayerBiasOptions
 
 from typing import TYPE_CHECKING
 
@@ -46,24 +49,31 @@ class SoftHalting(Module):
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
         self.cfg: "HaltingConfig" = self._overwrite_config(config, overrides)
+        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
-        self.halting_dropout: float = self.cfg.halting_dropout
 
-        self._gate: nn.Sequential = self.__build_gate()
+        self._gate: Layer | Sequential = self.__build_gate()
         self.__init_gate_weights()
 
-    def __build_gate(self) -> nn.Sequential:
-        return nn.Sequential(
-            nn.Linear(self.input_dim, self.input_dim),
-            nn.GELU(),
-            nn.Dropout(self.halting_dropout),
-            nn.Linear(self.input_dim, 2, bias=False),
+    def __build_gate(self) -> "Layer | Sequential":
+        from emperor.linears.utils.stack import LinearLayerStack
+
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=2,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
         )
+        return LinearLayerStack(self.main_cfg, overrides).build_model()
 
     def __init_gate_weights(self) -> None:
-        nn.init.zeros_(self._gate[-1].weight)  # type: ignore[union-attr]
+        last_linear = None
+        for m in self._gate.modules():
+            if isinstance(m, nn.Linear):
+                last_linear = m
+        if isinstance(last_linear, nn.Linear):
+            nn.init.zeros_(last_linear.weight)
 
     def __compute_gate_logits(self, previous_output: Tensor) -> Tensor:
         logits = self._gate(previous_output)
