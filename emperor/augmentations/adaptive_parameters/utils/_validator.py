@@ -32,6 +32,10 @@ class AdaptiveParameterAugmentationValidator:
         "row_mask_option": {
             "type": "RowMaskOptions",
         },
+        "mask_dimension_option": {
+            "type": "MaskDimensionOptions",
+            "optional": True,
+        },
         "memory_option": {
             "type": "LinearMemoryOptions",
         },
@@ -57,6 +61,7 @@ class AdaptiveParameterAugmentationValidator:
             LinearMemoryOptions,
             LinearMemoryPositionOptions,
             LinearMemorySizeOptions,
+            MaskDimensionOptions,
             RowMaskOptions,
             WeightNormalizationOptions,
         )
@@ -69,6 +74,7 @@ class AdaptiveParameterAugmentationValidator:
             "LinearMemoryOptions": LinearMemoryOptions,
             "LinearMemorySizeOptions": LinearMemorySizeOptions,
             "LinearMemoryPositionOptions": LinearMemoryPositionOptions,
+            "MaskDimensionOptions": MaskDimensionOptions,
             "RowMaskOptions": RowMaskOptions,
             "WeightNormalizationOptions": WeightNormalizationOptions,
         }
