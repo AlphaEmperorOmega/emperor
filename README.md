@@ -209,6 +209,10 @@ The file is updated in place as the search runs — if the process is interrupte
     - [x] `ResidualConnection` — adds the layer input directly to its output, enabling gradient flow across depth
     - [ ] Dynamic gate option
   - [x] `LayerStack` — sequential pipeline of initial, hidden, and output layers with configurable depth and dimensions
+    - [x] `LastLayerBias` — overrides the bias setting exclusively on the final layer of the stack, independent of the global bias flag
+      - [x] `DEFAULT` — inherits the bias setting from the global configuration without modification
+      - [x] `DISABLED` — forces bias off on the last layer regardless of the global setting
+      - [x] `ENABLED` — forces bias on on the last layer regardless of the global setting
 - **Linear transformation**
   - [x] `LinearLayer` — standard affine transform (y = Wx + b) with optional bias
   - [x] `AdaptiveLinearLayer` — affine transform where weights and bias are dynamically modified per sample via augmentation modules
@@ -238,10 +242,14 @@ The file is updated in place as the search runs — if the process is interrupte
       - [x] `SOFT_CLAMP` — smoothly bounds weight values using tanh for differentiable range limiting
       - [x] `RMS` — normalizes weights by dividing by their root mean square value
       - [x] `SIGMOID_SCALE` — maps weight values through sigmoid to bound them within (0, 1)
-    - [x] `RowMask` — dynamically masks weight matrix rows to control which output dimensions are active per sample
-      - [x] `GLOBAL_SCORE` — computes a global score vector and selects top-k rows by magnitude
-      - [x] `PER_ROW_SCORE` — each row receives an independent sigmoid score for binary activation
-      - [x] `TOP_SLICE` — retains the first N rows by index position, zeroing the rest
+    - [x] `RowMask` — dynamically masks weight matrix entries to control which parameters are active per sample
+      - [x] `GLOBAL_SCORE` — computes a global score vector and selects top-k rows or columns by magnitude
+      - [x] `PER_ROW_SCORE` — each row or column receives an independent sigmoid score for binary activation
+      - [x] `TOP_SLICE` — retains the first N rows or columns by index position, zeroing the rest
+      - [x] `DIAGONAL` — applies a triangular mask whose diagonal position shifts based on a learned input-dependent probability, controlling how much of the weight matrix is kept
+      - [x] `MaskDimension` — switches mask application between the row and column axis of the weight matrix
+        - [x] `ROW` — scores and masks operate along the row dimension
+        - [x] `COLUMN` — scores and masks operate along the column dimension
     - [x] `Memory` — enriches the input by blending it with a trainable memory representation
       - [x] `FUSION` — concatenates input with learned memory and compresses back to original dimension via an MLP
       - [x] `WEIGHTED` — blends input and memory features using softmax-computed attention weights
