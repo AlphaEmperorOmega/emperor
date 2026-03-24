@@ -9,7 +9,7 @@ from emperor.augmentations.adaptive_parameters.utils.factory import (
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
     DynamicWeightFactory,
-    RowMaskFactory,
+    MaskHandlerFactory,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
@@ -72,7 +72,7 @@ class AdaptiveParameterAugmentation(Module):
 
     def __init_row_mask_model(self) -> Module | None:
         is_valid_flag = self.row_mask_option != RowMaskOptions.DISABLED
-        return self.__build_model(is_valid_flag, RowMaskFactory)
+        return self.__build_model(is_valid_flag, MaskHandlerFactory)
 
     def __build_model(
         self, is_valid_flag: bool, factory_class: type[Module]
