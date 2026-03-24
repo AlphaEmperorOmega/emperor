@@ -7,6 +7,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     RowMaskOptions,
 )
 from emperor.augmentations.adaptive_parameters.utils.handlers.mask import (
+    MaskHandlerAbstract,
     PerRowMaskHandler,
     RowMaskHandler,
     TopSliceMaskHandler,
@@ -156,7 +157,7 @@ class DynamicMemoryFactory(Module):
                 )
 
 
-class RowMaskFactory(Module):
+class MaskHandlerFactory(Module):
     def __init__(
         self,
         cfg: "AdaptiveParameterAugmentationConfig",
@@ -168,7 +169,7 @@ class RowMaskFactory(Module):
         )
         self.row_mask_option = self.cfg.row_mask_option
 
-    def build(self) -> Module:
+    def build(self) -> MaskHandlerAbstract:
         match self.row_mask_option:
             case RowMaskOptions.GLOBAL_SCORE:
                 return RowMaskHandler(self.cfg)
