@@ -23,9 +23,9 @@ class StickBreakingState:
             "help": "Boolean mask indicating which tokens have accumulated enough halt probability to stop computing"
         },
     )
-    log_never_halt: Tensor = field(
+    log_remaining_stick: Tensor = field(
         metadata={
-            "help": "Log probability of never having halted up to the current step; represents the remaining stick"
+            "help": "Log of the remaining stick length after all breaks so far; the cumulative log probability of not yet having halted"
         },
     )
     accumulated_hidden: Tensor = field(
@@ -33,12 +33,12 @@ class StickBreakingState:
             "help": "Weighted sum of hidden states accumulated so far, where each step contributes proportionally to its halt probability"
         },
     )
-    accumulated_halt_prob: Tensor = field(
+    accumulated_halt_probabilities: Tensor = field(
         metadata={
             "help": "Total halt probability spent across all steps so far; halting is triggered when this exceeds the threshold"
         },
     )
-    step: int = field(
+    step_count: int = field(
         metadata={
             "help": "Current step index, used to compute the expected number of steps for regularisation"
         },
@@ -103,48 +103,48 @@ class StickBreaking(Module):
 
     def __init_state(
         self,
-        current_log_gates: Tensor,
+        log_softmax_gates: Tensor,
         previous_output: Tensor,
     ) -> StickBreakingState:
-        log_continuation, log_halting = torch.unbind(current_log_gates, dim=-1)
+        log_continuation, log_halting = torch.unbind(log_softmax_gates, dim=-1)
         halting_probability = torch.exp(log_halting)
         has_halted = halting_probability >= self.threshold
         weighted_hidden = halting_probability.unsqueeze(-1) * previous_output
         return StickBreakingState(
             halt_mask=has_halted,
-            log_never_halt=log_continuation,
+            log_remaining_stick=log_continuation,
             accumulated_hidden=weighted_hidden,
-            accumulated_halt_prob=halting_probability,
-            step=0,
+            accumulated_halt_probabilities=halting_probability,
+            step_count=0,
             accumulated_expected_step=torch.tensor(0.0),
         )
 
     def __update_state(
         self,
         previous_state: StickBreakingState,
-        current_log_gates: Tensor,
+        log_softmax_gates: Tensor,
         previous_output: Tensor,
     ) -> StickBreakingState:
-        updated_step = previous_state.step + 1
+        updated_step_count = previous_state.step_count + 1
         log_continuation, halting_probability = self.__compute_step_halting_probability(
-            previous_state, current_log_gates
+            previous_state, log_softmax_gates
         )
         accumulated_halting_probability = (
-            previous_state.accumulated_halt_prob + halting_probability
+            previous_state.accumulated_halt_probabilities + halting_probability
         )
         has_halted = accumulated_halting_probability >= self.threshold
         weighted_hidden = halting_probability.unsqueeze(-1) * previous_output
         updated_accumulated_hidden = previous_state.accumulated_hidden + weighted_hidden
-        step_contribution = halting_probability * updated_step
+        step_contribution = halting_probability * updated_step_count
         updated_accumulated_expected_step = (
             previous_state.accumulated_expected_step + step_contribution
         )
         return StickBreakingState(
             halt_mask=has_halted,
-            log_never_halt=log_continuation,
+            log_remaining_stick=log_continuation,
             accumulated_hidden=updated_accumulated_hidden,
-            accumulated_halt_prob=accumulated_halting_probability,
-            step=updated_step,
+            accumulated_halt_probabilities=accumulated_halting_probability,
+            step_count=updated_step_count,
             accumulated_expected_step=updated_accumulated_expected_step,
         )
 
@@ -154,7 +154,7 @@ class StickBreaking(Module):
         current_log_gates: Tensor,
     ) -> tuple[Tensor, Tensor]:
         current_log_halting = (
-            previous_state.log_never_halt.unsqueeze(-1) + current_log_gates
+            previous_state.log_remaining_stick.unsqueeze(-1) + current_log_gates
         )
         log_continuation, log_halting = torch.unbind(current_log_halting, dim=-1)
         halting_probability = torch.exp(log_halting)
@@ -168,11 +168,13 @@ class StickBreaking(Module):
         state: StickBreakingState,
         current_hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        remaining_probabilities = 1 - state.accumulated_halt_prob
-        weighted_remaining_hidden = remaining_probabilities.unsqueeze(-1) * current_hidden
+        remaining_probabilities = 1 - state.accumulated_halt_probabilities
+        weighted_remaining_hidden = (
+            remaining_probabilities.unsqueeze(-1) * current_hidden
+        )
         soft_halted_hidden = state.accumulated_hidden + weighted_remaining_hidden
         expected_step = (
-            state.accumulated_expected_step + (state.step + 1) * remaining_probabilities
+            state.accumulated_expected_step + (state.step_count + 1) * remaining_probabilities
         )
         if state.halt_mask.any():
             soft_halted_hidden.masked_scatter_(

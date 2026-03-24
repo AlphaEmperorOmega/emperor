@@ -23,9 +23,9 @@ class SoftHaltingState:
             "help": "Current step index, used to compute the expected number of steps for regularisation"
         },
     )
-    log_never_halt: Tensor = field(
+    log_remaining_stick: Tensor = field(
         metadata={
-            "help": "Log probability of never having halted up to the current step; represents the remaining stick"
+            "help": "Log of the remaining stick length after all breaks so far; the cumulative log probability of not yet having halted"
         },
     )
     accumulated_hidden: Tensor = field(
@@ -82,12 +82,12 @@ class SoftHalting(Module):
     def __update_halting_probs(
         self,
         current_log_gates: Tensor,
-        log_never_halt: Tensor,
+        log_remaining_stick: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        log_halt = log_never_halt[..., None] + current_log_gates
-        log_never_halt = log_halt[..., 0]
+        log_halt = log_remaining_stick[..., None] + current_log_gates
+        log_remaining_stick = log_halt[..., 0]
         halting_probability = torch.exp(log_halt[..., 1])
-        return halting_probability, log_never_halt
+        return halting_probability, log_remaining_stick
 
     def __compute_act_loss(
         self,
@@ -133,7 +133,7 @@ class SoftHalting(Module):
     ) -> tuple[SoftHaltingState, Tensor]:
         state = SoftHaltingState(
             step=0,
-            log_never_halt=torch.zeros_like(previous_output[..., 0]),
+            log_remaining_stick=torch.zeros_like(previous_output[..., 0]),
             accumulated_hidden=torch.zeros_like(previous_output),
             accumulated_expected_step=torch.zeros_like(previous_output[..., 0]),
         )
@@ -146,16 +146,16 @@ class SoftHalting(Module):
         pad_mask: Tensor,
     ) -> tuple[SoftHaltingState, Tensor]:
         current_log_gates = self.__compute_gate_logits(previous_output)
-        halting_probability, log_never_halt = self.__update_halting_probs(
-            current_log_gates, previous_state.log_never_halt
+        halting_probability, log_remaining_stick = self.__update_halting_probs(
+            current_log_gates, previous_state.log_remaining_stick
         )
-        p_never_halt = log_never_halt.exp()
+        p_never_halt = log_remaining_stick.exp()
         p_never_halt = (
             p_never_halt.masked_fill(p_never_halt < (1 - self.threshold), 0) * pad_mask
         ).contiguous()
         state = SoftHaltingState(
             step=previous_state.step + 1,
-            log_never_halt=log_never_halt,
+            log_remaining_stick=log_remaining_stick,
             accumulated_hidden=previous_state.accumulated_hidden
             + halting_probability[..., None] * previous_output,
             accumulated_expected_step=previous_state.accumulated_expected_step
