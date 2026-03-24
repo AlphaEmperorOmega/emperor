@@ -182,7 +182,9 @@ class DiagonalMaskHandler(MaskHandlerAbstract):
         keep_fraction = torch.sigmoid(keep_fraction_logit)
         row_count = weight_params.shape[-2]
         col_count = weight_params.shape[-1]
-        diagonal_shift = (keep_fraction * (row_count + col_count)).long().squeeze(-1) - row_count
+        min_diagonal_shift = 1 - row_count
+        raw_diagonal_shift = (keep_fraction * (row_count + col_count)).long().squeeze(-1) - row_count
+        diagonal_shift = raw_diagonal_shift.clamp(min=min_diagonal_shift)
         row_indices = torch.arange(row_count, device=weight_params.device)
         col_indices = torch.arange(col_count, device=weight_params.device)
         diagonal_mask = (
