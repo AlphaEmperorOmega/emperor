@@ -60,6 +60,7 @@ class RowMaskOptions(Enum):
     GLOBAL_SCORE = 1
     PER_ROW_SCORE = 2
     TOP_SLICE = 3
+    DIAGONAL = 4
 
 
 class MaskDimensionOptions(Enum):

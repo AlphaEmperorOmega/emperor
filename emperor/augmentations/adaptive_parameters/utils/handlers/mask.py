@@ -152,3 +152,43 @@ class TopSliceMaskHandler(MaskHandlerAbstract):
         if self.training:
             return sparsified_weights + (weight_params - weight_params.detach())
         return sparsified_weights
+
+
+class DiagonalMaskHandler(MaskHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.score_generator = self.__init_score_generator()
+
+    def __init_score_generator(self):
+        from emperor.linears.utils.stack import LinearLayerStack
+
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=1,
+        )
+        main_cfg = self._resolve_main_config(self.cfg, self.cfg)
+        return LinearLayerStack(main_cfg, overrides).build_model()
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        score = self.score_generator(logits)
+        p = torch.sigmoid(score)
+        n_rows = weight_params.shape[-2]
+        n_cols = weight_params.shape[-1]
+        diagonal_shift = (p * min(n_rows, n_cols)).long().squeeze(-1)
+        row_idx = torch.arange(n_rows, device=weight_params.device)
+        col_idx = torch.arange(n_cols, device=weight_params.device)
+        diagonal_mask = (
+            col_idx.unsqueeze(0) >= row_idx.unsqueeze(1) - diagonal_shift[..., None, None]
+        ).float()
+        sparsified_weights = weight_params * diagonal_mask
+        if self.training:
+            return sparsified_weights + (weight_params - weight_params.detach())
+        return sparsified_weights
