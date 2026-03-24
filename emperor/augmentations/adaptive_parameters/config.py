@@ -8,6 +8,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+    MaskDimensionOptions,
     RowMaskOptions,
     WeightNormalizationOptions,
 )
@@ -57,6 +58,10 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
         metadata={
             "help": "Input-dependent row masking of the weight matrix after weight updates."
         },
+    )
+    mask_dimension_option: MaskDimensionOptions | None = field(
+        default=None,
+        metadata={"help": "Whether to mask rows or columns of the weight matrix."},
     )
     memory_option: LinearMemoryOptions | None = field(
         default=None,
