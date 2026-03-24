@@ -62,6 +62,11 @@ class RowMaskOptions(Enum):
     TOP_SLICE = 3
 
 
+class MaskDimensionOptions(Enum):
+    ROW = "mask_rows"
+    COLUMN = "mask_columns"
+
+
 class LinearMemoryPositionOptions(Enum):
     BEFORE_AFFINE = 1
     AFTER_AFFINE = 2

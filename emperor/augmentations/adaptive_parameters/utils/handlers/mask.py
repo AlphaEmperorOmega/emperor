@@ -3,6 +3,7 @@ import torch
 from torch import Tensor
 from emperor.base.utils import Module
 from emperor.base.layer import LayerStackConfig
+from emperor.augmentations.adaptive_parameters.options import MaskDimensionOptions
 
 from typing import TYPE_CHECKING
 
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
     )
 
 
-class RowMaskHandler(Module):
+class MaskHandlerAbstract(Module):
     def __init__(
         self,
         cfg: "AdaptiveParameterAugmentationConfig",
@@ -23,6 +24,28 @@ class RowMaskHandler(Module):
             cfg, overrides
         )
         self.input_dim = self.cfg.input_dim
+        self.mask_dimension_option = self.cfg.mask_dimension_option
+
+    @property
+    def _count_dim(self) -> int:
+        return -1 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -2
+
+    @property
+    def _magnitude_dim(self) -> int:
+        return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
+
+    @property
+    def _broadcast_dim(self) -> int:
+        return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
+
+
+class RowMaskHandler(MaskHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
 
     def __init_score_generator(self):
@@ -41,13 +64,13 @@ class RowMaskHandler(Module):
     ) -> Tensor:
         keep_fraction_logit = self.score_generator(logits)
         keep_fraction = torch.sigmoid(keep_fraction_logit)
-        total_row_count = weight_params.shape[-2]
-        rows_to_keep = torch.clamp(
-            (keep_fraction * total_row_count).long(), min=1
+        total_count = weight_params.shape[self._count_dim]
+        items_to_keep = torch.clamp(
+            (keep_fraction * total_count).long(), min=1
         ).squeeze(-1)
-        row_magnitudes = weight_params.norm(dim=-1)
-        top_k_row_mask = self.__build_mask(row_magnitudes, rows_to_keep)
-        sparsified_weights = weight_params * top_k_row_mask.unsqueeze(-1)
+        magnitudes = weight_params.norm(dim=self._magnitude_dim)
+        top_k_mask = self.__build_mask(magnitudes, items_to_keep)
+        sparsified_weights = weight_params * top_k_mask.unsqueeze(self._broadcast_dim)
         if self.training:
             return sparsified_weights + (weight_params - weight_params.detach())
         return sparsified_weights
@@ -62,17 +85,13 @@ class RowMaskHandler(Module):
         return (row_magnitudes >= thresholds).float()
 
 
-class PerRowMaskHandler(Module):
+class PerRowMaskHandler(MaskHandlerAbstract):
     def __init__(
         self,
         cfg: "AdaptiveParameterAugmentationConfig",
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
-        super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
-            cfg, overrides
-        )
-        self.input_dim = self.cfg.input_dim
+        super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
 
     def __init_score_generator(self):
@@ -92,24 +111,20 @@ class PerRowMaskHandler(Module):
     ) -> Tensor:
         keep_fraction_logits = self.score_generator(logits)
         keep_fractions = torch.sigmoid(keep_fraction_logits)
-        per_row_mask = (keep_fractions >= 0.5).float()
-        sparsified_weights = weight_params * per_row_mask.unsqueeze(-1)
+        per_mask = (keep_fractions >= 0.5).float()
+        sparsified_weights = weight_params * per_mask.unsqueeze(self._broadcast_dim)
         if self.training:
             return sparsified_weights + (weight_params - weight_params.detach())
         return sparsified_weights
 
 
-class TopSliceMaskHandler(Module):
+class TopSliceMaskHandler(MaskHandlerAbstract):
     def __init__(
         self,
         cfg: "AdaptiveParameterAugmentationConfig",
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
-        super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
-            cfg, overrides
-        )
-        self.input_dim = self.cfg.input_dim
+        super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
 
     def __init_score_generator(self):
@@ -129,11 +144,11 @@ class TopSliceMaskHandler(Module):
     ) -> Tensor:
         keep_fraction_logit = self.score_generator(logits)
         keep_fraction = torch.sigmoid(keep_fraction_logit)
-        total_row_count = weight_params.shape[-2]
-        rows_to_keep = torch.clamp((keep_fraction * total_row_count).long(), min=1)
-        row_indices = torch.arange(total_row_count, device=weight_params.device)
-        top_k_row_mask = (row_indices.unsqueeze(0) < rows_to_keep).float()
-        sparsified_weights = weight_params * top_k_row_mask.unsqueeze(-1)
+        total_count = weight_params.shape[self._count_dim]
+        items_to_keep = torch.clamp((keep_fraction * total_count).long(), min=1)
+        indices = torch.arange(total_count, device=weight_params.device)
+        top_k_mask = (indices.unsqueeze(0) < items_to_keep).float()
+        sparsified_weights = weight_params * top_k_mask.unsqueeze(self._broadcast_dim)
         if self.training:
             return sparsified_weights + (weight_params - weight_params.detach())
         return sparsified_weights
