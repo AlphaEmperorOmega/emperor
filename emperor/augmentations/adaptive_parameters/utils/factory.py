@@ -7,6 +7,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     RowMaskOptions,
 )
 from emperor.augmentations.adaptive_parameters.utils.handlers.mask import (
+    DiagonalMaskHandler,
     MaskHandlerAbstract,
     PerRowMaskHandler,
     RowMaskHandler,
@@ -177,6 +178,8 @@ class MaskHandlerFactory(Module):
                 return PerRowMaskHandler(self.cfg)
             case RowMaskOptions.TOP_SLICE:
                 return TopSliceMaskHandler(self.cfg)
+            case RowMaskOptions.DIAGONAL:
+                return DiagonalMaskHandler(self.cfg)
             case RowMaskOptions.DISABLED:
                 raise ValueError(
                     "If the `row_mask_option` is set to `DISABLED`, this class should not be initialized"
