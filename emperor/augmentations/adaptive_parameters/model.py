@@ -46,6 +46,7 @@ class AdaptiveParameterAugmentation(Module):
         self.bias_flag = self.cfg.bias_flag
         self.bias_option = self.cfg.bias_option
         self.row_mask_option = self.cfg.row_mask_option
+        self.mask_dimension_option = self.cfg.mask_dimension_option
         self.validator = AdaptiveParameterAugmentationValidator(self)
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
