@@ -43,7 +43,7 @@ class StickBreakingState:
             "help": "Current step index, used to compute the expected number of steps for regularisation"
         },
     )
-    accumulated_expected_step: Tensor = field(
+    accumulated_ponder_cost: Tensor = field(
         metadata={
             "help": "Running sum of halt_prob * step across all steps; used to compute the expected computation depth"
         },
@@ -116,7 +116,7 @@ class StickBreaking(Module):
             accumulated_hidden=weighted_hidden,
             accumulated_halt_probabilities=halting_probability,
             step_count=0,
-            accumulated_expected_step=torch.tensor(0.0),
+            accumulated_ponder_cost=torch.tensor(0.0),
         )
 
     def __update_state(
@@ -132,20 +132,20 @@ class StickBreaking(Module):
         accumulated_halting_probability = (
             previous_state.accumulated_halt_probabilities + halting_probability
         )
-        has_halted = accumulated_halting_probability >= self.threshold
+        halt_mask = accumulated_halting_probability >= self.threshold
         weighted_hidden = halting_probability.unsqueeze(-1) * previous_output
         updated_accumulated_hidden = previous_state.accumulated_hidden + weighted_hidden
         step_contribution = halting_probability * updated_step_count
-        updated_accumulated_expected_step = (
-            previous_state.accumulated_expected_step + step_contribution
+        updated_accumulated_ponder_cost = (
+            previous_state.accumulated_ponder_cost + step_contribution
         )
         return StickBreakingState(
-            halt_mask=has_halted,
+            halt_mask=halt_mask,
             log_continuation=log_continuation,
             accumulated_hidden=updated_accumulated_hidden,
             accumulated_halt_probabilities=accumulated_halting_probability,
             step_count=updated_step_count,
-            accumulated_expected_step=updated_accumulated_expected_step,
+            accumulated_ponder_cost=updated_accumulated_ponder_cost,
         )
 
     def __compute_step_halting_probability(
@@ -153,14 +153,12 @@ class StickBreaking(Module):
         previous_state: StickBreakingState,
         current_log_gates: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        current_log_halting = (
-            previous_state.log_continuation.unsqueeze(-1) + current_log_gates
-        )
+        previous_step_log_continuation = previous_state.log_continuation.unsqueeze(-1)
+        current_log_halting = previous_step_log_continuation + current_log_gates
         log_continuation, log_halting = torch.unbind(current_log_halting, dim=-1)
         halting_probability = torch.exp(log_halting)
-        halting_probability = halting_probability.masked_fill(
-            previous_state.halt_mask, 0.0
-        )
+        previous_halt_mask = previous_state.halt_mask
+        halting_probability = halting_probability.masked_fill(previous_halt_mask, 0.0)
         return log_continuation, halting_probability
 
     def finalize_weighted_accumulation(
@@ -174,10 +172,10 @@ class StickBreaking(Module):
         )
         soft_halted_hidden = state.accumulated_hidden + weighted_remaining_hidden
         remaining_step_contribution = remaining_probabilities * (state.step_count + 1)
-        expected_step = state.accumulated_expected_step + remaining_step_contribution
+        ponder_cost = state.accumulated_ponder_cost + remaining_step_contribution
         if state.halt_mask.any():
             soft_halted_hidden.masked_scatter_(
                 state.halt_mask.unsqueeze(-1),
                 state.accumulated_hidden[state.halt_mask],
             )
-        return soft_halted_hidden, expected_step
+        return soft_halted_hidden, ponder_cost

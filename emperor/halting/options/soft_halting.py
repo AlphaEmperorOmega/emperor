@@ -33,7 +33,7 @@ class SoftHaltingState:
             "help": "Weighted sum of hidden states accumulated so far, where each step contributes proportionally to its halt probability"
         },
     )
-    accumulated_expected_step: Tensor = field(
+    accumulated_ponder_cost: Tensor = field(
         metadata={
             "help": "Running sum of halt_prob * step across all steps; used to compute the expected computation depth"
         },
@@ -96,7 +96,7 @@ class SoftHalting(Module):
         pad_mask: Tensor,
     ) -> Tensor:
         act_loss = (
-            state.accumulated_expected_step + p_never_halt * state.step
+            state.accumulated_ponder_cost + p_never_halt * state.step
         ) * pad_mask
         return act_loss.sum() / pad_mask.sum()
 
@@ -135,7 +135,7 @@ class SoftHalting(Module):
             step=0,
             log_remaining_stick=torch.zeros_like(previous_output[..., 0]),
             accumulated_hidden=torch.zeros_like(previous_output),
-            accumulated_expected_step=torch.zeros_like(previous_output[..., 0]),
+            accumulated_ponder_cost=torch.zeros_like(previous_output[..., 0]),
         )
         return state, pad_mask
 
@@ -158,7 +158,7 @@ class SoftHalting(Module):
             log_remaining_stick=log_remaining_stick,
             accumulated_hidden=previous_state.accumulated_hidden
             + halting_probability[..., None] * previous_output,
-            accumulated_expected_step=previous_state.accumulated_expected_step
+            accumulated_ponder_cost=previous_state.accumulated_ponder_cost
             + previous_state.step * halting_probability,
         )
         return state, p_never_halt
