@@ -7,7 +7,7 @@ from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.enums import LastLayerBiasOptions
-from emperor.halting.options.base import HaltingBase
+from emperor.halting.utils.options.base import HaltingBase
 
 from typing import TYPE_CHECKING
 
@@ -169,15 +169,13 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         current_hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
         remaining_probabilities = 1 - state.accumulated_halt_probabilities
+        remaining_probabilities = remaining_probabilities.masked_fill(
+            state.halt_mask, 0.0
+        )
         weighted_remaining_hidden = (
             remaining_probabilities.unsqueeze(-1) * current_hidden
         )
         soft_halted_hidden = state.accumulated_hidden + weighted_remaining_hidden
         remaining_step_contribution = remaining_probabilities * (state.step_count + 1)
         ponder_cost = state.accumulated_ponder_cost + remaining_step_contribution
-        if state.halt_mask.any():
-            soft_halted_hidden.masked_scatter_(
-                state.halt_mask.unsqueeze(-1),
-                state.accumulated_hidden[state.halt_mask],
-            )
         return soft_halted_hidden, ponder_cost

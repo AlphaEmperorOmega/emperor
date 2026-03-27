@@ -7,7 +7,7 @@ from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.enums import LastLayerBiasOptions
-from emperor.halting.options.base import HaltingBase
+from emperor.halting.utils.options.base import HaltingBase
 
 from typing import TYPE_CHECKING
 

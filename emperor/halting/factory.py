@@ -1,8 +1,8 @@
 from emperor.base.utils import Module
 from emperor.halting.config import HaltingConfig
 from emperor.halting.options import HaltingOptions
-from emperor.halting.options.soft_halting import SoftHalting
-from emperor.halting.options.stick_breaking import StickBreaking
+from emperor.halting.utils.options.soft_halting import SoftHalting
+from emperor.halting.utils.options.stick_breaking import StickBreaking
 
 from typing import TYPE_CHECKING
 
