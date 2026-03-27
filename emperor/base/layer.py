@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
     from emperor.linears.options import LinearLayerOptions
+    from emperor.halting.config import HaltingConfig
+    from emperor.halting.utils.options.base import HaltingBase
 
 
 @dataclass
@@ -54,6 +56,10 @@ class LayerConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
+    halting_config: "HaltingConfig | None" = field(
+        default=None,
+        metadata={"help": "Optional halting config for adaptive computation per layer"},
+    )
 
 
 class Layer(Module):
@@ -67,6 +73,7 @@ class Layer(Module):
         dropout_probability: float = 0.0,
         layer_norm_position: "LayerNormPositionOptions | None" = None,
         apply_gates_bool: bool = False,
+        halting_config: "HaltingConfig | None" = None,
     ):
         super().__init__()
 
@@ -78,6 +85,7 @@ class Layer(Module):
         self.dropout_probability = dropout_probability
         self.layer_norm_position = layer_norm_position
         self.apply_gates_bool = apply_gates_bool
+        self.halting_module = self.__build_halting_module(halting_config)
 
         self.has_activation = self.activation_function is not None
         self.has_dropout = self.dropout_probability > 0.0
@@ -85,6 +93,13 @@ class Layer(Module):
         self.dropout_module = self.__init_dropout_module()
         self.layer_norm_module = self.__init_layer_norm_module()
         self.last_layer_flag = False
+        self._halting_state = None
+
+    def __build_halting_module(self, halting_config: "HaltingConfig | None") -> "HaltingBase | None":
+        if halting_config is None:
+            return None
+        from emperor.halting.factory import HaltingFactory
+        return HaltingFactory(halting_config).build()
 
     def mark_as_last_layer(self) -> None:
         self.last_layer_flag = True
@@ -120,20 +135,21 @@ class Layer(Module):
         # TODO: Ensure that the skip_maks will be used
         # in the future.
         residual = self._handle_model_input(model_input)
-        X = self.__apply_layer_norm_before(residual)
+        X = self.__maybe_apply_layer_norm_before(residual)
         X = self._handle_model_processing(X)
-        X = self.__apply_layer_norm_default(X)
-        X = self.__apply_activation(X)
-        X = self.__apply_gates(X)
-        X = self.__apply_dropout(X)
-        X = self.__apply_residual_connection(X, residual)
-        X = self.__apply_layer_norm_after(X)
+        X = self.__maybe_apply_layer_norm_default(X)
+        X = self.__maybe_apply_activation(X)
+        X = self.__maybe_apply_gates(X)
+        X = self.__maybe_apply_dropout(X)
+        X = self.__maybe_apply_residual_connection(X, residual)
+        X = self.__maybe_apply_layer_norm_after(X)
+        X = self.__maybe_apply_halting(X)
         return self._handle_model_output(X)
 
     def _handle_model_input(self, input: Tensor) -> Tensor:
         return input
 
-    def __apply_layer_norm_before(self, input: Tensor):
+    def __maybe_apply_layer_norm_before(self, input: Tensor):
         if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
             return self.layer_norm_module(input)
         return input
@@ -145,41 +161,56 @@ class Layer(Module):
     ) -> Tensor:
         return self.model(main_model_input, **additional_model_inputs)
 
-    def __apply_layer_norm_default(self, input: Tensor):
+    def __maybe_apply_layer_norm_default(self, input: Tensor):
         if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
             return self.layer_norm_module(input)
         return input
 
-    def __apply_activation(self, input: Tensor):
+    def __maybe_apply_activation(self, input: Tensor):
         # TODO: Add the option to to redirect each sample in the
         # input batch to use a different activation function
         if self.has_activation:
             return self.activation_function(input)
         return input
 
-    def __apply_gates(self, input: Tensor):
+    def __maybe_apply_gates(self, input: Tensor):
         # TODO: Implement the gates option
         # if self.apply_gates_bool:
         #     return self.gate_module(output) * output
         return input
 
-    def __apply_dropout(self, input: Tensor):
+    def __maybe_apply_dropout(self, input: Tensor):
         if self.has_dropout:
             return self.dropout_module(input)
         return input
 
-    def __apply_residual_connection(self, input: Tensor, prev_input: Tensor):
+    def __maybe_apply_residual_connection(self, input: Tensor, prev_input: Tensor):
         if self.residual_connection_flag:
             return input + prev_input
         return input
 
-    def __apply_layer_norm_after(self, input: Tensor):
+    def __maybe_apply_layer_norm_after(self, input: Tensor):
         if self.layer_norm_position == LayerNormPositionOptions.AFTER:
             return self.layer_norm_module(input)
         return input
 
+    def __maybe_apply_halting(self, input: Tensor) -> Tensor:
+        if self.halting_module is not None:
+            self._halting_state = self.halting_module.update_halting_state(
+                self._halting_state, input
+            )
+        return input
+
     def _handle_model_output(self, output: Tensor) -> Tensor:
         return output
+
+    def reset_halting_state(self) -> None:
+        self._halting_state = None
+
+    def finalize_halting(self, current_hidden: Tensor) -> "tuple[Tensor, Tensor]":
+        return self.halting_module.finalize_weighted_accumulation(
+            self._halting_state, current_hidden
+        )
 
     # TODO: In the future instead multiple function inputs
     # use a dataset class to encapsulate the inputs and outputs
@@ -217,6 +248,10 @@ class LayerStackConfig(LayerConfig):
         default=None,
         metadata={"help": "Override bias on the last layer regardless of bias_flag"},
     )
+    shared_halting_module: bool | None = field(
+        default=None,
+        metadata={"help": "If True, one halting module is shared across all layers; if False, each layer gets its own"},
+    )
 
 
 class LayerStack(Module):
@@ -244,6 +279,8 @@ class LayerStack(Module):
         self.dropout_probability = self.cfg.dropout_probability
         self.layer_norm_position = self.cfg.layer_norm_position
         self.last_layer_bias_option = self.cfg.last_layer_bias_option
+        self.halting_config = self.cfg.halting_config
+        self.shared_halting_module_flag = self.cfg.shared_halting_module
         self.callback_function = None
 
         self.layer_block_model = self.cfg.layer_type or Layer
@@ -296,7 +333,7 @@ class LayerStack(Module):
 
     def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
         for _ in range(self.num_layers - layer_adjustment):
-            layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
+            layer = self.__create_layer(self.hidden_dim, self.hidden_dim, halting_config=self.halting_config)
             if self.callback_function is not None:
                 layer = self.callback_function(layer)
             layers.append(layer)
@@ -305,7 +342,10 @@ class LayerStack(Module):
         layer_input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
         config = self.__resolve_model_type_overrides(layer_input_dim, self.output_dim)
         self.__apply_last_layer_bias_override(config)
-        layer = self.layer_block_model(model=self.__get_model_type()(config))
+        layer = self.layer_block_model(
+            model=self.__get_model_type()(config),
+            halting_config=self.halting_config,
+        )
         layers.append(layer)
 
     def __apply_last_layer_bias_override(self, config) -> None:
@@ -325,6 +365,7 @@ class LayerStack(Module):
         input_dim: int,
         output_dim: int,
         residual_flag: bool = True,
+        halting_config: "HaltingConfig | None" = None,
     ) -> Layer:
         layer_norm_dim = None
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
@@ -341,6 +382,7 @@ class LayerStack(Module):
             activation_function=self.activation,
             dropout_probability=self.dropout_probability,
             layer_norm_position=self.layer_norm_position,
+            halting_config=halting_config,
         )
 
         return layer_block_model
