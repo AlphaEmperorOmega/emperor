@@ -18,12 +18,12 @@ if TYPE_CHECKING:
 
 @dataclass
 class SoftHaltingState:
-    step: int = field(
+    step_count: int = field(
         metadata={
             "help": "Current step index, used to compute the expected number of steps for regularisation"
         },
     )
-    log_remaining_stick: Tensor = field(
+    log_continuation: Tensor = field(
         metadata={
             "help": "Log of the remaining stick length after all breaks so far; the cumulative log probability of not yet having halted"
         },
@@ -75,28 +75,28 @@ class SoftHalting(Module):
         if isinstance(last_linear, nn.Linear):
             nn.init.zeros_(last_linear.weight)
 
-    def __compute_gate_logits(self, previous_output: Tensor) -> Tensor:
-        logits = self._gate(previous_output)
+    def __compute_gate_logits(self, model_hidden_state: Tensor) -> Tensor:
+        logits = self._gate(model_hidden_state)
         return F.log_softmax(logits, dim=-1)
 
-    def __update_halting_probs(
+    def __compute_step_halting_probability(
         self,
         current_log_gates: Tensor,
-        log_remaining_stick: Tensor,
+        log_continuation: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        log_halt = log_remaining_stick[..., None] + current_log_gates
-        log_remaining_stick = log_halt[..., 0]
-        halting_probability = torch.exp(log_halt[..., 1])
-        return halting_probability, log_remaining_stick
+        current_log_halting = log_continuation.unsqueeze(-1) + current_log_gates
+        log_continuation, log_halting = torch.unbind(current_log_halting, dim=-1)
+        halting_probability = torch.exp(log_halting)
+        return halting_probability, log_continuation
 
     def __compute_act_loss(
         self,
         state: SoftHaltingState,
-        p_never_halt: Tensor,
+        continuation_probability: Tensor,
         pad_mask: Tensor,
     ) -> Tensor:
         act_loss = (
-            state.accumulated_ponder_cost + p_never_halt * state.step
+            state.accumulated_ponder_cost + continuation_probability * state.step_count
         ) * pad_mask
         return act_loss.sum() / pad_mask.sum()
 
@@ -105,13 +105,13 @@ class SoftHalting(Module):
         state: SoftHaltingState,
         current_hidden: Tensor,
         self_attn_input: Tensor,
-        p_never_halt: Tensor,
+        continuation_probability: Tensor,
     ) -> Tensor:
         halted_output = (
-            state.accumulated_hidden + p_never_halt[..., None] * current_hidden
+            state.accumulated_hidden + continuation_probability.unsqueeze(-1) * current_hidden
         ).type_as(self_attn_input)
         return torch.where(
-            p_never_halt[..., None] < (1 - self.threshold),
+            continuation_probability.unsqueeze(-1) < (1 - self.threshold),
             self_attn_input,
             halted_output,
         )
@@ -119,62 +119,62 @@ class SoftHalting(Module):
     def forward(
         self,
         previous_state: SoftHaltingState | None,
-        previous_output: Tensor,
+        model_hidden_state: Tensor,
         pad_mask: Tensor,
     ) -> tuple[SoftHaltingState, Tensor]:
         if previous_state is None:
-            return self.__init_state(previous_output, pad_mask)
-        return self.__update_state(previous_state, previous_output, pad_mask)
+            return self.__init_state(model_hidden_state, pad_mask)
+        return self.__update_state(previous_state, model_hidden_state, pad_mask)
 
     def __init_state(
         self,
-        previous_output: Tensor,
+        model_hidden_state: Tensor,
         pad_mask: Tensor,
     ) -> tuple[SoftHaltingState, Tensor]:
         state = SoftHaltingState(
-            step=0,
-            log_remaining_stick=torch.zeros_like(previous_output[..., 0]),
-            accumulated_hidden=torch.zeros_like(previous_output),
-            accumulated_ponder_cost=torch.zeros_like(previous_output[..., 0]),
+            step_count=0,
+            log_continuation=torch.zeros_like(model_hidden_state[..., 0]),
+            accumulated_hidden=torch.zeros_like(model_hidden_state),
+            accumulated_ponder_cost=torch.zeros_like(model_hidden_state[..., 0]),
         )
         return state, pad_mask
 
     def __update_state(
         self,
         previous_state: SoftHaltingState,
-        previous_output: Tensor,
+        model_hidden_state: Tensor,
         pad_mask: Tensor,
     ) -> tuple[SoftHaltingState, Tensor]:
-        current_log_gates = self.__compute_gate_logits(previous_output)
-        halting_probability, log_remaining_stick = self.__update_halting_probs(
-            current_log_gates, previous_state.log_remaining_stick
+        current_log_gates = self.__compute_gate_logits(model_hidden_state)
+        halting_probability, log_continuation = self.__compute_step_halting_probability(
+            current_log_gates, previous_state.log_continuation
         )
-        p_never_halt = log_remaining_stick.exp()
-        p_never_halt = (
-            p_never_halt.masked_fill(p_never_halt < (1 - self.threshold), 0) * pad_mask
+        continuation_probability = log_continuation.exp()
+        continuation_probability = (
+            continuation_probability.masked_fill(continuation_probability < (1 - self.threshold), 0) * pad_mask
         ).contiguous()
         state = SoftHaltingState(
-            step=previous_state.step + 1,
-            log_remaining_stick=log_remaining_stick,
+            step_count=previous_state.step_count + 1,
+            log_continuation=log_continuation,
             accumulated_hidden=previous_state.accumulated_hidden
-            + halting_probability[..., None] * previous_output,
+            + halting_probability.unsqueeze(-1) * model_hidden_state,
             accumulated_ponder_cost=previous_state.accumulated_ponder_cost
-            + previous_state.step * halting_probability,
+            + previous_state.step_count * halting_probability,
         )
-        return state, p_never_halt
+        return state, continuation_probability
 
     def compute_output(
         self,
         state: SoftHaltingState,
         current_hidden: Tensor,
         self_attn_input: Tensor,
-        p_never_halt: Tensor,
+        continuation_probability: Tensor,
         pad_mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        if state.step == 0:
+        if state.step_count == 0:
             return current_hidden, torch.tensor(0.0)
         self_attn_input = self.__blend_attn_input(
-            state, current_hidden, self_attn_input, p_never_halt
+            state, current_hidden, self_attn_input, continuation_probability
         )
-        act_loss = self.__compute_act_loss(state, p_never_halt, pad_mask)
+        act_loss = self.__compute_act_loss(state, continuation_probability, pad_mask)
         return self_attn_input, act_loss

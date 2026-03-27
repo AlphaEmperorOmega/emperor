@@ -88,12 +88,14 @@ class StickBreaking(Module):
     def forward(
         self,
         previous_state: StickBreakingState | None,
-        previous_output: Tensor,
+        model_hidden_state: Tensor,
     ) -> StickBreakingState:
-        current_log_gates = self.__compute_gate_logits(previous_output)
+        current_log_gates = self.__compute_gate_logits(model_hidden_state)
         if previous_state is None:
-            return self.__init_state(current_log_gates, previous_output)
-        return self.__update_state(previous_state, current_log_gates, previous_output)
+            return self.__init_state(current_log_gates, model_hidden_state)
+        return self.__update_state(
+            previous_state, current_log_gates, model_hidden_state
+        )
 
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
         logits = self._gate(hidden_state)
@@ -104,12 +106,12 @@ class StickBreaking(Module):
     def __init_state(
         self,
         log_softmax_gates: Tensor,
-        previous_output: Tensor,
+        model_hidden_state: Tensor,
     ) -> StickBreakingState:
         log_continuation, log_halting = torch.unbind(log_softmax_gates, dim=-1)
         halting_probability = torch.exp(log_halting)
         halt_mask = halting_probability >= self.threshold
-        weighted_hidden = halting_probability.unsqueeze(-1) * previous_output
+        weighted_hidden = halting_probability.unsqueeze(-1) * model_hidden_state
         return StickBreakingState(
             halt_mask=halt_mask,
             log_continuation=log_continuation,
@@ -123,7 +125,7 @@ class StickBreaking(Module):
         self,
         previous_state: StickBreakingState,
         log_softmax_gates: Tensor,
-        previous_output: Tensor,
+        model_hidden_state: Tensor,
     ) -> StickBreakingState:
         updated_step_count = previous_state.step_count + 1
         log_continuation, halting_probability = self.__compute_step_halting_probability(
@@ -133,7 +135,7 @@ class StickBreaking(Module):
             previous_state.accumulated_halt_probabilities + halting_probability
         )
         halt_mask = accumulated_halting_probability >= self.threshold
-        weighted_hidden = halting_probability.unsqueeze(-1) * previous_output
+        weighted_hidden = halting_probability.unsqueeze(-1) * model_hidden_state
         updated_accumulated_hidden = previous_state.accumulated_hidden + weighted_hidden
         step_contribution = halting_probability * updated_step_count
         updated_accumulated_ponder_cost = (
