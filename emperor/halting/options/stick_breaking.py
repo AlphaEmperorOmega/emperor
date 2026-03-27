@@ -5,9 +5,9 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
-from emperor.base.utils import Module
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.enums import LastLayerBiasOptions
+from emperor.halting.options.base import HaltingBase
 
 from typing import TYPE_CHECKING
 
@@ -50,7 +50,7 @@ class StickBreakingState:
     )
 
 
-class StickBreaking(Module):
+class StickBreaking(HaltingBase[StickBreakingState]):
     def __init__(
         self,
         cfg: "HaltingConfig | ModelConfig",
@@ -85,7 +85,7 @@ class StickBreaking(Module):
         if isinstance(last_linear, nn.Linear):
             nn.init.zeros_(last_linear.weight)
 
-    def forward(
+    def update_halting_state(
         self,
         previous_state: StickBreakingState | None,
         model_hidden_state: Tensor,
