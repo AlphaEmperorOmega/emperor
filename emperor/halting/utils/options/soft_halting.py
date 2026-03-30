@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.enums import LastLayerBiasOptions
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.halting.utils.options.base import HaltingBase
+from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
 
 from typing import TYPE_CHECKING
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class SoftHaltingState:
+class SoftHaltingState(HaltingStateBase):
     step_count: int = field(
         metadata={
             "help": "Current step index, used to compute the expected number of steps for regularisation"

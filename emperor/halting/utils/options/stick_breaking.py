@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.enums import LastLayerBiasOptions
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.halting.utils.options.base import HaltingBase
+from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
 
 from typing import TYPE_CHECKING
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class StickBreakingState:
+class StickBreakingState(HaltingStateBase):
     halt_mask: Tensor = field(
         metadata={
             "help": "Boolean mask indicating which tokens have accumulated enough halt probability to stop computing"
