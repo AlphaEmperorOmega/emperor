@@ -7,6 +7,7 @@ from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.enums import LastLayerBiasOptions
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.halting.utils.options.base import HaltingBase
 
 from typing import TYPE_CHECKING
@@ -63,6 +64,9 @@ class StickBreaking(HaltingBase[StickBreakingState]):
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
+        self.hidden_state_mode: HaltingHiddenStateModeOptions = (
+            self.cfg.hidden_state_mode
+        )
 
         self._gate: Layer | Sequential = self.__build_gate()
         self.__init_gate_weights()
@@ -89,13 +93,17 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         self,
         previous_state: StickBreakingState | None,
         model_hidden_state: Tensor,
-    ) -> StickBreakingState:
+    ) -> tuple[StickBreakingState, Tensor]:
         current_log_gates = self.__compute_gate_logits(model_hidden_state)
         if previous_state is None:
-            return self.__init_state(current_log_gates, model_hidden_state)
-        return self.__update_state(
-            previous_state, current_log_gates, model_hidden_state
-        )
+            state = self.__init_state(current_log_gates, model_hidden_state)
+        else:
+            state = self.__update_state(
+                previous_state, current_log_gates, model_hidden_state
+            )
+        if self.hidden_state_mode == HaltingHiddenStateModeOptions.ACCUMULATED:
+            return state, state.accumulated_hidden
+        return state, model_hidden_state
 
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
         logits = self._gate(hidden_state)
@@ -177,5 +185,5 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         )
         soft_halted_hidden = state.accumulated_hidden + weighted_remaining_hidden
         remaining_step_contribution = remaining_probabilities * (state.step_count + 1)
-        ponder_cost = state.accumulated_ponder_cost + remaining_step_contribution
-        return soft_halted_hidden, ponder_cost
+        ponder_loss = state.accumulated_ponder_cost + remaining_step_contribution
+        return soft_halted_hidden, ponder_loss

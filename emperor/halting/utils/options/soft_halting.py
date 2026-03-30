@@ -7,6 +7,7 @@ from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.enums import LastLayerBiasOptions
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.halting.utils.options.base import HaltingBase
 
 from typing import TYPE_CHECKING
@@ -58,6 +59,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
+        self.hidden_state_mode: HaltingHiddenStateModeOptions = self.cfg.hidden_state_mode
 
         self._gate: Layer | Sequential = self.__build_gate()
         self.__init_gate_weights()
@@ -127,10 +129,14 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         previous_state: SoftHaltingState | None,
         model_hidden_state: Tensor,
         pad_mask: Tensor | None = None,
-    ) -> SoftHaltingState:
+    ) -> tuple[SoftHaltingState, Tensor]:
         if previous_state is None:
-            return self.__init_state(model_hidden_state, pad_mask)
-        return self.__update_state(previous_state, model_hidden_state, pad_mask)
+            state = self.__init_state(model_hidden_state, pad_mask)
+        else:
+            state = self.__update_state(previous_state, model_hidden_state, pad_mask)
+        if self.hidden_state_mode == HaltingHiddenStateModeOptions.ACCUMULATED:
+            return state, state.accumulated_hidden
+        return state, model_hidden_state
 
     def __init_state(
         self,
