@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
-from emperor.halting.options import HaltingOptions
+from emperor.halting.options import HaltingOptions, HaltingHiddenStateModeOptions
 
 
 @dataclass
@@ -15,9 +15,19 @@ class HaltingConfig(ConfigBase):
     )
     threshold: float | None = field(
         default=None,
-        metadata={"help": "Halting probability threshold; tokens above this stop computing"},
+        metadata={
+            "help": "Halting probability threshold; tokens above this stop computing"
+        },
     )
     halting_dropout: float | None = field(
         default=None,
-        metadata={"help": "Dropout probability applied inside the soft halting gate network"},
+        metadata={
+            "help": "Dropout probability applied inside the soft halting gate network"
+        },
+    )
+    hidden_state_mode: HaltingHiddenStateModeOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Controls whether each step returns the raw hidden state or the current accumulated weighted representation"
+        },
     )
