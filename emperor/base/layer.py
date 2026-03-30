@@ -59,9 +59,9 @@ class LayerConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    apply_gates_bool: bool | None = field(
+    gate_config: "LayerStackConfig | None" = field(
         default=None,
-        metadata={"help": ""},
+        metadata={"help": "LayerStack config for the gating mechanism; if None gates are skipped"},
     )
     halting_config: "HaltingConfig | None" = field(
         default=None,
@@ -85,7 +85,7 @@ class Layer(Module):
         is_adaptive_computation: bool = False,
         dropout_probability: float = 0.0,
         layer_norm_position: "LayerNormPositionOptions | None" = None,
-        apply_gates_bool: bool = False,
+        gate_config: "LayerStackConfig | None" = None,
         halting_config: "HaltingConfig | None" = None,
         shared_halting_flag: bool = False,
     ):
@@ -98,9 +98,10 @@ class Layer(Module):
         self.is_adaptive_computation = is_adaptive_computation
         self.dropout_probability = dropout_probability
         self.layer_norm_position = layer_norm_position
-        self.apply_gates_bool = apply_gates_bool
+        self.gate_config = gate_config
         self.halting_config = halting_config
         self.shared_halting_flag = shared_halting_flag
+        self.gate_module = self.__build_gate_module()
         self.halting_module = self.__build_halting_module()
 
         self.has_activation = self.activation_function is not None
@@ -109,6 +110,11 @@ class Layer(Module):
         self.dropout_module = self.__init_dropout_module()
         self.layer_norm_module = self.__init_layer_norm_module()
         self.last_layer_flag = False
+
+    def __build_gate_module(self) -> "Module | None":
+        if self.gate_config is None:
+            return None
+        return LayerStack(self.gate_config).build_model()
 
     def __build_halting_module(self) -> "HaltingBase | None":
         if self.halting_config is None:
@@ -183,10 +189,9 @@ class Layer(Module):
             return self.activation_function(input)
         return input
 
-    def __maybe_apply_gates(self, input: Tensor):
-        # TODO: Implement the gates option
-        # if self.apply_gates_bool:
-        #     return self.gate_module(output) * output
+    def __maybe_apply_gates(self, input: Tensor) -> Tensor:
+        if self.gate_module is not None:
+            return self.gate_module(input) * input
         return input
 
     def __maybe_apply_dropout(self, input: Tensor):
