@@ -5,3 +5,8 @@ class HaltingOptions(BaseOptions):
     DISABLED = 0
     SOFT_HALTING = 1
     STICK_BREAKING = 2
+
+
+class HaltingHiddenStateModeOptions(BaseOptions):
+    RAW = 0
+    ACCUMULATED = 1
