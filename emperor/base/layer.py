@@ -60,6 +60,12 @@ class LayerConfig(ConfigBase):
         default=None,
         metadata={"help": "Optional halting config for adaptive computation per layer"},
     )
+    shared_halting_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "If True, one halting module is shared across all layers; if False, each layer gets its own"
+        },
+    )
 
 
 class Layer(Module):
@@ -74,6 +80,7 @@ class Layer(Module):
         layer_norm_position: "LayerNormPositionOptions | None" = None,
         apply_gates_bool: bool = False,
         halting_config: "HaltingConfig | None" = None,
+        shared_halting_flag: bool = False,
     ):
         super().__init__()
 
@@ -85,7 +92,9 @@ class Layer(Module):
         self.dropout_probability = dropout_probability
         self.layer_norm_position = layer_norm_position
         self.apply_gates_bool = apply_gates_bool
-        self.halting_module = self.__build_halting_module(halting_config)
+        self.halting_config = halting_config
+        self.shared_halting_flag = shared_halting_flag
+        self.halting_module = self.__build_halting_module()
 
         self.has_activation = self.activation_function is not None
         self.has_dropout = self.dropout_probability > 0.0
@@ -95,11 +104,16 @@ class Layer(Module):
         self.last_layer_flag = False
         self._halting_state = None
 
-    def __build_halting_module(self, halting_config: "HaltingConfig | None") -> "HaltingBase | None":
-        if halting_config is None:
+    def __build_halting_module(self) -> "HaltingBase | None":
+        if self.halting_config is None:
+            if self.shared_halting_flag:
+                raise ValueError(
+                    "shared_halting_flag must be False when no halting_config is provided"
+                )
             return None
         from emperor.halting.factory import HaltingFactory
-        return HaltingFactory(halting_config).build()
+
+        return HaltingFactory(self.halting_config).build()
 
     def mark_as_last_layer(self) -> None:
         self.last_layer_flag = True
@@ -120,20 +134,10 @@ class Layer(Module):
         )
         return nn.LayerNorm(self.layer_norm_dim)
 
-    def create_adaptive_computation_module(self):
-        # TODO: Create a wrapper that first decides
-        # if the current layer should be computed using the
-        # adaptive computation from sparse universal transformer
-        # paper
-        pass
-
     def forward(
         self,
         model_input: Tensor | tuple,
-        skip_mask: Tensor | None = None,
     ) -> Tensor | tuple[Tensor | None]:
-        # TODO: Ensure that the skip_maks will be used
-        # in the future.
         residual = self._handle_model_input(model_input)
         X = self.__maybe_apply_layer_norm_before(residual)
         X = self._handle_model_processing(X)
@@ -196,9 +200,15 @@ class Layer(Module):
 
     def __maybe_apply_halting(self, input: Tensor) -> Tensor:
         if self.halting_module is not None:
-            self._halting_state = self.halting_module.update_halting_state(
+            self._halting_state, input = self.halting_module.update_halting_state(
                 self._halting_state, input
             )
+
+            if self.last_layer_flag:
+                final_state, loss = self.halting_module.finalize_weighted_accumulation(
+                    self._halting_state, input
+                )
+                return final_state, loss
         return input
 
     def _handle_model_output(self, output: Tensor) -> Tensor:
@@ -206,11 +216,6 @@ class Layer(Module):
 
     def reset_halting_state(self) -> None:
         self._halting_state = None
-
-    def finalize_halting(self, current_hidden: Tensor) -> "tuple[Tensor, Tensor]":
-        return self.halting_module.finalize_weighted_accumulation(
-            self._halting_state, current_hidden
-        )
 
     # TODO: In the future instead multiple function inputs
     # use a dataset class to encapsulate the inputs and outputs
@@ -248,10 +253,6 @@ class LayerStackConfig(LayerConfig):
         default=None,
         metadata={"help": "Override bias on the last layer regardless of bias_flag"},
     )
-    shared_halting_module: bool | None = field(
-        default=None,
-        metadata={"help": "If True, one halting module is shared across all layers; if False, each layer gets its own"},
-    )
 
 
 class LayerStack(Module):
@@ -268,20 +269,31 @@ class LayerStack(Module):
         self.cfg: "LayerStackConfig" = self._overwrite_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
-        self.input_dim = self.cfg.input_dim
-        self.hidden_dim = self.cfg.hidden_dim
-        self.output_dim = self.cfg.output_dim
-        self.num_layers = self.cfg.num_layers
-        self.model_type = self.cfg.model_type
-        self.activation = self.cfg.activation
-        self.residual_flag = self.cfg.residual_flag
-        self.adaptive_computation_flag = self.cfg.adaptive_computation_flag
-        self.dropout_probability = self.cfg.dropout_probability
-        self.layer_norm_position = self.cfg.layer_norm_position
-        self.last_layer_bias_option = self.cfg.last_layer_bias_option
-        self.halting_config = self.cfg.halting_config
-        self.shared_halting_module_flag = self.cfg.shared_halting_module
+        self.input_dim: int = self.cfg.input_dim
+        self.hidden_dim: int = self.cfg.hidden_dim
+        self.output_dim: int = self.cfg.output_dim
+        self.num_layers: int = self.cfg.num_layers
+        self.model_type: "LinearLayerOptions" = self.cfg.model_type
+        self.activation: ActivationOptions = self.cfg.activation
+        self.residual_flag: bool = self.cfg.residual_flag
+        self.adaptive_computation_flag: bool = self.cfg.adaptive_computation_flag
+        self.dropout_probability: float = self.cfg.dropout_probability
+        self.layer_norm_position: LayerNormPositionOptions = (
+            self.cfg.layer_norm_position
+        )
+        self.last_layer_bias_option: LastLayerBiasOptions = (
+            self.cfg.last_layer_bias_option
+        )
+        self.halting_config: "HaltingConfig" = self.cfg.halting_config
+        self.shared_halting_flag: bool = self.cfg.shared_halting_flag
         self.callback_function = None
+
+        if self.halting_config is not None and self.num_layers < 2:
+            raise ValueError(
+                f"num_layers must be at least 2 when halting_config is provided, "
+                f"got {self.num_layers}. The halting mechanism requires multiple steps to accumulate "
+                f"halting probabilities across layers."
+            )
 
         self.layer_block_model = self.cfg.layer_type or Layer
 
@@ -333,7 +345,7 @@ class LayerStack(Module):
 
     def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
         for _ in range(self.num_layers - layer_adjustment):
-            layer = self.__create_layer(self.hidden_dim, self.hidden_dim, halting_config=self.halting_config)
+            layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
             if self.callback_function is not None:
                 layer = self.callback_function(layer)
             layers.append(layer)
@@ -345,6 +357,7 @@ class LayerStack(Module):
         layer = self.layer_block_model(
             model=self.__get_model_type()(config),
             halting_config=self.halting_config,
+            shared_halting_flag=self.shared_halting_flag,
         )
         layers.append(layer)
 
@@ -365,7 +378,6 @@ class LayerStack(Module):
         input_dim: int,
         output_dim: int,
         residual_flag: bool = True,
-        halting_config: "HaltingConfig | None" = None,
     ) -> Layer:
         layer_norm_dim = None
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
@@ -382,7 +394,8 @@ class LayerStack(Module):
             activation_function=self.activation,
             dropout_probability=self.dropout_probability,
             layer_norm_position=self.layer_norm_position,
-            halting_config=halting_config,
+            halting_config=self.halting_config,
+            shared_halting_flag=self.shared_halting_flag,
         )
 
         return layer_block_model
