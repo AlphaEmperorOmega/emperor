@@ -19,7 +19,14 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
     from emperor.linears.options import LinearLayerOptions
     from emperor.halting.config import HaltingConfig
-    from emperor.halting.utils.options.base import HaltingBase
+    from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
+
+
+@dataclass
+class LayerState:
+    hidden: Tensor
+    loss: Tensor | None = None
+    halting_state: "HaltingStateBase | None" = None
 
 
 @dataclass
@@ -102,7 +109,6 @@ class Layer(Module):
         self.dropout_module = self.__init_dropout_module()
         self.layer_norm_module = self.__init_layer_norm_module()
         self.last_layer_flag = False
-        self._halting_state = None
 
     def __build_halting_module(self) -> "HaltingBase | None":
         if self.halting_config is None:
@@ -136,9 +142,9 @@ class Layer(Module):
 
     def forward(
         self,
-        model_input: Tensor | tuple,
-    ) -> Tensor | tuple[Tensor | None]:
-        residual = self._handle_model_input(model_input)
+        state: "LayerState",
+    ) -> "LayerState":
+        residual = self._handle_model_input(state.hidden)
         X = self.__maybe_apply_layer_norm_before(residual)
         X = self._handle_model_processing(X)
         X = self.__maybe_apply_layer_norm_default(X)
@@ -147,8 +153,8 @@ class Layer(Module):
         X = self.__maybe_apply_dropout(X)
         X = self.__maybe_apply_residual_connection(X, residual)
         X = self.__maybe_apply_layer_norm_after(X)
-        X = self.__maybe_apply_halting(X)
-        return self._handle_model_output(X)
+        state = self.__maybe_apply_halting(X, state)
+        return self._handle_model_output(state)
 
     def _handle_model_input(self, input: Tensor) -> Tensor:
         return input
@@ -162,7 +168,7 @@ class Layer(Module):
         self,
         main_model_input: Tensor,
         additional_model_inputs: dict = {},
-    ) -> Tensor:
+    ) -> tuple[Tensor, tuple | None]:
         return self.model(main_model_input, **additional_model_inputs)
 
     def __maybe_apply_layer_norm_default(self, input: Tensor):
@@ -198,24 +204,27 @@ class Layer(Module):
             return self.layer_norm_module(input)
         return input
 
-    def __maybe_apply_halting(self, input: Tensor) -> Tensor:
+    def __maybe_apply_halting(
+        self, input: Tensor, input_state: LayerState
+    ) -> LayerState:
         if self.halting_module is not None:
-            self._halting_state, input = self.halting_module.update_halting_state(
-                self._halting_state, input
+            input_state.halting_state, input = self.halting_module.update_halting_state(
+                input_state.halting_state, input
             )
-
             if self.last_layer_flag:
-                final_state, loss = self.halting_module.finalize_weighted_accumulation(
-                    self._halting_state, input
+                hidden, loss = self.halting_module.finalize_weighted_accumulation(
+                    input_state.halting_state, input
                 )
-                return final_state, loss
-        return input
+                input_state.hidden = hidden
+                input_state.loss = (
+                    loss if input_state.loss is None else input_state.loss + loss
+                )
+                return input_state
+        input_state.hidden = input
+        return input_state
 
-    def _handle_model_output(self, output: Tensor) -> Tensor:
-        return output
-
-    def reset_halting_state(self) -> None:
-        self._halting_state = None
+    def _handle_model_output(self, layer_state: LayerState) -> LayerState:
+        return layer_state
 
     # TODO: In the future instead multiple function inputs
     # use a dataset class to encapsulate the inputs and outputs
