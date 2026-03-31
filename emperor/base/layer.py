@@ -61,7 +61,9 @@ class LayerConfig(ConfigBase):
     )
     gate_config: "LayerStackConfig | None" = field(
         default=None,
-        metadata={"help": "LayerStack config for the gating mechanism; if None gates are skipped"},
+        metadata={
+            "help": "LayerStack config for the gating mechanism; if None gates are skipped"
+        },
     )
     halting_config: "HaltingConfig | None" = field(
         default=None,
@@ -220,10 +222,10 @@ class Layer(Module):
                 hidden, loss = self.halting_module.finalize_weighted_accumulation(
                     input_state.halting_state, input
                 )
+                loss = loss if input_state.loss is None else input_state.loss + loss
                 input_state.hidden = hidden
-                input_state.loss = (
-                    loss if input_state.loss is None else input_state.loss + loss
-                )
+                input_state.loss = loss
+
                 return input_state
         input_state.hidden = input
         return input_state
