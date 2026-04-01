@@ -11,10 +11,8 @@ from emperor.augmentations.adaptive_parameters.utils.handlers.parameter import (
 from emperor.base.layer import (
     LayerStackConfig,
 )
-from emperor.embedding.relative.options import dynamic_positional_bias
 
 from typing import TYPE_CHECKING
-
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.config import (
@@ -81,7 +79,9 @@ class WeightHandlerAbstract(Module):
             case WeightNormalizationOptions.DISABLED:
                 return vectors
             case _:
-                raise ValueError(f"Unknown weight normalization option: {self.normalization_option}")
+                raise ValueError(
+                    f"Unknown weight normalization option: {self.normalization_option}"
+                )
 
 
 class SingleModelWeightHandler(WeightHandlerAbstract):
@@ -246,3 +246,35 @@ class HypernetworkWeightHandler(WeightHandlerAbstract):
         flat = self._compute_dynamic_weights(flat)
         update = flat.view(-1, self.input_dim, self.output_dim)
         return weight_params + update
+
+
+class WeightedBankWeightHandler(WeightHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterAugmentationConfig",
+        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.bank_expansion_factor = self.cfg.weight_bank_size
+        self.weight_bank = self._init_parameter_bank(
+            (1, self.bank_expansion_factor * self.input_dim, self.output_dim)
+        )
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.bank_expansion_factor * self.input_dim,
+        )
+        self.distribution_generator = self._init_generator_model(overrides)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        bank_logits = self.distribution_generator(logits)
+        bank_distribution = torch.softmax(bank_logits, dim=-1)
+        bank_distribution_reshaped = bank_distribution.unsqueeze(dim=2)
+        batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
+        split_weghts_by_factor = batched_weighted_bank.view(
+            -1, self.input_dim, self.bank_expansion_factor, self.output_dim
+        )
+        return weight_params + split_weghts_by_factor.sum(dim=2)

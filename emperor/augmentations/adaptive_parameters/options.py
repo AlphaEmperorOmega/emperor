@@ -24,6 +24,7 @@ class DynamicWeightOptions(Enum):
     LOW_RANK = 3
     WEIGHT_MASK = 4
     HYPERNETWORK = 5
+    WEIGHTED_BANK = 6
 
 
 class WeightNormalizationOptions(Enum):

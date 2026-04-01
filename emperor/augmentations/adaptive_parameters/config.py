@@ -57,6 +57,10 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
         default=None,
         metadata={"help": "Size of the weight bank for WEIGHTED_BANK bias option."},
     )
+    weight_bank_size: int | None = field(
+        default=None,
+        metadata={"help": "Size of the weight bank for WEIGHTED_BANK weight option."},
+    )
     row_mask_option: RowMaskOptions | None = field(
         default=None,
         metadata={

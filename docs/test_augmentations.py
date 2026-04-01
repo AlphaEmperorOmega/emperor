@@ -10,6 +10,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
+    DynamicWeightOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
@@ -175,6 +176,28 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
             with self.subTest(f"generator_depth={depth}"):
                 cfg = LinearPresets.adaptive_linear_layer_preset(
                     generator_depth=depth,
+                )
+                cfg = cfg.override_config
+                model = AdaptiveParameterAugmentation(cfg)
+
+                weight_params, bias_params = self._make_weight_and_bias_params()
+                input_tensor = torch.randn(self.batch_size, self.input_dim)
+                callback = self._make_affine_callback()
+
+                output = model.compute_adaptive_parameters(
+                    callback, weight_params, bias_params, input_tensor
+                )
+                expected_shape = (self.batch_size, self.output_dim)
+                self.assertEqual(output.shape, expected_shape)
+                self.assertIsInstance(output, torch.Tensor)
+
+    def test_forward_with_weight_option(self):
+        for option in DynamicWeightOptions:
+            if option == DynamicWeightOptions.DISABLED:
+                continue
+            with self.subTest(f"weight_option={option}"):
+                cfg = LinearPresets.adaptive_linear_layer_preset(
+                    weight_option=option,
                 )
                 cfg = cfg.override_config
                 model = AdaptiveParameterAugmentation(cfg)

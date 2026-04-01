@@ -37,6 +37,7 @@ from emperor.augmentations.adaptive_parameters.utils.handlers.weight import (
     HypernetworkWeightHandler,
     LowRankWeightHandler,
     SingleModelWeightHandler,
+    WeightedBankWeightHandler,
     WeightHandlerAbstract,
     WeightMaskHandler,
 )
@@ -72,6 +73,8 @@ class DynamicWeightFactory(Module):
                 return WeightMaskHandler(self.cfg)
             case DynamicWeightOptions.HYPERNETWORK:
                 return HypernetworkWeightHandler(self.cfg)
+            case DynamicWeightOptions.WEIGHTED_BANK:
+                return WeightedBankWeightHandler(self.cfg)
             case DynamicWeightOptions.DISABLED:
                 raise ValueError(
                     "If the `weight_option` is set to `DISABLED`, this class should not be initialized"
