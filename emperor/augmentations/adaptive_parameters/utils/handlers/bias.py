@@ -100,3 +100,22 @@ class BiasGeneratorHandler(BiasHandlerAbstract):
 
     def forward(self, bias_params: None, logits: Tensor) -> Tensor | None:
         return self.bias_generator(logits)
+
+
+class WeightedBankBiasGeneratorHandler(BiasHandlerAbstract):
+    def __init__(
+        self,
+        cfg: "AdaptiveParameterAugmentationConfig",
+    ):
+        super().__init__(cfg)
+        self.bias_bank_size = self.cfg.bias_bank_size
+        self.weight_bank = self._init_parameter_bank(
+            (self.bias_bank_size, self.output_dim)
+        )
+        overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=self.bias_bank_size)
+        self.distribution_generator = self._init_model(overrides)
+
+    def forward(self, bias_params: None, logits: Tensor) -> Tensor:
+        bank_logits = self.distribution_generator(logits)
+        bank_distribution = torch.softmax(bank_logits, dim=-1)
+        return torch.matmul(bank_distribution, self.weight_bank)

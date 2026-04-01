@@ -19,6 +19,7 @@ from emperor.augmentations.adaptive_parameters.utils.handlers.bias import (
     BiasHandlerAbstract,
     ElementwiseBiasHandler,
     GatedBiasHandler,
+    WeightedBankBiasGeneratorHandler,
 )
 from emperor.augmentations.adaptive_parameters.utils.handlers.diagonal import (
     AntiDiagonalHandler,
@@ -128,6 +129,8 @@ class DynamicBiasFactory(Module):
                 return BiasGeneratorHandler(self.cfg)
             case DynamicBiasOptions.GATED:
                 return GatedBiasHandler(self.cfg)
+            case DynamicBiasOptions.WEIGHTED_BANK:
+                return WeightedBankBiasGeneratorHandler(self.cfg)
             case DynamicBiasOptions.DISABLED:
                 raise ValueError(
                     "If the `bias_option` is set to `DISABLED`, this class should not be initialized"
