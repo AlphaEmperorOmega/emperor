@@ -1,7 +1,6 @@
 import copy
 import torch.nn as nn
 
-from typing import Self
 from torch.types import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
@@ -84,7 +83,6 @@ class Layer(Module):
         activation_function: "ActivationOptions | None" = None,
         layer_norm_dim: int | None = None,
         residual_connection_flag: bool = False,
-        is_adaptive_computation: bool = False,
         dropout_probability: float = 0.0,
         layer_norm_position: "LayerNormPositionOptions | None" = None,
         gate_config: "LayerStackConfig | None" = None,
@@ -97,7 +95,6 @@ class Layer(Module):
         self.activation_function = activation_function
         self.layer_norm_dim = layer_norm_dim
         self.residual_connection_flag = residual_connection_flag
-        self.is_adaptive_computation = is_adaptive_computation
         self.dropout_probability = dropout_probability
         self.layer_norm_position = layer_norm_position
         self.gate_config = gate_config
@@ -116,7 +113,26 @@ class Layer(Module):
     def __build_gate_module(self) -> "Module | None":
         if self.gate_config is None:
             return None
-        return LayerStack(self.gate_config).build_model()
+        from emperor.linears.options import LinearLayerOptions
+
+        if self.gate_config.model_type != LinearLayerOptions.BASE:
+            raise ValueError(
+                f"gate_config.model_type must be LinearLayerOptions.BASE, got {self.gate_config.model_type}"
+            )
+        if self.gate_config.gate_config is not None:
+            raise ValueError(
+                "gate_config.gate_config must be None, nested gates are not allowed"
+            )
+        if self.gate_config.halting_config is not None:
+            raise ValueError(
+                "gate_config.halting_config must be None, halting is not allowed in gates"
+            )
+        if self.gate_config.shared_halting_flag:
+            raise ValueError(
+                "gate_config.shared_halting_flag must be False, halting is not allowed in gates"
+            )
+
+        return LayerStack(self.gate_config).build()
 
     def __build_halting_module(self) -> "HaltingBase | None":
         if self.halting_config is None:
@@ -143,9 +159,9 @@ class Layer(Module):
             or self.layer_norm_dim is None
         ):
             return None
-        assert self.layer_norm_dim > 0, (
-            f"expected layer_norm_dim must be greater than 0, received {self.layer_norm_dim}"
-        )
+        assert (
+            self.layer_norm_dim > 0
+        ), f"expected layer_norm_dim must be greater than 0, received {self.layer_norm_dim}"
         return nn.LayerNorm(self.layer_norm_dim)
 
     def forward(
@@ -185,16 +201,18 @@ class Layer(Module):
         return input
 
     def __maybe_apply_activation(self, input: Tensor):
-        # TODO: Add the option to to redirect each sample in the
-        # input batch to use a different activation function
         if self.has_activation:
             return self.activation_function(input)
         return input
 
     def __maybe_apply_gates(self, input: Tensor) -> Tensor:
         if self.gate_module is not None:
-            return self.gate_module(input) * input
+            return self.forward_module(self.gate_module, input) * input
         return input
+
+    @staticmethod
+    def forward_module(module: "Module", input: Tensor) -> Tensor:
+        return module(LayerState(hidden=input)).hidden
 
     def __maybe_apply_dropout(self, input: Tensor):
         if self.has_dropout:
@@ -211,36 +229,25 @@ class Layer(Module):
             return self.layer_norm_module(input)
         return input
 
-    def __maybe_apply_halting(
-        self, input: Tensor, input_state: LayerState
-    ) -> LayerState:
+    def __maybe_apply_halting(self, input: Tensor, state: LayerState) -> LayerState:
         if self.halting_module is not None:
-            input_state.halting_state, input = self.halting_module.update_halting_state(
-                input_state.halting_state, input
+            state.halting_state, input = self.halting_module.update_halting_state(
+                state.halting_state, input
             )
             if self.last_layer_flag:
                 hidden, loss = self.halting_module.finalize_weighted_accumulation(
-                    input_state.halting_state, input
+                    state.halting_state, input
                 )
-                loss = loss if input_state.loss is None else input_state.loss + loss
-                input_state.hidden = hidden
-                input_state.loss = loss
+                loss = loss if state.loss is None else state.loss + loss
+                state.hidden = hidden
+                state.loss = loss
 
-                return input_state
-        input_state.hidden = input
-        return input_state
+                return state
+        state.hidden = input
+        return state
 
     def _handle_model_output(self, layer_state: LayerState) -> LayerState:
         return layer_state
-
-    # TODO: In the future instead multiple function inputs
-    # use a dataset class to encapsulate the inputs and outputs
-    # of the block
-    # def forward(
-    #     self,
-    #     data: LayerData,
-    # ) -> LayerData:
-    #     output = self.model(data.tensor)
 
 
 @dataclass
@@ -268,6 +275,12 @@ class LayerStackConfig(LayerConfig):
     last_layer_bias_option: LastLayerBiasOptions | None = field(
         default=None,
         metadata={"help": "Override bias on the last layer regardless of bias_flag"},
+    )
+    apply_output_pipeline_flag: bool | None = field(
+        default=None,
+        metadata={
+            "help": "If True, the output layer gets the full processing pipeline (activation, dropout, layer norm, residual, gate)"
+        },
     )
 
 
@@ -300,9 +313,10 @@ class LayerStack(Module):
         self.last_layer_bias_option: LastLayerBiasOptions = (
             self.cfg.last_layer_bias_option
         )
+        self.gate_config: "LayerStack" = self.cfg.gate_config
         self.halting_config: "HaltingConfig" = self.cfg.halting_config
         self.shared_halting_flag: bool = self.cfg.shared_halting_flag
-        self.callback_function = None
+        self.apply_output_pipeline_flag: bool = self.cfg.apply_output_pipeline_flag
 
         if self.halting_config is not None and self.num_layers < 2:
             raise ValueError(
@@ -312,10 +326,6 @@ class LayerStack(Module):
             )
 
         self.layer_block_model = self.cfg.layer_type or Layer
-
-    def set_callback(self, callback) -> Self:
-        self.callback_function = callback
-        return self
 
     def _override_model_type(
         self,
@@ -332,7 +342,7 @@ class LayerStack(Module):
         overrides.layer_type = layer_type
         return overrides
 
-    def build_model(self) -> Layer | Sequential:
+    def build(self) -> Layer | Sequential:
         layers = []
 
         layer_adjustment = self.__add_initial_layer(layers)
@@ -362,16 +372,31 @@ class LayerStack(Module):
     def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
         for _ in range(self.num_layers - layer_adjustment):
             layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
-            if self.callback_function is not None:
-                layer = self.callback_function(layer)
             layers.append(layer)
 
     def __add_output_layer(self, layers: list) -> None:
         layer_input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
-        config = self.__resolve_model_type_overrides(layer_input_dim, self.output_dim)
+        if self.apply_output_pipeline_flag:
+            layer = self.__create_layer(
+                layer_input_dim,
+                self.output_dim,
+                residual_flag=False,
+                is_output_layer=True,
+            )
+            layers.append(layer)
+            return
+        config = self.__resolve_model_type_overrides(
+            self.main_cfg, layer_input_dim, self.output_dim
+        )
+        gate_config = None
+        if self.gate_config is not None:
+            gate_config = self.__resolve_model_type_overrides(
+                self.gate_config, self.output_dim, self.output_dim
+            )
         self.__apply_last_layer_bias_override(config)
         layer = self.layer_block_model(
             model=self.__get_model_type()(config),
+            gate_config=gate_config,
             halting_config=self.halting_config,
             shared_halting_flag=self.shared_halting_flag,
         )
@@ -394,13 +419,24 @@ class LayerStack(Module):
         input_dim: int,
         output_dim: int,
         residual_flag: bool = True,
+        is_output_layer: bool = False,
     ) -> Layer:
         layer_norm_dim = None
         if self.layer_norm_position != LayerNormPositionOptions.NONE:
             layer_norm_dim = output_dim
             if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
                 layer_norm_dim = input_dim
-        config = self.__resolve_model_type_overrides(input_dim, output_dim)
+        config = self.__resolve_model_type_overrides(
+            self.main_cfg, input_dim, output_dim
+        )
+
+        gate_config = None
+        if self.gate_config is not None:
+            gate_config = self.__resolve_model_type_overrides(
+                self.gate_config, self.hidden_dim, self.hidden_dim
+            )
+        if is_output_layer:
+            self.__apply_last_layer_bias_override(config)
         model = self.__get_model_type()(config)
 
         layer_block_model = self.layer_block_model(
@@ -410,14 +446,20 @@ class LayerStack(Module):
             activation_function=self.activation,
             dropout_probability=self.dropout_probability,
             layer_norm_position=self.layer_norm_position,
+            gate_config=gate_config,
             halting_config=self.halting_config,
             shared_halting_flag=self.shared_halting_flag,
         )
 
         return layer_block_model
 
-    def __resolve_model_type_overrides(self, input_dim: int, output_dim: int):
-        c = copy.deepcopy(self.main_cfg)
+    def __resolve_model_type_overrides(
+        self,
+        cfg: LayerStackConfig,
+        input_dim: int,
+        output_dim: int,
+    ):
+        c = copy.deepcopy(cfg)
         c.input_dim = input_dim
         c.output_dim = output_dim
         return c
