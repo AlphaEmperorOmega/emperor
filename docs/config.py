@@ -169,7 +169,7 @@ def default_unittest_config():
             residual_flag=False,
             adaptive_computation_flag=False,
             dropout_probability=0.0,
-            layer_norm_position=LayerNormPositionOptions.NONE,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
         ),
         transformer_layer_config=TransformerConfig(),
         transformer_config=TransformerConfig(

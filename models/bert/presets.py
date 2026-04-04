@@ -169,7 +169,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                     output_dim=output_dim,
                     num_layers=output_num_layers,
                     activation=activation_function,
-                    layer_norm_position=LayerNormPositionOptions.NONE,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
                     residual_flag=False,
                     adaptive_computation_flag=False,
                     dropout_probability=dropout_probability,

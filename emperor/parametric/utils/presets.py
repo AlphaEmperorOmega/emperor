@@ -424,7 +424,7 @@ class ParametricLayerPresets:
             output_dim=output_dim,
             num_layers=num_layers,
             activation=activation,
-            layer_norm_position=LayerNormPositionOptions.NONE,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_flag=residual_flag,
             adaptive_computation_flag=False,
             dropout_probability=dropout_probability,

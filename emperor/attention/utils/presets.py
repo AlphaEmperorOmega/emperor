@@ -288,7 +288,7 @@ class MultiHeadAttentionPresets:
     @staticmethod
     def multi_head_attention_linear_base_preset(
         batch_size: int = 8,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         bias_flag: bool = False,
         num_heads: int = 4,
         embedding_dim: int = 0,
@@ -373,7 +373,7 @@ class MultiHeadAttentionPresets:
         bias_flag: bool = False,
         num_heads: int = 4,
         embedding_dim: int = 0,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.NONE,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,

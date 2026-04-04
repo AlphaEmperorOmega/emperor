@@ -77,7 +77,7 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.MISH,
 ]
 SEARCH_SPACE_STACK_LAYER_NORM_POSITION: list = [
-    LayerNormPositionOptions.NONE,
+    LayerNormPositionOptions.DISABLED,
     LayerNormPositionOptions.DEFAULT,
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
@@ -92,7 +92,7 @@ SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_ACTIVATION: list = [
     ActivationOptions.MISH,
 ]
 SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: list = [
-    LayerNormPositionOptions.NONE,
+    LayerNormPositionOptions.DISABLED,
     LayerNormPositionOptions.DEFAULT,
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,

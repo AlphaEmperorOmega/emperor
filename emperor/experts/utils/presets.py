@@ -212,7 +212,7 @@ class MixtureOfExpertsPresets:
             output_dim=output_dim,
             num_layers=experts_stack_num_layers,
             activation=experts_stack_activation,
-            layer_norm_position=LayerNormPositionOptions.NONE,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_flag=experts_stack_residual_flag,
             adaptive_computation_flag=False,
             dropout_probability=experts_stack_dropout_probability,

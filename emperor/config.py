@@ -213,7 +213,7 @@ class ModelConfig(ConfigBase):
             num_layers=2,
             activation=ActivationOptions.RELU,
             model_type=nn.Linear,
-            layer_norm_position=LayerNormPositionOptions.NONE,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_flag=False,
             adaptive_computation_flag=False,
         ),

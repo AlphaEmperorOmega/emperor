@@ -24,7 +24,7 @@ class BaseOptions(Enum):
 
 
 class ActivationOptions(BaseOptions):
-    NONE = "no_activation"
+    DISABLED = 0
     RELU = F.relu
     GELU = F.gelu
     SIGMOID = F.sigmoid
@@ -39,13 +39,13 @@ class ActivationOptions(BaseOptions):
 
 
 class LayerNormPositionOptions(BaseOptions):
-    NONE = "no_layer_norm_added"
-    DEFAULT = "layer_norm_after_model_output"
-    BEFORE = "layer_norm_before_model_processing"
-    AFTER = "layer_norm_after_residual_connection"
+    DISABLED = 0
+    DEFAULT = 1
+    BEFORE = 2
+    AFTER = 3
 
 
 class LastLayerBiasOptions(BaseOptions):
-    DEFAULT = "inherit_bias_flag"
-    DISABLED = "disable_bias_on_last_layer"
-    ENABLED = "enable_bias_on_last_layer"
+    DEFAULT = 0
+    DISABLED = 1
+    ENABLED = 2
