@@ -42,35 +42,37 @@ class TestLayerStack(unittest.TestCase):
         shared_halting_flag: bool = False,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
+        gate_config: "LayerStackConfig | None" = None,
     ) -> "LayerStackConfig":
 
-        gate_config = LayerStackConfig(
-            input_dim=input_dim,
-            hidden_dim=hidden_dim,
-            output_dim=output_dim,
-            num_layers=stack_num_layers,
-            last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=stack_activation,
-                layer_norm_position=layer_norm_position,
-                residual_flag=stack_residual_flag,
-                dropout_probability=stack_dropout_probability,
-                halting_config=None,
-                shared_halting_flag=False,
-                gate_config=None,
-                model_config=LinearLayerConfig(
-                    input_dim=input_dim,
-                    output_dim=output_dim,
-                    bias_flag=bias_flag,
-                    data_monitor=None,
-                    parameter_monitor=None,
-                    override_config=AdaptiveParameterAugmentationConfig(
-                        generator_depth=generator_depth,
+        if gate_config is None:
+            gate_config = LayerStackConfig(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                output_dim=output_dim,
+                num_layers=stack_num_layers,
+                last_layer_bias_option=last_layer_bias_option,
+                apply_output_pipeline_flag=apply_output_pipeline_flag,
+                layer_config=LayerConfig(
+                    activation=stack_activation,
+                    layer_norm_position=layer_norm_position,
+                    residual_flag=stack_residual_flag,
+                    dropout_probability=stack_dropout_probability,
+                    halting_config=None,
+                    shared_halting_flag=False,
+                    gate_config=None,
+                    model_config=LinearLayerConfig(
+                        input_dim=input_dim,
+                        output_dim=output_dim,
+                        bias_flag=bias_flag,
+                        data_monitor=None,
+                        parameter_monitor=None,
+                        override_config=AdaptiveParameterAugmentationConfig(
+                            generator_depth=generator_depth,
+                        ),
                     ),
                 ),
-            ),
-        )
+            )
 
         # halting_config = HaltingConfig(
         #     halting_option=HaltingOptions.SOFT_HALTING,
@@ -322,7 +324,172 @@ class TestLayerStack(unittest.TestCase):
                                             if layer.input_dim != layer.output_dim:
                                                 self.assertFalse(layer.residual_flag)
 
-    # def test_no_layer_is_added_when_num_layers_is_one(self):
+    def test_add_initial_layer(self):
+        num_layers_options = [1, 2, 3, 4]
+        input_dims = [8, 16]
+        hidden_dim = 16
+        output_dim = 6
+
+        for num_layers in num_layers_options:
+            for input_dim in input_dims:
+                message = (
+                    f"num_layers={num_layers}, "
+                    f"input_dim={input_dim}, "
+                    f"hidden_dim={hidden_dim}"
+                )
+                with self.subTest(msg=message):
+                    cfg = self.preset(
+                        input_dim=input_dim,
+                        hidden_dim=hidden_dim,
+                        output_dim=output_dim,
+                        stack_num_layers=num_layers,
+                    )
+                    stack = LayerStack(cfg)
+                    layers = []
+                    adjustment = stack._LayerStack__add_initial_layer(layers)
+
+                    should_add = input_dim != hidden_dim and num_layers > 1
+                    if should_add:
+                        self.assertEqual(len(layers), 1)
+                        self.assertEqual(
+                            adjustment, LayerStack.SEPARATE_INPUT_OUTPUT_DIM
+                        )
+                        self.assertEqual(layers[0].input_dim, input_dim)
+                        self.assertEqual(layers[0].output_dim, hidden_dim)
+                    else:
+                        self.assertEqual(len(layers), 0)
+                        self.assertEqual(adjustment, LayerStack.SHARED_INPUT_OUTPUT_DIM)
+
+    def test_add_hidden_layers(self):
+        num_layers_options = [1, 2, 3, 4]
+        adjustments = [
+            LayerStack.SHARED_INPUT_OUTPUT_DIM,
+            LayerStack.SEPARATE_INPUT_OUTPUT_DIM,
+        ]
+        hidden_dim = 16
+
+        for num_layers in num_layers_options:
+            for adjustment in adjustments:
+                message = f"num_layers={num_layers}, adjustment={adjustment}"
+                with self.subTest(msg=message):
+                    cfg = self.preset(
+                        hidden_dim=hidden_dim,
+                        stack_num_layers=num_layers,
+                    )
+                    stack = LayerStack(cfg)
+                    layers = []
+                    stack._LayerStack__add_hidden_layers(layers, adjustment)
+
+                    expected_count = max(0, num_layers - adjustment)
+                    self.assertEqual(len(layers), expected_count)
+
+                    for layer in layers:
+                        self.assertEqual(layer.input_dim, hidden_dim)
+                        self.assertEqual(layer.output_dim, hidden_dim)
+
+    def test_add_output_layer(self):
+        num_layers_options = [1, 2, 3]
+        output_dims = [6, 16]
+        apply_pipeline_flags = [True, False]
+
+        for num_layers in num_layers_options:
+            for output_dim in output_dims:
+                for apply_pipeline in apply_pipeline_flags:
+                    message = (
+                        f"num_layers={num_layers}, "
+                        f"output_dim={output_dim}, "
+                        f"apply_pipeline={apply_pipeline}"
+                    )
+                    with self.subTest(msg=message):
+                        cfg = self.preset(
+                            stack_num_layers=num_layers,
+                            output_dim=output_dim,
+                            apply_output_pipeline_flag=apply_pipeline,
+                        )
+                        stack = LayerStack(cfg)
+                        layers = []
+                        stack._LayerStack__add_output_layer(layers)
+
+                        self.assertEqual(len(layers), 1)
+
+                        layer = layers[0]
+                        expected_input_dim = (
+                            cfg.hidden_dim if num_layers > 1 else cfg.input_dim
+                        )
+                        self.assertIsInstance(layer, Layer)
+                        self.assertEqual(layer.input_dim, expected_input_dim)
+                        self.assertEqual(layer.output_dim, output_dim)
+                        self.assertTrue(layer.last_layer_flag)
+
+                        if apply_pipeline:
+                            self.assertEqual(
+                                layer.activation_function,
+                                cfg.layer_config.activation,
+                            )
+                            self.assertEqual(
+                                layer.dropout_probability,
+                                cfg.layer_config.dropout_probability,
+                            )
+                        else:
+                            self.assertEqual(
+                                layer.activation_function, ActivationOptions.DISABLED
+                            )
+                            self.assertEqual(layer.dropout_probability, 0.0)
+                            self.assertFalse(layer.residual_flag)
+
+    def test_gate_config_rejects_nested_gates(self):
+        gate_inner = LayerStackConfig(
+            input_dim=6,
+            hidden_dim=6,
+            output_dim=6,
+            num_layers=1,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                input_dim=6,
+                output_dim=6,
+                activation=ActivationOptions.DISABLED,
+                residual_flag=False,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                shared_halting_flag=False,
+                gate_config=None,
+                model_config=LinearLayerConfig(bias_flag=True),
+            ),
+        )
+        invalid_configs = [
+            {"gate_config": gate_inner},
+            {"halting_config": HaltingConfig()},
+            {"shared_halting_flag": True},
+        ]
+        for invalid in invalid_configs:
+            invalid_field = list(invalid.keys())[0]
+            message = f"invalid_field={invalid_field}, value={invalid[invalid_field]}"
+            with self.subTest(msg=message):
+                gate_layer_config = LayerConfig(
+                    input_dim=6,
+                    output_dim=6,
+                    activation=ActivationOptions.DISABLED,
+                    residual_flag=False,
+                    dropout_probability=0.0,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    model_config=LinearLayerConfig(bias_flag=True),
+                    **invalid,
+                )
+                gate_config = LayerStackConfig(
+                    input_dim=6,
+                    hidden_dim=6,
+                    output_dim=6,
+                    num_layers=1,
+                    last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                    apply_output_pipeline_flag=False,
+                    layer_config=gate_layer_config,
+                )
+                cfg = self.preset(gate_config=gate_config)
+                with self.assertRaises(ValueError):
+                    LayerStack(cfg).build()
+
+    # def test_ensure_input_layer_is_returned_when_num_layers_is_one(self):
     #     types = (LinearLayerOptions, ParameterGeneratorTypes)
     #     for type in types:
     #         for layer_type in type:
@@ -335,193 +502,47 @@ class TestLayerStack(unittest.TestCase):
     #             self.rebuild_presets(config)
     #
     #             model_list = []
-    #             adjustment = self.model._LayerStack__add_initial_layer(model_list)
+    #             self.model._LayerStack__add_output_layer(model_list)
+    #             model = model_list[0]
     #
-    #             self.assertEqual(len(model_list), 0)
-    #             self.assertEqual(
-    #                 adjustment, LayerStackAdjustments.SHARED_INPUT_OUTPUT_DIM
-    #             )
-
-    # def test_no_layer_is_added_when_num_layers_is_three_with_same_input_output_dim(
-    #     self,
-    # ):
+    #             input = torch.randn(self.batch_size, self.input_dim)
+    #             output = model(input)
+    #             if isinstance(output, tuple):
+    #                 output, _ = model(input)
+    #
+    #             expected_output = (self.batch_size, self.output_dim)
+    #
+    #             self.assertEqual(len(model_list), 1)
+    #             self.assertEqual(output.shape, expected_output)
+    #
+    # def test_ensure_output_layer_is_added_when_multiple_layers_are_added(self):
     #     types = (LinearLayerOptions, ParameterGeneratorTypes)
     #     for type in types:
     #         for layer_type in type:
     #             config = LayerStackConfig(
-    #                 input_dim=16,
+    #                 input_dim=8,
     #                 output_dim=16,
-    #                 num_layers=1,
+    #                 num_layers=2,
     #                 model_type=layer_type,
     #             )
     #             self.rebuild_presets(config)
     #
     #             model_list = []
-    #             adjustment = self.model._LayerStack__add_initial_layer(model_list)
+    #             self.model._LayerStack__add_output_layer(model_list)
+    #             model = model_list[0]
     #
-    #             self.assertEqual(len(model_list), 0)
-    #             self.assertEqual(
-    #                 adjustment, LayerStackAdjustments.SHARED_INPUT_OUTPUT_DIM
-    #             )
+    #             input = torch.randn(self.batch_size, self.hidden_dim)
+    #             output = model(input)
+    #             if isinstance(output, tuple):
+    #                 output, _ = model(input)
+    #
+    #             expected_output = (self.batch_size, self.output_dim)
+    #
+    #             self.assertEqual(len(model_list), 1)
+    #             self.assertEqual(output.shape, expected_output)
+    #
 
 
-#
-#     def test_initial_layer_is_added_with_multiple_layers_and_different_input_output_dim(
-#         self,
-#     ):
-#         num_layers_array = [2, 3, 4]
-#         types = (LinearLayerOptions, ParameterGeneratorTypes)
-#         for type in types:
-#             for layer_type in type:
-#                 for num_layer in num_layers_array:
-#                     config = LayerStackConfig(
-#                         input_dim=8,
-#                         output_dim=16,
-#                         num_layers=num_layer,
-#                         model_type=layer_type,
-#                     )
-#                     self.rebuild_presets(config)
-#
-#                     model_list = []
-#                     adjustment = self.model._LayerStack__add_initial_layer(model_list)
-#                     model = nn.Sequential(*model_list)
-#
-#                     input = torch.randn(self.batch_size, self.input_dim)
-#                     output = model(input)
-#                     if isinstance(output, tuple):
-#                         output, _ = model(input)
-#
-#                     expected_output = (self.batch_size, self.hidden_dim)
-#
-#                     self.assertEqual(
-#                         adjustment, LayerStackAdjustments.SEPARATE_INPUT_OUTPUT_DIM
-#                     )
-#                     self.assertEqual(len(model_list), 1)
-#                     self.assertEqual(output.shape, expected_output)
-
-
-# class Test___add_hidden_layers(TestLayerStack):
-#     def test_no_layer_added_when_num_layers_is_one(self):
-#         types = (LinearLayerOptions, ParameterGeneratorTypes)
-#         for type in types:
-#             for layer_type in type:
-#                 config = LayerStackConfig(
-#                     input_dim=8,
-#                     output_dim=16,
-#                     num_layers=1,
-#                     model_type=layer_type,
-#                 )
-#                 self.rebuild_presets(config)
-#
-#                 model_list = []
-#                 adjustment = LayerStackAdjustments.SHARED_INPUT_OUTPUT_DIM
-#                 self.model._LayerStack__add_hidden_layers(model_list, adjustment)
-#
-#                 self.assertEqual(len(model_list), 0)
-#
-#     def test_no_layer_added_when_num_layers_is_two_with_initial_layer_added(self):
-#         types = (LinearLayerOptions, ParameterGeneratorTypes)
-#         for type in types:
-#             for layer_type in type:
-#                 config = LayerStackConfig(
-#                     input_dim=8,
-#                     output_dim=16,
-#                     num_layers=2,
-#                     model_type=layer_type,
-#                 )
-#                 self.rebuild_presets(config)
-#
-#                 model_list = []
-#                 adjustment = LayerStackAdjustments.SEPARATE_INPUT_OUTPUT_DIM
-#                 self.model._LayerStack__add_hidden_layers(model_list, adjustment)
-#
-#                 self.assertEqual(len(model_list), 0)
-#
-#     def test_hidden_layers_are_added_multiple_hidden_layers(self):
-#         num_layers_array = [2, 3, 4]
-#         types = (LinearLayerOptions, ParameterGeneratorTypes)
-#         for type in types:
-#             for layer_type in type:
-#                 for num_layer in num_layers_array:
-#                     config = LayerStackConfig(
-#                         input_dim=8,
-#                         output_dim=16,
-#                         num_layers=num_layer,
-#                         model_type=layer_type,
-#                     )
-#                     self.rebuild_presets(config)
-#
-#                     model_list = []
-#
-#                     adjustment = LayerStackAdjustments.SHARED_INPUT_OUTPUT_DIM
-#                     self.model._LayerStack__add_hidden_layers(model_list, adjustment)
-#                     model = nn.Sequential(*model_list)
-#
-#                     input = torch.randn(self.batch_size, self.hidden_dim)
-#                     output = model(input)
-#                     if isinstance(output, tuple):
-#                         output, _ = model(input)
-#
-#                     expected_output = (self.batch_size, self.hidden_dim)
-#
-#                     self.assertEqual(len(model_list), num_layer - adjustment.value)
-#                     self.assertEqual(output.shape, expected_output)
-#
-#
-# class Test___add_output_layer(TestLayerStack):
-#     def test_ensure_input_layer_is_returned_when_num_layers_is_one(self):
-#         types = (LinearLayerOptions, ParameterGeneratorTypes)
-#         for type in types:
-#             for layer_type in type:
-#                 config = LayerStackConfig(
-#                     input_dim=8,
-#                     output_dim=16,
-#                     num_layers=1,
-#                     model_type=layer_type,
-#                 )
-#                 self.rebuild_presets(config)
-#
-#                 model_list = []
-#                 self.model._LayerStack__add_output_layer(model_list)
-#                 model = model_list[0]
-#
-#                 input = torch.randn(self.batch_size, self.input_dim)
-#                 output = model(input)
-#                 if isinstance(output, tuple):
-#                     output, _ = model(input)
-#
-#                 expected_output = (self.batch_size, self.output_dim)
-#
-#                 self.assertEqual(len(model_list), 1)
-#                 self.assertEqual(output.shape, expected_output)
-#
-#     def test_ensure_output_layer_is_added_when_multiple_layers_are_added(self):
-#         types = (LinearLayerOptions, ParameterGeneratorTypes)
-#         for type in types:
-#             for layer_type in type:
-#                 config = LayerStackConfig(
-#                     input_dim=8,
-#                     output_dim=16,
-#                     num_layers=2,
-#                     model_type=layer_type,
-#                 )
-#                 self.rebuild_presets(config)
-#
-#                 model_list = []
-#                 self.model._LayerStack__add_output_layer(model_list)
-#                 model = model_list[0]
-#
-#                 input = torch.randn(self.batch_size, self.hidden_dim)
-#                 output = model(input)
-#                 if isinstance(output, tuple):
-#                     output, _ = model(input)
-#
-#                 expected_output = (self.batch_size, self.output_dim)
-#
-#                 self.assertEqual(len(model_list), 1)
-#                 self.assertEqual(output.shape, expected_output)
-#
-#
 # class Test_build_model(TestLayerStack):
 #     def test_model_layer_block_returned_when_num_layers_is_one(self):
 #         types = (LinearLayerOptions, ParameterGeneratorTypes)
