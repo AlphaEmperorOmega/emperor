@@ -573,6 +573,9 @@ class ConfigBase:
         metadata={"help": ""},
     )
 
+    def build(self, input_dim: int, output_dim: int) -> "Module":
+        raise NotImplementedError
+
     def get(self, key: str, default=None) -> Any:
         if not hasattr(self, key):
             return None
