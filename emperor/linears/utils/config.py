@@ -2,6 +2,11 @@ from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.linears.utils._monitors import TensorMonitor, StatisticsMonitor
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emperor.base.utils import Module
+
 
 @dataclass
 class LinearLayerConfig(ConfigBase):
@@ -31,3 +36,18 @@ class LinearLayerConfig(ConfigBase):
             "help": "Optional monitor class that tracks parameter statistics (mean/var/norm) and logs to TensorBoard."
         },
     )
+
+    def build(self, input_dim: int, output_dim: int) -> "Module":
+        from emperor.linears.utils.layers import LinearLayer
+
+        overrides = LinearLayerConfig(input_dim=input_dim, output_dim=output_dim)
+        return LinearLayer(self, overrides)
+
+
+@dataclass
+class AdaptiveLinearLayerConfig(LinearLayerConfig):
+    def build(self, input_dim: int, output_dim: int) -> "Module":
+        from emperor.linears.utils.layers import AdaptiveLinearLayer
+
+        overrides = AdaptiveLinearLayerConfig(input_dim=input_dim, output_dim=output_dim)
+        return AdaptiveLinearLayer(self, overrides)
