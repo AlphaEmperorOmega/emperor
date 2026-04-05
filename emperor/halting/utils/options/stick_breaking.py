@@ -6,9 +6,9 @@ from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.base.enums import LastLayerBiasOptions
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
+from emperor.halting.utils.options._validator import StickBreakingValidator
 
 from typing import TYPE_CHECKING
 
@@ -59,31 +59,25 @@ class StickBreaking(HaltingBase[StickBreakingState]):
     ):
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
-        self.cfg: "HaltingConfig" = self._overwrite_config(config, overrides)
-        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
+        self.cfg: "HaltingConfig" = self._override_config(config, overrides)
+        StickBreakingValidator.validate(self.cfg)
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
+        self.halting_gate_config: LayerStackConfig = self.cfg.halting_gate_config
         self.hidden_state_mode: HaltingHiddenStateModeOptions = (
             self.cfg.hidden_state_mode
         )
 
-        self._gate: Layer | Sequential = self.__build_gate()
+        self.halting_gate_model = self.__build_halting_gate_model()
         self.__init_gate_weights()
 
-    def __build_gate(self) -> "Layer | Sequential":
-        from emperor.linears.utils.stack import LinearLayerStack
-
-        overrides = LayerStackConfig(
-            input_dim=self.input_dim,
-            output_dim=2,
-            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-        )
-        return LinearLayerStack(self.main_cfg, overrides).build_model()
+    def __build_halting_gate_model(self) -> "Layer | Sequential":
+        return self.halting_gate_config.build(input_dim=self.input_dim)
 
     def __init_gate_weights(self) -> None:
         last_linear = None
-        for m in self._gate.modules():
+        for m in self.halting_gate_model.modules():
             if isinstance(m, nn.Linear):
                 last_linear = m
         if isinstance(last_linear, nn.Linear):
@@ -106,7 +100,7 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         return state, model_hidden_state
 
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
-        logits = self._gate(hidden_state)
+        logits = Layer.forward_with_state(self.halting_gate_model, hidden_state)
         if self.training:
             logits = logits + torch.randn_like(logits)
         return F.log_softmax(logits, dim=-1)
