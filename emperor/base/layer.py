@@ -191,12 +191,19 @@ class Layer(Module):
         self.layer_norm_module = self.__init_layer_norm_module()
         self.last_layer_flag = False
 
+    def __resolve_layer_norm_dim(self) -> int | None:
+        if self.layer_norm_position == LayerNormPositionOptions.DISABLED:
+            return None
+        if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
+            return self.input_dim
+        return self.output_dim
+
     def __build_model(self) -> "Module | None":
         if self.model_config is None:
             return None
         return self.model_config.build(self.input_dim, self.output_dim)
 
-    def __build_gate_model(self) -> "Module | None":
+    def __build_gate_model(self) -> "Layer | Sequential | None":
         if self.gate_config is None:
             return None
         overrides = LayerStackConfig(
@@ -215,13 +222,6 @@ class Layer(Module):
         if self.has_dropout:
             return nn.Dropout(self.dropout_probability)
         return None
-
-    def __resolve_layer_norm_dim(self) -> int | None:
-        if self.layer_norm_position == LayerNormPositionOptions.DISABLED:
-            return None
-        if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
-            return self.input_dim
-        return self.output_dim
 
     def __init_layer_norm_module(self) -> nn.Module | None:
         if self.layer_norm_dim is None:
@@ -274,11 +274,11 @@ class Layer(Module):
 
     def __maybe_apply_gates(self, input: Tensor) -> Tensor:
         if self.gate_model is not None:
-            return self.forward_module(self.gate_model, input) * input
+            return self.forward_with_state(self.gate_model, input) * input
         return input
 
     @staticmethod
-    def forward_module(module: "Module", input: Tensor) -> Tensor:
+    def forward_with_state(module: "Module", input: Tensor) -> Tensor:
         return module(LayerState(hidden=input)).hidden
 
     def __maybe_apply_dropout(self, input: Tensor):
