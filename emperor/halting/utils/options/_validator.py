@@ -61,3 +61,4 @@ class StickBreakingValidator:
                 f"halting_gate_config.last_layer_bias_option must be DISABLED, "
                 f"received {halting_gate_config.last_layer_bias_option}"
             )
+

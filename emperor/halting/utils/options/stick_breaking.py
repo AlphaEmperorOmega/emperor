@@ -100,7 +100,10 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         return state, model_hidden_state
 
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
-        logits = Layer.forward_with_state(self.halting_gate_model, hidden_state)
+        original_shape = hidden_state.shape
+        flat = hidden_state.view(-1, self.input_dim)
+        logits = Layer.forward_with_state(self.halting_gate_model, flat)
+        logits = logits.view(*original_shape[:-1], 2)
         if self.training:
             logits = logits + torch.randn_like(logits)
         return F.log_softmax(logits, dim=-1)
