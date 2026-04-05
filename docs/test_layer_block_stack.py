@@ -67,9 +67,6 @@ class TestLayerStack(unittest.TestCase):
                         bias_flag=bias_flag,
                         data_monitor=None,
                         parameter_monitor=None,
-                        override_config=AdaptiveParameterAugmentationConfig(
-                            generator_depth=generator_depth,
-                        ),
                     ),
                 ),
             )
