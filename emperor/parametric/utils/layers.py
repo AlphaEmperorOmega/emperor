@@ -38,7 +38,7 @@ class ParametricLayer(Module):
     ):
         super().__init__()
         config = getattr(cfg, "parameter_generator_model_config", cfg)
-        self.cfg: "ParametricLayerConfig" = self._overwrite_config(
+        self.cfg: "ParametricLayerConfig" = self._override_config(
             config, overrides
         )
         self.input_dim = self.cfg.input_dim

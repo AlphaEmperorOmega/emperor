@@ -323,7 +323,7 @@ class Module(LightningModule):
                 for layer in parameter:
                     self._initialize_parameters(layer)
 
-    def _overwrite_config(
+    def _override_config(
         self,
         cfg: "ConfigBase | ModelConfig",
         overrides: "ConfigBase | None" = None,

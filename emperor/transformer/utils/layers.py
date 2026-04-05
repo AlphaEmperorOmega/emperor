@@ -97,7 +97,7 @@ class TransformerLayerBase(Module):
     ):
         super().__init__()
         config = getattr(cfg, "transformer_layer_config", cfg)
-        self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "TransformerConfig" = self._override_config(config, overrides)
         self.main_config = cfg
         self.embedding_dim = self.cfg.embedding_dim
         self.layer_norm_dim = self.embedding_dim

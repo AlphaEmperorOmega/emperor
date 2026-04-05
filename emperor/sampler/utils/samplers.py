@@ -102,7 +102,7 @@ class SamplerBase(Module):
         super().__init__()
 
         config = getattr(cfg, "sampler_model_config", cfg)
-        self.cfg: "SamplerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "SamplerConfig" = self._override_config(config, overrides)
 
         self.top_k = self.cfg.top_k
         self.threshold = self.cfg.threshold

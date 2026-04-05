@@ -30,7 +30,7 @@ class AdaptiveWeightSelector(Module):
         overrides: "ParametricLayerConfig | None" = None,
     ):
         super().__init__()
-        self.cfg = self._overwrite_config(cfg, overrides)
+        self.cfg = self._override_config(cfg, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
@@ -61,7 +61,7 @@ class AdaptiveBiasSelector(Module):
         overrides: "ParametricLayerConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "ParametricLayerConfig" = self._overwrite_config(
+        self.cfg: "ParametricLayerConfig" = self._override_config(
             cfg, overrides
         )
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)

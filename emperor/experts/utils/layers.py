@@ -110,7 +110,7 @@ class MixtureOfExperts(Module):
     ):
         super().__init__()
         config = getattr(cfg, "mixture_of_experts_config", cfg)
-        self.cfg: "MixtureOfExpertsConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "MixtureOfExpertsConfig" = self._override_config(config, overrides)
         self.main_cfg: "LayerStackConfig" = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim: int = self.cfg.input_dim

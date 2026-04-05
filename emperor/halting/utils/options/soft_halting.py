@@ -54,7 +54,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
     ):
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
-        self.cfg: "HaltingConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "HaltingConfig" = self._override_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim: int = self.cfg.input_dim

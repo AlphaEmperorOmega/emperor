@@ -39,7 +39,7 @@ class RouterModel(Module):
     ) -> None:
         super().__init__()
         config = getattr(cfg, "router_model_config", cfg)
-        self.cfg: "RouterConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "RouterConfig" = self._override_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim = self.cfg.input_dim

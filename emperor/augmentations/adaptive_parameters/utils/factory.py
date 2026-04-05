@@ -56,7 +56,7 @@ class DynamicWeightFactory(Module):
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
             cfg, overrides
         )
         self.weight_option = self.cfg.weight_option
@@ -91,7 +91,7 @@ class DynamicDiagonalFactory(Module):
     ):
         super().__init__()
         config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
             config, overrides
         )
         self.diagonal_option = self.cfg.diagonal_option
@@ -117,7 +117,7 @@ class DynamicBiasFactory(Module):
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
             cfg, overrides
         )
         self.bias_option = self.cfg.bias_option
@@ -147,7 +147,7 @@ class DynamicMemoryFactory(Module):
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
             cfg, overrides
         )
         self.memory_option = self.cfg.memory_option
@@ -171,7 +171,7 @@ class MaskHandlerFactory(Module):
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
             cfg, overrides
         )
         self.row_mask_option = self.cfg.row_mask_option

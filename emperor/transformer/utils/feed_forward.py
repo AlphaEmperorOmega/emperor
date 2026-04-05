@@ -43,7 +43,7 @@ class FeedForward(Module):
         overrides: "FeedForwardConfig | None" = None,
     ) -> None:
         super().__init__()
-        self.cfg: FeedForwardConfig = self._overwrite_config(cfg, overrides)
+        self.cfg: FeedForwardConfig = self._override_config(cfg, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim = self.cfg.input_dim

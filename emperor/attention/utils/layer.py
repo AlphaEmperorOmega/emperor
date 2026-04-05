@@ -146,7 +146,7 @@ class MultiHeadAttention(Module):
     ):
         super().__init__()
         config = getattr(cfg, "multi_head_attention_model_config", cfg)
-        self.cfg: "MultiHeadAttentionConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "MultiHeadAttentionConfig" = self._override_config(config, overrides)
 
         self.main_cfg = cfg
         self.num_heads = self.cfg.num_heads

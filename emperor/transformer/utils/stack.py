@@ -84,7 +84,7 @@ class TransformerEncoderStack(TransformerBase):
         overrides: "TransformerConfig | None" = None,
     ):
         config = getattr(cfg, "transformer_config", cfg)
-        self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "TransformerConfig" = self._override_config(config, overrides)
 
         self.main_config = cfg
         super().__init__(self.cfg)
@@ -136,7 +136,7 @@ class TransformerDecoderStack(TransformerBase):
         overrides: "TransformerConfig | None" = None,
     ):
         config = getattr(cfg, "transformer_config", cfg)
-        self.cfg: "TransformerConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "TransformerConfig" = self._override_config(config, overrides)
         self.main_config = cfg
         super().__init__(self.cfg)
 

@@ -40,7 +40,7 @@ class Nucleus(Module):
     ):
         super().__init__()
         config = getattr(cfg, "neuron_nucleus_config", cfg)
-        self.cfg: "NucleusConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "NucleusConfig" = self._override_config(config, overrides)
         self.model_type = self.cfg.model_type
         self.processing_unit = self.__create_model(cfg)
 
@@ -70,7 +70,7 @@ class Axons(Module):
     ):
         super().__init__()
         config = getattr(cfg, "neuron_axon_config", cfg)
-        self.cfg: "AxonsConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "AxonsConfig" = self._override_config(config, overrides)
         self.memory_type = self.cfg.memory_type
 
     def forward(self, input: Tensor) -> Tensor:
@@ -149,7 +149,7 @@ class Terminal(Module):
     ):
         super().__init__()
         config = getattr(cfg, "neuron_terminal_config", cfg)
-        self.cfg: "TerminalConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "TerminalConfig" = self._override_config(config, overrides)
         self.x_axis_position = self.cfg.x_axis_position
         self.y_axis_position = self.cfg.y_axis_position
         self.z_axis_position = self.cfg.z_axis_position
@@ -237,7 +237,7 @@ class Neuron(Module):
     ):
         super().__init__()
         config = getattr(cfg, "neuron_cluster_config", cfg)
-        self.cfg: "NeuronClusterConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "NeuronClusterConfig" = self._override_config(config, overrides)
         self.nucleus = Nucleus(cfg)
         self.axons = Axons(cfg)
         self.terminal = Terminal(cfg)
@@ -284,7 +284,7 @@ class NeuronCluster(Module):
     ):
         super().__init__()
         config = getattr(cfg, "neuron_cluster_config", cfg)
-        self.cfg: "NeuronClusterConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "NeuronClusterConfig" = self._override_config(config, overrides)
         self.main_config = cfg
         self.x_axis_total_neurons: int = self.cfg.x_axis_total_neurons
         self.y_axis_total_neurons: int = self.cfg.y_axis_total_neurons

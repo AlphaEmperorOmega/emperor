@@ -55,7 +55,7 @@ class AdaptiveMixtureBase(Module):
     ):
         super().__init__()
         config = getattr(cfg, "mixture_model_config", cfg)
-        self.cfg: "AdaptiveMixtureConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "AdaptiveMixtureConfig" = self._override_config(config, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.input_dim = self.cfg.input_dim

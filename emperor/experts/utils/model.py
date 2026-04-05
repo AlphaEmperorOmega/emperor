@@ -25,7 +25,7 @@ class MixtureOfExpertsModel(Module):
     ) -> None:
         super().__init__()
         config = getattr(cfg, "layer_stack_config", cfg)
-        self.cfg = self._overwrite_config(config, overrides)
+        self.cfg = self._override_config(config, overrides)
         self.main_cfg: "MixtureOfExpertsConfig" = self._resolve_main_config(
             self.cfg, cfg
         )

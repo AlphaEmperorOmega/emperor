@@ -53,7 +53,7 @@ class PatchBase(Module):
         overrides: "PatchConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "PatchConfig" = self._overwrite_config(cfg, overrides)
+        self.cfg: "PatchConfig" = self._override_config(cfg, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
         self.embedding_dim = self.cfg.embedding_dim
         self.patch_size = self.cfg.patch_size

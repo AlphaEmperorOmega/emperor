@@ -68,7 +68,7 @@ class ProjectorBase(Module):
         overrides: "MultiHeadAttentionConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "MultiHeadAttentionConfig" = self._overwrite_config(cfg, overrides)
+        self.cfg: "MultiHeadAttentionConfig" = self._override_config(cfg, overrides)
         self.main_cfg = self._resolve_main_config(self.cfg, cfg)
 
         self.model_type = self.cfg.model_type.value

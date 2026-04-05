@@ -20,7 +20,7 @@ class MaskHandlerAbstract(Module):
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._overwrite_config(
+        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
             cfg, overrides
         )
         self.input_dim = self.cfg.input_dim

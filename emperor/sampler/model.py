@@ -27,7 +27,7 @@ class SamplerModel(Module):
         self.overrides = overrides
 
         config = getattr(cfg, "sampler_model_config", cfg)
-        self.sampler_config: "SamplerConfig" = self._overwrite_config(config, overrides)
+        self.sampler_config: "SamplerConfig" = self._override_config(config, overrides)
 
         self.num_experts: int = self.sampler_config.num_experts
         self.router_config: "RouterConfig" = self.sampler_config.router_config
