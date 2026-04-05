@@ -2,12 +2,9 @@ import torch
 import unittest
 
 from torch.nn import Sequential
-from dataclasses import asdict
-from emperor.parametric.utils.presets import ParametricLayerPresets
-from emperor.linears.utils.presets import LinearPresets
-from docs.config import default_unittest_config
+from emperor.halting.config import HaltingConfig
+from emperor.base.enums import LayerNormPositionOptions
 from emperor.base.enums import ActivationOptions, LastLayerBiasOptions
-from emperor.linears.options import LinearLayerOptions
 from emperor.base.layer import (
     Layer,
     LayerConfig,
@@ -19,11 +16,7 @@ from emperor.linears.utils.config import LinearLayerConfig
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.enums import LayerNormPositionOptions
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
-
-from emperor.halting.config import HaltingConfig
-from emperor.halting.options import HaltingOptions, HaltingHiddenStateModeOptions
 
 
 class TestLayerStack(unittest.TestCase):
