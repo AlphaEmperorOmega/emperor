@@ -1,14 +1,16 @@
 from dataclasses import dataclass, field
+from emperor.base.layer.config import LayerStackConfig
 from emperor.base.utils import ConfigBase
-from emperor.halting.options import HaltingOptions, HaltingHiddenStateModeOptions
+from emperor.halting.options import HaltingHiddenStateModeOptions
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emperor.base.utils import Module
 
 
 @dataclass
 class HaltingConfig(ConfigBase):
-    halting_option: HaltingOptions | None = field(
-        default=None,
-        metadata={"help": "Selects the halting strategy to use"},
-    )
     input_dim: int | None = field(
         default=None,
         metadata={"help": "Hidden dimension used to build the halting gate network"},
@@ -31,3 +33,23 @@ class HaltingConfig(ConfigBase):
             "help": "Controls whether each step returns the raw hidden state or the current accumulated weighted representation"
         },
     )
+    halting_gate_config: "LayerStackConfig | None" = field(
+        default=None,
+        metadata={"help": "Config used to build the model module within the layer"},
+    )
+
+
+@dataclass
+class StickBreakingConfig(HaltingConfig):
+    def build(self) -> "Module":
+        from emperor.halting.utils.options.stick_breaking import StickBreaking
+
+        return StickBreaking(self)
+
+
+@dataclass
+class SoftHaltingConfig(HaltingConfig):
+    def build(self) -> "Module":
+        from emperor.halting.utils.options.soft_halting import SoftHalting
+
+        return SoftHalting(self)
