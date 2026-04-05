@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.linears.utils._monitors import TensorMonitor, StatisticsMonitor
+from emperor.augmentations.adaptive_parameters.config import (
+    AdaptiveParameterAugmentationConfig,
+)
 
 from typing import TYPE_CHECKING
 
@@ -46,8 +49,17 @@ class LinearLayerConfig(ConfigBase):
 
 @dataclass
 class AdaptiveLinearLayerConfig(LinearLayerConfig):
+    adaptive_augmentation_config: "AdaptiveParameterAugmentationConfig | None" = field(
+        default=None,
+        metadata={
+            "help": "Config for input-dependent parameter augmentations applied to the linear layer"
+        },
+    )
+
     def build(self, input_dim: int, output_dim: int) -> "Module":
         from emperor.linears.utils.layers import AdaptiveLinearLayer
 
-        overrides = AdaptiveLinearLayerConfig(input_dim=input_dim, output_dim=output_dim)
+        overrides = AdaptiveLinearLayerConfig(
+            input_dim=input_dim, output_dim=output_dim
+        )
         return AdaptiveLinearLayer(self, overrides)
