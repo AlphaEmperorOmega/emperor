@@ -24,7 +24,7 @@ class Layer(Module):
         overrides: LayerConfig | None = None,
     ):
         super().__init__()
-        self.cfg: LayerConfig = self._overwrite_config(cfg, overrides)
+        self.cfg: LayerConfig = self._override_config(cfg, overrides)
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
@@ -67,19 +67,14 @@ class Layer(Module):
     def __build_gate_model(self) -> "Layer | Sequential | None":
         if self.gate_config is None:
             return None
-        from emperor.base.layer.stack import LayerStack
-
-        overrides = LayerStackConfig(
+        return self.gate_config.build(
             input_dim=self.output_dim, output_dim=self.output_dim
         )
-        return LayerStack(self.gate_config, overrides).build()
 
     def __build_halting_model(self) -> "HaltingBase | None":
         if self.halting_config is None:
             return None
-        from emperor.halting.factory import HaltingFactory
-
-        return HaltingFactory(self.halting_config).build()
+        return self.halting_config.build()
 
     def __init_dropout_module(self) -> nn.Module | None:
         if self.has_dropout:
@@ -93,6 +88,10 @@ class Layer(Module):
 
     def mark_as_last_layer(self) -> None:
         self.last_layer_flag = True
+
+    @staticmethod
+    def forward_with_state(model: "Module", input: Tensor) -> Tensor:
+        return model(LayerState(hidden=input)).hidden
 
     def forward(
         self,
@@ -139,10 +138,6 @@ class Layer(Module):
         if self.gate_model is not None:
             return self.forward_with_state(self.gate_model, input) * input
         return input
-
-    @staticmethod
-    def forward_with_state(module: "Module", input: Tensor) -> Tensor:
-        return module(LayerState(hidden=input)).hidden
 
     def __maybe_apply_dropout(self, input: Tensor):
         if self.has_dropout:

@@ -28,7 +28,7 @@ class LayerStack(Module):
     ):
         super().__init__()
         config = getattr(cfg, "layer_stack_config", cfg)
-        self.cfg: "LayerStackConfig" = self._overwrite_config(config, overrides)
+        self.cfg: "LayerStackConfig" = self._override_config(config, overrides)
         LayerStackValidator.validate(self.cfg)
 
         self.input_dim: int = self.cfg.input_dim
@@ -87,7 +87,7 @@ class LayerStack(Module):
             layer_norm_position=LayerNormPositionOptions.DISABLED,
         )
         if bias_overrides is not None:
-            overrides = self._overwrite_config(overrides, bias_overrides)
+            overrides = self._override_config(overrides, bias_overrides)
         layer = self.__create_layer(layer_input_dim, self.output_dim, overrides)
         layer.mark_as_last_layer()
         layers.append(layer)
@@ -119,5 +119,5 @@ class LayerStack(Module):
             residual_flag=residual_flag,
         )
         if overrides is not None:
-            dim_overrides = self._overwrite_config(dim_overrides, overrides)
-        return self.layer_block_model(cfg=self.layer_config, overrides=dim_overrides)
+            dim_overrides = self._override_config(dim_overrides, overrides)
+        return self._override_config(self.layer_config, dim_overrides).build()

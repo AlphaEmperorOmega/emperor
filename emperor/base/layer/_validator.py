@@ -56,11 +56,21 @@ class LayerValidator:
             raise ValueError(
                 "model_config is required, Layer needs it to build the model"
             )
+        if not isinstance(model_config, ConfigBase):
+            raise TypeError(
+                f"model_config must be an instance of ConfigBase, "
+                f"got {type(model_config).__name__}"
+            )
 
     @staticmethod
     def __validate_gate_config(gate_config: "LayerStackConfig | None") -> None:
         if gate_config is None:
             return
+        if not isinstance(gate_config, LayerStackConfig):
+            raise TypeError(
+                f"gate_config must be an instance of LayerStackConfig, "
+                f"got {type(gate_config).__name__}"
+            )
         layer_config = gate_config.layer_config
         if layer_config is None:
             return
@@ -87,6 +97,14 @@ class LayerValidator:
             raise ValueError(
                 "shared_halting_flag must be False when no halting_config is provided"
             )
+        if halting_config is not None:
+            from emperor.halting.config import HaltingConfig
+
+            if not isinstance(halting_config, HaltingConfig):
+                raise TypeError(
+                    f"halting_config must be an instance of HaltingConfig, "
+                    f"got {type(halting_config).__name__}"
+                )
 
 
 class LayerStackValidator:
@@ -135,6 +153,11 @@ class LayerStackValidator:
             )
         if cfg.layer_config is None:
             raise ValueError(f"layer_config is required, received {cfg.layer_config}")
+        if not isinstance(cfg.layer_config, LayerConfig):
+            raise TypeError(
+                f"layer_config must be an instance of LayerConfig, "
+                f"got {type(cfg.layer_config).__name__}"
+            )
 
     @staticmethod
     def __validate_halting_config(cfg: "LayerStackConfig") -> None:

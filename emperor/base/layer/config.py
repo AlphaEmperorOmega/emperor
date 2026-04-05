@@ -9,6 +9,9 @@ from emperor.base.enums import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from torch.nn import Sequential
+    from emperor.base.utils import Module
+    from emperor.base.layer.layer import Layer
     from emperor.halting.config import HaltingConfig
 
 
@@ -59,6 +62,12 @@ class LayerConfig(ConfigBase):
         metadata={"help": "Config used to build the model module within the layer"},
     )
 
+    def build(self, input_dim: int = None, output_dim: int = None) -> "Module":
+        from emperor.base.layer.layer import Layer
+
+        overrides = LayerConfig(input_dim=input_dim, output_dim=output_dim)
+        return Layer(self, overrides)
+
 
 @dataclass
 class LayerStackConfig(ConfigBase):
@@ -104,3 +113,11 @@ class LayerStackConfig(ConfigBase):
             "help": "LayerConfig shared across all layers in the stack; per-layer overrides are applied on top"
         },
     )
+
+    def build(
+        self, input_dim: int = None, output_dim: int = None
+    ) -> "Layer | Sequential":
+        from emperor.base.layer.stack import LayerStack
+
+        overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
+        return LayerStack(self, overrides).build()
