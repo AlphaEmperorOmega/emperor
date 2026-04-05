@@ -259,70 +259,9 @@ class TestLayerStack(unittest.TestCase):
                                 else:
                                     self.assertIsNone(last_layer.model.bias_params)
                             case LastLayerBiasOptions.DISABLED:
-                                self.assertIsNone(last_layer.model.bias_params)
+                                self.assertFalse(last_layer.model.bias_flag)
                             case LastLayerBiasOptions.ENABLED:
-                                self.assertIsNotNone(last_layer.model.bias_params)
-
-    def test_build_forward_pass_output_shape(self):
-        batch_size = 4
-        num_layers_options = [1, 2, 3]
-        input_dims = [6, 12]
-        output_dims = [6, 8]
-        activations = [ActivationOptions.RELU, ActivationOptions.DISABLED]
-        residual_flags = [True, False]
-        dropout_probabilities = [0.0, 0.2]
-        layer_norm_positions = [
-            LayerNormPositionOptions.DISABLED,
-            LayerNormPositionOptions.DEFAULT,
-            LayerNormPositionOptions.BEFORE,
-            LayerNormPositionOptions.AFTER,
-        ]
-
-        for num_layers in num_layers_options:
-            for input_dim in input_dims:
-                for output_dim in output_dims:
-                    for activation in activations:
-                        for residual_flag in residual_flags:
-                            for dropout in dropout_probabilities:
-                                for layer_norm in layer_norm_positions:
-                                    message = (
-                                        f"num_layers={num_layers}, "
-                                        f"input_dim={input_dim}, "
-                                        f"output_dim={output_dim}, "
-                                        f"activation={activation}, "
-                                        f"residual_flag={residual_flag}, "
-                                        f"dropout={dropout}, "
-                                        f"layer_norm={layer_norm}"
-                                    )
-                                    with self.subTest(msg=message):
-                                        cfg = self.preset(
-                                            stack_num_layers=num_layers,
-                                            input_dim=input_dim,
-                                            output_dim=output_dim,
-                                            stack_activation=activation,
-                                            stack_residual_flag=residual_flag,
-                                            stack_dropout_probability=dropout,
-                                            layer_norm_position=layer_norm,
-                                        )
-                                        model = LayerStack(cfg).build()
-                                        x = torch.randn(batch_size, input_dim)
-                                        state = LayerState(hidden=x)
-                                        output_state = model(state)
-                                        expected_shape = (batch_size, output_dim)
-
-                                        self.assertEqual(
-                                            output_state.hidden.shape,
-                                            expected_shape,
-                                        )
-
-                                        layers = (
-                                            [model]
-                                            if isinstance(model, Layer)
-                                            else list(model)
-                                        )
-                                        for layer in layers:
-                                            if layer.input_dim != layer.output_dim:
-                                                self.assertFalse(layer.residual_flag)
+                                self.assertTrue(last_layer.model.bias_flag)
 
     def test_add_initial_layer(self):
         num_layers_options = [1, 2, 3, 4]
@@ -489,108 +428,129 @@ class TestLayerStack(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     LayerStack(cfg).build()
 
-    # def test_ensure_input_layer_is_returned_when_num_layers_is_one(self):
-    #     types = (LinearLayerOptions, ParameterGeneratorTypes)
-    #     for type in types:
-    #         for layer_type in type:
-    #             config = LayerStackConfig(
-    #                 input_dim=8,
-    #                 output_dim=16,
-    #                 num_layers=1,
-    #                 model_type=layer_type,
-    #             )
-    #             self.rebuild_presets(config)
-    #
-    #             model_list = []
-    #             self.model._LayerStack__add_output_layer(model_list)
-    #             model = model_list[0]
-    #
-    #             input = torch.randn(self.batch_size, self.input_dim)
-    #             output = model(input)
-    #             if isinstance(output, tuple):
-    #                 output, _ = model(input)
-    #
-    #             expected_output = (self.batch_size, self.output_dim)
-    #
-    #             self.assertEqual(len(model_list), 1)
-    #             self.assertEqual(output.shape, expected_output)
-    #
-    # def test_ensure_output_layer_is_added_when_multiple_layers_are_added(self):
-    #     types = (LinearLayerOptions, ParameterGeneratorTypes)
-    #     for type in types:
-    #         for layer_type in type:
-    #             config = LayerStackConfig(
-    #                 input_dim=8,
-    #                 output_dim=16,
-    #                 num_layers=2,
-    #                 model_type=layer_type,
-    #             )
-    #             self.rebuild_presets(config)
-    #
-    #             model_list = []
-    #             self.model._LayerStack__add_output_layer(model_list)
-    #             model = model_list[0]
-    #
-    #             input = torch.randn(self.batch_size, self.hidden_dim)
-    #             output = model(input)
-    #             if isinstance(output, tuple):
-    #                 output, _ = model(input)
-    #
-    #             expected_output = (self.batch_size, self.output_dim)
-    #
-    #             self.assertEqual(len(model_list), 1)
-    #             self.assertEqual(output.shape, expected_output)
-    #
+    def test_resolve_last_layer_bias_override(self):
+        bias_options = [
+            LastLayerBiasOptions.DEFAULT,
+            LastLayerBiasOptions.DISABLED,
+            LastLayerBiasOptions.ENABLED,
+        ]
+        bias_flags = [True, False]
 
+        for bias_option in bias_options:
+            for bias_flag in bias_flags:
+                message = f"bias_option={bias_option}, bias_flag={bias_flag}"
+                with self.subTest(msg=message):
+                    cfg = self.preset(
+                        bias_flag=bias_flag,
+                        last_layer_bias_option=bias_option,
+                    )
+                    stack = LayerStack(cfg)
+                    result = stack._LayerStack__resolve_last_layer_bias_override()
 
-# class Test_build_model(TestLayerStack):
-#     def test_model_layer_block_returned_when_num_layers_is_one(self):
-#         types = (LinearLayerOptions, ParameterGeneratorTypes)
-#         for type in types:
-#             for layer_type in type:
-#                 config = LayerStackConfig(
-#                     input_dim=8,
-#                     output_dim=16,
-#                     num_layers=1,
-#                     model_type=layer_type,
-#                 )
-#                 self.rebuild_presets(config)
-#
-#                 model = self.model.build_model()
-#
-#                 input = torch.randn(self.batch_size, self.input_dim)
-#                 output = model(input)
-#                 if isinstance(output, tuple):
-#                     output, _ = model(input)
-#
-#                 expected_output = (self.batch_size, self.output_dim)
-#
-#                 self.assertIsInstance(model, Layer)
-#                 self.assertEqual(output.shape, expected_output)
-#
-#     def test_sequential_is_returned_when_num_layers_is_greater_than_one(self):
-#         num_layers_array = [2, 3, 4]
-#
-#         types = (LinearLayerOptions, ParameterGeneratorTypes)
-#         for type in types:
-#             for layer_type in type:
-#                 for num_layers in num_layers_array:
-#                     config = LayerStackConfig(
-#                         input_dim=8,
-#                         output_dim=16,
-#                         num_layers=num_layers,
-#                         model_type=layer_type,
-#                     )
-#                     self.rebuild_presets(config)
-#
-#                     model = self.model.build_model()
-#
-#                     input = torch.randn(self.batch_size, self.input_dim)
-#                     output = model(input)
-#                     if isinstance(output, tuple):
-#                         output, _ = model(input)
-#
-#                     expected_output = (self.batch_size, self.output_dim)
-#
-#                     self.assertIsInstance(model, nn.Sequential)
-#
+                    if bias_option == LastLayerBiasOptions.DEFAULT:
+                        self.assertIsNone(result)
+                    else:
+                        self.assertIsInstance(result, LayerConfig)
+                        self.assertIsNotNone(result.model_config)
+                        if bias_option == LastLayerBiasOptions.DISABLED:
+                            self.assertFalse(result.model_config.bias_flag)
+                        elif bias_option == LastLayerBiasOptions.ENABLED:
+                            self.assertTrue(result.model_config.bias_flag)
+
+    def test_create_layer(self):
+        dim_pairs = [(8, 8), (8, 16), (16, 8)]
+
+        for input_dim, output_dim in dim_pairs:
+            message = f"input_dim={input_dim}, output_dim={output_dim}"
+            with self.subTest(msg=message):
+                cfg = self.preset(input_dim=input_dim, output_dim=output_dim)
+                stack = LayerStack(cfg)
+                layer = stack._LayerStack__create_layer(input_dim, output_dim)
+
+                self.assertIsInstance(layer, Layer)
+                self.assertEqual(layer.input_dim, input_dim)
+                self.assertEqual(layer.output_dim, output_dim)
+
+                if input_dim != output_dim:
+                    self.assertFalse(layer.residual_flag)
+                else:
+                    self.assertEqual(
+                        layer.residual_flag, cfg.layer_config.residual_flag
+                    )
+
+    def test_create_layer_with_overrides(self):
+        cfg = self.preset(input_dim=8, output_dim=8)
+        stack = LayerStack(cfg)
+        overrides = LayerConfig(
+            activation=ActivationOptions.DISABLED,
+            dropout_probability=0.0,
+        )
+        layer = stack._LayerStack__create_layer(8, 16, overrides)
+
+        self.assertIsInstance(layer, Layer)
+        self.assertEqual(layer.input_dim, 8)
+        self.assertEqual(layer.output_dim, 16)
+        self.assertFalse(layer.residual_flag)
+        self.assertEqual(layer.activation_function, ActivationOptions.DISABLED)
+        self.assertEqual(layer.dropout_probability, 0.0)
+
+    def test_build_forward_pass_output_shape(self):
+        batch_size = 4
+        num_layers_options = [1, 2, 3]
+        input_dims = [6, 12]
+        output_dims = [6, 8]
+        activations = [ActivationOptions.RELU, ActivationOptions.DISABLED]
+        residual_flags = [True, False]
+        dropout_probabilities = [0.0, 0.2]
+        layer_norm_positions = [
+            LayerNormPositionOptions.DISABLED,
+            LayerNormPositionOptions.DEFAULT,
+            LayerNormPositionOptions.BEFORE,
+            LayerNormPositionOptions.AFTER,
+        ]
+
+        for num_layers in num_layers_options:
+            for input_dim in input_dims:
+                for output_dim in output_dims:
+                    for activation in activations:
+                        for residual_flag in residual_flags:
+                            for dropout in dropout_probabilities:
+                                for layer_norm in layer_norm_positions:
+                                    message = (
+                                        f"num_layers={num_layers}, "
+                                        f"input_dim={input_dim}, "
+                                        f"output_dim={output_dim}, "
+                                        f"activation={activation}, "
+                                        f"residual_flag={residual_flag}, "
+                                        f"dropout={dropout}, "
+                                        f"layer_norm={layer_norm}"
+                                    )
+                                    with self.subTest(msg=message):
+                                        cfg = self.preset(
+                                            stack_num_layers=num_layers,
+                                            input_dim=input_dim,
+                                            output_dim=output_dim,
+                                            stack_activation=activation,
+                                            stack_residual_flag=residual_flag,
+                                            stack_dropout_probability=dropout,
+                                            layer_norm_position=layer_norm,
+                                        )
+                                        model = LayerStack(cfg).build()
+                                        x = torch.randn(batch_size, input_dim)
+                                        state = LayerState(hidden=x)
+                                        output_state = model(state)
+                                        expected_shape = (batch_size, output_dim)
+
+                                        self.assertEqual(
+                                            output_state.hidden.shape,
+                                            expected_shape,
+                                        )
+
+                                        layers = (
+                                            [model]
+                                            if isinstance(model, Layer)
+                                            else list(model)
+                                        )
+                                        for layer in layers:
+                                            if layer.input_dim != layer.output_dim:
+                                                self.assertFalse(layer.residual_flag)
