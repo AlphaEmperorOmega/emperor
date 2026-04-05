@@ -1,3 +1,5 @@
+from torch import Tensor
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -54,3 +56,11 @@ class LinearBaseValidator:
                     raise ValueError(
                         f"Configuration Error: '{name}' {result} (value={val!r})."
                     )
+
+    @staticmethod
+    def validate_input_shape(X: Tensor) -> None:
+        if X.dim() != 2:
+            raise ValueError(
+                f"Input must be a 2D matrix (batch, input_dim), "
+                f"got {X.dim()}D tensor with shape {X.shape}"
+            )

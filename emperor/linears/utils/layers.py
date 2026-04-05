@@ -76,6 +76,7 @@ class LinearLayer(LinearBase):
         super().__init__(cfg, overrides)
 
     def forward(self, X: Tensor) -> Tensor:
+        LinearBaseValidator.validate_input_shape(X)
         output = F.linear(X, self.weight_params.T, self.bias_params)
         self._update_data_monitor(X, output)
         self._update_parameter_monitor()
@@ -102,6 +103,7 @@ class AdaptiveLinearLayer(LinearBase):
         )
 
     def forward(self, X: Tensor) -> Tensor:
+        LinearBaseValidator.validate_input_shape(X)
         return self.adaptive_behaviour.compute_adaptive_parameters(
             self._compute_affine_transformation_callback,
             self.weight_params,

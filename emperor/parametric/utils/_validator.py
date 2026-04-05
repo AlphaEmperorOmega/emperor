@@ -1,3 +1,4 @@
+from torch import Tensor
 from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
@@ -32,6 +33,14 @@ class _ParametricLayerValidator:
         for attr_name in required_attributes:
             if getattr(self.model, attr_name) is None:
                 raise ValueError(f"Configuration Error: '{attr_name}' is None.")
+
+    @staticmethod
+    def validate_input_shape(X: Tensor) -> None:
+        if X.dim() != 2:
+            raise ValueError(
+                f"Input must be a 2D matrix (batch, input_dim), "
+                f"got {X.dim()}D tensor with shape {X.shape}"
+            )
 
     def __ensure_correct_input_types(self) -> None:
         from emperor.parametric.utils.config import AdaptiveRouterOptions

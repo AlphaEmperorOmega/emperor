@@ -108,6 +108,7 @@ class ParametricLayer(Module):
         input: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor]:
+        _ParametricLayerValidator.validate_input_shape(input)
         if self.time_tracker_flag:
             return self._track_layer_output_time(input, skip_mask)
         return self._compute_layer_output(input, skip_mask)
