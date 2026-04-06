@@ -19,6 +19,9 @@ class StickBreakingValidator:
         StickBreakingValidator.__validate_input_dim(cfg.input_dim)
         StickBreakingValidator.__validate_threshold(cfg.threshold)
         StickBreakingValidator.__validate_halting_gate_config(cfg.halting_gate_config)
+        StickBreakingValidator.__validate_halting_gate_layer_config(
+            cfg.halting_gate_config.layer_config
+        )
 
     @staticmethod
     def __validate_required_fields(cfg: "HaltingConfig") -> None:
@@ -60,5 +63,24 @@ class StickBreakingValidator:
             raise ValueError(
                 f"halting_gate_config.last_layer_bias_option must be DISABLED, "
                 f"received {halting_gate_config.last_layer_bias_option}"
+            )
+
+    @staticmethod
+    def __validate_halting_gate_layer_config(
+        layer_config: "LayerConfig | None",
+    ) -> None:
+        if layer_config is None:
+            return
+        if layer_config.gate_config is not None:
+            raise ValueError(
+                "halting_gate_config.layer_config.gate_config must be None, nested gates are not allowed in halting"
+            )
+        if layer_config.halting_config is not None:
+            raise ValueError(
+                "halting_gate_config.layer_config.halting_config must be None, nested halting is not allowed"
+            )
+        if layer_config.shared_halting_flag:
+            raise ValueError(
+                "halting_gate_config.layer_config.shared_halting_flag must be False, nested halting is not allowed"
             )
 
