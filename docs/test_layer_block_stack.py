@@ -2,7 +2,8 @@ import torch
 import unittest
 
 from torch.nn import Sequential
-from emperor.halting.config import HaltingConfig
+from emperor.halting.config import HaltingConfig, StickBreakingConfig
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.base.enums import LayerNormPositionOptions
 from emperor.base.enums import ActivationOptions, LastLayerBiasOptions
 from emperor.base.layer import (
@@ -64,37 +65,38 @@ class TestLayerStack(unittest.TestCase):
                 ),
             )
 
-        # halting_config = HaltingConfig(
-        #     halting_option=HaltingOptions.SOFT_HALTING,
-        #     input_dim=output_dim,
-        #     threshold=0.99,
-        #     halting_dropout=0.0,
-        #     hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
-        #     model_config=LayerStackConfig(
-        #     input_dim=input_dim,
-        #     hidden_dim=hidden_dim,
-        #     output_dim=output_dim,
-        #     num_layers=stack_num_layers,
-        #     layer_config=LayerConfig(
-        #         activation=stack_activation,
-        #         layer_norm_position=layer_norm_position,
-        #         residual_flag=stack_residual_flag,
-        #         dropout_probability=stack_dropout_probability,
-        #         halting_config=None,
-        #         shared_halting_flag=False,
-        #         gate_config=gate_config,
-        #         model_config=LinearLayerConfig(
-        #             input_dim=input_dim,
-        #             output_dim=output_dim,
-        #             bias_flag=bias_flag,
-        #             data_monitor=None,
-        #             parameter_monitor=None,
-        #             override_config=AdaptiveParameterAugmentationConfig(
-        #                 generator_depth=generator_depth,
-        #             ),
-        #         ),
-        #     ),
-        # )
+        halting_config = None
+        if stack_num_layers > 1 and input_dim == hidden_dim == output_dim:
+            halting_config = StickBreakingConfig(
+                input_dim=output_dim,
+                threshold=0.99,
+                halting_dropout=0.0,
+                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+                halting_gate_config=LayerStackConfig(
+                    input_dim=output_dim,
+                    hidden_dim=output_dim,
+                    output_dim=2,
+                    num_layers=stack_num_layers,
+                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                    apply_output_pipeline_flag=False,
+                    layer_config=LayerConfig(
+                        activation=ActivationOptions.DISABLED,
+                        layer_norm_position=LayerNormPositionOptions.DISABLED,
+                        residual_flag=stack_residual_flag,
+                        dropout_probability=stack_dropout_probability,
+                        halting_config=None,
+                        shared_halting_flag=False,
+                        gate_config=None,
+                        model_config=LinearLayerConfig(
+                            input_dim=output_dim,
+                            output_dim=output_dim,
+                            bias_flag=True,
+                            data_monitor=None,
+                            parameter_monitor=None,
+                        ),
+                    ),
+                ),
+            )
 
         return LayerStackConfig(
             input_dim=input_dim,
@@ -111,7 +113,7 @@ class TestLayerStack(unittest.TestCase):
                 residual_flag=stack_residual_flag,
                 dropout_probability=stack_dropout_probability,
                 gate_config=gate_config,
-                halting_config=None,
+                halting_config=halting_config,
                 shared_halting_flag=shared_halting_flag,
                 model_config=LinearLayerConfig(
                     input_dim=input_dim,
@@ -488,6 +490,7 @@ class TestLayerStack(unittest.TestCase):
         batch_size = 4
         num_layers_options = [1, 2, 3]
         input_dims = [6, 12]
+        hidden_dims = [6, 24]
         output_dims = [6, 8]
         activations = [ActivationOptions.RELU, ActivationOptions.DISABLED]
         residual_flags = [True, False]
@@ -501,46 +504,50 @@ class TestLayerStack(unittest.TestCase):
 
         for num_layers in num_layers_options:
             for input_dim in input_dims:
-                for output_dim in output_dims:
-                    for activation in activations:
-                        for residual_flag in residual_flags:
-                            for dropout in dropout_probabilities:
-                                for layer_norm in layer_norm_positions:
-                                    message = (
-                                        f"num_layers={num_layers}, "
-                                        f"input_dim={input_dim}, "
-                                        f"output_dim={output_dim}, "
-                                        f"activation={activation}, "
-                                        f"residual_flag={residual_flag}, "
-                                        f"dropout={dropout}, "
-                                        f"layer_norm={layer_norm}"
-                                    )
-                                    with self.subTest(msg=message):
-                                        cfg = self.preset(
-                                            stack_num_layers=num_layers,
-                                            input_dim=input_dim,
-                                            output_dim=output_dim,
-                                            stack_activation=activation,
-                                            stack_residual_flag=residual_flag,
-                                            stack_dropout_probability=dropout,
-                                            layer_norm_position=layer_norm,
+                for hidden_dim in hidden_dims:
+                    for output_dim in output_dims:
+                        for activation in activations:
+                            for residual_flag in residual_flags:
+                                for dropout in dropout_probabilities:
+                                    for layer_norm in layer_norm_positions:
+                                        message = (
+                                            f"num_layers={num_layers}, "
+                                            f"input_dim={input_dim}, "
+                                            f"output_dim={output_dim}, "
+                                            f"activation={activation}, "
+                                            f"residual_flag={residual_flag}, "
+                                            f"dropout={dropout}, "
+                                            f"layer_norm={layer_norm}"
                                         )
-                                        model = LayerStack(cfg).build()
-                                        x = torch.randn(batch_size, input_dim)
-                                        state = LayerState(hidden=x)
-                                        output_state = model(state)
-                                        expected_shape = (batch_size, output_dim)
+                                        with self.subTest(msg=message):
+                                            cfg = self.preset(
+                                                stack_num_layers=num_layers,
+                                                input_dim=input_dim,
+                                                hidden_dim=hidden_dim,
+                                                output_dim=output_dim,
+                                                stack_activation=activation,
+                                                stack_residual_flag=residual_flag,
+                                                stack_dropout_probability=dropout,
+                                                layer_norm_position=layer_norm,
+                                            )
+                                            model = LayerStack(cfg).build()
+                                            x = torch.randn(batch_size, input_dim)
+                                            state = LayerState(hidden=x)
+                                            output_state = model(state)
+                                            expected_shape = (batch_size, output_dim)
 
-                                        self.assertEqual(
-                                            output_state.hidden.shape,
-                                            expected_shape,
-                                        )
+                                            self.assertEqual(
+                                                output_state.hidden.shape,
+                                                expected_shape,
+                                            )
 
-                                        layers = (
-                                            [model]
-                                            if isinstance(model, Layer)
-                                            else list(model)
-                                        )
-                                        for layer in layers:
-                                            if layer.input_dim != layer.output_dim:
-                                                self.assertFalse(layer.residual_flag)
+                                            layers = (
+                                                [model]
+                                                if isinstance(model, Layer)
+                                                else list(model)
+                                            )
+                                            for layer in layers:
+                                                if layer.input_dim != layer.output_dim:
+                                                    self.assertFalse(
+                                                        layer.residual_flag
+                                                    )

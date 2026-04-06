@@ -3,14 +3,11 @@ import unittest
 import torch.nn as nn
 
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
-from emperor.base.layer import (
-    Layer,
-    LayerConfig,
-    LayerStackConfig,
-    LayerState,
-)
+from emperor.base.layer import Layer, LayerConfig, LayerStackConfig, LayerState
 from emperor.linears.utils.config import LinearLayerConfig
 from emperor.base.enums import LastLayerBiasOptions
+from emperor.halting.config import StickBreakingConfig
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
@@ -63,37 +60,37 @@ class TestLayer(unittest.TestCase):
                 ),
             )
 
-        # halting_config = HaltingConfig(
-        #     halting_option=HaltingOptions.SOFT_HALTING,
-        #     input_dim=output_dim,
-        #     threshold=0.99,
-        #     halting_dropout=0.0,
-        #     hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
-        #     model_config=LayerStackConfig(
-        #     input_dim=input_dim,
-        #     hidden_dim=hidden_dim,
-        #     output_dim=output_dim,
-        #     num_layers=stack_num_layers,
-        #     layer_config=LayerConfig(
-        #         activation=stack_activation,
-        #         layer_norm_position=layer_norm_position,
-        #         residual_flag=stack_residual_flag,
-        #         dropout_probability=stack_dropout_probability,
-        #         halting_config=None,
-        #         shared_halting_flag=False,
-        #         gate_config=gate_config,
-        #         model_config=LinearLayerConfig(
-        #             input_dim=input_dim,
-        #             output_dim=output_dim,
-        #             bias_flag=bias_flag,
-        #             data_monitor=None,
-        #             parameter_monitor=None,
-        #             override_config=AdaptiveParameterAugmentationConfig(
-        #                 generator_depth=generator_depth,
-        #             ),
-        #         ),
-        #     ),
-        # )
+        if input_dim == output_dim:
+            halting_config = StickBreakingConfig(
+                input_dim=output_dim,
+                threshold=0.99,
+                halting_dropout=0.0,
+                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+                halting_gate_config=LayerStackConfig(
+                    input_dim=output_dim,
+                    hidden_dim=output_dim,
+                    output_dim=2,
+                    num_layers=gate_num_layers,
+                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                    apply_output_pipeline_flag=False,
+                    layer_config=LayerConfig(
+                        activation=gate_activation,
+                        layer_norm_position=LayerNormPositionOptions.DISABLED,
+                        residual_flag=gate_residual_flag,
+                        dropout_probability=gate_dropout_probability,
+                        halting_config=None,
+                        shared_halting_flag=False,
+                        gate_config=None,
+                        model_config=LinearLayerConfig(
+                            input_dim=output_dim,
+                            output_dim=output_dim,
+                            bias_flag=True,
+                            data_monitor=None,
+                            parameter_monitor=None,
+                        ),
+                    ),
+                ),
+            )
 
         return LayerConfig(
             input_dim=input_dim,
