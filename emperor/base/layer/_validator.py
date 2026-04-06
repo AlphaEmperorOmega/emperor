@@ -25,6 +25,9 @@ class LayerValidator:
         LayerValidator.__validate_halting_config(
             cfg.halting_config, cfg.shared_halting_flag
         )
+        LayerValidator.__validate_halting_dimensions(
+            cfg.input_dim, cfg.output_dim, cfg.halting_config
+        )
 
     @staticmethod
     def __validate_dimensions(input_dim: int, output_dim: int) -> None:
@@ -106,6 +109,19 @@ class LayerValidator:
                     f"got {type(halting_config).__name__}"
                 )
 
+    @staticmethod
+    def __validate_halting_dimensions(
+        input_dim: int,
+        output_dim: int,
+        halting_config: "HaltingConfig | None",
+    ) -> None:
+        if halting_config is not None and input_dim != output_dim:
+            raise ValueError(
+                f"input_dim and output_dim must be equal when halting_config is provided, "
+                f"got input_dim={input_dim} and output_dim={output_dim}. "
+                f"Halting accumulates hidden states across steps, which requires consistent dimensions."
+            )
+
 
 class LayerStackValidator:
     @staticmethod
@@ -168,4 +184,12 @@ class LayerStackValidator:
                 f"num_layers must be at least 2 when halting_config is provided, "
                 f"got {cfg.num_layers}. The halting mechanism requires multiple steps to accumulate "
                 f"halting probabilities across layers."
+            )
+        if cfg.layer_config.halting_config is not None and (
+            cfg.input_dim != cfg.hidden_dim or cfg.hidden_dim != cfg.output_dim
+        ):
+            raise ValueError(
+                f"input_dim, hidden_dim, and output_dim must all be equal when halting_config is provided, "
+                f"got input_dim={cfg.input_dim}, hidden_dim={cfg.hidden_dim}, output_dim={cfg.output_dim}. "
+                f"Halting accumulates hidden states across steps, which requires consistent dimensions."
             )
