@@ -38,18 +38,23 @@ class HaltingConfig(ConfigBase):
         metadata={"help": "Config used to build the model module within the layer"},
     )
 
+    def build(self, input_dim: int) -> "Module":
+        raise NotImplementedError
+
 
 @dataclass
 class StickBreakingConfig(HaltingConfig):
-    def build(self) -> "Module":
+    def build(self, input_dim: int) -> "Module":
         from emperor.halting.utils.options.stick_breaking import StickBreaking
 
-        return StickBreaking(self)
+        overrides = StickBreakingConfig(input_dim=input_dim)
+        return StickBreaking(self, overrides)
 
 
 @dataclass
 class SoftHaltingConfig(HaltingConfig):
-    def build(self) -> "Module":
+    def build(self, input_dim: int) -> "Module":
         from emperor.halting.utils.options.soft_halting import SoftHalting
 
-        return SoftHalting(self)
+        overrides = SoftHaltingConfig(input_dim=input_dim)
+        return SoftHalting(self, overrides)

@@ -73,7 +73,7 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         self.__init_gate_weights()
 
     def __build_halting_gate_model(self) -> "Layer | Sequential":
-        return self.halting_gate_config.build(input_dim=self.input_dim)
+        return self.halting_gate_config.build(input_dim=self.input_dim, output_dim=2)
 
     def __init_gate_weights(self) -> None:
         last_linear = None
@@ -101,7 +101,7 @@ class StickBreaking(HaltingBase[StickBreakingState]):
 
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
         original_shape = hidden_state.shape
-        flat = hidden_state.view(-1, self.input_dim)
+        flat = hidden_state.view(-1, original_shape[-1])
         logits = Layer.forward_with_state(self.halting_gate_model, flat)
         logits = logits.view(*original_shape[:-1], 2)
         if self.training:

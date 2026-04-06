@@ -2,7 +2,7 @@ import torch.nn as nn
 
 from torch.types import Tensor
 from torch.nn import Sequential
-from emperor.base.utils import Module
+from emperor.base.utils import ConfigBase, Module
 from emperor.base.enums import (
     ActivationOptions,
     LayerNormPositionOptions,
@@ -14,6 +14,7 @@ from emperor.base.layer._validator import LayerValidator
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from emperor.halting.config import HaltingConfig
     from emperor.halting.utils.options.base import HaltingBase
 
 
@@ -74,7 +75,7 @@ class Layer(Module):
     def __build_halting_model(self) -> "HaltingBase | None":
         if self.halting_config is None:
             return None
-        return self.halting_config.build()
+        return self.halting_config.build(input_dim=self.output_dim)
 
     def __init_dropout_module(self) -> nn.Module | None:
         if self.has_dropout:
@@ -156,8 +157,8 @@ class Layer(Module):
 
     def __maybe_apply_halting(self, input: Tensor, state: LayerState) -> LayerState:
         if self.halting_model is not None:
-            state.halting_state, input = self.halting_model.update_halting_state(
-                state.halting_state, input
+            state.halting_state, halting_output = (
+                self.halting_model.update_halting_state(state.halting_state, input)
             )
             if self.last_layer_flag:
                 hidden, loss = self.halting_model.finalize_weighted_accumulation(
@@ -166,8 +167,9 @@ class Layer(Module):
                 loss = loss if state.loss is None else state.loss + loss
                 state.hidden = hidden
                 state.loss = loss
-
                 return state
+            state.hidden = halting_output
+            return state
         state.hidden = input
         return state
 
