@@ -115,9 +115,11 @@ class LayerStackConfig(ConfigBase):
     )
 
     def build(
-        self, input_dim: int = None, output_dim: int = None
+        self, input_dim: int | None = None, output_dim: int | None = None
     ) -> "Layer | Sequential":
         from emperor.base.layer.stack import LayerStack
 
-        overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
+        overrides = None
+        if input_dim or output_dim:
+            overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
         return LayerStack(self, overrides).build()
