@@ -108,11 +108,11 @@ class WeightedBankBiasGeneratorHandler(BiasHandlerAbstract):
         cfg: "AdaptiveParameterAugmentationConfig",
     ):
         super().__init__(cfg)
-        self.bias_bank_size = self.cfg.bias_bank_size
+        self.bias_bank_expansion_factor = self.cfg.bias_bank_expansion_factor
         self.weight_bank = self._init_parameter_bank(
-            (self.bias_bank_size, self.output_dim)
+            (self.bias_bank_expansion_factor, self.output_dim)
         )
-        overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=self.bias_bank_size)
+        overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=self.bias_bank_expansion_factor)
         self.distribution_generator = self._init_model(overrides)
 
     def forward(self, bias_params: None, logits: Tensor) -> Tensor:

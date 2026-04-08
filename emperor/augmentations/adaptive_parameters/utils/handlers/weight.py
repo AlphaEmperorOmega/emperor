@@ -255,13 +255,13 @@ class WeightedBankWeightHandler(WeightHandlerAbstract):
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        self.bank_expansion_factor = self.cfg.weight_bank_size
+        self.weight_bank_expansion_factor = self.cfg.weight_bank_expansion_factor
         self.weight_bank = self._init_parameter_bank(
-            (1, self.bank_expansion_factor * self.input_dim, self.output_dim)
+            (1, self.weight_bank_expansion_factor * self.input_dim, self.output_dim)
         )
         overrides = LayerStackConfig(
             input_dim=self.input_dim,
-            output_dim=self.bank_expansion_factor * self.input_dim,
+            output_dim=self.weight_bank_expansion_factor * self.input_dim,
         )
         self.distribution_generator = self._init_generator_model(overrides)
 
@@ -275,6 +275,6 @@ class WeightedBankWeightHandler(WeightHandlerAbstract):
         bank_distribution_reshaped = bank_distribution.unsqueeze(dim=2)
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
         split_weghts_by_factor = batched_weighted_bank.view(
-            -1, self.input_dim, self.bank_expansion_factor, self.output_dim
+            -1, self.input_dim, self.weight_bank_expansion_factor, self.output_dim
         )
         return weight_params + split_weghts_by_factor.sum(dim=2)

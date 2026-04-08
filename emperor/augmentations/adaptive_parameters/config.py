@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from emperor.base.layer.config import LayerStackConfig
 from emperor.base.utils import ConfigBase
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
@@ -12,6 +13,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     RowMaskOptions,
     WeightNormalizationOptions,
 )
+
 
 @dataclass
 class AdaptiveParameterAugmentationConfig(ConfigBase):
@@ -53,13 +55,15 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
         default=None,
         metadata={"help": "Input-dependent adjustment of the bias vector."},
     )
-    bias_bank_size: int | None = field(
+    bias_bank_expansion_factor: int | None = field(
         default=None,
         metadata={"help": "Size of the weight bank for WEIGHTED_BANK bias option."},
     )
-    weight_bank_size: int | None = field(
+    weight_bank_expansion_factor: int | None = field(
         default=None,
-        metadata={"help": "Size of the weight bank for WEIGHTED_BANK weight option."},
+        metadata={
+            "help": "Number of times default weight parameter bank will be scaled by for example (weight_bank_expansion_factor * input_dim, output_dim)"
+        },
     )
     row_mask_option: RowMaskOptions | None = field(
         default=None,
@@ -84,4 +88,8 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
     memory_position_option: LinearMemoryPositionOptions | None = field(
         default=None,
         metadata={"help": "Controls when memory is applied in the computation."},
+    )
+    model_config: LayerStackConfig | None = field(
+        default=None,
+        metadata={"help": ""},
     )
