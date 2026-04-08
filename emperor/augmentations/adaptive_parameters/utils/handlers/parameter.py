@@ -1,24 +1,47 @@
 import torch
 
 from torch import Tensor
+from copy import deepcopy
 from emperor.base.utils import Module
-from emperor.base.layer import LayerStack, LayerStackConfig
+from dataclasses import dataclass, asdict
+from emperor.base.layer import LayerStackConfig
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
     from emperor.linears.utils.config import LinearLayerConfig
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
+    from emperor.augmentations.adaptive_parameters.config import (
+        AdaptiveParameterAugmentationConfig,
+    )
+
+
+@dataclass
+class DepthMappingLayerConfig(LinearLayerConfig):
+    generator_depth: "DynamicDepthOptions | None" = field(
+        default=None,
+        metadata={
+            "help": "Depth of the generator network that produces input-dependent weight adjustments."
+        },
+    )
+
+    def build(self, input_dim: int, output_dim: int) -> "Module":
+
+        overrides = LinearLayerConfig(input_dim=input_dim, output_dim=output_dim)
+        return DepthMappingLayer(self, overrides)
 
 
 class DepthMappingLayer(Module):
-    def __init__(self, cfg: "LinearLayerConfig"):
+    def __init__(
+        self,
+        cfg: "DepthMappingLayerConfig",
+        overrides: "DepthMappingLayerConfig | None" = None,
+    ):
         super().__init__()
-        self.cfg = cfg
-        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
-        self.generator_depth = self.main_cfg.generator_depth.value
+        self.cfg = self._override_config(cfg, overrides)
+        self.input_dim = self.input_dim
+        self.output_dim = self.output_dim
+        self.generator_depth = self.generator_depth.value
 
         self.weight_params, self.bias_params = self.__init_parameter_bank()
         self.__ensure_generator_depth_is_valid()
@@ -49,29 +72,25 @@ class DepthMappingLayerStack(Module):
         overrides: "AdaptiveParameterAugmentationConfig | None" = None,
     ):
         super().__init__()
-        self.cfg = cfg
-        self.main_cfg = self._resolve_main_config(self.cfg, cfg)
-        updated_overrides = self.__override_config(overrides)
-        self.generator_depth = cfg.generator_depth.value
-        self.model = LayerStack(self.main_cfg, updated_overrides).build_model()
+        self.cfg = self._override_config(cfg, overrides)
+        self.model_config: "LayerStackConfig" = self.__update_layer_stack_config()
+        self.generator_depth = self.cfg.generator_depth.value
+        self.generator_depth_value = self.cfg.generator_depth.value
+        self.model = self.model_config.build()
 
-    def __override_config(
-        self, overrides: "LayerStackConfig | None" = None
-    ) -> LayerStackConfig:
-        from emperor.base.enums import BaseOptions
-
-        class UpdatedLinearLayerOptions(BaseOptions):
-            DEPTH_MAPPING = DepthMappingLayer
-
-        if overrides is None:
-            return LayerStackConfig(model_type=UpdatedLinearLayerOptions.DEPTH_MAPPING)
-        overrides.model_type = UpdatedLinearLayerOptions.DEPTH_MAPPING
-        return overrides
+    def __update_layer_stack_config(self) -> "LayerStackConfig":
+        model_config = deepcopy(self.cfg.model_config)
+        linear_config = asdict(model_config.layer_config.model_config)
+        depth_mapping_config = DepthMappingLayerConfig(
+            generator_depth=self.generator_depth, **linear_config
+        )
+        model_config.layer_config.model_config = depth_mapping_config
+        return model_config
 
     def forward(self, input_batch: Tensor) -> Tensor:
         if not input_batch.dim() == 2:
             raise ValueError("Input batch must be a 2D tensor")
 
         input_batch = input_batch.unsqueeze(1)
-        input_batch = input_batch.repeat(1, self.generator_depth, 1)
+        input_batch = input_batch.repeat(1, self.generator_depth_value, 1)
         return self.model(input_batch)
