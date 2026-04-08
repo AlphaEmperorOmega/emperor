@@ -1,3 +1,4 @@
+from emperor.base.layer.config import LayerConfig
 import torch
 import unittest
 
@@ -9,8 +10,9 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
+    MaskDimensionOptions,
 )
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.utils.config import AdaptiveLinearLayerConfig, LinearLayerConfig
 from emperor.linears.utils.layers import (
     AdaptiveLinearLayer,
     LinearLayer,
@@ -20,7 +22,11 @@ from emperor.base.layer import LayerStackConfig
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.enums import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicWeightOptions,
     LinearMemoryOptions,
@@ -127,138 +133,148 @@ class TestLinearLayer(unittest.TestCase):
                             self.assertIsNone(m.bias_params)
 
 
-# class TestAdaptiveLinearLayer(unittest.TestCase):
-#     def preset(
-#         self,
-#         input_dim: int = 12,
-#         output_dim: int = 6,
-#         bias_flag: bool = True,
-#         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
-#         weight_option: DynamicWeightOptions = DynamicWeightOptions.DUAL_MODEL,
-#         weight_normalization: WeightNormalizationOptions = WeightNormalizationOptions.CLAMP,
-#         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-#         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-#         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
-#         row_mask_option: RowMaskOptions = RowMaskOptions.DISABLED,
-#         memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
-#         memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
-#         memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
-#         weight_bank_size: int = 4,
-#         stack_num_layers: int = 2,
-#         stack_hidden_dim: int = 0,
-#         stack_activation: ActivationOptions = ActivationOptions.RELU,
-#         stack_residual_flag: bool = False,
-#         stack_dropout_probability: float = 0.0,
-#     ) -> LinearLayerConfig:
-#
-#         return LinearLayerConfig(
-#             input_dim=input_dim,
-#             output_dim=output_dim,
-#             bias_flag=bias_flag,
-#             data_monitor=None,
-#             parameter_monitor=None,
-#             override_config=AdaptiveParameterAugmentationConfig(
-#                 input_dim=input_dim,
-#                 output_dim=output_dim,
-#                 weight_option=weight_option,
-#                 weight_normalization=weight_normalization,
-#                 generator_depth=generator_depth,
-#                 diagonal_option=diagonal_option,
-#                 bias_flag=bias_flag,
-#                 bias_option=bias_option,
-#                 weight_bank_size=weight_bank_size,
-#                 row_mask_option=row_mask_option,
-#                 memory_option=memory_option,
-#                 memory_size_option=memory_size_option,
-#                 memory_position_option=memory_position_option,
-#                 override_config=LayerStackConfig(
-#                     input_dim=input_dim,
-#                     hidden_dim=stack_hidden_dim,
-#                     output_dim=output_dim,
-#                     num_layers=stack_num_layers,
-#                     activation=stack_activation,
-#                     layer_norm_position=layer_norm_position,
-#                     residual_flag=stack_residual_flag,
-#                     adaptive_computation_flag=False,
-#                     dropout_probability=stack_dropout_probability,
-#                     override_config=LinearLayerConfig(
-#                         input_dim=input_dim,
-#                         output_dim=output_dim,
-#                         bias_flag=bias_flag,
-#                         data_monitor=None,
-#                         parameter_monitor=None,
-#                         override_config=AdaptiveParameterAugmentationConfig(
-#                             generator_depth=generator_depth,
-#                         ),
-#                     ),
-#                 ),
-#             ),
-#         )
-#
-#     def test_init_with_different_configation_options(self):
-#         bias_options = [True, False]
-#
-#         for bias_flag in bias_options:
-#             for generators_depth in DynamicDepthOptions:
-#                 for diagonal_option in DynamicDiagonalOptions:
-#                     for bias_option in DynamicBiasOptions:
-#                         message = f"Test failed for the options: {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
-#                         with self.subTest(message=message):
-#                             cfg = LinearPresets.adaptive_linear_layer_preset(
-#                                 return_model_config_flag=True,
-#                                 bias_flag=bias_flag,
-#                                 generator_depth=generators_depth,
-#                                 diagonal_option=diagonal_option,
-#                                 bias_option=bias_option,
-#                             )
-#                             m = AdaptiveLinearLayer(cfg)
-#
-#                             self.assertEqual(m.input_dim, cfg.input_dim)
-#                             self.assertEqual(m.output_dim, cfg.output_dim)
-#                             self.assertIsInstance(m.weight_params, torch.Tensor)
-#                             if bias_flag:
-#                                 self.assertIsInstance(m.bias_params, torch.Tensor)
-#                             else:
-#                                 self.assertIsNone(m.bias_params)
-#
-#     def test_forward(self):
-#         bias_options = [True, False]
-#         input_params = output_params = [8, 16]
-#
-#         for bias_flag in bias_options:
-#             for input_dim in input_params:
-#                 for output_dim in output_params:
-#                     for generators_depth in DynamicDepthOptions:
-#                         for diagonal_option in DynamicDiagonalOptions:
-#                             for bias_option in DynamicBiasOptions:
-#                                 message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
-#                                 with self.subTest(message=message):
-#                                     batch_size = 2
-#                                     cfg = LinearPresets.adaptive_linear_layer_preset(
-#                                         return_model_config_flag=True,
-#                                         stack_num_layers=3,
-#                                         batch_size=batch_size,
-#                                         input_dim=input_dim,
-#                                         output_dim=output_dim,
-#                                         bias_flag=bias_flag,
-#                                         generator_depth=generators_depth,
-#                                         diagonal_option=diagonal_option,
-#                                         bias_option=bias_option,
-#                                     )
-#
-#                                     m = AdaptiveLinearLayer(cfg)
-#                                     input_batch = torch.randn(batch_size, input_dim)
-#                                     output = m.forward(input_batch)
-#                                     expected_output_shape = (
-#                                         batch_size,
-#                                         output_dim,
-#                                     )
-#                                     self.assertEqual(
-#                                         output.shape,
-#                                         expected_output_shape,
-#                                     )
-#
-#
+class TestAdaptiveLinearLayer(unittest.TestCase):
+    def preset(
+        self,
+        input_dim: int = 12,
+        output_dim: int = 6,
+        bias_flag: bool = True,
+        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
+        weight_option: DynamicWeightOptions = DynamicWeightOptions.DUAL_MODEL,
+        weight_normalization: WeightNormalizationOptions = WeightNormalizationOptions.CLAMP,
+        generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
+        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        row_mask_option: RowMaskOptions = RowMaskOptions.DISABLED,
+        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
+        memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
+        memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+        weight_bank_expansion_factor: int = 4,
+        bias_bank_expansion_factor: int = 8,
+        mask_dimension_option: MaskDimensionOptions = MaskDimensionOptions.COLUMN,
+        last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
+        stack_num_layers: int = 2,
+        stack_hidden_dim: int = 0,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+        stack_dropout_probability: float = 0.0,
+    ) -> LinearLayerConfig:
+
+        return AdaptiveLinearLayerConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            bias_flag=bias_flag,
+            data_monitor=None,
+            parameter_monitor=None,
+            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                input_dim=input_dim,
+                output_dim=output_dim,
+                weight_option=weight_option,
+                weight_normalization=weight_normalization,
+                generator_depth=generator_depth,
+                diagonal_option=diagonal_option,
+                bias_flag=bias_flag,
+                bias_option=bias_option,
+                weight_bank_expansion_factor=weight_bank_expansion_factor,
+                bias_bank_expansion_factor=bias_bank_expansion_factor,
+                row_mask_option=row_mask_option,
+                mask_dimension_option=mask_dimension_option,
+                memory_option=memory_option,
+                memory_size_option=memory_size_option,
+                memory_position_option=memory_position_option,
+                model_config=LayerStackConfig(
+                    input_dim=input_dim,
+                    hidden_dim=stack_hidden_dim,
+                    output_dim=output_dim,
+                    num_layers=stack_num_layers,
+                    last_layer_bias_option=last_layer_bias_option,
+                    apply_output_pipeline_flag=False,
+                    layer_config=LayerConfig(
+                        input_dim=input_dim,
+                        output_dim=output_dim,
+                        activation=stack_activation,
+                        layer_norm_position=layer_norm_position,
+                        residual_flag=stack_residual_flag,
+                        dropout_probability=stack_dropout_probability,
+                        gate_config=None,
+                        halting_config=None,
+                        shared_halting_flag=False,
+                        model_config=LinearLayerConfig(
+                            input_dim=input_dim,
+                            output_dim=output_dim,
+                            bias_flag=bias_flag,
+                            data_monitor=None,
+                            parameter_monitor=None,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+    def test_init_with_different_configation_options(self):
+        bias_options = [True, False]
+
+        for bias_flag in bias_options:
+            for generators_depth in DynamicDepthOptions:
+                for diagonal_option in DynamicDiagonalOptions:
+                    for bias_option in DynamicBiasOptions:
+                        message = f"Test failed for the options: {bias_flag}, {generators_depth}, {diagonal_option}, {bias_option}"
+                        with self.subTest(message=message):
+                            cfg = LinearPresets.adaptive_linear_layer_preset(
+                                return_model_config_flag=True,
+                                bias_flag=bias_flag,
+                                generator_depth=generators_depth,
+                                diagonal_option=diagonal_option,
+                                bias_option=bias_option,
+                            )
+                            m = AdaptiveLinearLayer(cfg)
+
+                            self.assertEqual(m.input_dim, cfg.input_dim)
+                            self.assertEqual(m.output_dim, cfg.output_dim)
+                            self.assertIsInstance(m.weight_params, torch.Tensor)
+                            if bias_flag:
+                                self.assertIsInstance(m.bias_params, torch.Tensor)
+                            else:
+                                self.assertIsNone(m.bias_params)
+
+    def test_forward(self):
+        bias_options = [True, False]
+        input_params = output_params = [8, 16]
+
+        for bias_flag in bias_options:
+            for input_dim in input_params:
+                for output_dim in output_params:
+                    for generators_depth in DynamicDepthOptions:
+                        for diagonal_option in DynamicDiagonalOptions:
+                            for bias_option in DynamicBiasOptions:
+                                message = f"Test failed for options - Bias flag: {bias_flag}, Generator depth: {generators_depth}, Diagonal option: {diagonal_option}, Bias option: {bias_option}, Input dimension: {input_dim}, Output dimension: {output_dim}."
+                                with self.subTest(message=message):
+                                    batch_size = 2
+                                    cfg = LinearPresets.adaptive_linear_layer_preset(
+                                        return_model_config_flag=True,
+                                        stack_num_layers=3,
+                                        batch_size=batch_size,
+                                        input_dim=input_dim,
+                                        output_dim=output_dim,
+                                        bias_flag=bias_flag,
+                                        generator_depth=generators_depth,
+                                        diagonal_option=diagonal_option,
+                                        bias_option=bias_option,
+                                    )
+
+                                    m = AdaptiveLinearLayer(cfg)
+                                    input_batch = torch.randn(batch_size, input_dim)
+                                    output = m.forward(input_batch)
+                                    expected_output_shape = (
+                                        batch_size,
+                                        output_dim,
+                                    )
+                                    self.assertEqual(
+                                        output.shape,
+                                        expected_output_shape,
+                                    )
+
+
 # class TestLinearLayerBaseStack(unittest.TestCase):
 #     def test_init_with_different_configation_options(self):
 #         num_layer_options = [1, 2, 3]
