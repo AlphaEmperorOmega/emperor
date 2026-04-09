@@ -15,9 +15,9 @@ NUM_EPOCHS: int = 2
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Trainer
-# ACCELERATOR: str = "cpu"
-GRADIENT_CLIP_VAL: float = 1.0
-EARLY_STOPPING_PATIENCE: int = 5
+# TRAINER_ACCELERATOR: str = "cpu"
+TRAINER_GRADIENT_CLIP_VAL: float = 1.0
+CALLBACK_EARLY_STOPPING_PATIENCE: int = 5
 
 # Model
 INPUT_DIM: int = 28**2

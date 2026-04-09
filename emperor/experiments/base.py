@@ -9,14 +9,14 @@ from datetime import datetime
 from pathlib import Path
 
 from typing import Callable
-from lightning import Trainer, seed_everything
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from emperor.config import ModelConfig
 from emperor.base.enums import BaseOptions
-from emperor.datasets.image.classification.mnist import Mnist
+from lightning import Trainer, seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
+from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 
 
@@ -151,9 +151,6 @@ class ExperimentBase:
         self.model_type = self._model_type()
         self.preset_generator = self._preset_generator_instance()
         self.options_enumeration = self._experiment_enumeration()
-        package = type(self.preset_generator).__module__.rsplit(".", 1)[0]
-        config = importlib.import_module(f"{package}.config")
-        self.accelerator = getattr(config, "ACCELERATOR", "auto")
 
     def _num_epochs(self) -> int:
         return 10
@@ -180,9 +177,11 @@ class ExperimentBase:
         package = type(self.preset_generator).__module__.rsplit(".", 1)[0]
         config = importlib.import_module(f"{package}.config")
 
-        early_stopping_patience = getattr(config, "EARLY_STOPPING_PATIENCE", 0)
-        early_stopping_metric = getattr(config, "EARLY_STOPPING_METRIC", "validation/loss")
-        checkpoint_flag = getattr(config, "CHECKPOINT_FLAG", False)
+        early_stopping_patience = getattr(config, "CALLBACK_EARLY_STOPPING_PATIENCE", 0)
+        early_stopping_metric = getattr(
+            config, "CALLBACK_EARLY_STOPPING_METRIC", "validation/loss"
+        )
+        checkpoint_flag = getattr(config, "CALLBACK_CHECKPOINT_FLAG", False)
 
         callbacks = []
         if early_stopping_patience > 0:
@@ -202,33 +201,19 @@ class ExperimentBase:
                 )
             )
 
+        trainer_args = {}
+        for key, value in vars(config).items():
+            if not key.startswith("TRAINER_"):
+                continue
+
+            if value is None:
+                continue
+
+            clean_key = key[len("TRAINER_"):].lower()
+            trainer_args[clean_key] = value
+
         return {
-            "trainer_args": {
-                k: v
-                for k, v in {
-                    "gradient_clip_val": getattr(config, "GRADIENT_CLIP_VAL", 0.0),
-                    "gradient_clip_algorithm": getattr(
-                        config, "GRADIENT_CLIP_ALGORITHM", "norm"
-                    ),
-                    "accumulate_grad_batches": getattr(
-                        config, "ACCUMULATE_GRAD_BATCHES", 1
-                    ),
-                    "precision": getattr(config, "PRECISION", "32-true"),
-                    "deterministic": getattr(config, "DETERMINISTIC", False),
-                    "benchmark": getattr(config, "BENCHMARK", True),
-                    "max_steps": getattr(config, "MAX_STEPS", -1),
-                    "max_time": getattr(config, "MAX_TIME", None),
-                    "val_check_interval": getattr(config, "VAL_CHECK_INTERVAL", 1.0),
-                    "limit_train_batches": getattr(config, "LIMIT_TRAIN_BATCHES", 1.0),
-                    "limit_val_batches": getattr(config, "LIMIT_VAL_BATCHES", 1.0),
-                    "overfit_batches": getattr(config, "OVERFIT_BATCHES", 0.0),
-                    "num_sanity_val_steps": getattr(config, "NUM_SANITY_VAL_STEPS", 2),
-                    "log_every_n_steps": getattr(config, "LOG_EVERY_N_STEPS", 50),
-                    "enable_progress_bar": getattr(config, "ENABLE_PROGRESS_BAR", True),
-                    "profiler": getattr(config, "PROFILER", None),
-                }.items()
-                if v is not None
-            },
+            "trainer_args": trainer_args,
             "callbacks": callbacks,
         }
 
@@ -254,7 +239,6 @@ class ExperimentBase:
                     )
                     trainer = Trainer(
                         max_epochs=self.num_epochs,
-                        accelerator=self.accelerator,
                         logger=logger,
                         callbacks=trainer_config["callbacks"],
                         **trainer_config["trainer_args"],
@@ -292,7 +276,9 @@ class ExperimentBase:
         dataset = result["dataset"]
         runs = top5.get(dataset, [])
         new_acc = result["metrics"].get("validation_accuracy", 0)
-        worst_acc = min((r["metrics"].get("validation_accuracy", 0) for r in runs), default=-1)
+        worst_acc = min(
+            (r["metrics"].get("validation_accuracy", 0) for r in runs), default=-1
+        )
 
         if len(runs) < 5 or new_acc > worst_acc:
             runs.append(result)
