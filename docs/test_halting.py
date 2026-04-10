@@ -58,8 +58,6 @@ class TestHalting(unittest.TestCase):
                         input_dim=input_dim,
                         output_dim=input_dim,
                         bias_flag=gate_bias_flag,
-                        data_monitor=None,
-                        parameter_monitor=None,
                     ),
                 ),
             ),

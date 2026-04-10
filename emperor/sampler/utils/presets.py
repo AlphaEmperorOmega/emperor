@@ -46,8 +46,6 @@ class SamplerPresets:
                 input_dim=input_dim,
                 output_dim=num_experts,
                 bias_flag=bias_flag,
-                data_monitor=None,
-                parameter_monitor=None,
                 stack_num_layers=stack_num_layers,
                 stack_hidden_dim=stack_hidden_dim,
                 stack_activation=stack_activation,

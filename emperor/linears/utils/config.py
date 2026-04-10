@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
-from emperor.linears.utils._monitors import TensorMonitor, StatisticsMonitor
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
@@ -25,18 +24,6 @@ class LinearLayerConfig(ConfigBase):
         default=None,
         metadata={
             "help": "When true bias will be added to after the matrix multiplication between, the input and output"
-        },
-    )
-    data_monitor: type[TensorMonitor] | None = field(
-        default=None,
-        metadata={
-            "help": "Optional monitor class that tracks input/output statistics and logs to TensorBoard."
-        },
-    )
-    parameter_monitor: type[StatisticsMonitor] | None = field(
-        default=None,
-        metadata={
-            "help": "Optional monitor class that tracks parameter statistics (mean/var/norm) and logs to TensorBoard."
         },
     )
 

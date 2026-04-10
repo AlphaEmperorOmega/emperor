@@ -24,8 +24,6 @@ class LinearPresets:
         input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
-        data_monitor=None,
-        parameter_monitor=None,
     ) -> "LinearLayerConfig | ModelConfig":
         from emperor.config import ModelConfig
 
@@ -33,8 +31,6 @@ class LinearPresets:
             input_dim=input_dim,
             output_dim=output_dim,
             bias_flag=bias_flag,
-            data_monitor=data_monitor,
-            parameter_monitor=parameter_monitor,
         )
         if not return_model_config_flag:
             return config
@@ -78,8 +74,6 @@ class LinearPresets:
             input_dim=input_dim,
             output_dim=output_dim,
             bias_flag=bias_flag,
-            data_monitor=None,
-            parameter_monitor=None,
             override_config=AdaptiveParameterAugmentationConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
@@ -109,8 +103,6 @@ class LinearPresets:
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,
-                        data_monitor=None,
-                        parameter_monitor=None,
                         override_config=AdaptiveParameterAugmentationConfig(
                             generator_depth=generator_depth,
                         ),
@@ -135,8 +127,6 @@ class LinearPresets:
         input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
-        data_monitor=None,
-        parameter_monitor=None,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         stack_num_layers: int = 2,
         stack_hidden_dim: int = 0,
@@ -164,8 +154,6 @@ class LinearPresets:
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
-                data_monitor=data_monitor,
-                parameter_monitor=parameter_monitor,
             ),
         )
 
