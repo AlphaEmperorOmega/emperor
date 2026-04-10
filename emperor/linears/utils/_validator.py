@@ -7,55 +7,35 @@ if TYPE_CHECKING:
 
 
 class LinearBaseValidator:
-    _FIELDS = {
-        "input_dim": {"type": int, "validate": lambda v: v > 0 or "must be > 0"},
-        "output_dim": {"type": int, "validate": lambda v: v > 0 or "must be > 0"},
-        "bias_flag": {"type": bool},
-        "data_monitor": {"type": "TensorMonitor", "optional": True},
-        "parameter_monitor": {"type": "StatisticsMonitor", "optional": True},
-    }
+    @staticmethod
+    def validate(model: "LinearBase") -> None:
+        LinearBaseValidator.__validate_required_fields(model)
+        LinearBaseValidator.__validate_dimensions(model.input_dim, model.output_dim)
+        LinearBaseValidator.__validate_bias_flag(model.bias_flag)
 
-    def __init__(self, model: "LinearBase"):
-        self.model = model
-        self._resolve_monitor_types()
-        self.validate()
+    @staticmethod
+    def __validate_required_fields(model: "LinearBase") -> None:
+        name = model.__class__.__name__
+        if model.input_dim is None:
+            raise ValueError(f"input_dim is required for {name}")
+        if model.output_dim is None:
+            raise ValueError(f"output_dim is required for {name}")
+        if model.bias_flag is None:
+            raise ValueError(f"bias_flag is required for {name}")
 
-    def _resolve_monitor_types(self) -> None:
-        from emperor.linears.utils._monitors import StatisticsMonitor, TensorMonitor
+    @staticmethod
+    def __validate_dimensions(input_dim: int, output_dim: int) -> None:
+        if input_dim <= 0:
+            raise ValueError(f"input_dim must be greater than 0, received {input_dim}")
+        if output_dim <= 0:
+            raise ValueError(
+                f"output_dim must be greater than 0, received {output_dim}"
+            )
 
-        self._TYPES = {
-            "TensorMonitor": TensorMonitor,
-            "StatisticsMonitor": StatisticsMonitor,
-        }
-
-    def validate(self) -> None:
-        for name, rules in self._FIELDS.items():
-            val = getattr(self.model, name, None)
-
-            if val is None:
-                if rules.get("optional"):
-                    continue
-                raise ValueError(
-                    f"Configuration Error: '{name}' is required for "
-                    f"{self.model.__class__.__name__}."
-                )
-
-            expected = rules.get("type")
-            expected_type = self._TYPES.get(expected, expected)
-            if not isinstance(val, expected_type):
-                raise TypeError(
-                    f"Type Error: '{name}' on {self.model.__class__.__name__} "
-                    f"expected {expected_type.__name__}, got "
-                    f"{type(val).__name__} (value={val!r})."
-                )
-
-            validator = rules.get("validate")
-            if validator is not None:
-                result = validator(val)
-                if result is not True and result is not None:
-                    raise ValueError(
-                        f"Configuration Error: '{name}' {result} (value={val!r})."
-                    )
+    @staticmethod
+    def __validate_bias_flag(bias_flag: bool) -> None:
+        if not isinstance(bias_flag, bool):
+            raise TypeError(f"bias_flag must be a bool, got {type(bias_flag).__name__}")
 
     @staticmethod
     def validate_input_shape(X: Tensor) -> None:
