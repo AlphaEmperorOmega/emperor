@@ -61,21 +61,24 @@ class Layer(Module):
         return self.output_dim
 
     def __build_model(self) -> "Module | None":
-        if self.model_config is None:
-            return None
-        return self.model_config.build(self.input_dim, self.output_dim)
+        return self.__build_from_config(
+            self.model_config, input_dim=self.input_dim, output_dim=self.output_dim
+        )
 
     def __build_gate_model(self) -> "Layer | Sequential | None":
-        if self.gate_config is None:
-            return None
-        return self.gate_config.build(
-            input_dim=self.output_dim, output_dim=self.output_dim
+        return self.__build_from_config(
+            self.gate_config, input_dim=self.output_dim, output_dim=self.output_dim
         )
 
     def __build_halting_model(self) -> "HaltingBase | None":
-        if self.halting_config is None:
+        return self.__build_from_config(self.halting_config, input_dim=self.output_dim)
+
+    def __build_from_config(
+        self, config: "ConfigBase | None", **kwargs
+    ) -> "Module | None":
+        if config is None:
             return None
-        return self.halting_config.build(input_dim=self.output_dim)
+        return config.build(overrides=type(config)(**kwargs))
 
     def __init_dropout_module(self) -> nn.Module | None:
         if self.has_dropout:

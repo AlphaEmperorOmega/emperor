@@ -62,10 +62,9 @@ class LayerConfig(ConfigBase):
         metadata={"help": "Config used to build the model module within the layer"},
     )
 
-    def build(self, input_dim: int = None, output_dim: int = None) -> "Module":
+    def build(self, overrides: "LayerConfig | None" = None) -> "Module":
         from emperor.base.layer.layer import Layer
 
-        overrides = LayerConfig(input_dim=input_dim, output_dim=output_dim)
         return Layer(self, overrides)
 
 
@@ -114,12 +113,7 @@ class LayerStackConfig(ConfigBase):
         },
     )
 
-    def build(
-        self, input_dim: int | None = None, output_dim: int | None = None
-    ) -> "Layer | Sequential":
+    def build(self, overrides: "LayerStackConfig | None" = None) -> "Layer | Sequential":
         from emperor.base.layer.stack import LayerStack
 
-        overrides = None
-        if input_dim or output_dim:
-            overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
         return LayerStack(self, overrides).build()

@@ -73,7 +73,8 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         self.__init_gate_weights()
 
     def __build_halting_gate_model(self) -> "Layer | Sequential":
-        return self.halting_gate_config.build(input_dim=self.input_dim, output_dim=2)
+        override = type(self.halting_gate_config)(input_dim=self.input_dim, output_dim=2)
+        return self.halting_gate_config.build(overrides=override)
 
     def __init_gate_weights(self) -> None:
         last_linear = None

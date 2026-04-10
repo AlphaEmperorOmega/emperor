@@ -40,10 +40,12 @@ class LinearLayerConfig(ConfigBase):
         },
     )
 
-    def build(self, input_dim: int, output_dim: int) -> "Module":
+    def build(
+        self,
+        overrides: "LinearLayerConfig | None" = None,
+    ) -> "Module":
         from emperor.linears.utils.layers import LinearLayer
 
-        overrides = LinearLayerConfig(input_dim=input_dim, output_dim=output_dim)
         return LinearLayer(self, overrides)
 
 
@@ -56,10 +58,7 @@ class AdaptiveLinearLayerConfig(LinearLayerConfig):
         },
     )
 
-    def build(self, input_dim: int, output_dim: int) -> "Module":
+    def build(self, overrides: "AdaptiveLinearLayerConfig | None" = None) -> "Module":
         from emperor.linears.utils.layers import AdaptiveLinearLayer
 
-        overrides = AdaptiveLinearLayerConfig(
-            input_dim=input_dim, output_dim=output_dim
-        )
         return AdaptiveLinearLayer(self, overrides)

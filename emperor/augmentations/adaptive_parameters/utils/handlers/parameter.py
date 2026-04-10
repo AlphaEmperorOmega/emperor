@@ -3,14 +3,14 @@ import torch
 from torch import Tensor
 from copy import deepcopy
 from emperor.base.utils import Module
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from emperor.base.layer import LayerStackConfig
+from emperor.linears.utils.config import LinearLayerConfig
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
-    from emperor.linears.utils.config import LinearLayerConfig
     from emperor.augmentations.adaptive_parameters.config import (
         AdaptiveParameterAugmentationConfig,
     )
@@ -25,9 +25,7 @@ class DepthMappingLayerConfig(LinearLayerConfig):
         },
     )
 
-    def build(self, input_dim: int, output_dim: int) -> "Module":
-
-        overrides = LinearLayerConfig(input_dim=input_dim, output_dim=output_dim)
+    def build(self, overrides: "DepthMappingLayerConfig | None" = None) -> "Module":
         return DepthMappingLayer(self, overrides)
 
 
