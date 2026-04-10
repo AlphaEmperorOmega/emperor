@@ -30,6 +30,14 @@ class LayerValidator:
         )
 
     @staticmethod
+    def __validate_required_fields(cfg: LayerConfig) -> None:
+        for field_name in cfg.__dataclass_fields__:
+            if field_name in LayerValidator.OPTIONAL_FIELDS:
+                continue
+            if getattr(cfg, field_name) is None:
+                raise ValueError(f"{field_name} is required, received None")
+
+    @staticmethod
     def __validate_dimensions(input_dim: int, output_dim: int) -> None:
         if input_dim <= 0:
             raise ValueError(f"input_dim must be greater than 0, received {input_dim}")
@@ -44,14 +52,6 @@ class LayerValidator:
             raise ValueError(
                 f"dropout_probability must be between 0.0 and 1.0, received {dropout_probability}"
             )
-
-    @staticmethod
-    def __validate_required_fields(cfg: LayerConfig) -> None:
-        for field_name in cfg.__dataclass_fields__:
-            if field_name in LayerValidator.OPTIONAL_FIELDS:
-                continue
-            if getattr(cfg, field_name) is None:
-                raise ValueError(f"{field_name} is required, received None")
 
     @staticmethod
     def __validate_model_config(model_config: ConfigBase | None) -> None:
@@ -131,25 +131,6 @@ class LayerStackValidator:
         LayerStackValidator.__validate_halting_config(cfg)
 
     @staticmethod
-    def __validate_dimensions(cfg: "LayerStackConfig") -> None:
-        if cfg.input_dim is not None and cfg.input_dim <= 0:
-            raise ValueError(
-                f"input_dim must be greater than 0, received {cfg.input_dim}"
-            )
-        if cfg.hidden_dim is not None and cfg.hidden_dim <= 0:
-            raise ValueError(
-                f"hidden_dim must be greater than 0, received {cfg.hidden_dim}"
-            )
-        if cfg.output_dim is not None and cfg.output_dim <= 0:
-            raise ValueError(
-                f"output_dim must be greater than 0, received {cfg.output_dim}"
-            )
-        if cfg.num_layers is not None and cfg.num_layers <= 0:
-            raise ValueError(
-                f"num_layers must be greater than 0, received {cfg.num_layers}"
-            )
-
-    @staticmethod
     def __validate_required_fields(cfg: "LayerStackConfig") -> None:
         if cfg.input_dim is None:
             raise ValueError(f"input_dim is required, received {cfg.input_dim}")
@@ -173,6 +154,25 @@ class LayerStackValidator:
             raise TypeError(
                 f"layer_config must be an instance of LayerConfig, "
                 f"got {type(cfg.layer_config).__name__}"
+            )
+
+    @staticmethod
+    def __validate_dimensions(cfg: "LayerStackConfig") -> None:
+        if cfg.input_dim is not None and cfg.input_dim <= 0:
+            raise ValueError(
+                f"input_dim must be greater than 0, received {cfg.input_dim}"
+            )
+        if cfg.hidden_dim is not None and cfg.hidden_dim <= 0:
+            raise ValueError(
+                f"hidden_dim must be greater than 0, received {cfg.hidden_dim}"
+            )
+        if cfg.output_dim is not None and cfg.output_dim <= 0:
+            raise ValueError(
+                f"output_dim must be greater than 0, received {cfg.output_dim}"
+            )
+        if cfg.num_layers is not None and cfg.num_layers <= 0:
+            raise ValueError(
+                f"num_layers must be greater than 0, received {cfg.num_layers}"
             )
 
     @staticmethod
