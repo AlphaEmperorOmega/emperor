@@ -6,6 +6,7 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
+from emperor.linears.core.callbacks import LinearMonitorCallback
 from models.trainer_config import *
 
 # Global
@@ -18,6 +19,7 @@ DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 # TRAINER_ACCELERATOR: str = "cpu"
 TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 CALLBACK_EARLY_STOPPING_PATIENCE: int = 5
+CALLBACK_LINEAR_MONITOR = LinearMonitorCallback(log_every_n_steps=100)
 
 # Model
 INPUT_DIM: int = 28**2

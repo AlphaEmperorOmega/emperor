@@ -16,7 +16,7 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
-from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 
 
@@ -200,6 +200,10 @@ class ExperimentBase:
                     mode="min" if "loss" in early_stopping_metric else "max",
                 )
             )
+
+        for key, value in vars(config).items():
+            if key.startswith("CALLBACK_") and isinstance(value, Callback):
+                callbacks.append(value)
 
         trainer_args = {}
         for key, value in vars(config).items():
