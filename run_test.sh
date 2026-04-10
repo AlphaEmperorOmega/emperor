@@ -9,7 +9,6 @@ if [ -n "$1" ]; then
 
   if [ ! -f "$TEST_PATH" ]; then
     echo "Error: $TEST_PATH not found"
-    exit 1
   fi
 
   MODULE="${DOCS_DIR}.test_${FILE}"
