@@ -30,7 +30,7 @@ class TestLayer(unittest.TestCase):
         gate_residual_flag: bool = False,
         gate_dropout_probability: float = 0.0,
         gate_bias_flag: bool = True,
-        halting_config=None,
+        halting_config: "StickBreakingConfig | None" = None,
         shared_halting_flag: bool = False,
     ) -> LayerConfig:
 
@@ -60,7 +60,7 @@ class TestLayer(unittest.TestCase):
                 ),
             )
 
-        if input_dim == output_dim:
+        if halting_config is None and input_dim == output_dim:
             halting_config = StickBreakingConfig(
                 input_dim=output_dim,
                 threshold=0.99,
@@ -471,3 +471,47 @@ class TestLayer(unittest.TestCase):
                                         output.hidden.shape,
                                         (batch_size, output_dim),
                                     )
+
+    def test_halting_rejects_mismatched_dims(self):
+        dim = 8
+        halting_config = StickBreakingConfig(
+            input_dim=dim,
+            threshold=0.99,
+            halting_dropout=0.0,
+            hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            halting_gate_config=LayerStackConfig(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=2,
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
+                    activation=ActivationOptions.DISABLED,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_flag=False,
+                    dropout_probability=0.0,
+                    halting_config=None,
+                    shared_halting_flag=False,
+                    gate_config=None,
+                    model_config=LinearLayerConfig(
+                        input_dim=dim,
+                        output_dim=dim,
+                        bias_flag=True,
+                        data_monitor=None,
+                        parameter_monitor=None,
+                    ),
+                ),
+            ),
+        )
+
+        invalid_cases = [
+            {"input_dim": dim, "output_dim": dim * 2},
+            {"input_dim": dim * 2, "output_dim": dim},
+        ]
+
+        for case in invalid_cases:
+            message = ", ".join(f"{k}={v}" for k, v in case.items())
+            with self.subTest(msg=message):
+                with self.assertRaises(ValueError):
+                    Layer(self.preset(halting_config=halting_config, **case))
