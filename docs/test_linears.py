@@ -46,16 +46,12 @@ class TestLinearLayer(unittest.TestCase):
         input_dim: int = 12,
         output_dim: int = 6,
         bias_flag: bool = True,
-        data_monitor=None,
-        parameter_monitor=None,
     ) -> LinearLayerConfig:
 
         return LinearLayerConfig(
             input_dim=input_dim,
             output_dim=output_dim,
             bias_flag=bias_flag,
-            data_monitor=data_monitor,
-            parameter_monitor=parameter_monitor,
         )
 
     def test_init_with_different_configation_options(self):
@@ -64,14 +60,18 @@ class TestLinearLayer(unittest.TestCase):
             message = f"Test failed for the inputs: {bias_flag}"
             with self.subTest(i=message):
                 c = self.preset(bias_flag=bias_flag)
-                overrides = LinearLayerConfig(bias_flag=bias_flag)
-                m = LinearLayer(c, overrides)
+                m = LinearLayer(c)
 
+                expected_weight_shape = (c.input_dim, c.output_dim)
+                expected_bias_shape = (c.output_dim,)
                 self.assertEqual(m.input_dim, c.input_dim)
                 self.assertEqual(m.output_dim, c.output_dim)
+                self.assertEqual(m.bias_flag, bias_flag)
                 self.assertIsInstance(m.weight_params, torch.Tensor)
+                self.assertEqual(m.weight_params.shape, expected_weight_shape)
                 if bias_flag:
                     self.assertIsInstance(m.bias_params, torch.Tensor)
+                    self.assertEqual(m.bias_params.shape, expected_bias_shape)
                 else:
                     self.assertIsNone(m.bias_params)
 
