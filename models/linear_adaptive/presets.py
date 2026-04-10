@@ -2,7 +2,7 @@ import models.linear_adaptive.config as config
 
 from models.linear_adaptive.model import Model
 from emperor.base.layer import LayerStackConfig
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 from models.linear_adaptive.config import ExperimentConfig
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig

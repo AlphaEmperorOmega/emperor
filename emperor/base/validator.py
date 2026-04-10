@@ -66,7 +66,7 @@ class LinearBaseValidator(BaseModelValidator):
     }
 
     def _resolve_types(self) -> None:
-        from emperor.linears.utils.monitors import (
+        from emperor.linears.core.monitors import (
             TensorMonitor,
             StatisticsMonitor,
         )

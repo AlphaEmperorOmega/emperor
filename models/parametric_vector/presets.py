@@ -10,7 +10,7 @@ from emperor.augmentations.adaptive_parameters.options import (
 )
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.base.layer import LayerStackConfig
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.utils.routers import RouterConfig
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions

@@ -1,6 +1,6 @@
 from emperor.base.enums import BaseOptions
-from emperor.linears.utils.layers import AdaptiveLinearLayer, LinearLayer
-from emperor.linears.utils.stack import AdaptiveLinearLayerStack, LinearLayerStack
+from emperor.linears.core.layers import AdaptiveLinearLayer, LinearLayer
+from emperor.linears.core.stack import AdaptiveLinearLayerStack, LinearLayerStack
 
 
 class LinearLayerOptions(BaseOptions):

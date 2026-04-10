@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Parameter
 from emperor.base.utils import Module
-from emperor.linears.utils._validator import LinearBaseValidator
-from emperor.linears.utils.config import LinearLayerConfig, AdaptiveLinearLayerConfig
+from emperor.linears.core._validator import LinearBaseValidator
+from emperor.linears.core.config import LinearLayerConfig, AdaptiveLinearLayerConfig
 from emperor.augmentations.adaptive_parameters.model import (
     AdaptiveParameterAugmentation,
 )

@@ -3,7 +3,7 @@ import torch
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.text.language_modeling.penn_treebank import PennTreebank
 from emperor.datasets.text.language_modeling.wiki_text_2 import WikiText2
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.attention.utils.layer import MultiHeadAttentionConfig

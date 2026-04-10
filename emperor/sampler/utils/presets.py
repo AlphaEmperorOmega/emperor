@@ -1,6 +1,6 @@
 from emperor.config import ModelConfig
 from emperor.sampler.utils.routers import RouterConfig
-from emperor.linears.utils.presets import LinearPresets
+from emperor.linears.core.presets import LinearPresets
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.base.enums import ActivationOptions
 from emperor.linears.options import LinearLayerStackOptions

@@ -7,16 +7,16 @@ from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.utils.presets import LinearPresets
-from emperor.linears.utils.stack import AdaptiveLinearLayerStack, LinearLayerStack
+from emperor.linears.core.presets import LinearPresets
+from emperor.linears.core.stack import AdaptiveLinearLayerStack, LinearLayerStack
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
     MaskDimensionOptions,
 )
-from emperor.linears.utils.config import AdaptiveLinearLayerConfig, LinearLayerConfig
-from emperor.linears.utils.layers import (
+from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
+from emperor.linears.core.layers import (
     AdaptiveLinearLayer,
     LinearLayer,
 )

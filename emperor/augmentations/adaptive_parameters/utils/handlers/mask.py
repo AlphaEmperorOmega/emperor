@@ -49,7 +49,7 @@ class RowMaskHandler(MaskHandlerAbstract):
         self.score_generator = self.__init_score_generator()
 
     def __init_score_generator(self):
-        from emperor.linears.utils.stack import LinearLayerStack
+        from emperor.linears.core.stack import LinearLayerStack
 
         overrides = LayerStackConfig(
             input_dim=self.input_dim,
@@ -95,7 +95,7 @@ class PerRowMaskHandler(MaskHandlerAbstract):
         self.score_generator = self.__init_score_generator()
 
     def __init_score_generator(self):
-        from emperor.linears.utils.stack import LinearLayerStack
+        from emperor.linears.core.stack import LinearLayerStack
 
         overrides = LayerStackConfig(
             input_dim=self.input_dim,
@@ -128,7 +128,7 @@ class TopSliceMaskHandler(MaskHandlerAbstract):
         self.score_generator = self.__init_score_generator()
 
     def __init_score_generator(self):
-        from emperor.linears.utils.stack import LinearLayerStack
+        from emperor.linears.core.stack import LinearLayerStack
 
         overrides = LayerStackConfig(
             input_dim=self.input_dim,
@@ -164,7 +164,7 @@ class DiagonalMaskHandler(MaskHandlerAbstract):
         self.score_generator = self.__init_score_generator()
 
     def __init_score_generator(self):
-        from emperor.linears.utils.stack import LinearLayerStack
+        from emperor.linears.core.stack import LinearLayerStack
 
         overrides = LayerStackConfig(
             input_dim=self.input_dim,

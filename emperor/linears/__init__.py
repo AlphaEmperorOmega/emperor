@@ -1,8 +1,7 @@
-from .utils.presets import LinearPresets
 from .options import LinearLayerOptions, LinearLayerStackOptions
-from .utils.stack import LinearLayerStack, AdaptiveLinearLayerStack
-from .utils.config import LinearLayerConfig
-from .utils.layers import (
+from .core.stack import LinearLayerStack, AdaptiveLinearLayerStack
+from .core.config import LinearLayerConfig, AdaptiveLinearLayerConfig
+from .core.layers import (
     LinearLayer,
     AdaptiveLinearLayer,
     LinearBase,
@@ -18,7 +17,7 @@ __all__ = [
     "AdaptiveLinearLayerStack",
     # Configuration
     "LinearLayerConfig",
-    "LinearPresets",
+    "AdaptiveLinearLayerConfig",
     # Options/Enums
     "LinearLayerOptions",
     "LinearLayerStackOptions",

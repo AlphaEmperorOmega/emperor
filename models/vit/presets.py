@@ -2,7 +2,7 @@ import torch
 
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.presets import TransformerPresets
@@ -263,7 +263,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         image_height: int = config.IMAGE_HEIGHT,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
-        from emperor.linears.utils.presets import LinearPresets
+        from emperor.linears.core.presets import LinearPresets
 
         class_token_length = 1
         padding_size = 0

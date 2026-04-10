@@ -3,8 +3,8 @@ from emperor.base.layer import LayerStackConfig
 from emperor.base.utils import Module
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
-from emperor.linears.utils.config import LinearLayerConfig
-from emperor.linears.utils.stack import LinearLayerStack
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears.core.stack import LinearLayerStack
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
 from emperor.transformer.utils.layers import TransformerConfig

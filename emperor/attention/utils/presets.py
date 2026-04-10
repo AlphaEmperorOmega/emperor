@@ -1,5 +1,5 @@
 from torch import float32
-from emperor.linears.utils.presets import LinearPresets
+from emperor.linears.core.presets import LinearPresets
 from emperor.attention.utils.enums import AttentionOptions
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.parametric.utils.config import AdaptiveRouterOptions

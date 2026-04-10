@@ -41,7 +41,7 @@ class DiagonalHandlerAbstract(Module):
         return self._create_stack(self.cfg_main, overrides)
 
     def _create_stack(self, config, overrides) -> "Layer | Sequential":
-        from emperor.linears.utils.stack import LinearLayerStack
+        from emperor.linears.core.stack import LinearLayerStack
 
         return LinearLayerStack(config, overrides).build_model()
 

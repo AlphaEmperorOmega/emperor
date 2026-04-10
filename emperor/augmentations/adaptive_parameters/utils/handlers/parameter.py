@@ -5,7 +5,7 @@ from copy import deepcopy
 from emperor.base.utils import Module
 from dataclasses import dataclass, asdict, field
 from emperor.base.layer import LayerStackConfig
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 
 from typing import TYPE_CHECKING
 

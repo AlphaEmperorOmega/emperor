@@ -65,7 +65,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         self.__init_gate_weights()
 
     def __build_gate(self) -> "Layer | Sequential":
-        from emperor.linears.utils.stack import LinearLayerStack
+        from emperor.linears.core.stack import LinearLayerStack
 
         overrides = LayerStackConfig(
             input_dim=self.input_dim,

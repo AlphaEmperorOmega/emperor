@@ -32,7 +32,7 @@ class BiasHandlerAbstract(Module):
     def _init_model(
         self, overrides: LayerStackConfig | None = None
     ) -> "Layer | Sequential":
-        from emperor.linears.utils.stack import LinearLayerStack
+        from emperor.linears.core.stack import LinearLayerStack
 
         return LinearLayerStack(self.main_cfg, overrides).build_model()
 

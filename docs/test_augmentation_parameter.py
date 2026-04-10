@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.utils.handlers.weight import DualModelWeightHandler
-from emperor.linears.utils.presets import LinearPresets
+from emperor.linears.core.presets import LinearPresets
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
 from emperor.augmentations.adaptive_parameters.utils.handlers.parameter import (
     DepthMappingLayer,

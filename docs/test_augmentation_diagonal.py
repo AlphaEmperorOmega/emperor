@@ -5,7 +5,7 @@ import unittest
 from emperor.base.utils import Module
 from emperor.config import ModelConfig
 from emperor.augmentations.adaptive_parameters.utils.factory import DynamicDiagonalFactory
-from emperor.linears.utils.presets import LinearPresets
+from emperor.linears.core.presets import LinearPresets
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
 from emperor.augmentations.adaptive_parameters.utils.handlers.diagonal import (
     DiagonalHandlerAbstract,

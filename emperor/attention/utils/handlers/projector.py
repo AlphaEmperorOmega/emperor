@@ -4,7 +4,7 @@ from torch.types import Tensor
 from emperor.base.utils import Module
 from torch.nn.modules import Sequential
 from emperor.sampler.model import SamplerModel
-from emperor.linears.utils.layers import LinearBase
+from emperor.linears.core.layers import LinearBase
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.sampler.utils.routers import RouterConfig, RouterModel

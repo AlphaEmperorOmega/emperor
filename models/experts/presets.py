@@ -2,7 +2,7 @@ import models.experts.config as config
 
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.sampler.utils.routers import RouterConfig

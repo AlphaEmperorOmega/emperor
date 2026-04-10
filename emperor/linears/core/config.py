@@ -31,7 +31,7 @@ class LinearLayerConfig(ConfigBase):
         self,
         overrides: "LinearLayerConfig | None" = None,
     ) -> "Module":
-        from emperor.linears.utils.layers import LinearLayer
+        from emperor.linears.core.layers import LinearLayer
 
         return LinearLayer(self, overrides)
 
@@ -46,6 +46,6 @@ class AdaptiveLinearLayerConfig(LinearLayerConfig):
     )
 
     def build(self, overrides: "AdaptiveLinearLayerConfig | None" = None) -> "Module":
-        from emperor.linears.utils.layers import AdaptiveLinearLayer
+        from emperor.linears.core.layers import AdaptiveLinearLayer
 
         return AdaptiveLinearLayer(self, overrides)

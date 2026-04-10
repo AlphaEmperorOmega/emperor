@@ -3,7 +3,7 @@ import unittest
 
 from dataclasses import asdict
 from emperor.config import ModelConfig
-from emperor.linears.utils.presets import LinearPresets
+from emperor.linears.core.presets import LinearPresets
 from emperor.augmentations.adaptive_parameters.utils.factory import DynamicMemoryFactory
 from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,

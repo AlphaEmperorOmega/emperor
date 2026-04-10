@@ -39,7 +39,7 @@ class MemoryHandlerAbstract(Module):
         return self.output_dim
 
     def _init_model(self, config, overrides) -> "Layer | Sequential":
-        from emperor.linears.utils.stack import LinearLayerStack
+        from emperor.linears.core.stack import LinearLayerStack
 
         return LinearLayerStack(config, overrides).build_model()
 

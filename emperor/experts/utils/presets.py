@@ -1,7 +1,7 @@
 from emperor.config import ModelConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.sampler.utils.presets import SamplerPresets
-from emperor.linears.utils.presets import LinearPresets
+from emperor.linears.core.presets import LinearPresets
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions

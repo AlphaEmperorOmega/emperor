@@ -3,7 +3,7 @@ from torch import Tensor
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.linears.utils.layers import LinearBase
+    from emperor.linears.core.layers import LinearBase
 
 
 class LinearBaseValidator:

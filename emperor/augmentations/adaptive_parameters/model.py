@@ -78,7 +78,7 @@ class AdaptiveParameterAugmentation(Module):
     def __build_model(
         self, is_valid_flag: bool, factory_class: type[Module]
     ) -> Module | None:
-        from emperor.linears.utils.config import LinearLayerConfig
+        from emperor.linears.core.config import LinearLayerConfig
 
         if not is_valid_flag:
             return None

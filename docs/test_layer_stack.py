@@ -13,7 +13,7 @@ from emperor.base.layer import (
     LayerStackConfig,
     LayerState,
 )
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 
 
 class TestLayerStack(unittest.TestCase):

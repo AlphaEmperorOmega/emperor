@@ -16,7 +16,7 @@ from emperor.halting.utils.options.stick_breaking import (
     StickBreaking,
     StickBreakingState,
 )
-from emperor.linears.utils.config import LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.enums import LastLayerBiasOptions
 
 
