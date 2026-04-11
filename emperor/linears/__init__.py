@@ -1,5 +1,3 @@
-from .options import LinearLayerOptions, LinearLayerStackOptions
-from .core.stack import LinearLayerStack, AdaptiveLinearLayerStack
 from .core.config import LinearLayerConfig, AdaptiveLinearLayerConfig
 from .core.layers import (
     LinearLayer,
@@ -12,13 +10,7 @@ __all__ = [
     "LinearLayer",
     "AdaptiveLinearLayer",
     "LinearBase",
-    # Stack classes
-    "LinearLayerStack",
-    "AdaptiveLinearLayerStack",
     # Configuration
     "LinearLayerConfig",
     "AdaptiveLinearLayerConfig",
-    # Options/Enums
-    "LinearLayerOptions",
-    "LinearLayerStackOptions",
 ]
