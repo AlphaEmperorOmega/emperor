@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Parameter
 from emperor.base.utils import Module
-from emperor.linears.core._validator import LinearBaseValidator
+from emperor.linears.core._validator import LinearValidator
 from emperor.linears.core.config import LinearLayerConfig, AdaptiveLinearLayerConfig
 from emperor.augmentations.adaptive_parameters.model import (
     AdaptiveParameterAugmentation,
@@ -33,7 +33,7 @@ class LinearBase(Module):
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag
         self.weight_params, self.bias_params = self._init_parameters()
-        LinearBaseValidator.validate(self)
+        LinearValidator.validate(self)
 
     def _init_parameters(self) -> tuple[Parameter, Parameter | None]:
         weight_params = self.__init_weight_parameters()
@@ -51,7 +51,6 @@ class LinearBase(Module):
         return self._init_parameter_bank(bias_shape, nn.init.zeros_)
 
 
-
 class LinearLayer(LinearBase):
     def __init__(
         self,
@@ -61,7 +60,7 @@ class LinearLayer(LinearBase):
         super().__init__(cfg, overrides)
 
     def forward(self, X: Tensor) -> Tensor:
-        LinearBaseValidator.validate_input_shape(X)
+        LinearValidator.validate_input_shape(X)
         return F.linear(X, self.weight_params.T, self.bias_params)
 
 
@@ -72,6 +71,7 @@ class AdaptiveLinearLayer(LinearBase):
         overrides: "AdaptiveLinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
+        LinearValidator.validate_adaptive(self.cfg)
         self.adaptive_augmentation_config = self.cfg.adaptive_augmentation_config
         self.adaptive_behaviour = self.__init_behaviour()
 
@@ -85,7 +85,7 @@ class AdaptiveLinearLayer(LinearBase):
         )
 
     def forward(self, X: Tensor) -> Tensor:
-        LinearBaseValidator.validate_input_shape(X)
+        LinearValidator.validate_input_shape(X)
         return self.adaptive_behaviour.compute_adaptive_parameters(
             self._compute_affine_transformation_callback,
             self.weight_params,

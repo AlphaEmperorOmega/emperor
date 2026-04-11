@@ -1,41 +1,31 @@
 from torch import Tensor
 
+from emperor.base.validator import ValidatorBase
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from emperor.linears.core.config import AdaptiveLinearLayerConfig
     from emperor.linears.core.layers import LinearBase
 
 
-class LinearBaseValidator:
+class LinearValidator(ValidatorBase):
+    OPTIONAL_FIELDS = {"override_config"}
+
     @staticmethod
     def validate(model: "LinearBase") -> None:
-        LinearBaseValidator.__validate_required_fields(model)
-        LinearBaseValidator.__validate_dimensions(model.input_dim, model.output_dim)
-        LinearBaseValidator.__validate_bias_flag(model.bias_flag)
+        LinearValidator.validate_required_fields(model.cfg)
+        LinearValidator.validate_field_types(model.cfg)
+        LinearValidator.validate_dimensions(
+            input_dim=model.input_dim, output_dim=model.output_dim
+        )
 
     @staticmethod
-    def __validate_required_fields(model: "LinearBase") -> None:
-        name = model.__class__.__name__
-        if model.input_dim is None:
-            raise ValueError(f"input_dim is required for {name}")
-        if model.output_dim is None:
-            raise ValueError(f"output_dim is required for {name}")
-        if model.bias_flag is None:
-            raise ValueError(f"bias_flag is required for {name}")
-
-    @staticmethod
-    def __validate_dimensions(input_dim: int, output_dim: int) -> None:
-        if input_dim <= 0:
-            raise ValueError(f"input_dim must be greater than 0, received {input_dim}")
-        if output_dim <= 0:
+    def validate_adaptive(cfg: "AdaptiveLinearLayerConfig") -> None:
+        if cfg.adaptive_augmentation_config is None:
             raise ValueError(
-                f"output_dim must be greater than 0, received {output_dim}"
+                f"adaptive_augmentation_config is required for {cfg.__class__.__name__}"
             )
-
-    @staticmethod
-    def __validate_bias_flag(bias_flag: bool) -> None:
-        if not isinstance(bias_flag, bool):
-            raise TypeError(f"bias_flag must be a bool, got {type(bias_flag).__name__}")
 
     @staticmethod
     def validate_input_shape(X: Tensor) -> None:
