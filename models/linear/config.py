@@ -6,7 +6,7 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
-from emperor.linears.core.callbacks import LinearMonitorCallback
+from emperor.linears.core.monitor import LinearMonitorCallback
 from models.trainer_config import *
 
 # Global
