@@ -1,4 +1,5 @@
 from emperor.base.utils import ConfigBase
+from emperor.base.validator import ValidatorBase
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
 
 from typing import TYPE_CHECKING
@@ -7,7 +8,7 @@ if TYPE_CHECKING:
     from emperor.halting.config import HaltingConfig
 
 
-class LayerValidator:
+class LayerValidator(ValidatorBase):
     OPTIONAL_FIELDS = {
         "gate_config",
         "halting_config",
@@ -17,8 +18,11 @@ class LayerValidator:
 
     @staticmethod
     def validate(cfg: LayerConfig) -> None:
-        LayerValidator.__validate_required_fields(cfg)
-        LayerValidator.__validate_dimensions(cfg.input_dim, cfg.output_dim)
+        LayerValidator.validate_required_fields(cfg)
+        LayerValidator.validate_field_types(cfg)
+        LayerValidator.validate_dimensions(
+            input_dim=cfg.input_dim, output_dim=cfg.output_dim
+        )
         LayerValidator.__validate_dropout_probability(cfg.dropout_probability)
         LayerValidator.__validate_model_config(cfg.model_config)
         LayerValidator.__validate_gate_config(cfg.gate_config)
@@ -28,23 +32,6 @@ class LayerValidator:
         LayerValidator.__validate_halting_dimensions(
             cfg.input_dim, cfg.output_dim, cfg.halting_config
         )
-
-    @staticmethod
-    def __validate_required_fields(cfg: LayerConfig) -> None:
-        for field_name in cfg.__dataclass_fields__:
-            if field_name in LayerValidator.OPTIONAL_FIELDS:
-                continue
-            if getattr(cfg, field_name) is None:
-                raise ValueError(f"{field_name} is required, received None")
-
-    @staticmethod
-    def __validate_dimensions(input_dim: int, output_dim: int) -> None:
-        if input_dim <= 0:
-            raise ValueError(f"input_dim must be greater than 0, received {input_dim}")
-        if output_dim <= 0:
-            raise ValueError(
-                f"output_dim must be greater than 0, received {output_dim}"
-            )
 
     @staticmethod
     def __validate_dropout_probability(dropout_probability: float) -> None:
@@ -123,56 +110,33 @@ class LayerValidator:
             )
 
 
-class LayerStackValidator:
+class LayerStackValidator(ValidatorBase):
+    OPTIONAL_FIELDS = {
+        "layer_type",
+        "override_config",
+    }
+
     @staticmethod
     def validate(cfg: "LayerStackConfig") -> None:
-        LayerStackValidator.__validate_required_fields(cfg)
-        LayerStackValidator.__validate_dimensions(cfg)
+        LayerStackValidator.validate_required_fields(cfg)
+        LayerStackValidator.validate_field_types(cfg)
+        LayerStackValidator.validate_dimensions(
+            input_dim=cfg.input_dim,
+            hidden_dim=cfg.hidden_dim,
+            output_dim=cfg.output_dim,
+            num_layers=cfg.num_layers,
+        )
+        LayerStackValidator.__validate_layer_config(cfg.layer_config)
         LayerStackValidator.__validate_halting_config(cfg)
 
     @staticmethod
-    def __validate_required_fields(cfg: "LayerStackConfig") -> None:
-        if cfg.input_dim is None:
-            raise ValueError(f"input_dim is required, received {cfg.input_dim}")
-        if cfg.hidden_dim is None:
-            raise ValueError(f"hidden_dim is required, received {cfg.hidden_dim}")
-        if cfg.output_dim is None:
-            raise ValueError(f"output_dim is required, received {cfg.output_dim}")
-        if cfg.num_layers is None:
-            raise ValueError(f"num_layers is required, received {cfg.num_layers}")
-        if cfg.last_layer_bias_option is None:
-            raise ValueError(
-                f"last_layer_bias_option is required, received {cfg.last_layer_bias_option}"
-            )
-        if cfg.apply_output_pipeline_flag is None:
-            raise ValueError(
-                f"apply_output_pipeline_flag is required, received {cfg.apply_output_pipeline_flag}"
-            )
-        if cfg.layer_config is None:
-            raise ValueError(f"layer_config is required, received {cfg.layer_config}")
-        if not isinstance(cfg.layer_config, LayerConfig):
+    def __validate_layer_config(layer_config: "LayerConfig | None") -> None:
+        if layer_config is None:
+            raise ValueError(f"layer_config is required, received None")
+        if not isinstance(layer_config, LayerConfig):
             raise TypeError(
                 f"layer_config must be an instance of LayerConfig, "
-                f"got {type(cfg.layer_config).__name__}"
-            )
-
-    @staticmethod
-    def __validate_dimensions(cfg: "LayerStackConfig") -> None:
-        if cfg.input_dim is not None and cfg.input_dim <= 0:
-            raise ValueError(
-                f"input_dim must be greater than 0, received {cfg.input_dim}"
-            )
-        if cfg.hidden_dim is not None and cfg.hidden_dim <= 0:
-            raise ValueError(
-                f"hidden_dim must be greater than 0, received {cfg.hidden_dim}"
-            )
-        if cfg.output_dim is not None and cfg.output_dim <= 0:
-            raise ValueError(
-                f"output_dim must be greater than 0, received {cfg.output_dim}"
-            )
-        if cfg.num_layers is not None and cfg.num_layers <= 0:
-            raise ValueError(
-                f"num_layers must be greater than 0, received {cfg.num_layers}"
+                f"got {type(layer_config).__name__}"
             )
 
     @staticmethod
