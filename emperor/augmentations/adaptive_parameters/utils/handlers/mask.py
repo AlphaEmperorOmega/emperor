@@ -1,15 +1,33 @@
 import torch
 
 from torch import Tensor
-from emperor.base.utils import Module
+from dataclasses import dataclass, field
+from emperor.base.utils import Module, ConfigBase
 from emperor.base.layer import LayerStackConfig
-from emperor.augmentations.adaptive_parameters.options import MaskDimensionOptions
+from emperor.augmentations.adaptive_parameters.options import (
+    MaskDimensionOptions,
+    RowMaskOptions,
+)
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.config import (
         AdaptiveParameterAugmentationConfig,
+    )
+
+
+@dataclass
+class MaskHandlerConfig(ConfigBase):
+    row_mask_option: RowMaskOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Input-dependent row masking of the weight matrix after weight updates."
+        },
+    )
+    dimension_option: MaskDimensionOptions | None = field(
+        default=None,
+        metadata={"help": "Whether to mask rows or columns of the weight matrix."},
     )
 
 
@@ -183,12 +201,16 @@ class DiagonalMaskHandler(MaskHandlerAbstract):
         row_count = weight_params.shape[-2]
         col_count = weight_params.shape[-1]
         min_diagonal_shift = 1 - row_count
-        raw_diagonal_shift = (keep_fraction * (row_count + col_count)).long().squeeze(-1) - row_count
+        raw_diagonal_shift = (keep_fraction * (row_count + col_count)).long().squeeze(
+            -1
+        ) - row_count
         diagonal_shift = raw_diagonal_shift.clamp(min=min_diagonal_shift)
         row_indices = torch.arange(row_count, device=weight_params.device)
         col_indices = torch.arange(col_count, device=weight_params.device)
         diagonal_mask = (
-            col_indices.unsqueeze(0) <= (row_count - 1 - row_indices).unsqueeze(1) + diagonal_shift[..., None, None]
+            col_indices.unsqueeze(0)
+            <= (row_count - 1 - row_indices).unsqueeze(1)
+            + diagonal_shift[..., None, None]
         ).float()
         sparsified_weights = weight_params * diagonal_mask
         if self.training:

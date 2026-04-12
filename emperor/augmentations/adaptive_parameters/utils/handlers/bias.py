@@ -1,9 +1,11 @@
 import torch
 
+from dataclasses import dataclass, field
 from torch import Tensor
 from torch.nn import Sequential
-from emperor.base.utils import Module
+from emperor.base.utils import Module, ConfigBase
 from emperor.base.layer import Layer, LayerStackConfig
+from emperor.augmentations.adaptive_parameters.options import DynamicBiasOptions
 from emperor.augmentations.adaptive_parameters.utils.handlers._validator import (
     BiasHandlerAbstractValidator,
 )
@@ -13,6 +15,22 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.config import (
         AdaptiveParameterAugmentationConfig,
+    )
+
+
+@dataclass
+class BiasHandlerConfig(ConfigBase):
+    bias_flag: bool | None = field(
+        default=None,
+        metadata={"help": "Whether the linear layer has a bias parameter."},
+    )
+    bias_option: DynamicBiasOptions | None = field(
+        default=None,
+        metadata={"help": "Input-dependent adjustment of the bias vector."},
+    )
+    bank_expansion_factor: int | None = field(
+        default=None,
+        metadata={"help": "Size of the weight bank for WEIGHTED_BANK bias option."},
     )
 
 

@@ -3,9 +3,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from emperor.base.utils import Module
-from emperor.augmentations.adaptive_parameters.options import WeightNormalizationOptions
-from emperor.augmentations.adaptive_parameters.utils.handlers.parameter import (
+from dataclasses import dataclass, field
+from emperor.base.utils import Module, ConfigBase
+from emperor.augmentations.adaptive_parameters.options import (
+    DynamicDepthOptions,
+    DynamicWeightOptions,
+    WeightNormalizationOptions,
+)
+from emperor.augmentations.adaptive_parameters.utils.handlers.depth_mapper import (
     DepthMappingLayerStack,
 )
 from emperor.base.layer import (
@@ -17,6 +22,34 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.config import (
         AdaptiveParameterAugmentationConfig,
+    )
+
+
+@dataclass
+class WeightHandlerConfig(ConfigBase):
+    weight_option: DynamicWeightOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Selects the weight handler type for input-dependent weight adjustments."
+        },
+    )
+    normalization: WeightNormalizationOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Normalization applied to vectors before the outer product computation."
+        },
+    )
+    generator_depth: DynamicDepthOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Depth of the generator network that produces input-dependent weight adjustments."
+        },
+    )
+    bank_expansion_factor: int | None = field(
+        default=None,
+        metadata={
+            "help": "Number of times default weight parameter bank will be scaled by for example (weight_bank_expansion_factor * input_dim, output_dim)"
+        },
     )
 
 

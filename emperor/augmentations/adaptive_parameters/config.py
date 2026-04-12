@@ -1,18 +1,11 @@
 from dataclasses import dataclass, field
 from emperor.base.layer.config import LayerStackConfig
 from emperor.base.utils import ConfigBase
-from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
-    DynamicDepthOptions,
-    DynamicDiagonalOptions,
-    DynamicWeightOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
-    MaskDimensionOptions,
-    RowMaskOptions,
-    WeightNormalizationOptions,
-)
+from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
+from emperor.augmentations.adaptive_parameters.utils.handlers.bias import BiasHandlerConfig
+from emperor.augmentations.adaptive_parameters.utils.handlers.weight import WeightHandlerConfig
+from emperor.augmentations.adaptive_parameters.utils.handlers.mask import MaskHandlerConfig
+from emperor.augmentations.adaptive_parameters.utils.handlers.memory import MemoryHandlerConfig
 
 
 @dataclass
@@ -25,69 +18,25 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
         default=None,
         metadata={"help": "Output dimension of the linear layer"},
     )
-    weight_option: DynamicWeightOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Selects the weight handler type for input-dependent weight adjustments."
-        },
-    )
-    weight_normalization: WeightNormalizationOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Normalization applied to vectors before the outer product computation."
-        },
-    )
-    generator_depth: DynamicDepthOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Depth of the generator network that produces input-dependent weight adjustments."
-        },
-    )
     diagonal_option: DynamicDiagonalOptions | None = field(
         default=None,
         metadata={"help": "Input-dependent adjustment of the weight matrix diagonal."},
     )
-    bias_flag: bool | None = field(
+    weight_config: WeightHandlerConfig | None = field(
         default=None,
-        metadata={"help": "Whether the linear layer has a bias parameter."},
+        metadata={"help": "Configuration for input-dependent weight adjustments."},
     )
-    bias_option: DynamicBiasOptions | None = field(
+    bias_config: BiasHandlerConfig | None = field(
         default=None,
-        metadata={"help": "Input-dependent adjustment of the bias vector."},
+        metadata={"help": "Configuration for input-dependent bias adjustments."},
     )
-    bias_bank_expansion_factor: int | None = field(
+    mask_config: MaskHandlerConfig | None = field(
         default=None,
-        metadata={"help": "Size of the weight bank for WEIGHTED_BANK bias option."},
+        metadata={"help": "Configuration for input-dependent weight matrix masking."},
     )
-    weight_bank_expansion_factor: int | None = field(
+    memory_config: MemoryHandlerConfig | None = field(
         default=None,
-        metadata={
-            "help": "Number of times default weight parameter bank will be scaled by for example (weight_bank_expansion_factor * input_dim, output_dim)"
-        },
-    )
-    row_mask_option: RowMaskOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Input-dependent row masking of the weight matrix after weight updates."
-        },
-    )
-    mask_dimension_option: MaskDimensionOptions | None = field(
-        default=None,
-        metadata={"help": "Whether to mask rows or columns of the weight matrix."},
-    )
-    memory_option: LinearMemoryOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Blends a learned memory representation with the linear layer input or output."
-        },
-    )
-    memory_size_option: LinearMemorySizeOptions | None = field(
-        default=None,
-        metadata={"help": "Size of the learned memory representation."},
-    )
-    memory_position_option: LinearMemoryPositionOptions | None = field(
-        default=None,
-        metadata={"help": "Controls when memory is applied in the computation."},
+        metadata={"help": "Configuration for learned memory representation blending."},
     )
     model_config: LayerStackConfig | None = field(
         default=None,

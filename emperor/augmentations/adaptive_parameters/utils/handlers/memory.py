@@ -1,9 +1,12 @@
 import torch
+
 from torch import Tensor
 from torch.nn import Sequential
-from emperor.base.utils import Module
+from dataclasses import dataclass, field
+from emperor.base.utils import Module, ConfigBase
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import (
+    LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
@@ -11,7 +14,27 @@ from emperor.augmentations.adaptive_parameters.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
+    from emperor.augmentations.adaptive_parameters.config import (
+        AdaptiveParameterAugmentationConfig,
+    )
+
+
+@dataclass
+class MemoryHandlerConfig(ConfigBase):
+    memory_option: LinearMemoryOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Blends a learned memory representation with the linear layer input or output."
+        },
+    )
+    size_option: LinearMemorySizeOptions | None = field(
+        default=None,
+        metadata={"help": "Size of the learned memory representation."},
+    )
+    position_option: LinearMemoryPositionOptions | None = field(
+        default=None,
+        metadata={"help": "Controls when memory is applied in the computation."},
+    )
 
 
 class MemoryHandlerAbstract(Module):
