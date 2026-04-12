@@ -54,7 +54,7 @@ class TestHalting(unittest.TestCase):
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
-                    model_config=LinearLayerConfig(
+                    layer_model_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=input_dim,
                         bias_flag=gate_bias_flag,

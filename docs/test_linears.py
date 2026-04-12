@@ -193,7 +193,7 @@ class TestLinearLayerStack(unittest.TestCase):
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
-                    model_config=LinearLayerConfig(
+                    layer_model_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,
@@ -223,7 +223,7 @@ class TestLinearLayerStack(unittest.TestCase):
                         halting_config=None,
                         shared_halting_flag=False,
                         gate_config=None,
-                        model_config=LinearLayerConfig(
+                        layer_model_config=LinearLayerConfig(
                             input_dim=output_dim,
                             output_dim=output_dim,
                             bias_flag=True,
@@ -249,7 +249,7 @@ class TestLinearLayerStack(unittest.TestCase):
                 gate_config=gate_config,
                 halting_config=halting_config,
                 shared_halting_flag=shared_halting_flag,
-                model_config=LinearLayerConfig(
+                layer_model_config=LinearLayerConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     bias_flag=bias_flag,
@@ -359,7 +359,7 @@ class TestLinearLayerStack(unittest.TestCase):
 #                         gate_config=None,
 #                         halting_config=None,
 #                         shared_halting_flag=False,
-#                         model_config=LinearLayerConfig(
+#                         layer_model_config=LinearLayerConfig(
 #                             input_dim=input_dim,
 #                             output_dim=output_dim,
 #                             bias_flag=bias_flag,

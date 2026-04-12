@@ -51,7 +51,7 @@ class TestLayerStack(unittest.TestCase):
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
-                    model_config=LinearLayerConfig(
+                    layer_model_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,
@@ -84,7 +84,7 @@ class TestLayerStack(unittest.TestCase):
                         halting_config=None,
                         shared_halting_flag=False,
                         gate_config=None,
-                        model_config=LinearLayerConfig(
+                        layer_model_config=LinearLayerConfig(
                             input_dim=output_dim,
                             output_dim=output_dim,
                             bias_flag=True,
@@ -110,7 +110,7 @@ class TestLayerStack(unittest.TestCase):
                 gate_config=gate_config,
                 halting_config=halting_config,
                 shared_halting_flag=shared_halting_flag,
-                model_config=LinearLayerConfig(
+                layer_model_config=LinearLayerConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     bias_flag=bias_flag,
@@ -375,7 +375,7 @@ class TestLayerStack(unittest.TestCase):
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 shared_halting_flag=False,
                 gate_config=None,
-                model_config=LinearLayerConfig(bias_flag=True),
+                layer_model_config=LinearLayerConfig(bias_flag=True),
             ),
         )
         invalid_configs = [
@@ -394,7 +394,7 @@ class TestLayerStack(unittest.TestCase):
                     residual_flag=False,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    model_config=LinearLayerConfig(bias_flag=True),
+                    layer_model_config=LinearLayerConfig(bias_flag=True),
                     **invalid,
                 )
                 gate_config = LayerStackConfig(
@@ -432,7 +432,7 @@ class TestLayerStack(unittest.TestCase):
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
-                    model_config=LinearLayerConfig(
+                    layer_model_config=LinearLayerConfig(
                         input_dim=dim,
                         output_dim=dim,
                         bias_flag=True,
@@ -491,11 +491,11 @@ class TestLayerStack(unittest.TestCase):
                         self.assertIsNone(result)
                     else:
                         self.assertIsInstance(result, LayerConfig)
-                        self.assertIsNotNone(result.model_config)
+                        self.assertIsNotNone(result.layer_model_config)
                         if bias_option == LastLayerBiasOptions.DISABLED:
-                            self.assertFalse(result.model_config.bias_flag)
+                            self.assertFalse(result.layer_model_config.bias_flag)
                         elif bias_option == LastLayerBiasOptions.ENABLED:
-                            self.assertTrue(result.model_config.bias_flag)
+                            self.assertTrue(result.layer_model_config.bias_flag)
 
     def test_create_layer(self):
         dim_pairs = [(8, 8), (8, 16), (16, 8)]

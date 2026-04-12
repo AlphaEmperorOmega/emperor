@@ -95,16 +95,16 @@ class LayerStack(Module):
     def __resolve_last_layer_bias_override(self) -> LayerConfig | None:
         if self.last_layer_bias_option == LastLayerBiasOptions.DEFAULT:
             return None
-        if not hasattr(self.layer_config.model_config, "bias_flag"):
+        if not hasattr(self.layer_config.layer_model_config, "bias_flag"):
             return None
 
-        model_config = deepcopy(self.layer_config.model_config)
+        model_config = deepcopy(self.layer_config.layer_model_config)
         match self.last_layer_bias_option:
             case LastLayerBiasOptions.DISABLED:
                 model_config.bias_flag = False
             case LastLayerBiasOptions.ENABLED:
                 model_config.bias_flag = True
-        return LayerConfig(model_config=model_config)
+        return LayerConfig(layer_model_config=model_config)
 
     def __create_layer(
         self,

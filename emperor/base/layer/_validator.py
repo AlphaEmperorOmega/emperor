@@ -12,7 +12,7 @@ class LayerValidator(ValidatorBase):
     OPTIONAL_FIELDS = {
         "gate_config",
         "halting_config",
-        "model_config",
+        "layer_model_config",
         "override_config",
     }
 
@@ -24,7 +24,7 @@ class LayerValidator(ValidatorBase):
             input_dim=cfg.input_dim, output_dim=cfg.output_dim
         )
         LayerValidator.__validate_dropout_probability(cfg.dropout_probability)
-        LayerValidator.__validate_model_config(cfg.model_config)
+        LayerValidator.__validate_model_config(cfg.layer_model_config)
         LayerValidator.__validate_gate_config(cfg.gate_config)
         LayerValidator.__validate_halting_config(
             cfg.halting_config, cfg.shared_halting_flag
@@ -44,7 +44,7 @@ class LayerValidator(ValidatorBase):
     def __validate_model_config(model_config: ConfigBase | None) -> None:
         if model_config is None:
             raise ValueError(
-                "model_config is required, Layer needs it to build the model"
+                "layer_model_config is required, Layer needs it to build the model"
             )
         if not isinstance(model_config, ConfigBase):
             raise TypeError(

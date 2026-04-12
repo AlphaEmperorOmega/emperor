@@ -1,6 +1,7 @@
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
+from emperor.base.layer.config import LayerConfig, LayerStackConfig
 import torch
 import unittest
 import torch.nn as nn
@@ -9,6 +10,7 @@ from emperor.base.utils import Module
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
     DualModelWeightHandler,
+    WeightHandlerConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
 from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
@@ -115,19 +117,32 @@ class TestDepthMappingLayerStack(TestDepthMappingAugmentation):
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
     ) -> AdaptiveParameterAugmentationConfig:
 
-        return AdaptiveParameterAugmentationConfig(
+        return WeightHandlerConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            diagonal_option=diagonal_option,
-            weight_config=None,
-            bias_config=None,
-            mask_config=None,
-            memory_config=None,
-            model_config=LinearLayerConfig(
+            model_config=LayerStackConfig(
                 input_dim=input_dim,
+                hidden_dim=hidden_dim,
                 output_dim=output_dim,
-                bias_flag=bias_flag,
-                generator_depth=generator_depth,
+                num_layers=stack_num_layers,
+                last_layer_bias_option=last_layer_bias_option,
+                apply_output_pipeline_flag=apply_output_pipeline_flag,
+                layer_config=LayerConfig(
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    activation=stack_activation,
+                    layer_norm_position=layer_norm_position,
+                    residual_flag=stack_residual_flag,
+                    dropout_probability=stack_dropout_probability,
+                    gate_config=gate_config,
+                    halting_config=halting_config,
+                    shared_halting_flag=shared_halting_flag,
+                    layer_model_config=LinearLayerConfig(
+                        input_dim=input_dim,
+                        output_dim=output_dim,
+                        bias_flag=bias_flag,
+                    ),
+                ),
             ),
         )
 

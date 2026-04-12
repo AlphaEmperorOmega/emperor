@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         DepthMappingLayer,
         DepthMappingLayerConfig,
     )
+    from emperor.base.layer import LayerStackConfig
 
 
 class BiasHandlerAbstractValidator:
@@ -23,15 +24,15 @@ class BiasHandlerAbstractValidator:
             )
 
 
-class DepthMappingLayerValidator(ValidatorBase):
+class DepthMappingValidator(ValidatorBase):
     @staticmethod
     def validate(model: "DepthMappingLayer") -> None:
-        DepthMappingLayerValidator.validate_required_fields(model.cfg)
-        DepthMappingLayerValidator.validate_field_types(model.cfg)
-        DepthMappingLayerValidator.validate_dimensions(
+        DepthMappingValidator.validate_required_fields(model.cfg)
+        DepthMappingValidator.validate_field_types(model.cfg)
+        DepthMappingValidator.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
-        DepthMappingLayerValidator.validate_generator_depth(model.cfg)
+        DepthMappingValidator.validate_generator_depth(model.cfg)
 
     @staticmethod
     def validate_generator_depth(cfg: "DepthMappingLayerConfig") -> None:
@@ -40,4 +41,23 @@ class DepthMappingLayerValidator(ValidatorBase):
                 f"generator_depth must be greater than 0 for DepthMappingLayer, "
                 f"received {cfg.generator_depth}. "
                 f"Use DEPTH_OF_ONE, DEPTH_OF_TWO, or DEPTH_OF_THREE"
+            )
+
+    @staticmethod
+    def validate_input_is_2d(input_batch: Tensor) -> None:
+        if not input_batch.dim() == 2:
+            raise ValueError(
+                f"DepthMappingLayerStack expects a 2D input tensor (batch_size, features), "
+                f"received {input_batch.dim()}D tensor with shape {tuple(input_batch.shape)}"
+            )
+
+    @staticmethod
+    def validate_inner_model_is_linear_layer_config(model_config: "LayerStackConfig") -> None:
+        from emperor.linears.core.config import LinearLayerConfig
+
+        inner_config = model_config.layer_config.layer_model_config
+        if not isinstance(inner_config, LinearLayerConfig):
+            raise TypeError(
+                f"model_config.layer_config.layer_model_config must be a LinearLayerConfig, "
+                f"received {type(inner_config).__name__}"
             )

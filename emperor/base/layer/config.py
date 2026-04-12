@@ -57,7 +57,7 @@ class LayerConfig(ConfigBase):
             "help": "If True, one halting module is shared across all layers; if False, each layer gets its own"
         },
     )
-    model_config: ConfigBase | None = field(
+    layer_model_config: ConfigBase | None = field(
         default=None,
         metadata={"help": "Config used to build the model module within the layer"},
     )

@@ -69,61 +69,57 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        gate_config = None
-        if gate_config is None:
-            gate_config = LayerStackConfig(
-                input_dim=input_dim,
-                hidden_dim=hidden_dim,
-                output_dim=output_dim,
+        gate_config = LayerStackConfig(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_layers=stack_num_layers,
+            last_layer_bias_option=stack_last_layer_bias_option,
+            apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
+            layer_config=LayerConfig(
+                activation=stack_activation,
+                layer_norm_position=layer_norm_position,
+                residual_flag=stack_residual_flag,
+                dropout_probability=stack_dropout_probability,
+                halting_config=None,
+                shared_halting_flag=False,
+                gate_config=None,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    bias_flag=bias_flag,
+                ),
+            ),
+        )
+
+        halting_config = StickBreakingConfig(
+            input_dim=output_dim,
+            threshold=0.99,
+            halting_dropout=0.0,
+            hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            halting_gate_config=LayerStackConfig(
+                input_dim=output_dim,
+                hidden_dim=output_dim,
+                output_dim=2,
                 num_layers=stack_num_layers,
-                last_layer_bias_option=stack_last_layer_bias_option,
-                apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
+                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                apply_output_pipeline_flag=False,
                 layer_config=LayerConfig(
-                    activation=stack_activation,
-                    layer_norm_position=layer_norm_position,
+                    activation=ActivationOptions.DISABLED,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
                     residual_flag=stack_residual_flag,
                     dropout_probability=stack_dropout_probability,
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
-                    model_config=LinearLayerConfig(
-                        input_dim=input_dim,
+                    layer_model_config=LinearLayerConfig(
+                        input_dim=output_dim,
                         output_dim=output_dim,
-                        bias_flag=bias_flag,
+                        bias_flag=True,
                     ),
                 ),
-            )
-
-        halting_config = None
-        if stack_num_layers > 1 and input_dim == hidden_dim == output_dim:
-            halting_config = StickBreakingConfig(
-                input_dim=output_dim,
-                threshold=0.99,
-                halting_dropout=0.0,
-                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
-                halting_gate_config=LayerStackConfig(
-                    input_dim=output_dim,
-                    hidden_dim=output_dim,
-                    output_dim=2,
-                    num_layers=stack_num_layers,
-                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                    apply_output_pipeline_flag=False,
-                    layer_config=LayerConfig(
-                        activation=ActivationOptions.DISABLED,
-                        layer_norm_position=LayerNormPositionOptions.DISABLED,
-                        residual_flag=stack_residual_flag,
-                        dropout_probability=stack_dropout_probability,
-                        halting_config=None,
-                        shared_halting_flag=False,
-                        gate_config=None,
-                        model_config=LinearLayerConfig(
-                            input_dim=output_dim,
-                            output_dim=output_dim,
-                            bias_flag=True,
-                        ),
-                    ),
-                ),
-            )
+            ),
+        )
 
         return ModelConfig(
             batch_size=batch_size,
@@ -149,7 +145,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                         gate_config=gate_config,
                         halting_config=halting_config,
                         shared_halting_flag=False,
-                        model_config=LinearLayerConfig(
+                        layer_model_config=LinearLayerConfig(
                             input_dim=input_dim,
                             output_dim=output_dim,
                             bias_flag=bias_flag,

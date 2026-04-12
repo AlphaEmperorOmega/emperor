@@ -50,7 +50,7 @@ class TestLayer(unittest.TestCase):
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
-                    model_config=LinearLayerConfig(
+                    layer_model_config=LinearLayerConfig(
                         input_dim=output_dim,
                         output_dim=output_dim,
                         bias_flag=gate_bias_flag,
@@ -79,7 +79,7 @@ class TestLayer(unittest.TestCase):
                         halting_config=None,
                         shared_halting_flag=False,
                         gate_config=None,
-                        model_config=LinearLayerConfig(
+                        layer_model_config=LinearLayerConfig(
                             input_dim=output_dim,
                             output_dim=output_dim,
                             bias_flag=True,
@@ -98,13 +98,10 @@ class TestLayer(unittest.TestCase):
             gate_config=gate_config,
             halting_config=halting_config,
             shared_halting_flag=shared_halting_flag,
-            model_config=LinearLayerConfig(
+            layer_model_config=LinearLayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
-                override_config=AdaptiveParameterAugmentationConfig(
-                    generator_depth=DynamicDepthOptions.DISABLED,
-                ),
             ),
         )
 
@@ -122,7 +119,7 @@ class TestLayer(unittest.TestCase):
         self.assertEqual(layer.gate_config, cfg.gate_config)
         self.assertEqual(layer.halting_config, cfg.halting_config)
         self.assertEqual(layer.shared_halting_flag, cfg.shared_halting_flag or False)
-        self.assertEqual(layer.model_config, cfg.model_config)
+        self.assertEqual(layer.layer_model_config, cfg.layer_model_config)
         self.assertFalse(layer.last_layer_flag)
 
     def test_init_with_overrides(self):
@@ -145,11 +142,11 @@ class TestLayer(unittest.TestCase):
     def test_build_model(self):
         cfg = self.preset()
         layer = Layer(cfg)
-        model_configs = [cfg.model_config, None]
+        model_configs = [cfg.layer_model_config, None]
 
         for model_config in model_configs:
             with self.subTest(has_config=model_config is not None):
-                layer.model_config = model_config
+                layer.layer_model_config = model_config
                 result = layer._Layer__build_model()
 
                 if model_config is not None:
@@ -488,7 +485,7 @@ class TestLayer(unittest.TestCase):
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
-                    model_config=LinearLayerConfig(
+                    layer_model_config=LinearLayerConfig(
                         input_dim=dim,
                         output_dim=dim,
                         bias_flag=True,

@@ -41,7 +41,7 @@ class Layer(Module):
         # TODO: Implement shared_halting option at the moment a single halting
         # mechanis is created for each layer.
         self.shared_halting_flag: bool = self.cfg.shared_halting_flag
-        self.model_config: "ConfigBase" = self.cfg.model_config
+        self.layer_model_config: "ConfigBase" = self.cfg.layer_model_config
         LayerValidator.validate(self.cfg)
 
         self.model = self.__build_model()
@@ -64,7 +64,7 @@ class Layer(Module):
 
     def __build_model(self) -> "Module | None":
         return self.__build_from_config(
-            self.model_config, input_dim=self.input_dim, output_dim=self.output_dim
+            self.layer_model_config, input_dim=self.input_dim, output_dim=self.output_dim
         )
 
     def __build_gate_model(self) -> "Layer | Sequential | None":
