@@ -1,3 +1,4 @@
+from models.trainer_config import *
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStackConfig
@@ -7,7 +8,6 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.linears.core.monitor import LinearMonitorCallback
-from models.trainer_config import *
 
 # Global
 BATCH_SIZE: int = 128
