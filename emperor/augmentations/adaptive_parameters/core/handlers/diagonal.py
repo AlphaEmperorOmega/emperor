@@ -3,13 +3,29 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from torch.nn import Sequential
-from emperor.base.utils import Module
+from dataclasses import dataclass, field
+from emperor.base.utils import ConfigBase, Module
 from emperor.base.layer import Layer, LayerStackConfig
+from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
+    from emperor.augmentations.adaptive_parameters.config import (
+        AdaptiveParameterAugmentationConfig,
+    )
+
+
+@dataclass
+class DiagonalHandlerConfig(ConfigBase):
+    diagonal_option: DynamicDiagonalOptions | None = field(
+        default=None,
+        metadata={"help": "Input-dependent adjustment of the weight matrix diagonal."},
+    )
+    model_config: LayerStackConfig | None = field(
+        default=None,
+        metadata={"help": "Layer stack configuration for the internal generator network."},
+    )
 
 
 class DiagonalHandlerAbstract(Module):

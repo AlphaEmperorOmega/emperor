@@ -29,6 +29,10 @@ class MaskHandlerConfig(ConfigBase):
         default=None,
         metadata={"help": "Whether to mask rows or columns of the weight matrix."},
     )
+    model_config: LayerStackConfig | None = field(
+        default=None,
+        metadata={"help": "Layer stack configuration for the internal generator network."},
+    )
 
 
 class MaskHandlerAbstract(Module):

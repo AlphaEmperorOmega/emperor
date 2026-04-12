@@ -35,6 +35,10 @@ class MemoryHandlerConfig(ConfigBase):
         default=None,
         metadata={"help": "Controls when memory is applied in the computation."},
     )
+    model_config: LayerStackConfig | None = field(
+        default=None,
+        metadata={"help": "Layer stack configuration for the internal generator network."},
+    )
 
 
 class MemoryHandlerAbstract(Module):

@@ -40,5 +40,5 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
     )
     model_config: LayerStackConfig | None = field(
         default=None,
-        metadata={"help": ""},
+        metadata={"help": "Layer stack configuration for the internal generator network."},
     )

@@ -28,6 +28,10 @@ class DepthMappingLayerConfig(LinearLayerConfig):
             "help": "Depth of the generator network that produces input-dependent weight adjustments."
         },
     )
+    model_config: LayerStackConfig | None = field(
+        default=None,
+        metadata={"help": "Layer stack configuration for the internal generator network."},
+    )
 
     def build(self, overrides: "DepthMappingLayerConfig | None" = None) -> "Module":
         return DepthMappingLayer(self, overrides)

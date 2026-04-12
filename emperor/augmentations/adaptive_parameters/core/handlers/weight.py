@@ -51,6 +51,10 @@ class WeightHandlerConfig(ConfigBase):
             "help": "Number of times default weight parameter bank will be scaled by for example (weight_bank_expansion_factor * input_dim, output_dim)"
         },
     )
+    model_config: LayerStackConfig | None = field(
+        default=None,
+        metadata={"help": "Layer stack configuration for the internal generator network."},
+    )
 
 
 class WeightHandlerAbstract(Module):

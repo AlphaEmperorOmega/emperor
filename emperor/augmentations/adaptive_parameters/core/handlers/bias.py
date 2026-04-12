@@ -32,6 +32,10 @@ class BiasHandlerConfig(ConfigBase):
         default=None,
         metadata={"help": "Size of the weight bank for WEIGHTED_BANK bias option."},
     )
+    model_config: LayerStackConfig | None = field(
+        default=None,
+        metadata={"help": "Layer stack configuration for the internal generator network."},
+    )
 
 
 class BiasHandlerAbstract(Module):
@@ -130,7 +134,9 @@ class WeightedBankBiasGeneratorHandler(BiasHandlerAbstract):
         self.weight_bank = self._init_parameter_bank(
             (self.bias_bank_expansion_factor, self.output_dim)
         )
-        overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=self.bias_bank_expansion_factor)
+        overrides = LayerStackConfig(
+            input_dim=self.input_dim, output_dim=self.bias_bank_expansion_factor
+        )
         self.distribution_generator = self._init_model(overrides)
 
     def forward(self, bias_params: None, logits: Tensor) -> Tensor:
