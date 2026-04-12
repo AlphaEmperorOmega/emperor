@@ -7,6 +7,10 @@ from dataclasses import dataclass, asdict, field
 from emperor.base.layer import LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
 
+from emperor.augmentations.adaptive_parameters.utils.handlers._validator import (
+    DepthMappingLayerValidator,
+)
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -37,30 +41,36 @@ class DepthMappingLayer(Module):
     ):
         super().__init__()
         self.cfg = self._override_config(cfg, overrides)
-        self.input_dim = self.input_dim
-        self.output_dim = self.output_dim
-        self.generator_depth = self.generator_depth.value
+        DepthMappingLayerValidator.validate(self)
+        self.input_dim: int = self.cfg.input_dim
+        self.output_dim: int = self.cfg.output_dim
+        self.bias_flag: bool = self.cfg.bias_flag
+        self.generator_depth: int = self.cfg.generator_depth.value
 
-        self.weight_params, self.bias_params = self.__init_parameter_bank()
-        self.__ensure_generator_depth_is_valid()
+        self.__init_parameters()
 
-    def __ensure_generator_depth_is_valid(self):
-        if self.generator_depth == 0:
-            raise ValueError("generator_depth cannot be 0")
+    def __init_parameters(self):
+        weight_shape = (self.generator_depth, self.input_dim, self.output_dim)
+        self.weight_params = self._init_parameter_bank(weight_shape)
+        self.bias_params = self.__init_bias_parameters()
 
-    def __init_parameter_bank(self):
-        input_weight_shape = (self.generator_depth, self.input_dim, self.output_dim)
-        weight_bank = self._init_parameter_bank(input_weight_shape)
+    def __init_bias_parameters(self):
+        if not self.bias_flag:
+            return None
         bias_shape = (self.generator_depth, self.output_dim)
-        bias_bank = self._init_parameter_bank(bias_shape)
-        return weight_bank, bias_bank
+        return self._init_parameter_bank(bias_shape)
 
     def forward(
         self,
-        input_batch: Tensor,
+        X: Tensor,
     ) -> Tensor:
-        output = torch.einsum("bkj,kji->bki", input_batch, self.weight_params)
-        return output + self.bias_params
+        X = torch.einsum("bkj,kji->bki", X, self.weight_params)
+        return self.__add_bias_parameters(X)
+
+    def __add_bias_parameters(self, X: Tensor) -> Tensor:
+        if self.bias_params is not None:
+            return X + self.bias_params
+        return X
 
 
 class DepthMappingLayerStack(Module):
