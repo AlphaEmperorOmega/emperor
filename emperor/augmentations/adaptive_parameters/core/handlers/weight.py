@@ -311,7 +311,7 @@ class WeightedBankWeightHandler(WeightHandlerAbstract):
         bank_distribution = torch.softmax(bank_logits, dim=-1)
         bank_distribution_reshaped = bank_distribution.unsqueeze(dim=2)
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
-        split_weghts_by_factor = batched_weighted_bank.view(
+        split_weights_by_factor = batched_weighted_bank.view(
             -1, self.input_dim, self.weight_bank_expansion_factor, self.output_dim
         )
-        return weight_params + split_weghts_by_factor.sum(dim=2)
+        return weight_params + split_weights_by_factor.sum(dim=2)
