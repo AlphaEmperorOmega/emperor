@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, member
 import torch.nn.functional as F
 
 
@@ -25,17 +25,17 @@ class BaseOptions(Enum):
 
 class ActivationOptions(BaseOptions):
     DISABLED = 0
-    RELU = F.relu
-    GELU = F.gelu
-    SIGMOID = F.sigmoid
-    TANH = F.tanh
-    LEAKY_RELU = F.leaky_relu
-    ELU = F.elu
-    SELU = F.selu
-    SOFTPLUS = F.softplus
-    SOFTSIGN = F.softsign
-    SILU = F.silu
-    MISH = F.mish
+    RELU = member(F.relu)
+    GELU = member(F.gelu)
+    SIGMOID = member(F.sigmoid)
+    TANH = member(F.tanh)
+    LEAKY_RELU = member(F.leaky_relu)
+    ELU = member(F.elu)
+    SELU = member(F.selu)
+    SOFTPLUS = member(F.softplus)
+    SOFTSIGN = member(F.softsign)
+    SILU = member(F.silu)
+    MISH = member(F.mish)
 
 
 class LayerNormPositionOptions(BaseOptions):
