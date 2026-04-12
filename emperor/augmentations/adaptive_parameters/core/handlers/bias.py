@@ -6,7 +6,7 @@ from torch.nn import Sequential
 from emperor.base.utils import Module, ConfigBase
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicBiasOptions
-from emperor.augmentations.adaptive_parameters.utils.handlers._validator import (
+from emperor.augmentations.adaptive_parameters.core.handlers._validator import (
     BiasHandlerAbstractValidator,
 )
 

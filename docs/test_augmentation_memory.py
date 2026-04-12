@@ -4,13 +4,13 @@ import unittest
 from dataclasses import asdict
 from emperor.config import ModelConfig
 from emperor.linears.core.presets import LinearPresets
-from emperor.augmentations.adaptive_parameters.utils.factory import DynamicMemoryFactory
+from emperor.augmentations.adaptive_parameters.core.factory import DynamicMemoryFactory
 from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.augmentations.adaptive_parameters.utils.handlers.memory import (
+from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
     MemoryFusionHandler,
     MemoryHandlerAbstract,
     WeightedMemoryHandler,

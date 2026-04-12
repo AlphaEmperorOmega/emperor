@@ -2,10 +2,10 @@ from dataclasses import dataclass, field
 from emperor.base.layer.config import LayerStackConfig
 from emperor.base.utils import ConfigBase
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
-from emperor.augmentations.adaptive_parameters.utils.handlers.bias import BiasHandlerConfig
-from emperor.augmentations.adaptive_parameters.utils.handlers.weight import WeightHandlerConfig
-from emperor.augmentations.adaptive_parameters.utils.handlers.mask import MaskHandlerConfig
-from emperor.augmentations.adaptive_parameters.utils.handlers.memory import MemoryHandlerConfig
+from emperor.augmentations.adaptive_parameters.core.handlers.bias import BiasHandlerConfig
+from emperor.augmentations.adaptive_parameters.core.handlers.weight import WeightHandlerConfig
+from emperor.augmentations.adaptive_parameters.core.handlers.mask import MaskHandlerConfig
+from emperor.augmentations.adaptive_parameters.core.handlers.memory import MemoryHandlerConfig
 
 
 @dataclass

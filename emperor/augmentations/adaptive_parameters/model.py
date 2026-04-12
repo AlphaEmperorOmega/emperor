@@ -4,7 +4,7 @@ from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.augmentations.adaptive_parameters.utils.factory import (
+from emperor.augmentations.adaptive_parameters.core.factory import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
@@ -19,7 +19,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryPositionOptions,
     RowMaskOptions,
 )
-from emperor.augmentations.adaptive_parameters.utils._validator import (
+from emperor.augmentations.adaptive_parameters.core._validator import (
     AdaptiveParameterAugmentationValidator,
 )
 

@@ -10,7 +10,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicWeightOptions,
     WeightNormalizationOptions,
 )
-from emperor.augmentations.adaptive_parameters.utils.handlers.depth_mapper import (
+from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
     DepthMappingLayerStack,
 )
 from emperor.base.layer import (

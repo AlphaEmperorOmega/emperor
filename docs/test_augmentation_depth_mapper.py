@@ -7,11 +7,11 @@ import torch.nn as nn
 
 from emperor.base.utils import Module
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.utils.handlers.weight import (
+from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
     DualModelWeightHandler,
 )
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
-from emperor.augmentations.adaptive_parameters.utils.handlers.depth_mapper import (
+from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
     DepthMappingLayer,
     DepthMappingLayerConfig,
     DepthMappingLayerStack,

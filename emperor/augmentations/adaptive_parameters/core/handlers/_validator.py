@@ -5,8 +5,8 @@ from emperor.base.validator import ValidatorBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.utils.handlers.bias import BiasHandlerAbstract
-    from emperor.augmentations.adaptive_parameters.utils.handlers.depth_mapper import (
+    from emperor.augmentations.adaptive_parameters.core.handlers.bias import BiasHandlerAbstract
+    from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
         DepthMappingLayer,
         DepthMappingLayerConfig,
     )

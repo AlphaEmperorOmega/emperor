@@ -15,10 +15,10 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.augmentations.adaptive_parameters.utils.handlers.weight import WeightHandlerAbstract
-from emperor.augmentations.adaptive_parameters.utils.handlers.diagonal import DiagonalHandlerAbstract
-from emperor.augmentations.adaptive_parameters.utils.handlers.bias import BiasHandlerAbstract
-from emperor.augmentations.adaptive_parameters.utils.handlers.memory import MemoryHandlerAbstract
+from emperor.augmentations.adaptive_parameters.core.handlers.weight import WeightHandlerAbstract
+from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import DiagonalHandlerAbstract
+from emperor.augmentations.adaptive_parameters.core.handlers.bias import BiasHandlerAbstract
+from emperor.augmentations.adaptive_parameters.core.handlers.memory import MemoryHandlerAbstract
 
 
 class TestAdaptiveParameterAugmentation(unittest.TestCase):

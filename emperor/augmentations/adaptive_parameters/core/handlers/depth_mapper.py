@@ -7,7 +7,7 @@ from dataclasses import dataclass, asdict, field
 from emperor.base.layer import LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
 
-from emperor.augmentations.adaptive_parameters.utils.handlers._validator import (
+from emperor.augmentations.adaptive_parameters.core.handlers._validator import (
     DepthMappingLayerValidator,
 )
 

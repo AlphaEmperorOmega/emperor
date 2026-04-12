@@ -6,14 +6,14 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,
     RowMaskOptions,
 )
-from emperor.augmentations.adaptive_parameters.utils.handlers.mask import (
+from emperor.augmentations.adaptive_parameters.core.handlers.mask import (
     DiagonalMaskHandler,
     MaskHandlerAbstract,
     PerRowMaskHandler,
     RowMaskHandler,
     TopSliceMaskHandler,
 )
-from emperor.augmentations.adaptive_parameters.utils.handlers.bias import (
+from emperor.augmentations.adaptive_parameters.core.handlers.bias import (
     AffineBiasTransformHandler,
     BiasGeneratorHandler,
     BiasHandlerAbstract,
@@ -21,18 +21,18 @@ from emperor.augmentations.adaptive_parameters.utils.handlers.bias import (
     GatedBiasHandler,
     WeightedBankBiasGeneratorHandler,
 )
-from emperor.augmentations.adaptive_parameters.utils.handlers.diagonal import (
+from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import (
     AntiDiagonalHandler,
     DiagonalAndAntiDiagonalHandler,
     DiagonalHandler,
     DiagonalHandlerAbstract,
 )
-from emperor.augmentations.adaptive_parameters.utils.handlers.memory import (
+from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
     MemoryFusionHandler,
     MemoryHandlerAbstract,
     WeightedMemoryHandler,
 )
-from emperor.augmentations.adaptive_parameters.utils.handlers.weight import (
+from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
     DualModelWeightHandler,
     HypernetworkWeightHandler,
     LowRankWeightHandler,
