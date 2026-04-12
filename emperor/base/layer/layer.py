@@ -34,11 +34,13 @@ class Layer(Module):
         )
         self.activation_function: ActivationOptions = self.cfg.activation
         self.layer_norm_dim: int | None = self.__resolve_layer_norm_dim()
-        self.residual_flag: bool = self.cfg.residual_flag or False
-        self.dropout_probability: float = self.cfg.dropout_probability or 0.0
+        self.residual_flag: bool = self.cfg.residual_flag
+        self.dropout_probability: float = self.cfg.dropout_probability
         self.gate_config: "LayerStackConfig | None" = self.cfg.gate_config
         self.halting_config: "HaltingConfig | None" = self.cfg.halting_config
-        self.shared_halting_flag: bool = self.cfg.shared_halting_flag or False
+        # TODO: Implement shared_halting option at the moment a single halting
+        # mechanis is created for each layer.
+        self.shared_halting_flag: bool = self.cfg.shared_halting_flag
         self.model_config: "ConfigBase" = self.cfg.model_config
         LayerValidator.validate(self.cfg)
 

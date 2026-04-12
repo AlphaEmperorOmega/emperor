@@ -45,7 +45,5 @@ class ValidatorBase:
     @staticmethod
     def validate_dimensions(**dims: int) -> None:
         for name, value in dims.items():
-            if not isinstance(value, int):
-                raise TypeError(f"{name} must be an int, got {type(value).__name__}")
             if value <= 0:
                 raise ValueError(f"{name} must be greater than 0, received {value}")

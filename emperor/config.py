@@ -110,6 +110,17 @@ class ModelConfig(ConfigBase):
             "help": "Flag to control frequency of gathering operations for the purpose of visualization"
         },
     )
+    model_config: ConfigBase | None = field(
+        default=None,
+        metadata={"help": "Config used to build the model module within the layer"},
+    )
+
+    gather_frequency_flag: bool = field(
+        default=GATHER_FREQUENCY_FLAG,
+        metadata={
+            "help": "Flag to control frequency of gathering operations for the purpose of visualization"
+        },
+    )
     router_model_config: RouterConfig = field(
         default_factory=lambda: RouterConfig(
             num_experts=ROUTER_OUTPUT_DIM,

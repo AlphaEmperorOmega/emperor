@@ -32,13 +32,12 @@ class LinearBase(Module):
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag
-        self.weight_params, self.bias_params = self._init_parameters()
+        self.__init_parameters()
         LinearValidator.validate(self)
 
-    def _init_parameters(self) -> tuple[Parameter, Parameter | None]:
-        weight_params = self.__init_weight_parameters()
-        bias_params = self.__init_bias_parameters()
-        return weight_params, bias_params
+    def __init_parameters(self) -> None:
+        self.weight_params = self.__init_weight_parameters()
+        self.bias_params = self.__init_bias_parameters()
 
     def __init_weight_parameters(self) -> Parameter:
         weight_shape = (self.input_dim, self.output_dim)

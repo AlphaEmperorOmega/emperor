@@ -1,13 +1,21 @@
 import models.linear.config as config
 
-from emperor.datasets.image.classification.mnist import Mnist
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.base.layer import LayerStackConfig
-from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
-from models.linear.config import ExperimentConfig
 from models.linear.model import Model
 from emperor.experiments.base import SearchMode
+from emperor.base.layer import LayerStackConfig
+from models.linear.config import ExperimentConfig
+from emperor.base.layer.config import LayerConfig
+from emperor.halting.config import StickBreakingConfig
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.datasets.image.classification.mnist import Mnist
+from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
+from emperor.base.enums import (
+    BaseOptions,
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 
 from typing import TYPE_CHECKING
 
@@ -56,9 +64,66 @@ class ExperimentPresets(ExperimentPresetsBase):
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
         stack_residual_flag: bool = config.STACK_RESIDUAL_FLAG,
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
+        stack_last_layer_bias_option: LastLayerBiasOptions = config.STACK_LAST_LAYER_BIAS_OPTION,
+        stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
     ) -> "ModelConfig":
         from emperor.config import ModelConfig
-        from emperor.linears.options import LinearLayerOptions
+
+        gate_config = None
+        if gate_config is None:
+            gate_config = LayerStackConfig(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                output_dim=output_dim,
+                num_layers=stack_num_layers,
+                last_layer_bias_option=stack_last_layer_bias_option,
+                apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
+                layer_config=LayerConfig(
+                    activation=stack_activation,
+                    layer_norm_position=layer_norm_position,
+                    residual_flag=stack_residual_flag,
+                    dropout_probability=stack_dropout_probability,
+                    halting_config=None,
+                    shared_halting_flag=False,
+                    gate_config=None,
+                    model_config=LinearLayerConfig(
+                        input_dim=input_dim,
+                        output_dim=output_dim,
+                        bias_flag=bias_flag,
+                    ),
+                ),
+            )
+
+        halting_config = None
+        if stack_num_layers > 1 and input_dim == hidden_dim == output_dim:
+            halting_config = StickBreakingConfig(
+                input_dim=output_dim,
+                threshold=0.99,
+                halting_dropout=0.0,
+                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+                halting_gate_config=LayerStackConfig(
+                    input_dim=output_dim,
+                    hidden_dim=output_dim,
+                    output_dim=2,
+                    num_layers=stack_num_layers,
+                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                    apply_output_pipeline_flag=False,
+                    layer_config=LayerConfig(
+                        activation=ActivationOptions.DISABLED,
+                        layer_norm_position=LayerNormPositionOptions.DISABLED,
+                        residual_flag=stack_residual_flag,
+                        dropout_probability=stack_dropout_probability,
+                        halting_config=None,
+                        shared_halting_flag=False,
+                        gate_config=None,
+                        model_config=LinearLayerConfig(
+                            input_dim=output_dim,
+                            output_dim=output_dim,
+                            bias_flag=True,
+                        ),
+                    ),
+                ),
+            )
 
         return ModelConfig(
             batch_size=batch_size,
@@ -66,22 +131,29 @@ class ExperimentPresets(ExperimentPresetsBase):
             learning_rate=learning_rate,
             hidden_dim=hidden_dim,
             output_dim=output_dim,
-            override_config=ExperimentConfig(
+            model_config=ExperimentConfig(
                 model_config=LayerStackConfig(
-                    model_type=LinearLayerOptions.BASE,
                     input_dim=input_dim,
                     hidden_dim=hidden_dim,
                     output_dim=output_dim,
                     num_layers=stack_num_layers,
-                    activation=stack_activation,
-                    layer_norm_position=layer_norm_position,
-                    residual_flag=stack_residual_flag,
-                    adaptive_computation_flag=False,
-                    dropout_probability=stack_dropout_probability,
-                    override_config=LinearLayerConfig(
+                    last_layer_bias_option=stack_last_layer_bias_option,
+                    apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
+                    layer_config=LayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
-                        bias_flag=bias_flag,
+                        activation=stack_activation,
+                        layer_norm_position=layer_norm_position,
+                        residual_flag=stack_residual_flag,
+                        dropout_probability=stack_dropout_probability,
+                        gate_config=gate_config,
+                        halting_config=halting_config,
+                        shared_halting_flag=False,
+                        model_config=LinearLayerConfig(
+                            input_dim=input_dim,
+                            output_dim=output_dim,
+                            bias_flag=bias_flag,
+                        ),
                     ),
                 )
             ),

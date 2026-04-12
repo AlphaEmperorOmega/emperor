@@ -568,11 +568,6 @@ class Trainer(HyperParameters):
 
 @dataclass
 class ConfigBase:
-    override_config: "ConfigBase | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-
     def build(self, overrides: "ConfigBase | None" = None) -> "Module":
         raise NotImplementedError
 
