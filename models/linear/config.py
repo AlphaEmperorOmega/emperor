@@ -2,7 +2,11 @@ from models.trainer_config import *
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStackConfig
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.enums import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
@@ -33,6 +37,10 @@ STACK_NUM_LAYERS: int = 3
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = True
 STACK_DROPOUT_PROBABILITY: float = 0.2
+STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
+STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+STACK_HALTING_FLAG: bool = False
+STACK_GATE_FLAG: bool = False
 
 # Hyperparameter search space
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
