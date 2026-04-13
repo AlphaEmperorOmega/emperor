@@ -3,16 +3,14 @@ from torch import float32
 from dataclasses import dataclass, field
 
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from emperor.base.utils import ConfigBase
 from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
+from emperor.parametric.utils.config import ParametricLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
-from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.sampler.utils.routers import RouterConfig
@@ -157,7 +155,6 @@ class ModelConfig(ConfigBase):
     parameter_generator_model_config: ParametricLayerConfig = field(
         default_factory=lambda: ParametricLayerConfig(
             time_tracker_flag=PARAMETER_GENERATOR_TRACK_TIME_FLAG,
-            # dynamic_diagonal_params_flag=PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG,
         ),
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
@@ -187,7 +184,7 @@ class ModelConfig(ConfigBase):
     )
     output_moe_layer_config: MixtureOfExpertsConfig = field(
         default_factory=lambda: MixtureOfExpertsConfig(
-            layer_stack_option=LinearLayerStackOptions.BASE,
+            layer_stack_option=1,
             top_k=MIXTURE_TOP_K,
             num_experts=12,
             compute_expert_mixture_flag=True,
@@ -198,7 +195,7 @@ class ModelConfig(ConfigBase):
     )
     multi_head_attention_model_config: MultiHeadAttentionConfig = field(
         default_factory=lambda: MultiHeadAttentionConfig(
-            model_type=LinearLayerOptions.ADAPTIVE,
+            model_type=1,
             batch_size=BATCH_SIZE,
             num_heads=NUM_EXPERTS,
             query_key_projection_dim=16,
@@ -222,17 +219,12 @@ class ModelConfig(ConfigBase):
             hidden_dim=HIDDEN_DIM,
             output_dim=OUTPUT_DIM,
             num_layers=2,
-            activation=ActivationOptions.RELU,
-            model_type=nn.Linear,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
-            adaptive_computation_flag=False,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
     transformer_feed_forward_config: FeedForwardConfig = field(
         default_factory=lambda: FeedForwardConfig(
-            layer_stack_option=LinearLayerOptions.ADAPTIVE,
+            layer_stack_option=1,
             num_layers=1,
         ),
         metadata={"help": "`MultiHeadAttention` configuration"},
@@ -254,7 +246,7 @@ class ModelConfig(ConfigBase):
     )
     neuron_nucleus_config: NucleusConfig | None = field(
         default_factory=lambda: NucleusConfig(
-            model_type=LinearLayerOptions.ADAPTIVE,
+            model_type=1,
         ),
         metadata={"help": "`Nucleus` configuration"},
     )
@@ -271,7 +263,7 @@ class ModelConfig(ConfigBase):
             z_axis_position=0,
             xy_axis_range=TerminalRangeOptions.TWO,
             z_axis_range=TerminalRangeOptions.TWO,
-            z_axis_offset=TerminalRangeOptions.ONE,
+            z_axis_offset=1,
         ),
         metadata={"help": "Neuron `Axon` configuration"},
     )

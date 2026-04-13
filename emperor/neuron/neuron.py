@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase, Module
 from emperor.parametric.options import AdaptiveLayerOptions
 from emperor.parametric.utils.routers import RouterModel
-from emperor.linears.options import LinearLayerOptions
 from emperor.sampler.model import SamplerModel
 
 
@@ -26,7 +25,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class NucleusConfig(ConfigBase):
-    model_type: LinearLayerOptions | None = field(
+    model_type: "LinearLayerOptions | None" = field(
         default=None,
         metadata={"help": "Type of layer used for the experts."},
     )
@@ -54,7 +53,7 @@ class Nucleus(Module):
 
 @dataclass
 class AxonsConfig(ConfigBase):
-    memory_type: LinearLayerOptions | AdaptiveLayerOptions | None = field(
+    memory_type: "LinearLayerOptions | AdaptiveLayerOptions | None" = field(
         default=None,
         metadata={
             "help": "Memory module used as axons, or additional modules that modify the output of nucleus"
