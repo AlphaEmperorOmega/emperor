@@ -337,3 +337,22 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         grads = [p.grad for p in model.parameters() if p.requires_grad]
         non_none_grads = [g for g in grads if g is not None]
         self.assertTrue(len(non_none_grads) > 0)
+
+    def test_non_2d_input_raises_error(self):
+        cfg = self.preset(generator_depth=DynamicDepthOptions.DEPTH_OF_TWO)
+        model = DepthMappingLayerStack(cfg)
+        input_tensor = torch.randn(2, 4, 12)
+        with self.assertRaises(ValueError):
+            model(input_tensor)
+
+    def test_disabled_depth_raises_error(self):
+        cfg = self.preset(generator_depth=DynamicDepthOptions.DISABLED)
+        with self.assertRaises(ValueError):
+            DepthMappingLayerStack(cfg)
+
+    def test_invalid_layer_model_config_type_raises_error(self):
+        from emperor.base.utils import ConfigBase
+        cfg = self.preset(generator_depth=DynamicDepthOptions.DEPTH_OF_TWO)
+        cfg.model_config.layer_config.layer_model_config = ConfigBase()
+        with self.assertRaises(TypeError):
+            DepthMappingLayerStack(cfg)
