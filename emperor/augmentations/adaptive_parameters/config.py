@@ -1,4 +1,7 @@
 from dataclasses import dataclass, field
+from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
+    DepthMappingHandlerConfig,
+)
 from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import (
     DiagonalHandlerConfig,
 )
@@ -29,9 +32,17 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
         default=None,
         metadata={"help": "Output dimension of the linear layer"},
     )
+    depth_config: DepthMappingHandlerConfig | None = field(
+        default=None,
+        metadata={
+            "help": "Configuration for input-dependent diagonal weight adjustments."
+        },
+    )
     diagonal_config: DiagonalHandlerConfig | None = field(
         default=None,
-        metadata={"help": "Configuration for input-dependent diagonal weight adjustments."},
+        metadata={
+            "help": "Configuration for input-dependent diagonal weight adjustments."
+        },
     )
     weight_config: WeightHandlerConfig | None = field(
         default=None,
