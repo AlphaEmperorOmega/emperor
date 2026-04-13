@@ -108,7 +108,7 @@ class ModelConfig(ConfigBase):
             "help": "Flag to control frequency of gathering operations for the purpose of visualization"
         },
     )
-    model_config: ConfigBase | None = field(
+    experiment_config: ConfigBase | None = field(
         default=None,
         metadata={"help": "Config used to build the model module within the layer"},
     )

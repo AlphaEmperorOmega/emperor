@@ -127,7 +127,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             learning_rate=learning_rate,
             hidden_dim=hidden_dim,
             output_dim=output_dim,
-            model_config=ExperimentConfig(
+            experiment_config=ExperimentConfig(
                 model_config=LayerStackConfig(
                     input_dim=input_dim,
                     hidden_dim=hidden_dim,
