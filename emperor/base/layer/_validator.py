@@ -24,6 +24,9 @@ class LayerValidator(ValidatorBase):
             input_dim=cfg.input_dim, output_dim=cfg.output_dim
         )
         LayerValidator.__validate_dropout_probability(cfg.dropout_probability)
+        LayerValidator.__validate_residual_dimensions(
+            cfg.input_dim, cfg.output_dim, cfg.residual_flag
+        )
         LayerValidator.__validate_model_config(cfg.layer_model_config)
         LayerValidator.__validate_gate_config(cfg.gate_config)
         LayerValidator.__validate_halting_config(
@@ -38,6 +41,16 @@ class LayerValidator(ValidatorBase):
         if dropout_probability < 0.0 or dropout_probability > 1.0:
             raise ValueError(
                 f"dropout_probability must be between 0.0 and 1.0, received {dropout_probability}"
+            )
+
+    @staticmethod
+    def __validate_residual_dimensions(
+        input_dim: int, output_dim: int, residual_flag: bool | None
+    ) -> None:
+        if residual_flag and input_dim != output_dim:
+            raise ValueError(
+                f"input_dim and output_dim must be equal when residual_flag is True, "
+                f"got input_dim={input_dim} and output_dim={output_dim}."
             )
 
     @staticmethod
@@ -126,8 +139,16 @@ class LayerStackValidator(ValidatorBase):
             output_dim=cfg.output_dim,
             num_layers=cfg.num_layers,
         )
+        LayerStackValidator.__validate_num_layers(cfg.num_layers)
         LayerStackValidator.__validate_layer_config(cfg.layer_config)
         LayerStackValidator.__validate_halting_config(cfg)
+
+    @staticmethod
+    def __validate_num_layers(num_layers: int) -> None:
+        if num_layers < 1:
+            raise ValueError(
+                f"num_layers must be at least 1, received {num_layers}."
+            )
 
     @staticmethod
     def __validate_layer_config(layer_config: "LayerConfig | None") -> None:
