@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
-from emperor.augmentations.adaptive_parameters.config import (
-    AdaptiveParameterAugmentationConfig,
-)
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.base.utils import Module
+    from emperor.augmentations.adaptive_parameters.config import (
+        AdaptiveParameterAugmentationConfig,
+    )
 
 
 @dataclass
