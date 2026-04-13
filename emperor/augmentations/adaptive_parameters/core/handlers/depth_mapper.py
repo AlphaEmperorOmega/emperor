@@ -101,12 +101,12 @@ class DepthMappingLayerStack(Module):
         self.model = self.model_config.build()
 
     def __update_layer_stack_config(self) -> "LayerStackConfig":
-        model_config = deepcopy(self.cfg.model_config)
         if isinstance(
             self.cfg.model_config.layer_config.layer_model_config,
             DepthMappingLayerConfig,
         ):
-            return model_config
+            return self.cfg.model_config
+        model_config = deepcopy(self.cfg.model_config)
         DepthMappingValidator.validate_inner_model_is_linear_layer_config(model_config)
         DepthMappingValidator.validate_layer_config_has_no_gate_or_halting(model_config)
         linear_config = asdict(model_config.layer_config.layer_model_config)
