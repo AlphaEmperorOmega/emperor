@@ -21,20 +21,20 @@ def get_experiment_parser(
             f"  {c}" for c in config_choices
         )
 
-    name_group = parser.add_mutually_exclusive_group(required=True)
+    option_group = parser.add_mutually_exclusive_group(required=True)
 
-    name_group.add_argument(
-        "--name",
+    option_group.add_argument(
+        "--option",
         type=str,
-        help="Name of the experiment configuration to run." + choices_text,
+        help="Name of the experiment option to run." + choices_text,
         choices=config_choices,
-        metavar="CONFIG_NAME",
+        metavar="OPTION_NAME",
     )
 
-    name_group.add_argument(
+    option_group.add_argument(
         "--all-options",
         action="store_true",
-        help="Run all experiment configurations sequentially.",
+        help="Run all experiment options sequentially.",
     )
 
     search_group = parser.add_mutually_exclusive_group()
@@ -67,15 +67,15 @@ def resolve_experiment_mode(
     options_enum: type[BaseOptions],
     no_search_options: list[str] = ["PRESET"],
 ) -> tuple[BaseOptions | None, SearchMode]:
-    config_option = None if args.all_options else options_enum.get_option(args.name)
+    config_option = None if args.all_options else options_enum.get_option(args.option)
     if args.random_search is not None:
         search_mode: SearchMode = RandomSearch(args.random_search)
     elif args.grid_search:
         search_mode = GridSearch()
     else:
         search_mode = None
-    if not args.all_options and search_mode is not None and args.name in no_search_options:
+    if not args.all_options and search_mode is not None and args.option in no_search_options:
         raise ValueError(
-            f"'{args.name}' does not support --grid-search or --random-search. Use CONFIG instead."
+            f"'{args.option}' does not support --grid-search or --random-search. Use CONFIG instead."
         )
     return config_option, search_mode
