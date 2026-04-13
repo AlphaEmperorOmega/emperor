@@ -101,6 +101,25 @@ class TestDepthMappingAugmentation(unittest.TestCase):
         with self.assertRaises(ValueError):
             DepthMappingLayer(cfg)
 
+    def test_gradients_flow(self):
+        batch_size = 2
+        input_dim = 12
+        output_dim = 6
+        depth = DynamicDepthOptions.DEPTH_OF_TWO
+        cfg = self.preset(
+            input_dim=input_dim, output_dim=output_dim, generator_depth=depth
+        )
+        model = DepthMappingLayer(cfg)
+
+        input_tensor = torch.randn(
+            batch_size, depth.value, input_dim, requires_grad=True
+        )
+        output = model(input_tensor)
+        output.sum().backward()
+
+        self.assertIsNotNone(model.weight_params.grad)
+        self.assertEqual(model.weight_params.grad.shape, model.weight_params.shape)
+
 
 class TestDepthMappingLayerStack(unittest.TestCase):
     def preset(
@@ -286,3 +305,35 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         layer_model_config = model.model_config.layer_config.layer_model_config
         self.assertIsInstance(layer_model_config, DepthMappingLayerConfig)
         self.assertEqual(layer_model_config.generator_depth, depth)
+
+    def test_preconfigured_depth_mapping_layer_config_passthrough(self):
+        depth = DynamicDepthOptions.DEPTH_OF_TWO
+        input_dim = 12
+        output_dim = 6
+        depth_mapping_config = DepthMappingLayerConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            bias_flag=True,
+            generator_depth=depth,
+        )
+        cfg = self.preset(generator_depth=depth)
+        cfg.model_config.layer_config.layer_model_config = depth_mapping_config
+        model = DepthMappingLayerStack(cfg)
+        self.assertIs(
+            model.model_config.layer_config.layer_model_config, depth_mapping_config
+        )
+
+    def test_gradients_flow(self):
+        batch_size = 2
+        input_dim = 12
+        depth = DynamicDepthOptions.DEPTH_OF_TWO
+        cfg = self.preset(input_dim=input_dim, generator_depth=depth)
+        model = DepthMappingLayerStack(cfg)
+
+        input_tensor = torch.randn(batch_size, input_dim, requires_grad=True)
+        output = model(input_tensor)
+        output.sum().backward()
+
+        grads = [p.grad for p in model.parameters() if p.requires_grad]
+        non_none_grads = [g for g in grads if g is not None]
+        self.assertTrue(len(non_none_grads) > 0)
