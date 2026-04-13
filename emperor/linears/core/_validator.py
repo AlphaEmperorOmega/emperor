@@ -28,7 +28,7 @@ class LinearValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_input_shape(X: Tensor) -> None:
+    def validate_input_is_2d(X: Tensor) -> None:
         if X.dim() != 2:
             raise ValueError(
                 f"Input must be a 2D matrix (batch, input_dim), "
