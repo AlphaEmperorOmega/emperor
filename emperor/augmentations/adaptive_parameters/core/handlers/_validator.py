@@ -61,3 +61,22 @@ class DepthMappingValidator(ValidatorBase):
                 f"model_config.layer_config.layer_model_config must be a LinearLayerConfig, "
                 f"received {type(inner_config).__name__}"
             )
+
+    @staticmethod
+    def validate_layer_config_has_no_gate_or_halting(model_config: "LayerStackConfig") -> None:
+        layer_config = model_config.layer_config
+        if layer_config.gate_config is not None:
+            raise ValueError(
+                "DepthMappingLayerStack does not support gate_config. "
+                "gate_config must be None."
+            )
+        if layer_config.halting_config is not None:
+            raise ValueError(
+                "DepthMappingLayerStack does not support halting_config. "
+                "halting_config must be None."
+            )
+        if layer_config.shared_halting_flag:
+            raise ValueError(
+                "DepthMappingLayerStack does not support shared_halting_flag. "
+                "shared_halting_flag must be False."
+            )
