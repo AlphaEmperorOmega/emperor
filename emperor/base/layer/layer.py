@@ -64,7 +64,9 @@ class Layer(Module):
 
     def __build_model(self) -> "Module | None":
         return self.__build_from_config(
-            self.layer_model_config, input_dim=self.input_dim, output_dim=self.output_dim
+            self.layer_model_config,
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
         )
 
     def __build_gate_model(self) -> "Layer | Sequential | None":
