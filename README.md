@@ -34,7 +34,7 @@ Every run iterates over the datasets listed in the model's `DATASET_OPTIONS` (se
 
 ## Environment Setup
 
-**Requirements:** Python 3.14 (pinned in `mise.toml`). The package itself supports Python 3.11–3.14.
+**Requirements:** Python 3.13 (pinned in `mise.toml`). The package itself supports Python 3.11–3.13.
 
 **Note:** Windows users must use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) to run the setup scripts.
 
