@@ -9,6 +9,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     DynamicWeightOptions,
     WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
     DepthMappingLayerStack,
@@ -39,6 +40,12 @@ class WeightHandlerConfig(ConfigBase):
             "help": "Normalization applied to vectors before the outer product computation."
         },
     )
+    normalization_position: WeightNormalizationPositionOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Controls whether normalization is applied to the input vectors before or to the outer product after computation."
+        },
+    )
     generator_depth: DynamicDepthOptions | None = field(
         default=None,
         metadata={
@@ -53,7 +60,9 @@ class WeightHandlerConfig(ConfigBase):
     )
     model_config: LayerStackConfig | None = field(
         default=None,
-        metadata={"help": "Layer stack configuration for the internal generator network."},
+        metadata={
+            "help": "Layer stack configuration for the internal generator network."
+        },
     )
 
 
@@ -70,6 +79,7 @@ class WeightHandlerAbstract(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.normalization_option = self.cfg.weight_normalization
+        self.normalization_position_option = self.cfg.weight_normalization_position
         self.scale = nn.Parameter(torch.tensor(1.0))
         self.clamp_limit = nn.Parameter(torch.tensor(1.0))
 
@@ -93,11 +103,55 @@ class WeightHandlerAbstract(Module):
         input_vectors: Tensor,
         output_vectors: Tensor,
     ) -> Tensor:
-        input_vectors = self._normalize_vectors(input_vectors)
-        output_vectors = self._normalize_vectors(output_vectors)
+        return self.__apply_normalization_by_position(
+            input_vectors, output_vectors, self.normalization_position_option
+        )
+
+    def __apply_normalization_by_position(
+        self,
+        input_vectors: Tensor,
+        output_vectors: Tensor,
+        position: WeightNormalizationPositionOptions,
+    ) -> Tensor:
+        match position:
+            case WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT:
+                return self._compute_prenormalized_outer_product(
+                    input_vectors, output_vectors
+                )
+            case WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT:
+                return self._compute_postnormalized_outer_product(
+                    input_vectors, output_vectors
+                )
+            case WeightNormalizationPositionOptions.DISABLED:
+                return self._compute_raw_outer_product(input_vectors, output_vectors)
+            case _:
+                raise ValueError(f"Unknown normalization position option: {position}")
+
+    def _compute_prenormalized_outer_product(
+        self,
+        input_vectors: Tensor,
+        output_vectors: Tensor,
+    ) -> Tensor:
+        input_vectors = self._apply_normalization_transform(input_vectors)
+        output_vectors = self._apply_normalization_transform(output_vectors)
+        return self._compute_raw_outer_product(input_vectors, output_vectors)
+
+    def _compute_postnormalized_outer_product(
+        self,
+        input_vectors: Tensor,
+        output_vectors: Tensor,
+    ) -> Tensor:
+        outer_product = self._compute_raw_outer_product(input_vectors, output_vectors)
+        return self._apply_normalization_transform(outer_product)
+
+    def _compute_raw_outer_product(
+        self,
+        input_vectors: Tensor,
+        output_vectors: Tensor,
+    ) -> Tensor:
         return torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
 
-    def _normalize_vectors(
+    def _apply_normalization_transform(
         self,
         vectors: Tensor,
     ) -> Tensor:
@@ -215,9 +269,9 @@ class LowRankWeightHandler(WeightHandlerAbstract):
     ) -> Tensor:
         input_lowrank_matrix = self.input_model(logits)
         output_lowrank_matrix = self.output_model(logits)
-        input_matrix = self._normalize_vectors(input_lowrank_matrix)
+        input_matrix = self._apply_normalization_transform(input_lowrank_matrix)
         input_matrix_transposed = input_matrix.transpose(1, 2)
-        output_matrix = self._normalize_vectors(output_lowrank_matrix)
+        output_matrix = self._apply_normalization_transform(output_lowrank_matrix)
         dynamic_params = torch.bmm(input_matrix_transposed, output_matrix)
         return weight_params + dynamic_params
 
@@ -279,7 +333,7 @@ class HypernetworkWeightHandler(WeightHandlerAbstract):
         weight_params: Tensor,
         logits: Tensor,
     ) -> Tensor:
-        flat = self._normalize_vectors(self.model(logits))
+        flat = self._apply_normalization_transform(self.model(logits))
         flat = self._compute_dynamic_weights(flat)
         update = flat.view(-1, self.input_dim, self.output_dim)
         return weight_params + update

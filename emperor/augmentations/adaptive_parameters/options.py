@@ -73,3 +73,9 @@ class MaskDimensionOptions(Enum):
 class LinearMemoryPositionOptions(Enum):
     BEFORE_AFFINE = 1
     AFTER_AFFINE = 2
+
+
+class WeightNormalizationPositionOptions(Enum):
+    DISABLED = 0
+    BEFORE_OUTER_PRODUCT = 1
+    AFTER_OUTER_PRODUCT = 2

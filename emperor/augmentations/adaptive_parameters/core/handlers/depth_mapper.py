@@ -86,6 +86,9 @@ class DepthMappingHandlerConfig(LinearLayerConfig):
         },
     )
 
+    def build(self, overrides: "DepthMappingHandlerConfig | None" = None) -> "DepthMappingLayerStack":
+        return DepthMappingLayerStack(self, overrides)
+
 
 class DepthMappingLayerStack(Module):
     def __init__(
