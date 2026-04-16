@@ -419,10 +419,14 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
         bank_distribution_reshaped = bank_distribution.unsqueeze(dim=3)
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
         split_weights_by_factor = batched_weighted_bank.view(
-            -1, self.input_dim, self.bank_expansion_factor, self.output_dim
+            -1,
+            self.generator_depth,
+            self.input_dim,
+            self.bank_expansion_factor,
+            self.output_dim,
         )
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
-        return decayed_weight_params + split_weights_by_factor.sum(dim=2)
+        return decayed_weight_params + split_weights_by_factor.sum(dim=(1, 3))
 
 
 class SoftWeightedBankWeightHandler(WeightHandlerAbstract):
