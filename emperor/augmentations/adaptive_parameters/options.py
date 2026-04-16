@@ -22,9 +22,9 @@ class DynamicWeightOptions(Enum):
     DUAL_MODEL = 1
     SINGLE_MODEL = 2
     LOW_RANK = 3
-    WEIGHT_MASK = 4
-    HYPERNETWORK = 5
-    WEIGHTED_BANK = 6
+    HYPERNETWORK = 4
+    LAYERED_WEIGHTED_BANK = 5
+    SOFT_WEIGHTED_BANK = 6
 
 
 class WeightNormalizationOptions(Enum):

@@ -18,16 +18,17 @@ from emperor.base.layer import (
     LayerStackConfig,
 )
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import (
-        AdaptiveParameterAugmentationConfig,
-    )
-
 
 @dataclass
 class WeightHandlerConfig(ConfigBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": "Input dimension of the weight transformation."},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Output dimension of the weight transformation."},
+    )
     weight_option: DynamicWeightOptions | None = field(
         default=None,
         metadata={
@@ -69,17 +70,16 @@ class WeightHandlerConfig(ConfigBase):
 class WeightHandlerAbstract(Module):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: WeightHandlerConfig,
+        overrides: WeightHandlerConfig | None = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
-            cfg, overrides
-        )
+        self.cfg: WeightHandlerConfig = self._override_config(cfg, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
-        self.normalization_option = self.cfg.weight_normalization
-        self.normalization_position_option = self.cfg.weight_normalization_position
+        self.generator_depth = self.cfg.generator_depth
+        self.normalization_option = self.cfg.normalization
+        self.normalization_position_option = self.cfg.normalization_position
         self.scale = nn.Parameter(torch.tensor(1.0))
         self.clamp_limit = nn.Parameter(torch.tensor(1.0))
 
@@ -178,8 +178,8 @@ class WeightHandlerAbstract(Module):
 class SingleModelWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: WeightHandlerConfig,
+        overrides: WeightHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self.__init_model()
@@ -205,8 +205,8 @@ class SingleModelWeightHandler(WeightHandlerAbstract):
 class DualModelWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: WeightHandlerConfig,
+        overrides: WeightHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.input_model = self.__init_input_model()
@@ -241,8 +241,8 @@ class DualModelWeightHandler(WeightHandlerAbstract):
 class LowRankWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: WeightHandlerConfig,
+        overrides: WeightHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.input_model = self.__init_input_model()
@@ -279,8 +279,8 @@ class LowRankWeightHandler(WeightHandlerAbstract):
 class WeightMaskHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: WeightHandlerConfig,
+        overrides: WeightHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.input_model = self.__init_input_model()
@@ -315,8 +315,8 @@ class WeightMaskHandler(WeightHandlerAbstract):
 class HypernetworkWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: WeightHandlerConfig,
+        overrides: WeightHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self.__init_model()
@@ -339,22 +339,26 @@ class HypernetworkWeightHandler(WeightHandlerAbstract):
         return weight_params + update
 
 
-class WeightedBankWeightHandler(WeightHandlerAbstract):
+class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: WeightHandlerConfig,
+        overrides: WeightHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.weight_bank_expansion_factor = self.cfg.weight_bank_expansion_factor
+        self.bank_expansion_factor = self.cfg.bank_expansion_factor
         self.weight_bank = self._init_parameter_bank(
-            (1, self.weight_bank_expansion_factor * self.input_dim, self.output_dim)
+            (
+                self.generator_depth,
+                self.bank_expansion_factor * self.input_dim,
+                self.output_dim,
+            )
         )
-        overrides = LayerStackConfig(
+        generator_overrides = LayerStackConfig(
             input_dim=self.input_dim,
-            output_dim=self.weight_bank_expansion_factor * self.input_dim,
+            output_dim=self.bank_expansion_factor * self.input_dim,
         )
-        self.distribution_generator = self._init_generator_model(overrides)
+        self.distribution_generator = self._init_generator_model(generator_overrides)
 
     def forward(
         self,
@@ -366,6 +370,53 @@ class WeightedBankWeightHandler(WeightHandlerAbstract):
         bank_distribution_reshaped = bank_distribution.unsqueeze(dim=2)
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
         split_weights_by_factor = batched_weighted_bank.view(
-            -1, self.input_dim, self.weight_bank_expansion_factor, self.output_dim
+            -1, self.input_dim, self.bank_expansion_factor, self.output_dim
         )
         return weight_params + split_weights_by_factor.sum(dim=2)
+
+
+class SoftWeightedBankWeightHandler(WeightHandlerAbstract):
+    def __init__(
+        self,
+        cfg: WeightHandlerConfig,
+        overrides: WeightHandlerConfig | None = None,
+    ):
+        super().__init__(cfg, overrides)
+
+        self.bank_expansion_factor = self.cfg.bank_expansion_factor
+        self.weight_bank = self._init_parameter_bank(
+            (
+                self.generator_depth,
+                self.input_dim,
+                self.bank_expansion_factor,
+                self.output_dim,
+            )
+        )
+
+        generator_overrides = LayerStackConfig(
+            input_dim=self.input_dim,
+            output_dim=self.input_dim * self.bank_expansion_factor,
+        )
+        self.distribution_generator = self._init_generator_model(generator_overrides)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        bank_logits = self.distribution_generator(logits)
+        bank_logits = bank_logits.view(
+            -1,
+            self.generator_depth,
+            self.input_dim,
+            self.bank_expansion_factor,
+        )
+
+        bank_distribution = torch.softmax(bank_logits, dim=-1)
+        compressed_params = torch.einsum(
+            "bdik,diko->bdio",
+            bank_distribution,
+            self.weight_bank,
+        )
+
+        return weight_params + compressed_params
