@@ -8,6 +8,7 @@ from emperor.base.utils import Module, ConfigBase
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     DynamicWeightOptions,
+    WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
@@ -65,6 +66,18 @@ class WeightHandlerConfig(ConfigBase):
             "help": "Layer stack configuration for the internal generator network."
         },
     )
+    decay_schedule: WeightDecayScheduleOptions | None = field(
+        default=None,
+        metadata={
+            "help": "Schedule used to decay the base weight parameters over forward calls, eventually driving them to zero."
+        },
+    )
+    decay_rate: float | None = field(
+        default=None,
+        metadata={
+            "help": "Decay rate applied by the selected schedule. Interpretation depends on the schedule (exponent factor, linear slope, or multiplicative factor)."
+        },
+    )
 
 
 class WeightHandlerAbstract(Module):
@@ -80,8 +93,11 @@ class WeightHandlerAbstract(Module):
         self.generator_depth = self.cfg.generator_depth
         self.normalization_option = self.cfg.normalization
         self.normalization_position_option = self.cfg.normalization_position
+        self.decay_schedule_option = self.cfg.decay_schedule
+        self.decay_rate = self.cfg.decay_rate
         self.scale = nn.Parameter(torch.tensor(1.0))
         self.clamp_limit = nn.Parameter(torch.tensor(1.0))
+        self.register_buffer("decay_step", torch.zeros(1))
 
     def _init_generator_model(
         self, overrides: "LayerStackConfig"
@@ -174,6 +190,34 @@ class WeightHandlerAbstract(Module):
                     f"Unknown weight normalization option: {self.normalization_option}"
                 )
 
+    def _maybe_apply_weight_decay(self, weight_params: Tensor) -> Tensor:
+        if (
+            self.decay_schedule_option is None
+            or self.decay_schedule_option == WeightDecayScheduleOptions.DISABLED
+        ):
+            return weight_params
+        decay_factor = self.__compute_decay_factor_by_schedule(
+            self.decay_schedule_option
+        )
+        self.decay_step += 1
+        return weight_params * decay_factor
+
+    def __compute_decay_factor_by_schedule(
+        self,
+        schedule: WeightDecayScheduleOptions,
+    ) -> Tensor:
+        step = self.decay_step
+        rate = self.decay_rate
+        match schedule:
+            case WeightDecayScheduleOptions.EXPONENTIAL:
+                return torch.exp(-rate * step)
+            case WeightDecayScheduleOptions.LINEAR:
+                return torch.clamp(1.0 - rate * step, min=0.0)
+            case WeightDecayScheduleOptions.MULTIPLICATIVE:
+                return torch.pow(torch.tensor(1.0 - rate), step)
+            case _:
+                raise ValueError(f"Unknown weight decay schedule option: {schedule}")
+
 
 class SingleModelWeightHandler(WeightHandlerAbstract):
     def __init__(
@@ -199,7 +243,8 @@ class SingleModelWeightHandler(WeightHandlerAbstract):
         vectors = self.model(logits)
         outer_product = self._compute_outer_product(vectors, vectors)
         dynamic_params = self._compute_dynamic_weights(outer_product)
-        return weight_params + dynamic_params
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        return decayed_weight_params + dynamic_params
 
 
 class DualModelWeightHandler(WeightHandlerAbstract):
@@ -235,7 +280,8 @@ class DualModelWeightHandler(WeightHandlerAbstract):
         output_vectors = self.output_model(logits)
         outer_product = self._compute_outer_product(input_vectors, output_vectors)
         dynamic_params = self._compute_dynamic_weights(outer_product)
-        return weight_params + dynamic_params
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        return decayed_weight_params + dynamic_params
 
 
 class LowRankWeightHandler(WeightHandlerAbstract):
@@ -273,7 +319,8 @@ class LowRankWeightHandler(WeightHandlerAbstract):
         input_matrix_transposed = input_matrix.transpose(1, 2)
         output_matrix = self._apply_normalization_transform(output_lowrank_matrix)
         dynamic_params = torch.bmm(input_matrix_transposed, output_matrix)
-        return weight_params + dynamic_params
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        return decayed_weight_params + dynamic_params
 
 
 class WeightMaskHandler(WeightHandlerAbstract):
@@ -309,7 +356,8 @@ class WeightMaskHandler(WeightHandlerAbstract):
         output_vectors = self.output_model(logits)
         outer_product = self._compute_outer_product(input_vectors, output_vectors)
         mask = self._compute_dynamic_weights(outer_product)
-        return weight_params * mask
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        return decayed_weight_params * mask
 
 
 class HypernetworkWeightHandler(WeightHandlerAbstract):
@@ -336,7 +384,8 @@ class HypernetworkWeightHandler(WeightHandlerAbstract):
         flat = self._apply_normalization_transform(self.model(logits))
         flat = self._compute_dynamic_weights(flat)
         update = flat.view(-1, self.input_dim, self.output_dim)
-        return weight_params + update
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        return decayed_weight_params + update
 
 
 class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
@@ -367,12 +416,13 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
     ) -> Tensor:
         bank_logits = self.distribution_generator(logits)
         bank_distribution = torch.softmax(bank_logits, dim=-1)
-        bank_distribution_reshaped = bank_distribution.unsqueeze(dim=2)
+        bank_distribution_reshaped = bank_distribution.unsqueeze(dim=3)
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
         split_weights_by_factor = batched_weighted_bank.view(
             -1, self.input_dim, self.bank_expansion_factor, self.output_dim
         )
-        return weight_params + split_weights_by_factor.sum(dim=2)
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        return decayed_weight_params + split_weights_by_factor.sum(dim=2)
 
 
 class SoftWeightedBankWeightHandler(WeightHandlerAbstract):
@@ -406,17 +456,13 @@ class SoftWeightedBankWeightHandler(WeightHandlerAbstract):
     ) -> Tensor:
         bank_logits = self.distribution_generator(logits)
         bank_logits = bank_logits.view(
-            -1,
-            self.generator_depth,
-            self.input_dim,
-            self.bank_expansion_factor,
+            -1, self.generator_depth, self.input_dim, self.bank_expansion_factor
         )
 
         bank_distribution = torch.softmax(bank_logits, dim=-1)
         compressed_params = torch.einsum(
-            "bdik,diko->bdio",
-            bank_distribution,
-            self.weight_bank,
+            "bdik,diko->bdio", bank_distribution, self.weight_bank
         )
 
-        return weight_params + compressed_params
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        return decayed_weight_params + compressed_params
