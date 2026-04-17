@@ -78,6 +78,12 @@ class WeightHandlerConfig(ConfigBase):
             "help": "Decay rate applied by the selected schedule. Interpretation depends on the schedule (exponent factor, linear slope, or multiplicative factor)."
         },
     )
+    decay_warmup_batches: int | None = field(
+        default=None,
+        metadata={
+            "help": "Number of batches to delay before applying weight decay. Decay steps only begin counting after this warmup period."
+        },
+    )
 
 
 class WeightHandlerAbstract(Module):
@@ -95,9 +101,11 @@ class WeightHandlerAbstract(Module):
         self.normalization_position_option = self.cfg.normalization_position
         self.decay_schedule_option = self.cfg.decay_schedule
         self.decay_rate = self.cfg.decay_rate
+        self.decay_warmup_batches = self.cfg.decay_warmup_batches or 0
         self.scale = nn.Parameter(torch.tensor(1.0))
         self.clamp_limit = nn.Parameter(torch.tensor(1.0))
         self.register_buffer("decay_step", torch.zeros(1))
+        self.register_buffer("warmup_step", torch.zeros(1))
 
     def _init_generator_model(
         self, overrides: "LayerStackConfig"
@@ -195,6 +203,9 @@ class WeightHandlerAbstract(Module):
             self.decay_schedule_option is None
             or self.decay_schedule_option == WeightDecayScheduleOptions.DISABLED
         ):
+            return weight_params
+        if self.warmup_step < self.decay_warmup_batches:
+            self.warmup_step += 1
             return weight_params
         decay_factor = self.__compute_decay_factor_by_schedule(
             self.decay_schedule_option
@@ -396,8 +407,10 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
     ):
         super().__init__(cfg, overrides)
         self.bank_expansion_factor = self.cfg.bank_expansion_factor
+        broadcast_batch = 1
         self.weight_bank = self._init_parameter_bank(
             (
+                broadcast_batch,
                 self.generator_depth,
                 self.bank_expansion_factor * self.input_dim,
                 self.output_dim,
@@ -416,7 +429,7 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
     ) -> Tensor:
         bank_logits = self.distribution_generator(logits)
         bank_distribution = torch.softmax(bank_logits, dim=-1)
-        bank_distribution_reshaped = bank_distribution.unsqueeze(dim=3)
+        bank_distribution_reshaped = bank_distribution.unsqueeze(dim=-1)
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
         split_weights_by_factor = batched_weighted_bank.view(
             -1,
@@ -425,8 +438,9 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
             self.bank_expansion_factor,
             self.output_dim,
         )
+        depth_and_expansion_reduced_weights = split_weights_by_factor.sum(dim=(1, 3))
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
-        return decayed_weight_params + split_weights_by_factor.sum(dim=(1, 3))
+        return decayed_weight_params + depth_and_expansion_reduced_weights
 
 
 class SoftWeightedBankWeightHandler(WeightHandlerAbstract):
