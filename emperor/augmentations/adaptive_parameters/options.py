@@ -25,6 +25,7 @@ class DynamicWeightOptions(Enum):
     HYPERNETWORK = 4
     LAYERED_WEIGHTED_BANK = 5
     SOFT_WEIGHTED_BANK = 6
+    DUAL_MODEL_MASK = 7
 
 
 class WeightNormalizationOptions(Enum):
@@ -66,8 +67,8 @@ class RowMaskOptions(Enum):
 
 
 class MaskDimensionOptions(Enum):
-    ROW = "mask_rows"
-    COLUMN = "mask_columns"
+    ROW = 0
+    COLUMN = 1
 
 
 class LinearMemoryPositionOptions(Enum):
