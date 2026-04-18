@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+from typing import cast
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
@@ -8,16 +9,17 @@ from emperor.base.utils import ConfigBase, Module
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import (
-        AdaptiveParameterAugmentationConfig,
-    )
-
 
 @dataclass
 class DiagonalHandlerConfig(ConfigBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": "Input dimension of the diagonal transformation."},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Output dimension of the diagonal transformation."},
+    )
     diagonal_option: DynamicDiagonalOptions | None = field(
         default=None,
         metadata={"help": "Input-dependent adjustment of the weight matrix diagonal."},
@@ -27,17 +29,41 @@ class DiagonalHandlerConfig(ConfigBase):
         metadata={"help": "Layer stack configuration for the internal generator network."},
     )
 
+    def build(
+        self, overrides: "ConfigBase | None" = None
+    ) -> "DiagonalHandlerAbstract":
+        if self.diagonal_option is None:
+            raise ValueError("`diagonal_option` must be set before building the handler")
+        handler_cls = DiagonalHandlerAbstract.resolve(self.diagonal_option)
+        return handler_cls(self, cast("DiagonalHandlerConfig | None", overrides))
+
 
 class DiagonalHandlerAbstract(Module):
+    _registry: dict[DynamicDiagonalOptions, type["DiagonalHandlerAbstract"]] = {}
+
+    @classmethod
+    def register(cls, option: DynamicDiagonalOptions):
+        def decorator(handler_cls: type["DiagonalHandlerAbstract"]):
+            cls._registry[option] = handler_cls
+            return handler_cls
+
+        return decorator
+
+    @classmethod
+    def resolve(cls, option: DynamicDiagonalOptions) -> type["DiagonalHandlerAbstract"]:
+        if option not in cls._registry:
+            raise ValueError(f"No handler registered for diagonal option: {option}")
+        return cls._registry[option]
+
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
+        cfg: DiagonalHandlerConfig,
+        overrides: DiagonalHandlerConfig | None = None,
     ):
         super().__init__()
-        self.cfg = cfg
-        self.cfg_main = self._resolve_main_config(self.cfg, cfg)
-        self.input_dim = cfg.input_dim
-        self.output_dim = cfg.output_dim
+        self.cfg: DiagonalHandlerConfig = self._override_config(cfg, overrides)
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
         self.padding_shape = self.__get_diagonal_padding_shape()
 
     def __get_diagonal_padding_shape(self) -> tuple | None:
@@ -54,7 +80,7 @@ class DiagonalHandlerAbstract(Module):
     ) -> "Layer | Sequential":
         output_dim = min(self.input_dim, self.output_dim)
         overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=output_dim)
-        return self._create_stack(self.cfg_main, overrides)
+        return self._create_stack(self.cfg.model_config, overrides)
 
     def _create_stack(self, config, overrides) -> "Layer | Sequential":
         from emperor.linears.core.stack import LinearLayerStack
@@ -78,12 +104,14 @@ class DiagonalHandlerAbstract(Module):
         return self.__convert_to_diagonal_matrix(vectors)
 
 
+@DiagonalHandlerAbstract.register(DynamicDiagonalOptions.DIAGONAL)
 class DiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
+        cfg: DiagonalHandlerConfig,
+        overrides: DiagonalHandlerConfig | None = None,
     ):
-        super().__init__(cfg)
+        super().__init__(cfg, overrides)
         self.diagonal_generator = self._init_model()
 
     def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
@@ -91,12 +119,14 @@ class DiagonalHandler(DiagonalHandlerAbstract):
         return weight_params + diagonal_matrices
 
 
+@DiagonalHandlerAbstract.register(DynamicDiagonalOptions.ANTI_DIAGONAL)
 class AntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
+        cfg: DiagonalHandlerConfig,
+        overrides: DiagonalHandlerConfig | None = None,
     ):
-        super().__init__(cfg)
+        super().__init__(cfg, overrides)
         self.diagonal_generator = self._init_model()
 
     def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
@@ -105,14 +135,16 @@ class AntiDiagonalHandler(DiagonalHandlerAbstract):
         return weight_params + anti_diagonal_matrix
 
 
+@DiagonalHandlerAbstract.register(DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL)
 class DiagonalAndAntiDiagonalHandler(DiagonalHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
+        cfg: DiagonalHandlerConfig,
+        overrides: DiagonalHandlerConfig | None = None,
     ):
-        super().__init__(cfg)
-        self.diagonal_generator = DiagonalHandler(cfg)
-        self.anti_diagonal_generator = AntiDiagonalHandler(cfg)
+        super().__init__(cfg, overrides)
+        self.diagonal_generator = DiagonalHandler(self.cfg)
+        self.anti_diagonal_generator = AntiDiagonalHandler(self.cfg)
 
     def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
         weight_params = self.diagonal_generator(weight_params, logits)
