@@ -2,14 +2,14 @@ from .core.config import LinearLayerConfig, AdaptiveLinearLayerConfig
 from .core.layers import (
     LinearLayer,
     AdaptiveLinearLayer,
-    LinearBase,
+    LinearAbstract,
 )
 
 __all__ = [
     # Core layer classes
     "LinearLayer",
     "AdaptiveLinearLayer",
-    "LinearBase",
+    "LinearAbstract",
     # Configuration
     "LinearLayerConfig",
     "AdaptiveLinearLayerConfig",
