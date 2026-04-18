@@ -1,5 +1,6 @@
 import torch
 
+from typing import cast
 from torch import Tensor
 from dataclasses import dataclass, field
 from emperor.base.utils import Module, ConfigBase
@@ -9,23 +10,24 @@ from emperor.augmentations.adaptive_parameters.options import (
     RowMaskOptions,
 )
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import (
-        AdaptiveParameterAugmentationConfig,
-    )
-
 
 @dataclass
 class MaskHandlerConfig(ConfigBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": "Input dimension of the mask transformation."},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Output dimension of the mask transformation."},
+    )
     row_mask_option: RowMaskOptions | None = field(
         default=None,
         metadata={
             "help": "Input-dependent row masking of the weight matrix after weight updates."
         },
     )
-    dimension_option: MaskDimensionOptions | None = field(
+    mask_dimension_option: MaskDimensionOptions | None = field(
         default=None,
         metadata={"help": "Whether to mask rows or columns of the weight matrix."},
     )
@@ -34,17 +36,39 @@ class MaskHandlerConfig(ConfigBase):
         metadata={"help": "Layer stack configuration for the internal generator network."},
     )
 
+    def build(
+        self, overrides: "ConfigBase | None" = None
+    ) -> "MaskHandlerAbstract":
+        if self.row_mask_option is None:
+            raise ValueError("`row_mask_option` must be set before building the handler")
+        handler_cls = MaskHandlerAbstract.resolve(self.row_mask_option)
+        return handler_cls(self, cast("MaskHandlerConfig | None", overrides))
+
 
 class MaskHandlerAbstract(Module):
+    _registry: dict[RowMaskOptions, type["MaskHandlerAbstract"]] = {}
+
+    @classmethod
+    def register(cls, option: RowMaskOptions):
+        def decorator(handler_cls: type["MaskHandlerAbstract"]):
+            cls._registry[option] = handler_cls
+            return handler_cls
+
+        return decorator
+
+    @classmethod
+    def resolve(cls, option: RowMaskOptions) -> type["MaskHandlerAbstract"]:
+        if option not in cls._registry:
+            raise ValueError(f"No handler registered for mask option: {option}")
+        return cls._registry[option]
+
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: MaskHandlerConfig,
+        overrides: MaskHandlerConfig | None = None,
     ):
         super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
-            cfg, overrides
-        )
+        self.cfg: MaskHandlerConfig = self._override_config(cfg, overrides)
         self.input_dim = self.cfg.input_dim
         self.mask_dimension_option = self.cfg.mask_dimension_option
 
@@ -61,11 +85,12 @@ class MaskHandlerAbstract(Module):
         return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
 
 
+@MaskHandlerAbstract.register(RowMaskOptions.GLOBAL_SCORE)
 class RowMaskHandler(MaskHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: MaskHandlerConfig,
+        overrides: MaskHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
@@ -73,11 +98,11 @@ class RowMaskHandler(MaskHandlerAbstract):
     def __init_score_generator(self):
         from emperor.linears.core.stack import LinearLayerStack
 
-        overrides = LayerStackConfig(
+        layer_overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=1,
         )
-        return LinearLayerStack(self.cfg, overrides).build_model()
+        return LinearLayerStack(self.cfg.model_config, layer_overrides).build_model()
 
     def forward(
         self,
@@ -107,11 +132,12 @@ class RowMaskHandler(MaskHandlerAbstract):
         return (row_magnitudes >= thresholds).float()
 
 
+@MaskHandlerAbstract.register(RowMaskOptions.PER_ROW_SCORE)
 class PerRowMaskHandler(MaskHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: MaskHandlerConfig,
+        overrides: MaskHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
@@ -119,12 +145,11 @@ class PerRowMaskHandler(MaskHandlerAbstract):
     def __init_score_generator(self):
         from emperor.linears.core.stack import LinearLayerStack
 
-        overrides = LayerStackConfig(
+        layer_overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim,
         )
-        main_cfg = self._resolve_main_config(self.cfg, self.cfg)
-        return LinearLayerStack(main_cfg, overrides).build_model()
+        return LinearLayerStack(self.cfg.model_config, layer_overrides).build_model()
 
     def forward(
         self,
@@ -140,11 +165,12 @@ class PerRowMaskHandler(MaskHandlerAbstract):
         return sparsified_weights
 
 
+@MaskHandlerAbstract.register(RowMaskOptions.TOP_SLICE)
 class TopSliceMaskHandler(MaskHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: MaskHandlerConfig,
+        overrides: MaskHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
@@ -152,12 +178,11 @@ class TopSliceMaskHandler(MaskHandlerAbstract):
     def __init_score_generator(self):
         from emperor.linears.core.stack import LinearLayerStack
 
-        overrides = LayerStackConfig(
+        layer_overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=1,
         )
-        main_cfg = self._resolve_main_config(self.cfg, self.cfg)
-        return LinearLayerStack(main_cfg, overrides).build_model()
+        return LinearLayerStack(self.cfg.model_config, layer_overrides).build_model()
 
     def forward(
         self,
@@ -176,11 +201,12 @@ class TopSliceMaskHandler(MaskHandlerAbstract):
         return sparsified_weights
 
 
+@MaskHandlerAbstract.register(RowMaskOptions.DIAGONAL)
 class DiagonalMaskHandler(MaskHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
+        cfg: MaskHandlerConfig,
+        overrides: MaskHandlerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
@@ -188,12 +214,11 @@ class DiagonalMaskHandler(MaskHandlerAbstract):
     def __init_score_generator(self):
         from emperor.linears.core.stack import LinearLayerStack
 
-        overrides = LayerStackConfig(
+        layer_overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=1,
         )
-        main_cfg = self._resolve_main_config(self.cfg, self.cfg)
-        return LinearLayerStack(main_cfg, overrides).build_model()
+        return LinearLayerStack(self.cfg.model_config, layer_overrides).build_model()
 
     def forward(
         self,

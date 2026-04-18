@@ -4,9 +4,6 @@ from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.factory import (
-    MaskHandlerFactory,
-)
 from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
     WeightHandlerConfig,
 )
@@ -18,6 +15,9 @@ from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import (
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
     MemoryHandlerConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.handlers.mask import (
+    MaskHandlerConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
@@ -44,6 +44,7 @@ class AdaptiveParameterAugmentation(Module):
         )
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
+        self.weight_config = self.cfg.weight_config
         self.weight_option = self.cfg.weight_option
         self.weight_normalization = self.cfg.weight_normalization
         self.generator_depth = self.cfg.generator_depth
@@ -63,14 +64,13 @@ class AdaptiveParameterAugmentation(Module):
         self.row_mask_model = self.__init_row_mask_model()
 
     def __init_generator_model(self) -> Module | None:
-        if self.generator_depth == DynamicDepthOptions.DISABLED:
+        if self.weight_config is not None:
             return None
-        weight_cfg = self.cfg.weight_config or WeightHandlerConfig()
         overrides = WeightHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return weight_cfg.build(overrides)
+        return self.weight_cfg.build(overrides)
 
     def __init_diagonal_model(self) -> Module | None:
         if self.diagonal_option == DynamicDiagonalOptions.DISABLED:
@@ -105,21 +105,14 @@ class AdaptiveParameterAugmentation(Module):
         return bias_cfg.build(overrides)
 
     def __init_row_mask_model(self) -> Module | None:
-        is_valid_flag = self.row_mask_option != RowMaskOptions.DISABLED
-        return self.__build_model(is_valid_flag, MaskHandlerFactory)
-
-    def __build_model(
-        self, is_valid_flag: bool, factory_class: type[Module]
-    ) -> Module | None:
-        from emperor.linears.core.config import LinearLayerConfig
-
-        if not is_valid_flag:
+        if self.row_mask_option == RowMaskOptions.DISABLED:
             return None
-
-        overrides = LinearLayerConfig(
-            input_dim=self.input_dim, output_dim=self.output_dim
+        mask_cfg = self.cfg.mask_config or MaskHandlerConfig()
+        overrides = MaskHandlerConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
         )
-        return factory_class(self.cfg, overrides).build()
+        return mask_cfg.build(overrides)
 
     def compute_adaptive_parameters(
         self,
