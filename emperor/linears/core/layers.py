@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class LinearBase(Module):
+class LinearAbstract(Module):
     def __init__(
         self,
         cfg: "LinearLayerConfig | ModelConfig",
@@ -50,7 +50,7 @@ class LinearBase(Module):
         return self._init_parameter_bank(bias_shape, nn.init.zeros_)
 
 
-class LinearLayer(LinearBase):
+class LinearLayer(LinearAbstract):
     def __init__(
         self,
         cfg: "LinearLayerConfig | ModelConfig",
@@ -63,7 +63,7 @@ class LinearLayer(LinearBase):
         return F.linear(X, self.weight_params.T, self.bias_params)
 
 
-class AdaptiveLinearLayer(LinearBase):
+class AdaptiveLinearLayer(LinearAbstract):
     def __init__(
         self,
         cfg: "AdaptiveLinearLayerConfig | ModelConfig",
