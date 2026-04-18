@@ -5,19 +5,17 @@ from typing import cast
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.utils import ConfigBase, Module, optional_field
+from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
-from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
-    HandlerRegistryBase,
-)
 
 
 @dataclass
 class DiagonalHandlerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input dimension of the diagonal transformation.")
     output_dim: int | None = optional_field("Output dimension of the diagonal transformation.")
-    diagonal_option: DynamicDiagonalOptions | None = optional_field(
+    model_type: DynamicDiagonalOptions | None = optional_field(
         "Input-dependent adjustment of the weight matrix diagonal."
     )
     model_config: LayerStackConfig | None = optional_field(
@@ -27,15 +25,14 @@ class DiagonalHandlerConfig(ConfigBase):
     def build(
         self, overrides: "ConfigBase | None" = None
     ) -> "DiagonalHandlerAbstract":
-        if self.diagonal_option is None:
-            raise ValueError("`diagonal_option` must be set before building the handler")
-        handler_cls = DiagonalHandlerAbstract.resolve(self.diagonal_option)
+        if self.model_type is None:
+            raise ValueError("`model_type` must be set before building the handler")
+        handler_cls = DiagonalHandlerAbstract.resolve(self.model_type)
         return handler_cls(self, cast("DiagonalHandlerConfig | None", overrides))
 
 
-class DiagonalHandlerAbstract(HandlerRegistryBase[DynamicDiagonalOptions]):
-    _registry_label = "diagonal"
-
+@subclass_registry
+class DiagonalHandlerAbstract(Module):
     def __init__(
         self,
         cfg: DiagonalHandlerConfig,

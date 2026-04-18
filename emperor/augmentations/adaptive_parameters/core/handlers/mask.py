@@ -3,14 +3,12 @@ import torch
 from typing import cast
 from torch import Tensor
 from dataclasses import dataclass
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.utils import ConfigBase, Module, optional_field
+from emperor.base.registry import subclass_registry
 from emperor.base.layer import LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import (
     MaskDimensionOptions,
     RowMaskOptions,
-)
-from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
-    HandlerRegistryBase,
 )
 
 
@@ -18,7 +16,7 @@ from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
 class MaskHandlerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input dimension of the mask transformation.")
     output_dim: int | None = optional_field("Output dimension of the mask transformation.")
-    row_mask_option: RowMaskOptions | None = optional_field(
+    model_type: RowMaskOptions | None = optional_field(
         "Input-dependent row masking of the weight matrix after weight updates."
     )
     mask_dimension_option: MaskDimensionOptions | None = optional_field(
@@ -31,15 +29,14 @@ class MaskHandlerConfig(ConfigBase):
     def build(
         self, overrides: "ConfigBase | None" = None
     ) -> "MaskHandlerAbstract":
-        if self.row_mask_option is None:
-            raise ValueError("`row_mask_option` must be set before building the handler")
-        handler_cls = MaskHandlerAbstract.resolve(self.row_mask_option)
+        if self.model_type is None:
+            raise ValueError("`model_type` must be set before building the handler")
+        handler_cls = MaskHandlerAbstract.resolve(self.model_type)
         return handler_cls(self, cast("MaskHandlerConfig | None", overrides))
 
 
-class MaskHandlerAbstract(HandlerRegistryBase[RowMaskOptions]):
-    _registry_label = "mask"
-
+@subclass_registry
+class MaskHandlerAbstract(Module):
     def __init__(
         self,
         cfg: MaskHandlerConfig,

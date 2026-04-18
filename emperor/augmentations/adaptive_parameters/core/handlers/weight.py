@@ -5,16 +5,14 @@ import torch.nn.functional as F
 from typing import cast
 from torch import Tensor
 from dataclasses import dataclass
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.utils import ConfigBase, Module, optional_field
+from emperor.base.registry import subclass_registry
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     DynamicWeightOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
-)
-from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
-    HandlerRegistryBase,
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
     DepthMappingLayerStack,
@@ -32,7 +30,7 @@ class WeightHandlerConfig(ConfigBase):
     output_dim: int | None = optional_field(
         "Output dimension of the weight transformation."
     )
-    weight_option: DynamicWeightOptions | None = optional_field(
+    model_type: DynamicWeightOptions | None = optional_field(
         "Selects the weight handler type for input-dependent weight adjustments."
     )
     normalization: WeightNormalizationOptions | None = optional_field(
@@ -61,15 +59,14 @@ class WeightHandlerConfig(ConfigBase):
     )
 
     def build(self, overrides: "ConfigBase | None" = None) -> "WeightHandlerAbstract":
-        if self.weight_option is None:
-            raise ValueError("`weight_option` must be set before building the handler")
-        handler_cls = WeightHandlerAbstract.resolve(self.weight_option)
+        if self.model_type is None:
+            raise ValueError("`model_type` must be set before building the handler")
+        handler_cls = WeightHandlerAbstract.resolve(self.model_type)
         return handler_cls(self, cast("WeightHandlerConfig | None", overrides))
 
 
-class WeightHandlerAbstract(HandlerRegistryBase[DynamicWeightOptions]):
-    _registry_label = "weight"
-
+@subclass_registry
+class WeightHandlerAbstract(Module):
     def __init__(
         self,
         cfg: WeightHandlerConfig,
@@ -233,9 +230,9 @@ class SingleModelWeightHandler(WeightHandlerAbstract):
     def forward(
         self,
         weight_params: Tensor,
-        logits: Tensor,
+        X: Tensor,
     ) -> Tensor:
-        vectors = self.model(logits)
+        vectors = self.model(X)
         outer_product = self._compute_outer_product(vectors, vectors)
         dynamic_params = self._compute_dynamic_weights(outer_product)
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
@@ -270,14 +267,29 @@ class DualModelWeightHandler(WeightHandlerAbstract):
     def forward(
         self,
         weight_params: Tensor,
-        logits: Tensor,
+        X: Tensor,
     ) -> Tensor:
-        input_vectors = self.input_model(logits)
-        output_vectors = self.output_model(logits)
+        input_vectors = self.input_model(X)
+        output_vectors = self.output_model(X)
         outer_product = self._compute_outer_product(input_vectors, output_vectors)
         dynamic_params = self._compute_dynamic_weights(outer_product)
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
         return decayed_weight_params + dynamic_params
+
+
+@WeightHandlerAbstract.register(DynamicWeightOptions.DUAL_MODEL_MASK)
+class WeightMaskHandler(DualModelWeightHandler):
+    def forward(
+        self,
+        weight_params: Tensor,
+        X: Tensor,
+    ) -> Tensor:
+        input_vectors = self.input_model(X)
+        output_vectors = self.output_model(X)
+        outer_product = self._compute_outer_product(input_vectors, output_vectors)
+        mask = self._compute_dynamic_weights(outer_product)
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        return decayed_weight_params * mask
 
 
 @WeightHandlerAbstract.register(DynamicWeightOptions.LOW_RANK)
@@ -308,53 +320,16 @@ class LowRankWeightHandler(WeightHandlerAbstract):
     def forward(
         self,
         weight_params: Tensor,
-        logits: Tensor,
+        X: Tensor,
     ) -> Tensor:
-        input_lowrank_matrix = self.input_model(logits)
-        output_lowrank_matrix = self.output_model(logits)
+        input_lowrank_matrix = self.input_model(X)
+        output_lowrank_matrix = self.output_model(X)
         input_matrix = self._apply_normalization_transform(input_lowrank_matrix)
         input_matrix_transposed = input_matrix.transpose(1, 2)
         output_matrix = self._apply_normalization_transform(output_lowrank_matrix)
         dynamic_params = torch.bmm(input_matrix_transposed, output_matrix)
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
         return decayed_weight_params + dynamic_params
-
-
-class WeightMaskHandler(WeightHandlerAbstract):
-    def __init__(
-        self,
-        cfg: WeightHandlerConfig,
-        overrides: WeightHandlerConfig | None = None,
-    ):
-        super().__init__(cfg, overrides)
-        self.input_model = self.__init_input_model()
-        self.output_model = self.__init_output_model()
-
-    def __init_input_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
-            input_dim=self.input_dim,
-            output_dim=self.input_dim,
-        )
-        return self._init_generator_model(overrides)
-
-    def __init_output_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-        )
-        return self._init_generator_model(overrides)
-
-    def forward(
-        self,
-        weight_params: Tensor,
-        logits: Tensor,
-    ) -> Tensor:
-        input_vectors = self.input_model(logits)
-        output_vectors = self.output_model(logits)
-        outer_product = self._compute_outer_product(input_vectors, output_vectors)
-        mask = self._compute_dynamic_weights(outer_product)
-        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
-        return decayed_weight_params * mask
 
 
 @WeightHandlerAbstract.register(DynamicWeightOptions.HYPERNETWORK)
@@ -377,9 +352,10 @@ class HypernetworkWeightHandler(WeightHandlerAbstract):
     def forward(
         self,
         weight_params: Tensor,
-        logits: Tensor,
+        X: Tensor,
     ) -> Tensor:
-        flat = self._apply_normalization_transform(self.model(logits))
+        logits = self.model(X)
+        flat = self._apply_normalization_transform(logits)
         flat = self._compute_dynamic_weights(flat)
         update = flat.view(-1, self.input_dim, self.output_dim)
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
@@ -413,9 +389,9 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
     def forward(
         self,
         weight_params: Tensor,
-        logits: Tensor,
+        X: Tensor,
     ) -> Tensor:
-        bank_logits = self.distribution_generator(logits)
+        bank_logits = self.distribution_generator(X)
         bank_distribution = torch.softmax(bank_logits, dim=-1)
         bank_distribution_reshaped = bank_distribution.unsqueeze(dim=-1)
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
@@ -459,9 +435,9 @@ class SoftWeightedBankWeightHandler(WeightHandlerAbstract):
     def forward(
         self,
         weight_params: Tensor,
-        logits: Tensor,
+        X: Tensor,
     ) -> Tensor:
-        bank_logits = self.distribution_generator(logits)
+        bank_logits = self.distribution_generator(X)
         bank_logits = bank_logits.view(
             -1, self.generator_depth, self.input_dim, self.bank_expansion_factor
         )

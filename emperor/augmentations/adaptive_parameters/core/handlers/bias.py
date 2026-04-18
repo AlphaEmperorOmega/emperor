@@ -4,14 +4,12 @@ from typing import cast
 from torch import Tensor
 from dataclasses import dataclass
 from torch.nn import Sequential
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.utils import ConfigBase, Module, optional_field
+from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicBiasOptions
 from emperor.augmentations.adaptive_parameters.core.handlers._validator import (
     BiasHandlerAbstractValidator,
-)
-from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
-    HandlerRegistryBase,
 )
 
 
@@ -26,7 +24,7 @@ class BiasHandlerConfig(ConfigBase):
     bias_flag: bool | None = optional_field(
         "Whether the linear layer has a bias parameter."
     )
-    bias_option: DynamicBiasOptions | None = optional_field(
+    model_type: DynamicBiasOptions | None = optional_field(
         "Input-dependent adjustment of the bias vector."
     )
     bank_expansion_factor: int | None = optional_field(
@@ -37,15 +35,14 @@ class BiasHandlerConfig(ConfigBase):
     )
 
     def build(self, overrides: "ConfigBase | None" = None) -> "BiasHandlerAbstract":
-        if self.bias_option is None:
-            raise ValueError("`bias_option` must be set before building the handler")
-        handler_cls = BiasHandlerAbstract.resolve(self.bias_option)
+        if self.model_type is None:
+            raise ValueError("`model_type` must be set before building the handler")
+        handler_cls = BiasHandlerAbstract.resolve(self.model_type)
         return handler_cls(self, cast("BiasHandlerConfig | None", overrides))
 
 
-class BiasHandlerAbstract(HandlerRegistryBase[DynamicBiasOptions]):
-    _registry_label = "bias"
-
+@subclass_registry
+class BiasHandlerAbstract(Module):
     def __init__(
         self,
         cfg: BiasHandlerConfig,

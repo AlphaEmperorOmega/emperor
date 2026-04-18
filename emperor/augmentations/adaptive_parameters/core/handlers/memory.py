@@ -4,15 +4,13 @@ from typing import cast
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass
-from emperor.base.utils import ConfigBase, optional_field
+from emperor.base.utils import ConfigBase, Module, optional_field
+from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
-)
-from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
-    HandlerRegistryBase,
 )
 
 
@@ -20,7 +18,7 @@ from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
 class MemoryHandlerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input dimension of the memory transformation.")
     output_dim: int | None = optional_field("Output dimension of the memory transformation.")
-    memory_option: LinearMemoryOptions | None = optional_field(
+    model_type: LinearMemoryOptions | None = optional_field(
         "Blends a learned memory representation with the linear layer input or output."
     )
     memory_size_option: LinearMemorySizeOptions | None = optional_field(
@@ -36,15 +34,14 @@ class MemoryHandlerConfig(ConfigBase):
     def build(
         self, overrides: "ConfigBase | None" = None
     ) -> "MemoryHandlerAbstract":
-        if self.memory_option is None:
-            raise ValueError("`memory_option` must be set before building the handler")
-        handler_cls = MemoryHandlerAbstract.resolve(self.memory_option)
+        if self.model_type is None:
+            raise ValueError("`model_type` must be set before building the handler")
+        handler_cls = MemoryHandlerAbstract.resolve(self.model_type)
         return handler_cls(self, cast("MemoryHandlerConfig | None", overrides))
 
 
-class MemoryHandlerAbstract(HandlerRegistryBase[LinearMemoryOptions]):
-    _registry_label = "memory"
-
+@subclass_registry
+class MemoryHandlerAbstract(Module):
     def __init__(
         self,
         cfg: MemoryHandlerConfig,
