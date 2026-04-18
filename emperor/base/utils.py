@@ -566,6 +566,10 @@ class Trainer(HyperParameters):
                 param.grad[:] *= grad_clip_val / norm
 
 
+def optional_field(help: str):
+    return field(default=None, metadata={"help": help})
+
+
 @dataclass
 class ConfigBase:
     def build(self, overrides: "ConfigBase | None" = None) -> "Module":
