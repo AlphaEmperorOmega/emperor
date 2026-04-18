@@ -1,6 +1,5 @@
 from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDiagonalOptions,
     LinearMemoryOptions,
     RowMaskOptions,
@@ -11,14 +10,6 @@ from emperor.augmentations.adaptive_parameters.core.handlers.mask import (
     PerRowMaskHandler,
     RowMaskHandler,
     TopSliceMaskHandler,
-)
-from emperor.augmentations.adaptive_parameters.core.handlers.bias import (
-    AffineBiasTransformHandler,
-    BiasGeneratorHandler,
-    BiasHandlerAbstract,
-    ElementwiseBiasHandler,
-    GatedBiasHandler,
-    WeightedBankBiasGeneratorHandler,
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import (
     AntiDiagonalHandler,
@@ -64,36 +55,6 @@ class DynamicDiagonalFactory(Module):
             case DynamicDiagonalOptions.DISABLED:
                 raise ValueError(
                     "If the `diagonal_option` is set to `DISABLED`, this class should not be initialized"
-                )
-
-
-class DynamicBiasFactory(Module):
-    def __init__(
-        self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
-    ):
-        super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
-            cfg, overrides
-        )
-        self.bias_option = self.cfg.bias_option
-
-    def build(self) -> BiasHandlerAbstract:
-        match self.bias_option:
-            case DynamicBiasOptions.SCALE_AND_OFFSET:
-                return AffineBiasTransformHandler(self.cfg)
-            case DynamicBiasOptions.ELEMENT_WISE_OFFSET:
-                return ElementwiseBiasHandler(self.cfg)
-            case DynamicBiasOptions.DYNAMIC_PARAMETERS:
-                return BiasGeneratorHandler(self.cfg)
-            case DynamicBiasOptions.GATED:
-                return GatedBiasHandler(self.cfg)
-            case DynamicBiasOptions.WEIGHTED_BANK:
-                return WeightedBankBiasGeneratorHandler(self.cfg)
-            case DynamicBiasOptions.DISABLED:
-                raise ValueError(
-                    "If the `bias_option` is set to `DISABLED`, this class should not be initialized"
                 )
 
 

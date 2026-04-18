@@ -5,13 +5,15 @@ from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.factory import (
-    DynamicBiasFactory,
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
     MaskHandlerFactory,
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
     WeightHandlerConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.handlers.bias import (
+    BiasHandlerConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
@@ -77,7 +79,14 @@ class AdaptiveParameterAugmentation(Module):
     def __init_bias_model(self) -> Module | None:
         is_valid_not_disabled_flag = self.bias_option != DynamicBiasOptions.DISABLED
         is_valid_flag = self.bias_flag and is_valid_not_disabled_flag
-        return self.__build_model(is_valid_flag, DynamicBiasFactory)
+        if not is_valid_flag:
+            return None
+        bias_cfg = self.cfg.bias_config or BiasHandlerConfig()
+        overrides = BiasHandlerConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
+        return bias_cfg.build(overrides)
 
     def __init_row_mask_model(self) -> Module | None:
         is_valid_flag = self.row_mask_option != RowMaskOptions.DISABLED
