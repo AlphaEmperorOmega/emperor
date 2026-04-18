@@ -4,29 +4,24 @@ import torch.nn.functional as F
 from typing import cast
 from torch import Tensor
 from torch.nn import Sequential
-from dataclasses import dataclass, field
-from emperor.base.utils import ConfigBase, Module
+from dataclasses import dataclass
+from emperor.base.utils import ConfigBase, optional_field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
+from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
+    HandlerRegistryBase,
+)
 
 
 @dataclass
 class DiagonalHandlerConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input dimension of the diagonal transformation."},
+    input_dim: int | None = optional_field("Input dimension of the diagonal transformation.")
+    output_dim: int | None = optional_field("Output dimension of the diagonal transformation.")
+    diagonal_option: DynamicDiagonalOptions | None = optional_field(
+        "Input-dependent adjustment of the weight matrix diagonal."
     )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output dimension of the diagonal transformation."},
-    )
-    diagonal_option: DynamicDiagonalOptions | None = field(
-        default=None,
-        metadata={"help": "Input-dependent adjustment of the weight matrix diagonal."},
-    )
-    model_config: LayerStackConfig | None = field(
-        default=None,
-        metadata={"help": "Layer stack configuration for the internal generator network."},
+    model_config: LayerStackConfig | None = optional_field(
+        "Layer stack configuration for the internal generator network."
     )
 
     def build(
@@ -38,22 +33,8 @@ class DiagonalHandlerConfig(ConfigBase):
         return handler_cls(self, cast("DiagonalHandlerConfig | None", overrides))
 
 
-class DiagonalHandlerAbstract(Module):
-    _registry: dict[DynamicDiagonalOptions, type["DiagonalHandlerAbstract"]] = {}
-
-    @classmethod
-    def register(cls, option: DynamicDiagonalOptions):
-        def decorator(handler_cls: type["DiagonalHandlerAbstract"]):
-            cls._registry[option] = handler_cls
-            return handler_cls
-
-        return decorator
-
-    @classmethod
-    def resolve(cls, option: DynamicDiagonalOptions) -> type["DiagonalHandlerAbstract"]:
-        if option not in cls._registry:
-            raise ValueError(f"No handler registered for diagonal option: {option}")
-        return cls._registry[option]
+class DiagonalHandlerAbstract(HandlerRegistryBase[DynamicDiagonalOptions]):
+    _registry_label = "diagonal"
 
     def __init__(
         self,

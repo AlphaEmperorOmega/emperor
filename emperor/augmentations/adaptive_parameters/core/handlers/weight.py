@@ -4,14 +4,17 @@ import torch.nn.functional as F
 
 from typing import cast
 from torch import Tensor
-from dataclasses import dataclass, field
-from emperor.base.utils import Module, ConfigBase
+from dataclasses import dataclass
+from emperor.base.utils import ConfigBase, optional_field
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     DynamicWeightOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
+    HandlerRegistryBase,
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
     DepthMappingLayerStack,
@@ -23,94 +26,49 @@ from emperor.base.layer import (
 
 @dataclass
 class WeightHandlerConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input dimension of the weight transformation."},
+    input_dim: int | None = optional_field(
+        "Input dimension of the weight transformation."
     )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output dimension of the weight transformation."},
+    output_dim: int | None = optional_field(
+        "Output dimension of the weight transformation."
     )
-    weight_option: DynamicWeightOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Selects the weight handler type for input-dependent weight adjustments."
-        },
+    weight_option: DynamicWeightOptions | None = optional_field(
+        "Selects the weight handler type for input-dependent weight adjustments."
     )
-    normalization: WeightNormalizationOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Normalization applied to vectors before the outer product computation."
-        },
+    normalization: WeightNormalizationOptions | None = optional_field(
+        "Normalization applied to vectors before the outer product computation."
     )
-    normalization_position: WeightNormalizationPositionOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Controls whether normalization is applied to the input vectors before or to the outer product after computation."
-        },
+    normalization_position: WeightNormalizationPositionOptions | None = optional_field(
+        "Controls whether normalization is applied to the input vectors before or to the outer product after computation."
     )
-    generator_depth: DynamicDepthOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Depth of the generator network that produces input-dependent weight adjustments."
-        },
+    generator_depth: DynamicDepthOptions | None = optional_field(
+        "Depth of the generator network that produces input-dependent weight adjustments."
     )
-    bank_expansion_factor: int | None = field(
-        default=None,
-        metadata={
-            "help": "Number of times default weight parameter bank will be scaled by for example (weight_bank_expansion_factor * input_dim, output_dim)"
-        },
+    bank_expansion_factor: int | None = optional_field(
+        "Number of times default weight parameter bank will be scaled by for example (weight_bank_expansion_factor * input_dim, output_dim)"
     )
-    model_config: LayerStackConfig | None = field(
-        default=None,
-        metadata={
-            "help": "Layer stack configuration for the internal generator network."
-        },
+    model_config: LayerStackConfig | None = optional_field(
+        "Layer stack configuration for the internal generator network."
     )
-    decay_schedule: WeightDecayScheduleOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Schedule used to decay the base weight parameters over forward calls, eventually driving them to zero."
-        },
+    decay_schedule: WeightDecayScheduleOptions | None = optional_field(
+        "Schedule used to decay the base weight parameters over forward calls, eventually driving them to zero."
     )
-    decay_rate: float | None = field(
-        default=None,
-        metadata={
-            "help": "Decay rate applied by the selected schedule. Interpretation depends on the schedule (exponent factor, linear slope, or multiplicative factor)."
-        },
+    decay_rate: float | None = optional_field(
+        "Decay rate applied by the selected schedule. Interpretation depends on the schedule (exponent factor, linear slope, or multiplicative factor)."
     )
-    decay_warmup_batches: int | None = field(
-        default=None,
-        metadata={
-            "help": "Number of batches to delay before applying weight decay. Decay steps only begin counting after this warmup period."
-        },
+    decay_warmup_batches: int | None = optional_field(
+        "Number of batches to delay before applying weight decay. Decay steps only begin counting after this warmup period."
     )
 
-    def build(
-        self, overrides: "ConfigBase | None" = None
-    ) -> "WeightHandlerAbstract":
+    def build(self, overrides: "ConfigBase | None" = None) -> "WeightHandlerAbstract":
         if self.weight_option is None:
             raise ValueError("`weight_option` must be set before building the handler")
         handler_cls = WeightHandlerAbstract.resolve(self.weight_option)
         return handler_cls(self, cast("WeightHandlerConfig | None", overrides))
 
 
-class WeightHandlerAbstract(Module):
-    _registry: dict[DynamicWeightOptions, type["WeightHandlerAbstract"]] = {}
-
-    @classmethod
-    def register(cls, option: DynamicWeightOptions):
-        def decorator(handler_cls: type["WeightHandlerAbstract"]):
-            cls._registry[option] = handler_cls
-            return handler_cls
-
-        return decorator
-
-    @classmethod
-    def resolve(cls, option: DynamicWeightOptions) -> type["WeightHandlerAbstract"]:
-        if option not in cls._registry:
-            raise ValueError(f"No handler registered for weight option: {option}")
-        return cls._registry[option]
+class WeightHandlerAbstract(HandlerRegistryBase[DynamicWeightOptions]):
+    _registry_label = "weight"
 
     def __init__(
         self,

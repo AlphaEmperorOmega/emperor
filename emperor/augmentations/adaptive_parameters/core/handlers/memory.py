@@ -3,43 +3,34 @@ import torch
 from typing import cast
 from torch import Tensor
 from torch.nn import Sequential
-from dataclasses import dataclass, field
-from emperor.base.utils import Module, ConfigBase
+from dataclasses import dataclass
+from emperor.base.utils import ConfigBase, optional_field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
+from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
+    HandlerRegistryBase,
+)
 
 
 @dataclass
 class MemoryHandlerConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input dimension of the memory transformation."},
+    input_dim: int | None = optional_field("Input dimension of the memory transformation.")
+    output_dim: int | None = optional_field("Output dimension of the memory transformation.")
+    memory_option: LinearMemoryOptions | None = optional_field(
+        "Blends a learned memory representation with the linear layer input or output."
     )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output dimension of the memory transformation."},
+    memory_size_option: LinearMemorySizeOptions | None = optional_field(
+        "Size of the learned memory representation."
     )
-    memory_option: LinearMemoryOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Blends a learned memory representation with the linear layer input or output."
-        },
+    memory_position_option: LinearMemoryPositionOptions | None = optional_field(
+        "Controls when memory is applied in the computation."
     )
-    memory_size_option: LinearMemorySizeOptions | None = field(
-        default=None,
-        metadata={"help": "Size of the learned memory representation."},
-    )
-    memory_position_option: LinearMemoryPositionOptions | None = field(
-        default=None,
-        metadata={"help": "Controls when memory is applied in the computation."},
-    )
-    model_config: LayerStackConfig | None = field(
-        default=None,
-        metadata={"help": "Layer stack configuration for the internal generator network."},
+    model_config: LayerStackConfig | None = optional_field(
+        "Layer stack configuration for the internal generator network."
     )
 
     def build(
@@ -51,22 +42,8 @@ class MemoryHandlerConfig(ConfigBase):
         return handler_cls(self, cast("MemoryHandlerConfig | None", overrides))
 
 
-class MemoryHandlerAbstract(Module):
-    _registry: dict[LinearMemoryOptions, type["MemoryHandlerAbstract"]] = {}
-
-    @classmethod
-    def register(cls, option: LinearMemoryOptions):
-        def decorator(handler_cls: type["MemoryHandlerAbstract"]):
-            cls._registry[option] = handler_cls
-            return handler_cls
-
-        return decorator
-
-    @classmethod
-    def resolve(cls, option: LinearMemoryOptions) -> type["MemoryHandlerAbstract"]:
-        if option not in cls._registry:
-            raise ValueError(f"No handler registered for memory option: {option}")
-        return cls._registry[option]
+class MemoryHandlerAbstract(HandlerRegistryBase[LinearMemoryOptions]):
+    _registry_label = "memory"
 
     def __init__(
         self,

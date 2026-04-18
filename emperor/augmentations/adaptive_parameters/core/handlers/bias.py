@@ -1,76 +1,50 @@
 import torch
 
 from typing import cast
-from dataclasses import dataclass, field
 from torch import Tensor
+from dataclasses import dataclass
 from torch.nn import Sequential
-from emperor.base.utils import Module, ConfigBase
+from emperor.base.utils import ConfigBase, optional_field
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicBiasOptions
 from emperor.augmentations.adaptive_parameters.core.handlers._validator import (
     BiasHandlerAbstractValidator,
 )
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import (
-        AdaptiveParameterAugmentationConfig,
-    )
+from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
+    HandlerRegistryBase,
+)
 
 
 @dataclass
 class BiasHandlerConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input dimension of the bias transformation."},
+    input_dim: int | None = optional_field(
+        "Input dimension of the bias transformation."
     )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output dimension of the bias transformation."},
+    output_dim: int | None = optional_field(
+        "Output dimension of the bias transformation."
     )
-    bias_flag: bool | None = field(
-        default=None,
-        metadata={"help": "Whether the linear layer has a bias parameter."},
+    bias_flag: bool | None = optional_field(
+        "Whether the linear layer has a bias parameter."
     )
-    bias_option: DynamicBiasOptions | None = field(
-        default=None,
-        metadata={"help": "Input-dependent adjustment of the bias vector."},
+    bias_option: DynamicBiasOptions | None = optional_field(
+        "Input-dependent adjustment of the bias vector."
     )
-    bank_expansion_factor: int | None = field(
-        default=None,
-        metadata={"help": "Size of the weight bank for WEIGHTED_BANK bias option."},
+    bank_expansion_factor: int | None = optional_field(
+        "Size of the weight bank for WEIGHTED_BANK bias option."
     )
-    model_config: LayerStackConfig | None = field(
-        default=None,
-        metadata={"help": "Layer stack configuration for the internal generator network."},
+    model_config: LayerStackConfig | None = optional_field(
+        "Layer stack configuration for the internal generator network."
     )
 
-    def build(
-        self, overrides: "ConfigBase | None" = None
-    ) -> "BiasHandlerAbstract":
+    def build(self, overrides: "ConfigBase | None" = None) -> "BiasHandlerAbstract":
         if self.bias_option is None:
             raise ValueError("`bias_option` must be set before building the handler")
         handler_cls = BiasHandlerAbstract.resolve(self.bias_option)
         return handler_cls(self, cast("BiasHandlerConfig | None", overrides))
 
 
-class BiasHandlerAbstract(Module):
-    _registry: dict[DynamicBiasOptions, type["BiasHandlerAbstract"]] = {}
-
-    @classmethod
-    def register(cls, option: DynamicBiasOptions):
-        def decorator(handler_cls: type["BiasHandlerAbstract"]):
-            cls._registry[option] = handler_cls
-            return handler_cls
-
-        return decorator
-
-    @classmethod
-    def resolve(cls, option: DynamicBiasOptions) -> type["BiasHandlerAbstract"]:
-        if option not in cls._registry:
-            raise ValueError(f"No handler registered for bias option: {option}")
-        return cls._registry[option]
+class BiasHandlerAbstract(HandlerRegistryBase[DynamicBiasOptions]):
+    _registry_label = "bias"
 
     def __init__(
         self,

@@ -2,38 +2,30 @@ import torch
 
 from typing import cast
 from torch import Tensor
-from dataclasses import dataclass, field
-from emperor.base.utils import Module, ConfigBase
+from dataclasses import dataclass
+from emperor.base.utils import ConfigBase, optional_field
 from emperor.base.layer import LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import (
     MaskDimensionOptions,
     RowMaskOptions,
 )
+from emperor.augmentations.adaptive_parameters.core.handlers._registry import (
+    HandlerRegistryBase,
+)
 
 
 @dataclass
 class MaskHandlerConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input dimension of the mask transformation."},
+    input_dim: int | None = optional_field("Input dimension of the mask transformation.")
+    output_dim: int | None = optional_field("Output dimension of the mask transformation.")
+    row_mask_option: RowMaskOptions | None = optional_field(
+        "Input-dependent row masking of the weight matrix after weight updates."
     )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output dimension of the mask transformation."},
+    mask_dimension_option: MaskDimensionOptions | None = optional_field(
+        "Whether to mask rows or columns of the weight matrix."
     )
-    row_mask_option: RowMaskOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Input-dependent row masking of the weight matrix after weight updates."
-        },
-    )
-    mask_dimension_option: MaskDimensionOptions | None = field(
-        default=None,
-        metadata={"help": "Whether to mask rows or columns of the weight matrix."},
-    )
-    model_config: LayerStackConfig | None = field(
-        default=None,
-        metadata={"help": "Layer stack configuration for the internal generator network."},
+    model_config: LayerStackConfig | None = optional_field(
+        "Layer stack configuration for the internal generator network."
     )
 
     def build(
@@ -45,22 +37,8 @@ class MaskHandlerConfig(ConfigBase):
         return handler_cls(self, cast("MaskHandlerConfig | None", overrides))
 
 
-class MaskHandlerAbstract(Module):
-    _registry: dict[RowMaskOptions, type["MaskHandlerAbstract"]] = {}
-
-    @classmethod
-    def register(cls, option: RowMaskOptions):
-        def decorator(handler_cls: type["MaskHandlerAbstract"]):
-            cls._registry[option] = handler_cls
-            return handler_cls
-
-        return decorator
-
-    @classmethod
-    def resolve(cls, option: RowMaskOptions) -> type["MaskHandlerAbstract"]:
-        if option not in cls._registry:
-            raise ValueError(f"No handler registered for mask option: {option}")
-        return cls._registry[option]
+class MaskHandlerAbstract(HandlerRegistryBase[RowMaskOptions]):
+    _registry_label = "mask"
 
     def __init__(
         self,
