@@ -14,7 +14,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicDiagonalOptions,
     MaskDimensionOptions,
 )
-from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.core.layers import (
     AdaptiveLinearLayer,
     LinearLayer,

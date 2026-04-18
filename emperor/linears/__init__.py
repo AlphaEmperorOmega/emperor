@@ -1,4 +1,5 @@
-from .core.config import LinearLayerConfig, AdaptiveLinearLayerConfig
+from .options import LinearOptions
+from .core.config import LinearLayerConfig
 from .core.layers import (
     LinearLayer,
     AdaptiveLinearLayer,
@@ -12,5 +13,6 @@ __all__ = [
     "LinearAbstract",
     # Configuration
     "LinearLayerConfig",
-    "AdaptiveLinearLayerConfig",
+    # Options
+    "LinearOptions",
 ]

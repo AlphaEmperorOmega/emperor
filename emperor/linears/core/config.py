@@ -1,5 +1,7 @@
+from typing import cast
 from dataclasses import dataclass
 from emperor.base.utils import ConfigBase, optional_field
+from emperor.linears.options import LinearOptions
 
 from typing import TYPE_CHECKING
 
@@ -21,23 +23,20 @@ class LinearLayerConfig(ConfigBase):
     bias_flag: bool | None = optional_field(
         "When true a learnable bias vector is added to the output after the linear transformation"
     )
+    model_type: LinearOptions | None = optional_field(
+        "Selects the linear layer variant for registry-based dispatch"
+    )
+    adaptive_augmentation_config: "AdaptiveParameterAugmentationConfig | None" = optional_field(
+        "Config for input-dependent parameter augmentations applied to the linear layer"
+    )
 
     def build(
         self,
         overrides: "LinearLayerConfig | None" = None,
     ) -> "Module":
-        from emperor.linears.core.layers import LinearLayer
+        from emperor.linears.core.layers import LinearAbstract
 
-        return LinearLayer(self, overrides)
-
-
-@dataclass
-class AdaptiveLinearLayerConfig(LinearLayerConfig):
-    adaptive_augmentation_config: "AdaptiveParameterAugmentationConfig | None" = optional_field(
-        "Config for input-dependent parameter augmentations applied to the linear layer"
-    )
-
-    def build(self, overrides: "AdaptiveLinearLayerConfig | None" = None) -> "Module":
-        from emperor.linears.core.layers import AdaptiveLinearLayer
-
-        return AdaptiveLinearLayer(self, overrides)
+        if self.model_type is None:
+            raise ValueError("`model_type` must be set before building the layer")
+        layer_cls = LinearAbstract.resolve(self.model_type)
+        return layer_cls(self, cast("LinearLayerConfig | None", overrides))

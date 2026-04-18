@@ -5,15 +5,15 @@ from emperor.base.validator import ValidatorBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.linears.core.config import AdaptiveLinearLayerConfig
-    from emperor.linears.core.layers import LinearBase
+    from emperor.linears.core.config import LinearLayerConfig
+    from emperor.linears.core.layers import LinearAbstract
 
 
 class LinearValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"override_config"}
 
     @staticmethod
-    def validate(model: "LinearBase") -> None:
+    def validate(model: "LinearAbstract") -> None:
         LinearValidator.validate_required_fields(model.cfg)
         LinearValidator.validate_field_types(model.cfg)
         LinearValidator.validate_dimensions(
@@ -21,10 +21,18 @@ class LinearValidator(ValidatorBase):
         )
 
     @staticmethod
-    def validate_adaptive(cfg: "AdaptiveLinearLayerConfig") -> None:
+    def validate_adaptive(cfg: "LinearLayerConfig") -> None:
         if cfg.adaptive_augmentation_config is None:
             raise ValueError(
                 f"adaptive_augmentation_config is required for {cfg.__class__.__name__}"
+            )
+
+    @staticmethod
+    def validate_not_adaptive(cfg: "LinearLayerConfig") -> None:
+        if cfg.adaptive_augmentation_config is not None:
+            raise ValueError(
+                "`adaptive_augmentation_config` must be None for "
+                "`LinearOptions.LINEAR`; use `LinearOptions.ADAPTIVE` instead."
             )
 
     @staticmethod

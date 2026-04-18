@@ -5,8 +5,10 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Parameter
 from emperor.base.utils import Module
+from emperor.base.registry import subclass_registry
 from emperor.linears.core._validator import LinearValidator
-from emperor.linears.core.config import LinearLayerConfig, AdaptiveLinearLayerConfig
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears.options import LinearOptions
 from emperor.augmentations.adaptive_parameters.model import (
     AdaptiveParameterAugmentation,
 )
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
+@subclass_registry
 class LinearAbstract(Module):
     def __init__(
         self,
@@ -50,6 +53,7 @@ class LinearAbstract(Module):
         return self._init_parameter_bank(bias_shape, nn.init.zeros_)
 
 
+@LinearAbstract.register(LinearOptions.LINEAR)
 class LinearLayer(LinearAbstract):
     def __init__(
         self,
@@ -57,17 +61,19 @@ class LinearLayer(LinearAbstract):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
+        LinearValidator.validate_not_adaptive(self.cfg)
 
     def forward(self, X: Tensor) -> Tensor:
         LinearValidator.validate_input_is_2d(X)
         return F.linear(X, self.weight_params.T, self.bias_params)
 
 
+@LinearAbstract.register(LinearOptions.ADAPTIVE)
 class AdaptiveLinearLayer(LinearAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig | ModelConfig",
-        overrides: "AdaptiveLinearLayerConfig | None" = None,
+        cfg: "LinearLayerConfig | ModelConfig",
+        overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         LinearValidator.validate_adaptive(self.cfg)
