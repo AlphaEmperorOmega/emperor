@@ -2,7 +2,6 @@ from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDiagonalOptions,
-    DynamicWeightOptions,
     LinearMemoryOptions,
     RowMaskOptions,
 )
@@ -32,65 +31,11 @@ from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
     MemoryHandlerAbstract,
     WeightedMemoryHandler,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
-    DualModelWeightHandler,
-    HypernetworkWeightHandler,
-    LayeredWeightedBankWeightHandler,
-    LowRankWeightHandler,
-    SingleModelWeightHandler,
-    SoftWeightedBankWeightHandler,
-    WeightHandlerAbstract,
-    WeightHandlerConfig,
-)
-
 from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
-
-
-class DynamicWeightFactory(Module):
-    def __init__(
-        self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
-    ):
-        super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
-            cfg, overrides
-        )
-        self.weight_option = self.cfg.weight_option
-
-    def _build_weight_config(self) -> WeightHandlerConfig:
-        base = self.cfg.weight_config or WeightHandlerConfig()
-        return self._override_config(  # type: ignore[return-value]
-            base,
-            WeightHandlerConfig(
-                input_dim=self.cfg.input_dim,
-                output_dim=self.cfg.output_dim,
-            ),
-        )
-
-    def build(self) -> WeightHandlerAbstract:
-        weight_cfg = self._build_weight_config()
-        match self.weight_option:
-            case DynamicWeightOptions.DUAL_MODEL:
-                return DualModelWeightHandler(weight_cfg)
-            case DynamicWeightOptions.SINGLE_MODEL:
-                return SingleModelWeightHandler(weight_cfg)
-            case DynamicWeightOptions.LOW_RANK:
-                return LowRankWeightHandler(weight_cfg)
-            case DynamicWeightOptions.HYPERNETWORK:
-                return HypernetworkWeightHandler(weight_cfg)
-            case DynamicWeightOptions.LAYERED_WEIGHTED_BANK:
-                return LayeredWeightedBankWeightHandler(weight_cfg)
-            case DynamicWeightOptions.SOFT_WEIGHTED_BANK:
-                return SoftWeightedBankWeightHandler(weight_cfg)
-            case DynamicWeightOptions.DISABLED:
-                raise ValueError(
-                    "If the `weight_option` is set to `DISABLED`, this class should not be initialized"
-                )
 
 
 # TODO: Add option for a kernel to take the context

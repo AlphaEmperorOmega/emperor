@@ -8,8 +8,10 @@ from emperor.augmentations.adaptive_parameters.core.factory import (
     DynamicBiasFactory,
     DynamicDiagonalFactory,
     DynamicMemoryFactory,
-    DynamicWeightFactory,
     MaskHandlerFactory,
+)
+from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
+    WeightHandlerConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
@@ -55,8 +57,14 @@ class AdaptiveParameterAugmentation(Module):
         self.row_mask_model = self.__init_row_mask_model()
 
     def __init_generator_model(self) -> Module | None:
-        is_valid_flag = self.generator_depth != DynamicDepthOptions.DISABLED
-        return self.__build_model(is_valid_flag, DynamicWeightFactory)
+        if self.generator_depth == DynamicDepthOptions.DISABLED:
+            return None
+        weight_cfg = self.cfg.weight_config or WeightHandlerConfig()
+        overrides = WeightHandlerConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
+        return weight_cfg.build(overrides)
 
     def __init_diagonal_model(self) -> Module | None:
         is_valid_flag = self.diagonal_option != DynamicDiagonalOptions.DISABLED

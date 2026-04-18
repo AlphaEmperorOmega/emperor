@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import cast
 from torch import Tensor
 from dataclasses import dataclass, field
 from emperor.base.utils import Module, ConfigBase
@@ -85,8 +86,32 @@ class WeightHandlerConfig(ConfigBase):
         },
     )
 
+    def build(
+        self, overrides: "ConfigBase | None" = None
+    ) -> "WeightHandlerAbstract":
+        if self.weight_option is None:
+            raise ValueError("`weight_option` must be set before building the handler")
+        handler_cls = WeightHandlerAbstract.resolve(self.weight_option)
+        return handler_cls(self, cast("WeightHandlerConfig | None", overrides))
+
 
 class WeightHandlerAbstract(Module):
+    _registry: dict[DynamicWeightOptions, type["WeightHandlerAbstract"]] = {}
+
+    @classmethod
+    def register(cls, option: DynamicWeightOptions):
+        def decorator(handler_cls: type["WeightHandlerAbstract"]):
+            cls._registry[option] = handler_cls
+            return handler_cls
+
+        return decorator
+
+    @classmethod
+    def resolve(cls, option: DynamicWeightOptions) -> type["WeightHandlerAbstract"]:
+        if option not in cls._registry:
+            raise ValueError(f"No handler registered for weight option: {option}")
+        return cls._registry[option]
+
     def __init__(
         self,
         cfg: WeightHandlerConfig,
@@ -230,6 +255,7 @@ class WeightHandlerAbstract(Module):
                 raise ValueError(f"Unknown weight decay schedule option: {schedule}")
 
 
+@WeightHandlerAbstract.register(DynamicWeightOptions.SINGLE_MODEL)
 class SingleModelWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
@@ -258,6 +284,7 @@ class SingleModelWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + dynamic_params
 
 
+@WeightHandlerAbstract.register(DynamicWeightOptions.DUAL_MODEL)
 class DualModelWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
@@ -295,6 +322,7 @@ class DualModelWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + dynamic_params
 
 
+@WeightHandlerAbstract.register(DynamicWeightOptions.LOW_RANK)
 class LowRankWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
@@ -371,6 +399,7 @@ class WeightMaskHandler(WeightHandlerAbstract):
         return decayed_weight_params * mask
 
 
+@WeightHandlerAbstract.register(DynamicWeightOptions.HYPERNETWORK)
 class HypernetworkWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
@@ -399,6 +428,7 @@ class HypernetworkWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + update
 
 
+@WeightHandlerAbstract.register(DynamicWeightOptions.LAYERED_WEIGHTED_BANK)
 class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
@@ -443,6 +473,7 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + depth_and_expansion_reduced_weights
 
 
+@WeightHandlerAbstract.register(DynamicWeightOptions.SOFT_WEIGHTED_BANK)
 class SoftWeightedBankWeightHandler(WeightHandlerAbstract):
     def __init__(
         self,
