@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from emperor.base.utils import ConfigBase
+from dataclasses import dataclass
+from emperor.base.utils import ConfigBase, optional_field
 
 from typing import TYPE_CHECKING
 
@@ -12,21 +12,14 @@ if TYPE_CHECKING:
 
 @dataclass
 class LinearLayerConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Number of input features for the linear transformation"},
+    input_dim: int | None = optional_field(
+        "Number of input features for the linear transformation"
     )
-    output_dim: int | None = field(
-        default=None,
-        metadata={
-            "help": "Number of output features produced by the linear transformation"
-        },
+    output_dim: int | None = optional_field(
+        "Number of output features produced by the linear transformation"
     )
-    bias_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When true a learnable bias vector is added to the output after the linear transformation"
-        },
+    bias_flag: bool | None = optional_field(
+        "When true a learnable bias vector is added to the output after the linear transformation"
     )
 
     def build(
@@ -40,11 +33,8 @@ class LinearLayerConfig(ConfigBase):
 
 @dataclass
 class AdaptiveLinearLayerConfig(LinearLayerConfig):
-    adaptive_augmentation_config: "AdaptiveParameterAugmentationConfig | None" = field(
-        default=None,
-        metadata={
-            "help": "Config for input-dependent parameter augmentations applied to the linear layer"
-        },
+    adaptive_augmentation_config: "AdaptiveParameterAugmentationConfig | None" = optional_field(
+        "Config for input-dependent parameter augmentations applied to the linear layer"
     )
 
     def build(self, overrides: "AdaptiveLinearLayerConfig | None" = None) -> "Module":
