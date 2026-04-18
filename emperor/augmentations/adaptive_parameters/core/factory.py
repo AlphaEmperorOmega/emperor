@@ -1,6 +1,5 @@
 from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.options import (
-    LinearMemoryOptions,
     RowMaskOptions,
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.mask import (
@@ -10,40 +9,11 @@ from emperor.augmentations.adaptive_parameters.core.handlers.mask import (
     RowMaskHandler,
     TopSliceMaskHandler,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
-    MemoryFusionHandler,
-    MemoryHandlerAbstract,
-    WeightedMemoryHandler,
-)
 from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
-
-
-class DynamicMemoryFactory(Module):
-    def __init__(
-        self,
-        cfg: "AdaptiveParameterAugmentationConfig",
-        overrides: "AdaptiveParameterAugmentationConfig | None" = None,
-    ):
-        super().__init__()
-        self.cfg: "AdaptiveParameterAugmentationConfig" = self._override_config(
-            cfg, overrides
-        )
-        self.memory_option = self.cfg.memory_option
-
-    def build(self) -> MemoryHandlerAbstract:
-        match self.memory_option:
-            case LinearMemoryOptions.FUSION:
-                return MemoryFusionHandler(self.cfg)
-            case LinearMemoryOptions.WEIGHTED:
-                return WeightedMemoryHandler(self.cfg)
-            case LinearMemoryOptions.DISABLED:
-                raise ValueError(
-                    "If the `memory_option` is set to `DISABLED`, this class should not be initialized"
-                )
 
 
 class MaskHandlerFactory(Module):

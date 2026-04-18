@@ -1,5 +1,6 @@
 import torch
 
+from typing import cast
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
@@ -11,27 +12,28 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemorySizeOptions,
 )
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import (
-        AdaptiveParameterAugmentationConfig,
-    )
-
 
 @dataclass
 class MemoryHandlerConfig(ConfigBase):
+    input_dim: int | None = field(
+        default=None,
+        metadata={"help": "Input dimension of the memory transformation."},
+    )
+    output_dim: int | None = field(
+        default=None,
+        metadata={"help": "Output dimension of the memory transformation."},
+    )
     memory_option: LinearMemoryOptions | None = field(
         default=None,
         metadata={
             "help": "Blends a learned memory representation with the linear layer input or output."
         },
     )
-    size_option: LinearMemorySizeOptions | None = field(
+    memory_size_option: LinearMemorySizeOptions | None = field(
         default=None,
         metadata={"help": "Size of the learned memory representation."},
     )
-    position_option: LinearMemoryPositionOptions | None = field(
+    memory_position_option: LinearMemoryPositionOptions | None = field(
         default=None,
         metadata={"help": "Controls when memory is applied in the computation."},
     )
@@ -40,15 +42,39 @@ class MemoryHandlerConfig(ConfigBase):
         metadata={"help": "Layer stack configuration for the internal generator network."},
     )
 
+    def build(
+        self, overrides: "ConfigBase | None" = None
+    ) -> "MemoryHandlerAbstract":
+        if self.memory_option is None:
+            raise ValueError("`memory_option` must be set before building the handler")
+        handler_cls = MemoryHandlerAbstract.resolve(self.memory_option)
+        return handler_cls(self, cast("MemoryHandlerConfig | None", overrides))
+
 
 class MemoryHandlerAbstract(Module):
+    _registry: dict[LinearMemoryOptions, type["MemoryHandlerAbstract"]] = {}
+
+    @classmethod
+    def register(cls, option: LinearMemoryOptions):
+        def decorator(handler_cls: type["MemoryHandlerAbstract"]):
+            cls._registry[option] = handler_cls
+            return handler_cls
+
+        return decorator
+
+    @classmethod
+    def resolve(cls, option: LinearMemoryOptions) -> type["MemoryHandlerAbstract"]:
+        if option not in cls._registry:
+            raise ValueError(f"No handler registered for memory option: {option}")
+        return cls._registry[option]
+
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
+        cfg: MemoryHandlerConfig,
+        overrides: MemoryHandlerConfig | None = None,
     ):
         super().__init__()
-        self.cfg = cfg
-        self.cfg_main = self._resolve_main_config(self.cfg, cfg)
+        self.cfg: MemoryHandlerConfig = self._override_config(cfg, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.memory_size_option = self.cfg.memory_size_option
@@ -71,12 +97,14 @@ class MemoryHandlerAbstract(Module):
         return LinearLayerStack(config, overrides).build_model()
 
 
+@MemoryHandlerAbstract.register(LinearMemoryOptions.FUSION)
 class MemoryFusionHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
+        cfg: MemoryHandlerConfig,
+        overrides: MemoryHandlerConfig | None = None,
     ):
-        super().__init__(cfg)
+        super().__init__(cfg, overrides)
         self.memory_model = self.__init_memory_model()
         self.compression_model = self.__init_compression_model()
         self._validate_memory_option()
@@ -84,18 +112,18 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
     def __init_memory_model(self) -> "Layer | Sequential":
         input_dim = self._get_memory_dim()
         output_dim = self.memory_size_option.value
-        overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
-        return self._init_model(self.cfg_main, overrides)
+        layer_overrides = LayerStackConfig(input_dim=input_dim, output_dim=output_dim)
+        return self._init_model(self.cfg.model_config, layer_overrides)
 
     def __init_compression_model(self) -> "Layer | Sequential":
         dim = self._get_memory_dim()
         compression_input_dim = dim + self.memory_size_option.value
-        overrides = LayerStackConfig(
+        layer_overrides = LayerStackConfig(
             input_dim=compression_input_dim,
             hidden_dim=dim,
             output_dim=dim,
         )
-        return self._init_model(self.cfg_main, overrides)
+        return self._init_model(self.cfg.model_config, layer_overrides)
 
     def forward(self, logits: Tensor) -> Tensor:
         memory = self.memory_model(logits)
@@ -103,12 +131,14 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
         return self.compression_model(combined)
 
 
+@MemoryHandlerAbstract.register(LinearMemoryOptions.WEIGHTED)
 class WeightedMemoryHandler(MemoryHandlerAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveParameterAugmentationConfig",
+        cfg: MemoryHandlerConfig,
+        overrides: MemoryHandlerConfig | None = None,
     ):
-        super().__init__(cfg)
+        super().__init__(cfg, overrides)
 
         self.memory_model = self.__init_memory_model()
         self.memory_weight_model = self.__init_weight_model()
@@ -116,13 +146,13 @@ class WeightedMemoryHandler(MemoryHandlerAbstract):
 
     def __init_memory_model(self) -> "Layer | Sequential":
         dim = self._get_memory_dim()
-        overrides = LayerStackConfig(input_dim=dim, output_dim=dim)
-        return self._init_model(self.cfg_main, overrides)
+        layer_overrides = LayerStackConfig(input_dim=dim, output_dim=dim)
+        return self._init_model(self.cfg.model_config, layer_overrides)
 
     def __init_weight_model(self) -> "Layer | Sequential":
         dim = self._get_memory_dim() * 2
-        overrides = LayerStackConfig(input_dim=dim, hidden_dim=dim, output_dim=2)
-        return self._init_model(self.cfg_main, overrides)
+        layer_overrides = LayerStackConfig(input_dim=dim, hidden_dim=dim, output_dim=2)
+        return self._init_model(self.cfg.model_config, layer_overrides)
 
     def forward(self, logits: Tensor) -> Tensor:
         memory = self.memory_model(logits)

@@ -5,7 +5,6 @@ from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.factory import (
-    DynamicMemoryFactory,
     MaskHandlerFactory,
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
@@ -16,6 +15,9 @@ from emperor.augmentations.adaptive_parameters.core.handlers.bias import (
 )
 from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import (
     DiagonalHandlerConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
+    MemoryHandlerConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
@@ -81,8 +83,14 @@ class AdaptiveParameterAugmentation(Module):
         return diagonal_cfg.build(overrides)
 
     def __init_memory_model(self) -> Module | None:
-        is_valid_flag = self.memory_option != LinearMemoryOptions.DISABLED
-        return self.__build_model(is_valid_flag, DynamicMemoryFactory)
+        if self.memory_option == LinearMemoryOptions.DISABLED:
+            return None
+        memory_cfg = self.cfg.memory_config or MemoryHandlerConfig()
+        overrides = MemoryHandlerConfig(
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
+        return memory_cfg.build(overrides)
 
     def __init_bias_model(self) -> Module | None:
         is_valid_not_disabled_flag = self.bias_option != DynamicBiasOptions.DISABLED
