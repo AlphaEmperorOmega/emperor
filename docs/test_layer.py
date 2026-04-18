@@ -8,10 +8,6 @@ from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.enums import LastLayerBiasOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.augmentations.adaptive_parameters.config import (
-    AdaptiveParameterAugmentationConfig,
-)
-from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
 
 
 class TestLayer(unittest.TestCase):
@@ -21,7 +17,7 @@ class TestLayer(unittest.TestCase):
         output_dim: int = 8,
         bias_flag: bool = True,
         activation: ActivationOptions = ActivationOptions.RELU,
-        residual_flag: bool = True,
+        residual_flag: bool = False,
         dropout_probability: float = 0.2,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         gate_config: "LayerStackConfig | None" = None,

@@ -26,7 +26,7 @@ class TestLayerStack(unittest.TestCase):
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_flag: bool = True,
+        stack_residual_flag: bool = False,
         stack_dropout_probability: float = 0.2,
         shared_halting_flag: bool = False,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
