@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 class LinearValidator(ValidatorBase):
-    OPTIONAL_FIELDS = {"override_config"}
+    OPTIONAL_FIELDS = {"override_config", "adaptive_augmentation_config"}
 
     @staticmethod
     def validate(model: "LinearAbstract") -> None:
@@ -33,6 +33,13 @@ class LinearValidator(ValidatorBase):
             raise ValueError(
                 "`adaptive_augmentation_config` must be None for "
                 "`LinearOptions.LINEAR`; use `LinearOptions.ADAPTIVE` instead."
+            )
+
+    @staticmethod
+    def validate_model_type_is_set(cfg: "LinearLayerConfig") -> None:
+        if cfg.model_type is None:
+            raise ValueError(
+                f"`model_type` must be set before building the layer, got {cfg.model_type!r}"
             )
 
     @staticmethod
