@@ -8,6 +8,7 @@ from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.enums import LastLayerBiasOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.linears.options import LinearOptions
 
 
 class TestLayer(unittest.TestCase):
@@ -47,6 +48,7 @@ class TestLayer(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
+                        model_type=LinearOptions.LINEAR,
                         input_dim=output_dim,
                         output_dim=output_dim,
                         bias_flag=gate_bias_flag,
@@ -76,6 +78,7 @@ class TestLayer(unittest.TestCase):
                         shared_halting_flag=False,
                         gate_config=None,
                         layer_model_config=LinearLayerConfig(
+                            model_type=LinearOptions.LINEAR,
                             input_dim=output_dim,
                             output_dim=output_dim,
                             bias_flag=True,
@@ -95,6 +98,7 @@ class TestLayer(unittest.TestCase):
             halting_config=halting_config,
             shared_halting_flag=shared_halting_flag,
             layer_model_config=LinearLayerConfig(
+                model_type=LinearOptions.LINEAR,
                 input_dim=input_dim,
                 output_dim=output_dim,
                 bias_flag=bias_flag,
@@ -482,6 +486,7 @@ class TestLayer(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
+                        model_type=LinearOptions.LINEAR,
                         input_dim=dim,
                         output_dim=dim,
                         bias_flag=True,

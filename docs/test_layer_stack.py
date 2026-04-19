@@ -14,6 +14,7 @@ from emperor.base.layer import (
     LayerState,
 )
 from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears.options import LinearOptions
 
 
 class TestLayerStack(unittest.TestCase):
@@ -52,6 +53,7 @@ class TestLayerStack(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
+                        model_type=LinearOptions.LINEAR,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,
@@ -85,6 +87,7 @@ class TestLayerStack(unittest.TestCase):
                         shared_halting_flag=False,
                         gate_config=None,
                         layer_model_config=LinearLayerConfig(
+                            model_type=LinearOptions.LINEAR,
                             input_dim=output_dim,
                             output_dim=output_dim,
                             bias_flag=True,
@@ -111,6 +114,7 @@ class TestLayerStack(unittest.TestCase):
                 halting_config=halting_config,
                 shared_halting_flag=shared_halting_flag,
                 layer_model_config=LinearLayerConfig(
+                    model_type=LinearOptions.LINEAR,
                     input_dim=input_dim,
                     output_dim=output_dim,
                     bias_flag=bias_flag,
@@ -375,7 +379,9 @@ class TestLayerStack(unittest.TestCase):
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 shared_halting_flag=False,
                 gate_config=None,
-                layer_model_config=LinearLayerConfig(bias_flag=True),
+                layer_model_config=LinearLayerConfig(
+                    model_type=LinearOptions.LINEAR, bias_flag=True
+                ),
             ),
         )
         invalid_configs = [
@@ -394,7 +400,9 @@ class TestLayerStack(unittest.TestCase):
                     residual_flag=False,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    layer_model_config=LinearLayerConfig(bias_flag=True),
+                    layer_model_config=LinearLayerConfig(
+                        model_type=LinearOptions.LINEAR, bias_flag=True
+                    ),
                     **invalid,
                 )
                 gate_config = LayerStackConfig(
@@ -433,6 +441,7 @@ class TestLayerStack(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
+                        model_type=LinearOptions.LINEAR,
                         input_dim=dim,
                         output_dim=dim,
                         bias_flag=True,

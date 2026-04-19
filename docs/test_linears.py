@@ -15,6 +15,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     MaskDimensionOptions,
 )
 from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears.options import LinearOptions
 from emperor.linears.core.layers import (
     AdaptiveLinearLayer,
     LinearLayer,
@@ -48,6 +49,7 @@ class TestLinearLayer(unittest.TestCase):
     ) -> LinearLayerConfig:
 
         return LinearLayerConfig(
+            model_type=LinearOptions.LINEAR,
             input_dim=input_dim,
             output_dim=output_dim,
             bias_flag=bias_flag,
@@ -194,6 +196,7 @@ class TestLinearLayerStack(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
+                        model_type=LinearOptions.LINEAR,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,
@@ -224,6 +227,7 @@ class TestLinearLayerStack(unittest.TestCase):
                         shared_halting_flag=False,
                         gate_config=None,
                         layer_model_config=LinearLayerConfig(
+                            model_type=LinearOptions.LINEAR,
                             input_dim=output_dim,
                             output_dim=output_dim,
                             bias_flag=True,
@@ -250,6 +254,7 @@ class TestLinearLayerStack(unittest.TestCase):
                 halting_config=halting_config,
                 shared_halting_flag=shared_halting_flag,
                 layer_model_config=LinearLayerConfig(
+                    model_type=LinearOptions.LINEAR,
                     input_dim=input_dim,
                     output_dim=output_dim,
                     bias_flag=bias_flag,
