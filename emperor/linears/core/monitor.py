@@ -1,5 +1,5 @@
 from lightning.pytorch.callbacks import Callback
-from emperor.linears.core.layers import LinearBase
+from emperor.linears.core.layers import LinearAbstract
 
 from typing import TYPE_CHECKING
 
@@ -16,7 +16,7 @@ class LinearMonitorCallback(Callback):
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         for name, module in pl_module.named_modules():
-            if isinstance(module, LinearBase):
+            if isinstance(module, LinearAbstract):
                 self._linear_modules.append((name, module))
                 hook = module.register_forward_hook(
                     self.__make_forward_stats_hook(name, pl_module)

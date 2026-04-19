@@ -4,7 +4,7 @@ from torch.types import Tensor
 from emperor.base.utils import Module
 from torch.nn.modules import Sequential
 from emperor.sampler.model import SamplerModel
-from emperor.linears.core.layers import LinearBase
+from emperor.linears.core.layers import LinearAbstract
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.sampler.utils.routers import RouterConfig, RouterModel
@@ -313,7 +313,7 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
     def _compute_kv_projection(
         self,
         X: Tensor,
-        model: LinearBase | MixtureOfExperts,
+        model: LinearAbstract | MixtureOfExperts,
     ) -> Tensor:
         sequence_length, batch_size, _ = X.shape
         projection = self._compute_projection(X, model)
