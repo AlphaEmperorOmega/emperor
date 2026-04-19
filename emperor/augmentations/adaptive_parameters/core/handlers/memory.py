@@ -1,6 +1,5 @@
 import torch
 
-from typing import cast
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass
@@ -32,12 +31,12 @@ class MemoryHandlerConfig(ConfigBase):
     )
 
     def build(
-        self, overrides: "ConfigBase | None" = None
+        self, overrides: "MemoryHandlerConfig | None" = None
     ) -> "MemoryHandlerAbstract":
         if self.model_type is None:
             raise ValueError("`model_type` must be set before building the handler")
         handler_cls = MemoryHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, cast("MemoryHandlerConfig | None", overrides))
+        return handler_cls(self, overrides)
 
 
 @subclass_registry

@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from typing import cast
 from torch import Tensor
 from dataclasses import dataclass
 from emperor.base.utils import ConfigBase, Module, optional_field
@@ -58,11 +57,13 @@ class WeightHandlerConfig(ConfigBase):
         "Number of batches to delay before applying weight decay. Decay steps only begin counting after this warmup period."
     )
 
-    def build(self, overrides: "ConfigBase | None" = None) -> "WeightHandlerAbstract":
+    def build(
+        self, overrides: "WeightHandlerConfig | None" = None
+    ) -> "WeightHandlerAbstract":
         if self.model_type is None:
             raise ValueError("`model_type` must be set before building the handler")
         handler_cls = WeightHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, cast("WeightHandlerConfig | None", overrides))
+        return handler_cls(self, overrides)
 
 
 @subclass_registry
@@ -107,17 +108,7 @@ class WeightHandlerAbstract(Module):
         input_vectors: Tensor,
         output_vectors: Tensor,
     ) -> Tensor:
-        return self.__apply_normalization_by_position(
-            input_vectors, output_vectors, self.normalization_position_option
-        )
-
-    def __apply_normalization_by_position(
-        self,
-        input_vectors: Tensor,
-        output_vectors: Tensor,
-        position: WeightNormalizationPositionOptions,
-    ) -> Tensor:
-        match position:
+        match self.normalization_position_option:
             case WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT:
                 return self._compute_prenormalized_outer_product(
                     input_vectors, output_vectors

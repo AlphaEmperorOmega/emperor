@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 
-from typing import cast
 from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass
@@ -23,12 +22,12 @@ class DiagonalHandlerConfig(ConfigBase):
     )
 
     def build(
-        self, overrides: "ConfigBase | None" = None
+        self, overrides: "DiagonalHandlerConfig | None" = None
     ) -> "DiagonalHandlerAbstract":
         if self.model_type is None:
             raise ValueError("`model_type` must be set before building the handler")
         handler_cls = DiagonalHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, cast("DiagonalHandlerConfig | None", overrides))
+        return handler_cls(self, overrides)
 
 
 @subclass_registry

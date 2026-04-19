@@ -1,6 +1,5 @@
 import torch
 
-from typing import cast
 from torch import Tensor
 from dataclasses import dataclass
 from torch.nn import Sequential
@@ -34,11 +33,11 @@ class BiasHandlerConfig(ConfigBase):
         "Layer stack configuration for the internal generator network."
     )
 
-    def build(self, overrides: "ConfigBase | None" = None) -> "BiasHandlerAbstract":
+    def build(self, overrides: "BiasHandlerConfig | None" = None) -> "BiasHandlerAbstract":
         if self.model_type is None:
             raise ValueError("`model_type` must be set before building the handler")
         handler_cls = BiasHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, cast("BiasHandlerConfig | None", overrides))
+        return handler_cls(self, overrides)
 
 
 @subclass_registry

@@ -1,6 +1,5 @@
 import torch
 
-from typing import cast
 from torch import Tensor
 from dataclasses import dataclass
 from emperor.base.utils import ConfigBase, Module, optional_field
@@ -27,12 +26,12 @@ class MaskHandlerConfig(ConfigBase):
     )
 
     def build(
-        self, overrides: "ConfigBase | None" = None
+        self, overrides: "MaskHandlerConfig | None" = None
     ) -> "MaskHandlerAbstract":
         if self.model_type is None:
             raise ValueError("`model_type` must be set before building the handler")
         handler_cls = MaskHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, cast("MaskHandlerConfig | None", overrides))
+        return handler_cls(self, overrides)
 
 
 @subclass_registry
