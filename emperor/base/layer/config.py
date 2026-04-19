@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class LayerConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input features of the wrapped module")
-    output_dim: int | None = optional_field("Output features of the wrapped module")
+    input_dim: int | None = optional_field("Input dimension of the wrapped module")
+    output_dim: int | None = optional_field("Output dimension of the wrapped module")
     activation: ActivationOptions | None = optional_field(
         "Activation applied to the wrapped module's output"
     )
@@ -51,21 +51,18 @@ class LayerConfig(ConfigBase):
 
 @dataclass
 class LayerStackConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input features of the first layer")
-    hidden_dim: int | None = optional_field("Feature dim of hidden layers")
-    output_dim: int | None = optional_field("Output features of the last layer")
+    input_dim: int | None = optional_field("Input dimension of the first layer")
+    hidden_dim: int | None = optional_field("Hidden layers dimension")
+    output_dim: int | None = optional_field("Output dimension of the last layer")
     num_layers: int | None = optional_field("Total layers in the stack")
-    layer_type: "Layer | None" = optional_field(
-        "Layer subclass per step; defaults to Layer"
-    )
     last_layer_bias_option: "LastLayerBiasOptions | None" = optional_field(
         "Bias override for the final layer: DEFAULT inherits, DISABLED off, ENABLED on"
     )
     apply_output_pipeline_flag: bool | None = optional_field(
-        "When True, final layer runs the wrapper pipeline (activation, dropout, norm, residual, gate); else emits raw module output"
+        "When True, final layer runs the wrapper pipeline (activation, dropout, norm, residual, gate); else returns raw module output"
     )
     layer_config: LayerConfig | None = optional_field(
-        "Base config per layer; per-layer overrides merge on top"
+        "Layer config that determines the pipeline to be applied to the wrapped model"
     )
 
     def build(

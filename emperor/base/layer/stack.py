@@ -41,8 +41,6 @@ class LayerStack(Module):
         self.apply_output_pipeline_flag: bool = self.cfg.apply_output_pipeline_flag
         self.layer_config: LayerConfig = self.cfg.layer_config
 
-        self.layer_block_model = self.cfg.layer_type or Layer
-
     def build(self) -> Layer | Sequential:
         layers = []
 
