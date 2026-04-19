@@ -16,29 +16,31 @@ if TYPE_CHECKING:
 
 @dataclass
 class LayerConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input dimension of the first `Linear` layer")
-    output_dim: int | None = optional_field("Output dimension of the output `Linear` layer")
-    activation: ActivationOptions | None = optional_field("Activation function or layer to use")
+    input_dim: int | None = optional_field("Input features of the wrapped module")
+    output_dim: int | None = optional_field("Output features of the wrapped module")
+    activation: ActivationOptions | None = optional_field(
+        "Activation applied to the wrapped module's output"
+    )
     residual_flag: bool | None = optional_field(
-        "When True, adds a residual connection from layer input to output. Requires input_dim == output_dim."
+        "Add residual from input to output; requires input_dim == output_dim"
     )
     dropout_probability: float | None = optional_field(
-        "Probability for dropout applied after the layer output. Must be in [0.0, 1.0]; dropout is skipped when <= 0."
+        "Dropout after the layer output; range 0-1"
     )
     layer_norm_position: LayerNormPositionOptions | None = optional_field(
-        "Where LayerNorm is applied: BEFORE (pre-norm on input), DEFAULT (after model output, before activation), AFTER (post-activation on final output), DISABLED (no normalization)."
+        "LayerNorm position: BEFORE (pre-norm), DEFAULT (post-model, pre-activation), AFTER (post-activation), DISABLED"
     )
     gate_config: "LayerStackConfig | None" = optional_field(
-        "LayerStack config for the gating mechanism; if None gates are skipped"
+        "Gating LayerStack config; None skips gating"
     )
     halting_config: "HaltingConfig | None" = optional_field(
-        "Optional halting config for adaptive computation per layer"
+        "Halting config for adaptive computation; None skips halting"
     )
     shared_halting_flag: bool | None = optional_field(
-        "If True, one halting module is shared across all layers; if False, each layer gets its own"
+        "When True, one halting module shared across layers; else per-layer"
     )
     layer_model_config: ConfigBase | None = optional_field(
-        "Config used to build the model module within the layer"
+        "Config for the wrapped inner module (e.g., LinearLayerConfig)"
     )
 
     def _registry_owner(self) -> type:
@@ -49,23 +51,21 @@ class LayerConfig(ConfigBase):
 
 @dataclass
 class LayerStackConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input dimension of the first layer in the stack")
-    hidden_dim: int | None = optional_field(
-        "Dimension used for all hidden layers between input and output"
-    )
-    output_dim: int | None = optional_field("Output dimension of the last layer in the stack")
-    num_layers: int | None = optional_field("Total number of layers in the stack")
+    input_dim: int | None = optional_field("Input features of the first layer")
+    hidden_dim: int | None = optional_field("Feature dim of hidden layers")
+    output_dim: int | None = optional_field("Output features of the last layer")
+    num_layers: int | None = optional_field("Total layers in the stack")
     layer_type: "Layer | None" = optional_field(
-        "Layer subclass to use for each layer; defaults to Layer if None"
+        "Layer subclass per step; defaults to Layer"
     )
     last_layer_bias_option: "LastLayerBiasOptions | None" = optional_field(
-        "Override bias on the last layer: DEFAULT keeps model_config value, DISABLED removes bias, ENABLED adds bias"
+        "Bias override for the final layer: DEFAULT inherits, DISABLED off, ENABLED on"
     )
     apply_output_pipeline_flag: bool | None = optional_field(
-        "If True, the output layer applies the full pipeline (activation, dropout, layer norm, residual, gate); if False, returns clean model output"
+        "When True, final layer runs the wrapper pipeline (activation, dropout, norm, residual, gate); else emits raw module output"
     )
     layer_config: LayerConfig | None = optional_field(
-        "LayerConfig shared across all layers in the stack; per-layer overrides are applied on top"
+        "Base config per layer; per-layer overrides merge on top"
     )
 
     def build(
