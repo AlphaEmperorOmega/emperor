@@ -33,11 +33,8 @@ class BiasHandlerConfig(ConfigBase):
         "Layer stack configuration for the internal generator network."
     )
 
-    def build(self, overrides: "BiasHandlerConfig | None" = None) -> "BiasHandlerAbstract":
-        if self.model_type is None:
-            raise ValueError("`model_type` must be set before building the handler")
-        handler_cls = BiasHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, overrides)
+    def _registry_owner(self) -> type:
+        return BiasHandlerAbstract
 
 
 @subclass_registry

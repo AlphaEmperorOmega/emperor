@@ -572,8 +572,17 @@ def optional_field(help: str):
 
 @dataclass
 class ConfigBase:
+    def _registry_owner(self) -> type:
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement `_registry_owner` "
+            f"or override `build`"
+        )
+
     def build(self, overrides: "ConfigBase | None" = None) -> "Module":
-        raise NotImplementedError
+        owner = self._registry_owner()
+        if hasattr(self, "model_type"):
+            return owner.build_from_config(self, overrides)
+        return owner(self, overrides)
 
     def get(self, key: str, default=None) -> Any:
         if not hasattr(self, key):

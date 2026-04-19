@@ -36,13 +36,6 @@ class LinearValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_model_type_is_set(cfg: "LinearLayerConfig") -> None:
-        if cfg.model_type is None:
-            raise ValueError(
-                f"`model_type` must be set before building the layer, got {cfg.model_type!r}"
-            )
-
-    @staticmethod
     def validate_input_is_2d(X: Tensor) -> None:
         if X.dim() != 2:
             raise ValueError(

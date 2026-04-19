@@ -25,13 +25,8 @@ class MaskHandlerConfig(ConfigBase):
         "Layer stack configuration for the internal generator network."
     )
 
-    def build(
-        self, overrides: "MaskHandlerConfig | None" = None
-    ) -> "MaskHandlerAbstract":
-        if self.model_type is None:
-            raise ValueError("`model_type` must be set before building the handler")
-        handler_cls = MaskHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, overrides)
+    def _registry_owner(self) -> type:
+        return MaskHandlerAbstract
 
 
 @subclass_registry

@@ -57,13 +57,8 @@ class WeightHandlerConfig(ConfigBase):
         "Number of batches to delay before applying weight decay. Decay steps only begin counting after this warmup period."
     )
 
-    def build(
-        self, overrides: "WeightHandlerConfig | None" = None
-    ) -> "WeightHandlerAbstract":
-        if self.model_type is None:
-            raise ValueError("`model_type` must be set before building the handler")
-        handler_cls = WeightHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, overrides)
+    def _registry_owner(self) -> type:
+        return WeightHandlerAbstract
 
 
 @subclass_registry

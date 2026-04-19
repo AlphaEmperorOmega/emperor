@@ -5,7 +5,6 @@ from emperor.linears.options import LinearOptions
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.base.utils import Module
     from emperor.augmentations.adaptive_parameters.config import (
         AdaptiveParameterAugmentationConfig,
     )
@@ -31,13 +30,7 @@ class LinearLayerConfig(ConfigBase):
         )
     )
 
-    def build(
-        self,
-        overrides: "LinearLayerConfig | None" = None,
-    ) -> "Module":
+    def _registry_owner(self) -> type:
         from emperor.linears.core.layers import LinearAbstract
-        from emperor.linears.core._validator import LinearValidator
 
-        LinearValidator.validate_model_type_is_set(self)
-        layer_cls = LinearAbstract.resolve(self.model_type)
-        return layer_cls(self, overrides)
+        return LinearAbstract

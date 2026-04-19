@@ -21,13 +21,8 @@ class DiagonalHandlerConfig(ConfigBase):
         "Layer stack configuration for the internal generator network."
     )
 
-    def build(
-        self, overrides: "DiagonalHandlerConfig | None" = None
-    ) -> "DiagonalHandlerAbstract":
-        if self.model_type is None:
-            raise ValueError("`model_type` must be set before building the handler")
-        handler_cls = DiagonalHandlerAbstract.resolve(self.model_type)
-        return handler_cls(self, overrides)
+    def _registry_owner(self) -> type:
+        return DiagonalHandlerAbstract
 
 
 @subclass_registry

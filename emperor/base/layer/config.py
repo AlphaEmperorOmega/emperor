@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from torch.nn import Sequential
-    from emperor.base.utils import Module
     from emperor.base.layer.layer import Layer
     from emperor.halting.config import HaltingConfig
 
@@ -42,10 +41,10 @@ class LayerConfig(ConfigBase):
         "Config used to build the model module within the layer"
     )
 
-    def build(self, overrides: "LayerConfig | None" = None) -> "Module":
+    def _registry_owner(self) -> type:
         from emperor.base.layer.layer import Layer
 
-        return Layer(self, overrides)
+        return Layer
 
 
 @dataclass
@@ -69,7 +68,9 @@ class LayerStackConfig(ConfigBase):
         "LayerConfig shared across all layers in the stack; per-layer overrides are applied on top"
     )
 
-    def build(self, overrides: "LayerStackConfig | None" = None) -> "Layer | Sequential":
+    def build(
+        self, overrides: "LayerStackConfig | None" = None
+    ) -> "Layer | Sequential":
         from emperor.base.layer.stack import LayerStack
 
         return LayerStack(self, overrides).build()
