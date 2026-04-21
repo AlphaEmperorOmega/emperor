@@ -1,3 +1,4 @@
+from emperor.linears.options import LinearOptions
 import models.linear.config as config
 
 from models.linear.model import Model
@@ -89,6 +90,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
+                        model_type=LinearOptions.LINEAR,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,
@@ -119,6 +121,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                         shared_halting_flag=False,
                         gate_config=None,
                         layer_model_config=LinearLayerConfig(
+                            model_type=LinearOptions.LINEAR,
                             input_dim=output_dim,
                             output_dim=output_dim,
                             bias_flag=True,
@@ -152,6 +155,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                         halting_config=halting_config,
                         shared_halting_flag=False,
                         layer_model_config=LinearLayerConfig(
+                            model_type=LinearOptions.LINEAR,
                             input_dim=input_dim,
                             output_dim=output_dim,
                             bias_flag=bias_flag,
