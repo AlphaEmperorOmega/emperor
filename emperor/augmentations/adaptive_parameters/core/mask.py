@@ -12,7 +12,7 @@ from emperor.augmentations.adaptive_parameters.options import (
 
 
 @dataclass
-class MaskHandlerConfig(ConfigBase):
+class RowMaskConfig(ConfigBase):
     input_dim: int | None = optional_field("Input dimension of the mask transformation.")
     output_dim: int | None = optional_field("Output dimension of the mask transformation.")
     model_type: RowMaskOptions | None = optional_field(
@@ -26,18 +26,18 @@ class MaskHandlerConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        return MaskHandlerAbstract
+        return RowMaskAbstract
 
 
 @subclass_registry
-class MaskHandlerAbstract(Module):
+class RowMaskAbstract(Module):
     def __init__(
         self,
-        cfg: MaskHandlerConfig,
-        overrides: MaskHandlerConfig | None = None,
+        cfg: RowMaskConfig,
+        overrides: RowMaskConfig | None = None,
     ):
         super().__init__()
-        self.cfg: MaskHandlerConfig = self._override_config(cfg, overrides)
+        self.cfg: RowMaskConfig = self._override_config(cfg, overrides)
         self.input_dim = self.cfg.input_dim
         self.mask_dimension_option = self.cfg.mask_dimension_option
 
@@ -54,12 +54,12 @@ class MaskHandlerAbstract(Module):
         return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
 
 
-@MaskHandlerAbstract.register(RowMaskOptions.GLOBAL_SCORE)
-class RowMaskHandler(MaskHandlerAbstract):
+@RowMaskAbstract.register(RowMaskOptions.GLOBAL_SCORE)
+class GlobalScoreRowMask(RowMaskAbstract):
     def __init__(
         self,
-        cfg: MaskHandlerConfig,
-        overrides: MaskHandlerConfig | None = None,
+        cfg: RowMaskConfig,
+        overrides: RowMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
@@ -101,12 +101,12 @@ class RowMaskHandler(MaskHandlerAbstract):
         return (row_magnitudes >= thresholds).float()
 
 
-@MaskHandlerAbstract.register(RowMaskOptions.PER_ROW_SCORE)
-class PerRowMaskHandler(MaskHandlerAbstract):
+@RowMaskAbstract.register(RowMaskOptions.PER_ROW_SCORE)
+class PerRowScoreRowMask(RowMaskAbstract):
     def __init__(
         self,
-        cfg: MaskHandlerConfig,
-        overrides: MaskHandlerConfig | None = None,
+        cfg: RowMaskConfig,
+        overrides: RowMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
@@ -134,12 +134,12 @@ class PerRowMaskHandler(MaskHandlerAbstract):
         return sparsified_weights
 
 
-@MaskHandlerAbstract.register(RowMaskOptions.TOP_SLICE)
-class TopSliceMaskHandler(MaskHandlerAbstract):
+@RowMaskAbstract.register(RowMaskOptions.TOP_SLICE)
+class TopSliceRowMask(RowMaskAbstract):
     def __init__(
         self,
-        cfg: MaskHandlerConfig,
-        overrides: MaskHandlerConfig | None = None,
+        cfg: RowMaskConfig,
+        overrides: RowMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
@@ -170,12 +170,12 @@ class TopSliceMaskHandler(MaskHandlerAbstract):
         return sparsified_weights
 
 
-@MaskHandlerAbstract.register(RowMaskOptions.DIAGONAL)
-class DiagonalMaskHandler(MaskHandlerAbstract):
+@RowMaskAbstract.register(RowMaskOptions.DIAGONAL)
+class DiagonalRowMask(RowMaskAbstract):
     def __init__(
         self,
-        cfg: MaskHandlerConfig,
-        overrides: MaskHandlerConfig | None = None,
+        cfg: RowMaskConfig,
+        overrides: RowMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()

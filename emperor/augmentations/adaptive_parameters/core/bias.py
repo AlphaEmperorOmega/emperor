@@ -7,13 +7,13 @@ from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicBiasOptions
-from emperor.augmentations.adaptive_parameters.core.handlers._validator import (
-    BiasHandlerAbstractValidator,
+from emperor.augmentations.adaptive_parameters.core._validator import (
+    DynamicBiasAbstractValidator,
 )
 
 
 @dataclass
-class BiasHandlerConfig(ConfigBase):
+class DynamicBiasConfig(ConfigBase):
     input_dim: int | None = optional_field(
         "Input dimension of the bias transformation."
     )
@@ -34,22 +34,22 @@ class BiasHandlerConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        return BiasHandlerAbstract
+        return DynamicBiasAbstract
 
 
 @subclass_registry
-class BiasHandlerAbstract(Module):
+class DynamicBiasAbstract(Module):
     def __init__(
         self,
-        cfg: BiasHandlerConfig,
-        overrides: BiasHandlerConfig | None = None,
+        cfg: DynamicBiasConfig,
+        overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__()
-        self.cfg: BiasHandlerConfig = self._override_config(cfg, overrides)
+        self.cfg: DynamicBiasConfig = self._override_config(cfg, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
 
-        self.validator = BiasHandlerAbstractValidator(self)
+        self.validator = DynamicBiasAbstractValidator(self)
 
     def _init_model(
         self, overrides: LayerStackConfig | None = None
@@ -59,12 +59,12 @@ class BiasHandlerAbstract(Module):
         return LinearLayerStack(self.cfg.model_config, overrides).build_model()
 
 
-@BiasHandlerAbstract.register(DynamicBiasOptions.SCALE_AND_OFFSET)
-class AffineBiasTransformHandler(BiasHandlerAbstract):
+@DynamicBiasAbstract.register(DynamicBiasOptions.SCALE_AND_OFFSET)
+class AffineTransformDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: BiasHandlerConfig,
-        overrides: BiasHandlerConfig | None = None,
+        cfg: DynamicBiasConfig,
+        overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         layer_overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=2)
@@ -77,12 +77,12 @@ class AffineBiasTransformHandler(BiasHandlerAbstract):
         return bias_scaling_factor * bias_params + bias_offset
 
 
-@BiasHandlerAbstract.register(DynamicBiasOptions.ELEMENT_WISE_OFFSET)
-class ElementwiseBiasHandler(BiasHandlerAbstract):
+@DynamicBiasAbstract.register(DynamicBiasOptions.ELEMENT_WISE_OFFSET)
+class ElementwiseDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: BiasHandlerConfig,
-        overrides: BiasHandlerConfig | None = None,
+        cfg: DynamicBiasConfig,
+        overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         layer_overrides = LayerStackConfig(
@@ -96,12 +96,12 @@ class ElementwiseBiasHandler(BiasHandlerAbstract):
         return bias_params + parameters
 
 
-@BiasHandlerAbstract.register(DynamicBiasOptions.GATED)
-class GatedBiasHandler(BiasHandlerAbstract):
+@DynamicBiasAbstract.register(DynamicBiasOptions.GATED)
+class GatedDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: BiasHandlerConfig,
-        overrides: BiasHandlerConfig | None = None,
+        cfg: DynamicBiasConfig,
+        overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         layer_overrides = LayerStackConfig(
@@ -115,12 +115,12 @@ class GatedBiasHandler(BiasHandlerAbstract):
         return bias_params * gate
 
 
-@BiasHandlerAbstract.register(DynamicBiasOptions.DYNAMIC_PARAMETERS)
-class BiasGeneratorHandler(BiasHandlerAbstract):
+@DynamicBiasAbstract.register(DynamicBiasOptions.DYNAMIC_PARAMETERS)
+class GeneratorDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: BiasHandlerConfig,
-        overrides: BiasHandlerConfig | None = None,
+        cfg: DynamicBiasConfig,
+        overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         layer_overrides = LayerStackConfig(
@@ -132,12 +132,12 @@ class BiasGeneratorHandler(BiasHandlerAbstract):
         return self.bias_generator(logits)
 
 
-@BiasHandlerAbstract.register(DynamicBiasOptions.WEIGHTED_BANK)
-class WeightedBankBiasGeneratorHandler(BiasHandlerAbstract):
+@DynamicBiasAbstract.register(DynamicBiasOptions.WEIGHTED_BANK)
+class WeightedBankDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: BiasHandlerConfig,
-        overrides: BiasHandlerConfig | None = None,
+        cfg: DynamicBiasConfig,
+        overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.bank_expansion_factor = self.cfg.bank_expansion_factor

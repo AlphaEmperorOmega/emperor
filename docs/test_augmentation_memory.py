@@ -10,10 +10,10 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
-    MemoryFusionHandler,
-    MemoryHandlerAbstract,
-    WeightedMemoryHandler,
+from emperor.augmentations.adaptive_parameters.core.memory import (
+    FusionLinearMemory,
+    LinearMemoryAbstract,
+    WeightedLinearMemory,
 )
 
 
@@ -58,10 +58,10 @@ class TestMemoryFusionHandler(TestLinearsAugmentationMemory):
                     cfg = cfg.override_config
                     if size_option == LinearMemorySizeOptions.DISABLED:
                         with self.assertRaises(ValueError):
-                            model = MemoryFusionHandler(cfg)
+                            model = FusionLinearMemory(cfg)
                     else:
                         input_tensor = torch.ones(self.batch_size, dim)
-                        model = MemoryFusionHandler(cfg)
+                        model = FusionLinearMemory(cfg)
                         output = model(input_tensor)
                         expected_weight_shape = (self.batch_size, dim)
                         self.assertEqual(output.shape, expected_weight_shape)
@@ -85,10 +85,10 @@ class TestWeightedMemoryHandler(TestLinearsAugmentationMemory):
                     cfg = cfg.override_config
                     if size_option == LinearMemorySizeOptions.DISABLED:
                         with self.assertRaises(ValueError):
-                            model = WeightedMemoryHandler(cfg)
+                            model = WeightedLinearMemory(cfg)
                     else:
                         input_tensor = torch.randn(self.batch_size, dim)
-                        model = WeightedMemoryHandler(cfg)
+                        model = WeightedLinearMemory(cfg)
                         output = model(input_tensor)
                         expected_weight_shape = (self.batch_size, dim)
                         self.assertEqual(output.shape, expected_weight_shape)
@@ -125,5 +125,5 @@ class TestDynamicMemoryFactory(TestLinearsAugmentationMemory):
                             output = handler(input_tensor)
                             expected_weight_shape = (self.batch_size, dim)
                             self.assertEqual(output.shape, expected_weight_shape)
-                            self.assertIsInstance(handler, MemoryHandlerAbstract)
+                            self.assertIsInstance(handler, LinearMemoryAbstract)
                             self.assertIsInstance(output, torch.Tensor)

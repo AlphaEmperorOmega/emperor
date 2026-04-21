@@ -15,10 +15,10 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.weight import WeightHandlerAbstract
-from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import DiagonalHandlerAbstract
-from emperor.augmentations.adaptive_parameters.core.handlers.bias import BiasHandlerAbstract
-from emperor.augmentations.adaptive_parameters.core.handlers.memory import MemoryHandlerAbstract
+from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightAbstract
+from emperor.augmentations.adaptive_parameters.core.diagonal import DynamicDiagonalAbstract
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasAbstract
+from emperor.augmentations.adaptive_parameters.core.memory import LinearMemoryAbstract
 
 
 class TestAdaptiveParameterAugmentation(unittest.TestCase):
@@ -74,7 +74,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         generator_cases = [
             (
                 "generator_model",
-                WeightHandlerAbstract,
+                DynamicWeightAbstract,
                 {"generator_depth": depth},
             )
             for depth in DynamicDepthOptions
@@ -83,7 +83,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         diagonal_cases = [
             (
                 "diagonal_model",
-                DiagonalHandlerAbstract,
+                DynamicDiagonalAbstract,
                 {"diagonal_option": option},
             )
             for option in DynamicDiagonalOptions
@@ -92,7 +92,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         bias_cases = [
             (
                 "bias_model",
-                BiasHandlerAbstract,
+                DynamicBiasAbstract,
                 {"bias_option": option},
             )
             for option in DynamicBiasOptions
@@ -101,7 +101,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         memory_cases = [
             (
                 "memory_model",
-                MemoryHandlerAbstract,
+                LinearMemoryAbstract,
                 {
                     "memory_option": option,
                     "memory_size_option": LinearMemorySizeOptions.SMALL,

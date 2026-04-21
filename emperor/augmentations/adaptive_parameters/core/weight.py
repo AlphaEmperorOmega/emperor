@@ -4,8 +4,8 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from dataclasses import dataclass
-from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.base.registry import subclass_registry
+from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     DynamicWeightOptions,
@@ -13,8 +13,12 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
+from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
+    DepthMappingHandlerConfig,
     DepthMappingLayerStack,
+)
+from emperor.augmentations.adaptive_parameters.core._validator import (
+    DynamicWeightValidator,
 )
 from emperor.base.layer import (
     LayerStackConfig,
@@ -22,7 +26,7 @@ from emperor.base.layer import (
 
 
 @dataclass
-class WeightHandlerConfig(ConfigBase):
+class DynamicWeightConfig(ConfigBase):
     input_dim: int | None = optional_field(
         "Input dimension of the weight transformation."
     )
@@ -32,20 +36,19 @@ class WeightHandlerConfig(ConfigBase):
     model_type: DynamicWeightOptions | None = optional_field(
         "Selects the weight handler type for input-dependent weight adjustments."
     )
-    normalization: WeightNormalizationOptions | None = optional_field(
+    normalization_option: WeightNormalizationOptions | None = optional_field(
         "Normalization applied to vectors before the outer product computation."
     )
-    normalization_position: WeightNormalizationPositionOptions | None = optional_field(
-        "Controls whether normalization is applied to the input vectors before or to the outer product after computation."
+    normalization_position_option: WeightNormalizationPositionOptions | None = (
+        optional_field(
+            "Controls whether normalization is applied to the input vectors before or to the outer product after computation."
+        )
     )
     generator_depth: DynamicDepthOptions | None = optional_field(
         "Depth of the generator network that produces input-dependent weight adjustments."
     )
     bank_expansion_factor: int | None = optional_field(
         "Number of times default weight parameter bank will be scaled by for example (weight_bank_expansion_factor * input_dim, output_dim)"
-    )
-    model_config: LayerStackConfig | None = optional_field(
-        "Layer stack configuration for the internal generator network."
     )
     decay_schedule: WeightDecayScheduleOptions | None = optional_field(
         "Schedule used to decay the base weight parameters over forward calls, eventually driving them to zero."
@@ -56,25 +59,30 @@ class WeightHandlerConfig(ConfigBase):
     decay_warmup_batches: int | None = optional_field(
         "Number of batches to delay before applying weight decay. Decay steps only begin counting after this warmup period."
     )
+    model_config: LayerStackConfig | None = optional_field(
+        "Layer stack configuration for the internal generator network."
+    )
 
     def _registry_owner(self) -> type:
-        return WeightHandlerAbstract
+        return DynamicWeightAbstract
 
 
 @subclass_registry
-class WeightHandlerAbstract(Module):
+class DynamicWeightAbstract(Module):
     def __init__(
         self,
-        cfg: WeightHandlerConfig,
-        overrides: WeightHandlerConfig | None = None,
+        cfg: "DynamicWeightConfig",
+        overrides: "DynamicWeightConfig | None" = None,
     ):
         super().__init__()
-        self.cfg: WeightHandlerConfig = self._override_config(cfg, overrides)
+        self.cfg: DynamicWeightConfig = self._override_config(cfg, overrides)
+        DynamicWeightValidator.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
+        self.model_type = self.cfg.model_type
         self.generator_depth = self.cfg.generator_depth
-        self.normalization_option = self.cfg.normalization
-        self.normalization_position_option = self.cfg.normalization_position
+        self.normalization_option = self.cfg.normalization_option
+        self.normalization_position_option = self.cfg.normalization_position_option
         self.decay_schedule_option = self.cfg.decay_schedule
         self.decay_rate = self.cfg.decay_rate
         self.decay_warmup_batches = self.cfg.decay_warmup_batches or 0
@@ -115,7 +123,9 @@ class WeightHandlerAbstract(Module):
             case WeightNormalizationPositionOptions.DISABLED:
                 return self._compute_raw_outer_product(input_vectors, output_vectors)
             case _:
-                raise ValueError(f"Unknown normalization position option: {position}")
+                raise ValueError(
+                    f"Unknown normalization position option: {self.normalization_position_option}"
+                )
 
     def _compute_prenormalized_outer_product(
         self,
@@ -196,14 +206,15 @@ class WeightHandlerAbstract(Module):
                 raise ValueError(f"Unknown weight decay schedule option: {schedule}")
 
 
-@WeightHandlerAbstract.register(DynamicWeightOptions.SINGLE_MODEL)
-class SingleModelWeightHandler(WeightHandlerAbstract):
+@DynamicWeightAbstract.register(DynamicWeightOptions.SINGLE_MODEL)
+class SingleModelDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: WeightHandlerConfig,
-        overrides: WeightHandlerConfig | None = None,
+        cfg: DynamicWeightConfig,
+        overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
+        DynamicWeightValidator.validate_square_dimensions(self)
         self.model = self.__init_model()
 
     def __init_model(self) -> DepthMappingLayerStack:
@@ -225,12 +236,12 @@ class SingleModelWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + dynamic_params
 
 
-@WeightHandlerAbstract.register(DynamicWeightOptions.DUAL_MODEL)
-class DualModelWeightHandler(WeightHandlerAbstract):
+@DynamicWeightAbstract.register(DynamicWeightOptions.DUAL_MODEL)
+class DualModelDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: WeightHandlerConfig,
-        overrides: WeightHandlerConfig | None = None,
+        cfg: DynamicWeightConfig,
+        overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.input_model = self.__init_input_model()
@@ -244,7 +255,7 @@ class DualModelWeightHandler(WeightHandlerAbstract):
         return self._init_generator_model(overrides)
 
     def __init_output_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
+        overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
@@ -263,8 +274,8 @@ class DualModelWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + dynamic_params
 
 
-@WeightHandlerAbstract.register(DynamicWeightOptions.DUAL_MODEL_MASK)
-class WeightMaskHandler(DualModelWeightHandler):
+@DynamicWeightAbstract.register(DynamicWeightOptions.DUAL_MODEL_MASK)
+class DualModelMaskDynamicWeight(DualModelDynamicWeight):
     def forward(
         self,
         weight_params: Tensor,
@@ -278,12 +289,12 @@ class WeightMaskHandler(DualModelWeightHandler):
         return decayed_weight_params * mask
 
 
-@WeightHandlerAbstract.register(DynamicWeightOptions.LOW_RANK)
-class LowRankWeightHandler(WeightHandlerAbstract):
+@DynamicWeightAbstract.register(DynamicWeightOptions.LOW_RANK)
+class LowRankDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: WeightHandlerConfig,
-        overrides: WeightHandlerConfig | None = None,
+        cfg: DynamicWeightConfig,
+        overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.input_model = self.__init_input_model()
@@ -318,12 +329,12 @@ class LowRankWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + dynamic_params
 
 
-@WeightHandlerAbstract.register(DynamicWeightOptions.HYPERNETWORK)
-class HypernetworkWeightHandler(WeightHandlerAbstract):
+@DynamicWeightAbstract.register(DynamicWeightOptions.HYPERNETWORK)
+class HypernetworkDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: WeightHandlerConfig,
-        overrides: WeightHandlerConfig | None = None,
+        cfg: DynamicWeightConfig,
+        overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self.__init_model()
@@ -348,20 +359,21 @@ class HypernetworkWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + update
 
 
-@WeightHandlerAbstract.register(DynamicWeightOptions.LAYERED_WEIGHTED_BANK)
-class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
+@DynamicWeightAbstract.register(DynamicWeightOptions.LAYERED_WEIGHTED_BANK)
+class LayeredWeightedBankDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: WeightHandlerConfig,
-        overrides: WeightHandlerConfig | None = None,
+        cfg: DynamicWeightConfig,
+        overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.bank_expansion_factor = self.cfg.bank_expansion_factor
+        self.depth_value = self.generator_depth.value
         broadcast_batch = 1
         self.weight_bank = self._init_parameter_bank(
             (
                 broadcast_batch,
-                self.generator_depth,
+                self.depth_value,
                 self.bank_expansion_factor * self.input_dim,
                 self.output_dim,
             )
@@ -383,7 +395,7 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
         split_weights_by_factor = batched_weighted_bank.view(
             -1,
-            self.generator_depth,
+            self.depth_value,
             self.input_dim,
             self.bank_expansion_factor,
             self.output_dim,
@@ -393,19 +405,20 @@ class LayeredWeightedBankWeightHandler(WeightHandlerAbstract):
         return decayed_weight_params + depth_and_expansion_reduced_weights
 
 
-@WeightHandlerAbstract.register(DynamicWeightOptions.SOFT_WEIGHTED_BANK)
-class SoftWeightedBankWeightHandler(WeightHandlerAbstract):
+@DynamicWeightAbstract.register(DynamicWeightOptions.SOFT_WEIGHTED_BANK)
+class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: WeightHandlerConfig,
-        overrides: WeightHandlerConfig | None = None,
+        cfg: DynamicWeightConfig,
+        overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
 
+        self.depth_value = self.generator_depth.value
         self.bank_expansion_factor = self.cfg.bank_expansion_factor
         self.weight_bank = self._init_parameter_bank(
             (
-                self.generator_depth,
+                self.depth_value,
                 self.input_dim,
                 self.bank_expansion_factor,
                 self.output_dim,

@@ -7,11 +7,11 @@ from emperor.config import ModelConfig
 from emperor.augmentations.adaptive_parameters.core.factory import DynamicBiasFactory
 from emperor.linears.core.presets import LinearPresets
 from emperor.augmentations.adaptive_parameters.options import DynamicBiasOptions
-from emperor.augmentations.adaptive_parameters.core.handlers.bias import (
-    AffineBiasTransformHandler,
-    BiasGeneratorHandler,
-    BiasHandlerAbstract,
-    ElementwiseBiasHandler,
+from emperor.augmentations.adaptive_parameters.core.bias import (
+    AffineTransformDynamicBias,
+    GeneratorDynamicBias,
+    DynamicBiasAbstract,
+    ElementwiseDynamicBias,
 )
 
 
@@ -48,7 +48,7 @@ class TestAffineBiasTransformHandler(TestLinearsAugmentationBias):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = AffineBiasTransformHandler(cfg)
+        model = AffineTransformDynamicBias(cfg)
         output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
@@ -61,7 +61,7 @@ class TestElementwiseBiasHandler(TestLinearsAugmentationBias):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = ElementwiseBiasHandler(cfg)
+        model = ElementwiseDynamicBias(cfg)
         output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
@@ -74,7 +74,7 @@ class TestBiasGeneratorHandler(TestLinearsAugmentationBias):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = BiasGeneratorHandler(cfg)
+        model = GeneratorDynamicBias(cfg)
         output = model(self.bias_params, input_tensor)
         bias_shape = (self.batch_size, self.output_dim)
         self.assertEqual(output.shape, bias_shape)
@@ -96,5 +96,5 @@ class TestDynamicBiasFactory(TestLinearsAugmentationBias):
                 else:
                     handler = DynamicBiasFactory(cfg).build()
                     output = handler(self.bias_params, input_tensor)
-                    self.assertIsInstance(handler, BiasHandlerAbstract)
+                    self.assertIsInstance(handler, DynamicBiasAbstract)
                     self.assertIsInstance(output, torch.Tensor)

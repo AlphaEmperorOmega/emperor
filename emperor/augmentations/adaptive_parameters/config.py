@@ -1,24 +1,24 @@
 from dataclasses import dataclass, field
-from emperor.augmentations.adaptive_parameters.core.handlers.depth_mapper import (
+from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
     DepthMappingHandlerConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import (
-    DiagonalHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
 from emperor.base.layer.config import LayerStackConfig
 from emperor.base.utils import ConfigBase
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
-from emperor.augmentations.adaptive_parameters.core.handlers.bias import (
-    BiasHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.bias import (
+    DynamicBiasConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
-    WeightHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.weight import (
+    DynamicWeightConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.mask import (
-    MaskHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.mask import (
+    RowMaskConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
-    MemoryHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.memory import (
+    LinearMemoryConfig,
 )
 
 
@@ -38,25 +38,25 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
             "help": "Configuration for input-dependent diagonal weight adjustments."
         },
     )
-    diagonal_config: DiagonalHandlerConfig | None = field(
+    diagonal_config: DynamicDiagonalConfig | None = field(
         default=None,
         metadata={
             "help": "Configuration for input-dependent diagonal weight adjustments."
         },
     )
-    weight_config: WeightHandlerConfig | None = field(
+    weight_config: DynamicWeightConfig | None = field(
         default=None,
         metadata={"help": "Configuration for input-dependent weight adjustments."},
     )
-    bias_config: BiasHandlerConfig | None = field(
+    bias_config: DynamicBiasConfig | None = field(
         default=None,
         metadata={"help": "Configuration for input-dependent bias adjustments."},
     )
-    mask_config: MaskHandlerConfig | None = field(
+    mask_config: RowMaskConfig | None = field(
         default=None,
         metadata={"help": "Configuration for input-dependent weight matrix masking."},
     )
-    memory_config: MemoryHandlerConfig | None = field(
+    memory_config: LinearMemoryConfig | None = field(
         default=None,
         metadata={"help": "Configuration for learned memory representation blending."},
     )

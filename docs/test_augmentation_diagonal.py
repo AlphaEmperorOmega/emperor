@@ -7,11 +7,11 @@ from emperor.config import ModelConfig
 from emperor.augmentations.adaptive_parameters.core.factory import DynamicDiagonalFactory
 from emperor.linears.core.presets import LinearPresets
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
-from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import (
-    DiagonalHandlerAbstract,
-    DiagonalHandler,
-    AntiDiagonalHandler,
-    DiagonalAndAntiDiagonalHandler,
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalAbstract,
+    StandardDynamicDiagonal,
+    AntiDynamicDiagonal,
+    CombinedDynamicDiagonal,
 )
 
 
@@ -49,7 +49,7 @@ class TestDiagonalHandlerHandler(TestLinearsAugmentationDiagonal):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = DiagonalHandler(cfg)
+        model = StandardDynamicDiagonal(cfg)
         output = model(self.weight_params, input_tensor)
         expected_weight_shape = (self.batch_size, self.input_dim, self.output_dim)
         self.assertEqual(output.shape, expected_weight_shape)
@@ -61,7 +61,7 @@ class TestAntiDiagonalHandler(TestLinearsAugmentationDiagonal):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = AntiDiagonalHandler(cfg)
+        model = AntiDynamicDiagonal(cfg)
         output = model(self.weight_params, input_tensor)
         expected_weight_shape = (self.batch_size, self.input_dim, self.output_dim)
         self.assertEqual(output.shape, expected_weight_shape)
@@ -73,7 +73,7 @@ class TestDiagonalAndAntiDiagonalHandler(TestLinearsAugmentationDiagonal):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         cfg = LinearPresets.adaptive_linear_layer_preset()
         cfg = cfg.override_config
-        model = DiagonalAndAntiDiagonalHandler(cfg)
+        model = CombinedDynamicDiagonal(cfg)
         output = model(self.weight_params, input_tensor)
         expected_weight_shape = (self.batch_size, self.input_dim, self.output_dim)
         self.assertEqual(output.shape, expected_weight_shape)
@@ -94,5 +94,5 @@ class TestDynamicDiagonalFactory(TestLinearsAugmentationDiagonal):
                 else:
                     handler = DynamicDiagonalFactory(cfg).build()
                     output = handler(self.weight_params, input_tensor)
-                    self.assertIsInstance(handler, DiagonalHandlerAbstract)
+                    self.assertIsInstance(handler, DynamicDiagonalAbstract)
                     self.assertIsInstance(output, torch.Tensor)

@@ -4,20 +4,20 @@ from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.weight import (
-    WeightHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.weight import (
+    DynamicWeightConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.bias import (
-    BiasHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.bias import (
+    DynamicBiasConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.diagonal import (
-    DiagonalHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.memory import (
-    MemoryHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.memory import (
+    LinearMemoryConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.handlers.mask import (
-    MaskHandlerConfig,
+from emperor.augmentations.adaptive_parameters.core.mask import (
+    RowMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
@@ -66,7 +66,7 @@ class AdaptiveParameterAugmentation(Module):
     def __init_generator_model(self) -> Module | None:
         if self.weight_config is not None:
             return None
-        overrides = WeightHandlerConfig(
+        overrides = DynamicWeightConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
@@ -75,8 +75,8 @@ class AdaptiveParameterAugmentation(Module):
     def __init_diagonal_model(self) -> Module | None:
         if self.diagonal_option == DynamicDiagonalOptions.DISABLED:
             return None
-        diagonal_cfg = self.cfg.diagonal_config or DiagonalHandlerConfig()
-        overrides = DiagonalHandlerConfig(
+        diagonal_cfg = self.cfg.diagonal_config or DynamicDiagonalConfig()
+        overrides = DynamicDiagonalConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
@@ -85,8 +85,8 @@ class AdaptiveParameterAugmentation(Module):
     def __init_memory_model(self) -> Module | None:
         if self.memory_option == LinearMemoryOptions.DISABLED:
             return None
-        memory_cfg = self.cfg.memory_config or MemoryHandlerConfig()
-        overrides = MemoryHandlerConfig(
+        memory_cfg = self.cfg.memory_config or LinearMemoryConfig()
+        overrides = LinearMemoryConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
@@ -97,8 +97,8 @@ class AdaptiveParameterAugmentation(Module):
         is_valid_flag = self.bias_flag and is_valid_not_disabled_flag
         if not is_valid_flag:
             return None
-        bias_cfg = self.cfg.bias_config or BiasHandlerConfig()
-        overrides = BiasHandlerConfig(
+        bias_cfg = self.cfg.bias_config or DynamicBiasConfig()
+        overrides = DynamicBiasConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
@@ -107,8 +107,8 @@ class AdaptiveParameterAugmentation(Module):
     def __init_row_mask_model(self) -> Module | None:
         if self.row_mask_option == RowMaskOptions.DISABLED:
             return None
-        mask_cfg = self.cfg.mask_config or MaskHandlerConfig()
-        overrides = MaskHandlerConfig(
+        mask_cfg = self.cfg.mask_config or RowMaskConfig()
+        overrides = RowMaskConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )

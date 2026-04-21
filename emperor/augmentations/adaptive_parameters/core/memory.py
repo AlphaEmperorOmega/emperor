@@ -14,7 +14,7 @@ from emperor.augmentations.adaptive_parameters.options import (
 
 
 @dataclass
-class MemoryHandlerConfig(ConfigBase):
+class LinearMemoryConfig(ConfigBase):
     input_dim: int | None = optional_field("Input dimension of the memory transformation.")
     output_dim: int | None = optional_field("Output dimension of the memory transformation.")
     model_type: LinearMemoryOptions | None = optional_field(
@@ -31,18 +31,18 @@ class MemoryHandlerConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        return MemoryHandlerAbstract
+        return LinearMemoryAbstract
 
 
 @subclass_registry
-class MemoryHandlerAbstract(Module):
+class LinearMemoryAbstract(Module):
     def __init__(
         self,
-        cfg: MemoryHandlerConfig,
-        overrides: MemoryHandlerConfig | None = None,
+        cfg: LinearMemoryConfig,
+        overrides: LinearMemoryConfig | None = None,
     ):
         super().__init__()
-        self.cfg: MemoryHandlerConfig = self._override_config(cfg, overrides)
+        self.cfg: LinearMemoryConfig = self._override_config(cfg, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.memory_size_option = self.cfg.memory_size_option
@@ -65,12 +65,12 @@ class MemoryHandlerAbstract(Module):
         return LinearLayerStack(config, overrides).build_model()
 
 
-@MemoryHandlerAbstract.register(LinearMemoryOptions.FUSION)
-class MemoryFusionHandler(MemoryHandlerAbstract):
+@LinearMemoryAbstract.register(LinearMemoryOptions.FUSION)
+class FusionLinearMemory(LinearMemoryAbstract):
     def __init__(
         self,
-        cfg: MemoryHandlerConfig,
-        overrides: MemoryHandlerConfig | None = None,
+        cfg: LinearMemoryConfig,
+        overrides: LinearMemoryConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.memory_model = self.__init_memory_model()
@@ -99,12 +99,12 @@ class MemoryFusionHandler(MemoryHandlerAbstract):
         return self.compression_model(combined)
 
 
-@MemoryHandlerAbstract.register(LinearMemoryOptions.WEIGHTED)
-class WeightedMemoryHandler(MemoryHandlerAbstract):
+@LinearMemoryAbstract.register(LinearMemoryOptions.WEIGHTED)
+class WeightedLinearMemory(LinearMemoryAbstract):
     def __init__(
         self,
-        cfg: MemoryHandlerConfig,
-        overrides: MemoryHandlerConfig | None = None,
+        cfg: LinearMemoryConfig,
+        overrides: LinearMemoryConfig | None = None,
     ):
         super().__init__(cfg, overrides)
 

@@ -11,7 +11,7 @@ from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOpt
 
 
 @dataclass
-class DiagonalHandlerConfig(ConfigBase):
+class DynamicDiagonalConfig(ConfigBase):
     input_dim: int | None = optional_field("Input dimension of the diagonal transformation.")
     output_dim: int | None = optional_field("Output dimension of the diagonal transformation.")
     model_type: DynamicDiagonalOptions | None = optional_field(
@@ -22,18 +22,18 @@ class DiagonalHandlerConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        return DiagonalHandlerAbstract
+        return DynamicDiagonalAbstract
 
 
 @subclass_registry
-class DiagonalHandlerAbstract(Module):
+class DynamicDiagonalAbstract(Module):
     def __init__(
         self,
-        cfg: DiagonalHandlerConfig,
-        overrides: DiagonalHandlerConfig | None = None,
+        cfg: DynamicDiagonalConfig,
+        overrides: DynamicDiagonalConfig | None = None,
     ):
         super().__init__()
-        self.cfg: DiagonalHandlerConfig = self._override_config(cfg, overrides)
+        self.cfg: DynamicDiagonalConfig = self._override_config(cfg, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.padding_shape = self.__get_diagonal_padding_shape()
@@ -76,12 +76,12 @@ class DiagonalHandlerAbstract(Module):
         return self.__convert_to_diagonal_matrix(vectors)
 
 
-@DiagonalHandlerAbstract.register(DynamicDiagonalOptions.DIAGONAL)
-class DiagonalHandler(DiagonalHandlerAbstract):
+@DynamicDiagonalAbstract.register(DynamicDiagonalOptions.DIAGONAL)
+class StandardDynamicDiagonal(DynamicDiagonalAbstract):
     def __init__(
         self,
-        cfg: DiagonalHandlerConfig,
-        overrides: DiagonalHandlerConfig | None = None,
+        cfg: DynamicDiagonalConfig,
+        overrides: DynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.diagonal_generator = self._init_model()
@@ -91,12 +91,12 @@ class DiagonalHandler(DiagonalHandlerAbstract):
         return weight_params + diagonal_matrices
 
 
-@DiagonalHandlerAbstract.register(DynamicDiagonalOptions.ANTI_DIAGONAL)
-class AntiDiagonalHandler(DiagonalHandlerAbstract):
+@DynamicDiagonalAbstract.register(DynamicDiagonalOptions.ANTI_DIAGONAL)
+class AntiDynamicDiagonal(DynamicDiagonalAbstract):
     def __init__(
         self,
-        cfg: DiagonalHandlerConfig,
-        overrides: DiagonalHandlerConfig | None = None,
+        cfg: DynamicDiagonalConfig,
+        overrides: DynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.diagonal_generator = self._init_model()
@@ -107,16 +107,16 @@ class AntiDiagonalHandler(DiagonalHandlerAbstract):
         return weight_params + anti_diagonal_matrix
 
 
-@DiagonalHandlerAbstract.register(DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL)
-class DiagonalAndAntiDiagonalHandler(DiagonalHandlerAbstract):
+@DynamicDiagonalAbstract.register(DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL)
+class CombinedDynamicDiagonal(DynamicDiagonalAbstract):
     def __init__(
         self,
-        cfg: DiagonalHandlerConfig,
-        overrides: DiagonalHandlerConfig | None = None,
+        cfg: DynamicDiagonalConfig,
+        overrides: DynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.diagonal_generator = DiagonalHandler(self.cfg)
-        self.anti_diagonal_generator = AntiDiagonalHandler(self.cfg)
+        self.diagonal_generator = StandardDynamicDiagonal(self.cfg)
+        self.anti_diagonal_generator = AntiDynamicDiagonal(self.cfg)
 
     def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
         weight_params = self.diagonal_generator(weight_params, logits)
