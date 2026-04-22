@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from emperor.base.registry import subclass_registry
 from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.augmentations.adaptive_parameters.options import (
+    BankExpansionFactorOptions,
     DynamicDepthOptions,
     DynamicWeightOptions,
     WeightDecayScheduleOptions,
@@ -47,8 +48,8 @@ class DynamicWeightConfig(ConfigBase):
     generator_depth: DynamicDepthOptions | None = optional_field(
         "Depth of the generator network that produces input-dependent weight adjustments."
     )
-    bank_expansion_factor: int | None = optional_field(
-        "Number of times default weight parameter bank will be scaled by for example (weight_bank_expansion_factor * input_dim, output_dim)"
+    bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
+        "Expansion factor for the weight parameter bank. Only applicable to LAYERED_WEIGHTED_BANK and SOFT_WEIGHTED_BANK model types."
     )
     decay_schedule: WeightDecayScheduleOptions | None = optional_field(
         "Schedule used to decay the base weight parameters over forward calls, eventually driving them to zero."
@@ -367,7 +368,8 @@ class LayeredWeightedBankDynamicWeight(DynamicWeightAbstract):
         overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.bank_expansion_factor = self.cfg.bank_expansion_factor
+        DynamicWeightValidator.validate_bank_expansion_factor(self)
+        self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
         self.depth_value = self.generator_depth.value
         broadcast_batch = 1
         self.weight_bank = self._init_parameter_bank(
@@ -413,9 +415,9 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
         overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-
+        DynamicWeightValidator.validate_bank_expansion_factor(self)
         self.depth_value = self.generator_depth.value
-        self.bank_expansion_factor = self.cfg.bank_expansion_factor
+        self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
         self.weight_bank = self._init_parameter_bank(
             (
                 self.depth_value,
@@ -438,7 +440,7 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
     ) -> Tensor:
         bank_logits = self.distribution_generator(X)
         bank_logits = bank_logits.view(
-            -1, self.generator_depth, self.input_dim, self.bank_expansion_factor
+            -1, self.depth_value, self.input_dim, self.bank_expansion_factor
         )
 
         bank_distribution = torch.softmax(bank_logits, dim=-1)
@@ -447,4 +449,5 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
         )
 
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
-        return decayed_weight_params + compressed_params
+        # TODO: return decayed_weight_params + compressed_params
+        return decayed_weight_params.unsqueeze(0).expand(X.size(0), -1, -1)

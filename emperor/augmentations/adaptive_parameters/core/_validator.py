@@ -17,7 +17,22 @@ if TYPE_CHECKING:
 
 
 class DynamicWeightValidator(ValidatorBase):
-    OPTIONAL_FIELDS = {"model_config"}
+    OPTIONAL_FIELDS = {"model_config", "bank_expansion_factor"}
+
+    BANK_WEIGHT_OPTIONS = None
+
+    @classmethod
+    def _get_bank_weight_options(cls) -> set:
+        if cls.BANK_WEIGHT_OPTIONS is None:
+            from emperor.augmentations.adaptive_parameters.options import (
+                DynamicWeightOptions,
+            )
+
+            cls.BANK_WEIGHT_OPTIONS = {
+                DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
+                DynamicWeightOptions.SOFT_WEIGHTED_BANK,
+            }
+        return cls.BANK_WEIGHT_OPTIONS
 
     @staticmethod
     def validate(model: "DynamicWeightAbstract") -> None:
@@ -26,6 +41,45 @@ class DynamicWeightValidator(ValidatorBase):
         DynamicWeightValidator.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
+        DynamicWeightValidator.validate_no_bank_expansion_factor(model)
+
+    @staticmethod
+    def validate_no_bank_expansion_factor(model: "DynamicWeightAbstract") -> None:
+        from emperor.augmentations.adaptive_parameters.core.weight import (
+            LayeredWeightedBankDynamicWeight,
+            SoftWeightedBankDynamicWeight,
+        )
+        from emperor.augmentations.adaptive_parameters.options import (
+            BankExpansionFactorOptions,
+        )
+
+        if isinstance(model, (LayeredWeightedBankDynamicWeight, SoftWeightedBankDynamicWeight)):
+            return
+        if model.cfg.bank_expansion_factor is not None:
+            raise ValueError(
+                f"{type(model).__name__} does not support bank_expansion_factor. "
+                f"Only LAYERED_WEIGHTED_BANK and SOFT_WEIGHTED_BANK use this parameter, "
+                f"received {model.cfg.bank_expansion_factor!r}."
+            )
+
+    @staticmethod
+    def validate_bank_expansion_factor(model: "DynamicWeightAbstract") -> None:
+        from emperor.augmentations.adaptive_parameters.options import (
+            BankExpansionFactorOptions,
+        )
+
+        factor = model.cfg.bank_expansion_factor
+        if factor is None or not isinstance(factor, BankExpansionFactorOptions):
+            raise ValueError(
+                f"{type(model).__name__} requires bank_expansion_factor to be a "
+                f"BankExpansionFactorOptions enum value, received {factor!r}"
+            )
+        if factor == BankExpansionFactorOptions.DISABLED:
+            raise ValueError(
+                f"{type(model).__name__} requires bank_expansion_factor > 0, "
+                f"received {factor}. "
+                f"Use FACTOR_OF_ONE, FACTOR_OF_TWO, FACTOR_OF_THREE, or FACTOR_OF_FOUR"
+            )
 
     @staticmethod
     def validate_square_dimensions(model: "DynamicWeightAbstract") -> None:

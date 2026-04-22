@@ -44,6 +44,14 @@ class DynamicDepthOptions(Enum):
     DEPTH_OF_THREE = 3
 
 
+class BankExpansionFactorOptions(Enum):
+    DISABLED = 0
+    FACTOR_OF_ONE = 1
+    FACTOR_OF_TWO = 2
+    FACTOR_OF_THREE = 3
+    FACTOR_OF_FOUR = 4
+
+
 class LinearMemorySizeOptions(Enum):
     DISABLED = 0
     SMALL = 4
