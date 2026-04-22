@@ -15,22 +15,22 @@ from emperor.augmentations.adaptive_parameters.core._validator import (
 @dataclass
 class DynamicBiasConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Input dimension of the bias transformation."
+        "Input dimensionality of the dynamic bias module."
     )
     output_dim: int | None = optional_field(
-        "Output dimension of the bias transformation."
+        "Output dimensionality of the dynamic bias module."
     )
     bias_flag: bool | None = optional_field(
-        "Whether the linear layer has a bias parameter."
+        "Indicates whether the associated linear layer includes a bias parameter."
     )
     model_type: DynamicBiasOptions | None = optional_field(
-        "Input-dependent adjustment of the bias vector."
+        "Dynamic bias strategy used to generate input-dependent bias updates."
     )
     bank_expansion_factor: int | None = optional_field(
-        "Size of the weight bank for WEIGHTED_BANK bias option."
+        "Number of entries in the bank used by the WEIGHTED_BANK bias strategy."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Layer stack configuration for the internal generator network."
+        "Configuration for the internal generator network."
     )
 
     def _registry_owner(self) -> type:
@@ -48,15 +48,26 @@ class DynamicBiasAbstract(Module):
         self.cfg: DynamicBiasConfig = self._override_config(cfg, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
+        self.bias_flag = self.cfg.bias_flag
+        self.model_type = self.cfg.model_type
+        self.bank_expansion_factor = self.cfg.bank_expansion_factor
 
         self.validator = DynamicBiasAbstractValidator(self)
 
-    def _init_model(
+    def _init_generator_model(
         self, overrides: LayerStackConfig | None = None
     ) -> "Layer | Sequential":
         from emperor.linears.core.stack import LinearLayerStack
 
         return LinearLayerStack(self.cfg.model_config, overrides).build_model()
+
+    def _init_output_generator(self, output_dim: int) -> "Layer | Sequential":
+        overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=output_dim)
+        return self._init_generator_model(overrides)
+
+    def _require_bias_params(self, bias_params: Tensor | None) -> Tensor:
+        self.validator.ensure_parameters_exist(bias_params)
+        return bias_params
 
 
 @DynamicBiasAbstract.register(DynamicBiasOptions.SCALE_AND_OFFSET)
@@ -67,14 +78,16 @@ class AffineTransformDynamicBias(DynamicBiasAbstract):
         overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        layer_overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=2)
-        self.scalar_offset_generator = self._init_model(layer_overrides)
+        affine_parameter_dim = 2
+        self.scalar_offset_generator = self._init_output_generator(
+            affine_parameter_dim
+        )
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        self.validator.ensure_parameters_exist(bias_params)
-        parameters = self.scalar_offset_generator(logits)
-        bias_scaling_factor, bias_offset = parameters.chunk(2, dim=-1)
-        return bias_scaling_factor * bias_params + bias_offset
+        bias_params = self._require_bias_params(bias_params)
+        affine_parameters = self.scalar_offset_generator(logits)
+        bias_scale, bias_offset = affine_parameters.chunk(2, dim=-1)
+        return bias_scale * bias_params + bias_offset
 
 
 @DynamicBiasAbstract.register(DynamicBiasOptions.ELEMENT_WISE_OFFSET)
@@ -85,15 +98,12 @@ class ElementwiseDynamicBias(DynamicBiasAbstract):
         overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        layer_overrides = LayerStackConfig(
-            input_dim=self.input_dim, output_dim=self.output_dim
-        )
-        self.generator_model = self._init_model(layer_overrides)
+        self.generator_model = self._init_output_generator(self.output_dim)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        self.validator.ensure_parameters_exist(bias_params)
-        parameters = self.generator_model(logits)
-        return bias_params + parameters
+        bias_params = self._require_bias_params(bias_params)
+        generated_bias_offset = self.generator_model(logits)
+        return bias_params + generated_bias_offset
 
 
 @DynamicBiasAbstract.register(DynamicBiasOptions.GATED)
@@ -104,13 +114,10 @@ class GatedDynamicBias(DynamicBiasAbstract):
         overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        layer_overrides = LayerStackConfig(
-            input_dim=self.input_dim, output_dim=self.output_dim
-        )
-        self.gate_generator = self._init_model(layer_overrides)
+        self.gate_generator = self._init_output_generator(self.output_dim)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        self.validator.ensure_parameters_exist(bias_params)
+        bias_params = self._require_bias_params(bias_params)
         gate = torch.sigmoid(self.gate_generator(logits))
         return bias_params * gate
 
@@ -123,10 +130,7 @@ class GeneratorDynamicBias(DynamicBiasAbstract):
         overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        layer_overrides = LayerStackConfig(
-            input_dim=self.input_dim, output_dim=self.output_dim
-        )
-        self.bias_generator = self._init_model(layer_overrides)
+        self.bias_generator = self._init_output_generator(self.output_dim)
 
     def forward(self, bias_params: None, logits: Tensor) -> Tensor | None:
         return self.bias_generator(logits)
@@ -140,14 +144,12 @@ class WeightedBankDynamicBias(DynamicBiasAbstract):
         overrides: DynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.bank_expansion_factor = self.cfg.bank_expansion_factor
         self.weight_bank = self._init_parameter_bank(
             (self.bank_expansion_factor, self.output_dim)
         )
-        layer_overrides = LayerStackConfig(
-            input_dim=self.input_dim, output_dim=self.bank_expansion_factor
+        self.distribution_generator = self._init_output_generator(
+            self.bank_expansion_factor
         )
-        self.distribution_generator = self._init_model(layer_overrides)
 
     def forward(self, bias_params: None, logits: Tensor) -> Tensor:
         bank_logits = self.distribution_generator(logits)

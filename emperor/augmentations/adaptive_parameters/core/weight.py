@@ -29,39 +29,39 @@ from emperor.base.layer import (
 @dataclass
 class DynamicWeightConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Input dimension of the weight transformation."
+        "Input dimensionality of the dynamic weight module."
     )
     output_dim: int | None = optional_field(
-        "Output dimension of the weight transformation."
+        "Output dimensionality of the dynamic weight module."
     )
     model_type: DynamicWeightOptions | None = optional_field(
-        "Selects the weight handler type for input-dependent weight adjustments."
+        "Dynamic weight strategy used to generate input-dependent weight updates."
     )
     normalization_option: WeightNormalizationOptions | None = optional_field(
-        "Normalization applied to vectors before the outer product computation."
+        "Normalization method applied during dynamic weight generation."
     )
     normalization_position_option: WeightNormalizationPositionOptions | None = (
         optional_field(
-            "Controls whether normalization is applied to the input vectors before or to the outer product after computation."
+            "Specifies whether normalization is applied before the outer-product computation or after it."
         )
     )
     generator_depth: DynamicDepthOptions | None = optional_field(
-        "Depth of the generator network that produces input-dependent weight adjustments."
+        "Number of generator layers used to produce input-dependent weight updates."
     )
     bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
-        "Expansion factor for the weight parameter bank. Only applicable to LAYERED_WEIGHTED_BANK and SOFT_WEIGHTED_BANK model types."
+        "Expansion factor for bank-based weight strategies. Applies only to LAYERED_WEIGHTED_BANK and SOFT_WEIGHTED_BANK."
     )
     decay_schedule: WeightDecayScheduleOptions | None = optional_field(
-        "Schedule used to decay the base weight parameters over forward calls, eventually driving them to zero."
+        "Schedule used to decay the base weight parameters across forward passes."
     )
     decay_rate: float | None = optional_field(
-        "Decay rate applied by the selected schedule. Interpretation depends on the schedule (exponent factor, linear slope, or multiplicative factor)."
+        "Decay coefficient for the selected schedule. Its interpretation depends on the schedule type."
     )
     decay_warmup_batches: int | None = optional_field(
-        "Number of batches to delay before applying weight decay. Decay steps only begin counting after this warmup period."
+        "Number of initial batches to skip before applying weight decay."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Layer stack configuration for the internal generator network."
+        "Configuration for the internal generator network."
     )
 
     def _registry_owner(self) -> type:
@@ -125,7 +125,8 @@ class DynamicWeightAbstract(Module):
                 return self._compute_raw_outer_product(input_vectors, output_vectors)
             case _:
                 raise ValueError(
-                    f"Unknown normalization position option: {self.normalization_position_option}"
+                    "Unsupported normalization_position_option value: "
+                    f"{self.normalization_position_option!r}."
                 )
 
     def _compute_prenormalized_outer_product(
@@ -172,7 +173,7 @@ class DynamicWeightAbstract(Module):
                 return vectors
             case _:
                 raise ValueError(
-                    f"Unknown weight normalization option: {self.normalization_option}"
+                    f"Unsupported normalization_option value: {self.normalization_option!r}."
                 )
 
     def _maybe_apply_weight_decay(self, weight_params: Tensor) -> Tensor:
@@ -202,9 +203,12 @@ class DynamicWeightAbstract(Module):
             case WeightDecayScheduleOptions.LINEAR:
                 return torch.clamp(1.0 - rate * step, min=0.0)
             case WeightDecayScheduleOptions.MULTIPLICATIVE:
-                return torch.pow(torch.tensor(1.0 - rate), step)
+                decay_base = step.new_tensor(1.0 - rate)
+                return torch.pow(decay_base, step)
             case _:
-                raise ValueError(f"Unknown weight decay schedule option: {schedule}")
+                raise ValueError(
+                    f"Unsupported decay_schedule value: {schedule!r}."
+                )
 
 
 @DynamicWeightAbstract.register(DynamicWeightOptions.SINGLE_MODEL)

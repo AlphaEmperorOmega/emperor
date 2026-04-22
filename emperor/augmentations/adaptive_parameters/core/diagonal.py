@@ -12,13 +12,17 @@ from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOpt
 
 @dataclass
 class DynamicDiagonalConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input dimension of the diagonal transformation.")
-    output_dim: int | None = optional_field("Output dimension of the diagonal transformation.")
+    input_dim: int | None = optional_field(
+        "Input dimensionality of the dynamic diagonal module."
+    )
+    output_dim: int | None = optional_field(
+        "Output dimensionality of the dynamic diagonal module."
+    )
     model_type: DynamicDiagonalOptions | None = optional_field(
-        "Input-dependent adjustment of the weight matrix diagonal."
+        "Dynamic diagonal strategy used to generate input-dependent diagonal updates."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Layer stack configuration for the internal generator network."
+        "Configuration for the internal generator network."
     )
 
     def _registry_owner(self) -> type:

@@ -23,7 +23,7 @@ class DepthMappingLayerConfig(LinearLayerConfig):
     generator_depth: "DynamicDepthOptions | None" = field(
         default=None,
         metadata={
-            "help": "Depth of the generator network that produces input-dependent weight adjustments."
+            "help": "Number of generator layers used to produce input-dependent adaptive parameter updates."
         },
     )
 
@@ -77,13 +77,13 @@ class DepthMappingHandlerConfig(LinearLayerConfig):
     generator_depth: "DynamicDepthOptions | None" = field(
         default=None,
         metadata={
-            "help": "Depth of the generator network that produces input-dependent weight adjustments."
+            "help": "Number of generator layers used to produce input-dependent adaptive parameter updates."
         },
     )
     model_config: "LayerStackConfig | None" = field(
         default=None,
         metadata={
-            "help": "Layer stack configuration for the internal generator network."
+            "help": "Configuration for the internal generator network."
         },
     )
 

@@ -58,7 +58,7 @@ class DynamicWeightValidator(ValidatorBase):
         if model.cfg.bank_expansion_factor is not None:
             raise ValueError(
                 f"{type(model).__name__} does not support bank_expansion_factor. "
-                f"Only LAYERED_WEIGHTED_BANK and SOFT_WEIGHTED_BANK use this parameter, "
+                f"This parameter is only valid for LAYERED_WEIGHTED_BANK and SOFT_WEIGHTED_BANK, "
                 f"received {model.cfg.bank_expansion_factor!r}."
             )
 
@@ -72,13 +72,13 @@ class DynamicWeightValidator(ValidatorBase):
         if factor is None or not isinstance(factor, BankExpansionFactorOptions):
             raise ValueError(
                 f"{type(model).__name__} requires bank_expansion_factor to be a "
-                f"BankExpansionFactorOptions enum value, received {factor!r}"
+                f"BankExpansionFactorOptions value, received {factor!r}."
             )
         if factor == BankExpansionFactorOptions.DISABLED:
             raise ValueError(
                 f"{type(model).__name__} requires bank_expansion_factor > 0, "
                 f"received {factor}. "
-                f"Use FACTOR_OF_ONE, FACTOR_OF_TWO, FACTOR_OF_THREE, or FACTOR_OF_FOUR"
+                f"Use FACTOR_OF_ONE, FACTOR_OF_TWO, FACTOR_OF_THREE, or FACTOR_OF_FOUR."
             )
 
     @staticmethod
@@ -97,7 +97,7 @@ class DynamicBiasAbstractValidator:
     def ensure_parameters_exist(self, bias_params: Tensor | None) -> None:
         if bias_params is None:
             raise ValueError(
-                "The 'bias_params' argument cannot be None. Please provide valid parameters to proceed."
+                "bias_params must not be None. Provide a valid bias tensor for this dynamic bias strategy."
             )
 
 
@@ -119,7 +119,7 @@ class DepthMappingValidator(ValidatorBase):
             raise ValueError(
                 f"generator_depth must be greater than 0 for DepthMappingLayer, "
                 f"received {cfg.generator_depth}. "
-                f"Use DEPTH_OF_ONE, DEPTH_OF_TWO, or DEPTH_OF_THREE"
+                f"Use DEPTH_OF_ONE, DEPTH_OF_TWO, or DEPTH_OF_THREE."
             )
 
     @staticmethod
@@ -127,7 +127,7 @@ class DepthMappingValidator(ValidatorBase):
         if not input_batch.dim() == 2:
             raise ValueError(
                 f"DepthMappingLayerStack expects a 2D input tensor (batch_size, features), "
-                f"received {input_batch.dim()}D tensor with shape {tuple(input_batch.shape)}"
+                f"received a {input_batch.dim()}D tensor with shape {tuple(input_batch.shape)}."
             )
 
     @staticmethod
@@ -140,7 +140,7 @@ class DepthMappingValidator(ValidatorBase):
         if not isinstance(inner_config, LinearLayerConfig):
             raise TypeError(
                 f"model_config.layer_config.layer_model_config must be a LinearLayerConfig, "
-                f"received {type(inner_config).__name__}"
+                f"received {type(inner_config).__name__}."
             )
 
     @staticmethod
@@ -151,17 +151,17 @@ class DepthMappingValidator(ValidatorBase):
         if layer_config.gate_config is not None:
             raise ValueError(
                 "DepthMappingLayerStack does not support gate_config. "
-                "gate_config must be None."
+                "Set gate_config to None."
             )
         if layer_config.halting_config is not None:
             raise ValueError(
                 "DepthMappingLayerStack does not support halting_config. "
-                "halting_config must be None."
+                "Set halting_config to None."
             )
         if layer_config.shared_halting_flag:
             raise ValueError(
                 "DepthMappingLayerStack does not support shared_halting_flag. "
-                "shared_halting_flag must be False."
+                "Set shared_halting_flag to False."
             )
 
 
@@ -248,7 +248,7 @@ class AdaptiveParameterAugmentationValidator:
                 if rules.get("optional"):
                     continue
                 raise ValueError(
-                    f"Configuration Error: '{name}' is required for "
+                    f"Configuration error: '{name}' is required for "
                     f"{self.model.__class__.__name__}."
                 )
 
@@ -256,7 +256,7 @@ class AdaptiveParameterAugmentationValidator:
             expected_type = self._TYPES.get(expected, expected)
             if not isinstance(val, expected_type):
                 raise TypeError(
-                    f"Type Error: '{name}' on {self.model.__class__.__name__} "
+                    f"Type error: '{name}' on {self.model.__class__.__name__} "
                     f"expected {expected_type.__name__}, got "
                     f"{type(val).__name__} (value={val!r})."
                 )
@@ -266,5 +266,5 @@ class AdaptiveParameterAugmentationValidator:
                 result = validator(val)
                 if result is not True and result is not None:
                     raise ValueError(
-                        f"Configuration Error: '{name}' {result} (value={val!r})."
+                        f"Configuration error: '{name}' {result} (value={val!r})."
                     )

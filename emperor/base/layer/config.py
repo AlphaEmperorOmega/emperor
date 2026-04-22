@@ -16,31 +16,35 @@ if TYPE_CHECKING:
 
 @dataclass
 class LayerConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input dimension of the wrapped module")
-    output_dim: int | None = optional_field("Output dimension of the wrapped module")
+    input_dim: int | None = optional_field(
+        "Input dimensionality of the wrapped module."
+    )
+    output_dim: int | None = optional_field(
+        "Output dimensionality of the wrapped module."
+    )
     activation: ActivationOptions | None = optional_field(
-        "Activation applied to the wrapped module's output"
+        "Activation function applied to the wrapped module output."
     )
     residual_flag: bool | None = optional_field(
-        "Add residual from input to output; requires input_dim == output_dim"
+        "Enables a residual connection from input to output. Requires input_dim == output_dim."
     )
     dropout_probability: float | None = optional_field(
-        "Dropout after the layer output; range 0-1"
+        "Dropout probability applied after the layer output."
     )
     layer_norm_position: LayerNormPositionOptions | None = optional_field(
-        "LayerNorm position: BEFORE (pre-norm), DEFAULT (post-model, pre-activation), AFTER (post-activation), DISABLED"
+        "Specifies where layer normalization is applied within the layer pipeline."
     )
     gate_config: "LayerStackConfig | None" = optional_field(
-        "Gating LayerStack config; None skips gating"
+        "Configuration for the optional gating stack. Set to None to disable gating."
     )
     halting_config: "HaltingConfig | None" = optional_field(
-        "Halting config for adaptive computation; None skips halting"
+        "Configuration for the optional adaptive halting module. Set to None to disable halting."
     )
     shared_halting_flag: bool | None = optional_field(
-        "When True, one halting module shared across layers; else per-layer"
+        "When enabled, a single halting module is shared across layers instead of creating one per layer."
     )
     layer_model_config: ConfigBase | None = optional_field(
-        "Config for the wrapped inner module (e.g., LinearLayerConfig)"
+        "Configuration for the wrapped inner module, such as LinearLayerConfig."
     )
 
     def _registry_owner(self) -> type:
@@ -51,18 +55,26 @@ class LayerConfig(ConfigBase):
 
 @dataclass
 class LayerStackConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input dimension of the first layer")
-    hidden_dim: int | None = optional_field("Hidden layers dimension")
-    output_dim: int | None = optional_field("Output dimension of the last layer")
-    num_layers: int | None = optional_field("Total layers in the stack")
+    input_dim: int | None = optional_field(
+        "Input dimensionality of the first layer in the stack."
+    )
+    hidden_dim: int | None = optional_field(
+        "Hidden dimensionality used by intermediate layers in the stack."
+    )
+    output_dim: int | None = optional_field(
+        "Output dimensionality of the final layer in the stack."
+    )
+    num_layers: int | None = optional_field(
+        "Total number of layers in the stack."
+    )
     last_layer_bias_option: "LastLayerBiasOptions | None" = optional_field(
-        "Bias override for the final layer: DEFAULT inherits, DISABLED off, ENABLED on"
+        "Controls whether the final layer uses its default bias behavior or an explicit override."
     )
     apply_output_pipeline_flag: bool | None = optional_field(
-        "When True, final layer runs the wrapper pipeline (activation, dropout, norm, residual, gate); else returns raw module output"
+        "When enabled, the final layer applies the full wrapper pipeline instead of returning the raw module output."
     )
     layer_config: LayerConfig | None = optional_field(
-        "Layer config that determines the pipeline to be applied to the wrapped model"
+        "Configuration that defines the per-layer wrapper pipeline applied throughout the stack."
     )
 
     def build(

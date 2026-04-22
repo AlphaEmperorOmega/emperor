@@ -13,16 +13,20 @@ from emperor.augmentations.adaptive_parameters.options import (
 
 @dataclass
 class RowMaskConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input dimension of the mask transformation.")
-    output_dim: int | None = optional_field("Output dimension of the mask transformation.")
+    input_dim: int | None = optional_field(
+        "Input dimensionality of the row mask module."
+    )
+    output_dim: int | None = optional_field(
+        "Output dimensionality of the row mask module."
+    )
     model_type: RowMaskOptions | None = optional_field(
-        "Input-dependent row masking of the weight matrix after weight updates."
+        "Row masking strategy applied to the weight matrix after dynamic updates."
     )
     mask_dimension_option: MaskDimensionOptions | None = optional_field(
-        "Whether to mask rows or columns of the weight matrix."
+        "Specifies whether masking is applied across rows or columns of the weight matrix."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Layer stack configuration for the internal generator network."
+        "Configuration for the internal generator network."
     )
 
     def _registry_owner(self) -> type:

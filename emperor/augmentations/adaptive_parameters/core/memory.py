@@ -15,19 +15,23 @@ from emperor.augmentations.adaptive_parameters.options import (
 
 @dataclass
 class LinearMemoryConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input dimension of the memory transformation.")
-    output_dim: int | None = optional_field("Output dimension of the memory transformation.")
+    input_dim: int | None = optional_field(
+        "Input dimensionality of the linear memory module."
+    )
+    output_dim: int | None = optional_field(
+        "Output dimensionality of the linear memory module."
+    )
     model_type: LinearMemoryOptions | None = optional_field(
-        "Blends a learned memory representation with the linear layer input or output."
+        "Linear memory strategy used to blend a learned memory representation with the layer input or output."
     )
     memory_size_option: LinearMemorySizeOptions | None = optional_field(
         "Size of the learned memory representation."
     )
     memory_position_option: LinearMemoryPositionOptions | None = optional_field(
-        "Controls when memory is applied in the computation."
+        "Specifies whether memory is applied before or after the affine transformation."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Layer stack configuration for the internal generator network."
+        "Configuration for the internal generator network."
     )
 
     def _registry_owner(self) -> type:
@@ -51,7 +55,7 @@ class LinearMemoryAbstract(Module):
     def _validate_memory_option(self):
         if self.memory_size_option == LinearMemorySizeOptions.DISABLED:
             raise ValueError(
-                "The `memory_size_option` cannot be set to LinearMemorySizeOptions.DISABLED if this handler is used."
+                "memory_size_option must be set to a non-disabled LinearMemorySizeOptions value when a linear memory handler is active."
             )
 
     def _get_memory_dim(self) -> int:
