@@ -28,6 +28,7 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     LayeredWeightedBankDynamicWeight,
     LowRankDynamicWeight,
     SingleModelDynamicWeight,
+    SoftWeightedBankDynamicWeight,
     DynamicWeightConfig,
     DynamicWeightAbstract,
     DualModelMaskDynamicWeight,
@@ -181,6 +182,62 @@ class TestWeightHandlerForward(unittest.TestCase):
         self.assertEqual(output.shape, (batch_size, input_dim, output_dim))
         self.assertIsInstance(output, torch.Tensor)
         self.assertFalse(torch.all(output == 0))
+
+    def test_soft_weighted_bank_handler_forward(self):
+        batch_size = 2
+        input_dim = 12
+        output_dim = 24
+        bank_expansion_factor = BankExpansionFactorOptions.FACTOR_OF_THREE
+        cfg = self.preset(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            model_type=DynamicWeightOptions.SOFT_WEIGHTED_BANK,
+            generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
+            bank_expansion_factor=bank_expansion_factor,
+        )
+        weight_params = Module()._init_parameter_bank((input_dim, output_dim))
+        input_tensor = torch.randn(batch_size, input_dim)
+        model = SoftWeightedBankDynamicWeight(cfg)
+        output = model(weight_params, input_tensor)
+        self.assertEqual(output.shape, (batch_size, input_dim, output_dim))
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertFalse(torch.all(output == 0))
+
+    def test_compute_raw_outer_product_values(self):
+        batch_size = 2
+        generator_depth = 3
+        input_dim = 4
+        output_dim = 5
+        cfg = self.preset(input_dim=input_dim, output_dim=output_dim)
+        model = DualModelDynamicWeight(cfg)
+        input_vectors = torch.randn(batch_size, generator_depth, input_dim)
+        output_vectors = torch.randn(batch_size, generator_depth, output_dim)
+        result = model._compute_raw_outer_product(input_vectors, output_vectors)
+        self.assertEqual(
+            result.shape, (batch_size, generator_depth, input_dim, output_dim)
+        )
+        for b in range(batch_size):
+            for k in range(generator_depth):
+                expected = input_vectors[b, k].unsqueeze(1) * output_vectors[
+                    b, k
+                ].unsqueeze(0)
+                self.assertTrue(
+                    torch.allclose(result[b, k], expected, atol=1e-6),
+                    f"batch={b}, depth={k}",
+                )
+
+    def test_compute_dynamic_weights_sums_over_depth(self):
+        batch_size = 2
+        generator_depth = 3
+        input_dim = 4
+        output_dim = 5
+        outer_product = torch.randn(batch_size, generator_depth, input_dim, output_dim)
+        cfg = self.preset(input_dim=input_dim, output_dim=output_dim)
+        model = DualModelDynamicWeight(cfg)
+        result = model._compute_dynamic_weights(outer_product)
+        expected = outer_product.sum(dim=1)
+        self.assertEqual(result.shape, (batch_size, input_dim, output_dim))
+        self.assertTrue(torch.allclose(result, expected, atol=1e-6))
 
     def test_compute_outer_product_dispatches_by_position(self):
         batch_size = 2
@@ -511,6 +568,44 @@ class TestWeightHandlerForward(unittest.TestCase):
                     self.assertEqual(result.shape, weight_params.shape)
                     self.assertFalse(torch.equal(result, weight_params))
 
+    def test_decay_schedule_mathematical_correctness(self):
+        input_dim = 12
+        output_dim = 24
+        decay_rate = 0.3
+        num_steps = 5
+        weight_params = Module()._init_parameter_bank((input_dim, output_dim))
+
+        schedule_expected_factor = {
+            WeightDecayScheduleOptions.EXPONENTIAL: lambda step: torch.exp(
+                torch.tensor(-decay_rate * step)
+            ),
+            WeightDecayScheduleOptions.LINEAR: lambda step: torch.clamp(
+                torch.tensor(1.0 - decay_rate * step), min=0.0
+            ),
+            WeightDecayScheduleOptions.MULTIPLICATIVE: lambda step: torch.pow(
+                torch.tensor(1.0 - decay_rate), torch.tensor(float(step))
+            ),
+        }
+
+        for schedule, expected_factor_fn in schedule_expected_factor.items():
+            message = f"schedule={schedule}"
+            with self.subTest(msg=message):
+                cfg = self.preset(
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    decay_schedule=schedule,
+                    decay_rate=decay_rate,
+                )
+                model = cfg.build()
+                for step in range(num_steps):
+                    result = model._maybe_apply_weight_decay(weight_params)
+                    expected_factor = expected_factor_fn(step)
+                    expected = weight_params * expected_factor
+                    self.assertTrue(
+                        torch.allclose(result, expected, atol=1e-6),
+                        f"{message}, step={step}: expected factor={expected_factor.item():.6f}",
+                    )
+
     def test_weight_decay_warmup_delays_decay(self):
         input_dim = 12
         output_dim = 24
@@ -537,6 +632,21 @@ class TestWeightHandlerForward(unittest.TestCase):
         # second call: step=1, factor < 1.0, decay applied
         result = model._maybe_apply_weight_decay(weight_params)
         self.assertFalse(torch.equal(result, weight_params))
+
+    def test_weight_decay_schedule_raises_on_unknown_schedule(self):
+        input_dim = 12
+        output_dim = 24
+        cfg = self.preset(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            decay_rate=0.1,
+        )
+        model = cfg.build()
+        setattr(model, "decay_schedule_option", "invalid_schedule")
+        weight_params = Module()._init_parameter_bank((input_dim, output_dim))
+        with self.assertRaises(ValueError):
+            model._maybe_apply_weight_decay(weight_params)
 
     def test_apply_normalization_transform_all_options(self):
         batch_size = 2
