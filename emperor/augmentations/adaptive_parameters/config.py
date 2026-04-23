@@ -15,7 +15,7 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     DynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.mask import (
-    RowMaskConfig,
+    AxisMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.memory import (
     LinearMemoryConfig,
@@ -52,7 +52,7 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
         default=None,
         metadata={"help": "Configuration for input-dependent bias adjustments."},
     )
-    mask_config: RowMaskConfig | None = field(
+    mask_config: AxisMaskConfig | None = field(
         default=None,
         metadata={"help": "Configuration for input-dependent weight matrix masking."},
     )

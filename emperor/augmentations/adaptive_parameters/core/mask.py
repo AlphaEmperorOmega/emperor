@@ -2,54 +2,66 @@ import torch
 
 from torch import Tensor
 from torch.nn import Sequential
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.utils import ConfigBase, Module, optional_field
-from emperor.augmentations.adaptive_parameters.core._validator import RowMaskValidator
+from emperor.augmentations.adaptive_parameters.core._validator import AxisMaskValidator
 from emperor.augmentations.adaptive_parameters.options import (
+    AxisMaskOptions,
     MaskDimensionOptions,
-    RowMaskOptions,
 )
 
 
 @dataclass
-class RowMaskConfig(ConfigBase):
+class AxisMaskConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Input dimensionality of the row mask module."
+        "Input dimensionality of the axis mask module."
     )
     output_dim: int | None = optional_field(
-        "Output dimensionality of the row mask module."
+        "Output dimensionality of the axis mask module."
     )
-    model_type: RowMaskOptions | None = optional_field(
-        "Row masking strategy applied to the weight matrix after dynamic updates."
+    model_type: AxisMaskOptions | None = optional_field(
+        "Axis masking strategy applied to the weight matrix after dynamic updates."
     )
     mask_dimension_option: MaskDimensionOptions | None = optional_field(
         "Specifies whether masking is applied across rows or columns of the weight matrix."
+    )
+    mask_threshold: float | None = optional_field(
+        "Threshold applied to axis keep scores when deciding whether to preserve a row or column."
+    )
+    mask_surrogate_scale: float | None = optional_field(
+        "Steepness factor for the training-time sigmoid surrogate used around the axis mask threshold."
+    )
+    mask_floor: float | None = optional_field(
+        "Baseline mask value assigned to structurally dropped regions. "
+        "Use 0.0 to keep exact zeros, or a small positive value to attenuate "
+        "dropped rows, columns, or diagonal regions instead of removing them fully."
     )
     model_config: LayerStackConfig | None = optional_field(
         "Configuration for the internal generator network."
     )
 
     def _registry_owner(self) -> type:
-        return RowMaskAbstract
+        return AxisMaskAbstract
 
 
 @subclass_registry
-class RowMaskAbstract(Module):
-    MASK_SURROGATE_SCALE = 5.0
-
+class AxisMaskAbstract(Module):
     def __init__(
         self,
-        cfg: RowMaskConfig,
-        overrides: RowMaskConfig | None = None,
+        cfg: AxisMaskConfig,
+        overrides: AxisMaskConfig | None = None,
     ):
         super().__init__()
-        self.cfg: RowMaskConfig = self._override_config(cfg, overrides)
-        RowMaskValidator.validate(self)
+        self.cfg: AxisMaskConfig = self._override_config(cfg, overrides)
+        AxisMaskValidator.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.mask_dimension_option = self.cfg.mask_dimension_option
+        self.mask_threshold = self.cfg.mask_threshold
+        self.mask_surrogate_scale = self.cfg.mask_surrogate_scale
+        self.mask_floor = self.cfg.mask_floor
         self.model_config = self.cfg.model_config
 
     def _init_generator(self, output_dim: int) -> "Layer | Sequential":
@@ -58,53 +70,159 @@ class RowMaskAbstract(Module):
             output_dim=output_dim,
         )
         generator_model = self.model_config.build(overrides)
-        RowMaskValidator.validate_generator_model(generator_model)
+        AxisMaskValidator.validate_generator_model(generator_model)
         return generator_model
 
-    def _run_generator(
-        self, generator_model: "Layer | Sequential", logits: Tensor
-    ) -> Tensor:
-        return Layer.forward_with_state(generator_model, logits)
+    @property
+    def _target_axis_count(self) -> int:
+        return (
+            self.input_dim
+            if self.mask_dimension_option == MaskDimensionOptions.ROW
+            else self.output_dim
+        )
 
     @property
-    def _count_dim(self) -> int:
+    def _source_axis_count(self) -> int:
+        return (
+            self.input_dim
+            if self.mask_dimension_option == MaskDimensionOptions.COLUMN
+            else self.output_dim
+        )
+
+    @property
+    def __target_broadcast_dim(self) -> int:
+        return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
+
+    @property
+    def __source_broadcast_dim(self) -> int:
         return -1 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -2
 
     @property
-    def _magnitude_dim(self) -> int:
+    def __score_dim(self) -> int:
         return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
 
-    @property
-    def _broadcast_dim(self) -> int:
-        return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
-
-    @property
-    def _mask_count(self) -> int:
-        return (
-            self.output_dim
-            if self.mask_dimension_option == MaskDimensionOptions.COLUMN
-            else self.input_dim
-        )
-
-    def _resolve_training_mask(self, hard_mask: Tensor, soft_mask: Tensor) -> Tensor:
-        if not self.training:
-            return hard_mask
-        return hard_mask + soft_mask - soft_mask.detach()
-
-    def _apply_weight_straight_through(
-        self, sparsified_weights: Tensor, weight_params: Tensor
+    def _compute_generator_soft_values(
+        self, generator_model: "Layer | Sequential", logits: Tensor
     ) -> Tensor:
-        if self.training:
-            return sparsified_weights + (weight_params - weight_params.detach())
-        return sparsified_weights
+        mask_logits = Layer.forward_with_state(generator_model, logits)
+        return torch.sigmoid(mask_logits)
+
+    def _compute_masked_weight_scores(
+        self,
+        weight_params: Tensor,
+        soft_axis_mask: Tensor,
+    ) -> Tensor:
+        masked_weights = weight_params * soft_axis_mask.unsqueeze(
+            self.__source_broadcast_dim
+        )
+        return masked_weights.abs().mean(dim=self.__score_dim)
+
+    def _compute_hard_mask(self, scores: Tensor) -> Tensor:
+        return (scores >= self.mask_threshold).to(dtype=scores.dtype)
+
+    def _compute_soft_mask(self, scores: Tensor) -> Tensor:
+        return torch.sigmoid(self.mask_surrogate_scale * (scores - self.mask_threshold))
+
+    def _apply_hybrid_mask(
+        self,
+        weight_params: Tensor,
+        hard_mask: Tensor,
+        soft_mask: Tensor,
+    ) -> Tensor:
+        mask_floor = hard_mask.new_tensor(self.mask_floor)
+        adjusted_hard_mask = (mask_floor + (1.0 - mask_floor) * hard_mask).clamp(
+            min=mask_floor, max=1.0
+        )
+        final_mask = adjusted_hard_mask * soft_mask
+        if final_mask.dim() == weight_params.dim():
+            return weight_params * final_mask
+        return weight_params * final_mask.unsqueeze(self.__target_broadcast_dim)
 
 
-@RowMaskAbstract.register(RowMaskOptions.GLOBAL_SCORE)
-class GlobalScoreRowMask(RowMaskAbstract):
+@AxisMaskAbstract.register(AxisMaskOptions.WEIGHT_INFORMED_SCORE)
+class WeightInformedScoreAxisMask(AxisMaskAbstract):
     def __init__(
         self,
-        cfg: RowMaskConfig,
-        overrides: RowMaskConfig | None = None,
+        cfg: AxisMaskConfig,
+        overrides: AxisMaskConfig | None = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.score_generator = self.__init_score_generator()
+
+    def __init_score_generator(self) -> "Layer | Sequential":
+        return self._init_generator(self._source_axis_count)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        source_axis_soft_mask = self._compute_generator_soft_values(
+            self.score_generator, logits
+        )
+        axis_scores = self._compute_masked_weight_scores(
+            weight_params, source_axis_soft_mask
+        )
+        hard_mask = self._compute_hard_mask(axis_scores)
+        soft_mask = self._compute_soft_mask(axis_scores)
+        return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
+
+
+@AxisMaskAbstract.register(AxisMaskOptions.PER_AXIS_SCORE)
+class PerAxisScoreMask(AxisMaskAbstract):
+    def __init__(
+        self,
+        cfg: AxisMaskConfig,
+        overrides: AxisMaskConfig | None = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.score_generator = self.__init_score_generator()
+
+    def __init_score_generator(self) -> "Layer | Sequential":
+        return self._init_generator(self._target_axis_count)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        axis_scores = self._compute_generator_soft_values(self.score_generator, logits)
+        hard_mask = self._compute_hard_mask(axis_scores)
+        soft_mask = self._compute_soft_mask(axis_scores)
+        return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
+
+
+@AxisMaskAbstract.register(AxisMaskOptions.TOP_SLICE)
+class TopSliceAxisMask(AxisMaskAbstract):
+    def __init__(
+        self,
+        cfg: AxisMaskConfig,
+        overrides: AxisMaskConfig | None = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.score_generator = self.__init_score_generator()
+
+    def __init_score_generator(self) -> "Layer | Sequential":
+        return self._init_generator(self._target_axis_count)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        axis_scores = self._compute_generator_soft_values(self.score_generator, logits)
+        thresholded_axis_mask = self._compute_hard_mask(axis_scores)
+        hard_mask = thresholded_axis_mask.cumprod(dim=-1)
+        soft_mask = self._compute_soft_mask(axis_scores)
+        return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
+
+
+@AxisMaskAbstract.register(AxisMaskOptions.DIAGONAL)
+class DiagonalAxisMask(AxisMaskAbstract):
+    def __init__(
+        self,
+        cfg: AxisMaskConfig,
+        overrides: AxisMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.score_generator = self.__init_score_generator()
@@ -117,152 +235,33 @@ class GlobalScoreRowMask(RowMaskAbstract):
         weight_params: Tensor,
         logits: Tensor,
     ) -> Tensor:
-        keep_fraction_logit = self._run_generator(self.score_generator, logits)
-        keep_fraction = torch.sigmoid(keep_fraction_logit)
-        total_count = weight_params.shape[self._count_dim]
-        continuous_items_to_keep = torch.clamp(
-            keep_fraction.squeeze(-1) * total_count,
-            min=1.0,
-            max=float(total_count),
+        keep_fraction = self._compute_generator_soft_values(
+            self.score_generator, logits
         )
-        items_to_keep = torch.clamp(
-            (keep_fraction * total_count).long(), min=1
-        ).squeeze(-1)
-        magnitudes = weight_params.norm(dim=self._magnitude_dim)
-        hard_mask = self.__build_hard_mask(magnitudes, items_to_keep)
-        soft_mask = self.__build_soft_mask(magnitudes, continuous_items_to_keep)
-        effective_mask = self._resolve_training_mask(hard_mask, soft_mask)
-        sparsified_weights = weight_params * effective_mask.unsqueeze(self._broadcast_dim)
-        return self._apply_weight_straight_through(sparsified_weights, weight_params)
+        diagonal_scores = self.__compute_diagonal_scores(weight_params, keep_fraction)
+        hard_mask = self._compute_hard_mask(diagonal_scores)
+        soft_mask = self._compute_soft_mask(diagonal_scores)
+        return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
 
-    def __build_hard_mask(
-        self,
-        row_magnitudes: Tensor,
-        rows_to_keep: Tensor,
-    ) -> Tensor:
-        sorted_magnitudes, _ = row_magnitudes.sort(dim=-1, descending=True)
-        thresholds = sorted_magnitudes.gather(-1, (rows_to_keep - 1).unsqueeze(-1))
-        return (row_magnitudes >= thresholds).float()
-
-    def __build_soft_mask(
-        self,
-        row_magnitudes: Tensor,
-        rows_to_keep: Tensor,
-    ) -> Tensor:
-        rank_indices = row_magnitudes.argsort(dim=-1, descending=True).argsort(dim=-1)
-        ranks = rank_indices.float() + 1.0
-        scaled_distance = rows_to_keep.unsqueeze(-1) - ranks + 0.5
-        return torch.sigmoid(self.MASK_SURROGATE_SCALE * scaled_distance)
-
-
-@RowMaskAbstract.register(RowMaskOptions.PER_ROW_SCORE)
-class PerRowScoreRowMask(RowMaskAbstract):
-    def __init__(
-        self,
-        cfg: RowMaskConfig,
-        overrides: RowMaskConfig | None = None,
-    ):
-        super().__init__(cfg, overrides)
-        self.score_generator = self.__init_score_generator()
-
-    def __init_score_generator(self) -> "Layer | Sequential":
-        return self._init_generator(self._mask_count)
-
-    def forward(
+    def __compute_diagonal_scores(
         self,
         weight_params: Tensor,
-        logits: Tensor,
+        keep_fraction: Tensor,
     ) -> Tensor:
-        keep_fraction_logits = self._run_generator(self.score_generator, logits)
-        keep_fractions = torch.sigmoid(keep_fraction_logits)
-        hard_mask = (keep_fractions >= 0.5).float()
-        effective_mask = self._resolve_training_mask(hard_mask, keep_fractions)
-        sparsified_weights = weight_params * effective_mask.unsqueeze(self._broadcast_dim)
-        return self._apply_weight_straight_through(sparsified_weights, weight_params)
-
-
-@RowMaskAbstract.register(RowMaskOptions.TOP_SLICE)
-class TopSliceRowMask(RowMaskAbstract):
-    def __init__(
-        self,
-        cfg: RowMaskConfig,
-        overrides: RowMaskConfig | None = None,
-    ):
-        super().__init__(cfg, overrides)
-        self.score_generator = self.__init_score_generator()
-
-    def __init_score_generator(self) -> "Layer | Sequential":
-        return self._init_generator(1)
-
-    def forward(
-        self,
-        weight_params: Tensor,
-        logits: Tensor,
-    ) -> Tensor:
-        keep_fraction_logit = self._run_generator(self.score_generator, logits)
-        keep_fraction = torch.sigmoid(keep_fraction_logit)
-        total_count = weight_params.shape[self._count_dim]
-        continuous_items_to_keep = torch.clamp(
-            keep_fraction * total_count,
-            min=1.0,
-            max=float(total_count),
-        )
-        items_to_keep = torch.clamp((keep_fraction * total_count).long(), min=1)
-        indices = torch.arange(total_count, device=weight_params.device)
-        hard_mask = (indices.unsqueeze(0) < items_to_keep).float()
-        soft_mask = torch.sigmoid(
-            self.MASK_SURROGATE_SCALE
-            * (continuous_items_to_keep - indices.unsqueeze(0) + 0.5)
-        )
-        effective_mask = self._resolve_training_mask(hard_mask, soft_mask)
-        sparsified_weights = weight_params * effective_mask.unsqueeze(self._broadcast_dim)
-        return self._apply_weight_straight_through(sparsified_weights, weight_params)
-
-
-@RowMaskAbstract.register(RowMaskOptions.DIAGONAL)
-class DiagonalRowMask(RowMaskAbstract):
-    def __init__(
-        self,
-        cfg: RowMaskConfig,
-        overrides: RowMaskConfig | None = None,
-    ):
-        super().__init__(cfg, overrides)
-        self.score_generator = self.__init_score_generator()
-
-    def __init_score_generator(self) -> "Layer | Sequential":
-        return self._init_generator(1)
-
-    def forward(
-        self,
-        weight_params: Tensor,
-        logits: Tensor,
-    ) -> Tensor:
-        keep_fraction_logit = self._run_generator(self.score_generator, logits)
-        keep_fraction = torch.sigmoid(keep_fraction_logit)
         row_count = weight_params.shape[-2]
         col_count = weight_params.shape[-1]
+        row_indices = torch.arange(
+            row_count, device=weight_params.device, dtype=keep_fraction.dtype
+        )
+        col_indices = torch.arange(
+            col_count, device=weight_params.device, dtype=keep_fraction.dtype
+        )
         min_diagonal_shift = 1 - row_count
-        continuous_diagonal_shift = (
+        diagonal_shift = (
             keep_fraction.squeeze(-1) * (row_count + col_count) - row_count
-        ).clamp(min=min_diagonal_shift)
-        raw_diagonal_shift = (keep_fraction * (row_count + col_count)).long().squeeze(
+        ).clamp(min=float(min_diagonal_shift))
+        boundary = (row_count - 1 - row_indices).unsqueeze(0).unsqueeze(
             -1
-        ) - row_count
-        diagonal_shift = raw_diagonal_shift.clamp(min=min_diagonal_shift)
-        row_indices = torch.arange(row_count, device=weight_params.device)
-        col_indices = torch.arange(col_count, device=weight_params.device)
-        hard_mask = (
-            col_indices.unsqueeze(0)
-            <= (row_count - 1 - row_indices).unsqueeze(1)
-            + diagonal_shift[..., None, None]
-        ).float()
-        soft_boundary = (
-            (row_count - 1 - row_indices).unsqueeze(1)
-            + continuous_diagonal_shift[..., None, None]
-        )
-        soft_mask = torch.sigmoid(
-            self.MASK_SURROGATE_SCALE * (soft_boundary - col_indices.unsqueeze(0) + 0.5)
-        )
-        effective_mask = self._resolve_training_mask(hard_mask, soft_mask)
-        sparsified_weights = weight_params * effective_mask
-        return self._apply_weight_straight_through(sparsified_weights, weight_params)
+        ) + diagonal_shift[:, None, None]
+        margins = boundary - col_indices.unsqueeze(0).unsqueeze(0)
+        return ((margins + 1.0) / 2.0).clamp(0.0, 1.0)

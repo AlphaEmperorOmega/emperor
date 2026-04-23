@@ -19,6 +19,7 @@ from emperor.parametric.utils.mixtures.options import (
 )
 from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.augmentations.adaptive_parameters.options import (
+    AxisMaskOptions,
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -26,7 +27,6 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
-    RowMaskOptions,
     WeightNormalizationOptions,
 )
 
@@ -168,7 +168,7 @@ class ParametricLayerPresets:
         adaptive_mixture_clip_range=5.0,
         adaptive_behaviour_weight_option: DynamicWeightOptions = DynamicWeightOptions.DISABLED,
         adaptive_behaviour_weight_normalization: WeightNormalizationOptions = WeightNormalizationOptions.DISABLED,
-        adaptive_behaviour_row_mask_option: RowMaskOptions = RowMaskOptions.DISABLED,
+        adaptive_behaviour_row_mask_option: AxisMaskOptions = AxisMaskOptions.DISABLED,
         adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         adaptive_behaviour_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         adaptive_behaviour_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
@@ -374,7 +374,7 @@ class ParametricLayerPresets:
         adaptive_behaviour_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
         adaptive_behaviour_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
         adaptive_behaviour_weight_normalization: WeightNormalizationOptions = WeightNormalizationOptions.DISABLED,
-        adaptive_behaviour_row_mask_option: RowMaskOptions = RowMaskOptions.DISABLED,
+        adaptive_behaviour_row_mask_option: AxisMaskOptions = AxisMaskOptions.DISABLED,
         adaptive_behaviour_memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
         adaptive_behaviour_memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
         adaptive_behaviour_memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,

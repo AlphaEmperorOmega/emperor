@@ -8,8 +8,8 @@ if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters.core.diagonal import (
         DynamicDiagonalAbstract,
     )
+    from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskAbstract
     from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasAbstract
-    from emperor.augmentations.adaptive_parameters.core.mask import RowMaskAbstract
     from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
         DepthMappingLayer,
         DepthMappingLayerConfig,
@@ -201,14 +201,43 @@ class DynamicDiagonalValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         )
 
 
-class RowMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
+class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     @staticmethod
-    def validate(model: "RowMaskAbstract") -> None:
-        RowMaskValidator.validate_required_fields(model.cfg)
-        RowMaskValidator.validate_field_types(model.cfg)
-        RowMaskValidator.validate_dimensions(
+    def validate(model: "AxisMaskAbstract") -> None:
+        AxisMaskValidator.validate_required_fields(model.cfg)
+        AxisMaskValidator.validate_field_types(model.cfg)
+        AxisMaskValidator.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
+        AxisMaskValidator.validate_mask_threshold(model.cfg.mask_threshold)
+        AxisMaskValidator.validate_mask_surrogate_scale(
+            model.cfg.mask_surrogate_scale
+        )
+        AxisMaskValidator.validate_mask_floor(model.cfg.mask_floor)
+
+    @staticmethod
+    def validate_mask_threshold(mask_threshold: float) -> None:
+        if not 0.0 <= mask_threshold <= 1.0:
+            raise ValueError(
+                "mask_threshold must be between 0.0 and 1.0 inclusive, "
+                f"received {mask_threshold!r}."
+            )
+
+    @staticmethod
+    def validate_mask_surrogate_scale(mask_surrogate_scale: float) -> None:
+        if mask_surrogate_scale <= 0.0:
+            raise ValueError(
+                "mask_surrogate_scale must be greater than 0.0, "
+                f"received {mask_surrogate_scale!r}."
+            )
+
+    @staticmethod
+    def validate_mask_floor(mask_floor: float) -> None:
+        if not 0.0 <= mask_floor < 1.0:
+            raise ValueError(
+                "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
+                f"received {mask_floor!r}."
+            )
 
 
 class DepthMappingValidator(ValidatorBase):
@@ -301,7 +330,7 @@ class AdaptiveParameterAugmentationValidator:
             "type": "DynamicBiasOptions",
         },
         "row_mask_option": {
-            "type": "RowMaskOptions",
+            "type": "AxisMaskOptions",
         },
         "mask_dimension_option": {
             "type": "MaskDimensionOptions",
@@ -325,6 +354,7 @@ class AdaptiveParameterAugmentationValidator:
 
     def _resolve_enum_types(self) -> None:
         from emperor.augmentations.adaptive_parameters.options import (
+            AxisMaskOptions,
             DynamicBiasOptions,
             DynamicDepthOptions,
             DynamicDiagonalOptions,
@@ -333,7 +363,6 @@ class AdaptiveParameterAugmentationValidator:
             LinearMemoryPositionOptions,
             LinearMemorySizeOptions,
             MaskDimensionOptions,
-            RowMaskOptions,
             WeightNormalizationOptions,
         )
 
@@ -346,7 +375,7 @@ class AdaptiveParameterAugmentationValidator:
             "LinearMemorySizeOptions": LinearMemorySizeOptions,
             "LinearMemoryPositionOptions": LinearMemoryPositionOptions,
             "MaskDimensionOptions": MaskDimensionOptions,
-            "RowMaskOptions": RowMaskOptions,
+            "AxisMaskOptions": AxisMaskOptions,
             "WeightNormalizationOptions": WeightNormalizationOptions,
         }
 

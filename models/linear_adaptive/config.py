@@ -7,6 +7,7 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.augmentations.adaptive_parameters.options import (
+    AxisMaskOptions,
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -14,7 +15,6 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
-    RowMaskOptions,
     WeightNormalizationOptions,
 )
 from models.trainer_config import *
@@ -56,7 +56,7 @@ MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
 )
 WEIGHT_OPTION: DynamicWeightOptions = DynamicWeightOptions.DISABLED
 WEIGHT_NORMALIZATION: WeightNormalizationOptions = WeightNormalizationOptions.DISABLED
-ROW_MASK_OPTION: RowMaskOptions = RowMaskOptions.DISABLED
+ROW_MASK_OPTION: AxisMaskOptions = AxisMaskOptions.DISABLED
 
 # Adaptive generator stack
 ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2

@@ -17,15 +17,15 @@ from emperor.augmentations.adaptive_parameters.core.memory import (
     LinearMemoryConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.mask import (
-    RowMaskConfig,
+    AxisMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
+    AxisMaskOptions,
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
-    RowMaskOptions,
 )
 from emperor.augmentations.adaptive_parameters.core._validator import (
     AdaptiveParameterAugmentationValidator,
@@ -105,10 +105,10 @@ class AdaptiveParameterAugmentation(Module):
         return bias_cfg.build(overrides)
 
     def __init_row_mask_model(self) -> Module | None:
-        if self.row_mask_option == RowMaskOptions.DISABLED:
+        if self.row_mask_option == AxisMaskOptions.DISABLED:
             return None
-        mask_cfg = self.cfg.mask_config or RowMaskConfig()
-        overrides = RowMaskConfig(
+        mask_cfg = self.cfg.mask_config or AxisMaskConfig()
+        overrides = AxisMaskConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )

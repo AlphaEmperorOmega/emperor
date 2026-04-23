@@ -68,10 +68,10 @@ class LinearMemoryOptions(Enum):
     WEIGHTED = 2
 
 
-class RowMaskOptions(Enum):
+class AxisMaskOptions(Enum):
     DISABLED = 0
-    GLOBAL_SCORE = 1
-    PER_ROW_SCORE = 2
+    WEIGHT_INFORMED_SCORE = 1
+    PER_AXIS_SCORE = 2
     TOP_SLICE = 3
     DIAGONAL = 4
 

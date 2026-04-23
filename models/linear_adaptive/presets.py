@@ -8,6 +8,7 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.augmentations.adaptive_parameters.options import (
+    AxisMaskOptions,
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
@@ -15,7 +16,6 @@ from emperor.augmentations.adaptive_parameters.options import (
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
-    RowMaskOptions,
     WeightNormalizationOptions,
 )
 from emperor.experiments.base import (
@@ -264,10 +264,10 @@ class ExperimentPresets(ExperimentPresetsBase):
         search_space = {
             **self._extract_search_space_from_config(search_mode),
             "row_mask_option": [
-                RowMaskOptions.DISABLED,
-                RowMaskOptions.GLOBAL_SCORE,
-                RowMaskOptions.PER_ROW_SCORE,
-                RowMaskOptions.TOP_SLICE,
+                AxisMaskOptions.DISABLED,
+                AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+                AxisMaskOptions.PER_AXIS_SCORE,
+                AxisMaskOptions.TOP_SLICE,
             ],
         }
 
@@ -339,10 +339,10 @@ class ExperimentPresets(ExperimentPresetsBase):
                 WeightNormalizationOptions.SIGMOID_SCALE,
             ],
             "row_mask_option": [
-                RowMaskOptions.DISABLED,
-                RowMaskOptions.GLOBAL_SCORE,
-                RowMaskOptions.PER_ROW_SCORE,
-                RowMaskOptions.TOP_SLICE,
+                AxisMaskOptions.DISABLED,
+                AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+                AxisMaskOptions.PER_AXIS_SCORE,
+                AxisMaskOptions.TOP_SLICE,
             ],
         }
 
@@ -365,7 +365,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         memory_position_option: LinearMemoryPositionOptions = config.MEMORY_POSITION_OPTION,
         weight_option: DynamicWeightOptions = config.WEIGHT_OPTION,
         weight_normalization: WeightNormalizationOptions = config.WEIGHT_NORMALIZATION,
-        row_mask_option: RowMaskOptions = config.ROW_MASK_OPTION,
+        row_mask_option: AxisMaskOptions = config.ROW_MASK_OPTION,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
         stack_residual_flag: bool = config.STACK_RESIDUAL_FLAG,
