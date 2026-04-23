@@ -9,6 +9,7 @@ if TYPE_CHECKING:
         DynamicDiagonalAbstract,
     )
     from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasAbstract
+    from emperor.augmentations.adaptive_parameters.core.mask import RowMaskAbstract
     from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
         DepthMappingLayer,
         DepthMappingLayerConfig,
@@ -196,6 +197,16 @@ class DynamicDiagonalValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         DynamicDiagonalValidator.validate_required_fields(model.cfg)
         DynamicDiagonalValidator.validate_field_types(model.cfg)
         DynamicDiagonalValidator.validate_dimensions(
+            input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
+        )
+
+
+class RowMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
+    @staticmethod
+    def validate(model: "RowMaskAbstract") -> None:
+        RowMaskValidator.validate_required_fields(model.cfg)
+        RowMaskValidator.validate_field_types(model.cfg)
+        RowMaskValidator.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
 
