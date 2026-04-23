@@ -16,8 +16,50 @@ if TYPE_CHECKING:
     from emperor.base.layer import LayerStackConfig
 
 
+class AdaptiveGeneratorValidatorBase:
+    @staticmethod
+    def validate_generator_model(generator_model) -> None:
+        from torch.nn import Sequential
+        from emperor.base.layer import Layer
+
+        if isinstance(generator_model, Layer):
+            AdaptiveGeneratorValidatorBase.validate_generator_layer(generator_model)
+            return
+        if isinstance(generator_model, Sequential):
+            AdaptiveGeneratorValidatorBase.validate_generator_sequence(
+                generator_model
+            )
+            return
+        raise TypeError(
+            "Expected model_config.build(...) to return a Layer or Sequential, "
+            f"received {type(generator_model).__name__}."
+        )
+
+    @staticmethod
+    def validate_generator_sequence(generator_sequence) -> None:
+        from emperor.base.layer import Layer
+
+        for generator_layer in generator_sequence:
+            if not isinstance(generator_layer, Layer):
+                raise TypeError(
+                    "Expected each generator sequence item to be a Layer, "
+                    f"received {type(generator_layer).__name__}."
+                )
+            AdaptiveGeneratorValidatorBase.validate_generator_layer(generator_layer)
+
+    @staticmethod
+    def validate_generator_layer(generator_layer) -> None:
+        from emperor.linears.core.layers import LinearLayer
+
+        if not isinstance(generator_layer.model, LinearLayer):
+            raise TypeError(
+                "Expected each generator Layer to wrap a LinearLayer, "
+                f"received {type(generator_layer.model).__name__}."
+            )
+
+
 class DynamicWeightValidator(ValidatorBase):
-    OPTIONAL_FIELDS = {"model_config", "bank_expansion_factor"}
+    OPTIONAL_FIELDS = {"bank_expansion_factor"}
 
     BANK_WEIGHT_OPTIONS = None
 
@@ -53,7 +95,9 @@ class DynamicWeightValidator(ValidatorBase):
             BankExpansionFactorOptions,
         )
 
-        if isinstance(model, (LayeredWeightedBankDynamicWeight, SoftWeightedBankDynamicWeight)):
+        if isinstance(
+            model, (LayeredWeightedBankDynamicWeight, SoftWeightedBankDynamicWeight)
+        ):
             return
         if model.cfg.bank_expansion_factor is not None:
             raise ValueError(
@@ -90,11 +134,53 @@ class DynamicWeightValidator(ValidatorBase):
             )
 
 
-class DynamicBiasAbstractValidator:
-    def __init__(self, model: "DynamicBiasAbstract"):
-        self.model = model
+class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
+    OPTIONAL_FIELDS = {
+        "bank_expansion_factor",
+        "decay_schedule",
+        "decay_rate",
+        "decay_warmup_batches",
+    }
 
-    def ensure_parameters_exist(self, bias_params: Tensor | None) -> None:
+    @staticmethod
+    def validate(model: "DynamicBiasAbstract") -> None:
+        DynamicBiasValidator.validate_required_fields(model.cfg)
+        DynamicBiasValidator.validate_field_types(model.cfg)
+        DynamicBiasValidator.validate_dimensions(
+            input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
+        )
+        DynamicBiasValidator.validate_no_bank_expansion_factor(model)
+
+    @staticmethod
+    def validate_no_bank_expansion_factor(model: "DynamicBiasAbstract") -> None:
+        from emperor.augmentations.adaptive_parameters.core.bias import (
+            WeightedBankDynamicBias,
+        )
+
+        if isinstance(model, WeightedBankDynamicBias):
+            return
+        if model.cfg.bank_expansion_factor is not None:
+            raise ValueError(
+                f"{type(model).__name__} does not support bank_expansion_factor. "
+                f"This parameter is only valid for WEIGHTED_BANK, "
+                f"received {model.cfg.bank_expansion_factor!r}."
+            )
+
+    @staticmethod
+    def validate_bank_expansion_factor(model: "DynamicBiasAbstract") -> None:
+        factor = model.cfg.bank_expansion_factor
+        if factor is None or not isinstance(factor, int):
+            raise ValueError(
+                f"{type(model).__name__} requires bank_expansion_factor to be an integer value, "
+                f"received {factor!r}."
+            )
+        if factor <= 0:
+            raise ValueError(
+                f"{type(model).__name__} requires bank_expansion_factor > 0, "
+                f"received {factor!r}."
+            )
+
+    def ensure_parameters_exist(bias_params: Tensor | None) -> None:
         if bias_params is None:
             raise ValueError(
                 "bias_params must not be None. Provide a valid bias tensor for this dynamic bias strategy."

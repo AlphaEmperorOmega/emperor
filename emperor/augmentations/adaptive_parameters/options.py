@@ -11,10 +11,12 @@ class DynamicDiagonalOptions(Enum):
 class DynamicBiasOptions(Enum):
     DISABLED = 0
     SCALE_AND_OFFSET = 1
-    ELEMENT_WISE_OFFSET = 2
+    ADDITIVE = 2
     DYNAMIC_PARAMETERS = 3
-    GATED = 4
+    SIGMOID_MULTIPLICATIVE = 4
     WEIGHTED_BANK = 5
+    MULTIPLICATIVE = 6
+    TANH_MULTIPLICATIVE = 7
 
 
 class DynamicWeightOptions(Enum):

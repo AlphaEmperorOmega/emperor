@@ -84,8 +84,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             "experts_model_bias_option": [
                 DynamicBiasOptions.DISABLED,
                 DynamicBiasOptions.SCALE_AND_OFFSET,
-                DynamicBiasOptions.ELEMENT_WISE_OFFSET,
+                DynamicBiasOptions.ADDITIVE,
                 DynamicBiasOptions.DYNAMIC_PARAMETERS,
+                DynamicBiasOptions.MULTIPLICATIVE,
             ],
         }
 
