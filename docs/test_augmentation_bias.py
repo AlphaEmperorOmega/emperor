@@ -246,9 +246,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         model = AdditiveDynamicBias(cfg)
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([1.0, 2.0, 3.0])
-        generated_bias_offset = torch.tensor(
-            [[0.5, -1.0, 2.0], [-0.5, 1.5, -2.0]]
-        )
+        generated_bias_offset = torch.tensor([[0.5, -1.0, 2.0], [-0.5, 1.5, -2.0]])
         model.generator_model = ConstantGenerator(generated_bias_offset)
 
         output = model(bias_params, logits)
@@ -494,9 +492,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                     input_dim=input_dim,
                     output_dim=output_dim,
                     model_type=option,
-                    bank_expansion_factor=3
-                    if option == DynamicBiasOptions.WEIGHTED_BANK
-                    else None,
+                    bank_expansion_factor=(
+                        3 if option == DynamicBiasOptions.WEIGHTED_BANK else None
+                    ),
                 )
                 if option == DynamicBiasOptions.DISABLED:
                     with self.assertRaises(ValueError):
@@ -516,9 +514,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                     input_dim=input_dim,
                     output_dim=output_dim,
                     model_type=option,
-                    bank_expansion_factor=3
-                    if option == DynamicBiasOptions.WEIGHTED_BANK
-                    else None,
+                    bank_expansion_factor=(
+                        3 if option == DynamicBiasOptions.WEIGHTED_BANK else None
+                    ),
                 )
                 if option == DynamicBiasOptions.DISABLED:
                     with self.assertRaises(ValueError):
@@ -531,7 +529,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                 output = model(bias_params, logits)
                 output.sum().backward()
 
-                grads = [param.grad for param in model.parameters() if param.requires_grad]
+                grads = [
+                    param.grad for param in model.parameters() if param.requires_grad
+                ]
                 non_none_grads = [grad for grad in grads if grad is not None]
                 self.assertTrue(len(non_none_grads) > 0)
 
