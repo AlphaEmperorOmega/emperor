@@ -8,6 +8,9 @@ from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
+from emperor.augmentations.adaptive_parameters.core._validator import (
+    DynamicDiagonalValidator,
+)
 
 
 @dataclass
@@ -38,9 +41,11 @@ class DynamicDiagonalAbstract(Module):
     ):
         super().__init__()
         self.cfg: DynamicDiagonalConfig = self._override_config(cfg, overrides)
+        DynamicDiagonalValidator.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.padding_shape = self.__get_diagonal_padding_shape()
+        self.model_config = self.cfg.model_config
 
     def __get_diagonal_padding_shape(self) -> tuple | None:
         diagonal_padding_shape = None
@@ -56,12 +61,9 @@ class DynamicDiagonalAbstract(Module):
     ) -> "Layer | Sequential":
         output_dim = min(self.input_dim, self.output_dim)
         overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=output_dim)
-        return self._create_stack(self.cfg.model_config, overrides)
-
-    def _create_stack(self, config, overrides) -> "Layer | Sequential":
-        from emperor.linears.core.stack import LinearLayerStack
-
-        return LinearLayerStack(config, overrides).build_model()
+        generator_model = self.model_config.build(overrides)
+        DynamicDiagonalValidator.validate_generator_model(generator_model)
+        return generator_model
 
     def forward(self, weight_params: Tensor) -> Tensor:
         return weight_params
@@ -76,7 +78,7 @@ class DynamicDiagonalAbstract(Module):
         return diagonal_matrix
 
     def _compute_diagonal_matrix(self, logits: Tensor) -> Tensor:
-        vectors = self.diagonal_generator(logits)
+        vectors = Layer.forward_with_state(self.diagonal_generator, logits)
         return self.__convert_to_diagonal_matrix(vectors)
 
 

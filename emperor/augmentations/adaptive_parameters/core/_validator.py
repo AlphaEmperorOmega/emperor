@@ -5,6 +5,9 @@ from emperor.base.validator import ValidatorBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from emperor.augmentations.adaptive_parameters.core.diagonal import (
+        DynamicDiagonalAbstract,
+    )
     from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasAbstract
     from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
         DepthMappingLayer,
@@ -185,6 +188,16 @@ class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             raise ValueError(
                 "bias_params must not be None. Provide a valid bias tensor for this dynamic bias strategy."
             )
+
+
+class DynamicDiagonalValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
+    @staticmethod
+    def validate(model: "DynamicDiagonalAbstract") -> None:
+        DynamicDiagonalValidator.validate_required_fields(model.cfg)
+        DynamicDiagonalValidator.validate_field_types(model.cfg)
+        DynamicDiagonalValidator.validate_dimensions(
+            input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
+        )
 
 
 class DepthMappingValidator(ValidatorBase):
