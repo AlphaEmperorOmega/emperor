@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from emperor.halting.config import HaltingConfig
     from emperor.halting.utils.options.base import HaltingBase
+    from emperor.memory.config import DynamicMemoryConfig
+    from emperor.memory.core.memory import DynamicMemoryAbstract
 
 
 class Layer(Module):
@@ -38,6 +40,7 @@ class Layer(Module):
         self.dropout_probability: float = self.cfg.dropout_probability
         self.gate_config: "LayerStackConfig | None" = self.cfg.gate_config
         self.halting_config: "HaltingConfig | None" = self.cfg.halting_config
+        self.memory_config: "DynamicMemoryConfig | None" = self.cfg.memory_config
         # TODO: Implement shared_halting option at the moment a single halting
         # mechanis is created for each layer.
         self.shared_halting_flag: bool = self.cfg.shared_halting_flag
@@ -47,6 +50,7 @@ class Layer(Module):
         self.model = self.__build_model()
         self.gate_model = self.__build_gate_model()
         self.halting_model = self.__build_halting_model()
+        self.memory_model = self.__build_memory_model()
 
         self.has_activation = self.activation_function != ActivationOptions.DISABLED
         self.has_dropout = self.dropout_probability > 0.0
@@ -76,6 +80,13 @@ class Layer(Module):
 
     def __build_halting_model(self) -> "HaltingBase | None":
         return self.__build_from_config(self.halting_config, input_dim=self.output_dim)
+
+    def __build_memory_model(self) -> "DynamicMemoryAbstract | None":
+        return self.__build_from_config(
+            self.memory_config,
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
 
     def __build_from_config(
         self, config: "ConfigBase | None", **kwargs
@@ -107,7 +118,9 @@ class Layer(Module):
     ) -> "LayerState":
         residual = self._handle_model_input(state.hidden)
         X = self.__maybe_apply_layer_norm_before(residual)
+        X = self.__maybe_apply_memory_before(X)
         X = self._handle_model_processing(X, state)
+        X = self.__maybe_apply_memory_after(X)
         X = self.__maybe_apply_layer_norm_default(X)
         X = self.__maybe_apply_activation(X)
         X = self.__maybe_apply_gates(X)
@@ -123,6 +136,26 @@ class Layer(Module):
     def __maybe_apply_layer_norm_before(self, input: Tensor):
         if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
             return self.layer_norm_module(input)
+        return input
+
+    def __maybe_apply_memory_before(self, input: Tensor) -> Tensor:
+        return self.__maybe_apply_memory_by_position(input, "BEFORE_AFFINE")
+
+    def __maybe_apply_memory_after(self, input: Tensor) -> Tensor:
+        return self.__maybe_apply_memory_by_position(input, "AFTER_AFFINE")
+
+    def __maybe_apply_memory_by_position(
+        self,
+        input: Tensor,
+        position_name: str,
+    ) -> Tensor:
+        if self.memory_model is None:
+            return input
+        from emperor.memory.options import MemoryPositionOptions
+
+        position = getattr(MemoryPositionOptions, position_name)
+        if self.memory_config.memory_position_option == position:
+            return self.memory_model(input)
         return input
 
     def _handle_model_processing(

@@ -17,9 +17,6 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
 from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.memory import (
-    LinearMemoryConfig,
-)
 
 
 @dataclass
@@ -55,10 +52,6 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
     mask_config: AxisMaskConfig | None = field(
         default=None,
         metadata={"help": "Configuration for input-dependent weight matrix masking."},
-    )
-    memory_config: LinearMemoryConfig | None = field(
-        default=None,
-        metadata={"help": "Configuration for learned memory representation blending."},
     )
     model_config: LayerStackConfig | None = field(
         default=None,

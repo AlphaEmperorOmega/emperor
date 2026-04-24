@@ -12,6 +12,7 @@ class LayerValidator(ValidatorBase):
     OPTIONAL_FIELDS = {
         "gate_config",
         "halting_config",
+        "memory_config",
         "layer_model_config",
         "override_config",
     }
@@ -32,6 +33,7 @@ class LayerValidator(ValidatorBase):
         LayerValidator.__validate_halting_config(
             cfg.halting_config, cfg.shared_halting_flag
         )
+        LayerValidator.__validate_memory_config(cfg.memory_config)
         LayerValidator.__validate_halting_dimensions(
             cfg.input_dim, cfg.output_dim, cfg.halting_config
         )
@@ -108,6 +110,18 @@ class LayerValidator(ValidatorBase):
                     f"halting_config must be an instance of HaltingConfig, "
                     f"got {type(halting_config).__name__}"
                 )
+
+    @staticmethod
+    def __validate_memory_config(memory_config) -> None:
+        if memory_config is None:
+            return
+        from emperor.memory.config import DynamicMemoryConfig
+
+        if not isinstance(memory_config, DynamicMemoryConfig):
+            raise TypeError(
+                f"memory_config must be an instance of DynamicMemoryConfig, "
+                f"got {type(memory_config).__name__}."
+            )
 
     @staticmethod
     def __validate_halting_dimensions(

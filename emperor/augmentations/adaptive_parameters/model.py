@@ -13,9 +13,6 @@ from emperor.augmentations.adaptive_parameters.core.bias import (
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     DynamicDiagonalConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.memory import (
-    LinearMemoryConfig,
-)
 from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskConfig,
 )
@@ -24,8 +21,6 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
 )
 from emperor.augmentations.adaptive_parameters.core._validator import (
     AdaptiveParameterAugmentationValidator,
@@ -49,9 +44,6 @@ class AdaptiveParameterAugmentation(Module):
         self.weight_normalization = self.cfg.weight_normalization
         self.generator_depth = self.cfg.generator_depth
         self.diagonal_option = self.cfg.diagonal_option
-        self.memory_option = self.cfg.memory_option
-        self.memory_size_option = self.cfg.memory_size_option
-        self.memory_position_option = self.cfg.memory_position_option
         self.bias_flag = self.cfg.bias_flag
         self.bias_option = self.cfg.bias_option
         self.row_mask_option = self.cfg.row_mask_option
@@ -59,7 +51,6 @@ class AdaptiveParameterAugmentation(Module):
         self.validator = AdaptiveParameterAugmentationValidator(self)
         self.generator_model = self.__init_generator_model()
         self.diagonal_model = self.__init_diagonal_model()
-        self.memory_model = self.__init_memory_model()
         self.bias_model = self.__init_bias_model()
         self.row_mask_model = self.__init_row_mask_model()
 
@@ -81,16 +72,6 @@ class AdaptiveParameterAugmentation(Module):
             output_dim=self.output_dim,
         )
         return diagonal_cfg.build(overrides)
-
-    def __init_memory_model(self) -> Module | None:
-        if self.memory_option == LinearMemoryOptions.DISABLED:
-            return None
-        memory_cfg = self.cfg.memory_config or LinearMemoryConfig()
-        overrides = LinearMemoryConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-        )
-        return memory_cfg.build(overrides)
 
     def __init_bias_model(self) -> Module | None:
         is_valid_not_disabled_flag = self.bias_option != DynamicBiasOptions.DISABLED
@@ -121,30 +102,14 @@ class AdaptiveParameterAugmentation(Module):
         bias_params: Tensor | None,
         input: Tensor,
     ) -> Tensor:
-        input = self.__maybe_apply_memory(
-            input, LinearMemoryPositionOptions.BEFORE_AFFINE
-        )
         weights, bias = self.__apply_adaptive_adjustments(
             weight_params, bias_params, input
         )
         weights = self.__maybe_apply_weight_mask(weights, input)
-        output = affine_transform_callback(weights, bias, input)
-        output = self.__maybe_apply_memory(
-            output, LinearMemoryPositionOptions.AFTER_AFFINE
-        )
-        return output
+        return affine_transform_callback(weights, bias, input)
 
     def __maybe_apply_weight_mask(self, weights: Tensor, input: Tensor) -> Tensor:
         return self.__call_model(self.row_mask_model, weights, input)
-
-    def __maybe_apply_memory(
-        self,
-        input: Tensor,
-        position: LinearMemoryPositionOptions,
-    ) -> Tensor:
-        if self.memory_model and self.memory_position_option == position:
-            return self.__call_model(self.memory_model, None, input)
-        return input
 
     def __apply_adaptive_adjustments(
         self, weights: Tensor, bias: Tensor | None, input: Tensor

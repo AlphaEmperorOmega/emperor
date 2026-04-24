@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from torch.nn import Sequential
     from emperor.base.layer.layer import Layer
     from emperor.halting.config import HaltingConfig
+    from emperor.memory.config import DynamicMemoryConfig
 
 
 @dataclass
@@ -39,6 +40,9 @@ class LayerConfig(ConfigBase):
     )
     halting_config: "HaltingConfig | None" = optional_field(
         "Configuration for the optional adaptive halting module. Set to None to disable halting."
+    )
+    memory_config: "DynamicMemoryConfig | None" = optional_field(
+        "Configuration for the optional dynamic memory module applied before or after the wrapped model."
     )
     shared_halting_flag: bool | None = optional_field(
         "When enabled, a single halting module is shared across layers instead of creating one per layer."

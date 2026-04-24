@@ -9,6 +9,9 @@ if TYPE_CHECKING:
         DynamicDiagonalAbstract,
     )
     from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskAbstract
+    from emperor.augmentations.adaptive_parameters.core.memory import (
+        DynamicMemoryAbstract,
+    )
     from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasAbstract
     from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
         DepthMappingLayer,
@@ -254,6 +257,22 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             )
 
 
+class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
+    OPTIONAL_FIELDS = {
+        "num_memory_slots",
+        "test_time_training_learning_rate",
+        "test_time_training_num_inner_steps",
+    }
+
+    @staticmethod
+    def validate(model: "DynamicMemoryAbstract") -> None:
+        DynamicMemoryValidator.validate_required_fields(model.cfg)
+        DynamicMemoryValidator.validate_field_types(model.cfg)
+        DynamicMemoryValidator.validate_dimensions(
+            input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
+        )
+
+
 class DepthMappingValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"override_config", "adaptive_augmentation_config"}
 
@@ -350,15 +369,6 @@ class AdaptiveParameterAugmentationValidator:
             "type": "MaskDimensionOptions",
             "optional": True,
         },
-        "memory_option": {
-            "type": "LinearMemoryOptions",
-        },
-        "memory_size_option": {
-            "type": "LinearMemorySizeOptions",
-        },
-        "memory_position_option": {
-            "type": "LinearMemoryPositionOptions",
-        },
     }
 
     def __init__(self, model: "AdaptiveParameterAugmentation"):
@@ -373,9 +383,6 @@ class AdaptiveParameterAugmentationValidator:
             DynamicDepthOptions,
             DynamicDiagonalOptions,
             DynamicWeightOptions,
-            LinearMemoryOptions,
-            LinearMemoryPositionOptions,
-            LinearMemorySizeOptions,
             MaskDimensionOptions,
             WeightNormalizationOptions,
         )
@@ -385,9 +392,6 @@ class AdaptiveParameterAugmentationValidator:
             "DynamicDepthOptions": DynamicDepthOptions,
             "DynamicDiagonalOptions": DynamicDiagonalOptions,
             "DynamicWeightOptions": DynamicWeightOptions,
-            "LinearMemoryOptions": LinearMemoryOptions,
-            "LinearMemorySizeOptions": LinearMemorySizeOptions,
-            "LinearMemoryPositionOptions": LinearMemoryPositionOptions,
             "MaskDimensionOptions": MaskDimensionOptions,
             "AxisMaskOptions": AxisMaskOptions,
             "WeightNormalizationOptions": WeightNormalizationOptions,
