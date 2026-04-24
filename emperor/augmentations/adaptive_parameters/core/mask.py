@@ -38,6 +38,11 @@ class AxisMaskConfig(ConfigBase):
         "Use 0.0 to keep exact zeros, or a small positive value to attenuate "
         "dropped rows, columns, or diagonal regions instead of removing them fully."
     )
+    mask_transition_width: float | None = optional_field(
+        "Width of the smooth transition zone around the mask boundary for TOP_SLICE. "
+        "When set to 1 or below, the standard cumulative product is used. "
+        "When greater than 1, a margin-based gradient replaces the hard cutoff."
+    )
     model_config: LayerStackConfig | None = optional_field(
         "Configuration for the internal generator network."
     )
@@ -62,6 +67,7 @@ class AxisMaskAbstract(Module):
         self.mask_threshold = self.cfg.mask_threshold
         self.mask_surrogate_scale = self.cfg.mask_surrogate_scale
         self.mask_floor = self.cfg.mask_floor
+        self.mask_transition_width = self.cfg.mask_transition_width
         self.model_config = self.cfg.model_config
 
     def _init_generator(self, output_dim: int) -> "Layer | Sequential":
@@ -211,10 +217,28 @@ class TopSliceAxisMask(AxisMaskAbstract):
         logits: Tensor,
     ) -> Tensor:
         axis_scores = self._compute_generator_soft_values(self.score_generator, logits)
+        if self.mask_transition_width is not None and self.mask_transition_width > 1.0:
+            transition_scores = self.__compute_transition_scores(axis_scores)
+            hard_mask = self._compute_hard_mask(transition_scores)
+            soft_mask = self._compute_soft_mask(axis_scores)
+            return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
+
         thresholded_axis_mask = self._compute_hard_mask(axis_scores)
         hard_mask = thresholded_axis_mask.cumprod(dim=-1)
         soft_mask = self._compute_soft_mask(axis_scores)
         return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
+
+    def __compute_transition_scores(self, axis_scores: Tensor) -> Tensor:
+        binary_mask = self._compute_hard_mask(axis_scores)
+        boundary_pos = binary_mask.cumprod(dim=-1).sum(dim=-1, keepdim=True)
+        positions = torch.arange(
+            axis_scores.shape[-1],
+            device=axis_scores.device,
+            dtype=axis_scores.dtype,
+        )
+        margins = boundary_pos - positions
+        width = self.mask_transition_width
+        return ((margins + width / 2.0) / width).clamp(0.0, 1.0)
 
 
 @AxisMaskAbstract.register(AxisMaskOptions.DIAGONAL)
@@ -264,4 +288,5 @@ class DiagonalAxisMask(AxisMaskAbstract):
             -1
         ) + diagonal_shift[:, None, None]
         margins = boundary - col_indices.unsqueeze(0).unsqueeze(0)
-        return ((margins + 1.0) / 2.0).clamp(0.0, 1.0)
+        width = self.mask_transition_width if self.mask_transition_width is not None else 2.0
+        return ((margins + width / 2.0) / width).clamp(0.0, 1.0)

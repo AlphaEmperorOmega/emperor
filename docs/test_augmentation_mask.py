@@ -60,6 +60,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         mask_threshold: float = 0.5,
         mask_surrogate_scale: float = 5.0,
         mask_floor: float = 0.0,
+        mask_transition_width: float | None = None,
     ) -> AxisMaskConfig:
         return AxisMaskConfig(
             input_dim=input_dim,
@@ -69,6 +70,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
             mask_threshold=mask_threshold,
             mask_surrogate_scale=mask_surrogate_scale,
             mask_floor=mask_floor,
+            mask_transition_width=mask_transition_width,
             model_config=LayerStackConfig(
                 input_dim=input_dim,
                 hidden_dim=hidden_dim,
@@ -167,12 +169,28 @@ class TestAxisMaskHandlers(unittest.TestCase):
         threshold: float,
         scale: float,
         floor: float = 0.0,
+        transition_width: float | None = None,
     ) -> torch.Tensor:
         axis_scores = torch.sigmoid(mask_logits)
-        hard_prefix = (axis_scores >= threshold).float().cumprod(dim=-1)
-        soft_mask = torch.sigmoid(scale * (axis_scores - threshold))
-        adjusted_hard_prefix = floor + (1.0 - floor) * hard_prefix
-        axis_mask = adjusted_hard_prefix * soft_mask
+        if transition_width is not None and transition_width > 1.0:
+            binary_mask = (axis_scores >= threshold).float()
+            boundary_pos = binary_mask.cumprod(dim=-1).sum(dim=-1, keepdim=True)
+            positions = torch.arange(
+                axis_scores.shape[-1], dtype=axis_scores.dtype
+            )
+            margins = boundary_pos - positions
+            transition_scores = (
+                (margins + transition_width / 2.0) / transition_width
+            ).clamp(0.0, 1.0)
+            hard_mask = (transition_scores >= threshold).float()
+            soft_mask = torch.sigmoid(scale * (axis_scores - threshold))
+        else:
+            hard_mask = (axis_scores >= threshold).float().cumprod(dim=-1)
+            soft_mask = torch.sigmoid(scale * (axis_scores - threshold))
+        adjusted_hard_mask = (floor + (1.0 - floor) * hard_mask).clamp(
+            min=floor, max=1.0
+        )
+        axis_mask = adjusted_hard_mask * soft_mask
         return self._apply_axis_mask(weight_params, axis_mask, mask_dimension_option)
 
     def _expected_diagonal_output(
@@ -182,6 +200,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         threshold: float,
         scale: float,
         floor: float = 0.0,
+        transition_width: float = 2.0,
     ) -> torch.Tensor:
         row_count = weight_params.shape[-2]
         col_count = weight_params.shape[-1]
@@ -196,7 +215,9 @@ class TestAxisMaskHandlers(unittest.TestCase):
             -1
         ) + diagonal_shift[:, None, None]
         margins = boundary - col_indices.unsqueeze(0).unsqueeze(0)
-        diagonal_scores = ((margins + 1.0) / 2.0).clamp(0.0, 1.0)
+        diagonal_scores = (
+            (margins + transition_width / 2.0) / transition_width
+        ).clamp(0.0, 1.0)
         hard_mask = (diagonal_scores >= threshold).float()
         soft_mask = torch.sigmoid(scale * (diagonal_scores - threshold))
         adjusted_hard_mask = (floor + (1.0 - floor) * hard_mask).clamp(
@@ -682,6 +703,156 @@ class TestAxisMaskHandlers(unittest.TestCase):
         self.assertFalse(torch.allclose(output[0], output[1], atol=1e-6))
         self.assertTrue(torch.allclose(output[0, 1], torch.zeros_like(output[0, 1])))
         self.assertTrue(torch.allclose(output[1, 0], torch.zeros_like(output[1, 0])))
+
+    def test_top_slice_transition_width_produces_gradual_falloff(self):
+        cfg = self.preset(
+            input_dim=6,
+            output_dim=3,
+            model_type=AxisMaskOptions.TOP_SLICE,
+            mask_dimension_option=MaskDimensionOptions.ROW,
+            mask_transition_width=4.0,
+        )
+        model = TopSliceAxisMask(cfg)
+        model.eval()
+        logits = torch.zeros(1, 6)
+        weight_params = torch.ones(1, 6, 3)
+        mask_logits = torch.tensor([[10.0, 10.0, 10.0, -10.0, 10.0, 10.0]])
+        model.score_generator = ConstantGenerator(mask_logits)
+
+        output = model(weight_params, logits)
+        expected = self._expected_top_slice_output(
+            weight_params,
+            mask_logits,
+            MaskDimensionOptions.ROW,
+            cfg.mask_threshold,
+            cfg.mask_surrogate_scale,
+            transition_width=4.0,
+        )
+
+        self.assertTrue(torch.allclose(output, expected, atol=1e-6))
+        row_norms = output[0].abs().sum(dim=-1)
+        self.assertGreater(row_norms[2].item(), row_norms[3].item())
+        self.assertGreater(row_norms[3].item(), row_norms[4].item())
+
+    def test_top_slice_transition_width_none_uses_cumprod(self):
+        cfg = self.preset(
+            input_dim=4,
+            output_dim=3,
+            model_type=AxisMaskOptions.TOP_SLICE,
+            mask_dimension_option=MaskDimensionOptions.ROW,
+        )
+        model = TopSliceAxisMask(cfg)
+        model.eval()
+        logits = torch.zeros(1, 4)
+        weight_params = torch.ones(1, 4, 3)
+        mask_logits = torch.tensor([[10.0, 10.0, -10.0, 10.0]])
+        model.score_generator = ConstantGenerator(mask_logits)
+
+        output = model(weight_params, logits)
+        expected = self._expected_top_slice_output(
+            weight_params,
+            mask_logits,
+            MaskDimensionOptions.ROW,
+            cfg.mask_threshold,
+            cfg.mask_surrogate_scale,
+        )
+
+        self.assertTrue(torch.allclose(output, expected, atol=1e-6))
+        self.assertTrue(torch.allclose(output[0, 2], torch.zeros_like(output[0, 2])))
+        self.assertTrue(torch.allclose(output[0, 3], torch.zeros_like(output[0, 3])))
+
+    def test_diagonal_mask_custom_transition_width(self):
+        for width in (1.0, 4.0, 8.0):
+            with self.subTest(width=width):
+                cfg = self.preset(
+                    input_dim=4,
+                    output_dim=4,
+                    model_type=AxisMaskOptions.DIAGONAL,
+                    mask_transition_width=width,
+                )
+                model = DiagonalAxisMask(cfg)
+                model.eval()
+                logits = torch.zeros(1, 4)
+                weight_params = torch.ones(1, 4, 4)
+                mask_logits = torch.tensor([[0.0]])
+                model.score_generator = ConstantGenerator(mask_logits)
+
+                output = model(weight_params, logits)
+                expected = self._expected_diagonal_output(
+                    weight_params,
+                    mask_logits,
+                    cfg.mask_threshold,
+                    cfg.mask_surrogate_scale,
+                    transition_width=width,
+                )
+                self.assertTrue(torch.allclose(output, expected, atol=1e-6))
+
+    def test_diagonal_wider_transition_produces_more_partial_scores(self):
+        logits = torch.zeros(1, 8)
+        weight_params = torch.ones(1, 8, 8)
+        mask_logits = torch.tensor([[0.0]])
+
+        narrow_cfg = self.preset(
+            input_dim=8,
+            output_dim=8,
+            model_type=AxisMaskOptions.DIAGONAL,
+            mask_transition_width=0.5,
+        )
+        narrow_model = DiagonalAxisMask(narrow_cfg)
+        narrow_model.eval()
+        narrow_model.score_generator = ConstantGenerator(mask_logits)
+        narrow_output = narrow_model(weight_params, logits)
+
+        wide_cfg = self.preset(
+            input_dim=8,
+            output_dim=8,
+            model_type=AxisMaskOptions.DIAGONAL,
+            mask_transition_width=8.0,
+        )
+        wide_model = DiagonalAxisMask(wide_cfg)
+        wide_model.eval()
+        wide_model.score_generator = ConstantGenerator(mask_logits)
+        wide_output = wide_model(weight_params, logits)
+
+        narrow_near_binary = (
+            (narrow_output.abs() < 1e-3) | (narrow_output > 0.9)
+        ).sum()
+        wide_near_binary = (
+            (wide_output.abs() < 1e-3) | (wide_output > 0.9)
+        ).sum()
+        self.assertGreater(narrow_near_binary.item(), wide_near_binary.item())
+
+    def test_invalid_mask_transition_width_raises(self):
+        for invalid_width in (-1.0, 0.0):
+            with self.subTest(width=invalid_width):
+                cfg = self.preset(
+                    model_type=AxisMaskOptions.TOP_SLICE,
+                    mask_transition_width=invalid_width,
+                )
+                with self.assertRaises(ValueError):
+                    cfg.build()
+
+    def test_gradients_flow_through_top_slice_transition_path(self):
+        cfg = self.preset(
+            input_dim=4,
+            output_dim=3,
+            model_type=AxisMaskOptions.TOP_SLICE,
+            mask_threshold=0.2,
+            mask_surrogate_scale=5.0,
+            mask_transition_width=4.0,
+        )
+        model = cfg.build()
+        logits = torch.randn(2, 4)
+        weight_params = torch.randn(2, 4, 3, requires_grad=True)
+        loss = model(weight_params, logits).pow(2).sum()
+        loss.backward()
+
+        grads = [param.grad for param in model.parameters() if param.requires_grad]
+        nonzero_grads = [
+            grad for grad in grads if grad is not None and grad.abs().sum() > 0
+        ]
+        self.assertTrue(len(nonzero_grads) > 0)
+        self.assertIsNotNone(weight_params.grad)
 
     def test_build_creates_model_for_each_option(self):
         for option in AxisMaskOptions:

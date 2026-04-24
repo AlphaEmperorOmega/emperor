@@ -202,6 +202,8 @@ class DynamicDiagonalValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
 
 class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
+    OPTIONAL_FIELDS = {"mask_transition_width"}
+
     @staticmethod
     def validate(model: "AxisMaskAbstract") -> None:
         AxisMaskValidator.validate_required_fields(model.cfg)
@@ -214,6 +216,10 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             model.cfg.mask_surrogate_scale
         )
         AxisMaskValidator.validate_mask_floor(model.cfg.mask_floor)
+        if model.cfg.mask_transition_width is not None:
+            AxisMaskValidator.validate_mask_transition_width(
+                model.cfg.mask_transition_width
+            )
 
     @staticmethod
     def validate_mask_threshold(mask_threshold: float) -> None:
@@ -237,6 +243,14 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             raise ValueError(
                 "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
                 f"received {mask_floor!r}."
+            )
+
+    @staticmethod
+    def validate_mask_transition_width(mask_transition_width: float) -> None:
+        if mask_transition_width <= 0.0:
+            raise ValueError(
+                "mask_transition_width must be greater than 0.0, "
+                f"received {mask_transition_width!r}."
             )
 
 
