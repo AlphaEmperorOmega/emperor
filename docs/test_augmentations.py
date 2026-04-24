@@ -11,14 +11,14 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
     DynamicWeightOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
+    DynamicMemoryOptions,
+    MemoryPositionOptions,
+    MemorySizeOptions,
 )
 from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightAbstract
 from emperor.augmentations.adaptive_parameters.core.diagonal import DynamicDiagonalAbstract
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasAbstract
-from emperor.augmentations.adaptive_parameters.core.memory import LinearMemoryAbstract
+from emperor.augmentations.adaptive_parameters.core.memory import DynamicMemoryAbstract
 
 
 class TestAdaptiveParameterAugmentation(unittest.TestCase):
@@ -101,15 +101,15 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         memory_cases = [
             (
                 "memory_model",
-                LinearMemoryAbstract,
+                DynamicMemoryAbstract,
                 {
                     "memory_option": option,
-                    "memory_size_option": LinearMemorySizeOptions.SMALL,
-                    "memory_position_option": LinearMemoryPositionOptions.BEFORE_AFFINE,
+                    "memory_size_option": MemorySizeOptions.SMALL,
+                    "memory_position_option": MemoryPositionOptions.BEFORE_AFFINE,
                 },
             )
-            for option in LinearMemoryOptions
-            if option != LinearMemoryOptions.DISABLED
+            for option in DynamicMemoryOptions
+            if option != DynamicMemoryOptions.DISABLED
         ]
         cases = generator_cases + diagonal_cases + bias_cases + memory_cases
         for attr, expected_type, preset_kwargs in cases:
@@ -258,18 +258,18 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 self.assertIsInstance(output, torch.Tensor)
 
     def test_forward_with_memory_before_affine(self):
-        for memory_option in LinearMemoryOptions:
-            if memory_option == LinearMemoryOptions.DISABLED:
+        for memory_option in DynamicMemoryOptions:
+            if memory_option == DynamicMemoryOptions.DISABLED:
                 continue
-            for size_option in LinearMemorySizeOptions:
-                if size_option == LinearMemorySizeOptions.DISABLED:
+            for size_option in MemorySizeOptions:
+                if size_option == MemorySizeOptions.DISABLED:
                     continue
                 message = f"memory_option={memory_option}, size_option={size_option}"
                 with self.subTest(message):
                     cfg = LinearPresets.adaptive_linear_layer_preset(
                         memory_option=memory_option,
                         memory_size_option=size_option,
-                        memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
+                        memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
                     )
                     cfg = cfg.override_config
                     model = AdaptiveParameterAugmentation(cfg)
@@ -286,18 +286,18 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     self.assertIsInstance(output, torch.Tensor)
 
     def test_forward_with_memory_after_affine(self):
-        for memory_option in LinearMemoryOptions:
-            if memory_option == LinearMemoryOptions.DISABLED:
+        for memory_option in DynamicMemoryOptions:
+            if memory_option == DynamicMemoryOptions.DISABLED:
                 continue
-            for size_option in LinearMemorySizeOptions:
-                if size_option == LinearMemorySizeOptions.DISABLED:
+            for size_option in MemorySizeOptions:
+                if size_option == MemorySizeOptions.DISABLED:
                     continue
                 message = f"memory_option={memory_option}, size_option={size_option}"
                 with self.subTest(message):
                     cfg = LinearPresets.adaptive_linear_layer_preset(
                         memory_option=memory_option,
                         memory_size_option=size_option,
-                        memory_position_option=LinearMemoryPositionOptions.AFTER_AFFINE,
+                        memory_position_option=MemoryPositionOptions.AFTER_AFFINE,
                     )
                     cfg = cfg.override_config
                     model = AdaptiveParameterAugmentation(cfg)
@@ -322,13 +322,13 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 for bias in DynamicBiasOptions:
                     if bias == DynamicBiasOptions.DISABLED:
                         continue
-                    for memory_option in LinearMemoryOptions:
-                        for position_option in LinearMemoryPositionOptions:
+                    for memory_option in DynamicMemoryOptions:
+                        for position_option in MemoryPositionOptions:
                             memory_kwargs = {}
-                            if memory_option != LinearMemoryOptions.DISABLED:
+                            if memory_option != DynamicMemoryOptions.DISABLED:
                                 memory_kwargs = {
                                     "memory_option": memory_option,
-                                    "memory_size_option": LinearMemorySizeOptions.SMALL,
+                                    "memory_size_option": MemorySizeOptions.SMALL,
                                     "memory_position_option": position_option,
                                 }
                             message = (

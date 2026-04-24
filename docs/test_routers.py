@@ -9,8 +9,8 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
-    LinearMemoryOptions,
-    LinearMemorySizeOptions,
+    DynamicMemoryOptions,
+    MemorySizeOptions,
 )
 
 
@@ -85,10 +85,10 @@ class TestRouterModel(unittest.TestCase):
                                 noisy_topk_flag=noisy_flag_option,
                                 stack_num_layers=num_layers,
                                 bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
-                                memory_option=LinearMemoryOptions.WEIGHTED,
+                                memory_option=DynamicMemoryOptions.WEIGHTED,
                                 generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
                                 diagonal_option=DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
-                                memory_size_option=LinearMemorySizeOptions.LARGE,
+                                memory_size_option=MemorySizeOptions.LARGE,
                             )
                             model = RouterModel(cfg)
 

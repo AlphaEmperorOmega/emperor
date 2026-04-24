@@ -33,9 +33,9 @@ from emperor.base.enums import (
 from emperor.augmentations.adaptive_parameters.options import (
     AxisMaskOptions,
     DynamicWeightOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
+    DynamicMemoryOptions,
+    MemoryPositionOptions,
+    MemorySizeOptions,
     WeightNormalizationOptions,
 )
 
@@ -311,9 +311,9 @@ class TestLinearLayerStack(unittest.TestCase):
 #         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
 #         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
 #         row_mask_option: AxisMaskOptions = AxisMaskOptions.DISABLED,
-#         memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
-#         memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
-#         memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+#         memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
+#         memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
+#         memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
 #         weight_bank_expansion_factor: int = 4,
 #         bias_bank_expansion_factor: int = 8,
 #         mask_dimension_option: MaskDimensionOptions = MaskDimensionOptions.COLUMN,
