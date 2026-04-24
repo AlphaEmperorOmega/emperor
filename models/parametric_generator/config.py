@@ -12,9 +12,9 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
+    DynamicMemoryOptions,
+    MemoryPositionOptions,
+    MemorySizeOptions,
 )
 from models.trainer_config import *
 
@@ -56,12 +56,12 @@ ADAPTIVE_BEHAVIOUR_DIAGONAL_OPTION: DynamicDiagonalOptions = (
     DynamicDiagonalOptions.DISABLED
 )
 ADAPTIVE_BEHAVIOUR_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
-ADAPTIVE_BEHAVIOUR_MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
-ADAPTIVE_BEHAVIOUR_MEMORY_SIZE_OPTION: LinearMemorySizeOptions = (
-    LinearMemorySizeOptions.DISABLED
+ADAPTIVE_BEHAVIOUR_MEMORY_OPTION: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED
+ADAPTIVE_BEHAVIOUR_MEMORY_SIZE_OPTION: MemorySizeOptions = (
+    MemorySizeOptions.DISABLED
 )
-ADAPTIVE_BEHAVIOUR_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
-    LinearMemoryPositionOptions.BEFORE_AFFINE
+ADAPTIVE_BEHAVIOUR_MEMORY_POSITION_OPTION: MemoryPositionOptions = (
+    MemoryPositionOptions.BEFORE_AFFINE
 )
 
 # Adaptive generator stack

@@ -11,9 +11,9 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
+    DynamicMemoryOptions,
+    MemoryPositionOptions,
+    MemorySizeOptions,
 )
 from models.trainer_config import *
 
@@ -61,9 +61,9 @@ EXPERTS_DROPPED_TOKEN_BEHAVIOR: DroppedTokenOptions = DroppedTokenOptions.ZEROS
 EXPERTS_MODEL_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DISABLED
 EXPERTS_MODEL_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED
 EXPERTS_MODEL_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
-EXPERTS_MODEL_MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
-EXPERTS_MODEL_MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
-EXPERTS_MODEL_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE
+EXPERTS_MODEL_MEMORY_OPTION: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED
+EXPERTS_MODEL_MEMORY_SIZE_OPTION: MemorySizeOptions = MemorySizeOptions.DISABLED
+EXPERTS_MODEL_MEMORY_POSITION_OPTION: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE
 
 # Layer stack options
 HIDDEN_DIM: int = 256

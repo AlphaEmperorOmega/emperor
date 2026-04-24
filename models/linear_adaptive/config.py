@@ -12,9 +12,9 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
     DynamicWeightOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
+    DynamicMemoryOptions,
+    MemoryPositionOptions,
+    MemorySizeOptions,
     WeightNormalizationOptions,
 )
 from models.trainer_config import *
@@ -49,10 +49,10 @@ DIAGONAL_OPTION: DynamicDiagonalOptions = (
     DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL
 )
 BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DYNAMIC_PARAMETERS
-MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
-MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
-MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
-    LinearMemoryPositionOptions.BEFORE_AFFINE
+MEMORY_OPTION: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED
+MEMORY_SIZE_OPTION: MemorySizeOptions = MemorySizeOptions.DISABLED
+MEMORY_POSITION_OPTION: MemoryPositionOptions = (
+    MemoryPositionOptions.BEFORE_AFFINE
 )
 WEIGHT_OPTION: DynamicWeightOptions = DynamicWeightOptions.DISABLED
 WEIGHT_NORMALIZATION: WeightNormalizationOptions = WeightNormalizationOptions.DISABLED

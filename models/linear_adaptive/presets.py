@@ -13,9 +13,9 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     DynamicDiagonalOptions,
     DynamicWeightOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
+    DynamicMemoryOptions,
+    MemoryPositionOptions,
+    MemorySizeOptions,
     WeightNormalizationOptions,
 )
 from emperor.experiments.base import (
@@ -182,19 +182,19 @@ class ExperimentPresets(ExperimentPresetsBase):
         search_space = {
             **self._extract_search_space_from_config(search_mode),
             "memory_option": [
-                LinearMemoryOptions.DISABLED,
-                LinearMemoryOptions.FUSION,
-                LinearMemoryOptions.WEIGHTED,
+                DynamicMemoryOptions.DISABLED,
+                DynamicMemoryOptions.FUSION,
+                DynamicMemoryOptions.WEIGHTED,
             ],
             "memory_size_option": [
-                LinearMemorySizeOptions.SMALL,
-                LinearMemorySizeOptions.MEDIUM,
-                LinearMemorySizeOptions.LARGE,
-                LinearMemorySizeOptions.MAX,
+                MemorySizeOptions.SMALL,
+                MemorySizeOptions.MEDIUM,
+                MemorySizeOptions.LARGE,
+                MemorySizeOptions.MAX,
             ],
             "memory_position_option": [
-                LinearMemoryPositionOptions.BEFORE_AFFINE,
-                LinearMemoryPositionOptions.AFTER_AFFINE,
+                MemoryPositionOptions.BEFORE_AFFINE,
+                MemoryPositionOptions.AFTER_AFFINE,
             ],
         }
 
@@ -308,19 +308,19 @@ class ExperimentPresets(ExperimentPresetsBase):
                 DynamicBiasOptions.TANH_MULTIPLICATIVE,
             ],
             "memory_option": [
-                LinearMemoryOptions.DISABLED,
-                LinearMemoryOptions.FUSION,
-                LinearMemoryOptions.WEIGHTED,
+                DynamicMemoryOptions.DISABLED,
+                DynamicMemoryOptions.FUSION,
+                DynamicMemoryOptions.WEIGHTED,
             ],
             "memory_size_option": [
-                LinearMemorySizeOptions.SMALL,
-                LinearMemorySizeOptions.MEDIUM,
-                LinearMemorySizeOptions.LARGE,
-                LinearMemorySizeOptions.MAX,
+                MemorySizeOptions.SMALL,
+                MemorySizeOptions.MEDIUM,
+                MemorySizeOptions.LARGE,
+                MemorySizeOptions.MAX,
             ],
             "memory_position_option": [
-                LinearMemoryPositionOptions.BEFORE_AFFINE,
-                LinearMemoryPositionOptions.AFTER_AFFINE,
+                MemoryPositionOptions.BEFORE_AFFINE,
+                MemoryPositionOptions.AFTER_AFFINE,
             ],
             "weight_option": [
                 DynamicWeightOptions.DISABLED,
@@ -360,9 +360,9 @@ class ExperimentPresets(ExperimentPresetsBase):
         generator_depth: DynamicDepthOptions = config.GENERATOR_DEPTH,
         diagonal_option: DynamicDiagonalOptions = config.DIAGONAL_OPTION,
         bias_option: DynamicBiasOptions = config.BIAS_OPTION,
-        memory_option: LinearMemoryOptions = config.MEMORY_OPTION,
-        memory_size_option: LinearMemorySizeOptions = config.MEMORY_SIZE_OPTION,
-        memory_position_option: LinearMemoryPositionOptions = config.MEMORY_POSITION_OPTION,
+        memory_option: DynamicMemoryOptions = config.MEMORY_OPTION,
+        memory_size_option: MemorySizeOptions = config.MEMORY_SIZE_OPTION,
+        memory_position_option: MemoryPositionOptions = config.MEMORY_POSITION_OPTION,
         weight_option: DynamicWeightOptions = config.WEIGHT_OPTION,
         weight_normalization: WeightNormalizationOptions = config.WEIGHT_NORMALIZATION,
         row_mask_option: AxisMaskOptions = config.ROW_MASK_OPTION,

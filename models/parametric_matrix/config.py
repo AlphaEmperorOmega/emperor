@@ -62,10 +62,10 @@ ROUTER_DIAGONAL_OPTION: DynamicDiagonalOptions = (
     DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL
 )
 ROUTER_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DYNAMIC_PARAMETERS
-ROUTER_MEMORY_OPTION: LinearMemoryOptions = LinearMemoryOptions.DISABLED
-ROUTER_MEMORY_SIZE_OPTION: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED
-ROUTER_MEMORY_POSITION_OPTION: LinearMemoryPositionOptions = (
-    LinearMemoryPositionOptions.BEFORE_AFFINE
+ROUTER_MEMORY_OPTION: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED
+ROUTER_MEMORY_SIZE_OPTION: MemorySizeOptions = MemorySizeOptions.DISABLED
+ROUTER_MEMORY_POSITION_OPTION: MemoryPositionOptions = (
+    MemoryPositionOptions.BEFORE_AFFINE
 )
 ROUTER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = 256
 ROUTER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
