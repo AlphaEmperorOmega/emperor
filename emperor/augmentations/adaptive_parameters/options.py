@@ -1,5 +1,7 @@
 from enum import Enum
 
+from emperor.memory.options import DynamicMemoryOptions, MemoryPositionOptions
+
 
 class DynamicDiagonalOptions(Enum):
     DISABLED = 0
@@ -54,20 +56,6 @@ class BankExpansionFactorOptions(Enum):
     FACTOR_OF_FOUR = 4
 
 
-class LinearMemorySizeOptions(Enum):
-    DISABLED = 0
-    SMALL = 4
-    MEDIUM = 8
-    LARGE = 16
-    MAX = 32
-
-
-class LinearMemoryOptions(Enum):
-    DISABLED = 0
-    FUSION = 1
-    WEIGHTED = 2
-
-
 class AxisMaskOptions(Enum):
     DISABLED = 0
     WEIGHT_INFORMED_SCORE = 1
@@ -79,11 +67,6 @@ class AxisMaskOptions(Enum):
 class MaskDimensionOptions(Enum):
     ROW = 0
     COLUMN = 1
-
-
-class LinearMemoryPositionOptions(Enum):
-    BEFORE_AFFINE = 1
-    AFTER_AFFINE = 2
 
 
 class WeightNormalizationPositionOptions(Enum):

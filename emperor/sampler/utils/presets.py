@@ -8,9 +8,9 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
-    LinearMemoryOptions,
-    LinearMemoryPositionOptions,
-    LinearMemorySizeOptions,
+    DynamicMemoryOptions,
+    MemoryPositionOptions,
+    MemorySizeOptions,
 )
 
 
@@ -25,11 +25,11 @@ class SamplerPresets:
         noisy_topk_flag: bool = False,
         layer_stack_option: LinearLayerStackOptions = LinearLayerStackOptions.BASE,
         bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
-        memory_option: LinearMemoryOptions = LinearMemoryOptions.DISABLED,
+        memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        memory_size_option: LinearMemorySizeOptions = LinearMemorySizeOptions.DISABLED,
-        memory_position_option: LinearMemoryPositionOptions = LinearMemoryPositionOptions.BEFORE_AFFINE,
+        memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
+        memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
         stack_num_layers: int = 2,
         stack_hidden_dim: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
