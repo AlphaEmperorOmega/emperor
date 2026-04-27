@@ -140,7 +140,9 @@ class AxisMaskAbstract(Module):
             min=mask_floor, max=1.0
         )
         final_mask = adjusted_hard_mask * soft_mask
-        if final_mask.dim() == weight_params.dim():
+        if weight_params.dim() == 2:
+            weight_params = weight_params.unsqueeze(dim=0)
+        if final_mask.dim() == 3 and weight_params.dim() == 3:
             return weight_params * final_mask
         return weight_params * final_mask.unsqueeze(self.__target_broadcast_dim)
 
@@ -288,5 +290,9 @@ class DiagonalAxisMask(AxisMaskAbstract):
             -1
         ) + diagonal_shift[:, None, None]
         margins = boundary - col_indices.unsqueeze(0).unsqueeze(0)
-        width = self.mask_transition_width if self.mask_transition_width is not None else 2.0
+        width = (
+            self.mask_transition_width
+            if self.mask_transition_width is not None
+            else 2.0
+        )
         return ((margins + width / 2.0) / width).clamp(0.0, 1.0)
