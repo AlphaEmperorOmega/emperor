@@ -9,15 +9,15 @@ from emperor.base.enums import (
     LayerNormPositionOptions,
 )
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.options import (
+from emperor.memory.options import (
     DynamicMemoryOptions,
     MemoryPositionOptions,
     MemorySizeOptions,
 )
-from emperor.augmentations.adaptive_parameters.core.memory import (
-    FusionDynamicMemory,
+from emperor.memory.config import DynamicMemoryConfig
+from emperor.memory.core import (
     DynamicMemoryAbstract,
-    DynamicMemoryConfig,
+    GatedResidualDynamicMemory,
     WeightedDynamicMemory,
 )
 
@@ -99,9 +99,9 @@ class TestMemoryHandlers(unittest.TestCase):
                     )
                     if size_option == MemorySizeOptions.DISABLED:
                         with self.assertRaises(ValueError):
-                            FusionDynamicMemory(cfg)
+                            GatedResidualDynamicMemory(cfg)
                     else:
-                        model = FusionDynamicMemory(cfg)
+                        model = GatedResidualDynamicMemory(cfg)
                         input_tensor = torch.ones(batch_size, dim)
                         output = model(input_tensor)
                         self.assertEqual(output.shape, (batch_size, dim))
@@ -145,7 +145,7 @@ class TestMemoryHandlers(unittest.TestCase):
                     output_dim=output_dim,
                     memory_position_option=position_option,
                 )
-                model = FusionDynamicMemory(cfg)
+                model = GatedResidualDynamicMemory(cfg)
                 model.eval()
                 input_tensor = torch.randn(batch_size, dim)
                 memory = model.memory_model(input_tensor)
@@ -210,7 +210,7 @@ class TestMemoryHandlers(unittest.TestCase):
         input_dim = 12
         output_dim = 24
         cfg = self.preset(input_dim=input_dim, output_dim=output_dim)
-        model = FusionDynamicMemory(cfg)
+        model = GatedResidualDynamicMemory(cfg)
         model.eval()
         input_a = torch.randn(1, output_dim)
         input_b = torch.randn(1, output_dim)
@@ -236,7 +236,7 @@ class TestMemoryHandlers(unittest.TestCase):
 
     def test_disabled_memory_size_raises(self):
         for model_cls, model_type in [
-            (FusionDynamicMemory, DynamicMemoryOptions.FUSION),
+            (GatedResidualDynamicMemory, DynamicMemoryOptions.FUSION),
             (WeightedDynamicMemory, DynamicMemoryOptions.WEIGHTED),
         ]:
             with self.subTest(model_type=model_type):
@@ -263,7 +263,7 @@ class TestMemoryHandlers(unittest.TestCase):
                         memory_size_option=size_option,
                         memory_position_option=position_option,
                     )
-                    model = FusionDynamicMemory(cfg)
+                    model = GatedResidualDynamicMemory(cfg)
                     input_tensor = torch.randn(
                         batch_size, dim, requires_grad=True
                     )
@@ -342,7 +342,7 @@ class TestMemoryHandlers(unittest.TestCase):
 
     def test_build_creates_correct_model_type(self):
         expected_types = {
-            DynamicMemoryOptions.FUSION: FusionDynamicMemory,
+            DynamicMemoryOptions.FUSION: GatedResidualDynamicMemory,
             DynamicMemoryOptions.WEIGHTED: WeightedDynamicMemory,
         }
         for memory_option, expected_type in expected_types.items():

@@ -131,7 +131,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         callback = self._make_affine_callback()
 
-        output = model.compute_adaptive_parameters(
+        output = model(
             callback, weight_params, bias_params, input_tensor
         )
         expected = callback(weight_params, bias_params, input_tensor)
@@ -155,7 +155,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         input_tensor = torch.randn(self.batch_size, self.input_dim)
         callback = self._make_affine_callback()
 
-        output = model.compute_adaptive_parameters(
+        output = model(
             callback, weight_params, None, input_tensor
         )
         expected = callback(weight_params, None, input_tensor)
@@ -184,7 +184,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 callback = self._make_affine_callback()
 
-                output = model.compute_adaptive_parameters(
+                output = model(
                     callback, weight_params, bias_params, input_tensor
                 )
                 expected_shape = (self.batch_size, self.output_dim)
@@ -206,7 +206,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 callback = self._make_affine_callback()
 
-                output = model.compute_adaptive_parameters(
+                output = model(
                     callback, weight_params, bias_params, input_tensor
                 )
                 expected_shape = (self.batch_size, self.output_dim)
@@ -228,7 +228,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 callback = self._make_affine_callback()
 
-                output = model.compute_adaptive_parameters(
+                output = model(
                     callback, weight_params, bias_params, input_tensor
                 )
                 expected_shape = (self.batch_size, self.output_dim)
@@ -250,7 +250,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 input_tensor = torch.randn(self.batch_size, self.input_dim)
                 callback = self._make_affine_callback()
 
-                output = model.compute_adaptive_parameters(
+                output = model(
                     callback, weight_params, bias_params, input_tensor
                 )
                 expected_shape = (self.batch_size, self.output_dim)
@@ -278,7 +278,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     input_tensor = torch.randn(self.batch_size, self.input_dim)
                     callback = self._make_affine_callback()
 
-                    output = model.compute_adaptive_parameters(
+                    output = model(
                         callback, weight_params, bias_params, input_tensor
                     )
                     expected_shape = (self.batch_size, self.output_dim)
@@ -306,7 +306,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     input_tensor = torch.randn(self.batch_size, self.input_dim)
                     callback = self._make_affine_callback()
 
-                    output = model.compute_adaptive_parameters(
+                    output = model(
                         callback, weight_params, bias_params, input_tensor
                     )
                     self.assertEqual(output.shape, (self.batch_size, self.output_dim))
@@ -354,7 +354,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                                 )
                                 callback = self._make_affine_callback()
 
-                                output = model.compute_adaptive_parameters(
+                                output = model(
                                     callback,
                                     weight_params,
                                     bias_params,
