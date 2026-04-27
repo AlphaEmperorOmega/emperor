@@ -29,12 +29,6 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
         default=None,
         metadata={"help": "Output dimension of the linear layer"},
     )
-    depth_config: DepthMappingHandlerConfig | None = field(
-        default=None,
-        metadata={
-            "help": "Configuration for input-dependent diagonal weight adjustments."
-        },
-    )
     diagonal_config: DynamicDiagonalConfig | None = field(
         default=None,
         metadata={

@@ -9,10 +9,10 @@ if TYPE_CHECKING:
         DynamicDiagonalAbstract,
     )
     from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskAbstract
-    from emperor.augmentations.adaptive_parameters.core.memory import (
-        DynamicMemoryAbstract,
-    )
     from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasAbstract
+    from emperor.augmentations.adaptive_parameters.model import (
+        AdaptiveParameterAugmentation,
+    )
     from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
         DepthMappingLayer,
         DepthMappingLayerConfig,
@@ -338,90 +338,43 @@ class DepthMappingValidator(ValidatorBase):
 
 
 class AdaptiveParameterAugmentationValidator:
-    _FIELDS = {
-        "input_dim": {
-            "type": int,
-            "validate": lambda v: v > 0 or "must be > 0",
-        },
-        "output_dim": {
-            "type": int,
-            "validate": lambda v: v > 0 or "must be > 0",
-        },
-        "weight_option": {
-            "type": "DynamicWeightOptions",
-        },
-        "weight_normalization": {
-            "type": "WeightNormalizationOptions",
-        },
-        "generator_depth": {
-            "type": "DynamicDepthOptions",
-        },
-        "diagonal_option": {
-            "type": "DynamicDiagonalOptions",
-        },
-        "bias_option": {
-            "type": "DynamicBiasOptions",
-        },
-        "row_mask_option": {
-            "type": "AxisMaskOptions",
-        },
-        "mask_dimension_option": {
-            "type": "MaskDimensionOptions",
-            "optional": True,
-        },
-    }
+    @staticmethod
+    def validate(model: "AdaptiveParameterAugmentation") -> None:
+        AdaptiveParameterAugmentationValidator.validate_dimensions(model)
+        AdaptiveParameterAugmentationValidator.validate_sub_configs(model)
 
-    def __init__(self, model: "AdaptiveParameterAugmentation"):
-        self.model = model
-        self._resolve_enum_types()
-        self.validate()
+    @staticmethod
+    def validate_dimensions(model: "AdaptiveParameterAugmentation") -> None:
+        if model.input_dim is None or not isinstance(model.input_dim, int) or model.input_dim <= 0:
+            raise ValueError(
+                f"input_dim must be a positive integer, received {model.input_dim!r}."
+            )
+        if model.output_dim is None or not isinstance(model.output_dim, int) or model.output_dim <= 0:
+            raise ValueError(
+                f"output_dim must be a positive integer, received {model.output_dim!r}."
+            )
 
-    def _resolve_enum_types(self) -> None:
-        from emperor.augmentations.adaptive_parameters.options import (
-            AxisMaskOptions,
-            DynamicBiasOptions,
-            DynamicDepthOptions,
-            DynamicDiagonalOptions,
-            DynamicWeightOptions,
-            MaskDimensionOptions,
-            WeightNormalizationOptions,
-        )
+    @staticmethod
+    def validate_sub_configs(model: "AdaptiveParameterAugmentation") -> None:
+        from emperor.base.utils import ConfigBase
+        from emperor.base.layer.config import LayerStackConfig
 
-        self._TYPES = {
-            "DynamicBiasOptions": DynamicBiasOptions,
-            "DynamicDepthOptions": DynamicDepthOptions,
-            "DynamicDiagonalOptions": DynamicDiagonalOptions,
-            "DynamicWeightOptions": DynamicWeightOptions,
-            "MaskDimensionOptions": MaskDimensionOptions,
-            "AxisMaskOptions": AxisMaskOptions,
-            "WeightNormalizationOptions": WeightNormalizationOptions,
-        }
-
-    def validate(self) -> None:
-        for name, rules in self._FIELDS.items():
-            val = getattr(self.model, name)
-
-            if val is None:
-                if rules.get("optional"):
-                    continue
-                raise ValueError(
-                    f"Configuration error: '{name}' is required for "
-                    f"{self.model.__class__.__name__}."
-                )
-
-            expected = rules.get("type")
-            expected_type = self._TYPES.get(expected, expected)
-            if not isinstance(val, expected_type):
+        sub_configs = [
+            ("weight_config", model.weight_config),
+            ("diagonal_config", model.diagonal_config),
+            ("bias_config", model.bias_config),
+            ("mask_config", model.mask_config),
+        ]
+        for name, config in sub_configs:
+            if config is None:
+                continue
+            if not isinstance(config, ConfigBase):
                 raise TypeError(
-                    f"Type error: '{name}' on {self.model.__class__.__name__} "
-                    f"expected {expected_type.__name__}, got "
-                    f"{type(val).__name__} (value={val!r})."
+                    f"{name} must be a ConfigBase instance, "
+                    f"got {type(config).__name__}."
                 )
-
-            validator = rules.get("validate")
-            if validator is not None:
-                result = validator(val)
-                if result is not True and result is not None:
-                    raise ValueError(
-                        f"Configuration error: '{name}' {result} (value={val!r})."
-                    )
+            if config.model_config is None and model.model_config is None:
+                raise ValueError(
+                    f"{type(config).__name__} requires a model_config but none was provided "
+                    f"on the sub-config or the parent AdaptiveParameterAugmentationConfig."
+                )

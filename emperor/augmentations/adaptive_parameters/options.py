@@ -1,7 +1,5 @@
 from enum import Enum
 
-from emperor.memory.options import DynamicMemoryOptions, MemoryPositionOptions
-
 
 class DynamicDiagonalOptions(Enum):
     DISABLED = 0
