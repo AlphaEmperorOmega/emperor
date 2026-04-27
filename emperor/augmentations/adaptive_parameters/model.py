@@ -4,27 +4,7 @@ from emperor.base.utils import Module
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.weight import (
-    DynamicWeightConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    DynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import (
-    AxisMaskConfig,
-)
-from emperor.augmentations.adaptive_parameters.options import (
-    AxisMaskOptions,
-    DynamicBiasOptions,
-    DynamicDepthOptions,
-    DynamicDiagonalOptions,
-)
-from emperor.augmentations.adaptive_parameters.core._validator import (
-    AdaptiveParameterAugmentationValidator,
-)
+from emperor.base.utils import ConfigBase
 
 
 class AdaptiveParameterAugmentation(Module):
@@ -40,62 +20,24 @@ class AdaptiveParameterAugmentation(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.weight_config = self.cfg.weight_config
-        self.weight_option = self.cfg.weight_option
-        self.weight_normalization = self.cfg.weight_normalization
-        self.generator_depth = self.cfg.generator_depth
-        self.diagonal_option = self.cfg.diagonal_option
-        self.bias_flag = self.cfg.bias_flag
-        self.bias_option = self.cfg.bias_option
-        self.row_mask_option = self.cfg.row_mask_option
-        self.mask_dimension_option = self.cfg.mask_dimension_option
-        self.validator = AdaptiveParameterAugmentationValidator(self)
-        self.generator_model = self.__init_generator_model()
-        self.diagonal_model = self.__init_diagonal_model()
-        self.bias_model = self.__init_bias_model()
-        self.row_mask_model = self.__init_row_mask_model()
+        self.diagonal_config = self.cfg.diagonal_config
+        self.bias_config = self.cfg.bias_config
+        self.mask_config = self.cfg.mask_config
+        self.generator_model = self.__build_from_config(self.weight_config)
+        self.diagonal_model = self.__build_from_config(self.diagonal_config)
+        self.bias_model = self.__build_from_config(self.bias_config)
+        self.row_mask_model = self.__build_from_config(self.mask_config)
 
-    def __init_generator_model(self) -> Module | None:
-        if self.weight_config is not None:
+    def __build_from_config(self, config: ConfigBase | None) -> Module | None:
+        if config is None:
             return None
-        overrides = DynamicWeightConfig(
+        overrides = type(config)(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return self.weight_cfg.build(overrides)
+        return config.build(overrides)
 
-    def __init_diagonal_model(self) -> Module | None:
-        if self.diagonal_option == DynamicDiagonalOptions.DISABLED:
-            return None
-        diagonal_cfg = self.cfg.diagonal_config or DynamicDiagonalConfig()
-        overrides = DynamicDiagonalConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-        )
-        return diagonal_cfg.build(overrides)
-
-    def __init_bias_model(self) -> Module | None:
-        is_valid_not_disabled_flag = self.bias_option != DynamicBiasOptions.DISABLED
-        is_valid_flag = self.bias_flag and is_valid_not_disabled_flag
-        if not is_valid_flag:
-            return None
-        bias_cfg = self.cfg.bias_config or DynamicBiasConfig()
-        overrides = DynamicBiasConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-        )
-        return bias_cfg.build(overrides)
-
-    def __init_row_mask_model(self) -> Module | None:
-        if self.row_mask_option == AxisMaskOptions.DISABLED:
-            return None
-        mask_cfg = self.cfg.mask_config or AxisMaskConfig()
-        overrides = AxisMaskConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
-        )
-        return mask_cfg.build(overrides)
-
-    def compute_adaptive_parameters(
+    def forward(
         self,
         affine_transform_callback: Callable,
         weight_params: Tensor,

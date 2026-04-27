@@ -91,7 +91,7 @@ class AdaptiveLinearLayer(LinearAbstract):
 
     def forward(self, X: Tensor) -> Tensor:
         LinearValidator.validate_input_is_2d(X)
-        return self.adaptive_behaviour.compute_adaptive_parameters(
+        return self.adaptive_behaviour(
             self._compute_affine_transformation_callback,
             self.weight_params,
             self.bias_params,

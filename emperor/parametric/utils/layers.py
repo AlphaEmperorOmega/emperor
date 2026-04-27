@@ -129,7 +129,7 @@ class ParametricLayer(Module):
         weight_parameters, biase_parameters, loss = self._generate_parameters(
             input, skip_mask
         )
-        output = self.adaptive_behaviour.compute_adaptive_parameters(
+        output = self.adaptive_behaviour(
             self._compute_affine_transformation_callback,
             weight_parameters,
             biase_parameters,
