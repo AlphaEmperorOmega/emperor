@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from emperor.halting.config import HaltingConfig
     from emperor.halting.utils.options.base import HaltingBase
     from emperor.memory.config import DynamicMemoryConfig
-    from emperor.memory.core.memory import DynamicMemoryAbstract
+    from emperor.memory.core.base import DynamicMemoryAbstract
 
 
 class Layer(Module):

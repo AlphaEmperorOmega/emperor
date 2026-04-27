@@ -4,7 +4,7 @@ from emperor.base.validator import ValidatorBase
 from emperor.base.layer import LayerStackConfig
 
 if TYPE_CHECKING:
-    from emperor.memory.core.memory import DynamicMemoryAbstract
+    from emperor.memory.core.base import DynamicMemoryAbstract
 
 
 class AdaptiveGeneratorValidatorBase:

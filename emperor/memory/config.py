@@ -33,6 +33,6 @@ class DynamicMemoryConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.memory.core.memory import DynamicMemoryAbstract
+        from emperor.memory.core.base import DynamicMemoryAbstract
 
         return DynamicMemoryAbstract
