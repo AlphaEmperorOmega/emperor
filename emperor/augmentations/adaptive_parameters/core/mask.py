@@ -61,14 +61,14 @@ class AxisMaskAbstract(Module):
         super().__init__()
         self.cfg: AxisMaskConfig = self._override_config(cfg, overrides)
         AxisMaskValidator.validate(self)
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
-        self.mask_dimension_option = self.cfg.mask_dimension_option
-        self.mask_threshold = self.cfg.mask_threshold
-        self.mask_surrogate_scale = self.cfg.mask_surrogate_scale
-        self.mask_floor = self.cfg.mask_floor
-        self.mask_transition_width = self.cfg.mask_transition_width
-        self.model_config = self.cfg.model_config
+        self.input_dim: int = self.cfg.input_dim
+        self.output_dim: int = self.cfg.output_dim
+        self.mask_dimension_option: AxisMaskAbstract = self.cfg.mask_dimension_option
+        self.mask_threshold: float = self.cfg.mask_threshold
+        self.mask_surrogate_scale: float = self.cfg.mask_surrogate_scale
+        self.mask_floor: float = self.cfg.mask_floor
+        self.mask_transition_width: float = self.cfg.mask_transition_width
+        self.model_config: LayerStackConfig = self.cfg.model_config
 
     def _init_generator(self, output_dim: int) -> "Layer | Sequential":
         overrides = LayerStackConfig(
