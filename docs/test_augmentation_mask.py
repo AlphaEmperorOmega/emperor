@@ -8,7 +8,8 @@ from emperor.base.enums import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
+from emperor.base.layer.state import LayerState
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearOptions
 from emperor.augmentations.adaptive_parameters.options import (
@@ -244,7 +245,12 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 ],
             ]
         )
-        row_mask_logits = torch.tensor([[10.0, -10.0, 10.0], [-10.0, 10.0, -10.0]])
+        row_mask_logits = torch.tensor(
+            [
+                [10.0, -10.0, 10.0],
+                [-10.0, 10.0, -10.0],
+            ]
+        )
         row_model.score_generator = ConstantGenerator(row_mask_logits)
 
         row_output = row_model(row_weights, row_logits)
@@ -312,95 +318,201 @@ class TestAxisMaskHandlers(unittest.TestCase):
             )
         )
 
-    # def test_per_axis_score_applies_direct_hybrid_axis_masks_in_row_and_column_modes(
-    #     self,
-    # ):
-    #     row_cfg = self.preset(
-    #         input_dim=4,
-    #         output_dim=3,
-    #         model_type=AxisMaskOptions.PER_AXIS_SCORE,
-    #         mask_dimension_option=MaskDimensionOptions.ROW,
-    #     )
-    #     row_model = PerAxisScoreMask(row_cfg)
-    #     row_model.eval()
-    #     row_logits = torch.zeros(2, 4)
-    #     row_weights = torch.tensor(
-    #         [
-    #             [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [1.0, 1.0, 1.0]],
-    #             [[-1.0, -2.0, -3.0], [2.0, 3.0, 4.0], [5.0, 6.0, 7.0], [8.0, 9.0, 1.0]],
-    #         ]
-    #     )
-    #     row_mask_logits = torch.tensor(
-    #         [[10.0, -10.0, 10.0, -10.0], [-10.0, 10.0, -10.0, 10.0]]
-    #     )
-    #     row_model.score_generator = ConstantGenerator(row_mask_logits)
-    #
-    #     row_output = row_model(row_weights, row_logits)
-    #     row_expected = self._expected_per_axis_output(
-    #         row_weights,
-    #         row_mask_logits,
-    #         MaskDimensionOptions.ROW,
-    #         row_cfg.mask_threshold,
-    #         row_cfg.mask_surrogate_scale,
-    #     )
-    #
-    #     self.assertTrue(torch.allclose(row_output, row_expected, atol=1e-6))
-    #     self.assertTrue(
-    #         torch.allclose(row_output[0, 1], torch.zeros_like(row_output[0, 1]))
-    #     )
-    #     self.assertTrue(
-    #         torch.allclose(row_output[1, 0], torch.zeros_like(row_output[1, 0]))
-    #     )
-    #
-    #     column_cfg = self.preset(
-    #         input_dim=3,
-    #         output_dim=5,
-    #         model_type=AxisMaskOptions.PER_AXIS_SCORE,
-    #         mask_dimension_option=MaskDimensionOptions.COLUMN,
-    #     )
-    #     column_model = PerAxisScoreMask(column_cfg)
-    #     column_model.eval()
-    #     column_logits = torch.zeros(2, 3)
-    #     column_weights = torch.tensor(
-    #         [
-    #             [
-    #                 [1.0, 2.0, 3.0, 4.0, 5.0],
-    #                 [6.0, 7.0, 8.0, 9.0, 1.0],
-    #                 [2.0, 3.0, 4.0, 5.0, 6.0],
-    #             ],
-    #             [
-    #                 [-1.0, -2.0, -3.0, -4.0, -5.0],
-    #                 [5.0, 4.0, 3.0, 2.0, 1.0],
-    #                 [9.0, 8.0, 7.0, 6.0, 5.0],
-    #             ],
-    #         ]
-    #     )
-    #     column_mask_logits = torch.tensor(
-    #         [[10.0, -10.0, 10.0, -10.0, 10.0], [-10.0, 10.0, -10.0, 10.0, -10.0]]
-    #     )
-    #     column_model.score_generator = ConstantGenerator(column_mask_logits)
-    #
-    #     column_output = column_model(column_weights, column_logits)
-    #     column_expected = self._expected_per_axis_output(
-    #         column_weights,
-    #         column_mask_logits,
-    #         MaskDimensionOptions.COLUMN,
-    #         column_cfg.mask_threshold,
-    #         column_cfg.mask_surrogate_scale,
-    #     )
-    #
-    #     self.assertTrue(torch.allclose(column_output, column_expected, atol=1e-6))
-    #     self.assertTrue(
-    #         torch.allclose(
-    #             column_output[0, :, 1], torch.zeros_like(column_output[0, :, 1])
-    #         )
-    #     )
-    #     self.assertTrue(
-    #         torch.allclose(
-    #             column_output[1, :, 0], torch.zeros_like(column_output[1, :, 0])
-    #         )
-    #     )
-    #
+    def test_global_score_end_to_end_with_internal_generator(self):
+        batch_size = 2
+        dimension_cases = [(3, 2), (4, 5), (1, 3)]
+        hidden_dims = [4, 8]
+        bias_flags = [True, False]
+        mask_dimensions = [
+            MaskDimensionOptions.ROW,
+            MaskDimensionOptions.COLUMN,
+        ]
+        mask_floors = [0.0, 0.2]
+        mask_thresholds = [0.2, 0.5, 0.8]
+        mask_surrogate_scales = [1.0, 5.0, 20.0]
+
+        for input_dim, output_dim in dimension_cases:
+            for hidden_dim in hidden_dims:
+                for bias_flag in bias_flags:
+                    for mask_dimension in mask_dimensions:
+                        for mask_floor in mask_floors:
+                            for mask_threshold in mask_thresholds:
+                                for mask_surrogate_scale in mask_surrogate_scales:
+                                    message = (
+                                        f"input_dim={input_dim}, "
+                                        f"output_dim={output_dim}, "
+                                        f"hidden_dim={hidden_dim}, "
+                                        f"bias_flag={bias_flag}, "
+                                        f"mask_dimension={mask_dimension}, "
+                                        f"mask_floor={mask_floor}, "
+                                        f"mask_threshold={mask_threshold}, "
+                                        f"mask_surrogate_scale={mask_surrogate_scale}"
+                                    )
+                                    with self.subTest(msg=message):
+                                        torch.manual_seed(0)
+                                        cfg = self.preset(
+                                            input_dim=input_dim,
+                                            hidden_dim=hidden_dim,
+                                            output_dim=output_dim,
+                                            bias_flag=bias_flag,
+                                            model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+                                            mask_dimension_option=mask_dimension,
+                                            mask_threshold=mask_threshold,
+                                            mask_surrogate_scale=mask_surrogate_scale,
+                                            mask_floor=mask_floor,
+                                        )
+                                        model = WeightInformedScoreAxisMask(cfg)
+                                        model.eval()
+                                        logits = torch.randn(batch_size, input_dim)
+                                        weight_params = torch.randn(
+                                            batch_size, input_dim, output_dim
+                                        )
+
+                                        mask_logits = Layer.forward_with_state(
+                                            model.score_generator, logits
+                                        )
+                                        output = model(weight_params, logits)
+                                        expected = self._expected_global_output(
+                                            weight_params,
+                                            mask_logits,
+                                            mask_dimension,
+                                            cfg.mask_threshold,
+                                            cfg.mask_surrogate_scale,
+                                            cfg.mask_floor,
+                                        )
+                                        expected_mask_shape = (
+                                            (batch_size, output_dim)
+                                            if mask_dimension
+                                            == MaskDimensionOptions.ROW
+                                            else (batch_size, input_dim)
+                                        )
+
+                                        self.assertEqual(
+                                            tuple(mask_logits.shape),
+                                            expected_mask_shape,
+                                        )
+                                        self.assertEqual(
+                                            tuple(output.shape),
+                                            tuple(weight_params.shape),
+                                        )
+                                        self.assertTrue(
+                                            torch.isfinite(mask_logits).all()
+                                        )
+                                        self.assertTrue(torch.isfinite(output).all())
+                                        self.assertTrue(
+                                            torch.allclose(output, expected, atol=1e-6)
+                                        )
+                                        self.assertTrue(
+                                            torch.all(
+                                                output.abs()
+                                                <= weight_params.abs() + 1e-6
+                                            )
+                                        )
+
+    def test_per_axis_score_applies_direct_hybrid_row_mask(self):
+        row_cfg = self.preset(
+            input_dim=4,
+            output_dim=3,
+            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            mask_dimension_option=MaskDimensionOptions.ROW,
+        )
+        row_model = PerAxisScoreMask(row_cfg)
+        row_model.eval()
+        row_logits = torch.zeros(2, 4)
+        row_weights = torch.tensor(
+            [
+                [
+                    [1.0, 2.0, 3.0],
+                    [4.0, 5.0, 6.0],
+                    [7.0, 8.0, 9.0],
+                    [1.0, 1.0, 1.0],
+                ],
+                [
+                    [-1.0, -2.0, -3.0],
+                    [2.0, 3.0, 4.0],
+                    [5.0, 6.0, 7.0],
+                    [8.0, 9.0, 1.0],
+                ],
+            ]
+        )
+        row_mask_logits = torch.tensor(
+            [
+                [10.0, -10.0, 10.0, -10.0],
+                [-10.0, 10.0, -10.0, 10.0],
+            ]
+        )
+        row_model.score_generator = ConstantGenerator(row_mask_logits)
+
+        row_output = row_model(row_weights, row_logits)
+        row_expected = self._expected_per_axis_output(
+            row_weights,
+            row_mask_logits,
+            MaskDimensionOptions.ROW,
+            row_cfg.mask_threshold,
+            row_cfg.mask_surrogate_scale,
+        )
+
+        self.assertTrue(torch.allclose(row_output, row_expected, atol=1e-6))
+        self.assertTrue(
+            torch.allclose(row_output[0, 1], torch.zeros_like(row_output[0, 1]))
+        )
+        self.assertTrue(
+            torch.allclose(row_output[1, 0], torch.zeros_like(row_output[1, 0]))
+        )
+
+    def test_per_axis_score_applies_direct_hybrid_column_mask(self):
+        column_cfg = self.preset(
+            input_dim=3,
+            output_dim=5,
+            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            mask_dimension_option=MaskDimensionOptions.COLUMN,
+        )
+        column_model = PerAxisScoreMask(column_cfg)
+        column_model.eval()
+        column_logits = torch.zeros(2, 3)
+        column_weights = torch.tensor(
+            [
+                [
+                    [1.0, 2.0, 3.0, 4.0, 5.0],
+                    [6.0, 7.0, 8.0, 9.0, 1.0],
+                    [2.0, 3.0, 4.0, 5.0, 6.0],
+                ],
+                [
+                    [-1.0, -2.0, -3.0, -4.0, -5.0],
+                    [5.0, 4.0, 3.0, 2.0, 1.0],
+                    [9.0, 8.0, 7.0, 6.0, 5.0],
+                ],
+            ]
+        )
+        column_mask_logits = torch.tensor(
+            [
+                [10.0, -10.0, 10.0, -10.0, 10.0],
+                [-10.0, 10.0, -10.0, 10.0, -10.0],
+            ]
+        )
+        column_model.score_generator = ConstantGenerator(column_mask_logits)
+
+        column_output = column_model(column_weights, column_logits)
+        column_expected = self._expected_per_axis_output(
+            column_weights,
+            column_mask_logits,
+            MaskDimensionOptions.COLUMN,
+            column_cfg.mask_threshold,
+            column_cfg.mask_surrogate_scale,
+        )
+
+        self.assertTrue(torch.allclose(column_output, column_expected, atol=1e-6))
+        self.assertTrue(
+            torch.allclose(
+                column_output[0, :, 1], torch.zeros_like(column_output[0, :, 1])
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                column_output[1, :, 0], torch.zeros_like(column_output[1, :, 0])
+            )
+        )
+
     # def test_top_slice_row_mode_zeroes_first_below_threshold_row_and_all_later_rows(
     #     self,
     # ):
