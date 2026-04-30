@@ -234,9 +234,9 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
     @staticmethod
     def validate_mask_surrogate_scale(mask_surrogate_scale: float) -> None:
-        if mask_surrogate_scale <= 0.0:
+        if mask_surrogate_scale < 0.0:
             raise ValueError(
-                "mask_surrogate_scale must be greater than 0.0, "
+                "mask_surrogate_scale must be greater than or equal to 0.0, "
                 f"received {mask_surrogate_scale!r}."
             )
 

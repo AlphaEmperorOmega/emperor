@@ -31,7 +31,8 @@ class AxisMaskConfig(ConfigBase):
         "Threshold applied to axis keep scores when deciding whether to preserve a row or column."
     )
     mask_surrogate_scale: float | None = optional_field(
-        "Steepness factor for the training-time sigmoid surrogate used around the axis mask threshold."
+        "Steepness factor for the training-time sigmoid surrogate used around the axis mask threshold. "
+        "Set to 0.0 to bypass the surrogate and use the raw axis scores directly."
     )
     mask_floor: float | None = optional_field(
         "Baseline mask value assigned to structurally dropped regions. "
@@ -127,6 +128,8 @@ class AxisMaskAbstract(Module):
         return (scores >= self.mask_threshold).to(dtype=scores.dtype)
 
     def _compute_soft_mask(self, scores: Tensor) -> Tensor:
+        if self.mask_surrogate_scale == 0.0:
+            return scores.clamp(0.0, 1.0)
         return torch.sigmoid(self.mask_surrogate_scale * (scores - self.mask_threshold))
 
     def _apply_hybrid_mask(
