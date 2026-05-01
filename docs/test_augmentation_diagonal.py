@@ -12,7 +12,7 @@ from emperor.base.enums import (
 from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearOptions
-from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
+from emperor.augmentations.adaptive_parameters import DynamicDiagonalOptions
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     AntiDynamicDiagonal,
     CombinedDynamicDiagonal,
@@ -149,7 +149,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
             model_type=DynamicDiagonalOptions.DIAGONAL,
         )
         model = StandardDynamicDiagonal(cfg)
-        self._set_generator_identity(model.diagonal_generator)
+        self._set_generator_identity(model.model)
         logits = torch.tensor([[1.0, 2.0, 3.0], [4.0, 0.5, 2.5]])
         weight_params = torch.zeros(3, 3)
 
@@ -165,7 +165,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
             model_type=DynamicDiagonalOptions.ANTI_DIAGONAL,
         )
         model = AntiDynamicDiagonal(cfg)
-        self._set_generator_identity(model.diagonal_generator)
+        self._set_generator_identity(model.model)
         logits = torch.tensor([[1.0, 2.0, 3.0], [4.0, 0.5, 2.5]])
         weight_params = torch.zeros(3, 3)
 
@@ -181,8 +181,8 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
             model_type=DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
         )
         model = CombinedDynamicDiagonal(cfg)
-        self._set_generator_identity(model.diagonal_generator.diagonal_generator)
-        self._set_generator_identity(model.anti_diagonal_generator.diagonal_generator)
+        self._set_generator_identity(model.diagonal_model.model)
+        self._set_generator_identity(model.anti_diagonal_model.model)
         logits = torch.tensor([[1.0, 2.0, 3.0], [4.0, 0.5, 2.5]])
         weight_params = torch.zeros(3, 3)
 
@@ -198,7 +198,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
             model_type=DynamicDiagonalOptions.DIAGONAL,
         )
         model = StandardDynamicDiagonal(cfg)
-        self._set_generator_identity(model.diagonal_generator)
+        self._set_generator_identity(model.model)
         logits = torch.tensor([[1.0, 2.0, 3.0], [4.0, 0.5, 2.5]])
 
         output = model._compute_diagonal_matrix(logits)

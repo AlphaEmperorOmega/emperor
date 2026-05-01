@@ -78,7 +78,7 @@ class DynamicDiagonalAbstract(Module):
         return diagonal_matrix
 
     def _compute_diagonal_matrix(self, logits: Tensor) -> Tensor:
-        vectors = Layer.forward_with_state(self.diagonal_generator, logits)
+        vectors = Layer.forward_with_state(self.model, logits)
         return self.__convert_to_diagonal_matrix(vectors)
 
 
@@ -90,7 +90,7 @@ class StandardDynamicDiagonal(DynamicDiagonalAbstract):
         overrides: DynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.diagonal_generator = self._init_model()
+        self.model = self._init_model()
 
     def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
         diagonal_matrices = self._compute_diagonal_matrix(logits)
@@ -105,7 +105,7 @@ class AntiDynamicDiagonal(DynamicDiagonalAbstract):
         overrides: DynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.diagonal_generator = self._init_model()
+        self.model = self._init_model()
 
     def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
         diagonal_matrices = self._compute_diagonal_matrix(logits)
@@ -121,9 +121,9 @@ class CombinedDynamicDiagonal(DynamicDiagonalAbstract):
         overrides: DynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.diagonal_generator = StandardDynamicDiagonal(self.cfg)
-        self.anti_diagonal_generator = AntiDynamicDiagonal(self.cfg)
+        self.diagonal_model = StandardDynamicDiagonal(self.cfg)
+        self.anti_diagonal_model = AntiDynamicDiagonal(self.cfg)
 
     def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
-        weight_params = self.diagonal_generator(weight_params, logits)
-        return self.anti_diagonal_generator(weight_params, logits)
+        weight_params = self.diagonal_model(weight_params, logits)
+        return self.anti_diagonal_model(weight_params, logits)
