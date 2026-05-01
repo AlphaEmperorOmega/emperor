@@ -91,12 +91,14 @@ class DynamicBiasAbstract(Module):
         ):
             return bias_params
         if self.warmup_step < self.decay_warmup_batches:
-            self.warmup_step += 1
+            if self.training:
+                self.warmup_step += 1
             return bias_params
         decay_factor = self.__compute_decay_factor_by_schedule(
             self.decay_schedule_option
         )
-        self.decay_step += 1
+        if self.training:
+            self.decay_step += 1
         return bias_params * decay_factor
 
     def __compute_decay_factor_by_schedule(
