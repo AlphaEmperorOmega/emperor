@@ -1,11 +1,12 @@
 import torch
 import unittest
 
+from emperor.linears.options import LinearOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
+from emperor.augmentations.adaptive_parameters import DynamicDepthOptions
 from emperor.base.enums import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -141,6 +142,8 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
     ) -> DepthMappingHandlerConfig:
         return DepthMappingHandlerConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
             generator_depth=generator_depth,
             model_config=LayerStackConfig(
                 input_dim=input_dim,
@@ -160,6 +163,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                     halting_config=halting_config,
                     shared_halting_flag=shared_halting_flag,
                     layer_model_config=LinearLayerConfig(
+                        model_type=LinearOptions.LINEAR,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,
@@ -352,6 +356,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
 
     def test_invalid_layer_model_config_type_raises_error(self):
         from emperor.base.utils import ConfigBase
+
         cfg = self.preset(generator_depth=DynamicDepthOptions.DEPTH_OF_TWO)
         cfg.model_config.layer_config.layer_model_config = ConfigBase()
         with self.assertRaises(TypeError):

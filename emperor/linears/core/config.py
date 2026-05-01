@@ -5,7 +5,7 @@ from emperor.linears.options import LinearOptions
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.config import (
+    from emperor.augmentations.adaptive_parameters import (
         AdaptiveParameterAugmentationConfig,
     )
 

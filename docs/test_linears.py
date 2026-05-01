@@ -8,12 +8,6 @@ from emperor.base.layer import Layer
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.base.layer import LayerStack
-from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
-    DynamicDepthOptions,
-    DynamicDiagonalOptions,
-    MaskDimensionOptions,
-)
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearOptions
 from emperor.linears.core.layers import (
@@ -22,20 +16,19 @@ from emperor.linears.core.layers import (
 )
 
 from emperor.base.layer import LayerStackConfig
-from emperor.augmentations.adaptive_parameters.config import (
-    AdaptiveParameterAugmentationConfig,
-)
 from emperor.base.enums import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.augmentations.adaptive_parameters.options import (
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveParameterAugmentationConfig,
     AxisMaskOptions,
+    DynamicBiasOptions,
+    DynamicDepthOptions,
+    DynamicDiagonalOptions,
     DynamicWeightOptions,
-    DynamicMemoryOptions,
-    MemoryPositionOptions,
-    MemorySizeOptions,
+    MaskDimensionOptions,
     WeightNormalizationOptions,
 )
 

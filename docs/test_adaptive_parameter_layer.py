@@ -5,12 +5,13 @@ from torch.types import Tensor
 from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.config import ModelConfig
-from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterAugmentation
+from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.parametric.utils.layers import ParametricLayer
 from emperor.parametric.utils.stack import ParametricLayerStack
 from emperor.parametric.utils.presets import ParametricLayerPresets
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.utils.mixtures.types.vector import VectorWeightsMixture
-from emperor.parametric.utils.layers import ParametricLayer
+from emperor.augmentations.adaptive_parameters import AdaptiveParameterAugmentation
 from emperor.parametric.utils.config import AdaptiveRouterOptions
 from emperor.parametric.utils.mixtures.options import (
     AdaptiveBiasOptions,
@@ -24,7 +25,6 @@ from emperor.parametric.utils.mixtures.types.matrix import (
     MatrixBiasMixture,
     MatrixWeightsMixture,
 )
-from emperor.experts.utils.enums import InitSamplerOptions
 
 
 class TestParametricLayer(unittest.TestCase):
@@ -101,7 +101,9 @@ class TestParametricLayer(unittest.TestCase):
                 behaviour_model = m._ParametricLayer__init_adaptive_behaviour()
 
                 if adaptive_behaviour_config is not None:
-                    self.assertIsInstance(behaviour_model, AdaptiveParameterAugmentation)
+                    self.assertIsInstance(
+                        behaviour_model, AdaptiveParameterAugmentation
+                    )
                     continue
                 self.assertIsNone(behaviour_model)
 
@@ -282,10 +284,8 @@ class TestParametricLayer(unittest.TestCase):
                         input_tensor
                     )
                 )
-                bias_parameters, loss = (
-                    m._ParametricLayer__generate_bias_parameters(
-                        input_tensor, skip_mask, probabilities, indices
-                    )
+                bias_parameters, loss = m._ParametricLayer__generate_bias_parameters(
+                    input_tensor, skip_mask, probabilities, indices
                 )
 
                 expected_bias_shape = (batch_size, cfg.output_dim)
@@ -377,9 +377,7 @@ class TestParametricLayer(unittest.TestCase):
         input = torch.randn(batch_size, cfg.input_dim)
         weight_parameters = torch.randn(batch_size, cfg.input_dim, cfg.output_dim)
 
-        output = m._ParametricLayer__apply_generated_weights(
-            input, weight_parameters
-        )
+        output = m._ParametricLayer__apply_generated_weights(input, weight_parameters)
 
         expected_output_shape = (batch_size, cfg.output_dim)
         self.assertIsInstance(output, Tensor)
@@ -405,9 +403,7 @@ class TestParametricLayer(unittest.TestCase):
         input = torch.ones(batch_size, cfg.output_dim)
         bias_parameters = torch.randn(batch_size, cfg.output_dim)
 
-        output = m._ParametricLayer__apply_generated_biases(
-            input, bias_parameters
-        )
+        output = m._ParametricLayer__apply_generated_biases(input, bias_parameters)
 
         expected_output_shape = (batch_size, cfg.output_dim)
         self.assertIsInstance(output, Tensor)

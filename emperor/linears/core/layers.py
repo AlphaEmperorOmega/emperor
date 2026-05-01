@@ -9,13 +9,6 @@ from emperor.base.registry import subclass_registry
 from emperor.linears.core._validator import LinearValidator
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearOptions
-from emperor.augmentations.adaptive_parameters.model import (
-    AdaptiveParameterAugmentation,
-)
-from emperor.augmentations.adaptive_parameters.config import (
-    AdaptiveParameterAugmentationConfig,
-)
-
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -81,6 +74,11 @@ class AdaptiveLinearLayer(LinearAbstract):
         self.adaptive_behaviour = self.__init_behaviour()
 
     def __init_behaviour(self):
+        from emperor.augmentations.adaptive_parameters import (
+            AdaptiveParameterAugmentation,
+            AdaptiveParameterAugmentationConfig,
+        )
+
         overrides = AdaptiveParameterAugmentationConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
