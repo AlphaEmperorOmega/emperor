@@ -1,5 +1,4 @@
 from torch.types import Tensor
-
 from emperor.base.validator import ValidatorBase
 
 from typing import TYPE_CHECKING
@@ -30,12 +29,10 @@ class AdaptiveGeneratorValidatorBase:
         from emperor.base.layer import Layer
 
         if isinstance(generator_model, Layer):
-            AdaptiveGeneratorValidatorBase.validate_generator_layer(generator_model)
+            AdaptiveGeneratorValidatorBase._validate_generator_layer(generator_model)
             return
         if isinstance(generator_model, Sequential):
-            AdaptiveGeneratorValidatorBase.validate_generator_sequence(
-                generator_model
-            )
+            AdaptiveGeneratorValidatorBase._validate_generator_sequence(generator_model)
             return
         raise TypeError(
             "Expected model_config.build(...) to return a Layer or Sequential, "
@@ -43,7 +40,7 @@ class AdaptiveGeneratorValidatorBase:
         )
 
     @staticmethod
-    def validate_generator_sequence(generator_sequence) -> None:
+    def _validate_generator_sequence(generator_sequence) -> None:
         from emperor.base.layer import Layer
 
         for generator_layer in generator_sequence:
@@ -52,10 +49,10 @@ class AdaptiveGeneratorValidatorBase:
                     "Expected each generator sequence item to be a Layer, "
                     f"received {type(generator_layer).__name__}."
                 )
-            AdaptiveGeneratorValidatorBase.validate_generator_layer(generator_layer)
+            AdaptiveGeneratorValidatorBase._validate_generator_layer(generator_layer)
 
     @staticmethod
-    def validate_generator_layer(generator_layer) -> None:
+    def _validate_generator_layer(generator_layer) -> None:
         from emperor.linears.core.layers import LinearLayer
 
         if not isinstance(generator_layer.model, LinearLayer):
@@ -64,8 +61,39 @@ class AdaptiveGeneratorValidatorBase:
                 f"received {type(generator_layer.model).__name__}."
             )
 
+    @staticmethod
+    def validate_decay_parameters(cfg) -> None:
+        from emperor.augmentations.adaptive_parameters.options import (
+            WeightDecayScheduleOptions,
+        )
 
-class DynamicWeightValidator(ValidatorBase):
+        schedule = cfg.decay_schedule
+        if schedule is None or schedule == WeightDecayScheduleOptions.DISABLED:
+            return
+        decay_rate = cfg.decay_rate
+        if decay_rate is None or decay_rate <= 0.0:
+            raise ValueError(
+                f"decay_rate must be greater than 0.0 when decay_schedule is "
+                f"{schedule.name}, received {decay_rate!r}."
+            )
+        bounded_schedules = {
+            WeightDecayScheduleOptions.LINEAR,
+            WeightDecayScheduleOptions.MULTIPLICATIVE,
+        }
+        if schedule in bounded_schedules and decay_rate >= 1.0:
+            raise ValueError(
+                f"decay_rate must be less than 1.0 for {schedule.name}, "
+                f"received {decay_rate!r}."
+            )
+        decay_warmup_batches = cfg.decay_warmup_batches
+        if decay_warmup_batches is not None and decay_warmup_batches < 0:
+            raise ValueError(
+                f"decay_warmup_batches must be >= 0, "
+                f"received {decay_warmup_batches!r}."
+            )
+
+
+class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     OPTIONAL_FIELDS = {"bank_expansion_factor"}
 
     BANK_WEIGHT_OPTIONS = None
@@ -91,15 +119,13 @@ class DynamicWeightValidator(ValidatorBase):
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
         DynamicWeightValidator.validate_no_bank_expansion_factor(model)
+        AdaptiveGeneratorValidatorBase.validate_decay_parameters(model.cfg)
 
     @staticmethod
     def validate_no_bank_expansion_factor(model: "DynamicWeightAbstract") -> None:
         from emperor.augmentations.adaptive_parameters.core.weight import (
             LayeredWeightedBankDynamicWeight,
             SoftWeightedBankDynamicWeight,
-        )
-        from emperor.augmentations.adaptive_parameters.options import (
-            BankExpansionFactorOptions,
         )
 
         if isinstance(
@@ -157,6 +183,7 @@ class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
         DynamicBiasValidator.validate_no_bank_expansion_factor(model)
+        AdaptiveGeneratorValidatorBase.validate_decay_parameters(model.cfg)
 
     @staticmethod
     def validate_no_bank_expansion_factor(model: "DynamicBiasAbstract") -> None:
@@ -187,6 +214,7 @@ class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
                 f"received {factor!r}."
             )
 
+    @staticmethod
     def ensure_parameters_exist(bias_params: Tensor | None) -> None:
         if bias_params is None:
             raise ValueError(
@@ -215,9 +243,7 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
         AxisMaskValidator.validate_mask_threshold(model.cfg.mask_threshold)
-        AxisMaskValidator.validate_mask_surrogate_scale(
-            model.cfg.mask_surrogate_scale
-        )
+        AxisMaskValidator.validate_mask_surrogate_scale(model.cfg.mask_surrogate_scale)
         AxisMaskValidator.validate_mask_floor(model.cfg.mask_floor)
         if model.cfg.mask_transition_width is not None:
             AxisMaskValidator.validate_mask_transition_width(
@@ -257,24 +283,12 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             )
 
 
-class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
-    OPTIONAL_FIELDS = {
-        "num_memory_slots",
-        "test_time_training_learning_rate",
-        "test_time_training_num_inner_steps",
-    }
-
-    @staticmethod
-    def validate(model: "DynamicMemoryAbstract") -> None:
-        DynamicMemoryValidator.validate_required_fields(model.cfg)
-        DynamicMemoryValidator.validate_field_types(model.cfg)
-        DynamicMemoryValidator.validate_dimensions(
-            input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
-        )
-
-
 class DepthMappingValidator(ValidatorBase):
-    OPTIONAL_FIELDS = {"override_config", "adaptive_augmentation_config"}
+    OPTIONAL_FIELDS = {
+        "model_type",
+        "override_config",
+        "adaptive_augmentation_config",
+    }
 
     @staticmethod
     def validate(model: "DepthMappingLayer") -> None:
@@ -345,11 +359,19 @@ class AdaptiveParameterAugmentationValidator:
 
     @staticmethod
     def validate_dimensions(model: "AdaptiveParameterAugmentation") -> None:
-        if model.input_dim is None or not isinstance(model.input_dim, int) or model.input_dim <= 0:
+        if (
+            model.input_dim is None
+            or not isinstance(model.input_dim, int)
+            or model.input_dim <= 0
+        ):
             raise ValueError(
                 f"input_dim must be a positive integer, received {model.input_dim!r}."
             )
-        if model.output_dim is None or not isinstance(model.output_dim, int) or model.output_dim <= 0:
+        if (
+            model.output_dim is None
+            or not isinstance(model.output_dim, int)
+            or model.output_dim <= 0
+        ):
             raise ValueError(
                 f"output_dim must be a positive integer, received {model.output_dim!r}."
             )
