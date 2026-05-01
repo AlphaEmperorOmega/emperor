@@ -1,13 +1,14 @@
 from torch import Tensor
-from typing import Callable
-from emperor.base.utils import Module
-from emperor.augmentations.adaptive_parameters.config import (
-    AdaptiveParameterAugmentationConfig,
-)
-from emperor.base.utils import ConfigBase
+from typing import Callable, TYPE_CHECKING
+from emperor.base.utils import ConfigBase, Module
 from emperor.augmentations.adaptive_parameters.core._validator import (
     AdaptiveParameterAugmentationValidator,
 )
+
+if TYPE_CHECKING:
+    from emperor.augmentations.adaptive_parameters.config import (
+        AdaptiveParameterAugmentationConfig,
+    )
 
 
 class AdaptiveParameterAugmentation(Module):
@@ -28,7 +29,7 @@ class AdaptiveParameterAugmentation(Module):
         self.mask_config = self.cfg.mask_config
         self.model_config = self.cfg.model_config
         AdaptiveParameterAugmentationValidator.validate(self)
-        self.generator_model = self.__build_from_config(self.weight_config)
+        self.weight_model = self.__build_from_config(self.weight_config)
         self.diagonal_model = self.__build_from_config(self.diagonal_config)
         self.bias_model = self.__build_from_config(self.bias_config)
         self.mask_model = self.__build_from_config(self.mask_config)
@@ -69,7 +70,7 @@ class AdaptiveParameterAugmentation(Module):
     def __apply_adaptive_adjustments(
         self, weights: Tensor, bias: Tensor | None, input: Tensor
     ) -> tuple[Tensor, Tensor | None]:
-        weights = self.__call_model(self.generator_model, weights, input)
+        weights = self.__call_model(self.weight_model, weights, input)
         weights = self.__call_model(self.diagonal_model, weights, input)
         bias = self.__call_bias_model(self.bias_model, bias, input)
         return weights, bias
@@ -79,7 +80,7 @@ class AdaptiveParameterAugmentation(Module):
 
     def __call_model(
         self,
-        model,
+        model: Module | None,
         parameters: Tensor | None = None,
         input: Tensor | None = None,
     ) -> Tensor | None:

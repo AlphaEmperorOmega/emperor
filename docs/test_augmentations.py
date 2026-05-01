@@ -11,13 +11,9 @@ from emperor.base.enums import (
     LayerNormPositionOptions,
 )
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.config import (
-    AdaptiveParameterAugmentationConfig,
-)
-from emperor.augmentations.adaptive_parameters.model import (
+from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentation,
-)
-from emperor.augmentations.adaptive_parameters.options import (
+    AdaptiveParameterAugmentationConfig,
     AxisMaskOptions,
     BankExpansionFactorOptions,
     DynamicBiasOptions,
@@ -246,7 +242,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                         weight_config=self._make_weight_config(model_type=option),
                     )
                     model = AdaptiveParameterAugmentation(cfg)
-                    self.assertIsNone(model.generator_model)
+                    self.assertIsNone(model.weight_model)
                 continue
             with self.subTest(f"weight={option}"):
                 input_dim = 12
@@ -271,8 +267,8 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     ),
                 )
                 model = AdaptiveParameterAugmentation(cfg)
-                self.assertIsNotNone(model.generator_model)
-                self.assertIsInstance(model.generator_model, DynamicWeightAbstract)
+                self.assertIsNotNone(model.weight_model)
+                self.assertIsInstance(model.weight_model, DynamicWeightAbstract)
 
     def test_init_with_diagonal_config(self):
         for option in DynamicDiagonalOptions:
@@ -614,7 +610,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 DynamicWeightOptions,
                 self._make_weight_config,
                 DynamicWeightAbstract,
-                "generator_model",
+                "weight_model",
             ),
             (
                 "diagonal",
