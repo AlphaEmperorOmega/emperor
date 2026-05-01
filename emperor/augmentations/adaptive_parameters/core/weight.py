@@ -92,17 +92,17 @@ class DynamicWeightAbstract(Module):
         self.register_buffer("decay_step", torch.zeros(1))
         self.register_buffer("warmup_step", torch.zeros(1))
 
-    def _init_generator_model(
-        self, overrides: "LayerStackConfig"
-    ) -> DepthMappingLayerStack:
+    def _init_model(self, overrides: "LayerStackConfig") -> DepthMappingLayerStack:
         return DepthMappingLayerStack(self.cfg, overrides)
 
     def forward(
         self,
         weight_params: Tensor,
-        logits: Tensor,
+        X: Tensor,
     ) -> Tensor:
-        return weight_params
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement forward()."
+        )
 
     def _compute_dynamic_weights(self, outer_product: Tensor) -> Tensor:
         return outer_product.sum(dim=1)
@@ -206,9 +206,7 @@ class DynamicWeightAbstract(Module):
                 decay_base = step.new_tensor(1.0 - rate)
                 return torch.pow(decay_base, step)
             case _:
-                raise ValueError(
-                    f"Unsupported decay_schedule value: {schedule!r}."
-                )
+                raise ValueError(f"Unsupported decay_schedule value: {schedule!r}.")
 
 
 @DynamicWeightAbstract.register(DynamicWeightOptions.SINGLE_MODEL)
@@ -220,14 +218,14 @@ class SingleModelDynamicWeight(DynamicWeightAbstract):
     ):
         super().__init__(cfg, overrides)
         DynamicWeightValidator.validate_square_dimensions(self)
-        self.model = self.__init_model()
+        self.model = self._init_model()
 
-    def __init_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
+    def _init_model(self) -> DepthMappingLayerStack:
+        model_overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim,
         )
-        return self._init_generator_model(overrides)
+        return super()._init_model(model_overrides)
 
     def forward(
         self,
@@ -257,14 +255,14 @@ class DualModelDynamicWeight(DynamicWeightAbstract):
             input_dim=self.input_dim,
             output_dim=self.input_dim,
         )
-        return self._init_generator_model(overrides)
+        return self._init_model(overrides)
 
     def __init_output_model(self) -> DepthMappingLayerStack:
         overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return self._init_generator_model(overrides)
+        return self._init_model(overrides)
 
     def forward(
         self,
@@ -310,14 +308,14 @@ class LowRankDynamicWeight(DynamicWeightAbstract):
             input_dim=self.input_dim,
             output_dim=self.input_dim,
         )
-        return self._init_generator_model(overrides)
+        return self._init_model(overrides)
 
     def __init_output_model(self) -> DepthMappingLayerStack:
         overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return self._init_generator_model(overrides)
+        return self._init_model(overrides)
 
     def forward(
         self,
@@ -342,14 +340,14 @@ class HypernetworkDynamicWeight(DynamicWeightAbstract):
         overrides: DynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.model = self.__init_model()
+        self.model = self._init_model()
 
-    def __init_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
+    def _init_model(self) -> DepthMappingLayerStack:
+        model_overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim * self.output_dim,
         )
-        return self._init_generator_model(overrides)
+        return super()._init_model(model_overrides)
 
     def forward(
         self,
@@ -384,18 +382,21 @@ class LayeredWeightedBankDynamicWeight(DynamicWeightAbstract):
                 self.output_dim,
             )
         )
-        generator_overrides = LayerStackConfig(
+        self.model = self._init_model()
+
+    def _init_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
             input_dim=self.input_dim,
-            output_dim=self.bank_expansion_factor * self.input_dim,
+            output_dim=self.input_dim * self.bank_expansion_factor,
         )
-        self.distribution_generator = self._init_generator_model(generator_overrides)
+        return super()._init_model(overrides)
 
     def forward(
         self,
         weight_params: Tensor,
         X: Tensor,
     ) -> Tensor:
-        bank_logits = self.distribution_generator(X)
+        bank_logits = self.model(X)
         bank_distribution = torch.softmax(bank_logits, dim=-1)
         bank_distribution_reshaped = bank_distribution.unsqueeze(dim=-1)
         batched_weighted_bank = self.weight_bank * bank_distribution_reshaped
@@ -431,18 +432,21 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
             )
         )
 
-        generator_overrides = LayerStackConfig(
+        self.model = self._init_model()
+
+    def _init_model(self) -> DepthMappingLayerStack:
+        overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim * self.bank_expansion_factor,
         )
-        self.distribution_generator = self._init_generator_model(generator_overrides)
+        return super()._init_model(overrides)
 
     def forward(
         self,
         weight_params: Tensor,
         X: Tensor,
     ) -> Tensor:
-        bank_logits = self.distribution_generator(X)
+        bank_logits = self.model(X)
         bank_logits = bank_logits.view(
             -1, self.depth_value, self.input_dim, self.bank_expansion_factor
         )

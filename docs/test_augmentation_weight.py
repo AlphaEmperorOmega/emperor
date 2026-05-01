@@ -10,7 +10,7 @@ from emperor.base.enums import (
     LayerNormPositionOptions,
 )
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters.options import (
+from emperor.augmentations.adaptive_parameters import (
     BankExpansionFactorOptions,
     DynamicDepthOptions,
     DynamicWeightOptions,
@@ -678,7 +678,7 @@ class TestWeightHandlerForward(unittest.TestCase):
         with self.assertRaises(ValueError):
             model._apply_normalization_transform(vectors)
 
-    def test_init_generator_model_accepts_depth_mapping_handler_override(self):
+    def test_init_model_accepts_depth_mapping_handler_override(self):
         input_dim = 12
         output_dim = 24
         cfg = self.preset(input_dim=input_dim, output_dim=output_dim)
@@ -688,7 +688,7 @@ class TestWeightHandlerForward(unittest.TestCase):
             input_dim=input_dim,
             output_dim=output_dim,
         )
-        generator = model._init_generator_model(overrides)
+        generator = model._init_model(overrides)
 
         self.assertIsInstance(generator, DepthMappingLayerStack)
         self.assertEqual(generator.input_dim, input_dim)
