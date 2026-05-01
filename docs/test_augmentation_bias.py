@@ -12,7 +12,7 @@ from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.base.layer.state import LayerState
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearOptions
-from emperor.augmentations.adaptive_parameters.options import (
+from emperor.augmentations.adaptive_parameters import (
     DynamicBiasOptions,
     WeightDecayScheduleOptions,
 )
@@ -230,7 +230,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([1.0, -2.0])
         affine_parameters = torch.tensor([[2.0, 0.5], [-1.5, 1.0]])
-        model.scalar_offset_generator = ConstantGenerator(affine_parameters)
+        model.model = ConstantGenerator(affine_parameters)
 
         output = model(bias_params, logits)
         expected = torch.tensor([[2.5, -3.5], [-0.5, 4.0]])
@@ -247,7 +247,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([1.0, 2.0, 3.0])
         generated_bias_offset = torch.tensor([[0.5, -1.0, 2.0], [-0.5, 1.5, -2.0]])
-        model.generator_model = ConstantGenerator(generated_bias_offset)
+        model.model = ConstantGenerator(generated_bias_offset)
 
         output = model(bias_params, logits)
         expected = torch.tensor([[1.5, 1.0, 5.0], [0.5, 3.5, 1.0]])
@@ -264,7 +264,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([2.0, -4.0])
         gate_logits = torch.tensor([[0.0, 0.0], [2.0, -2.0]])
-        model.gate_generator = ConstantGenerator(gate_logits)
+        model.model = ConstantGenerator(gate_logits)
 
         output = model(bias_params, logits)
         expected = bias_params.unsqueeze(0) * torch.sigmoid(gate_logits)
@@ -281,7 +281,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([2.0, -4.0])
         gate_logits = torch.tensor([[0.0, 0.0], [2.0, -2.0]])
-        model.gate_generator = ConstantGenerator(gate_logits)
+        model.model = ConstantGenerator(gate_logits)
 
         output = model(bias_params, logits)
         expected = bias_params.unsqueeze(0) * torch.tanh(gate_logits)
@@ -298,7 +298,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([2.0, -4.0])
         bias_scale = torch.tensor([[0.5, -1.0], [2.0, 3.0]])
-        model.scale_generator = ConstantGenerator(bias_scale)
+        model.model = ConstantGenerator(bias_scale)
 
         output = model(bias_params, logits)
         expected = bias_params.unsqueeze(0) * bias_scale
@@ -318,7 +318,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([2.0, -4.0])
         generated_bias_offset = torch.zeros(2, 2)
-        model.generator_model = ConstantGenerator(generated_bias_offset)
+        model.model = ConstantGenerator(generated_bias_offset)
 
         first_output = model(bias_params, logits)
         second_output = model(bias_params, logits)
@@ -341,7 +341,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([7.0, 9.0])
         generated_bias = torch.tensor([[1.0, -1.0], [0.5, 2.5]])
-        model.bias_generator = ConstantGenerator(generated_bias)
+        model.model = ConstantGenerator(generated_bias)
 
         output = model(bias_params, logits)
 
@@ -358,7 +358,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([3.0, -5.0])
         bank_logits = torch.tensor([[12.0, -12.0], [-12.0, 12.0]])
-        model.distribution_generator = ConstantGenerator(bank_logits)
+        model.model = ConstantGenerator(bank_logits)
         with torch.no_grad():
             model.weight_bank.copy_(torch.tensor([[1.0, 0.0], [0.0, 2.0]]))
 
@@ -378,7 +378,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         model = GeneratorDynamicBias(cfg)
         logits = torch.zeros(2, 3)
         generated_bias = torch.tensor([[1.0, -1.0], [0.5, 2.5]])
-        model.bias_generator = ConstantGenerator(generated_bias)
+        model.model = ConstantGenerator(generated_bias)
 
         output_a = model(torch.tensor([7.0, 9.0]), logits)
         output_b = model(torch.tensor([-3.0, 4.0]), logits)
@@ -396,7 +396,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         model = WeightedBankDynamicBias(cfg)
         logits = torch.zeros(2, 3)
         bank_logits = torch.tensor([[12.0, -12.0], [-12.0, 12.0]])
-        model.distribution_generator = ConstantGenerator(bank_logits)
+        model.model = ConstantGenerator(bank_logits)
         with torch.no_grad():
             model.weight_bank.copy_(torch.tensor([[1.0, 0.0], [0.0, 2.0]]))
 
