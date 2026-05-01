@@ -52,7 +52,7 @@ class AdaptiveParameterAugmentation(Module):
             return False
         if config.model_type is None:
             return False
-        return config.model_type.value == 0
+        return config.model_type == type(config.model_type).DISABLED
 
     def forward(
         self,
