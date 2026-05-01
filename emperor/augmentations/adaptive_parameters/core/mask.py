@@ -2,7 +2,7 @@ import torch
 
 from torch import Tensor
 from torch.nn import Sequential
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.utils import ConfigBase, Module, optional_field
@@ -64,14 +64,16 @@ class AxisMaskAbstract(Module):
         AxisMaskValidator.validate(self)
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
-        self.mask_dimension_option: AxisMaskAbstract = self.cfg.mask_dimension_option
+        self.mask_dimension_option: MaskDimensionOptions = (
+            self.cfg.mask_dimension_option
+        )
         self.mask_threshold: float = self.cfg.mask_threshold
         self.mask_surrogate_scale: float = self.cfg.mask_surrogate_scale
         self.mask_floor: float = self.cfg.mask_floor
         self.mask_transition_width: float = self.cfg.mask_transition_width
         self.model_config: LayerStackConfig = self.cfg.model_config
 
-    def _init_generator(self, output_dim: int) -> "Layer | Sequential":
+    def _init_model(self, output_dim: int) -> "Layer | Sequential":
         overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=output_dim,
@@ -108,10 +110,8 @@ class AxisMaskAbstract(Module):
     def __score_dim(self) -> int:
         return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
 
-    def _compute_generator_soft_values(
-        self, generator_model: "Layer | Sequential", logits: Tensor
-    ) -> Tensor:
-        mask_logits = Layer.forward_with_state(generator_model, logits)
+    def _compute_generator_soft_values(self, logits: Tensor) -> Tensor:
+        mask_logits = Layer.forward_with_state(self.model, logits)
         return torch.sigmoid(mask_logits)
 
     def _compute_masked_weight_scores(
@@ -158,19 +158,14 @@ class WeightInformedScoreAxisMask(AxisMaskAbstract):
         overrides: AxisMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.score_generator = self.__init_score_generator()
-
-    def __init_score_generator(self) -> "Layer | Sequential":
-        return self._init_generator(self._source_axis_count)
+        self.model = self._init_model(self._source_axis_count)
 
     def forward(
         self,
         weight_params: Tensor,
         logits: Tensor,
     ) -> Tensor:
-        source_axis_soft_mask = self._compute_generator_soft_values(
-            self.score_generator, logits
-        )
+        source_axis_soft_mask = self._compute_generator_soft_values(logits)
         axis_scores = self._compute_masked_weight_scores(
             weight_params, source_axis_soft_mask
         )
@@ -187,17 +182,14 @@ class PerAxisScoreMask(AxisMaskAbstract):
         overrides: AxisMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.score_generator = self.__init_score_generator()
-
-    def __init_score_generator(self) -> "Layer | Sequential":
-        return self._init_generator(self._target_axis_count)
+        self.model = self._init_model(self._target_axis_count)
 
     def forward(
         self,
         weight_params: Tensor,
         logits: Tensor,
     ) -> Tensor:
-        axis_scores = self._compute_generator_soft_values(self.score_generator, logits)
+        axis_scores = self._compute_generator_soft_values(logits)
         hard_mask = self._compute_hard_mask(axis_scores)
         soft_mask = self._compute_soft_mask(axis_scores)
         return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
@@ -211,17 +203,14 @@ class TopSliceAxisMask(AxisMaskAbstract):
         overrides: AxisMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.score_generator = self.__init_score_generator()
-
-    def __init_score_generator(self) -> "Layer | Sequential":
-        return self._init_generator(self._target_axis_count)
+        self.model = self._init_model(self._target_axis_count)
 
     def forward(
         self,
         weight_params: Tensor,
         logits: Tensor,
     ) -> Tensor:
-        axis_scores = self._compute_generator_soft_values(self.score_generator, logits)
+        axis_scores = self._compute_generator_soft_values(logits)
         if self.mask_transition_width is not None and self.mask_transition_width > 1.0:
             transition_scores = self.__compute_transition_scores(axis_scores)
             hard_mask = self._compute_hard_mask(transition_scores)
@@ -254,19 +243,14 @@ class DiagonalAxisMask(AxisMaskAbstract):
         overrides: AxisMaskConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.score_generator = self.__init_score_generator()
-
-    def __init_score_generator(self) -> "Layer | Sequential":
-        return self._init_generator(1)
+        self.model = self._init_model(1)
 
     def forward(
         self,
         weight_params: Tensor,
         logits: Tensor,
     ) -> Tensor:
-        keep_fraction = self._compute_generator_soft_values(
-            self.score_generator, logits
-        )
+        keep_fraction = self._compute_generator_soft_values(logits)
         diagonal_scores = self.__compute_diagonal_scores(weight_params, keep_fraction)
         hard_mask = self._compute_hard_mask(diagonal_scores)
         soft_mask = self._compute_soft_mask(diagonal_scores)

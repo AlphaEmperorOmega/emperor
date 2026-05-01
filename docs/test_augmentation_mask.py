@@ -12,7 +12,7 @@ from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
 from emperor.base.layer.state import LayerState
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearOptions
-from emperor.augmentations.adaptive_parameters.options import (
+from emperor.augmentations.adaptive_parameters import (
     AxisMaskOptions,
     MaskDimensionOptions,
 )
@@ -267,7 +267,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [-10.0, 10.0, -10.0],
             ]
         )
-        row_model.score_generator = ConstantGenerator(row_mask_logits)
+        row_model.model = ConstantGenerator(row_mask_logits)
 
         row_output = row_model(row_weights, row_logits)
         row_expected = self._expected_global_output(
@@ -311,7 +311,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
             ]
         )
         column_mask_logits = torch.tensor([[10.0, -10.0, 10.0], [-10.0, 10.0, -10.0]])
-        column_model.score_generator = ConstantGenerator(column_mask_logits)
+        column_model.model = ConstantGenerator(column_mask_logits)
 
         column_output = column_model(column_weights, column_logits)
         column_expected = self._expected_global_output(
@@ -363,7 +363,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
             ]
         )
         mask_logits = torch.tensor([[10.0, -10.0, 10.0], [-10.0, 10.0, -10.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_global_output(
@@ -435,7 +435,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                         )
 
                                         mask_logits = Layer.forward_with_state(
-                                            model.score_generator, logits
+                                            model.model, logits
                                         )
                                         output = model(weight_params, logits)
                                         expected = self._expected_global_output(
@@ -507,7 +507,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [-10.0, 10.0, -10.0, 10.0],
             ]
         )
-        row_model.score_generator = ConstantGenerator(row_mask_logits)
+        row_model.model = ConstantGenerator(row_mask_logits)
 
         row_output = row_model(row_weights, row_logits)
         row_expected = self._expected_per_axis_output(
@@ -556,7 +556,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [-10.0, 10.0, -10.0, 10.0, -10.0],
             ]
         )
-        column_model.score_generator = ConstantGenerator(column_mask_logits)
+        column_model.model = ConstantGenerator(column_mask_logits)
 
         column_output = column_model(column_weights, column_logits)
         column_expected = self._expected_per_axis_output(
@@ -613,7 +613,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [-10.0, 10.0, 2.0, 0.0],
             ]
         )
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_per_axis_output(
@@ -677,7 +677,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                         )
 
                                         mask_logits = Layer.forward_with_state(
-                                            model.score_generator, logits
+                                            model.model, logits
                                         )
                                         output = model(weight_params, logits)
                                         expected = self._expected_per_axis_output(
@@ -751,7 +751,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [10.0, -10.0, 10.0, 10.0],
             ]
         )
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_top_slice_output(
@@ -800,7 +800,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [10.0, -10.0, 10.0, 10.0, 10.0],
             ]
         )
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_top_slice_output(
@@ -859,7 +859,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [10.0, -10.0, 10.0, 10.0],
             ]
         )
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_top_slice_output(
@@ -923,7 +923,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                         )
 
                                         mask_logits = Layer.forward_with_state(
-                                            model.score_generator, logits
+                                            model.model, logits
                                         )
                                         output = model(weight_params, logits)
                                         expected = self._expected_top_slice_output(
@@ -976,7 +976,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         logits = torch.zeros(2, 4)
         weight_params = torch.ones(2, 4, 4)
         mask_logits = torch.tensor([[0.0], [2.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_diagonal_output(
@@ -1033,7 +1033,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                     )
 
                                     mask_logits = Layer.forward_with_state(
-                                        model.score_generator, logits
+                                        model.model, logits
                                     )
                                     output = model(weight_params, logits)
                                     expected = self._expected_diagonal_output(
@@ -1074,7 +1074,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         logits = torch.zeros(2, 4)
         weight_params = torch.ones(2, 4, 4)
         mask_logits = torch.tensor([[2.0], [-2.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_diagonal_output(
@@ -1106,7 +1106,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         high_logits = torch.tensor([[10.0], [-10.0], [0.0]])
         model = DiagonalAxisMask(cfg)
         model.eval()
-        model.score_generator = ConstantGenerator(high_logits)
+        model.model = ConstantGenerator(high_logits)
 
         output = model(weight_params, logits)
 
@@ -1136,7 +1136,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         logits = torch.zeros(2, 3)
         weight_params = torch.ones(2, 3, 4)
         mask_logits = torch.tensor([[3.0], [-3.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
 
@@ -1157,7 +1157,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         logits = torch.zeros(1, 4)
         weight_params = torch.ones(1, 4, 4)
         mask_logits = torch.tensor([[0.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_diagonal_output(
@@ -1203,7 +1203,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         )
         global_model = WeightInformedScoreAxisMask(global_cfg)
         global_model.eval()
-        global_model.score_generator = ConstantGenerator(
+        global_model.model = ConstantGenerator(
             torch.tensor([[10.0, -10.0, 10.0]])
         )
         global_output = global_model(weight_params, logits)
@@ -1216,7 +1216,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         )
         per_axis_model = PerAxisScoreMask(per_axis_cfg)
         per_axis_model.eval()
-        per_axis_model.score_generator = ConstantGenerator(
+        per_axis_model.model = ConstantGenerator(
             torch.tensor([[10.0, -10.0, 10.0, -10.0]])
         )
         per_axis_output = per_axis_model(weight_params, logits)
@@ -1229,7 +1229,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         )
         top_slice_model = TopSliceAxisMask(top_slice_cfg)
         top_slice_model.eval()
-        top_slice_model.score_generator = ConstantGenerator(
+        top_slice_model.model = ConstantGenerator(
             torch.tensor([[10.0, 10.0, -10.0, 10.0]])
         )
         top_slice_output = top_slice_model(weight_params, logits)
@@ -1242,7 +1242,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         )
         diagonal_model = DiagonalAxisMask(diagonal_cfg)
         diagonal_model.eval()
-        diagonal_model.score_generator = ConstantGenerator(torch.tensor([[0.0]]))
+        diagonal_model.model = ConstantGenerator(torch.tensor([[0.0]]))
         diagonal_output = diagonal_model(weight_params, logits)
 
         outputs = [global_output, per_axis_output, top_slice_output, diagonal_output]
@@ -1283,7 +1283,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [-10.0, 10.0, 10.0],
             ]
         )
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
 
@@ -1323,7 +1323,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [-10.0, 10.0, -10.0, 10.0],
             ]
         )
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
 
@@ -1363,7 +1363,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 [10.0, -10.0, 10.0, 10.0],
             ]
         )
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
 
@@ -1384,7 +1384,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         logits = torch.zeros(1, 6)
         weight_params = torch.ones(1, 6, 3)
         mask_logits = torch.tensor([[10.0, 10.0, 10.0, -10.0, 10.0, 10.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_top_slice_output(
@@ -1414,7 +1414,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         logits = torch.zeros(1, 4)
         weight_params = torch.ones(1, 4, 3)
         mask_logits = torch.tensor([[10.0, 10.0, -10.0, 10.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_top_slice_output(
@@ -1442,7 +1442,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         logits = torch.zeros(1, 4)
         weight_params = torch.ones(1, 4, 3)
         mask_logits = torch.tensor([[10.0, 10.0, -10.0, 10.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_top_slice_output(
@@ -1471,7 +1471,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 logits = torch.zeros(1, 4)
                 weight_params = torch.ones(1, 4, 4)
                 mask_logits = torch.tensor([[0.0]])
-                model.score_generator = ConstantGenerator(mask_logits)
+                model.model = ConstantGenerator(mask_logits)
 
                 output = model(weight_params, logits)
                 expected = self._expected_diagonal_output(
@@ -1503,8 +1503,8 @@ class TestAxisMaskHandlers(unittest.TestCase):
         logits = torch.zeros(1, 4)
         weight_params = torch.ones(1, 4, 4)
         mask_logits = torch.tensor([[0.0]])
-        default_model.score_generator = ConstantGenerator(mask_logits)
-        explicit_model.score_generator = ConstantGenerator(mask_logits)
+        default_model.model = ConstantGenerator(mask_logits)
+        explicit_model.model = ConstantGenerator(mask_logits)
 
         default_output = default_model(weight_params, logits)
         explicit_output = explicit_model(weight_params, logits)
@@ -1524,7 +1524,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         )
         narrow_model = DiagonalAxisMask(narrow_cfg)
         narrow_model.eval()
-        narrow_model.score_generator = ConstantGenerator(mask_logits)
+        narrow_model.model = ConstantGenerator(mask_logits)
         narrow_output = narrow_model(weight_params, logits)
 
         wide_cfg = self.preset(
@@ -1535,7 +1535,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         )
         wide_model = DiagonalAxisMask(wide_cfg)
         wide_model.eval()
-        wide_model.score_generator = ConstantGenerator(mask_logits)
+        wide_model.model = ConstantGenerator(mask_logits)
         wide_output = wide_model(weight_params, logits)
 
         narrow_near_binary = (
@@ -1644,7 +1644,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
             [[[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [3.0, 3.0, 3.0], [4.0, 4.0, 4.0]]]
         )
         mask_logits = torch.tensor([[10.0, -10.0, 10.0, -10.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_per_axis_output(
@@ -1683,7 +1683,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
             [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [1.0, 1.0, 1.0]]
         )
         mask_logits = torch.tensor([[10.0, -10.0, 10.0, -10.0]])
-        model.score_generator = ConstantGenerator(mask_logits)
+        model.model = ConstantGenerator(mask_logits)
 
         output = model(weight_params, logits)
         expected = self._expected_per_axis_output(
@@ -1722,7 +1722,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         model.model_config = InvalidGeneratorConfig()
 
         with self.assertRaises(TypeError):
-            model._init_generator(1)
+            model._init_model(1)
 
     def test_gradients_flow_to_generator_parameters_for_all_enabled_options(self):
         batch_size = 2
