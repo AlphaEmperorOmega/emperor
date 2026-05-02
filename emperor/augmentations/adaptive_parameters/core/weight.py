@@ -92,7 +92,7 @@ class DynamicWeightAbstract(Module):
         self.register_buffer("decay_step", torch.zeros(1))
         self.register_buffer("warmup_step", torch.zeros(1))
 
-    def _init_model(self, overrides: "LayerStackConfig") -> DepthMappingLayerStack:
+    def _init_model(self, overrides: "DepthMappingHandlerConfig") -> DepthMappingLayerStack:
         return DepthMappingLayerStack(self.cfg, overrides)
 
     def forward(
@@ -223,7 +223,7 @@ class SingleModelDynamicWeight(DynamicWeightAbstract):
         self.model = self._init_model()
 
     def _init_model(self) -> DepthMappingLayerStack:
-        model_overrides = LayerStackConfig(
+        model_overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim,
         )
@@ -253,7 +253,7 @@ class DualModelDynamicWeight(DynamicWeightAbstract):
         self.output_model = self.__init_output_model()
 
     def __init_input_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
+        overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim,
         )
@@ -291,14 +291,14 @@ class LowRankDynamicWeight(DynamicWeightAbstract):
         self.output_model = self.__init_output_model()
 
     def __init_input_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
+        overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim,
         )
         return self._init_model(overrides)
 
     def __init_output_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
+        overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
@@ -330,7 +330,7 @@ class HypernetworkDynamicWeight(DynamicWeightAbstract):
         self.model = self._init_model()
 
     def _init_model(self) -> DepthMappingLayerStack:
-        model_overrides = LayerStackConfig(
+        model_overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim * self.output_dim,
         )
@@ -372,7 +372,7 @@ class LayeredWeightedBankDynamicWeight(DynamicWeightAbstract):
         self.model = self._init_model()
 
     def _init_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
+        overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim * self.bank_expansion_factor,
         )
@@ -422,7 +422,7 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
         self.model = self._init_model()
 
     def _init_model(self) -> DepthMappingLayerStack:
-        overrides = LayerStackConfig(
+        overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
             output_dim=self.input_dim * self.bank_expansion_factor,
         )
