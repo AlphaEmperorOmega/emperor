@@ -279,21 +279,6 @@ class DualModelDynamicWeight(DynamicWeightAbstract):
         return decayed_weight_params + dynamic_params
 
 
-@DynamicWeightAbstract.register(DynamicWeightOptions.DUAL_MODEL_MASK)
-class DualModelMaskDynamicWeight(DualModelDynamicWeight):
-    def forward(
-        self,
-        weight_params: Tensor,
-        X: Tensor,
-    ) -> Tensor:
-        input_vectors = self.input_model(X)
-        output_vectors = self.output_model(X)
-        outer_product = self._compute_outer_product(input_vectors, output_vectors)
-        mask = self._compute_dynamic_weights(outer_product)
-        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
-        return decayed_weight_params * mask
-
-
 @DynamicWeightAbstract.register(DynamicWeightOptions.LOW_RANK)
 class LowRankDynamicWeight(DynamicWeightAbstract):
     def __init__(

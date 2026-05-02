@@ -31,7 +31,6 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     SoftWeightedBankDynamicWeight,
     DynamicWeightConfig,
     DynamicWeightAbstract,
-    DualModelMaskDynamicWeight,
 )
 
 
@@ -128,19 +127,6 @@ class TestWeightHandlerForward(unittest.TestCase):
         weight_params = Module()._init_parameter_bank((input_dim, output_dim))
         input_tensor = torch.randn(batch_size, input_dim)
         model = LowRankDynamicWeight(cfg)
-        output = model(weight_params, input_tensor)
-        self.assertEqual(output.shape, (batch_size, input_dim, output_dim))
-        self.assertIsInstance(output, torch.Tensor)
-        self.assertFalse(torch.all(output == 0))
-
-    def test_weight_mask_handler_forward(self):
-        batch_size = 2
-        input_dim = 12
-        output_dim = 24
-        cfg = self.preset(input_dim, output_dim)
-        weight_params = Module()._init_parameter_bank((input_dim, output_dim))
-        input_tensor = torch.randn(batch_size, input_dim)
-        model = DualModelMaskDynamicWeight(cfg)
         output = model(weight_params, input_tensor)
         self.assertEqual(output.shape, (batch_size, input_dim, output_dim))
         self.assertIsInstance(output, torch.Tensor)
