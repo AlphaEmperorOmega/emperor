@@ -80,10 +80,6 @@ class DynamicBiasAbstract(Module):
         DynamicBiasValidator.validate_generator_model(generator_model)
         return generator_model
 
-    def _require_bias_params(self, bias_params: Tensor) -> Tensor:
-        DynamicBiasValidator.ensure_parameters_exist(bias_params)
-        return bias_params
-
     def _maybe_apply_bias_decay(self, bias_params: Tensor) -> Tensor:
         if (
             self.decay_schedule_option is None
@@ -131,7 +127,7 @@ class AffineTransformDynamicBias(DynamicBiasAbstract):
         self.model = self._init_model(affine_parameter_dim)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        bias_params = self._require_bias_params(bias_params)
+        DynamicBiasValidator.ensure_parameters_exist(bias_params)
         affine_parameters = Layer.forward_with_state(self.model, logits)
         bias_scale, bias_offset = affine_parameters.chunk(2, dim=-1)
         return bias_scale * bias_params + bias_offset
@@ -148,7 +144,7 @@ class AdditiveDynamicBias(DynamicBiasAbstract):
         self.model = self._init_model(self.output_dim)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        bias_params = self._require_bias_params(bias_params)
+        DynamicBiasValidator.ensure_parameters_exist(bias_params)
         bias_params = self._maybe_apply_bias_decay(bias_params)
         generated_bias_offset = Layer.forward_with_state(self.model, logits)
         return bias_params + generated_bias_offset
@@ -165,7 +161,7 @@ class MultiplicativeDynamicBias(DynamicBiasAbstract):
         self.model = self._init_model(self.output_dim)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        bias_params = self._require_bias_params(bias_params)
+        DynamicBiasValidator.ensure_parameters_exist(bias_params)
         bias_scale = Layer.forward_with_state(self.model, logits)
         return bias_params * bias_scale
 
@@ -181,7 +177,7 @@ class SigmoidGatedDynamicBias(DynamicBiasAbstract):
         self.model = self._init_model(self.output_dim)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        bias_params = self._require_bias_params(bias_params)
+        DynamicBiasValidator.ensure_parameters_exist(bias_params)
         gate = torch.sigmoid(Layer.forward_with_state(self.model, logits))
         return bias_params * gate
 
@@ -197,7 +193,7 @@ class TanhGatedDynamicBias(DynamicBiasAbstract):
         self.model = self._init_model(self.output_dim)
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
-        bias_params = self._require_bias_params(bias_params)
+        DynamicBiasValidator.ensure_parameters_exist(bias_params)
         gate = torch.tanh(Layer.forward_with_state(self.model, logits))
         return bias_params * gate
 
