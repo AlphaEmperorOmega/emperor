@@ -96,21 +96,6 @@ class AdaptiveGeneratorValidatorBase:
 class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     OPTIONAL_FIELDS = {"bank_expansion_factor"}
 
-    BANK_WEIGHT_OPTIONS = None
-
-    @classmethod
-    def _get_bank_weight_options(cls) -> set:
-        if cls.BANK_WEIGHT_OPTIONS is None:
-            from emperor.augmentations.adaptive_parameters.options import (
-                DynamicWeightOptions,
-            )
-
-            cls.BANK_WEIGHT_OPTIONS = {
-                DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                DynamicWeightOptions.SOFT_WEIGHTED_BANK,
-            }
-        return cls.BANK_WEIGHT_OPTIONS
-
     @staticmethod
     def validate(model: "DynamicWeightAbstract") -> None:
         DynamicWeightValidator.validate_required_fields(model.cfg)
