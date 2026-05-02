@@ -235,6 +235,31 @@ class TopSliceAxisMask(AxisMaskAbstract):
         return ((margins + width / 2.0) / width).clamp(0.0, 1.0)
 
 
+@AxisMaskAbstract.register(AxisMaskOptions.OUTER_PRODUCT)
+class OuterProductMask(AxisMaskAbstract):
+    def __init__(
+        self,
+        cfg: AxisMaskConfig,
+        overrides: AxisMaskConfig | None = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.input_model = self._init_model(self.input_dim)
+        self.output_model = self._init_model(self.output_dim)
+
+    def forward(
+        self,
+        weight_params: Tensor,
+        logits: Tensor,
+    ) -> Tensor:
+        input_vectors = Layer.forward_with_state(self.input_model, logits)
+        output_vectors = Layer.forward_with_state(self.output_model, logits)
+        outer_product = torch.einsum("bi,bj->bij", input_vectors, output_vectors)
+        scores = torch.sigmoid(outer_product)
+        hard_mask = self._compute_hard_mask(scores)
+        soft_mask = self._compute_soft_mask(scores)
+        return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
+
+
 @AxisMaskAbstract.register(AxisMaskOptions.DIAGONAL)
 class DiagonalAxisMask(AxisMaskAbstract):
     def __init__(

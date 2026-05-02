@@ -20,6 +20,7 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskAbstract,
     AxisMaskConfig,
     DiagonalAxisMask,
+    OuterProductMask,
     PerAxisScoreMask,
     TopSliceAxisMask,
     WeightInformedScoreAxisMask,
@@ -1791,3 +1792,139 @@ class TestAxisMaskHandlers(unittest.TestCase):
                         self.assertEqual(
                             output.shape, (batch_size, input_dim, output_dim)
                         )
+
+
+class TestOuterProductMask(unittest.TestCase):
+    def _build_outer_product_model(
+        self,
+        input_dim: int,
+        output_dim: int,
+        mask_threshold: float = 0.5,
+        mask_surrogate_scale: float = 10.0,
+        mask_floor: float = 0.0,
+    ) -> OuterProductMask:
+        cfg = TestAxisMaskHandlers().preset(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            model_type=AxisMaskOptions.OUTER_PRODUCT,
+            mask_threshold=mask_threshold,
+            mask_surrogate_scale=mask_surrogate_scale,
+            mask_floor=mask_floor,
+        )
+        return cfg.build()
+
+    def test_per_sample_mask_differs(self):
+        batch_size = 2
+        input_dim = 3
+        output_dim = 3
+        model = self._build_outer_product_model(input_dim, output_dim)
+        input_logits = torch.tensor(
+            [
+                [5.0, -5.0, 5.0],
+                [5.0, 5.0, -5.0],
+            ]
+        )
+        output_logits = torch.tensor(
+            [
+                [5.0, -5.0, 5.0],
+                [5.0, -5.0, 5.0],
+            ]
+        )
+        model.input_model = ConstantGenerator(input_logits)
+        model.output_model = ConstantGenerator(output_logits)
+        weight_params = torch.ones(batch_size, input_dim, output_dim)
+        logits = torch.randn(batch_size, input_dim)
+        output = model(weight_params, logits)
+
+        sample_zero_pattern = (output[0] > 1e-3).float()
+        sample_one_pattern = (output[1] > 1e-3).float()
+        self.assertFalse(torch.equal(sample_zero_pattern, sample_one_pattern))
+
+    def test_zero_threshold_keeps_all_cells(self):
+        batch_size = 2
+        input_dim = 4
+        output_dim = 5
+        model = self._build_outer_product_model(
+            input_dim,
+            output_dim,
+            mask_threshold=0.0,
+            mask_surrogate_scale=0.0,
+        )
+        weight_params = torch.ones(batch_size, input_dim, output_dim)
+        logits = torch.randn(batch_size, input_dim)
+        output = model(weight_params, logits)
+        self.assertTrue(torch.all(output > 0.0))
+
+    def test_high_threshold_sparsifies(self):
+        batch_size = 2
+        input_dim = 3
+        output_dim = 3
+        model = self._build_outer_product_model(
+            input_dim,
+            output_dim,
+            mask_threshold=0.99,
+            mask_surrogate_scale=20.0,
+        )
+        positive_logits = torch.full((batch_size, input_dim), 0.1)
+        negative_logits = torch.full((batch_size, output_dim), -10.0)
+        model.input_model = ConstantGenerator(positive_logits)
+        model.output_model = ConstantGenerator(negative_logits)
+        weight_params = torch.ones(batch_size, input_dim, output_dim)
+        logits = torch.randn(batch_size, input_dim)
+        output = model(weight_params, logits)
+        zero_count = (output.abs() < 1e-6).sum().item()
+        total_count = output.numel()
+        self.assertGreater(zero_count, total_count // 2)
+
+    def test_floor_attenuates_dropped_cells(self):
+        batch_size = 1
+        input_dim = 3
+        output_dim = 3
+        floor_value = 0.25
+        model = self._build_outer_product_model(
+            input_dim,
+            output_dim,
+            mask_threshold=0.99,
+            mask_surrogate_scale=20.0,
+            mask_floor=floor_value,
+        )
+        positive_logits = torch.full((batch_size, input_dim), 0.1)
+        negative_logits = torch.full((batch_size, output_dim), -10.0)
+        model.input_model = ConstantGenerator(positive_logits)
+        model.output_model = ConstantGenerator(negative_logits)
+        weight_params = torch.ones(batch_size, input_dim, output_dim)
+        logits = torch.randn(batch_size, input_dim)
+        output = model(weight_params, logits)
+        self.assertTrue(torch.all(output > 0.0))
+        self.assertTrue(torch.all(output <= weight_params * 1.0 + 1e-6))
+        self.assertTrue(torch.any(output < floor_value + 1e-3))
+
+    def test_gradient_flow_through_both_generators(self):
+        batch_size = 2
+        input_dim = 4
+        output_dim = 5
+        model = self._build_outer_product_model(
+            input_dim,
+            output_dim,
+            mask_threshold=0.5,
+            mask_surrogate_scale=5.0,
+        )
+        weight_params = torch.randn(
+            batch_size, input_dim, output_dim, requires_grad=True
+        )
+        logits = torch.randn(batch_size, input_dim, requires_grad=True)
+        output = model(weight_params, logits)
+        output.sum().backward()
+        input_grads = [
+            param.grad
+            for param in model.input_model.parameters()
+            if param.requires_grad
+        ]
+        output_grads = [
+            param.grad
+            for param in model.output_model.parameters()
+            if param.requires_grad
+        ]
+        self.assertTrue(any(grad is not None for grad in input_grads))
+        self.assertTrue(any(grad is not None for grad in output_grads))
+        self.assertIsNotNone(weight_params.grad)

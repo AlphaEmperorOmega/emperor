@@ -60,6 +60,7 @@ class AxisMaskOptions(Enum):
     PER_AXIS_SCORE = 2
     TOP_SLICE = 3
     DIAGONAL = 4
+    OUTER_PRODUCT = 5
 
 
 class MaskDimensionOptions(Enum):
