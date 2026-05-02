@@ -630,6 +630,41 @@ class TestWeightHandlerForward(unittest.TestCase):
         result = model._maybe_apply_weight_decay(weight_params)
         self.assertFalse(torch.equal(result, weight_params))
 
+    def test_decay_counters_frozen_in_eval_mode(self):
+        input_dim = 12
+        output_dim = 24
+        warmup_batches = 2
+        weight_params = Module()._init_parameter_bank((input_dim, output_dim))
+        cfg = self.preset(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            decay_rate=0.1,
+            decay_warmup_batches=warmup_batches,
+        )
+        model = cfg.build()
+
+        model.eval()
+        for _ in range(3):
+            model._maybe_apply_weight_decay(weight_params)
+        self.assertEqual(model.warmup_step.item(), 0)
+        self.assertEqual(model.decay_step.item(), 0)
+
+        model.train()
+        for _ in range(warmup_batches):
+            model._maybe_apply_weight_decay(weight_params)
+        model._maybe_apply_weight_decay(weight_params)
+        frozen_decay_step = model.decay_step.clone()
+        frozen_warmup_step = model.warmup_step.clone()
+
+        model.eval()
+        baseline = model._maybe_apply_weight_decay(weight_params)
+        for _ in range(3):
+            result = model._maybe_apply_weight_decay(weight_params)
+            self.assertTrue(torch.equal(result, baseline))
+        self.assertTrue(torch.equal(model.decay_step, frozen_decay_step))
+        self.assertTrue(torch.equal(model.warmup_step, frozen_warmup_step))
+
     def test_weight_decay_schedule_raises_on_unknown_schedule(self):
         input_dim = 12
         output_dim = 24
