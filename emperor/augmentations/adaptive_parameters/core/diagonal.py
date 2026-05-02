@@ -5,9 +5,7 @@ from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass
 from emperor.base.utils import ConfigBase, Module, optional_field
-from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DynamicDiagonalValidator,
 )
@@ -21,18 +19,35 @@ class DynamicDiagonalConfig(ConfigBase):
     output_dim: int | None = optional_field(
         "Output dimensionality of the dynamic diagonal module."
     )
-    model_type: DynamicDiagonalOptions | None = optional_field(
-        "Dynamic diagonal strategy used to generate input-dependent diagonal updates."
-    )
     model_config: LayerStackConfig | None = optional_field(
         "Configuration for the internal generator network."
     )
 
     def _registry_owner(self) -> type:
-        return DynamicDiagonalAbstract
+        raise ValueError(
+            f"DynamicDiagonalConfig is abstract and has no registered "
+            f"DynamicDiagonal class; instantiate a concrete leaf config instead."
+        )
 
 
-@subclass_registry
+@dataclass
+class StandardDynamicDiagonalConfig(DynamicDiagonalConfig):
+    def _registry_owner(self) -> type:
+        return StandardDynamicDiagonal
+
+
+@dataclass
+class AntiDynamicDiagonalConfig(DynamicDiagonalConfig):
+    def _registry_owner(self) -> type:
+        return AntiDynamicDiagonal
+
+
+@dataclass
+class CombinedDynamicDiagonalConfig(DynamicDiagonalConfig):
+    def _registry_owner(self) -> type:
+        return CombinedDynamicDiagonal
+
+
 class DynamicDiagonalAbstract(Module):
     def __init__(
         self,
@@ -65,8 +80,8 @@ class DynamicDiagonalAbstract(Module):
         DynamicDiagonalValidator.validate_generator_model(generator_model)
         return generator_model
 
-    def forward(self, weight_params: Tensor) -> Tensor:
-        return weight_params
+    def forward(self, weight_params: Tensor, logits: Tensor) -> Tensor:
+        raise NotImplementedError(f"{type(self).__name__} must implement forward().")
 
     def __convert_to_diagonal_matrix(
         self,
@@ -82,12 +97,11 @@ class DynamicDiagonalAbstract(Module):
         return self.__convert_to_diagonal_matrix(vectors)
 
 
-@DynamicDiagonalAbstract.register(DynamicDiagonalOptions.DIAGONAL)
 class StandardDynamicDiagonal(DynamicDiagonalAbstract):
     def __init__(
         self,
-        cfg: DynamicDiagonalConfig,
-        overrides: DynamicDiagonalConfig | None = None,
+        cfg: StandardDynamicDiagonalConfig,
+        overrides: StandardDynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self._init_model()
@@ -97,12 +111,11 @@ class StandardDynamicDiagonal(DynamicDiagonalAbstract):
         return weight_params + diagonal_matrices
 
 
-@DynamicDiagonalAbstract.register(DynamicDiagonalOptions.ANTI_DIAGONAL)
 class AntiDynamicDiagonal(DynamicDiagonalAbstract):
     def __init__(
         self,
-        cfg: DynamicDiagonalConfig,
-        overrides: DynamicDiagonalConfig | None = None,
+        cfg: AntiDynamicDiagonalConfig,
+        overrides: AntiDynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self._init_model()
@@ -113,12 +126,11 @@ class AntiDynamicDiagonal(DynamicDiagonalAbstract):
         return weight_params + anti_diagonal_matrix
 
 
-@DynamicDiagonalAbstract.register(DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL)
 class CombinedDynamicDiagonal(DynamicDiagonalAbstract):
     def __init__(
         self,
-        cfg: DynamicDiagonalConfig,
-        overrides: DynamicDiagonalConfig | None = None,
+        cfg: CombinedDynamicDiagonalConfig,
+        overrides: CombinedDynamicDiagonalConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.diagonal_model = StandardDynamicDiagonal(self.cfg)

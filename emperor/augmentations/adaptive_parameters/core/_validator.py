@@ -103,26 +103,7 @@ class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         DynamicWeightValidator.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
-        DynamicWeightValidator.validate_no_bank_expansion_factor(model)
         AdaptiveGeneratorValidatorBase.validate_decay_parameters(model.cfg)
-
-    @staticmethod
-    def validate_no_bank_expansion_factor(model: "DynamicWeightAbstract") -> None:
-        from emperor.augmentations.adaptive_parameters.core.weight import (
-            LayeredWeightedBankDynamicWeight,
-            SoftWeightedBankDynamicWeight,
-        )
-
-        if isinstance(
-            model, (LayeredWeightedBankDynamicWeight, SoftWeightedBankDynamicWeight)
-        ):
-            return
-        if model.cfg.bank_expansion_factor is not None:
-            raise ValueError(
-                f"{type(model).__name__} does not support bank_expansion_factor. "
-                f"This parameter is only valid for LAYERED_WEIGHTED_BANK and SOFT_WEIGHTED_BANK, "
-                f"received {model.cfg.bank_expansion_factor!r}."
-            )
 
     @staticmethod
     def validate_bank_expansion_factor(model: "DynamicWeightAbstract") -> None:
@@ -153,12 +134,7 @@ class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
 
 class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
-    OPTIONAL_FIELDS = {
-        "bank_expansion_factor",
-        "decay_schedule",
-        "decay_rate",
-        "decay_warmup_batches",
-    }
+    OPTIONAL_FIELDS = {"bank_expansion_factor"}
 
     @staticmethod
     def validate(model: "DynamicBiasAbstract") -> None:
@@ -167,36 +143,26 @@ class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         DynamicBiasValidator.validate_dimensions(
             input_dim=model.cfg.input_dim, output_dim=model.cfg.output_dim
         )
-        DynamicBiasValidator.validate_no_bank_expansion_factor(model)
         AdaptiveGeneratorValidatorBase.validate_decay_parameters(model.cfg)
 
     @staticmethod
-    def validate_no_bank_expansion_factor(model: "DynamicBiasAbstract") -> None:
-        from emperor.augmentations.adaptive_parameters.core.bias import (
-            WeightedBankDynamicBias,
+    def validate_bank_expansion_factor(model: "DynamicBiasAbstract") -> None:
+        from emperor.augmentations.adaptive_parameters.options import (
+            BankExpansionFactorOptions,
         )
 
-        if isinstance(model, WeightedBankDynamicBias):
-            return
-        if model.cfg.bank_expansion_factor is not None:
-            raise ValueError(
-                f"{type(model).__name__} does not support bank_expansion_factor. "
-                f"This parameter is only valid for WEIGHTED_BANK, "
-                f"received {model.cfg.bank_expansion_factor!r}."
-            )
-
-    @staticmethod
-    def validate_bank_expansion_factor(model: "DynamicBiasAbstract") -> None:
         factor = model.cfg.bank_expansion_factor
-        if factor is None or not isinstance(factor, int):
+        if factor is None or not isinstance(factor, BankExpansionFactorOptions):
             raise ValueError(
-                f"{type(model).__name__} requires bank_expansion_factor to be an integer value, "
+                f"{type(model).__name__} requires bank_expansion_factor to be a "
+                f"BankExpansionFactorOptions value, "
                 f"received {factor!r}."
             )
-        if factor <= 0:
+        if factor == BankExpansionFactorOptions.DISABLED:
             raise ValueError(
                 f"{type(model).__name__} requires bank_expansion_factor > 0, "
-                f"received {factor!r}."
+                f"received {factor}. "
+                f"Use FACTOR_OF_ONE, FACTOR_OF_TWO, FACTOR_OF_THREE, or FACTOR_OF_FOUR."
             )
 
     @staticmethod
@@ -230,9 +196,10 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         AxisMaskValidator.validate_mask_threshold(model.cfg.mask_threshold)
         AxisMaskValidator.validate_mask_surrogate_scale(model.cfg.mask_surrogate_scale)
         AxisMaskValidator.validate_mask_floor(model.cfg.mask_floor)
-        if model.cfg.mask_transition_width is not None:
+        mask_transition_width = getattr(model.cfg, "mask_transition_width", None)
+        if mask_transition_width is not None:
             AxisMaskValidator.validate_mask_transition_width(
-                model.cfg.mask_transition_width
+                mask_transition_width
             )
 
     @staticmethod

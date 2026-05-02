@@ -20,10 +20,15 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskAbstract,
     AxisMaskConfig,
     DiagonalAxisMask,
+    DiagonalAxisMaskConfig,
     OuterProductMask,
+    OuterProductMaskConfig,
     PerAxisScoreMask,
+    PerAxisScoreMaskConfig,
     TopSliceAxisMask,
+    TopSliceAxisMaskConfig,
     WeightInformedScoreAxisMask,
+    WeightInformedScoreAxisMaskConfig,
 )
 
 
@@ -50,12 +55,33 @@ class ConstantGenerator(nn.Module):
 
 
 class TestAxisMaskHandlers(unittest.TestCase):
+    def _config_cls_for_option(
+        self, option: AxisMaskOptions
+    ) -> type[AxisMaskConfig]:
+        return {
+            AxisMaskOptions.WEIGHT_INFORMED_SCORE: WeightInformedScoreAxisMaskConfig,
+            AxisMaskOptions.PER_AXIS_SCORE: PerAxisScoreMaskConfig,
+            AxisMaskOptions.TOP_SLICE: TopSliceAxisMaskConfig,
+            AxisMaskOptions.OUTER_PRODUCT: OuterProductMaskConfig,
+            AxisMaskOptions.DIAGONAL: DiagonalAxisMaskConfig,
+        }[option]
+
+    def mask_cases(self) -> list[tuple[type[AxisMaskConfig], type]]:
+        return [
+            (WeightInformedScoreAxisMaskConfig, WeightInformedScoreAxisMask),
+            (PerAxisScoreMaskConfig, PerAxisScoreMask),
+            (TopSliceAxisMaskConfig, TopSliceAxisMask),
+            (OuterProductMaskConfig, OuterProductMask),
+            (DiagonalAxisMaskConfig, DiagonalAxisMask),
+        ]
+
     def preset(
         self,
         input_dim: int = 4,
         hidden_dim: int = 8,
         output_dim: int = 3,
         bias_flag: bool = True,
+        config_cls: type[AxisMaskConfig] | None = None,
         model_type: AxisMaskOptions = AxisMaskOptions.WEIGHT_INFORMED_SCORE,
         mask_dimension_option: MaskDimensionOptions = MaskDimensionOptions.ROW,
         mask_threshold: float = 0.5,
@@ -63,15 +89,13 @@ class TestAxisMaskHandlers(unittest.TestCase):
         mask_floor: float = 0.0,
         mask_transition_width: float | None = None,
     ) -> AxisMaskConfig:
-        return AxisMaskConfig(
+        config_cls = config_cls or self._config_cls_for_option(model_type)
+        common_kwargs = dict(
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=model_type,
-            mask_dimension_option=mask_dimension_option,
             mask_threshold=mask_threshold,
             mask_surrogate_scale=mask_surrogate_scale,
             mask_floor=mask_floor,
-            mask_transition_width=mask_transition_width,
             model_config=LayerStackConfig(
                 input_dim=input_dim,
                 hidden_dim=hidden_dim,
@@ -98,6 +122,26 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 ),
             ),
         )
+        if config_cls in {
+            WeightInformedScoreAxisMaskConfig,
+            PerAxisScoreMaskConfig,
+        }:
+            return config_cls(
+                **common_kwargs,
+                mask_dimension_option=mask_dimension_option,
+            )
+        if config_cls is TopSliceAxisMaskConfig:
+            return config_cls(
+                **common_kwargs,
+                mask_dimension_option=mask_dimension_option,
+                mask_transition_width=mask_transition_width,
+            )
+        if config_cls is DiagonalAxisMaskConfig:
+            return config_cls(
+                **common_kwargs,
+                mask_transition_width=mask_transition_width,
+            )
+        return config_cls(**common_kwargs)
 
     def _axis_hybrid_mask(
         self,
@@ -1577,32 +1621,60 @@ class TestAxisMaskHandlers(unittest.TestCase):
         self.assertTrue(len(nonzero_grads) > 0)
         self.assertIsNotNone(weight_params.grad)
 
-    def test_build_creates_model_for_each_option(self):
-        for option in AxisMaskOptions:
-            with self.subTest(option=option):
-                cfg = self.preset(model_type=option)
-                if option == AxisMaskOptions.DISABLED:
-                    with self.assertRaises(ValueError):
-                        cfg.build()
-                else:
-                    model = cfg.build()
-                    self.assertIsInstance(model, AxisMaskAbstract)
+    def test_build_creates_model_for_each_leaf_config(self):
+        for config_cls, _ in self.mask_cases():
+            with self.subTest(config_cls=config_cls.__name__):
+                model = self.preset(config_cls=config_cls).build()
+                self.assertIsInstance(model, AxisMaskAbstract)
 
     def test_enum_uses_per_axis_score_name(self):
         self.assertTrue(hasattr(AxisMaskOptions, "PER_AXIS_SCORE"))
         legacy_name = "PER_" + "ROW_SCORE"
         self.assertFalse(hasattr(AxisMaskOptions, legacy_name))
 
-    def test_registry_maps_each_option_to_distinct_mask_class(self):
-        for option, model_cls in (
-            (AxisMaskOptions.WEIGHT_INFORMED_SCORE, WeightInformedScoreAxisMask),
-            (AxisMaskOptions.PER_AXIS_SCORE, PerAxisScoreMask),
-            (AxisMaskOptions.TOP_SLICE, TopSliceAxisMask),
-            (AxisMaskOptions.DIAGONAL, DiagonalAxisMask),
-        ):
-            with self.subTest(option=option):
-                cfg = self.preset(model_type=option)
+    def test_build_maps_each_leaf_config_to_distinct_mask_class(self):
+        for config_cls, model_cls in self.mask_cases():
+            with self.subTest(config_cls=config_cls.__name__):
+                cfg = self.preset(config_cls=config_cls)
                 self.assertIsInstance(cfg.build(), model_cls)
+
+    def test_abstract_mask_config_cannot_build(self):
+        cfg = self.preset(config_cls=AxisMaskConfig)
+
+        with self.assertRaises(ValueError):
+            cfg.build()
+
+    def test_mask_dimension_field_absent_on_outer_product_and_diagonal(self):
+        for config_cls in (OuterProductMaskConfig, DiagonalAxisMaskConfig):
+            with self.subTest(config_cls=config_cls.__name__):
+                with self.assertRaises(TypeError):
+                    config_cls(
+                        input_dim=4,
+                        output_dim=3,
+                        mask_threshold=0.5,
+                        mask_surrogate_scale=5.0,
+                        mask_floor=0.0,
+                        mask_dimension_option=MaskDimensionOptions.ROW,
+                        model_config=self.preset().model_config,
+                    )
+
+    def test_mask_transition_width_field_absent_on_non_transition_leaves(self):
+        for config_cls in (
+            WeightInformedScoreAxisMaskConfig,
+            PerAxisScoreMaskConfig,
+            OuterProductMaskConfig,
+        ):
+            with self.subTest(config_cls=config_cls.__name__):
+                with self.assertRaises(TypeError):
+                    config_cls(
+                        input_dim=4,
+                        output_dim=3,
+                        mask_threshold=0.5,
+                        mask_surrogate_scale=5.0,
+                        mask_floor=0.0,
+                        mask_transition_width=2.0,
+                        model_config=self.preset().model_config,
+                    )
 
     def test_invalid_mask_threshold_raises(self):
         cfg = self.preset(mask_threshold=1.5)
@@ -1699,10 +1771,9 @@ class TestAxisMaskHandlers(unittest.TestCase):
         self.assertTrue(torch.allclose(output, expected, atol=1e-6))
 
     def test_invalid_dimensions_raise(self):
-        cfg = AxisMaskConfig(
+        cfg = WeightInformedScoreAxisMaskConfig(
             input_dim=0,
             output_dim=3,
-            model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
             mask_dimension_option=MaskDimensionOptions.ROW,
             model_config=self.preset().model_config,
             mask_threshold=0.5,
@@ -1730,21 +1801,16 @@ class TestAxisMaskHandlers(unittest.TestCase):
         input_dim = 4
         output_dim = 3
 
-        for option in AxisMaskOptions:
-            with self.subTest(option=option):
+        for config_cls, _ in self.mask_cases():
+            with self.subTest(config_cls=config_cls.__name__):
                 torch.manual_seed(0)
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=option,
+                    config_cls=config_cls,
                     mask_threshold=0.5,
                     mask_surrogate_scale=5.0,
                 )
-                if option == AxisMaskOptions.DISABLED:
-                    with self.assertRaises(ValueError):
-                        cfg.build()
-                    continue
-
                 model = cfg.build()
                 torch.manual_seed(123)
                 logits = torch.randn(batch_size, input_dim)
@@ -1768,13 +1834,11 @@ class TestAxisMaskHandlers(unittest.TestCase):
         input_dims = [4, 3]
         output_dims = [3, 5]
 
-        for option in AxisMaskOptions:
-            if option == AxisMaskOptions.DISABLED:
-                continue
+        for config_cls, _ in self.mask_cases():
             for mask_dimension_option in MaskDimensionOptions:
                 for input_dim, output_dim in zip(input_dims, output_dims):
                     with self.subTest(
-                        option=option,
+                        config_cls=config_cls.__name__,
                         mask_dimension_option=mask_dimension_option,
                         input_dim=input_dim,
                         output_dim=output_dim,
@@ -1782,7 +1846,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                         cfg = self.preset(
                             input_dim=input_dim,
                             output_dim=output_dim,
-                            model_type=option,
+                            config_cls=config_cls,
                             mask_dimension_option=mask_dimension_option,
                         )
                         model = cfg.build()

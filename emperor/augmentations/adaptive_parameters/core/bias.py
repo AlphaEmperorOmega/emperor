@@ -4,10 +4,9 @@ from torch import Tensor
 from dataclasses import dataclass
 from torch.nn import Sequential
 from emperor.base.utils import ConfigBase, Module, optional_field
-from emperor.base.registry import subclass_registry
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
+    BankExpansionFactorOptions,
     WeightDecayScheduleOptions,
 )
 from emperor.augmentations.adaptive_parameters.core._validator import (
@@ -26,12 +25,6 @@ class DynamicBiasConfig(ConfigBase):
     bias_flag: bool | None = optional_field(
         "Indicates whether the associated linear layer includes a bias parameter."
     )
-    model_type: DynamicBiasOptions | None = optional_field(
-        "Dynamic bias strategy used to generate input-dependent bias updates."
-    )
-    bank_expansion_factor: int | None = optional_field(
-        "Number of entries in the bank used by the WEIGHTED_BANK bias strategy."
-    )
     decay_schedule: WeightDecayScheduleOptions | None = optional_field(
         "Schedule used to decay the base bias parameters across forward passes."
     )
@@ -46,10 +39,58 @@ class DynamicBiasConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        return DynamicBiasAbstract
+        raise ValueError(
+            f"DynamicBiasConfig is abstract and has no registered "
+            f"DynamicBias class; instantiate a concrete leaf config instead."
+        )
 
 
-@subclass_registry
+@dataclass
+class AffineTransformDynamicBiasConfig(DynamicBiasConfig):
+    def _registry_owner(self) -> type:
+        return AffineTransformDynamicBias
+
+
+@dataclass
+class AdditiveDynamicBiasConfig(DynamicBiasConfig):
+    def _registry_owner(self) -> type:
+        return AdditiveDynamicBias
+
+
+@dataclass
+class MultiplicativeDynamicBiasConfig(DynamicBiasConfig):
+    def _registry_owner(self) -> type:
+        return MultiplicativeDynamicBias
+
+
+@dataclass
+class SigmoidGatedDynamicBiasConfig(DynamicBiasConfig):
+    def _registry_owner(self) -> type:
+        return SigmoidGatedDynamicBias
+
+
+@dataclass
+class TanhGatedDynamicBiasConfig(DynamicBiasConfig):
+    def _registry_owner(self) -> type:
+        return TanhGatedDynamicBias
+
+
+@dataclass
+class GeneratorDynamicBiasConfig(DynamicBiasConfig):
+    def _registry_owner(self) -> type:
+        return GeneratorDynamicBias
+
+
+@dataclass
+class WeightedBankDynamicBiasConfig(DynamicBiasConfig):
+    bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
+        "Expansion factor for bank-based bias strategies."
+    )
+
+    def _registry_owner(self) -> type:
+        return WeightedBankDynamicBias
+
+
 class DynamicBiasAbstract(Module):
     def __init__(
         self,
@@ -62,8 +103,6 @@ class DynamicBiasAbstract(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.bias_flag = self.cfg.bias_flag
-        self.model_type = self.cfg.model_type
-        self.bank_expansion_factor = self.cfg.bank_expansion_factor
         self.decay_schedule_option = self.cfg.decay_schedule
         self.decay_rate = self.cfg.decay_rate
         self.decay_warmup_batches = self.cfg.decay_warmup_batches or 0
@@ -115,12 +154,11 @@ class DynamicBiasAbstract(Module):
                 raise ValueError(f"Unsupported decay_schedule value: {schedule!r}.")
 
 
-@DynamicBiasAbstract.register(DynamicBiasOptions.SCALE_AND_OFFSET)
 class AffineTransformDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: DynamicBiasConfig,
-        overrides: DynamicBiasConfig | None = None,
+        cfg: AffineTransformDynamicBiasConfig,
+        overrides: AffineTransformDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         affine_parameter_dim = 2
@@ -133,12 +171,11 @@ class AffineTransformDynamicBias(DynamicBiasAbstract):
         return bias_scale * bias_params + bias_offset
 
 
-@DynamicBiasAbstract.register(DynamicBiasOptions.ADDITIVE)
 class AdditiveDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: DynamicBiasConfig,
-        overrides: DynamicBiasConfig | None = None,
+        cfg: AdditiveDynamicBiasConfig,
+        overrides: AdditiveDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self._init_model(self.output_dim)
@@ -150,12 +187,11 @@ class AdditiveDynamicBias(DynamicBiasAbstract):
         return bias_params + generated_bias_offset
 
 
-@DynamicBiasAbstract.register(DynamicBiasOptions.MULTIPLICATIVE)
 class MultiplicativeDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: DynamicBiasConfig,
-        overrides: DynamicBiasConfig | None = None,
+        cfg: MultiplicativeDynamicBiasConfig,
+        overrides: MultiplicativeDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self._init_model(self.output_dim)
@@ -166,12 +202,11 @@ class MultiplicativeDynamicBias(DynamicBiasAbstract):
         return bias_params * bias_scale
 
 
-@DynamicBiasAbstract.register(DynamicBiasOptions.SIGMOID_MULTIPLICATIVE)
 class SigmoidGatedDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: DynamicBiasConfig,
-        overrides: DynamicBiasConfig | None = None,
+        cfg: SigmoidGatedDynamicBiasConfig,
+        overrides: SigmoidGatedDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self._init_model(self.output_dim)
@@ -182,12 +217,11 @@ class SigmoidGatedDynamicBias(DynamicBiasAbstract):
         return bias_params * gate
 
 
-@DynamicBiasAbstract.register(DynamicBiasOptions.TANH_MULTIPLICATIVE)
 class TanhGatedDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: DynamicBiasConfig,
-        overrides: DynamicBiasConfig | None = None,
+        cfg: TanhGatedDynamicBiasConfig,
+        overrides: TanhGatedDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self._init_model(self.output_dim)
@@ -198,12 +232,11 @@ class TanhGatedDynamicBias(DynamicBiasAbstract):
         return bias_params * gate
 
 
-@DynamicBiasAbstract.register(DynamicBiasOptions.DYNAMIC_PARAMETERS)
 class GeneratorDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: DynamicBiasConfig,
-        overrides: DynamicBiasConfig | None = None,
+        cfg: GeneratorDynamicBiasConfig,
+        overrides: GeneratorDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         self.model = self._init_model(self.output_dim)
@@ -212,15 +245,15 @@ class GeneratorDynamicBias(DynamicBiasAbstract):
         return Layer.forward_with_state(self.model, logits)
 
 
-@DynamicBiasAbstract.register(DynamicBiasOptions.WEIGHTED_BANK)
 class WeightedBankDynamicBias(DynamicBiasAbstract):
     def __init__(
         self,
-        cfg: DynamicBiasConfig,
-        overrides: DynamicBiasConfig | None = None,
+        cfg: WeightedBankDynamicBiasConfig,
+        overrides: WeightedBankDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         DynamicBiasValidator.validate_bank_expansion_factor(self)
+        self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
         self.weight_bank = self._init_parameter_bank(
             (self.bank_expansion_factor, self.output_dim)
         )

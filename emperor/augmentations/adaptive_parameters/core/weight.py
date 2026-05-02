@@ -4,12 +4,10 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from dataclasses import dataclass
-from emperor.base.registry import subclass_registry
 from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.augmentations.adaptive_parameters.options import (
     BankExpansionFactorOptions,
     DynamicDepthOptions,
-    DynamicWeightOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
@@ -34,22 +32,8 @@ class DynamicWeightConfig(ConfigBase):
     output_dim: int | None = optional_field(
         "Output dimensionality of the dynamic weight module."
     )
-    model_type: DynamicWeightOptions | None = optional_field(
-        "Dynamic weight strategy used to generate input-dependent weight updates."
-    )
-    normalization_option: WeightNormalizationOptions | None = optional_field(
-        "Normalization method applied during dynamic weight generation."
-    )
-    normalization_position_option: WeightNormalizationPositionOptions | None = (
-        optional_field(
-            "Specifies whether normalization is applied before the outer-product computation or after it."
-        )
-    )
     generator_depth: DynamicDepthOptions | None = optional_field(
         "Number of generator layers used to produce input-dependent weight updates."
-    )
-    bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
-        "Expansion factor for bank-based weight strategies. Applies only to LAYERED_WEIGHTED_BANK and SOFT_WEIGHTED_BANK."
     )
     decay_schedule: WeightDecayScheduleOptions | None = optional_field(
         "Schedule used to decay the base weight parameters across forward passes."
@@ -65,10 +49,82 @@ class DynamicWeightConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        return DynamicWeightAbstract
+        raise ValueError(
+            f"DynamicWeightConfig is abstract and has no registered "
+            f"DynamicWeight class; instantiate a concrete leaf config instead."
+        )
 
 
-@subclass_registry
+@dataclass
+class SingleModelDynamicWeightConfig(DynamicWeightConfig):
+    normalization_option: WeightNormalizationOptions | None = optional_field(
+        "Normalization method applied during dynamic weight generation."
+    )
+    normalization_position_option: WeightNormalizationPositionOptions | None = (
+        optional_field(
+            "Specifies whether normalization is applied before the outer-product computation or after it."
+        )
+    )
+
+    def _registry_owner(self) -> type:
+        return SingleModelDynamicWeight
+
+
+@dataclass
+class DualModelDynamicWeightConfig(DynamicWeightConfig):
+    normalization_option: WeightNormalizationOptions | None = optional_field(
+        "Normalization method applied during dynamic weight generation."
+    )
+    normalization_position_option: WeightNormalizationPositionOptions | None = (
+        optional_field(
+            "Specifies whether normalization is applied before the outer-product computation or after it."
+        )
+    )
+
+    def _registry_owner(self) -> type:
+        return DualModelDynamicWeight
+
+
+@dataclass
+class LowRankDynamicWeightConfig(DynamicWeightConfig):
+    normalization_option: WeightNormalizationOptions | None = optional_field(
+        "Normalization method applied during dynamic weight generation."
+    )
+
+    def _registry_owner(self) -> type:
+        return LowRankDynamicWeight
+
+
+@dataclass
+class HypernetworkDynamicWeightConfig(DynamicWeightConfig):
+    normalization_option: WeightNormalizationOptions | None = optional_field(
+        "Normalization method applied during dynamic weight generation."
+    )
+
+    def _registry_owner(self) -> type:
+        return HypernetworkDynamicWeight
+
+
+@dataclass
+class LayeredWeightedBankDynamicWeightConfig(DynamicWeightConfig):
+    bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
+        "Expansion factor for bank-based weight strategies."
+    )
+
+    def _registry_owner(self) -> type:
+        return LayeredWeightedBankDynamicWeight
+
+
+@dataclass
+class SoftWeightedBankDynamicWeightConfig(DynamicWeightConfig):
+    bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
+        "Expansion factor for bank-based weight strategies."
+    )
+
+    def _registry_owner(self) -> type:
+        return SoftWeightedBankDynamicWeight
+
+
 class DynamicWeightAbstract(Module):
     def __init__(
         self,
@@ -80,10 +136,7 @@ class DynamicWeightAbstract(Module):
         DynamicWeightValidator.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
-        self.model_type = self.cfg.model_type
         self.generator_depth = self.cfg.generator_depth
-        self.normalization_option = self.cfg.normalization_option
-        self.normalization_position_option = self.cfg.normalization_position_option
         self.decay_schedule_option = self.cfg.decay_schedule
         self.decay_rate = self.cfg.decay_rate
         self.decay_warmup_batches = self.cfg.decay_warmup_batches or 0
@@ -92,7 +145,9 @@ class DynamicWeightAbstract(Module):
         self.register_buffer("decay_step", torch.zeros(1))
         self.register_buffer("warmup_step", torch.zeros(1))
 
-    def _init_model(self, overrides: "DepthMappingHandlerConfig") -> DepthMappingLayerStack:
+    def _init_model(
+        self, overrides: "DepthMappingHandlerConfig"
+    ) -> DepthMappingLayerStack:
         return DepthMappingLayerStack(self.cfg, overrides)
 
     def forward(
@@ -100,9 +155,7 @@ class DynamicWeightAbstract(Module):
         weight_params: Tensor,
         X: Tensor,
     ) -> Tensor:
-        raise NotImplementedError(
-            f"{type(self).__name__} must implement forward()."
-        )
+        raise NotImplementedError(f"{type(self).__name__} must implement forward().")
 
     def _compute_dynamic_weights(self, outer_product: Tensor) -> Tensor:
         return outer_product.sum(dim=1)
@@ -211,14 +264,15 @@ class DynamicWeightAbstract(Module):
                 raise ValueError(f"Unsupported decay_schedule value: {schedule!r}.")
 
 
-@DynamicWeightAbstract.register(DynamicWeightOptions.SINGLE_MODEL)
 class SingleModelDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: DynamicWeightConfig,
-        overrides: DynamicWeightConfig | None = None,
+        cfg: SingleModelDynamicWeightConfig,
+        overrides: SingleModelDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
+        self.normalization_option = self.cfg.normalization_option
+        self.normalization_position_option = self.cfg.normalization_position_option
         DynamicWeightValidator.validate_square_dimensions(self)
         self.model = self._init_model()
 
@@ -241,14 +295,15 @@ class SingleModelDynamicWeight(DynamicWeightAbstract):
         return decayed_weight_params + dynamic_params
 
 
-@DynamicWeightAbstract.register(DynamicWeightOptions.DUAL_MODEL)
 class DualModelDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: DynamicWeightConfig,
-        overrides: DynamicWeightConfig | None = None,
+        cfg: DualModelDynamicWeightConfig,
+        overrides: DualModelDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
+        self.normalization_option = self.cfg.normalization_option
+        self.normalization_position_option = self.cfg.normalization_position_option
         self.input_model = self.__init_input_model()
         self.output_model = self.__init_output_model()
 
@@ -279,14 +334,14 @@ class DualModelDynamicWeight(DynamicWeightAbstract):
         return decayed_weight_params + dynamic_params
 
 
-@DynamicWeightAbstract.register(DynamicWeightOptions.LOW_RANK)
 class LowRankDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: DynamicWeightConfig,
-        overrides: DynamicWeightConfig | None = None,
+        cfg: LowRankDynamicWeightConfig,
+        overrides: LowRankDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
+        self.normalization_option = self.cfg.normalization_option
         self.input_model = self.__init_input_model()
         self.output_model = self.__init_output_model()
 
@@ -319,14 +374,15 @@ class LowRankDynamicWeight(DynamicWeightAbstract):
         return decayed_weight_params + dynamic_params
 
 
-@DynamicWeightAbstract.register(DynamicWeightOptions.HYPERNETWORK)
 class HypernetworkDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: DynamicWeightConfig,
-        overrides: DynamicWeightConfig | None = None,
+        cfg: HypernetworkDynamicWeightConfig,
+        overrides: HypernetworkDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
+
+        self.normalization_option = self.cfg.normalization_option
         self.model = self._init_model()
 
     def _init_model(self) -> DepthMappingLayerStack:
@@ -349,12 +405,11 @@ class HypernetworkDynamicWeight(DynamicWeightAbstract):
         return decayed_weight_params + update
 
 
-@DynamicWeightAbstract.register(DynamicWeightOptions.LAYERED_WEIGHTED_BANK)
 class LayeredWeightedBankDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: DynamicWeightConfig,
-        overrides: DynamicWeightConfig | None = None,
+        cfg: LayeredWeightedBankDynamicWeightConfig,
+        overrides: LayeredWeightedBankDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         DynamicWeightValidator.validate_bank_expansion_factor(self)
@@ -399,12 +454,11 @@ class LayeredWeightedBankDynamicWeight(DynamicWeightAbstract):
         return decayed_weight_params + depth_and_expansion_reduced_weights
 
 
-@DynamicWeightAbstract.register(DynamicWeightOptions.SOFT_WEIGHTED_BANK)
 class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
     def __init__(
         self,
-        cfg: DynamicWeightConfig,
-        overrides: DynamicWeightConfig | None = None,
+        cfg: SoftWeightedBankDynamicWeightConfig,
+        overrides: SoftWeightedBankDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         DynamicWeightValidator.validate_bank_expansion_factor(self)
@@ -444,5 +498,4 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
         )
 
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
-        # TODO: return decayed_weight_params + compressed_params
-        return decayed_weight_params.unsqueeze(0).expand(X.size(0), -1, -1)
+        return decayed_weight_params + compressed_params.sum(dim=1)

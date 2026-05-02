@@ -7,7 +7,6 @@ from emperor.augmentations.adaptive_parameters.core.diagonal import (
 )
 from emperor.base.layer.config import LayerStackConfig
 from emperor.base.utils import ConfigBase
-from emperor.augmentations.adaptive_parameters.options import DynamicDiagonalOptions
 from emperor.augmentations.adaptive_parameters.core.bias import (
     DynamicBiasConfig,
 )

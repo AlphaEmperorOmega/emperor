@@ -1,3 +1,4 @@
+from copy import deepcopy
 from torch import Tensor
 from typing import Callable, TYPE_CHECKING
 from emperor.base.utils import ConfigBase, Module
@@ -37,8 +38,7 @@ class AdaptiveParameterAugmentation(Module):
     def __build_from_config(self, config: ConfigBase | None) -> Module | None:
         if config is None:
             return None
-        if self.__is_model_type_disabled(config):
-            return None
+        config = deepcopy(config)
         if config.model_config is None:
             config.model_config = self.model_config
         overrides = type(config)(
@@ -46,13 +46,6 @@ class AdaptiveParameterAugmentation(Module):
             output_dim=self.output_dim,
         )
         return config.build(overrides)
-
-    def __is_model_type_disabled(self, config: ConfigBase) -> bool:
-        if not hasattr(config, "model_type"):
-            return False
-        if config.model_type is None:
-            return False
-        return config.model_type == type(config.model_type).DISABLED
 
     def forward(
         self,

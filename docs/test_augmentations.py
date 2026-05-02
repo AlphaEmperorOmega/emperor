@@ -14,12 +14,8 @@ from emperor.linears.core.config import LinearLayerConfig
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentation,
     AdaptiveParameterAugmentationConfig,
-    AxisMaskOptions,
     BankExpansionFactorOptions,
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
-    DynamicWeightOptions,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
@@ -28,18 +24,39 @@ from emperor.augmentations.adaptive_parameters import (
 from emperor.augmentations.adaptive_parameters.core.weight import (
     DynamicWeightConfig,
     DynamicWeightAbstract,
+    DualModelDynamicWeightConfig,
+    HypernetworkDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+    LowRankDynamicWeightConfig,
+    SingleModelDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    AntiDynamicDiagonalConfig,
+    CombinedDynamicDiagonalConfig,
     DynamicDiagonalConfig,
     DynamicDiagonalAbstract,
+    StandardDynamicDiagonalConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.bias import (
+    AdditiveDynamicBiasConfig,
+    AffineTransformDynamicBiasConfig,
     DynamicBiasConfig,
     DynamicBiasAbstract,
+    GeneratorDynamicBiasConfig,
+    MultiplicativeDynamicBiasConfig,
+    SigmoidGatedDynamicBiasConfig,
+    TanhGatedDynamicBiasConfig,
+    WeightedBankDynamicBiasConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskConfig,
     AxisMaskAbstract,
+    DiagonalAxisMaskConfig,
+    OuterProductMaskConfig,
+    PerAxisScoreMaskConfig,
+    TopSliceAxisMaskConfig,
+    WeightInformedScoreAxisMaskConfig,
 )
 
 
@@ -66,9 +83,9 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
 
     def _make_weight_config(
         self,
+        config_cls: type[DynamicWeightConfig] = DualModelDynamicWeightConfig,
         input_dim: int = 12,
         output_dim: int = 24,
-        model_type: DynamicWeightOptions = DynamicWeightOptions.DUAL_MODEL,
         normalization_option: WeightNormalizationOptions = WeightNormalizationOptions.L2_SCALE,
         normalization_position_option: WeightNormalizationPositionOptions = WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
@@ -77,50 +94,105 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         decay_rate: float = 0.0,
         decay_warmup_batches: int = 0,
     ) -> DynamicWeightConfig:
-        return DynamicWeightConfig(
-            model_type=model_type,
-            normalization_option=normalization_option,
-            normalization_position_option=normalization_position_option,
+        model_config = self._make_layer_stack_config(
+            input_dim=input_dim, output_dim=output_dim
+        )
+        common_kwargs = dict(
+            input_dim=input_dim,
+            output_dim=output_dim,
             generator_depth=generator_depth,
-            bank_expansion_factor=bank_expansion_factor,
             decay_schedule=decay_schedule,
             decay_rate=decay_rate,
             decay_warmup_batches=decay_warmup_batches,
-            model_config=self._make_layer_stack_config(
-                input_dim=input_dim, output_dim=output_dim
-            ),
+            model_config=model_config,
         )
+        if config_cls in {
+            SingleModelDynamicWeightConfig,
+            DualModelDynamicWeightConfig,
+        }:
+            return config_cls(
+                **common_kwargs,
+                normalization_option=normalization_option,
+                normalization_position_option=normalization_position_option,
+            )
+        if config_cls in {
+            LowRankDynamicWeightConfig,
+            HypernetworkDynamicWeightConfig,
+        }:
+            return config_cls(
+                **common_kwargs,
+                normalization_option=normalization_option,
+            )
+        if config_cls in {
+            LayeredWeightedBankDynamicWeightConfig,
+            SoftWeightedBankDynamicWeightConfig,
+        }:
+            return config_cls(
+                **common_kwargs,
+                bank_expansion_factor=bank_expansion_factor,
+            )
+        return config_cls(**common_kwargs)
+
+    def _weight_cases(
+        self,
+    ) -> list[tuple[type[DynamicWeightConfig], int, BankExpansionFactorOptions | None]]:
+        input_dim = 12
+        output_dim = 24
+        return [
+            (SingleModelDynamicWeightConfig, input_dim, None),
+            (DualModelDynamicWeightConfig, output_dim, None),
+            (LowRankDynamicWeightConfig, output_dim, None),
+            (HypernetworkDynamicWeightConfig, output_dim, None),
+            (
+                LayeredWeightedBankDynamicWeightConfig,
+                output_dim,
+                BankExpansionFactorOptions.FACTOR_OF_TWO,
+            ),
+            (
+                SoftWeightedBankDynamicWeightConfig,
+                output_dim,
+                BankExpansionFactorOptions.FACTOR_OF_TWO,
+            ),
+        ]
 
     def _make_diagonal_config(
         self,
+        config_cls: type[DynamicDiagonalConfig] = StandardDynamicDiagonalConfig,
         input_dim: int = 12,
         output_dim: int = 24,
-        model_type: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL,
     ) -> DynamicDiagonalConfig:
-        return DynamicDiagonalConfig(
+        return config_cls(
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=model_type,
             model_config=self._make_layer_stack_config(
                 input_dim=input_dim, output_dim=output_dim
             ),
         )
 
+    def _diagonal_cases(
+        self,
+    ) -> list[type[DynamicDiagonalConfig]]:
+        return [
+            StandardDynamicDiagonalConfig,
+            AntiDynamicDiagonalConfig,
+            CombinedDynamicDiagonalConfig,
+        ]
+
     def _make_bias_config(
         self,
+        config_cls: type[DynamicBiasConfig] = GeneratorDynamicBiasConfig,
         input_dim: int = 12,
         output_dim: int = 24,
-        model_type: DynamicBiasOptions = DynamicBiasOptions.DYNAMIC_PARAMETERS,
         bias_flag: bool = True,
-        bank_expansion_factor: int | None = None,
+        bank_expansion_factor: BankExpansionFactorOptions | None = None,
         decay_schedule: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED,
         decay_rate: float = 0.0,
         decay_warmup_batches: int = 0,
     ) -> DynamicBiasConfig:
-        return DynamicBiasConfig(
-            model_type=model_type,
+        common_kwargs = dict(
+            input_dim=input_dim,
+            output_dim=output_dim,
             bias_flag=bias_flag,
-            bank_expansion_factor=bank_expansion_factor,
             decay_schedule=decay_schedule,
             decay_rate=decay_rate,
             decay_warmup_batches=decay_warmup_batches,
@@ -128,29 +200,74 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 input_dim=input_dim, output_dim=output_dim
             ),
         )
+        if config_cls is WeightedBankDynamicBiasConfig:
+            return config_cls(
+                **common_kwargs,
+                bank_expansion_factor=bank_expansion_factor,
+            )
+        return config_cls(**common_kwargs)
+
+    def _bias_cases(
+        self,
+    ) -> list[tuple[type[DynamicBiasConfig], BankExpansionFactorOptions | None]]:
+        return [
+            (AffineTransformDynamicBiasConfig, None),
+            (AdditiveDynamicBiasConfig, None),
+            (MultiplicativeDynamicBiasConfig, None),
+            (SigmoidGatedDynamicBiasConfig, None),
+            (TanhGatedDynamicBiasConfig, None),
+            (GeneratorDynamicBiasConfig, None),
+            (WeightedBankDynamicBiasConfig, BankExpansionFactorOptions.FACTOR_OF_FOUR),
+        ]
 
     def _make_mask_config(
         self,
         input_dim: int = 12,
         output_dim: int = 24,
-        model_type: AxisMaskOptions = AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+        config_cls: type[AxisMaskConfig] = WeightInformedScoreAxisMaskConfig,
         mask_dimension_option: MaskDimensionOptions = MaskDimensionOptions.COLUMN,
         mask_threshold: float = 0.5,
         mask_surrogate_scale: float = 10.0,
         mask_floor: float = 0.0,
         mask_transition_width: float | None = None,
     ) -> AxisMaskConfig:
-        return AxisMaskConfig(
-            model_type=model_type,
-            mask_dimension_option=mask_dimension_option,
+        common_kwargs = dict(
             mask_threshold=mask_threshold,
             mask_surrogate_scale=mask_surrogate_scale,
             mask_floor=mask_floor,
-            mask_transition_width=mask_transition_width,
             model_config=self._make_layer_stack_config(
                 input_dim=input_dim, output_dim=output_dim
             ),
         )
+        if config_cls in {
+            WeightInformedScoreAxisMaskConfig,
+            PerAxisScoreMaskConfig,
+        }:
+            return config_cls(
+                **common_kwargs,
+                mask_dimension_option=mask_dimension_option,
+            )
+        if config_cls is TopSliceAxisMaskConfig:
+            return config_cls(
+                **common_kwargs,
+                mask_dimension_option=mask_dimension_option,
+                mask_transition_width=mask_transition_width,
+            )
+        if config_cls is DiagonalAxisMaskConfig:
+            return config_cls(
+                **common_kwargs,
+                mask_transition_width=mask_transition_width,
+            )
+        return config_cls(**common_kwargs)
+
+    def _mask_cases(self) -> list[type[AxisMaskConfig]]:
+        return [
+            WeightInformedScoreAxisMaskConfig,
+            PerAxisScoreMaskConfig,
+            TopSliceAxisMaskConfig,
+            OuterProductMaskConfig,
+            DiagonalAxisMaskConfig,
+        ]
 
     def _make_layer_stack_config(
         self,
@@ -235,32 +352,14 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         self.assertIsNone(model.model_config)
 
     def test_init_with_weight_config(self):
-        for option in DynamicWeightOptions:
-            if option == DynamicWeightOptions.DISABLED:
-                with self.subTest("weight=DISABLED returns None"):
-                    cfg = self.preset(
-                        weight_config=self._make_weight_config(model_type=option),
-                    )
-                    model = AdaptiveParameterAugmentation(cfg)
-                    self.assertIsNone(model.weight_model)
-                continue
-            with self.subTest(f"weight={option}"):
+        for config_cls, output_dim, bank_factor in self._weight_cases():
+            with self.subTest(weight=config_cls.__name__):
                 input_dim = 12
-                output_dim = 24
-                if option == DynamicWeightOptions.SINGLE_MODEL:
-                    output_dim = input_dim
-                is_bank_type = option in {
-                    DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                    DynamicWeightOptions.SOFT_WEIGHTED_BANK,
-                }
-                bank_factor = None
-                if is_bank_type:
-                    bank_factor = BankExpansionFactorOptions.FACTOR_OF_TWO
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     weight_config=self._make_weight_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bank_expansion_factor=bank_factor,
@@ -271,40 +370,21 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 self.assertIsInstance(model.weight_model, DynamicWeightAbstract)
 
     def test_init_with_diagonal_config(self):
-        for option in DynamicDiagonalOptions:
-            if option == DynamicDiagonalOptions.DISABLED:
-                with self.subTest("diagonal=DISABLED returns None"):
-                    cfg = self.preset(
-                        diagonal_config=self._make_diagonal_config(model_type=option),
-                    )
-                    model = AdaptiveParameterAugmentation(cfg)
-                    self.assertIsNone(model.diagonal_model)
-                continue
-            with self.subTest(f"diagonal={option}"):
+        for config_cls in self._diagonal_cases():
+            with self.subTest(f"diagonal={config_cls.__name__}"):
                 cfg = self.preset(
-                    diagonal_config=self._make_diagonal_config(model_type=option),
+                    diagonal_config=self._make_diagonal_config(config_cls=config_cls),
                 )
                 model = AdaptiveParameterAugmentation(cfg)
                 self.assertIsNotNone(model.diagonal_model)
                 self.assertIsInstance(model.diagonal_model, DynamicDiagonalAbstract)
 
     def test_init_with_bias_config(self):
-        for option in DynamicBiasOptions:
-            if option == DynamicBiasOptions.DISABLED:
-                with self.subTest("bias=DISABLED returns None"):
-                    cfg = self.preset(
-                        bias_config=self._make_bias_config(model_type=option),
-                    )
-                    model = AdaptiveParameterAugmentation(cfg)
-                    self.assertIsNone(model.bias_model)
-                continue
-            with self.subTest(f"bias={option}"):
-                bank_factor = None
-                if option == DynamicBiasOptions.WEIGHTED_BANK:
-                    bank_factor = 4
+        for config_cls, bank_factor in self._bias_cases():
+            with self.subTest(f"bias={config_cls.__name__}"):
                 cfg = self.preset(
                     bias_config=self._make_bias_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         bank_expansion_factor=bank_factor,
                     ),
                 )
@@ -313,18 +393,10 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 self.assertIsInstance(model.bias_model, DynamicBiasAbstract)
 
     def test_init_with_mask_config(self):
-        for option in AxisMaskOptions:
-            if option == AxisMaskOptions.DISABLED:
-                with self.subTest("mask=DISABLED returns None"):
-                    cfg = self.preset(
-                        mask_config=self._make_mask_config(model_type=option),
-                    )
-                    model = AdaptiveParameterAugmentation(cfg)
-                    self.assertIsNone(model.mask_model)
-                continue
-            with self.subTest(f"mask={option}"):
+        for config_cls in self._mask_cases():
+            with self.subTest(f"mask={config_cls.__name__}"):
                 cfg = self.preset(
-                    mask_config=self._make_mask_config(model_type=option),
+                    mask_config=self._make_mask_config(config_cls=config_cls),
                 )
                 model = AdaptiveParameterAugmentation(cfg)
                 self.assertIsNotNone(model.mask_model)
@@ -333,30 +405,15 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
     def test_forward_with_each_weight_option(self):
         batch_size = 2
         input_dim = 12
-        base_output_dim = 24
-        for option in DynamicWeightOptions:
-            if option == DynamicWeightOptions.DISABLED:
+        for config_cls, output_dim, bank_factor in self._weight_cases():
+            if config_cls == SoftWeightedBankDynamicWeightConfig:
                 continue
-            if option == DynamicWeightOptions.SOFT_WEIGHTED_BANK:
-                continue
-            with self.subTest(f"weight={option}"):
-                output_dim = (
-                    input_dim
-                    if option == DynamicWeightOptions.SINGLE_MODEL
-                    else base_output_dim
-                )
-                is_bank_type = option in {
-                    DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                    DynamicWeightOptions.SOFT_WEIGHTED_BANK,
-                }
-                bank_factor = (
-                    BankExpansionFactorOptions.FACTOR_OF_TWO if is_bank_type else None
-                )
+            with self.subTest(weight=config_cls.__name__):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     weight_config=self._make_weight_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bank_expansion_factor=bank_factor,
@@ -375,15 +432,15 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        for option in DynamicDiagonalOptions:
-            if option == DynamicDiagonalOptions.DISABLED:
-                continue
-            with self.subTest(f"diagonal={option}"):
+        for config_cls in self._diagonal_cases():
+            with self.subTest(f"diagonal={config_cls.__name__}"):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     diagonal_config=self._make_diagonal_config(
-                        model_type=option, input_dim=input_dim, output_dim=output_dim
+                        config_cls=config_cls,
+                        input_dim=input_dim,
+                        output_dim=output_dim,
                     ),
                 )
                 model = AdaptiveParameterAugmentation(cfg)
@@ -399,15 +456,10 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        for option in DynamicBiasOptions:
-            if option == DynamicBiasOptions.DISABLED:
-                continue
-            with self.subTest(f"bias={option}"):
-                bank_factor = None
-                if option == DynamicBiasOptions.WEIGHTED_BANK:
-                    bank_factor = 4
+        for config_cls, bank_factor in self._bias_cases():
+            with self.subTest(f"bias={config_cls.__name__}"):
                 bias_config = self._make_bias_config(
-                    model_type=option,
+                    config_cls=config_cls,
                     input_dim=input_dim,
                     output_dim=output_dim,
                     bank_expansion_factor=bank_factor,
@@ -435,15 +487,13 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        for option in AxisMaskOptions:
-            if option == AxisMaskOptions.DISABLED:
-                continue
-            with self.subTest(f"mask={option}"):
+        for config_cls in self._mask_cases():
+            with self.subTest(f"mask={config_cls.__name__}"):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     mask_config=self._make_mask_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                     ),
@@ -509,15 +559,13 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        for option in DynamicDiagonalOptions:
-            if option == DynamicDiagonalOptions.DISABLED:
-                continue
-            with self.subTest(f"diagonal={option}"):
+        for config_cls in self._diagonal_cases():
+            with self.subTest(f"diagonal={config_cls.__name__}"):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     diagonal_config=self._make_diagonal_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                     ),
@@ -538,18 +586,13 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        for option in DynamicBiasOptions:
-            if option == DynamicBiasOptions.DISABLED:
-                continue
-            with self.subTest(f"bias={option}"):
-                bank_factor = None
-                if option == DynamicBiasOptions.WEIGHTED_BANK:
-                    bank_factor = 4
+        for config_cls, bank_factor in self._bias_cases():
+            with self.subTest(f"bias={config_cls.__name__}"):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     bias_config=self._make_bias_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bank_expansion_factor=bank_factor,
@@ -581,22 +624,62 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     AdaptiveParameterAugmentation(cfg)
 
     def test_init_raises_on_missing_model_config_for_all_enabled_sub_configs(self):
+        def make_sub_config(name, option):
+            if name == "weight":
+                return option()
+            if name == "diagonal":
+                return option()
+            if name == "bias":
+                if option is WeightedBankDynamicBiasConfig:
+                    return option(
+                        bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO
+                    )
+                return option()
+            return option()
+
         sub_config_options = [
-            ("weight", DynamicWeightConfig, DynamicWeightOptions),
-            ("diagonal", DynamicDiagonalConfig, DynamicDiagonalOptions),
-            ("bias", DynamicBiasConfig, DynamicBiasOptions),
-            ("mask", AxisMaskConfig, AxisMaskOptions),
+            (
+                "weight",
+                [
+                    SingleModelDynamicWeightConfig,
+                    DualModelDynamicWeightConfig,
+                    LowRankDynamicWeightConfig,
+                    HypernetworkDynamicWeightConfig,
+                    LayeredWeightedBankDynamicWeightConfig,
+                    SoftWeightedBankDynamicWeightConfig,
+                ],
+            ),
+            (
+                "diagonal",
+                [
+                    StandardDynamicDiagonalConfig,
+                    AntiDynamicDiagonalConfig,
+                    CombinedDynamicDiagonalConfig,
+                ],
+            ),
+            (
+                "bias",
+                [
+                    AffineTransformDynamicBiasConfig,
+                    AdditiveDynamicBiasConfig,
+                    MultiplicativeDynamicBiasConfig,
+                    SigmoidGatedDynamicBiasConfig,
+                    TanhGatedDynamicBiasConfig,
+                    GeneratorDynamicBiasConfig,
+                    WeightedBankDynamicBiasConfig,
+                ],
+            ),
+            ("mask", self._mask_cases()),
         ]
 
-        for config_name, config_cls, option_enum in sub_config_options:
+        for config_name, option_enum in sub_config_options:
             for option in option_enum:
-                if option.value == 0:
-                    continue
                 with self.subTest(config=config_name, option=option):
+                    sub_config = make_sub_config(config_name, option)
                     cfg = AdaptiveParameterAugmentationConfig(
                         input_dim=12,
                         output_dim=24,
-                        **{f"{config_name}_config": config_cls(model_type=option)},
+                        **{f"{config_name}_config": sub_config},
                     )
                     with self.assertRaises(ValueError):
                         AdaptiveParameterAugmentation(cfg)
@@ -607,28 +690,47 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         sub_config_options = [
             (
                 "weight",
-                DynamicWeightOptions,
+                [
+                    SingleModelDynamicWeightConfig,
+                    DualModelDynamicWeightConfig,
+                    LowRankDynamicWeightConfig,
+                    HypernetworkDynamicWeightConfig,
+                    LayeredWeightedBankDynamicWeightConfig,
+                    SoftWeightedBankDynamicWeightConfig,
+                ],
                 self._make_weight_config,
                 DynamicWeightAbstract,
                 "weight_model",
             ),
             (
                 "diagonal",
-                DynamicDiagonalOptions,
+                [
+                    StandardDynamicDiagonalConfig,
+                    AntiDynamicDiagonalConfig,
+                    CombinedDynamicDiagonalConfig,
+                ],
                 self._make_diagonal_config,
                 DynamicDiagonalAbstract,
                 "diagonal_model",
             ),
             (
                 "bias",
-                DynamicBiasOptions,
+                [
+                    AffineTransformDynamicBiasConfig,
+                    AdditiveDynamicBiasConfig,
+                    MultiplicativeDynamicBiasConfig,
+                    SigmoidGatedDynamicBiasConfig,
+                    TanhGatedDynamicBiasConfig,
+                    GeneratorDynamicBiasConfig,
+                    WeightedBankDynamicBiasConfig,
+                ],
                 self._make_bias_config,
                 DynamicBiasAbstract,
                 "bias_model",
             ),
             (
                 "mask",
-                AxisMaskOptions,
+                self._mask_cases(),
                 self._make_mask_config,
                 AxisMaskAbstract,
                 "mask_model",
@@ -643,38 +745,57 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
             model_attr,
         ) in sub_config_options:
             for option in option_enum:
-                if option.value == 0:
-                    continue
                 output_dim = (
                     input_dim
                     if config_name == "weight"
-                    and option == DynamicWeightOptions.SINGLE_MODEL
+                    and option == SingleModelDynamicWeightConfig
                     else base_output_dim
                 )
                 bank_expansion_factor = None
                 if config_name == "weight" and option in {
-                    DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                    DynamicWeightOptions.SOFT_WEIGHTED_BANK,
+                    LayeredWeightedBankDynamicWeightConfig,
+                    SoftWeightedBankDynamicWeightConfig,
                 }:
                     bank_expansion_factor = BankExpansionFactorOptions.FACTOR_OF_TWO
-                if config_name == "bias" and option == DynamicBiasOptions.WEIGHTED_BANK:
-                    bank_expansion_factor = 4
+                if config_name == "bias" and option == WeightedBankDynamicBiasConfig:
+                    bank_expansion_factor = BankExpansionFactorOptions.FACTOR_OF_FOUR
 
                 with self.subTest(config=config_name, option=option):
                     parent_model_config = self._make_layer_stack_config(
                         input_dim=input_dim,
                         output_dim=output_dim,
                     )
-                    sub_config_kwargs = {
-                        "model_type": option,
-                        "input_dim": input_dim,
-                        "output_dim": output_dim,
-                    }
-                    if bank_expansion_factor is not None:
-                        sub_config_kwargs["bank_expansion_factor"] = (
-                            bank_expansion_factor
+                    if config_name == "weight":
+                        sub_config = make_config(
+                            config_cls=option,
+                            input_dim=input_dim,
+                            output_dim=output_dim,
+                            bank_expansion_factor=bank_expansion_factor,
                         )
-                    sub_config = make_config(**sub_config_kwargs)
+                    elif config_name == "diagonal":
+                        sub_config = make_config(
+                            config_cls=option,
+                            input_dim=input_dim,
+                            output_dim=output_dim,
+                        )
+                    elif config_name == "bias":
+                        sub_config_kwargs = {
+                            "config_cls": option,
+                            "input_dim": input_dim,
+                            "output_dim": output_dim,
+                        }
+                        if bank_expansion_factor is not None:
+                            sub_config_kwargs["bank_expansion_factor"] = (
+                                bank_expansion_factor
+                            )
+                        sub_config = make_config(**sub_config_kwargs)
+                    else:
+                        sub_config_kwargs = {
+                            "config_cls": option,
+                            "input_dim": input_dim,
+                            "output_dim": output_dim,
+                        }
+                        sub_config = make_config(**sub_config_kwargs)
                     sub_config.model_config = None
                     cfg = AdaptiveParameterAugmentationConfig(
                         input_dim=input_dim,
@@ -685,7 +806,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
 
                     model = AdaptiveParameterAugmentation(cfg)
 
-                    self.assertIs(sub_config.model_config, parent_model_config)
+                    self.assertIsNone(sub_config.model_config)
                     self.assertIsNotNone(getattr(model, model_attr))
                     self.assertIsInstance(getattr(model, model_attr), abstract_cls)
 
@@ -693,15 +814,13 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        for option in DynamicDiagonalOptions:
-            if option == DynamicDiagonalOptions.DISABLED:
-                continue
-            with self.subTest(f"diagonal={option}"):
+        for config_cls in self._diagonal_cases():
+            with self.subTest(f"diagonal={config_cls.__name__}"):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     diagonal_config=self._make_diagonal_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                     ),
@@ -724,30 +843,15 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
     def test_gradients_flow_with_weight(self):
         batch_size = 2
         input_dim = 12
-        base_output_dim = 24
-        for option in DynamicWeightOptions:
-            if option == DynamicWeightOptions.DISABLED:
+        for config_cls, output_dim, bank_factor in self._weight_cases():
+            if config_cls == SoftWeightedBankDynamicWeightConfig:
                 continue
-            if option == DynamicWeightOptions.SOFT_WEIGHTED_BANK:
-                continue
-            with self.subTest(f"weight={option}"):
-                output_dim = (
-                    input_dim
-                    if option == DynamicWeightOptions.SINGLE_MODEL
-                    else base_output_dim
-                )
-                is_bank_type = option in {
-                    DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                    DynamicWeightOptions.SOFT_WEIGHTED_BANK,
-                }
-                bank_factor = (
-                    BankExpansionFactorOptions.FACTOR_OF_TWO if is_bank_type else None
-                )
+            with self.subTest(weight=config_cls.__name__):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     weight_config=self._make_weight_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bank_expansion_factor=bank_factor,
@@ -776,18 +880,13 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         input_dim = 8
         output_dim = 4
         torch.manual_seed(0)
-        for option in DynamicBiasOptions:
-            if option == DynamicBiasOptions.DISABLED:
-                continue
-            with self.subTest(f"bias={option}"):
-                bank_factor = None
-                if option == DynamicBiasOptions.WEIGHTED_BANK:
-                    bank_factor = 3
+        for config_cls, bank_factor in self._bias_cases():
+            with self.subTest(f"bias={config_cls.__name__}"):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     bias_config=self._make_bias_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bank_expansion_factor=bank_factor,
@@ -812,15 +911,13 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         input_dim = 4
         output_dim = 3
         torch.manual_seed(0)
-        for option in AxisMaskOptions:
-            if option == AxisMaskOptions.DISABLED:
-                continue
-            with self.subTest(f"mask={option}"):
+        for config_cls in self._mask_cases():
+            with self.subTest(f"mask={config_cls.__name__}"):
                 cfg = self.preset(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     mask_config=self._make_mask_config(
-                        model_type=option,
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         mask_threshold=0.2,
@@ -848,63 +945,37 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
     def test_forward_full_pipeline(self):
         batch_size = 2
         input_dim = 12
-        base_output_dim = 24
-        for weight_option in DynamicWeightOptions:
-            if weight_option == DynamicWeightOptions.DISABLED:
-                continue
-            output_dim = (
-                input_dim
-                if weight_option == DynamicWeightOptions.SINGLE_MODEL
-                else base_output_dim
-            )
-            weight_bank_factor = (
-                BankExpansionFactorOptions.FACTOR_OF_TWO
-                if weight_option
-                in {
-                    DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                    DynamicWeightOptions.SOFT_WEIGHTED_BANK,
-                }
-                else None
-            )
-            for diagonal_option in DynamicDiagonalOptions:
-                if diagonal_option == DynamicDiagonalOptions.DISABLED:
-                    continue
-                for bias_option in DynamicBiasOptions:
-                    if bias_option == DynamicBiasOptions.DISABLED:
-                        continue
-                    bias_bank_factor = (
-                        4 if bias_option == DynamicBiasOptions.WEIGHTED_BANK else None
-                    )
-                    for mask_option in AxisMaskOptions:
-                        if mask_option == AxisMaskOptions.DISABLED:
-                            continue
+        for weight_config_cls, output_dim, weight_bank_factor in self._weight_cases():
+            for diagonal_config_cls in self._diagonal_cases():
+                for bias_config_cls, bias_bank_factor in self._bias_cases():
+                    for mask_config_cls in self._mask_cases():
                         msg = (
-                            f"weight={weight_option}, diagonal={diagonal_option}, "
-                            f"bias={bias_option}, mask={mask_option}"
+                            f"weight={weight_config_cls.__name__}, diagonal={diagonal_config_cls.__name__}, "
+                            f"bias={bias_config_cls.__name__}, mask={mask_config_cls.__name__}"
                         )
                         with self.subTest(msg):
                             cfg = self.preset(
                                 input_dim=input_dim,
                                 output_dim=output_dim,
                                 weight_config=self._make_weight_config(
-                                    model_type=weight_option,
+                                    config_cls=weight_config_cls,
                                     input_dim=input_dim,
                                     output_dim=output_dim,
                                     bank_expansion_factor=weight_bank_factor,
                                 ),
                                 diagonal_config=self._make_diagonal_config(
-                                    model_type=diagonal_option,
+                                    config_cls=diagonal_config_cls,
                                     input_dim=input_dim,
                                     output_dim=output_dim,
                                 ),
                                 bias_config=self._make_bias_config(
-                                    model_type=bias_option,
+                                    config_cls=bias_config_cls,
                                     input_dim=input_dim,
                                     output_dim=output_dim,
                                     bank_expansion_factor=bias_bank_factor,
                                 ),
                                 mask_config=self._make_mask_config(
-                                    model_type=mask_option,
+                                    config_cls=mask_config_cls,
                                     input_dim=input_dim,
                                     output_dim=output_dim,
                                 ),

@@ -8,24 +8,31 @@ from emperor.base.enums import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
 from emperor.base.layer.state import LayerState
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearOptions
 from emperor.augmentations.adaptive_parameters import (
-    DynamicBiasOptions,
+    BankExpansionFactorOptions,
     WeightDecayScheduleOptions,
 )
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBias,
+    AdditiveDynamicBiasConfig,
     AffineTransformDynamicBias,
+    AffineTransformDynamicBiasConfig,
     DynamicBiasAbstract,
     DynamicBiasConfig,
     GeneratorDynamicBias,
+    GeneratorDynamicBiasConfig,
     MultiplicativeDynamicBias,
+    MultiplicativeDynamicBiasConfig,
     SigmoidGatedDynamicBias,
+    SigmoidGatedDynamicBiasConfig,
     TanhGatedDynamicBias,
+    TanhGatedDynamicBiasConfig,
     WeightedBankDynamicBias,
+    WeightedBankDynamicBiasConfig,
 )
 
 
@@ -54,22 +61,20 @@ class ConstantGenerator(nn.Module):
 class TestDynamicBiasHandlers(unittest.TestCase):
     def preset(
         self,
+        config_cls: type[DynamicBiasConfig] = AffineTransformDynamicBiasConfig,
         input_dim: int = 8,
         hidden_dim: int = 16,
         output_dim: int = 4,
         bias_flag: bool = True,
-        model_type: DynamicBiasOptions = DynamicBiasOptions.SCALE_AND_OFFSET,
-        bank_expansion_factor: int | None = None,
-        decay_schedule: WeightDecayScheduleOptions | None = None,
-        decay_rate: float | None = None,
-        decay_warmup_batches: int | None = None,
+        bank_expansion_factor: BankExpansionFactorOptions | None = None,
+        decay_schedule: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED,
+        decay_rate: float = 0.0,
+        decay_warmup_batches: int = 0,
     ) -> DynamicBiasConfig:
-        return DynamicBiasConfig(
+        common_kwargs = dict(
             input_dim=input_dim,
             output_dim=output_dim,
             bias_flag=bias_flag,
-            model_type=model_type,
-            bank_expansion_factor=bank_expansion_factor,
             decay_schedule=decay_schedule,
             decay_rate=decay_rate,
             decay_warmup_batches=decay_warmup_batches,
@@ -99,15 +104,32 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                 ),
             ),
         )
+        if config_cls is WeightedBankDynamicBiasConfig:
+            return config_cls(
+                **common_kwargs,
+                bank_expansion_factor=bank_expansion_factor,
+            )
+        return config_cls(**common_kwargs)
+
+    def bias_cases(self) -> list[tuple[type[DynamicBiasConfig], type]]:
+        return [
+            (AffineTransformDynamicBiasConfig, AffineTransformDynamicBias),
+            (AdditiveDynamicBiasConfig, AdditiveDynamicBias),
+            (MultiplicativeDynamicBiasConfig, MultiplicativeDynamicBias),
+            (SigmoidGatedDynamicBiasConfig, SigmoidGatedDynamicBias),
+            (TanhGatedDynamicBiasConfig, TanhGatedDynamicBias),
+            (GeneratorDynamicBiasConfig, GeneratorDynamicBias),
+            (WeightedBankDynamicBiasConfig, WeightedBankDynamicBias),
+        ]
 
     def test_affine_transform_dynamic_bias_forward(self):
         batch_size = 2
         input_dim = 8
         output_dim = 4
         cfg = self.preset(
+            config_cls=AffineTransformDynamicBiasConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicBiasOptions.SCALE_AND_OFFSET,
         )
         model = AffineTransformDynamicBias(cfg)
         logits = torch.randn(batch_size, input_dim)
@@ -122,9 +144,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         input_dim = 8
         output_dim = 4
         cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicBiasOptions.ADDITIVE,
         )
         model = AdditiveDynamicBias(cfg)
         logits = torch.randn(batch_size, input_dim)
@@ -139,9 +161,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         input_dim = 8
         output_dim = 4
         cfg = self.preset(
+            config_cls=SigmoidGatedDynamicBiasConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicBiasOptions.SIGMOID_MULTIPLICATIVE,
         )
         model = SigmoidGatedDynamicBias(cfg)
         logits = torch.randn(batch_size, input_dim)
@@ -156,9 +178,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         input_dim = 8
         output_dim = 4
         cfg = self.preset(
+            config_cls=TanhGatedDynamicBiasConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicBiasOptions.TANH_MULTIPLICATIVE,
         )
         model = TanhGatedDynamicBias(cfg)
         logits = torch.randn(batch_size, input_dim)
@@ -173,9 +195,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         input_dim = 8
         output_dim = 4
         cfg = self.preset(
+            config_cls=MultiplicativeDynamicBiasConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicBiasOptions.MULTIPLICATIVE,
         )
         model = MultiplicativeDynamicBias(cfg)
         logits = torch.randn(batch_size, input_dim)
@@ -190,9 +212,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         input_dim = 8
         output_dim = 4
         cfg = self.preset(
+            config_cls=GeneratorDynamicBiasConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicBiasOptions.DYNAMIC_PARAMETERS,
         )
         model = GeneratorDynamicBias(cfg)
         logits = torch.randn(batch_size, input_dim)
@@ -207,10 +229,10 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         input_dim = 8
         output_dim = 4
         cfg = self.preset(
+            config_cls=WeightedBankDynamicBiasConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicBiasOptions.WEIGHTED_BANK,
-            bank_expansion_factor=3,
+            bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_THREE,
         )
         model = WeightedBankDynamicBias(cfg)
         logits = torch.randn(batch_size, input_dim)
@@ -222,14 +244,16 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_affine_transform_dynamic_bias_mathematical_correctness(self):
         cfg = self.preset(
+            config_cls=AffineTransformDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.SCALE_AND_OFFSET,
         )
         model = AffineTransformDynamicBias(cfg)
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([1.0, -2.0])
-        affine_parameters = torch.tensor([[2.0, 0.5], [-1.5, 1.0]])
+        affine_parameters = torch.tensor(
+            [[2.0, 0.5, 0.5, -2.5], [-1.5, 1.0, 1.0, 6.0]]
+        )
         model.model = ConstantGenerator(affine_parameters)
 
         output = model(bias_params, logits)
@@ -239,9 +263,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_additive_dynamic_bias_adds_generated_offset(self):
         cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
             input_dim=3,
             output_dim=3,
-            model_type=DynamicBiasOptions.ADDITIVE,
         )
         model = AdditiveDynamicBias(cfg)
         logits = torch.zeros(2, 3)
@@ -256,9 +280,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_sigmoid_multiplicative_dynamic_bias_applies_sigmoid_gate(self):
         cfg = self.preset(
+            config_cls=SigmoidGatedDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.SIGMOID_MULTIPLICATIVE,
         )
         model = SigmoidGatedDynamicBias(cfg)
         logits = torch.zeros(2, 3)
@@ -273,9 +297,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_tanh_multiplicative_dynamic_bias_applies_tanh_gate(self):
         cfg = self.preset(
+            config_cls=TanhGatedDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.TANH_MULTIPLICATIVE,
         )
         model = TanhGatedDynamicBias(cfg)
         logits = torch.zeros(2, 3)
@@ -290,9 +314,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_multiplicative_dynamic_bias_applies_raw_scale(self):
         cfg = self.preset(
+            config_cls=MultiplicativeDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.MULTIPLICATIVE,
         )
         model = MultiplicativeDynamicBias(cfg)
         logits = torch.zeros(2, 3)
@@ -307,9 +331,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_additive_dynamic_bias_applies_bias_decay(self):
         cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.ADDITIVE,
             decay_schedule=WeightDecayScheduleOptions.MULTIPLICATIVE,
             decay_rate=0.5,
             decay_warmup_batches=0,
@@ -333,9 +357,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_generator_dynamic_bias_returns_generated_parameters(self):
         cfg = self.preset(
+            config_cls=GeneratorDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.DYNAMIC_PARAMETERS,
         )
         model = GeneratorDynamicBias(cfg)
         logits = torch.zeros(2, 3)
@@ -349,10 +373,10 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_weighted_bank_dynamic_bias_uses_bank_distribution(self):
         cfg = self.preset(
+            config_cls=WeightedBankDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.WEIGHTED_BANK,
-            bank_expansion_factor=2,
+            bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO,
         )
         model = WeightedBankDynamicBias(cfg)
         logits = torch.zeros(2, 3)
@@ -371,9 +395,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_generator_dynamic_bias_ignores_passed_bias_tensor(self):
         cfg = self.preset(
+            config_cls=GeneratorDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.DYNAMIC_PARAMETERS,
         )
         model = GeneratorDynamicBias(cfg)
         logits = torch.zeros(2, 3)
@@ -388,10 +412,10 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_weighted_bank_dynamic_bias_ignores_passed_bias_tensor(self):
         cfg = self.preset(
+            config_cls=WeightedBankDynamicBiasConfig,
             input_dim=3,
             output_dim=2,
-            model_type=DynamicBiasOptions.WEIGHTED_BANK,
-            bank_expansion_factor=2,
+            bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO,
         )
         model = WeightedBankDynamicBias(cfg)
         logits = torch.zeros(2, 3)
@@ -407,122 +431,114 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_bias_required_strategies_raise_when_bias_params_missing(self):
         logits = torch.randn(2, 8)
-        required_options = [
-            DynamicBiasOptions.SCALE_AND_OFFSET,
-            DynamicBiasOptions.ADDITIVE,
-            DynamicBiasOptions.MULTIPLICATIVE,
-            DynamicBiasOptions.SIGMOID_MULTIPLICATIVE,
-            DynamicBiasOptions.TANH_MULTIPLICATIVE,
+        required_config_classes = [
+            AffineTransformDynamicBiasConfig,
+            AdditiveDynamicBiasConfig,
+            MultiplicativeDynamicBiasConfig,
+            SigmoidGatedDynamicBiasConfig,
+            TanhGatedDynamicBiasConfig,
         ]
 
-        for option in required_options:
-            with self.subTest(option=option):
-                cfg = self.preset(model_type=option)
+        for config_cls in required_config_classes:
+            with self.subTest(config_cls=config_cls.__name__):
+                cfg = self.preset(config_cls=config_cls)
                 model = cfg.build()
                 with self.assertRaises(ValueError):
                     model(None, logits)
 
-    def test_non_bank_bias_strategies_reject_bank_expansion_factor(self):
-        non_bank_options = [
-            DynamicBiasOptions.SCALE_AND_OFFSET,
-            DynamicBiasOptions.ADDITIVE,
-            DynamicBiasOptions.MULTIPLICATIVE,
-            DynamicBiasOptions.DYNAMIC_PARAMETERS,
-            DynamicBiasOptions.SIGMOID_MULTIPLICATIVE,
-            DynamicBiasOptions.TANH_MULTIPLICATIVE,
+    def test_build_creates_model_for_each_leaf_config(self):
+        input_dim = 8
+        output_dim = 4
+        for config_cls, model_cls in self.bias_cases():
+            with self.subTest(config_cls=config_cls.__name__):
+                bank_factor = (
+                    BankExpansionFactorOptions.FACTOR_OF_THREE
+                    if config_cls is WeightedBankDynamicBiasConfig
+                    else None
+                )
+                cfg = self.preset(
+                    config_cls=config_cls,
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    bank_expansion_factor=bank_factor,
+                )
+                model = cfg.build()
+                self.assertIsInstance(model, model_cls)
+
+    def test_abstract_config_cannot_build(self):
+        cfg = self.preset(config_cls=DynamicBiasConfig)
+        with self.assertRaises(ValueError):
+            cfg.build()
+
+    def test_bank_expansion_factor_field_absent_on_non_bank_leaves(self):
+        non_bank_leaf_classes = [
+            AffineTransformDynamicBiasConfig,
+            AdditiveDynamicBiasConfig,
+            MultiplicativeDynamicBiasConfig,
+            SigmoidGatedDynamicBiasConfig,
+            TanhGatedDynamicBiasConfig,
+            GeneratorDynamicBiasConfig,
         ]
+        for leaf_cls in non_bank_leaf_classes:
+            with self.subTest(leaf=leaf_cls.__name__):
+                with self.assertRaises(TypeError):
+                    leaf_cls(
+                        bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO
+                    )
 
-        for option in non_bank_options:
-            with self.subTest(option=option):
-                cfg = self.preset(model_type=option, bank_expansion_factor=2)
-                with self.assertRaises(ValueError):
-                    cfg.build()
-
-    def test_weighted_bank_requires_positive_bank_expansion_factor(self):
+    def test_weighted_bank_requires_bank_expansion_factor_enum(self):
         invalid_factors = [None, 0, -1]
 
         for factor in invalid_factors:
             with self.subTest(bank_expansion_factor=factor):
                 cfg = self.preset(
-                    model_type=DynamicBiasOptions.WEIGHTED_BANK,
+                    config_cls=WeightedBankDynamicBiasConfig,
                     bank_expansion_factor=factor,
                 )
                 with self.assertRaises(ValueError):
                     cfg.build()
 
     def test_bank_expansion_factor_variants(self):
-        valid_factors = [1, 2, 3]
-        invalid_factors = [0, -1]
-
-        for option in DynamicBiasOptions:
-            if option == DynamicBiasOptions.DISABLED:
-                continue
-
-            is_bank_type = option == DynamicBiasOptions.WEIGHTED_BANK
-            for factor in [*invalid_factors, *valid_factors]:
-                with self.subTest(option=option, bank_expansion_factor=factor):
-                    cfg = self.preset(
-                        model_type=option,
-                        bank_expansion_factor=factor,
-                    )
-                    if not is_bank_type:
-                        if factor is None:
-                            model = cfg.build()
-                            self.assertIsInstance(model, DynamicBiasAbstract)
-                        else:
-                            with self.assertRaises(ValueError):
-                                cfg.build()
-                    elif factor in invalid_factors or factor is None:
-                        with self.assertRaises(ValueError):
-                            cfg.build()
-                    else:
-                        model = cfg.build()
-                        logits = torch.randn(2, 8)
-                        bias_params = torch.randn(4)
-                        output = model(bias_params, logits)
-                        self.assertEqual(output.shape, (2, 4))
-
-    def test_build_creates_model_for_each_option(self):
+        batch_size = 2
         input_dim = 8
         output_dim = 4
+        logits = torch.randn(batch_size, input_dim)
+        bias_params = torch.randn(output_dim)
 
-        for option in DynamicBiasOptions:
-            with self.subTest(option=option):
+        for factor in BankExpansionFactorOptions:
+            with self.subTest(bank_expansion_factor=factor):
                 cfg = self.preset(
+                    config_cls=WeightedBankDynamicBiasConfig,
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=option,
-                    bank_expansion_factor=(
-                        3 if option == DynamicBiasOptions.WEIGHTED_BANK else None
-                    ),
+                    bank_expansion_factor=factor,
                 )
-                if option == DynamicBiasOptions.DISABLED:
+                if factor == BankExpansionFactorOptions.DISABLED:
                     with self.assertRaises(ValueError):
                         cfg.build()
                 else:
                     model = cfg.build()
-                    self.assertIsInstance(model, DynamicBiasAbstract)
+                    output = model(bias_params, logits)
+                    self.assertEqual(output.shape, (batch_size, output_dim))
 
     def test_gradients_flow(self):
         batch_size = 2
         input_dim = 8
         output_dim = 4
 
-        for option in DynamicBiasOptions:
-            with self.subTest(option=option):
+        for config_cls, _ in self.bias_cases():
+            with self.subTest(config_cls=config_cls.__name__):
+                bank_factor = (
+                    BankExpansionFactorOptions.FACTOR_OF_THREE
+                    if config_cls is WeightedBankDynamicBiasConfig
+                    else None
+                )
                 cfg = self.preset(
+                    config_cls=config_cls,
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=option,
-                    bank_expansion_factor=(
-                        3 if option == DynamicBiasOptions.WEIGHTED_BANK else None
-                    ),
+                    bank_expansion_factor=bank_factor,
                 )
-                if option == DynamicBiasOptions.DISABLED:
-                    with self.assertRaises(ValueError):
-                        cfg.build()
-                    continue
-
                 model = cfg.build()
                 logits = torch.randn(batch_size, input_dim, requires_grad=True)
                 bias_params = torch.randn(output_dim)
@@ -534,30 +550,6 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                 ]
                 non_none_grads = [grad for grad in grads if grad is not None]
                 self.assertTrue(len(non_none_grads) > 0)
-
-    def test_bias_decay_schedule_options(self):
-        output_dim = 4
-        bias_params = torch.randn(output_dim)
-
-        for schedule in WeightDecayScheduleOptions:
-            with self.subTest(decay_schedule=schedule):
-                cfg = self.preset(
-                    output_dim=output_dim,
-                    model_type=DynamicBiasOptions.ADDITIVE,
-                    decay_schedule=schedule,
-                    decay_rate=0.4,
-                )
-                model = cfg.build()
-
-                if schedule == WeightDecayScheduleOptions.DISABLED:
-                    result = model._maybe_apply_bias_decay(bias_params)
-                    self.assertTrue(torch.equal(result, bias_params))
-                else:
-                    result = model._maybe_apply_bias_decay(bias_params)
-                    self.assertTrue(torch.equal(result, bias_params))
-                    result = model._maybe_apply_bias_decay(bias_params)
-                    self.assertEqual(result.shape, bias_params.shape)
-                    self.assertFalse(torch.equal(result, bias_params))
 
     def test_bias_decay_schedule_mathematical_correctness(self):
         output_dim = 4
@@ -580,8 +572,8 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         for schedule, expected_factor_fn in schedule_expected_factor.items():
             with self.subTest(schedule=schedule):
                 cfg = self.preset(
+                    config_cls=AdditiveDynamicBiasConfig,
                     output_dim=output_dim,
-                    model_type=DynamicBiasOptions.ADDITIVE,
                     decay_schedule=schedule,
                     decay_rate=decay_rate,
                 )
@@ -593,13 +585,33 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                     expected = bias_params * expected_factor
                     self.assertTrue(torch.allclose(result, expected, atol=1e-6))
 
+    def test_bias_decay_schedule_disabled_leaves_bias_unchanged(self):
+        output_dim = 4
+        bias_params = torch.randn(output_dim)
+        cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
+            output_dim=output_dim,
+            decay_schedule=WeightDecayScheduleOptions.DISABLED,
+            decay_rate=0.3,
+        )
+        model = cfg.build()
+        baseline_decay_step = model.decay_step.clone()
+        baseline_warmup_step = model.warmup_step.clone()
+
+        for _ in range(3):
+            result = model._maybe_apply_bias_decay(bias_params)
+            self.assertTrue(torch.equal(result, bias_params))
+
+        self.assertTrue(torch.equal(model.decay_step, baseline_decay_step))
+        self.assertTrue(torch.equal(model.warmup_step, baseline_warmup_step))
+
     def test_bias_decay_warmup_delays_decay(self):
         output_dim = 4
         warmup_batches = 3
         bias_params = torch.randn(output_dim)
         cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
             output_dim=output_dim,
-            model_type=DynamicBiasOptions.ADDITIVE,
             decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
             decay_rate=0.1,
             decay_warmup_batches=warmup_batches,
@@ -619,7 +631,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_bias_decay_schedule_raises_on_unknown_schedule(self):
         cfg = self.preset(
-            model_type=DynamicBiasOptions.ADDITIVE,
+            config_cls=AdditiveDynamicBiasConfig,
             decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
             decay_rate=0.1,
         )
@@ -629,3 +641,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             model._maybe_apply_bias_decay(bias_params)
+
+
+if __name__ == "__main__":
+    unittest.main()

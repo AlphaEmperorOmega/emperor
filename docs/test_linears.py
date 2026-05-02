@@ -27,7 +27,6 @@ from emperor.augmentations.adaptive_parameters import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
-    DynamicWeightOptions,
     MaskDimensionOptions,
     WeightNormalizationOptions,
 )
@@ -298,7 +297,6 @@ class TestLinearLayerStack(unittest.TestCase):
 #         output_dim: int = 6,
 #         bias_flag: bool = True,
 #         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
-#         weight_option: DynamicWeightOptions = DynamicWeightOptions.DUAL_MODEL,
 #         weight_normalization: WeightNormalizationOptions = WeightNormalizationOptions.CLAMP,
 #         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
 #         diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,

@@ -13,7 +13,6 @@ from emperor.linears.core.config import LinearLayerConfig
 from emperor.augmentations.adaptive_parameters import (
     BankExpansionFactorOptions,
     DynamicDepthOptions,
-    DynamicWeightOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
@@ -30,20 +29,24 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     SingleModelDynamicWeight,
     SoftWeightedBankDynamicWeight,
     DynamicWeightConfig,
-    DynamicWeightAbstract,
+    SingleModelDynamicWeightConfig,
+    DualModelDynamicWeightConfig,
+    LowRankDynamicWeightConfig,
+    HypernetworkDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
 )
 
 
 class TestWeightHandlerForward(unittest.TestCase):
     def preset(
         self,
+        config_cls: type[DynamicWeightConfig] = DualModelDynamicWeightConfig,
         input_dim: int = 12,
         hidden_dim: int = 36,
         output_dim: int = 24,
         bias_flag: bool = True,
-        model_type: DynamicWeightOptions = DynamicWeightOptions.DUAL_MODEL,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
-        stack_dropout_probability: float = 0.0,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
         normalization_option: WeightNormalizationOptions = WeightNormalizationOptions.L2_SCALE,
@@ -53,14 +56,10 @@ class TestWeightHandlerForward(unittest.TestCase):
         decay_rate: float = 0.0,
         decay_warmup_batches: int = 0,
     ) -> DynamicWeightConfig:
-        return DynamicWeightConfig(
+        common_kwargs = dict(
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=model_type,
-            normalization_option=normalization_option,
-            normalization_position_option=normalization_position_option,
             generator_depth=generator_depth,
-            bank_expansion_factor=bank_expansion_factor,
             decay_schedule=decay_schedule,
             decay_rate=decay_rate,
             decay_warmup_batches=decay_warmup_batches,
@@ -90,11 +89,76 @@ class TestWeightHandlerForward(unittest.TestCase):
                 ),
             ),
         )
+        if config_cls in {
+            SingleModelDynamicWeightConfig,
+            DualModelDynamicWeightConfig,
+        }:
+            return config_cls(
+                **common_kwargs,
+                normalization_option=normalization_option,
+                normalization_position_option=normalization_position_option,
+            )
+        if config_cls in {
+            LowRankDynamicWeightConfig,
+            HypernetworkDynamicWeightConfig,
+        }:
+            return config_cls(
+                **common_kwargs,
+                normalization_option=normalization_option,
+            )
+        if config_cls in {
+            LayeredWeightedBankDynamicWeightConfig,
+            SoftWeightedBankDynamicWeightConfig,
+        }:
+            return config_cls(
+                **common_kwargs,
+                bank_expansion_factor=bank_expansion_factor,
+            )
+        return config_cls(**common_kwargs)
+
+    def weight_cases(
+        self,
+    ) -> list[tuple[type[DynamicWeightConfig], type, int]]:
+        input_dim = 12
+        output_dim = 24
+        return [
+            (
+                SingleModelDynamicWeightConfig,
+                SingleModelDynamicWeight,
+                input_dim,
+            ),
+            (
+                DualModelDynamicWeightConfig,
+                DualModelDynamicWeight,
+                output_dim,
+            ),
+            (
+                LowRankDynamicWeightConfig,
+                LowRankDynamicWeight,
+                output_dim,
+            ),
+            (
+                HypernetworkDynamicWeightConfig,
+                HypernetworkDynamicWeight,
+                output_dim,
+            ),
+            (
+                LayeredWeightedBankDynamicWeightConfig,
+                LayeredWeightedBankDynamicWeight,
+                output_dim,
+            ),
+            (
+                SoftWeightedBankDynamicWeightConfig,
+                SoftWeightedBankDynamicWeight,
+                output_dim,
+            ),
+        ]
 
     def test_single_model_handler_forward(self):
         batch_size = 2
         dim = 12
         cfg = self.preset(
+            config_cls=SingleModelDynamicWeightConfig,
             input_dim=dim,
             output_dim=dim,
         )
@@ -110,7 +174,11 @@ class TestWeightHandlerForward(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        cfg = self.preset(input_dim, output_dim)
+        cfg = self.preset(
+            config_cls=DualModelDynamicWeightConfig,
+            input_dim=input_dim,
+            output_dim=output_dim,
+        )
         weight_params = Module()._init_parameter_bank((input_dim, output_dim))
         input_tensor = torch.randn(batch_size, input_dim)
         model = DualModelDynamicWeight(cfg)
@@ -123,7 +191,11 @@ class TestWeightHandlerForward(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        cfg = self.preset(input_dim, output_dim)
+        cfg = self.preset(
+            config_cls=LowRankDynamicWeightConfig,
+            input_dim=input_dim,
+            output_dim=output_dim,
+        )
         weight_params = Module()._init_parameter_bank((input_dim, output_dim))
         input_tensor = torch.randn(batch_size, input_dim)
         model = LowRankDynamicWeight(cfg)
@@ -136,8 +208,11 @@ class TestWeightHandlerForward(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         output_dim = 24
-        flattened_weight_dim = input_dim * output_dim
-        cfg = self.preset(input_dim, flattened_weight_dim)
+        cfg = self.preset(
+            config_cls=HypernetworkDynamicWeightConfig,
+            input_dim=input_dim,
+            output_dim=output_dim,
+        )
         weight_params = Module()._init_parameter_bank((input_dim, output_dim))
         input_tensor = torch.randn(batch_size, input_dim)
         model = HypernetworkDynamicWeight(cfg)
@@ -152,9 +227,9 @@ class TestWeightHandlerForward(unittest.TestCase):
         output_dim = 24
         bank_expansion_factor = BankExpansionFactorOptions.FACTOR_OF_THREE
         cfg = self.preset(
+            config_cls=LayeredWeightedBankDynamicWeightConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
             generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
             bank_expansion_factor=bank_expansion_factor,
         )
@@ -172,9 +247,9 @@ class TestWeightHandlerForward(unittest.TestCase):
         output_dim = 24
         bank_expansion_factor = BankExpansionFactorOptions.FACTOR_OF_THREE
         cfg = self.preset(
+            config_cls=SoftWeightedBankDynamicWeightConfig,
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=DynamicWeightOptions.SOFT_WEIGHTED_BANK,
             generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
             bank_expansion_factor=bank_expansion_factor,
         )
@@ -221,44 +296,6 @@ class TestWeightHandlerForward(unittest.TestCase):
         expected = outer_product.sum(dim=1)
         self.assertEqual(result.shape, (batch_size, input_dim, output_dim))
         self.assertTrue(torch.allclose(result, expected, atol=1e-6))
-
-    def test_compute_outer_product_dispatches_by_position(self):
-        batch_size = 2
-        generator_depth = 1
-        input_dim = 12
-        output_dim = 24
-        positions = [
-            WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT,
-            WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT,
-            WeightNormalizationPositionOptions.DISABLED,
-        ]
-        for position in positions:
-            message = f"position={position}"
-            with self.subTest(msg=message):
-                cfg = self.preset(
-                    input_dim=input_dim,
-                    output_dim=output_dim,
-                    normalization_option=WeightNormalizationOptions.L2_SCALE,
-                    normalization_position_option=position,
-                )
-                model = DualModelDynamicWeight(cfg)
-                input_vectors = torch.randn(batch_size, generator_depth, input_dim)
-                output_vectors = torch.randn(batch_size, generator_depth, output_dim)
-                result = model._compute_outer_product(input_vectors, output_vectors)
-
-                if position == WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT:
-                    expected = model._compute_prenormalized_outer_product(
-                        input_vectors, output_vectors
-                    )
-                elif position == WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT:
-                    expected = model._compute_postnormalized_outer_product(
-                        input_vectors, output_vectors
-                    )
-                else:
-                    expected = model._compute_raw_outer_product(
-                        input_vectors, output_vectors
-                    )
-                self.assertTrue(torch.equal(result, expected))
 
     def test_compute_outer_product_raises_on_unknown_position(self):
         batch_size = 2
@@ -339,98 +376,85 @@ class TestWeightHandlerForward(unittest.TestCase):
                 )
                 self.assertTrue(torch.equal(result, expected))
 
-    def test_build_creates_model_for_each_option(self):
+    def test_normalization_position_disabled_uses_raw_outer_product(self):
+        batch_size = 2
+        generator_depth = 1
         input_dim = 12
         output_dim = 24
-        flattened_weight_dim = input_dim * output_dim
+        cfg = self.preset(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            normalization_option=WeightNormalizationOptions.L2_SCALE,
+            normalization_position_option=WeightNormalizationPositionOptions.DISABLED,
+        )
+        model = DualModelDynamicWeight(cfg)
+        input_vectors = torch.randn(batch_size, generator_depth, input_dim)
+        output_vectors = torch.randn(batch_size, generator_depth, output_dim)
+        result = model._compute_outer_product(input_vectors, output_vectors)
+        expected = model._compute_raw_outer_product(input_vectors, output_vectors)
+        self.assertTrue(torch.equal(result, expected))
 
-        for option in DynamicWeightOptions:
-            if option == DynamicWeightOptions.DISABLED:
-                with self.subTest(msg="option=DISABLED raises ValueError"):
-                    cfg = self.preset(
-                        input_dim=input_dim,
-                        output_dim=output_dim,
-                        model_type=option,
-                    )
-                    with self.assertRaises(ValueError):
-                        cfg.build()
-                continue
-            message = f"option={option}"
-            with self.subTest(msg=message):
-                if option == DynamicWeightOptions.SINGLE_MODEL:
-                    effective_output_dim = input_dim
-                elif option == DynamicWeightOptions.HYPERNETWORK:
-                    effective_output_dim = flattened_weight_dim
-                else:
-                    effective_output_dim = output_dim
+    def test_build_creates_model_for_each_leaf_config(self):
+        input_dim = 12
+        for config_cls, model_cls, effective_output_dim in self.weight_cases():
+            with self.subTest(config_cls=config_cls.__name__):
                 bank_factor = (
                     BankExpansionFactorOptions.FACTOR_OF_TWO
-                    if option
+                    if config_cls
                     in {
-                        DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                        DynamicWeightOptions.SOFT_WEIGHTED_BANK,
+                        LayeredWeightedBankDynamicWeightConfig,
+                        SoftWeightedBankDynamicWeightConfig,
                     }
                     else None
                 )
                 cfg = self.preset(
+                    config_cls=config_cls,
                     input_dim=input_dim,
                     output_dim=effective_output_dim,
-                    model_type=option,
                     bank_expansion_factor=bank_factor,
                 )
                 model = cfg.build()
-                self.assertIsInstance(model, DynamicWeightAbstract)
+                self.assertIsInstance(model, model_cls)
+                weight_shape = (input_dim, effective_output_dim)
+                expected_shape = (2, input_dim, effective_output_dim)
+                weight_params = Module()._init_parameter_bank(weight_shape)
+                input_tensor = torch.randn(2, input_dim)
+                output = model(weight_params, input_tensor)
+                self.assertEqual(output.shape, expected_shape)
+
+    def test_abstract_config_cannot_build(self):
+        cfg = self.preset(config_cls=DynamicWeightConfig)
+        with self.assertRaises(ValueError):
+            cfg.build()
 
     def test_gradients_flow(self):
         batch_size = 2
         input_dim = 12
-        output_dim = 24
-        flattened_weight_dim = input_dim * output_dim
-
-        for option in DynamicWeightOptions:
-            if option == DynamicWeightOptions.SOFT_WEIGHTED_BANK:
-                # TODO: removem this when you have implemented SoftWeightedBankDynamicWeight
-                continue
-
-            if option == DynamicWeightOptions.DISABLED:
-                with self.subTest(msg="option=DISABLED raises ValueError"):
-                    cfg = self.preset(
-                        input_dim=input_dim,
-                        output_dim=output_dim,
-                        model_type=option,
-                    )
-                    with self.assertRaises(ValueError):
-                        cfg.build()
-                continue
-            message = f"option={option}"
-            with self.subTest(msg=message):
-                if option == DynamicWeightOptions.SINGLE_MODEL:
-                    effective_output_dim = input_dim
-                elif option == DynamicWeightOptions.HYPERNETWORK:
-                    effective_output_dim = flattened_weight_dim
-                else:
-                    effective_output_dim = output_dim
+        for config_cls, _, effective_output_dim in self.weight_cases():
+            with self.subTest(config_cls=config_cls.__name__):
                 effective_weight_params = Module()._init_parameter_bank(
                     (input_dim, effective_output_dim)
                 )
+                expected_shape = (batch_size, input_dim, effective_output_dim)
                 bank_factor = (
                     BankExpansionFactorOptions.FACTOR_OF_TWO
-                    if option
+                    if config_cls
                     in {
-                        DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                        DynamicWeightOptions.SOFT_WEIGHTED_BANK,
+                        LayeredWeightedBankDynamicWeightConfig,
+                        SoftWeightedBankDynamicWeightConfig,
                     }
                     else None
                 )
                 cfg = self.preset(
+                    config_cls=config_cls,
                     input_dim=input_dim,
                     output_dim=effective_output_dim,
-                    model_type=option,
                     bank_expansion_factor=bank_factor,
                 )
                 model = cfg.build()
                 input_tensor = torch.randn(batch_size, input_dim, requires_grad=True)
                 output = model(effective_weight_params, input_tensor)
+                self.assertEqual(output.shape, expected_shape)
                 output.sum().backward()
                 grads = [p.grad for p in model.parameters() if p.requires_grad]
                 non_none_grads = [g for g in grads if g is not None]
@@ -439,48 +463,32 @@ class TestWeightHandlerForward(unittest.TestCase):
     def test_generator_depth_options(self):
         batch_size = 2
         input_dim = 12
-        output_dim = 24
-        flattened_weight_dim = input_dim * output_dim
-
-        for weight_option in DynamicWeightOptions:
-            if weight_option == DynamicWeightOptions.DISABLED:
-                continue
-            if weight_option == DynamicWeightOptions.SINGLE_MODEL:
-                effective_output_dim = input_dim
-            elif weight_option == DynamicWeightOptions.HYPERNETWORK:
-                effective_output_dim = flattened_weight_dim
-            else:
-                effective_output_dim = output_dim
-            is_bank_type = weight_option in {
-                DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                DynamicWeightOptions.SOFT_WEIGHTED_BANK,
+        for config_cls, _, effective_output_dim in self.weight_cases():
+            is_bank_type = config_cls in {
+                LayeredWeightedBankDynamicWeightConfig,
+                SoftWeightedBankDynamicWeightConfig,
             }
             bank_factor = (
                 BankExpansionFactorOptions.FACTOR_OF_TWO if is_bank_type else None
             )
-            weight_params = Module()._init_parameter_bank(
-                (input_dim, effective_output_dim)
-            )
+            weight_shape = (input_dim, effective_output_dim)
+            expected_shape = (batch_size, input_dim, effective_output_dim)
+            weight_params = Module()._init_parameter_bank(weight_shape)
             for depth in DynamicDepthOptions:
                 if depth == DynamicDepthOptions.DISABLED:
                     continue
-                msg = f"option={weight_option}, depth={depth}"
+                msg = f"config_cls={config_cls.__name__}, depth={depth}"
                 with self.subTest(msg=msg):
                     cfg = self.preset(
+                        config_cls=config_cls,
                         input_dim=input_dim,
                         output_dim=effective_output_dim,
-                        model_type=weight_option,
                         generator_depth=depth,
                         bank_expansion_factor=bank_factor,
                     )
                     model = cfg.build()
                     input_tensor = torch.randn(batch_size, input_dim)
                     output = model(weight_params, input_tensor)
-                    expected_shape = (
-                        batch_size,
-                        input_dim,
-                        effective_output_dim,
-                    )
                     self.assertEqual(output.shape, expected_shape)
 
     def test_bank_expansion_factor_variants(self):
@@ -488,30 +496,25 @@ class TestWeightHandlerForward(unittest.TestCase):
         input_dim = 12
         output_dim = 24
         weight_params = Module()._init_parameter_bank((input_dim, output_dim))
-        for option in DynamicWeightOptions:
-            if option == DynamicWeightOptions.DISABLED:
-                continue
-            is_bank_type = option in {
-                DynamicWeightOptions.LAYERED_WEIGHTED_BANK,
-                DynamicWeightOptions.SOFT_WEIGHTED_BANK,
-            }
-            effective_output_dim = (
-                input_dim if option == DynamicWeightOptions.SINGLE_MODEL else output_dim
-            )
+        bank_config_classes = [
+            LayeredWeightedBankDynamicWeightConfig,
+            SoftWeightedBankDynamicWeightConfig,
+        ]
+        for config_cls in bank_config_classes:
             for factor in BankExpansionFactorOptions:
                 is_disabled = factor == BankExpansionFactorOptions.DISABLED
-                msg = f"option={option}, factor={factor}"
+                msg = f"config_cls={config_cls.__name__}, factor={factor}"
                 with self.subTest(msg=msg):
                     cfg = self.preset(
+                        config_cls=config_cls,
                         input_dim=input_dim,
-                        output_dim=effective_output_dim,
-                        model_type=option,
+                        output_dim=output_dim,
                         bank_expansion_factor=factor,
                     )
-                    if not is_bank_type or is_disabled:
+                    if is_disabled:
                         with self.assertRaises(ValueError):
                             cfg.build()
-                    elif is_bank_type:
+                    else:
                         model = cfg.build()
                         input_tensor = torch.randn(batch_size, input_dim)
                         output = model(weight_params, input_tensor)
@@ -522,34 +525,100 @@ class TestWeightHandlerForward(unittest.TestCase):
                         )
                         self.assertEqual(output.shape, expected_shape)
 
-    def test_weight_decay_schedule_options(self):
-        input_dim = 12
-        output_dim = 24
-        decay_rate = 0.4
-        weight_params = Module()._init_parameter_bank((input_dim, output_dim))
+    def test_bank_expansion_factor_field_absent_on_non_bank_leaves(self):
+        non_bank_leaf_classes = [
+            SingleModelDynamicWeightConfig,
+            DualModelDynamicWeightConfig,
+            LowRankDynamicWeightConfig,
+            HypernetworkDynamicWeightConfig,
+        ]
+        for leaf_cls in non_bank_leaf_classes:
+            with self.subTest(leaf=leaf_cls.__name__):
+                with self.assertRaises(TypeError):
+                    leaf_cls(
+                        bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO
+                    )
 
-        for schedule in WeightDecayScheduleOptions:
-            message = f"decay_schedule={schedule}"
-            with self.subTest(msg=message):
-                cfg = self.preset(
-                    input_dim=input_dim,
-                    output_dim=output_dim,
-                    decay_schedule=schedule,
-                    decay_rate=decay_rate,
-                )
-                model = cfg.build()
+    def test_normalization_fields_absent_on_bank_leaf_configs(self):
+        bank_leaf_classes = [
+            LayeredWeightedBankDynamicWeightConfig,
+            SoftWeightedBankDynamicWeightConfig,
+        ]
+        for leaf_cls in bank_leaf_classes:
+            with self.subTest(leaf=leaf_cls.__name__, field="normalization_option"):
+                with self.assertRaises(TypeError):
+                    leaf_cls(normalization_option=WeightNormalizationOptions.L2_SCALE)
+            with self.subTest(
+                leaf=leaf_cls.__name__, field="normalization_position_option"
+            ):
+                with self.assertRaises(TypeError):
+                    leaf_cls(
+                        normalization_position_option=WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+                    )
 
-                if schedule == WeightDecayScheduleOptions.DISABLED:
-                    result = model._maybe_apply_weight_decay(weight_params)
-                    self.assertTrue(torch.equal(result, weight_params))
-                else:
-                    # step=0: all schedules produce factor=1.0, no change
-                    result = model._maybe_apply_weight_decay(weight_params)
-                    self.assertTrue(torch.equal(result, weight_params))
-                    # step=1: decay factor < 1.0, output differs
-                    result = model._maybe_apply_weight_decay(weight_params)
-                    self.assertEqual(result.shape, weight_params.shape)
-                    self.assertFalse(torch.equal(result, weight_params))
+    def test_normalization_position_field_absent_on_low_rank_and_hypernetwork(self):
+        leaf_classes = [
+            LowRankDynamicWeightConfig,
+            HypernetworkDynamicWeightConfig,
+        ]
+        for leaf_cls in leaf_classes:
+            with self.subTest(leaf=leaf_cls.__name__):
+                with self.assertRaises(TypeError):
+                    leaf_cls(
+                        normalization_position_option=WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+                    )
+
+    def test_soft_weighted_bank_forward_applies_compressed_update(self):
+        input_dim = 2
+        output_dim = 3
+        batch_size = 2
+        depth = DynamicDepthOptions.DEPTH_OF_ONE
+        bank_factor = BankExpansionFactorOptions.FACTOR_OF_TWO
+        cfg = self.preset(
+            config_cls=SoftWeightedBankDynamicWeightConfig,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            hidden_dim=6,
+            generator_depth=depth,
+            bank_expansion_factor=bank_factor,
+        )
+        model = SoftWeightedBankDynamicWeight(cfg)
+        weight_params = torch.zeros(input_dim, output_dim)
+        input_tensor = torch.randn(batch_size, input_dim)
+        raw_logits = torch.tensor(
+            [[[2.0, -1.0, -0.5, 1.5]]],
+            dtype=weight_params.dtype,
+        )
+
+        class StaticDepthMapper(torch.nn.Module):
+            def __init__(self, logits: torch.Tensor):
+                super().__init__()
+                self.logits = logits
+
+            def forward(self, X: torch.Tensor) -> torch.Tensor:
+                return self.logits.expand(X.size(0), -1, -1)
+
+        model.model = StaticDepthMapper(raw_logits)
+        model.weight_bank.data = torch.tensor(
+            [
+                [
+                    [[1.0, 2.0, 3.0], [10.0, 20.0, 30.0]],
+                    [[4.0, 5.0, 6.0], [40.0, 50.0, 60.0]],
+                ]
+            ],
+            dtype=weight_params.dtype,
+        )
+
+        output = model(weight_params, input_tensor)
+        bank_logits = model.model(input_tensor).view(
+            batch_size, depth.value, input_dim, bank_factor.value
+        )
+        bank_distribution = torch.softmax(bank_logits, dim=-1)
+        expected_update = torch.einsum(
+            "bdik,diko->bdio", bank_distribution, model.weight_bank
+        ).sum(dim=1)
+        self.assertTrue(torch.allclose(output, expected_update, atol=1e-6))
+        self.assertFalse(torch.allclose(output, weight_params.expand_as(output)))
 
     def test_decay_schedule_mathematical_correctness(self):
         input_dim = 12
@@ -588,6 +657,27 @@ class TestWeightHandlerForward(unittest.TestCase):
                         torch.allclose(result, expected, atol=1e-6),
                         f"{message}, step={step}: expected factor={expected_factor.item():.6f}",
                     )
+
+    def test_decay_schedule_disabled_leaves_weights_unchanged(self):
+        input_dim = 12
+        output_dim = 24
+        weight_params = Module()._init_parameter_bank((input_dim, output_dim))
+        cfg = self.preset(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            decay_schedule=WeightDecayScheduleOptions.DISABLED,
+            decay_rate=0.3,
+        )
+        model = cfg.build()
+        baseline_decay_step = model.decay_step.clone()
+        baseline_warmup_step = model.warmup_step.clone()
+
+        for _ in range(3):
+            result = model._maybe_apply_weight_decay(weight_params)
+            self.assertTrue(torch.equal(result, weight_params))
+
+        self.assertTrue(torch.equal(model.decay_step, baseline_decay_step))
+        self.assertTrue(torch.equal(model.warmup_step, baseline_warmup_step))
 
     def test_weight_decay_warmup_delays_decay(self):
         input_dim = 12

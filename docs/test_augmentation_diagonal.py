@@ -12,29 +12,30 @@ from emperor.base.enums import (
 from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearOptions
-from emperor.augmentations.adaptive_parameters import DynamicDiagonalOptions
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     AntiDynamicDiagonal,
+    AntiDynamicDiagonalConfig,
     CombinedDynamicDiagonal,
+    CombinedDynamicDiagonalConfig,
     DynamicDiagonalAbstract,
     DynamicDiagonalConfig,
     StandardDynamicDiagonal,
+    StandardDynamicDiagonalConfig,
 )
 
 
 class TestDynamicDiagonalHandlers(unittest.TestCase):
     def preset(
         self,
+        config_cls: type[DynamicDiagonalConfig] = StandardDynamicDiagonalConfig,
         input_dim: int = 8,
         hidden_dim: int = 16,
         output_dim: int = 4,
         bias_flag: bool = True,
-        model_type: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL,
     ) -> DynamicDiagonalConfig:
-        return DynamicDiagonalConfig(
+        return config_cls(
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=model_type,
             model_config=LayerStackConfig(
                 input_dim=input_dim,
                 hidden_dim=hidden_dim,
@@ -61,6 +62,15 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
                 ),
             ),
         )
+
+    def diagonal_cases(
+        self,
+    ) -> list[tuple[type[DynamicDiagonalConfig], type]]:
+        return [
+            (StandardDynamicDiagonalConfig, StandardDynamicDiagonal),
+            (AntiDynamicDiagonalConfig, AntiDynamicDiagonal),
+            (CombinedDynamicDiagonalConfig, CombinedDynamicDiagonal),
+        ]
 
     def _set_generator_identity(self, generator_model) -> None:
         layers = (
@@ -90,9 +100,9 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         for input_dim, output_dim in zip(input_dims, output_dims):
             with self.subTest(input_dim=input_dim, output_dim=output_dim):
                 cfg = self.preset(
+                    config_cls=StandardDynamicDiagonalConfig,
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=DynamicDiagonalOptions.DIAGONAL,
                 )
                 model = StandardDynamicDiagonal(cfg)
                 logits = torch.randn(batch_size, input_dim)
@@ -110,9 +120,9 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         for input_dim, output_dim in zip(input_dims, output_dims):
             with self.subTest(input_dim=input_dim, output_dim=output_dim):
                 cfg = self.preset(
+                    config_cls=AntiDynamicDiagonalConfig,
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=DynamicDiagonalOptions.ANTI_DIAGONAL,
                 )
                 model = AntiDynamicDiagonal(cfg)
                 logits = torch.randn(batch_size, input_dim)
@@ -130,9 +140,9 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         for input_dim, output_dim in zip(input_dims, output_dims):
             with self.subTest(input_dim=input_dim, output_dim=output_dim):
                 cfg = self.preset(
+                    config_cls=CombinedDynamicDiagonalConfig,
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
                 )
                 model = CombinedDynamicDiagonal(cfg)
                 logits = torch.randn(batch_size, input_dim)
@@ -144,9 +154,9 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
 
     def test_standard_dynamic_diagonal_adds_diagonal_matrix(self):
         cfg = self.preset(
+            config_cls=StandardDynamicDiagonalConfig,
             input_dim=3,
             output_dim=3,
-            model_type=DynamicDiagonalOptions.DIAGONAL,
         )
         model = StandardDynamicDiagonal(cfg)
         self._set_generator_identity(model.model)
@@ -160,9 +170,9 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
 
     def test_anti_dynamic_diagonal_adds_flipped_diagonal_matrix(self):
         cfg = self.preset(
+            config_cls=AntiDynamicDiagonalConfig,
             input_dim=3,
             output_dim=3,
-            model_type=DynamicDiagonalOptions.ANTI_DIAGONAL,
         )
         model = AntiDynamicDiagonal(cfg)
         self._set_generator_identity(model.model)
@@ -176,9 +186,9 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
 
     def test_combined_dynamic_diagonal_adds_diagonal_and_anti_diagonal(self):
         cfg = self.preset(
+            config_cls=CombinedDynamicDiagonalConfig,
             input_dim=3,
             output_dim=3,
-            model_type=DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
         )
         model = CombinedDynamicDiagonal(cfg)
         self._set_generator_identity(model.diagonal_model.model)
@@ -193,9 +203,9 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
 
     def test_compute_diagonal_matrix_pads_rectangular_shape(self):
         cfg = self.preset(
+            config_cls=StandardDynamicDiagonalConfig,
             input_dim=3,
             output_dim=5,
-            model_type=DynamicDiagonalOptions.DIAGONAL,
         )
         model = StandardDynamicDiagonal(cfg)
         self._set_generator_identity(model.model)
@@ -207,29 +217,30 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         self.assertEqual(output.shape, (2, 3, 5))
         self.assertTrue(torch.allclose(output, expected, atol=1e-6))
 
-    def test_build_creates_model_for_each_option(self):
+    def test_build_creates_model_for_each_leaf_config(self):
         input_dim = 8
         output_dim = 4
 
-        for option in DynamicDiagonalOptions:
-            with self.subTest(option=option):
+        for config_cls, model_cls in self.diagonal_cases():
+            with self.subTest(config_cls=config_cls.__name__):
                 cfg = self.preset(
+                    config_cls=config_cls,
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=option,
                 )
-                if option == DynamicDiagonalOptions.DISABLED:
-                    with self.assertRaises(ValueError):
-                        cfg.build()
-                else:
-                    model = cfg.build()
-                    self.assertIsInstance(model, DynamicDiagonalAbstract)
+                model = cfg.build()
+                self.assertIsInstance(model, model_cls)
+                self.assertIsInstance(model, DynamicDiagonalAbstract)
+
+    def test_abstract_config_cannot_build(self):
+        cfg = self.preset(config_cls=DynamicDiagonalConfig)
+        with self.assertRaises(ValueError):
+            cfg.build()
 
     def test_invalid_dimensions_raise(self):
         cfg = DynamicDiagonalConfig(
             input_dim=0,
             output_dim=4,
-            model_type=DynamicDiagonalOptions.DIAGONAL,
             model_config=self.preset().model_config,
         )
 
@@ -242,9 +253,9 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
                 return nn.Identity()
 
         cfg = self.preset(
+            config_cls=StandardDynamicDiagonalConfig,
             input_dim=3,
             output_dim=3,
-            model_type=DynamicDiagonalOptions.DIAGONAL,
         )
         model = StandardDynamicDiagonal(cfg)
         model.model_config = InvalidGeneratorConfig()
@@ -257,25 +268,22 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         input_dim = 8
         output_dim = 4
 
-        for option in DynamicDiagonalOptions:
-            with self.subTest(option=option):
+        for config_cls, _ in self.diagonal_cases():
+            with self.subTest(config_cls=config_cls.__name__):
                 cfg = self.preset(
+                    config_cls=config_cls,
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=option,
                 )
-                if option == DynamicDiagonalOptions.DISABLED:
-                    with self.assertRaises(ValueError):
-                        cfg.build()
-                    continue
-
                 model = cfg.build()
                 logits = torch.randn(batch_size, input_dim, requires_grad=True)
                 weight_params = torch.randn(input_dim, output_dim)
                 output = model(weight_params, logits)
                 output.sum().backward()
 
-                grads = [param.grad for param in model.parameters() if param.requires_grad]
+                grads = [
+                    param.grad for param in model.parameters() if param.requires_grad
+                ]
                 non_none_grads = [grad for grad in grads if grad is not None]
                 self.assertTrue(len(non_none_grads) > 0)
 
@@ -285,17 +293,18 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         output_dim = 4
         weight_params = torch.randn(input_dim, output_dim)
 
-        for option in DynamicDiagonalOptions:
-            if option == DynamicDiagonalOptions.DISABLED:
-                continue
-
-            with self.subTest(option=option):
+        for config_cls, _ in self.diagonal_cases():
+            with self.subTest(config_cls=config_cls.__name__):
                 cfg = self.preset(
+                    config_cls=config_cls,
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    model_type=option,
                 )
                 model = cfg.build()
                 logits = torch.randn(batch_size, input_dim)
                 output = model(weight_params, logits)
                 self.assertEqual(output.shape, (batch_size, input_dim, output_dim))
+
+
+if __name__ == "__main__":
+    unittest.main()

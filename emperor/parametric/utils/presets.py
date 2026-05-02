@@ -6,6 +6,7 @@ from emperor.sampler.utils.presets import SamplerPresets
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
 from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
+from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
@@ -23,7 +24,6 @@ from emperor.augmentations.adaptive_parameters.options import (
     DynamicBiasOptions,
     DynamicDepthOptions,
     DynamicDiagonalOptions,
-    DynamicWeightOptions,
     DynamicMemoryOptions,
     MemoryPositionOptions,
     MemorySizeOptions,
@@ -166,7 +166,7 @@ class ParametricLayerPresets:
         adaptive_mixture_weighted_parameters_flag=False,
         adaptive_mixture_clip_parameter_option=ClipParameterOptions.BEFORE,
         adaptive_mixture_clip_range=5.0,
-        adaptive_behaviour_weight_option: DynamicWeightOptions = DynamicWeightOptions.DISABLED,
+        adaptive_behaviour_weight_config: DynamicWeightConfig | None = None,
         adaptive_behaviour_weight_normalization: WeightNormalizationOptions = WeightNormalizationOptions.DISABLED,
         adaptive_behaviour_row_mask_option: AxisMaskOptions = AxisMaskOptions.DISABLED,
         adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
@@ -284,7 +284,7 @@ class ParametricLayerPresets:
             adaptive_behaviour_config=AdaptiveParameterAugmentationConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
-                weight_option=adaptive_behaviour_weight_option,
+                weight_config=adaptive_behaviour_weight_config,
                 weight_normalization=adaptive_behaviour_weight_normalization,
                 row_mask_option=adaptive_behaviour_row_mask_option,
                 generator_depth=adaptive_behaviour_generator_depth,
