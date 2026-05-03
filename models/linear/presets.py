@@ -1,15 +1,9 @@
-from emperor.linears.options import LinearOptions
 import models.linear.config as config
 
+from models.linear.config_builder import LinearConfigBuilder
 from models.linear.model import Model
 from emperor.experiments.base import SearchMode
-from emperor.base.layer import LayerStackConfig
-from models.linear.config import ExperimentConfig
-from emperor.base.layer.config import LayerConfig
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
 from emperor.datasets.image.classification.mnist import Mnist
-from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.base.enums import (
     BaseOptions,
@@ -18,7 +12,7 @@ from emperor.base.enums import (
     LayerNormPositionOptions,
 )
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -27,6 +21,9 @@ if TYPE_CHECKING:
 class ExperimentOptions(BaseOptions):
     PRESET = 0
     CONFIG = 1
+    GATING = 2
+    HALTING = 3
+    GATING_HALTING = 4
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -42,15 +39,58 @@ class ExperimentPresets(ExperimentPresetsBase):
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.PRESET:
-                return self._create_default_preset_configs(dataset)
+                return self._create_named_preset_configs(dataset, self._baseline_preset)
             case ExperimentOptions.CONFIG:
                 return self._create_default_search_space_configs(
                     dataset, search_mode, log_folder
+                )
+            case ExperimentOptions.GATING:
+                return self._create_named_preset_configs(dataset, self._gating_preset)
+            case ExperimentOptions.HALTING:
+                return self._create_named_preset_configs(dataset, self._halting_preset)
+            case ExperimentOptions.GATING_HALTING:
+                return self._create_named_preset_configs(
+                    dataset, self._gating_halting_preset
                 )
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `LinearExperimentOptions`."
                 )
+
+    def _create_named_preset_configs(
+        self,
+        dataset: type,
+        preset_callback: Callable[..., "ModelConfig"],
+    ) -> list["ModelConfig"]:
+        return [preset_callback(**self._dataset_config(dataset))]
+
+    def _baseline_preset(
+        self,
+        **kwargs,
+    ) -> "ModelConfig":
+        return self._preset(**kwargs)
+
+    def _gating_preset(
+        self,
+        **kwargs,
+    ) -> "ModelConfig":
+        return self._preset(**kwargs, stack_gate_flag=True)
+
+    def _halting_preset(
+        self,
+        **kwargs,
+    ) -> "ModelConfig":
+        return self._preset(**kwargs, stack_halting_flag=True)
+
+    def _gating_halting_preset(
+        self,
+        **kwargs,
+    ) -> "ModelConfig":
+        return self._preset(
+            **kwargs,
+            stack_gate_flag=True,
+            stack_halting_flag=True,
+        )
 
     def _preset(
         self,
@@ -67,103 +107,26 @@ class ExperimentPresets(ExperimentPresetsBase):
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
         stack_last_layer_bias_option: LastLayerBiasOptions = config.STACK_LAST_LAYER_BIAS_OPTION,
         stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        stack_gate_flag: bool = config.STACK_GATE_FLAG,
-        stack_halting_flag: bool = config.STACK_HALTING_FLAG,
+        stack_gate_flag: bool = config.GATE_FLAG,
+        stack_halting_flag: bool = config.HALTING_FLAG,
     ) -> "ModelConfig":
-        from emperor.config import ModelConfig
-
-        gate_config = None
-        if stack_gate_flag:
-            gate_config = LayerStackConfig(
-                input_dim=input_dim,
-                hidden_dim=hidden_dim,
-                output_dim=output_dim,
-                num_layers=stack_num_layers,
-                last_layer_bias_option=stack_last_layer_bias_option,
-                apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
-                layer_config=LayerConfig(
-                    activation=stack_activation,
-                    layer_norm_position=layer_norm_position,
-                    residual_flag=stack_residual_flag,
-                    dropout_probability=stack_dropout_probability,
-                    halting_config=None,
-                    shared_halting_flag=False,
-                    gate_config=None,
-                    layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR,
-                        input_dim=input_dim,
-                        output_dim=output_dim,
-                        bias_flag=bias_flag,
-                    ),
-                ),
-            )
-
-        halting_config = None
-        if stack_halting_flag:
-            halting_config = StickBreakingConfig(
-                input_dim=output_dim,
-                threshold=0.99,
-                halting_dropout=0.0,
-                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
-                halting_gate_config=LayerStackConfig(
-                    input_dim=output_dim,
-                    hidden_dim=output_dim,
-                    output_dim=2,
-                    num_layers=stack_num_layers,
-                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                    apply_output_pipeline_flag=False,
-                    layer_config=LayerConfig(
-                        activation=ActivationOptions.DISABLED,
-                        layer_norm_position=LayerNormPositionOptions.DISABLED,
-                        residual_flag=stack_residual_flag,
-                        dropout_probability=stack_dropout_probability,
-                        halting_config=None,
-                        shared_halting_flag=False,
-                        gate_config=None,
-                        layer_model_config=LinearLayerConfig(
-                            model_type=LinearOptions.LINEAR,
-                            input_dim=output_dim,
-                            output_dim=output_dim,
-                            bias_flag=True,
-                        ),
-                    ),
-                ),
-            )
-
-        return ModelConfig(
+        return LinearConfigBuilder(
             batch_size=batch_size,
-            input_dim=input_dim,
             learning_rate=learning_rate,
+            input_dim=input_dim,
             hidden_dim=hidden_dim,
             output_dim=output_dim,
-            experiment_config=ExperimentConfig(
-                model_config=LayerStackConfig(
-                    input_dim=input_dim,
-                    hidden_dim=hidden_dim,
-                    output_dim=output_dim,
-                    num_layers=stack_num_layers,
-                    last_layer_bias_option=stack_last_layer_bias_option,
-                    apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
-                    layer_config=LayerConfig(
-                        input_dim=input_dim,
-                        output_dim=output_dim,
-                        activation=stack_activation,
-                        layer_norm_position=layer_norm_position,
-                        residual_flag=stack_residual_flag,
-                        dropout_probability=stack_dropout_probability,
-                        gate_config=gate_config,
-                        halting_config=halting_config,
-                        shared_halting_flag=False,
-                        layer_model_config=LinearLayerConfig(
-                            model_type=LinearOptions.LINEAR,
-                            input_dim=input_dim,
-                            output_dim=output_dim,
-                            bias_flag=bias_flag,
-                        ),
-                    ),
-                )
-            ),
-        )
+            bias_flag=bias_flag,
+            layer_norm_position=layer_norm_position,
+            stack_num_layers=stack_num_layers,
+            stack_activation=stack_activation,
+            stack_residual_flag=stack_residual_flag,
+            stack_dropout_probability=stack_dropout_probability,
+            stack_last_layer_bias_option=stack_last_layer_bias_option,
+            stack_apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
+            stack_gate_flag=stack_gate_flag,
+            stack_halting_flag=stack_halting_flag,
+        ).build()
 
 
 class Experiment(ExperimentBase):
