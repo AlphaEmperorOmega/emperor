@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from emperor.base.utils import ConfigBase, optional_field
-from emperor.linears.options import LinearOptions
 
 from typing import TYPE_CHECKING
 
@@ -12,9 +11,6 @@ if TYPE_CHECKING:
 
 @dataclass
 class LinearLayerConfig(ConfigBase):
-    model_type: LinearOptions | None = optional_field(
-        "Selects the linear layer variant for registry-based dispatch"
-    )
     input_dim: int | None = optional_field(
         "Number of input features for the linear transformation"
     )
@@ -24,6 +20,15 @@ class LinearLayerConfig(ConfigBase):
     bias_flag: bool | None = optional_field(
         "When true a learnable bias vector is added to the output after the linear transformation"
     )
+
+    def _registry_owner(self) -> type:
+        from emperor.linears.core.layers import LinearLayer
+
+        return LinearLayer
+
+
+@dataclass
+class AdaptiveLinearLayerConfig(LinearLayerConfig):
     adaptive_augmentation_config: "AdaptiveParameterAugmentationConfig | None" = (
         optional_field(
             "Config for input-dependent parameter augmentations applied to the linear layer"
@@ -31,6 +36,6 @@ class LinearLayerConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.linears.core.layers import LinearAbstract
+        from emperor.linears.core.layers import AdaptiveLinearLayer
 
-        return LinearAbstract
+        return AdaptiveLinearLayer

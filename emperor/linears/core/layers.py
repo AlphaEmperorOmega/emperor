@@ -5,17 +5,15 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Parameter
 from emperor.base.utils import Module
-from emperor.base.registry import subclass_registry
 from emperor.linears.core._validator import LinearValidator
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.linears.options import LinearOptions
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-@subclass_registry
 class LinearAbstract(Module):
     def __init__(
         self,
@@ -28,8 +26,8 @@ class LinearAbstract(Module):
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag
-        self.__init_parameters()
         LinearValidator.validate(self)
+        self.__init_parameters()
 
     def __init_parameters(self) -> None:
         self.weight_params = self.__init_weight_parameters()
@@ -46,7 +44,6 @@ class LinearAbstract(Module):
         return self._init_parameter_bank(bias_shape, nn.init.zeros_)
 
 
-@LinearAbstract.register(LinearOptions.LINEAR)
 class LinearLayer(LinearAbstract):
     def __init__(
         self,
@@ -54,14 +51,12 @@ class LinearLayer(LinearAbstract):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        LinearValidator.validate_not_adaptive(self.cfg)
 
     def forward(self, X: Tensor) -> Tensor:
         LinearValidator.validate_input_is_2d(X)
         return F.linear(X, self.weight_params.T, self.bias_params)
 
 
-@LinearAbstract.register(LinearOptions.ADAPTIVE)
 class AdaptiveLinearLayer(LinearAbstract):
     def __init__(
         self,
@@ -69,7 +64,6 @@ class AdaptiveLinearLayer(LinearAbstract):
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
-        LinearValidator.validate_adaptive(self.cfg)
         self.adaptive_augmentation_config = self.cfg.adaptive_augmentation_config
         self.adaptive_behaviour = self.__init_behaviour()
 
@@ -105,11 +99,11 @@ class AdaptiveLinearLayer(LinearAbstract):
     def __compute_linear_transformation(
         self,
         X: Tensor,
-        dynamic_diagonal_weights: Tensor,
+        weights: Tensor,
     ) -> Tensor:
-        if dynamic_diagonal_weights.dim() == 3:
-            return torch.einsum("ij,ijk->ik", X, dynamic_diagonal_weights)
-        return torch.matmul(X, dynamic_diagonal_weights)
+        if weights.dim() == 3:
+            return torch.einsum("ij,ijk->ik", X, weights)
+        return torch.matmul(X, weights)
 
     def __add_bias_parameters(
         self,
