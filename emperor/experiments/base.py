@@ -103,7 +103,7 @@ class ExperimentPresetsBase:
     ) -> list["ModelConfig"]:
         base_config = {
             **self._dataset_config(dataset),
-            **self._best_params(dataset, log_folder),
+            # **self._best_params(dataset, log_folder),
         }
         return create_search_space(
             self._preset,
@@ -213,7 +213,7 @@ class ExperimentBase:
             if value is None:
                 continue
 
-            clean_key = key[len("TRAINER_"):].lower()
+            clean_key = key[len("TRAINER_") :].lower()
             trainer_args[clean_key] = value
 
         return {
