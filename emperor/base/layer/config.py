@@ -17,38 +17,34 @@ if TYPE_CHECKING:
 
 @dataclass
 class LayerConfig(ConfigBase):
-    input_dim: int | None = optional_field(
-        "Input dimensionality of the wrapped module."
-    )
-    output_dim: int | None = optional_field(
-        "Output dimensionality of the wrapped module."
-    )
+    input_dim: int | None = optional_field("Input feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
     activation: ActivationOptions | None = optional_field(
-        "Activation function applied to the wrapped module output."
+        "Activation applied to the layer output."
     )
     residual_flag: bool | None = optional_field(
-        "Enables a residual connection from input to output. Requires input_dim == output_dim."
+        "Adds the input back to the output. Requires input_dim == output_dim."
     )
     dropout_probability: float | None = optional_field(
-        "Dropout probability applied after the layer output."
+        "Dropout probability. Use 0.0 to disable."
     )
     layer_norm_position: LayerNormPositionOptions | None = optional_field(
-        "Specifies where layer normalization is applied within the layer pipeline."
+        "Where layer normalization is applied."
     )
     gate_config: "LayerStackConfig | None" = optional_field(
-        "Configuration for the optional gating stack. Set to None to disable gating."
+        "Optional gate stack that scales the layer output. Set to None to disable."
     )
     halting_config: "HaltingConfig | None" = optional_field(
-        "Configuration for the optional adaptive halting module. Set to None to disable halting."
+        "Optional adaptive computation module. Set to None to disable halting."
     )
     memory_config: "DynamicMemoryConfig | None" = optional_field(
-        "Configuration for the optional dynamic memory module applied before or after the wrapped model."
+        "Optional dynamic memory module. Set to None to disable memory."
     )
     shared_halting_flag: bool | None = optional_field(
-        "When enabled, a single halting module is shared across layers instead of creating one per layer."
+        "Reserved for shared halting. Not supported yet; keep False."
     )
     layer_model_config: ConfigBase | None = optional_field(
-        "Configuration for the wrapped inner module, such as LinearLayerConfig."
+        "Config for the wrapped module, such as LinearLayerConfig."
     )
 
     def _registry_owner(self) -> type:
@@ -68,9 +64,7 @@ class LayerStackConfig(ConfigBase):
     output_dim: int | None = optional_field(
         "Output dimensionality of the final layer in the stack."
     )
-    num_layers: int | None = optional_field(
-        "Total number of layers in the stack."
-    )
+    num_layers: int | None = optional_field("Total number of layers in the stack.")
     last_layer_bias_option: "LastLayerBiasOptions | None" = optional_field(
         "Controls whether the final layer uses its default bias behavior or an explicit override."
     )
