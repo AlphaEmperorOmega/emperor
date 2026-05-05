@@ -14,13 +14,13 @@ from emperor.augmentations.adaptive_parameters.core._validator import (
 @dataclass
 class DynamicDiagonalConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Input dimensionality of the dynamic diagonal module."
+        "Input feature dimension."
     )
     output_dim: int | None = optional_field(
-        "Output dimensionality of the dynamic diagonal module."
+        "Output feature dimension."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Configuration for the internal generator network."
+        "Internal generator network config."
     )
 
     def _registry_owner(self) -> type:

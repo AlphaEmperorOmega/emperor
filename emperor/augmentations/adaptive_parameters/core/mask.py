@@ -12,25 +12,22 @@ from emperor.augmentations.adaptive_parameters.options import MaskDimensionOptio
 @dataclass
 class AxisMaskConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Input dimensionality of the axis mask module."
+        "Input feature dimension."
     )
     output_dim: int | None = optional_field(
-        "Output dimensionality of the axis mask module."
+        "Output feature dimension."
     )
     mask_threshold: float | None = optional_field(
-        "Threshold applied to axis keep scores when deciding whether to preserve a row or column."
+        "Threshold for keeping rows or columns."
     )
     mask_surrogate_scale: float | None = optional_field(
-        "Steepness factor for the training-time sigmoid surrogate used around the axis mask threshold. "
-        "Set to 0.0 to bypass the surrogate and use the raw axis scores directly."
+        "Training-time mask surrogate scale. Use 0.0 to disable."
     )
     mask_floor: float | None = optional_field(
-        "Baseline mask value assigned to structurally dropped regions. "
-        "Use 0.0 to keep exact zeros, or a small positive value to attenuate "
-        "dropped rows, columns, or diagonal regions instead of removing them fully."
+        "Minimum value for dropped mask regions."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Configuration for the internal generator network."
+        "Internal generator network config."
     )
 
     def _registry_owner(self) -> type:
@@ -43,7 +40,7 @@ class AxisMaskConfig(ConfigBase):
 @dataclass
 class WeightInformedScoreAxisMaskConfig(AxisMaskConfig):
     mask_dimension_option: MaskDimensionOptions | None = optional_field(
-        "Specifies whether masking is applied across rows or columns of the weight matrix."
+        "Mask rows or columns."
     )
 
     def _registry_owner(self) -> type:
@@ -53,7 +50,7 @@ class WeightInformedScoreAxisMaskConfig(AxisMaskConfig):
 @dataclass
 class PerAxisScoreMaskConfig(AxisMaskConfig):
     mask_dimension_option: MaskDimensionOptions | None = optional_field(
-        "Specifies whether masking is applied across rows or columns of the weight matrix."
+        "Mask rows or columns."
     )
 
     def _registry_owner(self) -> type:
@@ -63,12 +60,10 @@ class PerAxisScoreMaskConfig(AxisMaskConfig):
 @dataclass
 class TopSliceAxisMaskConfig(AxisMaskConfig):
     mask_dimension_option: MaskDimensionOptions | None = optional_field(
-        "Specifies whether masking is applied across rows or columns of the weight matrix."
+        "Mask rows or columns."
     )
     mask_transition_width: float | None = optional_field(
-        "Width of the smooth transition zone around the mask boundary for TOP_SLICE. "
-        "When set to 1 or below, the standard cumulative product is used. "
-        "When greater than 1, a margin-based gradient replaces the hard cutoff."
+        "Smooth transition width for top-slice masking."
     )
 
     def _registry_owner(self) -> type:
@@ -84,7 +79,7 @@ class OuterProductMaskConfig(AxisMaskConfig):
 @dataclass
 class DiagonalAxisMaskConfig(AxisMaskConfig):
     mask_transition_width: float | None = optional_field(
-        "Width of the smooth transition zone around the mask boundary for diagonal masking."
+        "Smooth transition width for diagonal masking."
     )
 
     def _registry_owner(self) -> type:

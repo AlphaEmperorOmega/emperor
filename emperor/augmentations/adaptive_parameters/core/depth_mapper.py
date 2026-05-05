@@ -23,7 +23,7 @@ class DepthMappingLayerConfig(LinearLayerConfig):
     generator_depth: "DynamicDepthOptions | None" = field(
         default=None,
         metadata={
-            "help": "Number of generator layers used to produce input-dependent adaptive parameter updates."
+            "help": "Generator depth for adaptive parameters."
         },
     )
 
@@ -77,14 +77,12 @@ class DepthMappingHandlerConfig(LinearLayerConfig):
     generator_depth: "DynamicDepthOptions | None" = field(
         default=None,
         metadata={
-            "help": "Number of generator layers used to produce input-dependent adaptive parameter updates."
+            "help": "Generator depth for adaptive parameters."
         },
     )
     model_config: "LayerStackConfig | None" = field(
         default=None,
-        metadata={
-            "help": "Configuration for the internal generator network."
-        },
+        metadata={"help": "Internal generator network config."},
     )
 
     def build(

@@ -22,33 +22,31 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
 class AdaptiveParameterAugmentationConfig(ConfigBase):
     input_dim: int | None = field(
         default=None,
-        metadata={"help": "Input dimension of the linear layer"},
+        metadata={"help": "Input feature dimension."},
     )
     output_dim: int | None = field(
         default=None,
-        metadata={"help": "Output dimension of the linear layer"},
+        metadata={"help": "Output feature dimension."},
     )
     diagonal_config: DynamicDiagonalConfig | None = field(
         default=None,
         metadata={
-            "help": "Configuration for input-dependent diagonal weight adjustments."
+            "help": "Optional dynamic diagonal adjustment."
         },
     )
     weight_config: DynamicWeightConfig | None = field(
         default=None,
-        metadata={"help": "Configuration for input-dependent weight adjustments."},
+        metadata={"help": "Optional dynamic weight adjustment."},
     )
     bias_config: DynamicBiasConfig | None = field(
         default=None,
-        metadata={"help": "Configuration for input-dependent bias adjustments."},
+        metadata={"help": "Optional dynamic bias adjustment."},
     )
     mask_config: AxisMaskConfig | None = field(
         default=None,
-        metadata={"help": "Configuration for input-dependent weight matrix masking."},
+        metadata={"help": "Optional dynamic weight mask."},
     )
     model_config: LayerStackConfig | None = field(
         default=None,
-        metadata={
-            "help": "Layer stack configuration for the internal generator network."
-        },
+        metadata={"help": "Internal generator network config."},
     )

@@ -17,25 +17,25 @@ from emperor.augmentations.adaptive_parameters.core._validator import (
 @dataclass
 class DynamicBiasConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Input dimensionality of the dynamic bias module."
+        "Input feature dimension."
     )
     output_dim: int | None = optional_field(
-        "Output dimensionality of the dynamic bias module."
+        "Output feature dimension."
     )
     bias_flag: bool | None = optional_field(
-        "Indicates whether the associated linear layer includes a bias parameter."
+        "Whether the wrapped linear layer has bias."
     )
     decay_schedule: WeightDecayScheduleOptions | None = optional_field(
-        "Schedule used to decay the base bias parameters across forward passes."
+        "Base bias decay schedule."
     )
     decay_rate: float | None = optional_field(
-        "Decay coefficient for the selected schedule. Its interpretation depends on the schedule type."
+        "Decay rate for the selected schedule."
     )
     decay_warmup_batches: int | None = optional_field(
-        "Number of initial batches to skip before applying bias decay."
+        "Warmup batches before bias decay starts."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Configuration for the internal generator network."
+        "Internal generator network config."
     )
 
     def _registry_owner(self) -> type:
@@ -84,7 +84,7 @@ class GeneratorDynamicBiasConfig(DynamicBiasConfig):
 @dataclass
 class WeightedBankDynamicBiasConfig(DynamicBiasConfig):
     bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
-        "Expansion factor for bank-based bias strategies."
+        "Bias bank expansion factor."
     )
 
     def _registry_owner(self) -> type:

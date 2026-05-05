@@ -27,25 +27,25 @@ from emperor.base.layer import (
 @dataclass
 class DynamicWeightConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Input dimensionality of the dynamic weight module."
+        "Input feature dimension."
     )
     output_dim: int | None = optional_field(
-        "Output dimensionality of the dynamic weight module."
+        "Output feature dimension."
     )
     generator_depth: DynamicDepthOptions | None = optional_field(
-        "Number of generator layers used to produce input-dependent weight updates."
+        "Generator depth for dynamic weights."
     )
     decay_schedule: WeightDecayScheduleOptions | None = optional_field(
-        "Schedule used to decay the base weight parameters across forward passes."
+        "Base weight decay schedule."
     )
     decay_rate: float | None = optional_field(
-        "Decay coefficient for the selected schedule. Its interpretation depends on the schedule type."
+        "Decay rate for the selected schedule."
     )
     decay_warmup_batches: int | None = optional_field(
-        "Number of initial batches to skip before applying weight decay."
+        "Warmup batches before weight decay starts."
     )
     model_config: LayerStackConfig | None = optional_field(
-        "Configuration for the internal generator network."
+        "Internal generator network config."
     )
 
     def _registry_owner(self) -> type:
@@ -58,11 +58,11 @@ class DynamicWeightConfig(ConfigBase):
 @dataclass
 class SingleModelDynamicWeightConfig(DynamicWeightConfig):
     normalization_option: WeightNormalizationOptions | None = optional_field(
-        "Normalization method applied during dynamic weight generation."
+        "Dynamic weight normalization method."
     )
     normalization_position_option: WeightNormalizationPositionOptions | None = (
         optional_field(
-            "Specifies whether normalization is applied before the outer-product computation or after it."
+            "Where dynamic weight normalization is applied."
         )
     )
 
@@ -73,11 +73,11 @@ class SingleModelDynamicWeightConfig(DynamicWeightConfig):
 @dataclass
 class DualModelDynamicWeightConfig(DynamicWeightConfig):
     normalization_option: WeightNormalizationOptions | None = optional_field(
-        "Normalization method applied during dynamic weight generation."
+        "Dynamic weight normalization method."
     )
     normalization_position_option: WeightNormalizationPositionOptions | None = (
         optional_field(
-            "Specifies whether normalization is applied before the outer-product computation or after it."
+            "Where dynamic weight normalization is applied."
         )
     )
 
@@ -88,7 +88,7 @@ class DualModelDynamicWeightConfig(DynamicWeightConfig):
 @dataclass
 class LowRankDynamicWeightConfig(DynamicWeightConfig):
     normalization_option: WeightNormalizationOptions | None = optional_field(
-        "Normalization method applied during dynamic weight generation."
+        "Dynamic weight normalization method."
     )
 
     def _registry_owner(self) -> type:
@@ -98,7 +98,7 @@ class LowRankDynamicWeightConfig(DynamicWeightConfig):
 @dataclass
 class HypernetworkDynamicWeightConfig(DynamicWeightConfig):
     normalization_option: WeightNormalizationOptions | None = optional_field(
-        "Normalization method applied during dynamic weight generation."
+        "Dynamic weight normalization method."
     )
 
     def _registry_owner(self) -> type:
@@ -108,7 +108,7 @@ class HypernetworkDynamicWeightConfig(DynamicWeightConfig):
 @dataclass
 class LayeredWeightedBankDynamicWeightConfig(DynamicWeightConfig):
     bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
-        "Expansion factor for bank-based weight strategies."
+        "Weight bank expansion factor."
     )
 
     def _registry_owner(self) -> type:
@@ -118,7 +118,7 @@ class LayeredWeightedBankDynamicWeightConfig(DynamicWeightConfig):
 @dataclass
 class SoftWeightedBankDynamicWeightConfig(DynamicWeightConfig):
     bank_expansion_factor: BankExpansionFactorOptions | None = optional_field(
-        "Expansion factor for bank-based weight strategies."
+        "Weight bank expansion factor."
     )
 
     def _registry_owner(self) -> type:
