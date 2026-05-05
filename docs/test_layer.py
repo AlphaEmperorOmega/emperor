@@ -8,7 +8,6 @@ from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.enums import LastLayerBiasOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.options import LinearOptions
 
 
 class TestLayer(unittest.TestCase):
@@ -33,9 +32,7 @@ class TestLayer(unittest.TestCase):
 
         if gate_config is None:
             gate_config = LayerStackConfig(
-                input_dim=output_dim,
                 hidden_dim=output_dim,
-                output_dim=output_dim,
                 num_layers=gate_num_layers,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
                 apply_output_pipeline_flag=False,
@@ -48,9 +45,6 @@ class TestLayer(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR,
-                        input_dim=output_dim,
-                        output_dim=output_dim,
                         bias_flag=gate_bias_flag,
                     ),
                 ),
@@ -58,12 +52,10 @@ class TestLayer(unittest.TestCase):
 
         if halting_config is None and input_dim == output_dim:
             halting_config = StickBreakingConfig(
-                input_dim=output_dim,
                 threshold=0.99,
                 halting_dropout=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=LayerStackConfig(
-                    input_dim=output_dim,
                     hidden_dim=output_dim,
                     output_dim=2,
                     num_layers=gate_num_layers,
@@ -78,9 +70,6 @@ class TestLayer(unittest.TestCase):
                         shared_halting_flag=False,
                         gate_config=None,
                         layer_model_config=LinearLayerConfig(
-                            model_type=LinearOptions.LINEAR,
-                            input_dim=output_dim,
-                            output_dim=output_dim,
                             bias_flag=True,
                         ),
                     ),
@@ -98,10 +87,39 @@ class TestLayer(unittest.TestCase):
             halting_config=halting_config,
             shared_halting_flag=shared_halting_flag,
             layer_model_config=LinearLayerConfig(
-                model_type=LinearOptions.LINEAR,
-                input_dim=input_dim,
-                output_dim=output_dim,
                 bias_flag=bias_flag,
+            ),
+        )
+
+    def _halting_config(
+        self,
+        dim: int,
+        threshold: float = 1e-9,
+    ) -> StickBreakingConfig:
+        return StickBreakingConfig(
+            input_dim=dim,
+            threshold=threshold,
+            halting_dropout=0.0,
+            hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            halting_gate_config=LayerStackConfig(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=2,
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
+                    activation=ActivationOptions.DISABLED,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_flag=False,
+                    dropout_probability=0.0,
+                    halting_config=None,
+                    shared_halting_flag=False,
+                    gate_config=None,
+                    layer_model_config=LinearLayerConfig(
+                        bias_flag=True,
+                    ),
+                ),
             ),
         )
 
@@ -486,7 +504,6 @@ class TestLayer(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR,
                         input_dim=dim,
                         output_dim=dim,
                         bias_flag=True,
@@ -505,3 +522,53 @@ class TestLayer(unittest.TestCase):
             with self.subTest(msg=message):
                 with self.assertRaises(ValueError):
                     Layer(self.preset(halting_config=halting_config, **case))
+
+    def test_halting_finalizes_when_all_items_halt_before_last_layer(self):
+        batch_size = 4
+        dim = 8
+        cfg = self.preset(
+            input_dim=dim,
+            output_dim=dim,
+            activation=ActivationOptions.DISABLED,
+            dropout_probability=0.0,
+            halting_config=self._halting_config(dim),
+        )
+        layer = Layer(cfg)
+        layer.eval()
+
+        state = LayerState(hidden=torch.randn(batch_size, dim))
+        result = layer(state)
+
+        self.assertFalse(layer.last_layer_flag)
+
+        self.assertTrue(result.halting_state.halt_mask.all().item())
+        self.assertIsNotNone(result.loss)
+        self.assertTrue(
+            torch.allclose(result.hidden, result.halting_state.accumulated_hidden)
+        )
+
+    def test_halting_skips_layer_when_all_items_already_halted(self):
+        batch_size = 4
+        dim = 8
+        cfg = self.preset(
+            input_dim=dim,
+            output_dim=dim,
+            activation=ActivationOptions.DISABLED,
+            dropout_probability=0.0,
+            halting_config=self._halting_config(dim),
+        )
+        first_layer = Layer(cfg)
+        first_layer.eval()
+        state = first_layer(LayerState(hidden=torch.randn(batch_size, dim)))
+        hidden_before_skip = state.hidden.clone()
+        loss_before_skip = state.loss.clone()
+
+        layer = Layer(cfg)
+        layer.eval()
+
+        result = layer(state)
+
+        self.assertIs(result, state)
+        self.assertTrue(result.halting_state.halt_mask.all().item())
+        self.assertTrue(torch.equal(result.hidden, hidden_before_skip))
+        self.assertTrue(torch.equal(result.loss, loss_before_skip))

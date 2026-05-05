@@ -14,7 +14,6 @@ from emperor.base.layer import (
     LayerState,
 )
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.linears.options import LinearOptions
 
 
 class TestLayerStack(unittest.TestCase):
@@ -38,9 +37,7 @@ class TestLayerStack(unittest.TestCase):
 
         if gate_config is None:
             gate_config = LayerStackConfig(
-                input_dim=input_dim,
                 hidden_dim=hidden_dim,
-                output_dim=output_dim,
                 num_layers=stack_num_layers,
                 last_layer_bias_option=last_layer_bias_option,
                 apply_output_pipeline_flag=apply_output_pipeline_flag,
@@ -53,9 +50,6 @@ class TestLayerStack(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR,
-                        input_dim=input_dim,
-                        output_dim=output_dim,
                         bias_flag=bias_flag,
                     ),
                 ),
@@ -67,12 +61,10 @@ class TestLayerStack(unittest.TestCase):
             and input_dim == hidden_dim == output_dim
         ):
             halting_config = StickBreakingConfig(
-                input_dim=output_dim,
                 threshold=0.99,
                 halting_dropout=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=LayerStackConfig(
-                    input_dim=output_dim,
                     hidden_dim=output_dim,
                     output_dim=2,
                     num_layers=stack_num_layers,
@@ -87,9 +79,6 @@ class TestLayerStack(unittest.TestCase):
                         shared_halting_flag=False,
                         gate_config=None,
                         layer_model_config=LinearLayerConfig(
-                            model_type=LinearOptions.LINEAR,
-                            input_dim=output_dim,
-                            output_dim=output_dim,
                             bias_flag=True,
                         ),
                     ),
@@ -104,8 +93,6 @@ class TestLayerStack(unittest.TestCase):
             last_layer_bias_option=last_layer_bias_option,
             apply_output_pipeline_flag=apply_output_pipeline_flag,
             layer_config=LayerConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
                 activation=stack_activation,
                 layer_norm_position=layer_norm_position,
                 residual_flag=stack_residual_flag,
@@ -114,10 +101,39 @@ class TestLayerStack(unittest.TestCase):
                 halting_config=halting_config,
                 shared_halting_flag=shared_halting_flag,
                 layer_model_config=LinearLayerConfig(
-                    model_type=LinearOptions.LINEAR,
-                    input_dim=input_dim,
-                    output_dim=output_dim,
                     bias_flag=bias_flag,
+                ),
+            ),
+        )
+
+    def halting_config(
+        self,
+        dim: int,
+        threshold: float,
+    ) -> StickBreakingConfig:
+        return StickBreakingConfig(
+            input_dim=dim,
+            threshold=threshold,
+            halting_dropout=0.0,
+            hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            halting_gate_config=LayerStackConfig(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=2,
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
+                    activation=ActivationOptions.DISABLED,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_flag=False,
+                    dropout_probability=0.0,
+                    halting_config=None,
+                    shared_halting_flag=False,
+                    gate_config=None,
+                    layer_model_config=LinearLayerConfig(
+                        bias_flag=True,
+                    ),
                 ),
             ),
         )
@@ -379,9 +395,7 @@ class TestLayerStack(unittest.TestCase):
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 shared_halting_flag=False,
                 gate_config=None,
-                layer_model_config=LinearLayerConfig(
-                    model_type=LinearOptions.LINEAR, bias_flag=True
-                ),
+                layer_model_config=LinearLayerConfig(bias_flag=True),
             ),
         )
         invalid_configs = [
@@ -400,9 +414,7 @@ class TestLayerStack(unittest.TestCase):
                     residual_flag=False,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR, bias_flag=True
-                    ),
+                    layer_model_config=LinearLayerConfig(bias_flag=True),
                     **invalid,
                 )
                 gate_config = LayerStackConfig(
@@ -441,7 +453,6 @@ class TestLayerStack(unittest.TestCase):
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR,
                         input_dim=dim,
                         output_dim=dim,
                         bias_flag=True,
@@ -476,6 +487,79 @@ class TestLayerStack(unittest.TestCase):
             with self.subTest(msg=message):
                 with self.assertRaises(ValueError):
                     LayerStack(self.preset(halting_config=halting_config, **case))
+
+    def test_halting_stack_finalizes_early_and_skips_remaining_layers(self):
+        batch_size = 4
+        dim = 8
+        num_layers = 3
+        halting_config = self.halting_config(dim, threshold=1e-9)
+        cfg = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=num_layers,
+            stack_activation=ActivationOptions.DISABLED,
+            stack_dropout_probability=0.0,
+            halting_config=halting_config,
+        )
+        model = LayerStack(cfg).build()
+        model.eval()
+
+        input = LayerState(hidden=torch.randn(batch_size, dim))
+        state = model(input)
+
+        self.assertTrue(state.halting_state.halt_mask.all().item())
+        self.assertEqual(state.halting_state.step_count, 0)
+        self.assertIsNotNone(state.loss)
+
+    def test_halting_stack_finalizes_at_last_layer_when_not_all_halted(self):
+        batch_size = 4
+        dim = 8
+        num_layers = 10
+        halting_config = self.halting_config(dim, threshold=1.0)
+        cfg = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=num_layers,
+            stack_activation=ActivationOptions.DISABLED,
+            stack_dropout_probability=0.0,
+            halting_config=halting_config,
+        )
+        model = LayerStack(cfg).build()
+        model.eval()
+
+        input = LayerState(hidden=torch.randn(batch_size, dim))
+        state = model(input)
+
+        self.assertFalse(state.halting_state.halt_mask.all().item())
+        self.assertEqual(state.halting_state.step_count, num_layers - 1)
+        self.assertIsNotNone(state.loss)
+
+    def test_halting_stack_with_ten_layers_finalizes_between_first_and_last_layer(self):
+        batch_size = 4
+        dim = 8
+        num_layers = 10
+        halting_config = self.halting_config(dim, threshold=0.7)
+        cfg = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=num_layers,
+            stack_activation=ActivationOptions.DISABLED,
+            stack_dropout_probability=0.0,
+            halting_config=halting_config,
+        )
+        model = LayerStack(cfg).build()
+        model.eval()
+
+        input = LayerState(hidden=torch.randn(batch_size, dim))
+        state = model(input)
+
+        self.assertTrue(state.halting_state.halt_mask.all().item())
+        self.assertGreater(state.halting_state.step_count, 0)
+        self.assertLess(state.halting_state.step_count, num_layers - 1)
+        self.assertIsNotNone(state.loss)
 
     def test_resolve_last_layer_bias_override(self):
         bias_options = [

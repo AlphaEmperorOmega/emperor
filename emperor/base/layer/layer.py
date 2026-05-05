@@ -116,6 +116,8 @@ class Layer(Module):
         self,
         state: "LayerState",
     ) -> "LayerState":
+        if self.__should_skip_halted_state(state):
+            return state
         residual = self._handle_model_input(state.hidden)
         X = self.__maybe_apply_layer_norm_before(residual)
         X = self.__maybe_apply_memory_before(X)
@@ -129,6 +131,19 @@ class Layer(Module):
         X = self.__maybe_apply_layer_norm_after(X)
         state = self.__maybe_apply_halting(X, state)
         return self._handle_model_output(state)
+
+    def __should_skip_halted_state(self, state: LayerState) -> bool:
+        if not self.__has_halting_state(state):
+            return False
+
+        halt_mask = getattr(state.halting_state, "halt_mask", None)
+        if halt_mask is None:
+            return False
+
+        return bool(halt_mask.all().item())
+
+    def __has_halting_state(self, state: LayerState) -> bool:
+        return self.halting_model is not None and state.halting_state is not None
 
     def _handle_model_input(self, input: Tensor) -> Tensor:
         return input
@@ -200,17 +215,26 @@ class Layer(Module):
             state.halting_state, halting_output = (
                 self.halting_model.update_halting_state(state.halting_state, input)
             )
-            if self.last_layer_flag:
-                hidden, loss = self.halting_model.finalize_weighted_accumulation(
-                    state.halting_state, input
-                )
-                loss = loss if state.loss is None else state.loss + loss
-                state.hidden = hidden
-                state.loss = loss
-                return state
+            if self.last_layer_flag or self.__should_skip_halted_state(state):
+                return self.__maybe_finalize_halted_state(state, input)
             state.hidden = halting_output
             return state
         state.hidden = input
+        return state
+
+    def __maybe_finalize_halted_state(
+        self,
+        state: LayerState,
+        input: Tensor,
+    ) -> LayerState:
+        if not self.__has_halting_state(state):
+            return state
+        hidden, loss = self.halting_model.finalize_weighted_accumulation(
+            state.halting_state, input
+        )
+        loss = loss if state.loss is None else state.loss + loss
+        state.hidden = hidden
+        state.loss = loss
         return state
 
     def _handle_model_output(self, layer_state: LayerState) -> LayerState:

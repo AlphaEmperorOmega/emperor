@@ -73,7 +73,9 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         self.__init_gate_weights()
 
     def __build_halting_gate_model(self) -> "Layer | Sequential":
-        override = type(self.halting_gate_config)(input_dim=self.input_dim, output_dim=2)
+        override = type(self.halting_gate_config)(
+            input_dim=self.input_dim, output_dim=2
+        )
         return self.halting_gate_config.build(overrides=override)
 
     def __init_gate_weights(self) -> None:
@@ -124,7 +126,7 @@ class StickBreaking(HaltingBase[StickBreakingState]):
             accumulated_hidden=weighted_hidden,
             accumulated_halt_probabilities=halting_probability,
             step_count=0,
-            accumulated_ponder_cost=torch.tensor(0.0),
+            accumulated_ponder_cost=torch.tensor(0.0, device=model_hidden_state.device),
         )
 
     def __update_state(
