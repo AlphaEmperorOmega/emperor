@@ -488,6 +488,111 @@ class TestLayerStack(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     LayerStack(self.preset(halting_config=halting_config, **case))
 
+    def test_shared_halting_reuses_one_module_across_stack(self):
+        dim = 8
+        cfg = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=4,
+            halting_config=self.halting_config(dim, threshold=0.99),
+            shared_halting_flag=True,
+        )
+        model = LayerStack(cfg).build()
+        layers = [model] if isinstance(model, Layer) else list(model)
+        halting_models = [layer.halting_model for layer in layers]
+
+        self.assertTrue(all(halting_model is not None for halting_model in halting_models))
+        first_halting_model = halting_models[0]
+        self.assertTrue(
+            all(halting_model is first_halting_model for halting_model in halting_models)
+        )
+
+    def test_unshared_halting_builds_separate_modules_per_layer(self):
+        dim = 8
+        cfg = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=4,
+            halting_config=self.halting_config(dim, threshold=0.99),
+            shared_halting_flag=False,
+        )
+        model = LayerStack(cfg).build()
+        layers = [model] if isinstance(model, Layer) else list(model)
+        halting_models = [layer.halting_model for layer in layers]
+
+        self.assertTrue(all(halting_model is not None for halting_model in halting_models))
+        self.assertEqual(len({id(halting_model) for halting_model in halting_models}), len(layers))
+
+    def test_shared_halting_stack_forward_pass(self):
+        batch_size = 4
+        dim = 8
+        cfg = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=4,
+            stack_activation=ActivationOptions.DISABLED,
+            stack_dropout_probability=0.0,
+            halting_config=self.halting_config(dim, threshold=1.0),
+            shared_halting_flag=True,
+        )
+        model = LayerStack(cfg).build()
+        model.eval()
+
+        input = LayerState(hidden=torch.randn(batch_size, dim))
+        state = model(input)
+
+        self.assertEqual(state.hidden.shape, (batch_size, dim))
+        self.assertIsNotNone(state.halting_state)
+        self.assertIsNotNone(state.loss)
+
+    def test_shared_halting_remains_shared_after_training_step(self):
+        batch_size = 4
+        dim = 8
+        cfg = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=4,
+            stack_activation=ActivationOptions.DISABLED,
+            stack_dropout_probability=0.0,
+            halting_config=self.halting_config(dim, threshold=1.0),
+            shared_halting_flag=True,
+        )
+        model = LayerStack(cfg).build()
+        model.eval()
+        layers = [model] if isinstance(model, Layer) else list(model)
+        shared_halting_model = layers[0].halting_model
+        before = [
+            parameter.detach().clone()
+            for parameter in shared_halting_model.parameters()
+            if parameter.requires_grad
+        ]
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+
+        input = LayerState(hidden=torch.randn(batch_size, dim))
+        state = model(input)
+        loss = state.hidden.sum() + state.loss.sum()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        self.assertTrue(
+            all(layer.halting_model is shared_halting_model for layer in layers)
+        )
+        after = [
+            parameter.detach()
+            for parameter in shared_halting_model.parameters()
+            if parameter.requires_grad
+        ]
+        changed = any(
+            not torch.equal(before_parameter, after_parameter)
+            for before_parameter, after_parameter in zip(before, after)
+        )
+        self.assertTrue(changed)
+
     def test_halting_stack_finalizes_early_and_skips_remaining_layers(self):
         batch_size = 4
         dim = 8

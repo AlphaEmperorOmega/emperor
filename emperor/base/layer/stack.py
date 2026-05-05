@@ -47,6 +47,7 @@ class LayerStack(Module):
         layer_adjustment = self.__add_initial_layer(layers)
         self.__add_hidden_layers(layers, layer_adjustment)
         self.__add_output_layer(layers)
+        self.__maybe_share_halting_model(layers)
 
         if len(layers) == 1:
             [model] = layers
@@ -119,3 +120,20 @@ class LayerStack(Module):
         if overrides is not None:
             dim_overrides = self._override_config(dim_overrides, overrides)
         return self._override_config(self.layer_config, dim_overrides).build()
+
+    def __maybe_share_halting_model(self, layers: list[Layer]) -> None:
+        if not self.layer_config.shared_halting_flag:
+            return
+
+        shared_halting_model = None
+        for layer in layers:
+            if layer.halting_model is not None:
+                shared_halting_model = layer.halting_model
+                break
+
+        if shared_halting_model is None:
+            return
+
+        for layer in layers:
+            if layer.halting_model is not None:
+                layer.halting_model = shared_halting_model
