@@ -41,7 +41,7 @@ class LayerConfig(ConfigBase):
         "Optional dynamic memory module. Set to None to disable memory."
     )
     shared_halting_flag: bool | None = optional_field(
-        "Reserved for shared halting. Not supported yet; keep False."
+        "Share one halting module across the stack. Requires halting_config."
     )
     layer_model_config: ConfigBase | None = optional_field(
         "Config for the wrapped module, such as LinearLayerConfig."
@@ -56,23 +56,23 @@ class LayerConfig(ConfigBase):
 @dataclass
 class LayerStackConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Input dimensionality of the first layer in the stack."
+        "Input feature dimension."
     )
     hidden_dim: int | None = optional_field(
-        "Hidden dimensionality used by intermediate layers in the stack."
+        "Hidden feature dimension."
     )
     output_dim: int | None = optional_field(
-        "Output dimensionality of the final layer in the stack."
+        "Output feature dimension."
     )
     num_layers: int | None = optional_field("Total number of layers in the stack.")
     last_layer_bias_option: "LastLayerBiasOptions | None" = optional_field(
-        "Controls whether the final layer uses its default bias behavior or an explicit override."
+        "Bias behavior for the final layer."
     )
     apply_output_pipeline_flag: bool | None = optional_field(
-        "When enabled, the final layer applies the full wrapper pipeline instead of returning the raw module output."
+        "Apply the full layer pipeline to the final layer."
     )
     layer_config: LayerConfig | None = optional_field(
-        "Configuration that defines the per-layer wrapper pipeline applied throughout the stack."
+        "Base layer config used to build each stack layer."
     )
 
     def build(
