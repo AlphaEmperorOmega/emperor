@@ -39,21 +39,15 @@ from emperor.augmentations.adaptive_parameters.options import (
 
 
 def make_layer_stack_config(
-    input_dim: int,
-    output_dim: int,
     hidden_dim: int = 16,
     num_layers: int = 2,
 ) -> LayerStackConfig:
     return LayerStackConfig(
-        input_dim=input_dim,
         hidden_dim=hidden_dim,
-        output_dim=output_dim,
         num_layers=num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag=False,
         layer_config=LayerConfig(
-            input_dim=input_dim,
-            output_dim=output_dim,
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_flag=False,
@@ -62,8 +56,6 @@ def make_layer_stack_config(
             halting_config=None,
             shared_halting_flag=False,
             layer_model_config=LinearLayerConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
                 bias_flag=True,
             ),
         ),
@@ -72,8 +64,6 @@ def make_layer_stack_config(
 
 def make_weight_config(input_dim: int, output_dim: int) -> DualModelDynamicWeightConfig:
     return DualModelDynamicWeightConfig(
-        input_dim=input_dim,
-        output_dim=output_dim,
         generator_depth=DynamicDepthOptions.DEPTH_OF_TWO,
         normalization_option=WeightNormalizationOptions.L2_SCALE,
         normalization_position_option=WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT,
@@ -88,8 +78,6 @@ def make_bias_config(
     input_dim: int, output_dim: int, bias_flag: bool = True
 ) -> GeneratorDynamicBiasConfig:
     return GeneratorDynamicBiasConfig(
-        input_dim=input_dim,
-        output_dim=output_dim,
         bias_flag=bias_flag,
         decay_schedule=WeightDecayScheduleOptions.DISABLED,
         decay_rate=0.0,
@@ -102,8 +90,6 @@ def make_diagonal_config(
     input_dim: int, output_dim: int
 ) -> StandardDynamicDiagonalConfig:
     return StandardDynamicDiagonalConfig(
-        input_dim=input_dim,
-        output_dim=output_dim,
         model_config=make_layer_stack_config(input_dim, output_dim),
     )
 
@@ -325,9 +311,7 @@ class TestLinearLayerStack(unittest.TestCase):
 
         if gate_config is None:
             gate_config = LayerStackConfig(
-                input_dim=input_dim,
                 hidden_dim=hidden_dim,
-                output_dim=output_dim,
                 num_layers=stack_num_layers,
                 last_layer_bias_option=last_layer_bias_option,
                 apply_output_pipeline_flag=apply_output_pipeline_flag,
@@ -350,12 +334,10 @@ class TestLinearLayerStack(unittest.TestCase):
         halting_config = None
         if stack_num_layers > 1 and input_dim == hidden_dim == output_dim:
             halting_config = StickBreakingConfig(
-                input_dim=output_dim,
                 threshold=0.99,
                 halting_dropout=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=LayerStackConfig(
-                    input_dim=output_dim,
                     hidden_dim=output_dim,
                     output_dim=2,
                     num_layers=stack_num_layers,
@@ -370,8 +352,6 @@ class TestLinearLayerStack(unittest.TestCase):
                         shared_halting_flag=False,
                         gate_config=None,
                         layer_model_config=LinearLayerConfig(
-                            input_dim=output_dim,
-                            output_dim=output_dim,
                             bias_flag=True,
                         ),
                     ),
@@ -386,8 +366,6 @@ class TestLinearLayerStack(unittest.TestCase):
             last_layer_bias_option=last_layer_bias_option,
             apply_output_pipeline_flag=apply_output_pipeline_flag,
             layer_config=LayerConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
                 activation=stack_activation,
                 layer_norm_position=layer_norm_position,
                 residual_flag=stack_residual_flag,
@@ -396,8 +374,6 @@ class TestLinearLayerStack(unittest.TestCase):
                 halting_config=halting_config,
                 shared_halting_flag=shared_halting_flag,
                 layer_model_config=LinearLayerConfig(
-                    input_dim=input_dim,
-                    output_dim=output_dim,
                     bias_flag=bias_flag,
                 ),
             ),
@@ -456,8 +432,6 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
             output_dim=output_dim,
             bias_flag=bias_flag,
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
                 weight_config=weight_config,
                 bias_config=bias_config,
                 diagonal_config=diagonal_config,
@@ -668,8 +642,6 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
             last_layer_bias_option=last_layer_bias_option,
             apply_output_pipeline_flag=True,
             layer_config=LayerConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
                 activation=stack_activation,
                 layer_norm_position=layer_norm_position,
                 residual_flag=stack_residual_flag,
@@ -678,12 +650,8 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                 halting_config=None,
                 shared_halting_flag=False,
                 layer_model_config=AdaptiveLinearLayerConfig(
-                    input_dim=input_dim,
-                    output_dim=output_dim,
                     bias_flag=bias_flag,
                     adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                        input_dim=input_dim,
-                        output_dim=output_dim,
                         weight_config=weight_config,
                         bias_config=bias_config,
                         diagonal_config=diagonal_config,
