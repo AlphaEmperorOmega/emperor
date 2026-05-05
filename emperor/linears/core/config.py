@@ -12,13 +12,13 @@ if TYPE_CHECKING:
 @dataclass
 class LinearLayerConfig(ConfigBase):
     input_dim: int | None = optional_field(
-        "Number of input features for the linear transformation"
+        "Input feature dimension."
     )
     output_dim: int | None = optional_field(
-        "Number of output features produced by the linear transformation"
+        "Output feature dimension."
     )
     bias_flag: bool | None = optional_field(
-        "When true a learnable bias vector is added to the output after the linear transformation"
+        "Add a learnable bias to the output."
     )
 
     def _registry_owner(self) -> type:
@@ -31,7 +31,7 @@ class LinearLayerConfig(ConfigBase):
 class AdaptiveLinearLayerConfig(LinearLayerConfig):
     adaptive_augmentation_config: "AdaptiveParameterAugmentationConfig | None" = (
         optional_field(
-            "Config for input-dependent parameter augmentations applied to the linear layer"
+            "Optional input-dependent parameter augmentation."
         )
     )
 
