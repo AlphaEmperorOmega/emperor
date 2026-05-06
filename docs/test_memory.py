@@ -1,7 +1,6 @@
 import torch
 import unittest
 
-from emperor.linears.options import LinearOptions
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.base.enums import (
     ActivationOptions,
@@ -63,7 +62,6 @@ class TestMemoryHandlers(unittest.TestCase):
                     halting_config=None,
                     shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,

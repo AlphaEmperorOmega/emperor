@@ -11,7 +11,6 @@ from emperor.base.enums import (
 from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
 from emperor.base.layer.state import LayerState
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.linears.options import LinearOptions
 from emperor.augmentations.adaptive_parameters import (
     BankExpansionFactorOptions,
     WeightDecayScheduleOptions,
@@ -96,7 +95,6 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                     halting_config=None,
                     shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,

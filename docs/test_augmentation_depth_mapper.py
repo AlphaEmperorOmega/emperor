@@ -1,7 +1,6 @@
 import torch
 import unittest
 
-from emperor.linears.options import LinearOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
@@ -163,7 +162,6 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                     halting_config=halting_config,
                     shared_halting_flag=shared_halting_flag,
                     layer_model_config=LinearLayerConfig(
-                        model_type=LinearOptions.LINEAR,
                         input_dim=input_dim,
                         output_dim=output_dim,
                         bias_flag=bias_flag,
