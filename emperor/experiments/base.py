@@ -179,6 +179,15 @@ class ExperimentBase:
         early_stopping_metric = getattr(
             config, "CALLBACK_EARLY_STOPPING_METRIC", "validation/loss"
         )
+        early_stopping_min_delta = getattr(
+            config, "CALLBACK_EARLY_STOPPING_MIN_DELTA", 0.0
+        )
+        early_stopping_strict = getattr(
+            config, "CALLBACK_EARLY_STOPPING_STRICT", True
+        )
+        early_stopping_check_finite = getattr(
+            config, "CALLBACK_EARLY_STOPPING_CHECK_FINITE", True
+        )
         checkpoint_flag = getattr(config, "CALLBACK_CHECKPOINT_FLAG", False)
 
         callbacks = []
@@ -187,6 +196,9 @@ class ExperimentBase:
                 EarlyStopping(
                     monitor=early_stopping_metric,
                     patience=early_stopping_patience,
+                    min_delta=early_stopping_min_delta,
+                    strict=early_stopping_strict,
+                    check_finite=early_stopping_check_finite,
                     mode="min" if "loss" in early_stopping_metric else "max",
                 )
             )
