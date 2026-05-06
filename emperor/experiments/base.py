@@ -99,11 +99,9 @@ class ExperimentPresetsBase:
         self,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
-        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
         base_config = {
             **self._dataset_config(dataset),
-            # **self._best_params(dataset, log_folder),
         }
         return create_search_space(
             self._preset,
@@ -232,7 +230,6 @@ class ExperimentBase:
                     option, dataset_type, search_mode, log_folder
                 ):
                     trainer_config = self._load_trainer_config()
-                    seed_everything(42, workers=True)
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
                     logger = TensorBoardLogger(
