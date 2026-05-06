@@ -290,6 +290,26 @@ class TestLinearLayer(unittest.TestCase):
         self.assertEqual(m.bias_flag, True)
         self.assertEqual(m.weight_params.shape, (5, 3))
 
+    def test_config_build_returns_linear_layer(self):
+        cfg = self.preset(input_dim=5, output_dim=3, bias_flag=True)
+        m = cfg.build()
+
+        self.assertIsInstance(m, LinearLayer)
+        self.assertEqual(m.input_dim, cfg.input_dim)
+        self.assertEqual(m.output_dim, cfg.output_dim)
+        self.assertEqual(m.bias_flag, cfg.bias_flag)
+
+    def test_config_build_applies_overrides(self):
+        cfg = self.preset(input_dim=5, output_dim=3, bias_flag=True)
+        overrides = LinearLayerConfig(input_dim=7, output_dim=2, bias_flag=False)
+        m = cfg.build(overrides)
+
+        self.assertIsInstance(m, LinearLayer)
+        self.assertEqual(m.input_dim, overrides.input_dim)
+        self.assertEqual(m.output_dim, overrides.output_dim)
+        self.assertEqual(m.bias_flag, overrides.bias_flag)
+        self.assertIsNone(m.bias_params)
+
 
 class TestLinearLayerStack(unittest.TestCase):
     def preset(
@@ -614,6 +634,49 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
                                         self.assertEqual(
                                             output.shape, (batch_size, output_dim)
                                         )
+
+    def test_config_build_returns_adaptive_linear_layer(self):
+        cfg = self.preset(input_dim=5, output_dim=3, bias_flag=True)
+        m = cfg.build()
+
+        self.assertIsInstance(m, AdaptiveLinearLayer)
+        self.assertEqual(m.input_dim, cfg.input_dim)
+        self.assertEqual(m.output_dim, cfg.output_dim)
+        self.assertEqual(m.bias_flag, cfg.bias_flag)
+
+    def test_config_build_applies_overrides(self):
+        cfg = self.preset(input_dim=5, output_dim=3, bias_flag=True)
+        overrides = AdaptiveLinearLayerConfig(
+            input_dim=7,
+            output_dim=2,
+            bias_flag=False,
+            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                weight_config=None,
+                bias_config=None,
+                diagonal_config=None,
+                mask_config=None,
+                model_config=make_layer_stack_config(7, 2),
+            ),
+        )
+        m = cfg.build(overrides)
+
+        self.assertIsInstance(m, AdaptiveLinearLayer)
+        self.assertEqual(m.input_dim, overrides.input_dim)
+        self.assertEqual(m.output_dim, overrides.output_dim)
+        self.assertEqual(m.bias_flag, overrides.bias_flag)
+        self.assertIsNone(m.bias_params)
+
+    def test_gradients_flow_through_adaptive_linear_layer(self):
+        cfg = self.preset(input_dim=4, output_dim=3, bias_flag=True)
+        m = AdaptiveLinearLayer(cfg)
+
+        input_batch = torch.randn(2, cfg.input_dim, requires_grad=True)
+        output = m.forward(input_batch)
+        output.sum().backward()
+
+        grads = [p.grad for p in m.parameters() if p.requires_grad]
+        non_none_grads = [g for g in grads if g is not None]
+        self.assertTrue(len(non_none_grads) > 0)
 
 
 class TestLinearLayerAdaptiveStack(unittest.TestCase):
