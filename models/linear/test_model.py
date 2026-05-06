@@ -4,7 +4,13 @@ import torch
 
 import models.linear.config as config
 
+from emperor.base.enums import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from models.linear.model import Model
+from models.linear.config_builder import LinearConfigBuilder
 from models.linear.presets import ExperimentOptions, ExperimentPresets
 
 
@@ -33,6 +39,86 @@ class TestLinearModel(unittest.TestCase):
             dataset.default_height,
             dataset.default_width,
         )
+
+    def test_gate_config_uses_builder_overrides(self):
+        cfg = LinearConfigBuilder(
+            stack_gate_flag=True,
+            gate_hidden_dim=32,
+            gate_layer_norm_position=LayerNormPositionOptions.AFTER,
+            gate_stack_num_layers=3,
+            gate_stack_activation=ActivationOptions.SILU,
+            gate_stack_residual_flag=False,
+            gate_stack_dropout_probability=0.1,
+            gate_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            gate_stack_apply_output_pipeline_flag=True,
+            gate_bias_flag=False,
+        ).build()
+
+        gate_cfg = cfg.experiment_config.model_config.layer_config.gate_config
+
+        self.assertEqual(gate_cfg.hidden_dim, 32)
+        self.assertEqual(gate_cfg.num_layers, 3)
+        self.assertEqual(gate_cfg.last_layer_bias_option, LastLayerBiasOptions.DISABLED)
+        self.assertTrue(gate_cfg.apply_output_pipeline_flag)
+        self.assertEqual(
+            gate_cfg.layer_config.layer_norm_position, LayerNormPositionOptions.AFTER
+        )
+        self.assertEqual(gate_cfg.layer_config.activation, ActivationOptions.SILU)
+        self.assertFalse(gate_cfg.layer_config.residual_flag)
+        self.assertEqual(gate_cfg.layer_config.dropout_probability, 0.1)
+        self.assertFalse(gate_cfg.layer_config.layer_model_config.bias_flag)
+
+    def test_halting_config_uses_builder_overrides(self):
+        cfg = LinearConfigBuilder(
+            output_dim=9,
+            stack_halting_flag=True,
+            halting_threshold=0.5,
+            halting_dropout=0.2,
+            halting_gate_hidden_dim=48,
+            halting_gate_output_dim=4,
+            halting_gate_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            halting_gate_stack_num_layers=5,
+            halting_gate_stack_activation=ActivationOptions.MISH,
+            halting_gate_stack_residual_flag=False,
+            halting_gate_stack_dropout_probability=0.3,
+            halting_gate_stack_last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            halting_gate_stack_apply_output_pipeline_flag=True,
+            halting_gate_bias_flag=False,
+        ).build()
+
+        halting_cfg = cfg.experiment_config.model_config.layer_config.halting_config
+        halting_gate_cfg = halting_cfg.halting_gate_config
+
+        self.assertEqual(halting_cfg.threshold, 0.5)
+        self.assertEqual(halting_cfg.halting_dropout, 0.2)
+        self.assertEqual(halting_gate_cfg.hidden_dim, 48)
+        self.assertEqual(halting_gate_cfg.output_dim, 4)
+        self.assertEqual(halting_gate_cfg.num_layers, 5)
+        self.assertEqual(
+            halting_gate_cfg.last_layer_bias_option, LastLayerBiasOptions.DEFAULT
+        )
+        self.assertTrue(halting_gate_cfg.apply_output_pipeline_flag)
+        self.assertEqual(
+            halting_gate_cfg.layer_config.layer_norm_position,
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertEqual(
+            halting_gate_cfg.layer_config.activation, ActivationOptions.MISH
+        )
+        self.assertFalse(halting_gate_cfg.layer_config.residual_flag)
+        self.assertEqual(halting_gate_cfg.layer_config.dropout_probability, 0.3)
+        self.assertFalse(halting_gate_cfg.layer_config.layer_model_config.bias_flag)
+
+    def test_halting_gate_hidden_dim_falls_back_to_output_dim(self):
+        cfg = LinearConfigBuilder(
+            output_dim=11,
+            stack_halting_flag=True,
+            halting_gate_hidden_dim=0,
+        ).build()
+
+        halting_cfg = cfg.experiment_config.model_config.layer_config.halting_config
+
+        self.assertEqual(halting_cfg.halting_gate_config.hidden_dim, 11)
 
 
 if __name__ == "__main__":

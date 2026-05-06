@@ -8,6 +8,7 @@ from emperor.base.enums import (
 from emperor.base.layer import LayerStackConfig
 from emperor.base.layer.config import LayerConfig
 from emperor.halting.config import StickBreakingConfig
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
 from models.linear.experiment_config import ExperimentConfig
 
@@ -34,7 +35,31 @@ class LinearConfigBuilder:
         stack_last_layer_bias_option: LastLayerBiasOptions = config.STACK_LAST_LAYER_BIAS_OPTION,
         stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         stack_gate_flag: bool = config.GATE_FLAG,
+        gate_hidden_dim: int = config.GATE_HIDDEN_DIM,
+        gate_layer_norm_position: LayerNormPositionOptions = config.GATE_LAYER_NORM_POSITION,
+        gate_stack_num_layers: int = config.GATE_STACK_NUM_LAYERS,
+        gate_stack_activation: ActivationOptions = config.GATE_STACK_ACTIVATION,
+        gate_stack_residual_flag: bool = config.GATE_STACK_RESIDUAL_FLAG,
+        gate_stack_dropout_probability: float = config.GATE_STACK_DROPOUT_PROBABILITY,
+        gate_stack_last_layer_bias_option: LastLayerBiasOptions = config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
+        gate_stack_apply_output_pipeline_flag: bool = config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        gate_bias_flag: bool = config.GATE_BIAS_FLAG,
         stack_halting_flag: bool = config.HALTING_FLAG,
+        halting_threshold: float = config.HALTING_THRESHOLD,
+        halting_dropout: float = config.HALTING_DROPOUT,
+        halting_hidden_state_mode: HaltingHiddenStateModeOptions = (
+            config.HALTING_HIDDEN_STATE_MODE
+        ),
+        halting_gate_hidden_dim: int = config.HALTING_GATE_HIDDEN_DIM,
+        halting_gate_output_dim: int = config.HALTING_GATE_OUTPUT_DIM,
+        halting_gate_layer_norm_position: LayerNormPositionOptions = config.HALTING_GATE_LAYER_NORM_POSITION,
+        halting_gate_stack_num_layers: int = config.HALTING_GATE_STACK_NUM_LAYERS,
+        halting_gate_stack_activation: ActivationOptions = config.HALTING_GATE_STACK_ACTIVATION,
+        halting_gate_stack_residual_flag: bool = config.HALTING_GATE_STACK_RESIDUAL_FLAG,
+        halting_gate_stack_dropout_probability: float = config.HALTING_GATE_STACK_DROPOUT_PROBABILITY,
+        halting_gate_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_GATE_STACK_LAST_LAYER_BIAS_OPTION,
+        halting_gate_stack_apply_output_pipeline_flag: bool = config.HALTING_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        halting_gate_bias_flag: bool = config.HALTING_GATE_BIAS_FLAG,
     ) -> None:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -50,7 +75,37 @@ class LinearConfigBuilder:
         self.stack_last_layer_bias_option = stack_last_layer_bias_option
         self.stack_apply_output_pipeline_flag = stack_apply_output_pipeline_flag
         self.stack_gate_flag = stack_gate_flag
+        self.gate_hidden_dim = gate_hidden_dim
+        self.gate_layer_norm_position = gate_layer_norm_position
+        self.gate_stack_num_layers = gate_stack_num_layers
+        self.gate_stack_activation = gate_stack_activation
+        self.gate_stack_residual_flag = gate_stack_residual_flag
+        self.gate_stack_dropout_probability = gate_stack_dropout_probability
+        self.gate_stack_last_layer_bias_option = gate_stack_last_layer_bias_option
+        self.gate_stack_apply_output_pipeline_flag = (
+            gate_stack_apply_output_pipeline_flag
+        )
+        self.gate_bias_flag = gate_bias_flag
         self.stack_halting_flag = stack_halting_flag
+        self.halting_threshold = halting_threshold
+        self.halting_dropout = halting_dropout
+        self.halting_hidden_state_mode = halting_hidden_state_mode
+        self.halting_gate_hidden_dim = halting_gate_hidden_dim
+        self.halting_gate_output_dim = halting_gate_output_dim
+        self.halting_gate_layer_norm_position = halting_gate_layer_norm_position
+        self.halting_gate_stack_num_layers = halting_gate_stack_num_layers
+        self.halting_gate_stack_activation = halting_gate_stack_activation
+        self.halting_gate_stack_residual_flag = halting_gate_stack_residual_flag
+        self.halting_gate_stack_dropout_probability = (
+            halting_gate_stack_dropout_probability
+        )
+        self.halting_gate_stack_last_layer_bias_option = (
+            halting_gate_stack_last_layer_bias_option
+        )
+        self.halting_gate_stack_apply_output_pipeline_flag = (
+            halting_gate_stack_apply_output_pipeline_flag
+        )
+        self.halting_gate_bias_flag = halting_gate_bias_flag
 
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
@@ -91,7 +146,7 @@ class LinearConfigBuilder:
 
         output_model_config = LayerConfig(
             activation=ActivationOptions.DISABLED,
-            layer_norm_position=LayerNormPositionOptions.DEFAULT,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_flag=False,
             dropout_probability=0.0,
             gate_config=None,
@@ -119,20 +174,20 @@ class LinearConfigBuilder:
         if not self.stack_gate_flag:
             return None
         return LayerStackConfig(
-            hidden_dim=config.GATE_HIDDEN_DIM,
-            num_layers=config.GATE_STACK_NUM_LAYERS,
-            last_layer_bias_option=config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            hidden_dim=self.gate_hidden_dim,
+            num_layers=self.gate_stack_num_layers,
+            last_layer_bias_option=self.gate_stack_last_layer_bias_option,
+            apply_output_pipeline_flag=self.gate_stack_apply_output_pipeline_flag,
             layer_config=LayerConfig(
-                activation=config.GATE_STACK_ACTIVATION,
-                layer_norm_position=config.GATE_LAYER_NORM_POSITION,
-                residual_flag=config.GATE_STACK_RESIDUAL_FLAG,
-                dropout_probability=config.GATE_STACK_DROPOUT_PROBABILITY,
+                activation=self.gate_stack_activation,
+                layer_norm_position=self.gate_layer_norm_position,
+                residual_flag=self.gate_stack_residual_flag,
+                dropout_probability=self.gate_stack_dropout_probability,
                 halting_config=None,
                 shared_halting_flag=False,
                 gate_config=None,
                 layer_model_config=LinearLayerConfig(
-                    bias_flag=config.GATE_BIAS_FLAG,
+                    bias_flag=self.gate_bias_flag,
                 ),
             ),
         )
@@ -141,25 +196,25 @@ class LinearConfigBuilder:
         if not self.stack_halting_flag:
             return None
         return StickBreakingConfig(
-            threshold=config.HALTING_THRESHOLD,
-            halting_dropout=config.HALTING_DROPOUT,
-            hidden_state_mode=config.HALTING_HIDDEN_STATE_MODE,
+            threshold=self.halting_threshold,
+            halting_dropout=self.halting_dropout,
+            hidden_state_mode=self.halting_hidden_state_mode,
             halting_gate_config=LayerStackConfig(
-                hidden_dim=config.HALTING_GATE_HIDDEN_DIM or self.output_dim,
-                output_dim=config.HALTING_GATE_OUTPUT_DIM,
-                num_layers=config.HALTING_GATE_STACK_NUM_LAYERS,
-                last_layer_bias_option=config.HALTING_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-                apply_output_pipeline_flag=config.HALTING_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+                hidden_dim=self.halting_gate_hidden_dim or self.output_dim,
+                output_dim=self.halting_gate_output_dim,
+                num_layers=self.halting_gate_stack_num_layers,
+                last_layer_bias_option=self.halting_gate_stack_last_layer_bias_option,
+                apply_output_pipeline_flag=self.halting_gate_stack_apply_output_pipeline_flag,
                 layer_config=LayerConfig(
-                    activation=config.HALTING_GATE_STACK_ACTIVATION,
-                    layer_norm_position=config.HALTING_GATE_LAYER_NORM_POSITION,
-                    residual_flag=config.HALTING_GATE_STACK_RESIDUAL_FLAG,
-                    dropout_probability=config.HALTING_GATE_STACK_DROPOUT_PROBABILITY,
+                    activation=self.halting_gate_stack_activation,
+                    layer_norm_position=self.halting_gate_layer_norm_position,
+                    residual_flag=self.halting_gate_stack_residual_flag,
+                    dropout_probability=self.halting_gate_stack_dropout_probability,
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
-                        bias_flag=config.HALTING_GATE_BIAS_FLAG,
+                        bias_flag=self.halting_gate_bias_flag,
                     ),
                 ),
             ),
