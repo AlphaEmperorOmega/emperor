@@ -9,6 +9,7 @@ from emperor.base.enums import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
+from emperor.experiments.base import RandomSearch
 from models.linear.model import Model
 from models.linear.config_builder import LinearConfigBuilder
 from models.linear.presets import ExperimentOptions, ExperimentPresets
@@ -39,6 +40,33 @@ class TestLinearModel(unittest.TestCase):
             dataset.default_height,
             dataset.default_width,
         )
+
+    def test_preset_accepts_search_flags(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentOptions.PRESET,
+            config.DATASET_OPTIONS[0],
+            RandomSearch(num_samples=2),
+        )
+
+        self.assertEqual(len(configs), 2)
+
+    def test_non_baseline_options_accept_search_flags(self):
+        presets = ExperimentPresets()
+        searchable_options = [
+            ExperimentOptions.GATING,
+            ExperimentOptions.HALTING,
+            ExperimentOptions.GATING_HALTING,
+        ]
+
+        for option in searchable_options:
+            with self.subTest(option=option.name):
+                configs = presets.get_config(
+                    option,
+                    config.DATASET_OPTIONS[0],
+                    RandomSearch(num_samples=2),
+                )
+
+                self.assertEqual(len(configs), 2)
 
     def test_gate_config_uses_builder_overrides(self):
         cfg = LinearConfigBuilder(

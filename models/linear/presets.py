@@ -2,7 +2,7 @@ import models.linear.config as config
 
 from models.linear.config_builder import LinearConfigBuilder
 from models.linear.model import Model
-from emperor.experiments.base import SearchMode
+from emperor.experiments.base import SearchMode, create_search_space
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.base.enums import (
@@ -13,18 +13,19 @@ from emperor.base.enums import (
 )
 from emperor.halting.options import HaltingHiddenStateModeOptions
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
 class ExperimentOptions(BaseOptions):
-    PRESET = 0
-    CONFIG = 1
-    GATING = 2
-    HALTING = 3
-    GATING_HALTING = 4
+    PRESET = "Baseline linear stack preset; supports search-space flags."
+    GATING = "Linear stack with a learned gate applied to hidden-layer outputs."
+    HALTING = "Linear stack with adaptive computation halting enabled."
+    GATING_HALTING = (
+        "Linear stack with both learned gating and adaptive computation halting."
+    )
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -36,34 +37,39 @@ class ExperimentPresets(ExperimentPresetsBase):
         model_config_options: ExperimentOptions = ExperimentOptions.PRESET,
         dataset: type = Mnist,
         search_mode: SearchMode = None,
-        log_folder: str | None = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.PRESET:
-                return self._create_named_preset_configs(dataset, self._baseline_preset)
-            case ExperimentOptions.CONFIG:
-                return self._create_default_search_space_configs(
-                    dataset, search_mode, log_folder
-                )
+                return self._create_default_search_space_configs(dataset, search_mode)
             case ExperimentOptions.GATING:
-                return self._create_named_preset_configs(dataset, self._gating_preset)
+                return self._create_search_space_configs(
+                    dataset, search_mode, self._gating_preset
+                )
             case ExperimentOptions.HALTING:
-                return self._create_named_preset_configs(dataset, self._halting_preset)
+                return self._create_search_space_configs(
+                    dataset, search_mode, self._halting_preset
+                )
             case ExperimentOptions.GATING_HALTING:
-                return self._create_named_preset_configs(
-                    dataset, self._gating_halting_preset
+                return self._create_search_space_configs(
+                    dataset, search_mode, self._gating_halting_preset
                 )
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `LinearExperimentOptions`."
                 )
 
-    def _create_named_preset_configs(
+    def _create_search_space_configs(
         self,
         dataset: type,
-        preset_callback: Callable[..., "ModelConfig"],
+        search_mode: SearchMode,
+        preset_callback,
     ) -> list["ModelConfig"]:
-        return [preset_callback(**self._dataset_config(dataset))]
+        return create_search_space(
+            preset_callback,
+            self._dataset_config(dataset),
+            self._extract_search_space_from_config(search_mode),
+            search_mode,
+        )
 
     def _baseline_preset(
         self,

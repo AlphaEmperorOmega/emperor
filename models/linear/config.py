@@ -21,7 +21,7 @@ DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 TRAINER_ACCELERATOR: str = "cpu"
 TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 CALLBACK_EARLY_STOPPING_PATIENCE: int = 5
-CALLBACK_LINEAR_MONITOR = LinearMonitorCallback(log_every_n_steps=100)
+# CALLBACK_LINEAR_MONITOR = LinearMonitorCallback(log_every_n_steps=100)
 
 # Model
 INPUT_DIM: int = 28**2
@@ -32,7 +32,7 @@ BIAS_FLAG: bool = True
 # LAYER STACK OPTIONS
 HIDDEN_DIM: int = 256
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
-STACK_NUM_LAYERS: int = 2
+STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = True
 STACK_DROPOUT_PROBABILITY: float = 0.2
@@ -76,7 +76,7 @@ HALTING_GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED
 )
 HALTING_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-HALTING_GATE_BIAS_FLAG: bool = True
+HALTING_GATE_BIAS_FLAG: bool = BIAS_FLAG
 
 #########################################################################
 # HYPERPARAMETER SEARCH SPACE

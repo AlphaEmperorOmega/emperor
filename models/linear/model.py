@@ -23,7 +23,7 @@ class Model(ClassifierExperiment):
         self.main_cfg = self.cfg
         self.cfg: ExperimentConfig = self.cfg.experiment_config
         self.input_model = self._build_input_model()
-        self.model = self._build_model()
+        self.main_model = self._build_model()
         self.output_model = self._build_output_model()
 
     def _build_input_model(self) -> Layer:
@@ -78,6 +78,6 @@ class Model(ClassifierExperiment):
         X = X.to(self.device)
         X = torch.flatten(X, start_dim=1)
         X = Layer.forward_with_state(self.input_model, X)
-        X = Layer.forward_with_state(self.model, X)
+        X = Layer.forward_with_state(self.main_model, X)
         X = Layer.forward_with_state(self.output_model, X)
         return X
