@@ -14,7 +14,7 @@ from emperor.base.enums import (
 # Global
 BATCH_SIZE: int = 128
 LEARNING_RATE: float = 1e-3
-NUM_EPOCHS: int = 2
+NUM_EPOCHS: int = 30
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Trainer
@@ -34,7 +34,7 @@ HIDDEN_DIM: int = 256
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_FLAG: bool = True
+STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.2
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
@@ -43,7 +43,7 @@ STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 # GATE STACK OPTIONS
 # If `GATE_FLAG` is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
-GATE_HIDDEN_DIM: int = 256
+GATE_HIDDEN_DIM: int = HIDDEN_DIM
 GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
 GATE_STACK_ACTIVATION: ActivationOptions = STACK_ACTIVATION
@@ -68,7 +68,7 @@ HALTING_GATE_OUTPUT_DIM: int = 2
 HALTING_GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
-HALTING_GATE_STACK_NUM_LAYERS: int = STACK_NUM_LAYERS
+HALTING_GATE_STACK_NUM_LAYERS: int = 2
 HALTING_GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
 HALTING_GATE_STACK_RESIDUAL_FLAG: bool = STACK_RESIDUAL_FLAG
 HALTING_GATE_STACK_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
