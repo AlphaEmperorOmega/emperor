@@ -37,7 +37,7 @@ STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.2
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
-STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 
 #########################################################################
 # GATE STACK OPTIONS
@@ -46,12 +46,12 @@ GATE_FLAG: bool = False
 GATE_HIDDEN_DIM: int = HIDDEN_DIM
 GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
-GATE_STACK_ACTIVATION: ActivationOptions = STACK_ACTIVATION
+GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
 GATE_STACK_RESIDUAL_FLAG: bool = STACK_RESIDUAL_FLAG
-GATE_STACK_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
+GATE_STACK_DROPOUT_PROBABILITY: float = 0.0
 GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = STACK_LAST_LAYER_BIAS_OPTION
-GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-GATE_BIAS_FLAG: bool = BIAS_FLAG
+GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
+GATE_BIAS_FLAG: bool = True
 
 #########################################################################
 # Halting options
@@ -69,11 +69,11 @@ HALTING_GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
 HALTING_GATE_STACK_NUM_LAYERS: int = 2
-HALTING_GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
-HALTING_GATE_STACK_RESIDUAL_FLAG: bool = STACK_RESIDUAL_FLAG
-HALTING_GATE_STACK_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
+HALTING_GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
+HALTING_GATE_STACK_RESIDUAL_FLAG: bool = False
+HALTING_GATE_STACK_DROPOUT_PROBABILITY: float = 0.0
 HALTING_GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
-    LastLayerBiasOptions.DISABLED
+    LastLayerBiasOptions.DEFAULT
 )
 HALTING_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 HALTING_GATE_BIAS_FLAG: bool = BIAS_FLAG
@@ -82,12 +82,19 @@ HALTING_GATE_BIAS_FLAG: bool = BIAS_FLAG
 # HYPERPARAMETER SEARCH SPACE
 # These values define the parameter ranges explored when search mode is enabled.
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
-SEARCH_SPACE_HIDDEN_DIM: list = [64, 128, 256]
-SEARCH_SPACE_STACK_NUM_LAYERS: list = [3, 6, 9]
-SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2]
+SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
+SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 6, 8, 19]
+SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+SEARCH_SPACE_LAYER_NORM_POSITION: list = [
+    LayerNormPositionOptions.DISABLED,
+    LayerNormPositionOptions.DEFAULT,
+    LayerNormPositionOptions.BEFORE,
+    LayerNormPositionOptions.AFTER,
+]
 SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.RELU,
-    ActivationOptions.SILU,
+    ActivationOptions.LEAKY_RELU,
+    ActivationOptions.ELU,
     ActivationOptions.GELU,
-    ActivationOptions.MISH,
+    ActivationOptions.TANH,
 ]
