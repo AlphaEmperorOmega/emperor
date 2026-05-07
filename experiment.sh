@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 MODELS_DIR="models"
-COMMAND="bash $0"
+COMMAND="source experiment.sh"
 
 list_experiments() {
   echo "Available experiments:"
@@ -14,19 +14,26 @@ list_experiments() {
 
 list_flags() {
   echo "Available flags:"
-  echo "  --list                  Show available experiments and flags"
+  echo ""
+  echo "  --list                  ## Show available experiments and flags"
   echo "                          $COMMAND --list"
-  echo "  --list-options          Show available options for an experiment"
+  echo ""
+  echo "  --list-options          ## Show available options for an experiment"
   echo "                          $COMMAND <experiment> --list-options"
-  echo "  --option <option>       Run one experiment option"
+  echo ""
+  echo "  --option <option>       ## Run one experiment option"
   echo "                          $COMMAND <experiment> --option <option>"
-  echo "  --all-options           Run all experiment options sequentially"
+  echo ""
+  echo "  --all-options           ## Run all experiment options sequentially"
   echo "                          $COMMAND <experiment> --all-options"
-  echo "  --grid-search           Run grid search for the selected option"
+  echo ""
+  echo "  --grid-search           ## Run grid search for the selected option"
   echo "                          $COMMAND <experiment> --option <option> --grid-search"
-  echo "  --random-search <n>     Run random search with <n> sampled combinations"
+  echo ""
+  echo "  --random-search <n>     ## Run random search with <n> sampled combinations"
   echo "                          $COMMAND <experiment> --option <option> --random-search <n>"
-  echo "  --logdir <dir>          Store experiment logs in <dir>"
+  echo ""
+  echo "  --logdir <dir>          ## Store experiment logs in <dir>"
   echo "                          $COMMAND <experiment> --option <option> --logdir <dir>"
 }
 
