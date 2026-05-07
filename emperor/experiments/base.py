@@ -72,6 +72,7 @@ class ExperimentPresetsBase:
         dataset,
         search_mode: SearchMode = None,
         log_folder: str | None = None,
+        search_keys: list[str] | None = None,
     ) -> list["ModelConfig"]:
         raise NotImplementedError(
             "The method 'train_model' must be implemented in the subclass."
@@ -82,33 +83,34 @@ class ExperimentPresetsBase:
             "The method '_preset' must be implemented in the subclass."
         )
 
+    def _create_default_preset_configs(
+        self,
+        dataset: type = Mnist,
+        search_keys: list[str] | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = self._dataset_config(dataset)
+        return create_search_space(self._preset, base_config)
+
+    def _create_preset_search_space_configs(
+        self,
+        dataset: type = Mnist,
+        search_mode: SearchMode = None,
+        preset_callback: Callable | None = None,
+        search_keys: list[str] | None = None,
+    ) -> list["ModelConfig"]:
+        base_config = {**self._dataset_config(dataset)}
+        return create_search_space(
+            preset_callback or self._preset,
+            base_config,
+            self._extract_search_space_from_config(search_mode, search_keys),
+            search_mode,
+        )
+
     def _dataset_config(self, dataset: type) -> dict:
         return {
             "input_dim": dataset.flattened_input_dim,
             "output_dim": dataset.num_classes,
         }
-
-    def _create_default_preset_configs(
-        self,
-        dataset: type = Mnist,
-    ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
-        return create_search_space(self._preset, base_config)
-
-    def _create_default_search_space_configs(
-        self,
-        dataset: type = Mnist,
-        search_mode: SearchMode = None,
-    ) -> list["ModelConfig"]:
-        base_config = {
-            **self._dataset_config(dataset),
-        }
-        return create_search_space(
-            self._preset,
-            base_config,
-            self._extract_search_space_from_config(search_mode),
-            search_mode,
-        )
 
     def _best_params(self, dataset: type, log_folder: str | None = None) -> dict:
         package = type(self).__module__.rsplit(".", 1)[0]
@@ -128,17 +130,30 @@ class ExperimentPresetsBase:
             if type(v) in (int, float, bool)
         }
 
-    def _extract_search_space_from_config(self, search_mode: SearchMode = None) -> dict:
+    def _extract_search_space_from_config(
+        self,
+        search_mode: SearchMode = None,
+        search_keys: list[str] | None = None,
+    ) -> dict:
         if search_mode is None:
             return {}
         package = type(self).__module__.rsplit(".", 1)[0]
         config = importlib.import_module(f"{package}.config")
         prefix = "SEARCH_SPACE_"
-        return {
+        full_space = {
             key[len(prefix) :].lower(): value
             for key, value in vars(config).items()
             if key.startswith(prefix)
         }
+        if search_keys is None:
+            return full_space
+        unknown_keys = set(search_keys) - set(full_space)
+        if unknown_keys:
+            raise ValueError(
+                f"Unknown --search-keys: {sorted(unknown_keys)}. "
+                f"Valid keys: {sorted(full_space)}"
+            )
+        return {key: full_space[key] for key in search_keys}
 
 
 class ExperimentBase:
@@ -182,9 +197,7 @@ class ExperimentBase:
         early_stopping_min_delta = getattr(
             config, "CALLBACK_EARLY_STOPPING_MIN_DELTA", 0.0
         )
-        early_stopping_strict = getattr(
-            config, "CALLBACK_EARLY_STOPPING_STRICT", True
-        )
+        early_stopping_strict = getattr(config, "CALLBACK_EARLY_STOPPING_STRICT", True)
         early_stopping_check_finite = getattr(
             config, "CALLBACK_EARLY_STOPPING_CHECK_FINITE", True
         )
@@ -232,14 +245,17 @@ class ExperimentBase:
         }
 
     def train_model(
-        self, search_mode: SearchMode = None, log_folder: str | None = None
+        self,
+        search_mode: SearchMode = None,
+        log_folder: str | None = None,
+        search_keys: list[str] | None = None,
     ) -> None:
         options = [self.option] if self.option else self.options_enumeration
         top5 = self._load_best_results(log_folder)
         for option in options:
             for dataset_type in self.dataset_options:
                 for config in self.preset_generator.get_config(
-                    option, dataset_type, search_mode, log_folder
+                    option, dataset_type, search_mode, log_folder, search_keys
                 ):
                     trainer_config = self._load_trainer_config()
                     dataset = dataset_type(batch_size=config.batch_size)

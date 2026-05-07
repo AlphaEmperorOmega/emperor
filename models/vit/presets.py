@@ -48,7 +48,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             case ExperimentOptions.PRESET:
                 return self._create_default_preset_configs(dataset)
             case ExperimentOptions.CONFIG:
-                return self._create_default_search_space_configs(dataset, search_mode, log_folder)
+                return self._create_preset_search_space_configs(dataset, search_mode)
             case ExperimentOptions.ADAPTIVE:
                 return [self.__adaptive_preset(**self._dataset_config(dataset))]
             case _:

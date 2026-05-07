@@ -53,6 +53,15 @@ def get_experiment_parser(
     )
 
     parser.add_argument(
+        "--search-keys",
+        nargs="+",
+        type=str,
+        default=None,
+        metavar="KEY",
+        help="Restrict sweep to named SEARCH_SPACE_* axes (e.g. HIDDEN_DIM STACK_NUM_LAYERS).\nRequires --grid-search or --random-search.",
+    )
+
+    parser.add_argument(
         "--logdir",
         type=str,
         default=None,
@@ -66,7 +75,7 @@ def resolve_experiment_mode(
     args: argparse.Namespace,
     options_enum: type[BaseOptions],
     no_search_options: list[str] = ["PRESET"],
-) -> tuple[BaseOptions | None, SearchMode]:
+) -> tuple[BaseOptions | None, SearchMode, list[str] | None]:
     config_option = None if args.all_options else options_enum.get_option(args.option)
     if args.random_search is not None:
         search_mode: SearchMode = RandomSearch(args.random_search)
@@ -78,4 +87,13 @@ def resolve_experiment_mode(
         raise ValueError(
             f"'{args.option}' does not support --grid-search or --random-search. Use CONFIG instead."
         )
-    return config_option, search_mode
+    if args.search_keys is not None and search_mode is None:
+        raise ValueError(
+            "--search-keys requires --grid-search or --random-search."
+        )
+    search_keys = (
+        [key.lower() for key in args.search_keys]
+        if args.search_keys is not None
+        else None
+    )
+    return config_option, search_mode, search_keys

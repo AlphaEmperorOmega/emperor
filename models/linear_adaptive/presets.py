@@ -96,7 +96,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             case ExperimentOptions.PRESET:
                 return self._create_default_preset_configs(dataset)
             case ExperimentOptions.CONFIG:
-                return self._create_default_search_space_configs(
+                return self._create_preset_search_space_configs(
                     dataset, search_mode
                 )
             case ExperimentOptions.GENERATOR_DEPTH:

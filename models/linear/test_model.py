@@ -43,7 +43,7 @@ class TestLinearModel(unittest.TestCase):
 
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
-            ExperimentOptions.PRESET,
+            ExperimentOptions.BASELINE,
             config.DATASET_OPTIONS[0],
             RandomSearch(num_samples=2),
         )
@@ -136,6 +136,31 @@ class TestLinearModel(unittest.TestCase):
         self.assertFalse(halting_gate_cfg.layer_config.residual_flag)
         self.assertEqual(halting_gate_cfg.layer_config.dropout_probability, 0.3)
         self.assertFalse(halting_gate_cfg.layer_config.layer_model_config.bias_flag)
+
+    def test_search_keys_restrict_sweep_to_subset_of_axes(self):
+        configs = ExperimentPresets().get_config(
+            ExperimentOptions.BASELINE,
+            config.DATASET_OPTIONS[0],
+            RandomSearch(num_samples=20),
+            search_keys=["hidden_dim"],
+        )
+
+        learning_rates = {cfg.learning_rate for cfg in configs}
+        hidden_dims = {cfg.hidden_dim for cfg in configs}
+
+        self.assertEqual(len(learning_rates), 1)
+        self.assertEqual(hidden_dims, set(config.SEARCH_SPACE_HIDDEN_DIM))
+
+    def test_search_keys_unknown_axis_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            ExperimentPresets().get_config(
+                ExperimentOptions.BASELINE,
+                config.DATASET_OPTIONS[0],
+                RandomSearch(num_samples=2),
+                search_keys=["bogus_axis"],
+            )
+
+        self.assertIn("Unknown", str(ctx.exception))
 
     def test_halting_gate_hidden_dim_falls_back_to_output_dim(self):
         cfg = LinearConfigBuilder(
