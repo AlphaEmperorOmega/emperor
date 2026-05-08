@@ -11,10 +11,7 @@ from emperor.base.enums import (
 from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
 from emperor.base.layer.state import LayerState
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.augmentations.adaptive_parameters import (
-    AxisMaskOptions,
-    MaskDimensionOptions,
-)
+from emperor.augmentations.adaptive_parameters import MaskDimensionOptions
 from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskAbstract,
     AxisMaskConfig,
@@ -54,17 +51,6 @@ class ConstantGenerator(nn.Module):
 
 
 class TestAxisMaskHandlers(unittest.TestCase):
-    def _config_cls_for_option(
-        self, option: AxisMaskOptions
-    ) -> type[AxisMaskConfig]:
-        return {
-            AxisMaskOptions.WEIGHT_INFORMED_SCORE: WeightInformedScoreAxisMaskConfig,
-            AxisMaskOptions.PER_AXIS_SCORE: PerAxisScoreMaskConfig,
-            AxisMaskOptions.TOP_SLICE: TopSliceAxisMaskConfig,
-            AxisMaskOptions.OUTER_PRODUCT: OuterProductMaskConfig,
-            AxisMaskOptions.DIAGONAL: DiagonalAxisMaskConfig,
-        }[option]
-
     def mask_cases(self) -> list[tuple[type[AxisMaskConfig], type]]:
         return [
             (WeightInformedScoreAxisMaskConfig, WeightInformedScoreAxisMask),
@@ -81,14 +67,14 @@ class TestAxisMaskHandlers(unittest.TestCase):
         output_dim: int = 3,
         bias_flag: bool = True,
         config_cls: type[AxisMaskConfig] | None = None,
-        model_type: AxisMaskOptions = AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+        model_type: type[AxisMaskConfig] = WeightInformedScoreAxisMaskConfig,
         mask_dimension_option: MaskDimensionOptions = MaskDimensionOptions.ROW,
         mask_threshold: float = 0.5,
         mask_surrogate_scale: float = 5.0,
         mask_floor: float = 0.0,
         mask_transition_width: float | None = None,
     ) -> AxisMaskConfig:
-        config_cls = config_cls or self._config_cls_for_option(model_type)
+        config_cls = config_cls or model_type
         common_kwargs = dict(
             input_dim=input_dim,
             output_dim=output_dim,
@@ -282,7 +268,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         row_cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+            model_type=WeightInformedScoreAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         row_model = WeightInformedScoreAxisMask(row_cfg)
@@ -333,7 +319,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         column_cfg = self.preset(
             input_dim=3,
             output_dim=5,
-            model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+            model_type=WeightInformedScoreAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.COLUMN,
         )
         column_model = WeightInformedScoreAxisMask(column_cfg)
@@ -381,7 +367,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+            model_type=WeightInformedScoreAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
             mask_threshold=0.5,
             mask_surrogate_scale=0.0,
@@ -464,7 +450,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             hidden_dim=hidden_dim,
                                             output_dim=output_dim,
                                             bias_flag=bias_flag,
-                                            model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+                                            model_type=WeightInformedScoreAxisMaskConfig,
                                             mask_dimension_option=mask_dimension,
                                             mask_threshold=mask_threshold,
                                             mask_surrogate_scale=mask_surrogate_scale,
@@ -522,7 +508,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         row_cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            model_type=PerAxisScoreMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         row_model = PerAxisScoreMask(row_cfg)
@@ -573,7 +559,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         column_cfg = self.preset(
             input_dim=3,
             output_dim=5,
-            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            model_type=PerAxisScoreMaskConfig,
             mask_dimension_option=MaskDimensionOptions.COLUMN,
         )
         column_model = PerAxisScoreMask(column_cfg)
@@ -626,7 +612,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            model_type=PerAxisScoreMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
             mask_threshold=0.5,
             mask_surrogate_scale=0.0,
@@ -706,7 +692,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             hidden_dim=hidden_dim,
                                             output_dim=output_dim,
                                             bias_flag=bias_flag,
-                                            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+                                            model_type=PerAxisScoreMaskConfig,
                                             mask_dimension_option=mask_dimension,
                                             mask_threshold=mask_threshold,
                                             mask_surrogate_scale=mask_surrogate_scale,
@@ -766,7 +752,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         model = TopSliceAxisMask(cfg)
@@ -817,7 +803,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=3,
             output_dim=5,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.COLUMN,
         )
         model = TopSliceAxisMask(cfg)
@@ -872,7 +858,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
             mask_threshold=0.5,
             mask_surrogate_scale=0.0,
@@ -952,7 +938,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             hidden_dim=hidden_dim,
                                             output_dim=output_dim,
                                             bias_flag=bias_flag,
-                                            model_type=AxisMaskOptions.TOP_SLICE,
+                                            model_type=TopSliceAxisMaskConfig,
                                             mask_dimension_option=mask_dimension,
                                             mask_threshold=mask_threshold,
                                             mask_surrogate_scale=mask_surrogate_scale,
@@ -1010,7 +996,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=4,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
             mask_threshold=0.5,
             mask_surrogate_scale=0.0,
         )
@@ -1063,7 +1049,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                         hidden_dim=hidden_dim,
                                         output_dim=output_dim,
                                         bias_flag=bias_flag,
-                                        model_type=AxisMaskOptions.DIAGONAL,
+                                        model_type=DiagonalAxisMaskConfig,
                                         mask_threshold=mask_threshold,
                                         mask_surrogate_scale=mask_surrogate_scale,
                                         mask_floor=mask_floor,
@@ -1110,7 +1096,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=4,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
         )
         model = DiagonalAxisMask(cfg)
         model.eval()
@@ -1140,7 +1126,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=4,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
             mask_threshold=0.5,
         )
         weight_params = torch.ones(3, 4, 4)
@@ -1172,7 +1158,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=3,
             output_dim=4,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
         )
         model = DiagonalAxisMask(cfg)
         model.eval()
@@ -1192,7 +1178,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=4,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
             mask_floor=0.2,
         )
         model = DiagonalAxisMask(cfg)
@@ -1241,7 +1227,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         global_cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+            model_type=WeightInformedScoreAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         global_model = WeightInformedScoreAxisMask(global_cfg)
@@ -1254,7 +1240,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         per_axis_cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            model_type=PerAxisScoreMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         per_axis_model = PerAxisScoreMask(per_axis_cfg)
@@ -1267,7 +1253,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         top_slice_cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         top_slice_model = TopSliceAxisMask(top_slice_cfg)
@@ -1280,7 +1266,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         diagonal_cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         diagonal_model = DiagonalAxisMask(diagonal_cfg)
@@ -1298,7 +1284,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+            model_type=WeightInformedScoreAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         model = WeightInformedScoreAxisMask(cfg)
@@ -1338,7 +1324,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            model_type=PerAxisScoreMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         model = PerAxisScoreMask(cfg)
@@ -1378,7 +1364,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         model = TopSliceAxisMask(cfg)
@@ -1418,7 +1404,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=6,
             output_dim=3,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
             mask_transition_width=4.0,
         )
@@ -1448,7 +1434,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
             mask_transition_width=1.0,
         )
@@ -1477,7 +1463,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         model = TopSliceAxisMask(cfg)
@@ -1506,7 +1492,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 cfg = self.preset(
                     input_dim=4,
                     output_dim=4,
-                    model_type=AxisMaskOptions.DIAGONAL,
+                    model_type=DiagonalAxisMaskConfig,
                     mask_transition_width=width,
                 )
                 model = DiagonalAxisMask(cfg)
@@ -1530,13 +1516,13 @@ class TestAxisMaskHandlers(unittest.TestCase):
         default_cfg = self.preset(
             input_dim=4,
             output_dim=4,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
             mask_transition_width=None,
         )
         explicit_cfg = self.preset(
             input_dim=4,
             output_dim=4,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
             mask_transition_width=2.0,
         )
         default_model = DiagonalAxisMask(default_cfg)
@@ -1562,7 +1548,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         narrow_cfg = self.preset(
             input_dim=8,
             output_dim=8,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
             mask_transition_width=0.5,
         )
         narrow_model = DiagonalAxisMask(narrow_cfg)
@@ -1573,7 +1559,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         wide_cfg = self.preset(
             input_dim=8,
             output_dim=8,
-            model_type=AxisMaskOptions.DIAGONAL,
+            model_type=DiagonalAxisMaskConfig,
             mask_transition_width=8.0,
         )
         wide_model = DiagonalAxisMask(wide_cfg)
@@ -1591,7 +1577,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         for invalid_width in (-1.0, 0.0):
             with self.subTest(width=invalid_width):
                 cfg = self.preset(
-                    model_type=AxisMaskOptions.TOP_SLICE,
+                    model_type=TopSliceAxisMaskConfig,
                     mask_transition_width=invalid_width,
                 )
                 with self.assertRaises(ValueError):
@@ -1601,7 +1587,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.TOP_SLICE,
+            model_type=TopSliceAxisMaskConfig,
             mask_threshold=0.2,
             mask_surrogate_scale=5.0,
             mask_transition_width=4.0,
@@ -1625,10 +1611,17 @@ class TestAxisMaskHandlers(unittest.TestCase):
                 model = self.preset(config_cls=config_cls).build()
                 self.assertIsInstance(model, AxisMaskAbstract)
 
-    def test_enum_uses_per_axis_score_name(self):
-        self.assertTrue(hasattr(AxisMaskOptions, "PER_AXIS_SCORE"))
-        legacy_name = "PER_" + "ROW_SCORE"
-        self.assertFalse(hasattr(AxisMaskOptions, legacy_name))
+    def test_obsolete_enums_removed(self):
+        from emperor.augmentations.adaptive_parameters import options
+        for name in (
+            "DynamicDiagonalOptions",
+            "DynamicBiasOptions",
+            "AxisMaskOptions",
+        ):
+            self.assertFalse(
+                hasattr(options, name),
+                f"{name} should be removed from options module",
+            )
 
     def test_build_maps_each_leaf_config_to_distinct_mask_class(self):
         for config_cls, model_cls in self.mask_cases():
@@ -1704,7 +1697,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            model_type=PerAxisScoreMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
             mask_floor=0.2,
         )
@@ -1744,7 +1737,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         cfg = self.preset(
             input_dim=4,
             output_dim=3,
-            model_type=AxisMaskOptions.PER_AXIS_SCORE,
+            model_type=PerAxisScoreMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         model = PerAxisScoreMask(cfg)
@@ -1787,7 +1780,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
             def build(self, overrides):
                 return nn.Identity()
 
-        cfg = self.preset(model_type=AxisMaskOptions.WEIGHT_INFORMED_SCORE)
+        cfg = self.preset(model_type=WeightInformedScoreAxisMaskConfig)
         model = WeightInformedScoreAxisMask(cfg)
         model.model_config = InvalidGeneratorConfig()
 
@@ -1868,7 +1861,7 @@ class TestOuterProductMask(unittest.TestCase):
         cfg = TestAxisMaskHandlers().preset(
             input_dim=input_dim,
             output_dim=output_dim,
-            model_type=AxisMaskOptions.OUTER_PRODUCT,
+            model_type=OuterProductMaskConfig,
             mask_threshold=mask_threshold,
             mask_surrogate_scale=mask_surrogate_scale,
             mask_floor=mask_floor,

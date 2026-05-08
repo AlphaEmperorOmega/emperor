@@ -17,9 +17,6 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
-    AxisMaskOptions,
-    DynamicBiasOptions,
-    DynamicDiagonalOptions,
     MaskDimensionOptions,
 )
 from emperor.base.enums import (
@@ -102,9 +99,9 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             hidden_dim=16,
             output_dim=4,
             weight_flag=True,
-            diagonal_option=DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
-            bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
-            row_mask_option=AxisMaskOptions.WEIGHT_INFORMED_SCORE,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+            bias_option=GeneratorDynamicBiasConfig,
+            row_mask_option=WeightInformedScoreAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
         augmentation_config = (

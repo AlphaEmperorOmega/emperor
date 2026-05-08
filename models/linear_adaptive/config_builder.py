@@ -9,16 +9,15 @@ from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.bias import (
-    GeneratorDynamicBiasConfig,
+    DynamicBiasConfig,
+    WeightedBankDynamicBiasConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    AntiDynamicDiagonalConfig,
-    CombinedDynamicDiagonalConfig,
-    StandardDynamicDiagonalConfig,
+    DynamicDiagonalConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.mask import (
+    AxisMaskConfig,
     DiagonalAxisMaskConfig,
-    OuterProductMaskConfig,
     PerAxisScoreMaskConfig,
     TopSliceAxisMaskConfig,
     WeightInformedScoreAxisMaskConfig,
@@ -27,11 +26,8 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
-    AxisMaskOptions,
     BankExpansionFactorOptions,
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
@@ -60,9 +56,9 @@ class LinearAdaptiveConfigBuilder:
         bias_flag: bool = config.BIAS_FLAG,
         layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
         stack_layer_norm_position: LayerNormPositionOptions | None = None,
-        generator_depth: DynamicDepthOptions = config.GENERATOR_DEPTH,
-        diagonal_option: DynamicDiagonalOptions = config.DIAGONAL_OPTION,
-        bias_option: DynamicBiasOptions = config.BIAS_OPTION,
+        generator_depth: DynamicDepthOptions = config.WEIGHT_GENERATOR_DEPTH,
+        diagonal_option: type[DynamicDiagonalConfig] | None = config.DIAGONAL_OPTION,
+        bias_option: type[DynamicBiasConfig] | None = config.BIAS_OPTION,
         weight_flag: bool = config.WEIGHT_FLAG,
         weight_normalization: WeightNormalizationOptions = config.WEIGHT_NORMALIZATION,
         weight_normalization_position: WeightNormalizationPositionOptions = config.WEIGHT_NORMALIZATION_POSITION,
@@ -73,7 +69,7 @@ class LinearAdaptiveConfigBuilder:
         bias_decay_rate: float = config.BIAS_DECAY_RATE,
         bias_decay_warmup_batches: int = config.BIAS_DECAY_WARMUP_BATCHES,
         bias_bank_expansion_factor: BankExpansionFactorOptions = config.BIAS_BANK_EXPANSION_FACTOR,
-        row_mask_option: AxisMaskOptions = config.ROW_MASK_OPTION,
+        row_mask_option: type[AxisMaskConfig] | None = config.ROW_MASK_OPTION,
         mask_dimension_option: MaskDimensionOptions = config.MASK_DIMENSION_OPTION,
         mask_threshold: float = config.MASK_THRESHOLD,
         mask_surrogate_scale: float = config.MASK_SURROGATE_SCALE,
@@ -111,14 +107,14 @@ class LinearAdaptiveConfigBuilder:
         halting_gate_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_GATE_STACK_LAST_LAYER_BIAS_OPTION,
         halting_gate_stack_apply_output_pipeline_flag: bool = config.HALTING_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         halting_gate_bias_flag: bool = config.HALTING_GATE_BIAS_FLAG,
-        adaptive_generator_stack_num_layers: int = config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
-        adaptive_generator_stack_hidden_dim: int = config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
-        adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
-        adaptive_generator_stack_residual_flag: bool = config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG,
-        adaptive_generator_stack_dropout_probability: float = config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
-        adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
-        adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        adaptive_generator_stack_apply_output_pipeline_flag: bool = config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        adaptive_generator_stack_num_layers: int = config.AUGMENTATION_GENERATOR_STACK_NUM_LAYERS,
+        adaptive_generator_stack_hidden_dim: int = config.AUGMENTATION_GENERATOR_STACK_HIDDEN_DIM,
+        adaptive_generator_stack_activation: ActivationOptions = config.AUGMENTATION_GENERATOR_STACK_ACTIVATION,
+        adaptive_generator_stack_residual_flag: bool = config.AUGMENTATION_GENERATOR_STACK_RESIDUAL_FLAG,
+        adaptive_generator_stack_dropout_probability: float = config.AUGMENTATION_GENERATOR_STACK_DROPOUT_PROBABILITY,
+        adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.AUGMENTATION_GENERATOR_STACK_LAYER_NORM_POSITION,
+        adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.AUGMENTATION_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
+        adaptive_generator_stack_apply_output_pipeline_flag: bool = config.AUGMENTATION_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
     ) -> None:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -342,52 +338,41 @@ class LinearAdaptiveConfigBuilder:
             decay_warmup_batches=self.weight_decay_warmup_batches,
         )
 
-    def _build_bias_config(self) -> GeneratorDynamicBiasConfig | None:
-        if self.bias_option != DynamicBiasOptions.DYNAMIC_PARAMETERS:
+    def _build_bias_config(self) -> DynamicBiasConfig | None:
+        if self.bias_option is None:
             return None
-        return GeneratorDynamicBiasConfig(
+        kwargs = dict(
             bias_flag=self.bias_flag,
             decay_schedule=self.bias_decay_schedule,
             decay_rate=self.bias_decay_rate,
             decay_warmup_batches=self.bias_decay_warmup_batches,
         )
+        if self.bias_option is WeightedBankDynamicBiasConfig:
+            kwargs["bank_expansion_factor"] = self.bias_bank_expansion_factor
+        return self.bias_option(**kwargs)
 
-    def _build_diagonal_config(self) -> StandardDynamicDiagonalConfig | None:
-        config_cls = {
-            DynamicDiagonalOptions.DISABLED: None,
-            DynamicDiagonalOptions.DIAGONAL: StandardDynamicDiagonalConfig,
-            DynamicDiagonalOptions.ANTI_DIAGONAL: AntiDynamicDiagonalConfig,
-            DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL: CombinedDynamicDiagonalConfig,
-        }[self.diagonal_option]
-        if config_cls is None:
+    def _build_diagonal_config(self) -> DynamicDiagonalConfig | None:
+        if self.diagonal_option is None:
             return None
-        return config_cls()
+        return self.diagonal_option()
 
-    def _build_mask_config(self) -> TopSliceAxisMaskConfig | None:
-        config_cls = {
-            AxisMaskOptions.DISABLED: None,
-            AxisMaskOptions.WEIGHT_INFORMED_SCORE: WeightInformedScoreAxisMaskConfig,
-            AxisMaskOptions.PER_AXIS_SCORE: PerAxisScoreMaskConfig,
-            AxisMaskOptions.TOP_SLICE: TopSliceAxisMaskConfig,
-            AxisMaskOptions.OUTER_PRODUCT: OuterProductMaskConfig,
-            AxisMaskOptions.DIAGONAL: DiagonalAxisMaskConfig,
-        }[self.row_mask_option]
-        if config_cls is None:
+    def _build_mask_config(self) -> AxisMaskConfig | None:
+        if self.row_mask_option is None:
             return None
         kwargs = dict(
             mask_threshold=self.mask_threshold,
             mask_surrogate_scale=self.mask_surrogate_scale,
             mask_floor=self.mask_floor,
         )
-        if config_cls in {
+        if self.row_mask_option in {
             WeightInformedScoreAxisMaskConfig,
             PerAxisScoreMaskConfig,
             TopSliceAxisMaskConfig,
         }:
             kwargs["mask_dimension_option"] = self.mask_dimension_option
-        if config_cls in {TopSliceAxisMaskConfig, DiagonalAxisMaskConfig}:
+        if self.row_mask_option in {TopSliceAxisMaskConfig, DiagonalAxisMaskConfig}:
             kwargs["mask_transition_width"] = self.mask_transition_width
-        return config_cls(**kwargs)
+        return self.row_mask_option(**kwargs)
 
     def _build_model_config(self) -> LayerStackConfig:
         return LayerStackConfig(

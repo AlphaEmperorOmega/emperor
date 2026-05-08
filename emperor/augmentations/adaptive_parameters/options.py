@@ -1,24 +1,6 @@
 from enum import Enum
 
 
-class DynamicDiagonalOptions(Enum):
-    DISABLED = 0
-    DIAGONAL = 1
-    ANTI_DIAGONAL = 2
-    DIAGONAL_AND_ANTI_DIAGONAL = 3
-
-
-class DynamicBiasOptions(Enum):
-    DISABLED = 0
-    SCALE_AND_OFFSET = 1
-    ADDITIVE = 2
-    DYNAMIC_PARAMETERS = 3
-    SIGMOID_MULTIPLICATIVE = 4
-    WEIGHTED_BANK = 5
-    MULTIPLICATIVE = 6
-    TANH_MULTIPLICATIVE = 7
-
-
 class WeightNormalizationOptions(Enum):
     DISABLED = 0
     CLAMP = 1
@@ -48,15 +30,6 @@ class BankExpansionFactorOptions(Enum):
     FACTOR_OF_TWO = 2
     FACTOR_OF_THREE = 3
     FACTOR_OF_FOUR = 4
-
-
-class AxisMaskOptions(Enum):
-    DISABLED = 0
-    WEIGHT_INFORMED_SCORE = 1
-    PER_AXIS_SCORE = 2
-    TOP_SLICE = 3
-    DIAGONAL = 4
-    OUTER_PRODUCT = 5
 
 
 class MaskDimensionOptions(Enum):

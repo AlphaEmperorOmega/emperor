@@ -38,11 +38,8 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
     DiagonalAxisMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
-    AxisMaskOptions,
     BankExpansionFactorOptions,
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
@@ -77,11 +74,8 @@ __all__ = [
     "TopSliceAxisMaskConfig",
     "OuterProductMaskConfig",
     "DiagonalAxisMaskConfig",
-    "AxisMaskOptions",
     "BankExpansionFactorOptions",
-    "DynamicBiasOptions",
     "DynamicDepthOptions",
-    "DynamicDiagonalOptions",
     "MaskDimensionOptions",
     "WeightDecayScheduleOptions",
     "WeightNormalizationOptions",
