@@ -6,12 +6,12 @@ from torch import Tensor
 from torch.nn import Parameter
 from emperor.base.utils import Module
 from emperor.linears.core._validator import LinearValidator
-from emperor.linears.core.config import LinearLayerConfig
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
 
 
 class LinearAbstract(Module):
@@ -60,8 +60,8 @@ class LinearLayer(LinearAbstract):
 class AdaptiveLinearLayer(LinearAbstract):
     def __init__(
         self,
-        cfg: "LinearLayerConfig | ModelConfig",
-        overrides: "LinearLayerConfig | None" = None,
+        cfg: "AdaptiveLinearLayerConfig | ModelConfig",
+        overrides: "AdaptiveLinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
         self.adaptive_augmentation_config = self.cfg.adaptive_augmentation_config
