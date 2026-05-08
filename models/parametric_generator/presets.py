@@ -20,12 +20,14 @@ from emperor.experts.utils.enums import (
 )
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
 import models.parametric_generator.config as config
 from models.parametric_generator.config import ExperimentConfig
@@ -82,8 +84,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         adaptive_mixture_clip_range: float = config.ADAPTIVE_MIXTURE_CLIP_RANGE,
         adaptive_bias_option: AdaptiveBiasOptions = config.ADAPTIVE_BIAS_OPTION,
         adaptive_behaviour_generator_depth: DynamicDepthOptions = config.ADAPTIVE_BEHAVIOUR_GENERATOR_DEPTH,
-        adaptive_behaviour_diagonal_option: DynamicDiagonalOptions = config.ADAPTIVE_BEHAVIOUR_DIAGONAL_OPTION,
-        adaptive_behaviour_bias_option: DynamicBiasOptions = config.ADAPTIVE_BEHAVIOUR_BIAS_OPTION,
+        adaptive_behaviour_diagonal_option: type[DynamicDiagonalConfig] | None = config.ADAPTIVE_BEHAVIOUR_DIAGONAL_OPTION,
+        adaptive_behaviour_bias_option: type[DynamicBiasConfig] | None = config.ADAPTIVE_BEHAVIOUR_BIAS_OPTION,
         adaptive_behaviour_memory_option: LinearMemoryOptions = config.ADAPTIVE_BEHAVIOUR_MEMORY_OPTION,
         adaptive_behaviour_memory_size_option: LinearMemorySizeOptions = config.ADAPTIVE_BEHAVIOUR_MEMORY_SIZE_OPTION,
         adaptive_behaviour_memory_position_option: LinearMemoryPositionOptions = config.ADAPTIVE_BEHAVIOUR_MEMORY_POSITION_OPTION,

@@ -10,10 +10,11 @@ from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.patch.options.base import PatchConfig
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
-    DynamicDepthOptions,
-    DynamicDiagonalOptions,
+from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
+    StandardDynamicDiagonalConfig,
 )
 from models.trainer_config import *
 
@@ -56,17 +57,17 @@ OUTPUT_NUM_LAYERS: int = 2
 # Adaptive preset
 ADAPTIVE_ATTN_BIAS_FLAG: bool = True
 ADAPTIVE_ATTN_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO
-ADAPTIVE_ATTN_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL
-ADAPTIVE_ATTN_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
+ADAPTIVE_ATTN_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = StandardDynamicDiagonalConfig
+ADAPTIVE_ATTN_BIAS_OPTION: type[DynamicBiasConfig] | None = None
 ADAPTIVE_ATTN_BEHAVIOUR_STACK_NUM_LAYERS: int = 2
 ADAPTIVE_FF_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO
-ADAPTIVE_FF_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL
-ADAPTIVE_FF_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
+ADAPTIVE_FF_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = StandardDynamicDiagonalConfig
+ADAPTIVE_FF_BIAS_OPTION: type[DynamicBiasConfig] | None = None
 ADAPTIVE_FF_BEHAVIOUR_STACK_NUM_LAYERS: int = 2
 ADAPTIVE_OUTPUT_NUM_LAYERS: int = 1
 ADAPTIVE_OUTPUT_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO
-ADAPTIVE_OUTPUT_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DIAGONAL
-ADAPTIVE_OUTPUT_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
+ADAPTIVE_OUTPUT_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = StandardDynamicDiagonalConfig
+ADAPTIVE_OUTPUT_BIAS_OPTION: type[DynamicBiasConfig] | None = None
 ADAPTIVE_OUTPUT_BEHAVIOUR_STACK_NUM_LAYERS: int = 2
 
 

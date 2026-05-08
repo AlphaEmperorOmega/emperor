@@ -5,12 +5,14 @@ from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.base.enums import ActivationOptions
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     DynamicMemoryOptions,
     MemoryPositionOptions,
     MemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
 
 
@@ -24,10 +26,10 @@ class SamplerPresets:
         bias_flag: bool = True,
         noisy_topk_flag: bool = False,
         layer_stack_option: LinearLayerStackOptions = LinearLayerStackOptions.BASE,
-        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        bias_option: type[DynamicBiasConfig] | None = None,
         memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
+        diagonal_option: type[DynamicDiagonalConfig] | None = None,
         memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
         stack_num_layers: int = 2,

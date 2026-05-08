@@ -63,15 +63,12 @@ class _ParametricLayerValidator:
     def __ensure_adaptive_bias_option_is_disabled_for_behaviour_bias(
         self,
     ) -> None:
-        from emperor.augmentations.adaptive_parameters.options import DynamicBiasOptions
-
         if self.model.adaptive_behaviour_config is not None:
             is_bias_disabled = (
                 self.model.adaptive_bias_option != AdaptiveBiasOptions.DISABLED
             )
             is_behaviour_bias_enabled = (
-                self.model.adaptive_behaviour_config.bias_option
-                != DynamicBiasOptions.DISABLED
+                self.model.adaptive_behaviour_config.bias_option is not None
             )
             if is_bias_disabled and is_behaviour_bias_enabled:
                 raise ValueError(

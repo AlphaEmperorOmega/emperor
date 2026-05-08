@@ -9,12 +9,14 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     DynamicMemoryOptions,
     MemoryPositionOptions,
     MemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
 from models.trainer_config import *
 
@@ -52,10 +54,8 @@ ADAPTIVE_BIAS_OPTION: AdaptiveBiasOptions = AdaptiveBiasOptions.DISABLED
 
 # Adaptive behaviour
 ADAPTIVE_BEHAVIOUR_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DISABLED
-ADAPTIVE_BEHAVIOUR_DIAGONAL_OPTION: DynamicDiagonalOptions = (
-    DynamicDiagonalOptions.DISABLED
-)
-ADAPTIVE_BEHAVIOUR_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
+ADAPTIVE_BEHAVIOUR_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
+ADAPTIVE_BEHAVIOUR_BIAS_OPTION: type[DynamicBiasConfig] | None = None
 ADAPTIVE_BEHAVIOUR_MEMORY_OPTION: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED
 ADAPTIVE_BEHAVIOUR_MEMORY_SIZE_OPTION: MemorySizeOptions = (
     MemorySizeOptions.DISABLED

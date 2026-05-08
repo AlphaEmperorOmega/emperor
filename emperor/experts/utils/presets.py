@@ -11,12 +11,14 @@ from emperor.experts.utils.enums import (
     InitSamplerOptions,
 )
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     DynamicMemoryOptions,
     MemoryPositionOptions,
     MemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
 
 
@@ -30,8 +32,8 @@ class MixtureOfExpertsPresets:
         router_model_bias_flag: bool = False,
         router_model_noisy_topk_flag: bool = False,
         router_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        router_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        router_model_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        router_model_diagonal_option: type[DynamicDiagonalConfig] | None = None,
+        router_model_bias_option: type[DynamicBiasConfig] | None = None,
         router_model_memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         router_model_memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         router_model_memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
@@ -55,8 +57,8 @@ class MixtureOfExpertsPresets:
         experts_dropped_token_behavior: DroppedTokenOptions = DroppedTokenOptions.ZEROS,
         experts_model_bias_flag: bool = False,
         experts_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        experts_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        experts_model_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        experts_model_diagonal_option: type[DynamicDiagonalConfig] | None = None,
+        experts_model_bias_option: type[DynamicBiasConfig] | None = None,
         experts_model_memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         experts_model_memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         experts_model_memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
@@ -161,8 +163,8 @@ class MixtureOfExpertsPresets:
         router_model_bias_flag: bool = False,
         router_model_noisy_topk_flag: bool = False,
         router_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        router_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        router_model_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        router_model_diagonal_option: type[DynamicDiagonalConfig] | None = None,
+        router_model_bias_option: type[DynamicBiasConfig] | None = None,
         router_model_memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         router_model_memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         router_model_memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
@@ -186,8 +188,8 @@ class MixtureOfExpertsPresets:
         experts_dropped_token_behavior: DroppedTokenOptions = DroppedTokenOptions.ZEROS,
         experts_model_bias_flag: bool = False,
         experts_model_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        experts_model_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        experts_model_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        experts_model_diagonal_option: type[DynamicDiagonalConfig] | None = None,
+        experts_model_bias_option: type[DynamicBiasConfig] | None = None,
         experts_model_memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         experts_model_memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         experts_model_memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,

@@ -14,10 +14,10 @@ from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
-from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
-    DynamicDepthOptions,
-    DynamicDiagonalOptions,
+from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
 import models.vit.config as config
 from models.vit.config import ExperimentConfig
@@ -243,20 +243,20 @@ class ExperimentPresets(ExperimentPresetsBase):
         attn_bias_flag: bool = config.ADAPTIVE_ATTN_BIAS_FLAG,
         attn_num_layers: int = config.ATTN_NUM_LAYERS,
         attn_generator_depth: DynamicDepthOptions = config.ADAPTIVE_ATTN_GENERATOR_DEPTH,
-        attn_diagonal_option: DynamicDiagonalOptions = config.ADAPTIVE_ATTN_DIAGONAL_OPTION,
-        attn_bias_option: DynamicBiasOptions = config.ADAPTIVE_ATTN_BIAS_OPTION,
+        attn_diagonal_option: type[DynamicDiagonalConfig] | None = config.ADAPTIVE_ATTN_DIAGONAL_OPTION,
+        attn_bias_option: type[DynamicBiasConfig] | None = config.ADAPTIVE_ATTN_BIAS_OPTION,
         attn_behaviour_stack_num_layers: int = config.ADAPTIVE_ATTN_BEHAVIOUR_STACK_NUM_LAYERS,
         ff_bias_flag: bool = config.FF_BIAS_FLAG,
         ff_num_layers: int = config.FF_NUM_LAYERS,
         ff_generator_depth: DynamicDepthOptions = config.ADAPTIVE_FF_GENERATOR_DEPTH,
-        ff_diagonal_option: DynamicDiagonalOptions = config.ADAPTIVE_FF_DIAGONAL_OPTION,
-        ff_bias_option: DynamicBiasOptions = config.ADAPTIVE_FF_BIAS_OPTION,
+        ff_diagonal_option: type[DynamicDiagonalConfig] | None = config.ADAPTIVE_FF_DIAGONAL_OPTION,
+        ff_bias_option: type[DynamicBiasConfig] | None = config.ADAPTIVE_FF_BIAS_OPTION,
         ff_behaviour_stack_num_layers: int = config.ADAPTIVE_FF_BEHAVIOUR_STACK_NUM_LAYERS,
         output_bias_flag: bool = config.OUTPUT_BIAS_FLAG,
         output_num_layers: int = config.ADAPTIVE_OUTPUT_NUM_LAYERS,
         output_generator_depth: DynamicDepthOptions = config.ADAPTIVE_OUTPUT_GENERATOR_DEPTH,
-        output_diagonal_option: DynamicDiagonalOptions = config.ADAPTIVE_OUTPUT_DIAGONAL_OPTION,
-        output_bias_option: DynamicBiasOptions = config.ADAPTIVE_OUTPUT_BIAS_OPTION,
+        output_diagonal_option: type[DynamicDiagonalConfig] | None = config.ADAPTIVE_OUTPUT_DIAGONAL_OPTION,
+        output_bias_option: type[DynamicBiasConfig] | None = config.ADAPTIVE_OUTPUT_BIAS_OPTION,
         output_behaviour_stack_num_layers: int = config.ADAPTIVE_OUTPUT_BEHAVIOUR_STACK_NUM_LAYERS,
         image_patch_size: int = config.IMAGE_PATCH_SIZE,
         input_channels: int = config.INPUT_CHANNELS,

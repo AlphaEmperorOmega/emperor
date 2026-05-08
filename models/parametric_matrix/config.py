@@ -4,6 +4,22 @@ from emperor.base.layer import LayerStackConfig
 from emperor.base.enums import ActivationOptions
 from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions
 from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.augmentations.adaptive_parameters.options import (
+    DynamicDepthOptions,
+    DynamicMemoryOptions,
+    MemoryPositionOptions,
+    MemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import (
+    DynamicBiasConfig,
+    GeneratorDynamicBiasConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    CombinedDynamicDiagonalConfig,
+    DynamicDiagonalConfig,
+)
+from emperor.linears.options import LinearLayerStackOptions
+from emperor.base.enums import LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
@@ -58,10 +74,10 @@ ROUTER_DROPOUT_PROBABILITY: float = 0.1
 ROUTER_BIAS_FLAG: bool = True
 ROUTER_NOISY_TOPK_FLAG: bool = False
 ROUTER_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
-ROUTER_DIAGONAL_OPTION: DynamicDiagonalOptions = (
-    DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL
+ROUTER_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = (
+    CombinedDynamicDiagonalConfig
 )
-ROUTER_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DYNAMIC_PARAMETERS
+ROUTER_BIAS_OPTION: type[DynamicBiasConfig] | None = GeneratorDynamicBiasConfig
 ROUTER_MEMORY_OPTION: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED
 ROUTER_MEMORY_SIZE_OPTION: MemorySizeOptions = MemorySizeOptions.DISABLED
 ROUTER_MEMORY_POSITION_OPTION: MemoryPositionOptions = (

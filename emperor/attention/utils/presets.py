@@ -19,12 +19,14 @@ from emperor.parametric.utils.mixtures.options import (
     AdaptiveWeightOptions,
 )
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     DynamicMemoryOptions,
     MemoryPositionOptions,
     MemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
 
 
@@ -66,16 +68,16 @@ class MultiHeadAttentionPresets:
         projector_adaptive_init_sampler_model_option: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
         projector_adaptive_time_tracker_flag: bool = False,
         projector_adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        projector_adaptive_behaviour_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        projector_adaptive_behaviour_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        projector_adaptive_behaviour_diagonal_option: type[DynamicDiagonalConfig] | None = None,
+        projector_adaptive_behaviour_bias_option: type[DynamicBiasConfig] | None = None,
         projector_adaptive_behaviour_memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         projector_adaptive_behaviour_memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         projector_adaptive_behaviour_memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
         projector_router_bias_flag: bool = False,
         projector_router_noisy_topk_flag: bool = False,
         projector_router_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        projector_router_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        projector_router_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        projector_router_diagonal_option: type[DynamicDiagonalConfig] | None = None,
+        projector_router_bias_option: type[DynamicBiasConfig] | None = None,
         projector_router_memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         projector_router_memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         projector_router_memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
@@ -96,8 +98,8 @@ class MultiHeadAttentionPresets:
         projector_experts_weighted_parameters_flag=False,
         projector_experts_bias_flag: bool = False,
         projector_experts_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        projector_experts_diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        projector_experts_bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        projector_experts_diagonal_option: type[DynamicDiagonalConfig] | None = None,
+        projector_experts_bias_option: type[DynamicBiasConfig] | None = None,
         projector_experts_memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         projector_experts_memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         projector_experts_memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,
@@ -375,8 +377,8 @@ class MultiHeadAttentionPresets:
         embedding_dim: int = 0,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
-        diagonal_option: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED,
-        bias_option: DynamicBiasOptions = DynamicBiasOptions.DISABLED,
+        diagonal_option: type[DynamicDiagonalConfig] | None = None,
+        bias_option: type[DynamicBiasConfig] | None = None,
         memory_option: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED,
         memory_size_option: MemorySizeOptions = MemorySizeOptions.DISABLED,
         memory_position_option: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE,

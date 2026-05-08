@@ -1,12 +1,15 @@
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    CombinedDynamicDiagonalConfig,
+    DynamicDiagonalConfig,
 )
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.base.layer import LayerStackConfig
@@ -90,8 +93,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         bias_flag: bool = config.BIAS_FLAG,
         layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
         generator_depth: DynamicDepthOptions = config.GENERATOR_DEPTH,
-        diagonal_option: DynamicDiagonalOptions = config.DIAGONAL_OPTION,
-        bias_option: DynamicBiasOptions = config.BIAS_OPTION,
+        diagonal_option: type[DynamicDiagonalConfig] | None = config.DIAGONAL_OPTION,
+        bias_option: type[DynamicBiasConfig] | None = config.BIAS_OPTION,
         memory_option: LinearMemoryOptions = config.MEMORY_OPTION,
         memory_size_option: LinearMemorySizeOptions = config.MEMORY_SIZE_OPTION,
         memory_position_option: LinearMemoryPositionOptions = config.MEMORY_POSITION_OPTION,
@@ -133,8 +136,8 @@ class ExperimentPresets(ExperimentPresetsBase):
                             input_dim=hidden_dim,
                             output_dim=hidden_dim,
                             generator_depth=DynamicDepthOptions.DISABLED,
-                            diagonal_option=DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
-                            bias_option=DynamicBiasOptions.DISABLED,
+                            diagonal_option=CombinedDynamicDiagonalConfig,
+                            bias_option=None,
                             memory_option=LinearMemoryOptions.DISABLED,
                             memory_size_option=LinearMemorySizeOptions.DISABLED,
                             memory_position_option=LinearMemoryPositionOptions.BEFORE_AFFINE,
@@ -263,8 +266,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         bias_flag: bool,
         layer_norm_position: LayerNormPositionOptions,
         generator_depth: DynamicDepthOptions,
-        diagonal_option: DynamicDiagonalOptions,
-        bias_option: DynamicBiasOptions,
+        diagonal_option: type[DynamicDiagonalConfig] | None,
+        bias_option: type[DynamicBiasConfig] | None,
         memory_option: LinearMemoryOptions,
         memory_size_option: LinearMemorySizeOptions,
         memory_position_option: LinearMemoryPositionOptions,

@@ -19,12 +19,23 @@ from emperor.experts.utils.enums import (
     InitSamplerOptions,
 )
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     LinearMemoryOptions,
     LinearMemoryPositionOptions,
     LinearMemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import (
+    AdditiveDynamicBiasConfig,
+    AffineTransformDynamicBiasConfig,
+    DynamicBiasConfig,
+    GeneratorDynamicBiasConfig,
+    MultiplicativeDynamicBiasConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    AntiDynamicDiagonalConfig,
+    CombinedDynamicDiagonalConfig,
+    DynamicDiagonalConfig,
+    StandardDynamicDiagonalConfig,
 )
 from models.experts.config import ExperimentConfig
 from models.experts.model import Model
@@ -76,17 +87,17 @@ class ExperimentPresets(ExperimentPresetsBase):
                 DynamicDepthOptions.DEPTH_OF_THREE,
             ],
             "experts_model_diagonal_option": [
-                DynamicDiagonalOptions.DISABLED,
-                DynamicDiagonalOptions.DIAGONAL,
-                DynamicDiagonalOptions.ANTI_DIAGONAL,
-                DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
+                None,
+                StandardDynamicDiagonalConfig,
+                AntiDynamicDiagonalConfig,
+                CombinedDynamicDiagonalConfig,
             ],
             "experts_model_bias_option": [
-                DynamicBiasOptions.DISABLED,
-                DynamicBiasOptions.SCALE_AND_OFFSET,
-                DynamicBiasOptions.ADDITIVE,
-                DynamicBiasOptions.DYNAMIC_PARAMETERS,
-                DynamicBiasOptions.MULTIPLICATIVE,
+                None,
+                AffineTransformDynamicBiasConfig,
+                AdditiveDynamicBiasConfig,
+                GeneratorDynamicBiasConfig,
+                MultiplicativeDynamicBiasConfig,
             ],
         }
 
@@ -121,8 +132,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         experts_capacity_factor: float = config.EXPERTS_CAPACITY_FACTOR,
         experts_dropped_token_behavior: DroppedTokenOptions = config.EXPERTS_DROPPED_TOKEN_BEHAVIOR,
         experts_model_generator_depth: DynamicDepthOptions = config.EXPERTS_MODEL_GENERATOR_DEPTH,
-        experts_model_diagonal_option: DynamicDiagonalOptions = config.EXPERTS_MODEL_DIAGONAL_OPTION,
-        experts_model_bias_option: DynamicBiasOptions = config.EXPERTS_MODEL_BIAS_OPTION,
+        experts_model_diagonal_option: type[DynamicDiagonalConfig] | None = config.EXPERTS_MODEL_DIAGONAL_OPTION,
+        experts_model_bias_option: type[DynamicBiasConfig] | None = config.EXPERTS_MODEL_BIAS_OPTION,
         experts_model_memory_option: LinearMemoryOptions = config.EXPERTS_MODEL_MEMORY_OPTION,
         experts_model_memory_size_option: LinearMemorySizeOptions = config.EXPERTS_MODEL_MEMORY_SIZE_OPTION,
         experts_model_memory_position_option: LinearMemoryPositionOptions = config.EXPERTS_MODEL_MEMORY_POSITION_OPTION,

@@ -6,11 +6,15 @@ from emperor.linears.options import LinearLayerStackOptions
 from emperor.sampler.utils.presets import SamplerPresets
 from emperor.sampler.utils.routers import RouterModel
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     DynamicMemoryOptions,
     MemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import (
+    GeneratorDynamicBiasConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    CombinedDynamicDiagonalConfig,
 )
 
 
@@ -84,10 +88,10 @@ class TestRouterModel(unittest.TestCase):
                                 num_experts=num_experts,
                                 noisy_topk_flag=noisy_flag_option,
                                 stack_num_layers=num_layers,
-                                bias_option=DynamicBiasOptions.DYNAMIC_PARAMETERS,
+                                bias_option=GeneratorDynamicBiasConfig,
                                 memory_option=DynamicMemoryOptions.WEIGHTED,
                                 generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
-                                diagonal_option=DynamicDiagonalOptions.DIAGONAL_AND_ANTI_DIAGONAL,
+                                diagonal_option=CombinedDynamicDiagonalConfig,
                                 memory_size_option=MemorySizeOptions.LARGE,
                             )
                             model = RouterModel(cfg)

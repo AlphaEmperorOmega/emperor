@@ -8,12 +8,14 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.augmentations.adaptive_parameters.options import (
-    DynamicBiasOptions,
     DynamicDepthOptions,
-    DynamicDiagonalOptions,
     DynamicMemoryOptions,
     MemoryPositionOptions,
     MemorySizeOptions,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    DynamicDiagonalConfig,
 )
 from models.trainer_config import *
 
@@ -59,8 +61,8 @@ EXPERTS_INIT_SAMPLER_OPTION: InitSamplerOptions = InitSamplerOptions.DISABLED
 EXPERTS_CAPACITY_FACTOR: float = 0.0
 EXPERTS_DROPPED_TOKEN_BEHAVIOR: DroppedTokenOptions = DroppedTokenOptions.ZEROS
 EXPERTS_MODEL_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DISABLED
-EXPERTS_MODEL_DIAGONAL_OPTION: DynamicDiagonalOptions = DynamicDiagonalOptions.DISABLED
-EXPERTS_MODEL_BIAS_OPTION: DynamicBiasOptions = DynamicBiasOptions.DISABLED
+EXPERTS_MODEL_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
+EXPERTS_MODEL_BIAS_OPTION: type[DynamicBiasConfig] | None = None
 EXPERTS_MODEL_MEMORY_OPTION: DynamicMemoryOptions = DynamicMemoryOptions.DISABLED
 EXPERTS_MODEL_MEMORY_SIZE_OPTION: MemorySizeOptions = MemorySizeOptions.DISABLED
 EXPERTS_MODEL_MEMORY_POSITION_OPTION: MemoryPositionOptions = MemoryPositionOptions.BEFORE_AFFINE
