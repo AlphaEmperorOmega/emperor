@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
     DepthMappingHandlerConfig,
 )
@@ -6,7 +6,7 @@ from emperor.augmentations.adaptive_parameters.core.diagonal import (
     DynamicDiagonalConfig,
 )
 from emperor.base.layer.config import LayerStackConfig
-from emperor.base.utils import ConfigBase
+from emperor.base.utils import ConfigBase, optional_field
 from emperor.augmentations.adaptive_parameters.core.bias import (
     DynamicBiasConfig,
 )
@@ -20,33 +20,24 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
 
 @dataclass
 class AdaptiveParameterAugmentationConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Input feature dimension."},
+    input_dim: int | None = optional_field(
+        "Input feature dimension."
     )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Output feature dimension."},
+    output_dim: int | None = optional_field(
+        "Output feature dimension."
     )
-    diagonal_config: DynamicDiagonalConfig | None = field(
-        default=None,
-        metadata={
-            "help": "Optional dynamic diagonal adjustment."
-        },
+    diagonal_config: DynamicDiagonalConfig | None = optional_field(
+        "Optional dynamic diagonal adjustment."
     )
-    weight_config: DynamicWeightConfig | None = field(
-        default=None,
-        metadata={"help": "Optional dynamic weight adjustment."},
+    weight_config: DynamicWeightConfig | None = optional_field(
+        "Optional dynamic weight adjustment."
     )
-    bias_config: DynamicBiasConfig | None = field(
-        default=None,
-        metadata={"help": "Optional dynamic bias adjustment."},
+    bias_config: DynamicBiasConfig | None = optional_field(
+        "Optional dynamic bias adjustment."
     )
-    mask_config: AxisMaskConfig | None = field(
-        default=None,
-        metadata={"help": "Optional dynamic weight mask."},
+    mask_config: AxisMaskConfig | None = optional_field(
+        "Optional dynamic weight mask."
     )
-    model_config: LayerStackConfig | None = field(
-        default=None,
-        metadata={"help": "Internal generator network config."},
+    model_config: LayerStackConfig | None = optional_field(
+        "Internal generator network config."
     )
