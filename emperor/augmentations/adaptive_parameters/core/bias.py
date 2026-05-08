@@ -16,21 +16,12 @@ from emperor.augmentations.adaptive_parameters.core._validator import (
 
 @dataclass
 class DynamicBiasConfig(ConfigBase):
-    input_dim: int | None = optional_field(
-        "Input feature dimension."
-    )
-    output_dim: int | None = optional_field(
-        "Output feature dimension."
-    )
-    bias_flag: bool | None = optional_field(
-        "Whether the wrapped linear layer has bias."
-    )
+    input_dim: int | None = optional_field("Input feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
     decay_schedule: WeightDecayScheduleOptions | None = optional_field(
         "Base bias decay schedule."
     )
-    decay_rate: float | None = optional_field(
-        "Decay rate for the selected schedule."
-    )
+    decay_rate: float | None = optional_field("Decay rate for the selected schedule.")
     decay_warmup_batches: int | None = optional_field(
         "Warmup batches before bias decay starts."
     )
@@ -102,7 +93,6 @@ class DynamicBiasAbstract(Module):
         DynamicBiasValidator.validate(self)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
-        self.bias_flag = self.cfg.bias_flag
         self.decay_schedule_option = self.cfg.decay_schedule
         self.decay_rate = self.cfg.decay_rate
         self.decay_warmup_batches = self.cfg.decay_warmup_batches or 0
