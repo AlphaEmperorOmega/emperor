@@ -24,13 +24,20 @@ from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
     CombinedDynamicDiagonalConfig,
     DiagonalAxisMaskConfig,
+    DualModelDynamicWeightConfig,
     DynamicBiasConfig,
     DynamicDiagonalConfig,
+    DynamicWeightConfig,
     GeneratorDynamicBiasConfig,
+    HypernetworkDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+    LowRankDynamicWeightConfig,
     MultiplicativeDynamicBiasConfig,
     OuterProductMaskConfig,
     PerAxisScoreMaskConfig,
     SigmoidGatedDynamicBiasConfig,
+    SingleModelDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
     StandardDynamicDiagonalConfig,
     TanhGatedDynamicBiasConfig,
     TopSliceAxisMaskConfig,
@@ -124,7 +131,6 @@ WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
 # BIAS OPTIONS
 # If `BIAS_OPTION` is None, the bias-specific parameters below are ignored.
 BIAS_OPTION: type[DynamicBiasConfig] | None = GeneratorDynamicBiasConfig
-BIAS_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
 BIAS_DECAY_SCHEDULE: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED
 BIAS_DECAY_RATE: float = 0.0
 BIAS_DECAY_WARMUP_BATCHES: int = 0
@@ -167,6 +173,9 @@ AUGMENTATION_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 #########################################################################
 # HYPERPARAMETER SEARCH SPACE
 # These values define the parameter ranges explored when search mode is enabled.
+
+#########################################################################
+# MAIN STACK HYPERPARAMETERS
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
@@ -184,16 +193,23 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.GELU,
     ActivationOptions.TANH,
 ]
+#########################################################################
+# WEIGHT GENERATOR HYPERPARAMETERS
+SEARCH_SPACE_WEIGHT_OPTION: list = [
+    None,
+    SingleModelDynamicWeightConfig,
+    DualModelDynamicWeightConfig,
+    LowRankDynamicWeightConfig,
+    HypernetworkDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
+]
 SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH: list = [
     DynamicDepthOptions.DEPTH_OF_ONE,
     DynamicDepthOptions.DEPTH_OF_TWO,
-    DynamicDepthOptions.DEPTH_OF_THREE,
     DynamicDepthOptions.DEPTH_OF_FOUR,
-    DynamicDepthOptions.DEPTH_OF_FIVE,
     DynamicDepthOptions.DEPTH_OF_SIX,
-    DynamicDepthOptions.DEPTH_OF_SEVEN,
     DynamicDepthOptions.DEPTH_OF_EIGHT,
-    DynamicDepthOptions.DEPTH_OF_NINE,
     DynamicDepthOptions.DEPTH_OF_TEN,
 ]
 SEARCH_SPACE_WEIGHT_DECAY_SCHEDULE: list = [
@@ -223,6 +239,8 @@ SEARCH_SPACE_WEIGHT_BANK_EXPANSION_FACTOR: list = [
     BankExpansionFactorOptions.FACTOR_OF_THREE,
     BankExpansionFactorOptions.FACTOR_OF_FOUR,
 ]
+#########################################################################
+# BIAS GENERATOR HYPERPARAMETERS
 SEARCH_SPACE_BIAS_OPTION: list = [
     None,
     AffineTransformDynamicBiasConfig,
