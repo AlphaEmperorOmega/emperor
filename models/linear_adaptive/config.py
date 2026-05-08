@@ -164,10 +164,12 @@ AUGMENTATION_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
 )
 AUGMENTATION_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
-# Hyperparameter search space
+#########################################################################
+# HYPERPARAMETER SEARCH SPACE
+# These values define the parameter ranges explored when search mode is enabled.
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
-SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 6, 8, 19]
+SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 SEARCH_SPACE_STACK_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.DISABLED,
