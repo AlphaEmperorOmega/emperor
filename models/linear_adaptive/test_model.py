@@ -5,7 +5,7 @@ import torch
 import models.linear_adaptive.config as config
 
 from emperor.augmentations.adaptive_parameters.core.bias import (
-    GeneratorDynamicBiasConfig,
+    AdditiveDynamicBiasConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     CombinedDynamicDiagonalConfig,
@@ -77,7 +77,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
     def test_config_search_space_builds_configs(self):
         configs = ExperimentPresets().get_config(
-            ExperimentOptions.CONFIG,
+            ExperimentOptions.BASELINE,
             config.DATASET_OPTIONS[0],
             RandomSearch(num_samples=2),
         )
@@ -98,9 +98,9 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             input_dim=8,
             hidden_dim=16,
             output_dim=4,
-            weight_flag=True,
+            weight_option=DualModelDynamicWeightConfig,
             diagonal_option=CombinedDynamicDiagonalConfig,
-            bias_option=GeneratorDynamicBiasConfig,
+            bias_option=AdditiveDynamicBiasConfig,
             row_mask_option=WeightInformedScoreAxisMaskConfig,
             mask_dimension_option=MaskDimensionOptions.ROW,
         )
@@ -116,7 +116,7 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             augmentation_config.diagonal_config, CombinedDynamicDiagonalConfig
         )
         self.assertIsInstance(
-            augmentation_config.bias_config, GeneratorDynamicBiasConfig
+            augmentation_config.bias_config, AdditiveDynamicBiasConfig
         )
         self.assertIsInstance(
             augmentation_config.mask_config, WeightInformedScoreAxisMaskConfig

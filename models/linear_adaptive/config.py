@@ -28,7 +28,6 @@ from emperor.augmentations.adaptive_parameters import (
     DynamicBiasConfig,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
-    GeneratorDynamicBiasConfig,
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
@@ -64,7 +63,7 @@ BIAS_FLAG: bool = True
 #########################################################################
 # LAYER STACK OPTIONS
 HIDDEN_DIM: int = 256
-LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
+STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
@@ -77,7 +76,7 @@ STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 # If `GATE_FLAG` is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
 GATE_HIDDEN_DIM: int = HIDDEN_DIM
-GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
+GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
 GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
 GATE_STACK_RESIDUAL_FLAG: bool = STACK_RESIDUAL_FLAG
@@ -112,14 +111,16 @@ HALTING_GATE_BIAS_FLAG: bool = BIAS_FLAG
 
 #########################################################################
 # WEIGHT OPTIONS
-# If `WEIGHT_FLAG` is False, the weight-specific parameters below are ignored.
-WEIGHT_FLAG: bool = False
+# If `WEIGHT_OPTION` is None, the weight-specific parameters below are ignored.
+WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
 WEIGHT_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
 WEIGHT_DECAY_SCHEDULE: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED
 WEIGHT_DECAY_RATE: float = 0.0
 WEIGHT_DECAY_WARMUP_BATCHES: int = 0
-WEIGHT_NORMALIZATION: WeightNormalizationOptions = WeightNormalizationOptions.DISABLED
-WEIGHT_NORMALIZATION_POSITION: WeightNormalizationPositionOptions = (
+WEIGHT_NORMALIZATION_OPTION: WeightNormalizationOptions = (
+    WeightNormalizationOptions.DISABLED
+)
+WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = (
     WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
 )
 WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
@@ -130,7 +131,7 @@ WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
 #########################################################################
 # BIAS OPTIONS
 # If `BIAS_OPTION` is None, the bias-specific parameters below are ignored.
-BIAS_OPTION: type[DynamicBiasConfig] | None = GeneratorDynamicBiasConfig
+BIAS_OPTION: type[DynamicBiasConfig] | None = AdditiveDynamicBiasConfig
 BIAS_DECAY_SCHEDULE: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED
 BIAS_DECAY_RATE: float = 0.0
 BIAS_DECAY_WARMUP_BATCHES: int = 0
@@ -142,40 +143,36 @@ BIAS_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
 # DIAGONAL OPTIONS
 # If `DIAGONAL_OPTION` is None, the diagonal-specific parameters below are ignored.
 DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = CombinedDynamicDiagonalConfig
-DIAGONAL_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
 
 #########################################################################
 # MASK OPTIONS
 # If `ROW_MASK_OPTION` is None, the mask-specific parameters below are ignored.
 ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
-MASK_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
-MASK_DIMENSION_OPTION: MaskDimensionOptions = MaskDimensionOptions.COLUMN
 MASK_THRESHOLD: float = 0.5
-MASK_SURROGATE_SCALE: float = 10.0
 MASK_FLOOR: float = 0.0
 MASK_TRANSITION_WIDTH: float = 0.1
+MASK_SURROGATE_SCALE: float = 10.0
+MASK_DIMENSION_OPTION: MaskDimensionOptions = MaskDimensionOptions.COLUMN
 
 #########################################################################
 # Augmentation generator stack
-AUGMENTATION_GENERATOR_STACK_HIDDEN_DIM: int = HIDDEN_DIM
-AUGMENTATION_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
-    LAYER_NORM_POSITION
-)
-AUGMENTATION_GENERATOR_STACK_NUM_LAYERS: int = 2
-AUGMENTATION_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-AUGMENTATION_GENERATOR_STACK_RESIDUAL_FLAG: bool = False
-AUGMENTATION_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.1
-AUGMENTATION_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+ADAPTIVE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
+ADAPTIVE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
+ADAPTIVE_STACK_NUM_LAYERS: int = 2
+ADAPTIVE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
+ADAPTIVE_STACK_RESIDUAL_FLAG: bool = False
+ADAPTIVE_STACK_DROPOUT_PROBABILITY: float = 0.1
+ADAPTIVE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
 )
-AUGMENTATION_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+ADAPTIVE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
 #########################################################################
 # HYPERPARAMETER SEARCH SPACE
 # These values define the parameter ranges explored when search mode is enabled.
 
 #########################################################################
-# MAIN STACK HYPERPARAMETERS
+# GLOBAL TRAINING AND MAIN LAYER STACK HYPERPARAMETERS
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
@@ -193,8 +190,9 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.GELU,
     ActivationOptions.TANH,
 ]
+
 #########################################################################
-# WEIGHT GENERATOR HYPERPARAMETERS
+# DYNAMIC WEIGHT GENERATOR OPTION, DEPTH, DECAY, AND NORMALIZATION HYPERPARAMETERS
 SEARCH_SPACE_WEIGHT_OPTION: list = [
     None,
     SingleModelDynamicWeightConfig,
@@ -220,7 +218,7 @@ SEARCH_SPACE_WEIGHT_DECAY_SCHEDULE: list = [
 ]
 SEARCH_SPACE_WEIGHT_DECAY_RATE: list = [1e-5, 1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_WEIGHT_DECAY_WARMUP_BATCHES: list = [0, 100, 500, 1000]
-SEARCH_SPACE_WEIGHT_NORMALIZATION: list = [
+SEARCH_SPACE_WEIGHT_NORMALIZATION_OPTION: list = [
     WeightNormalizationOptions.DISABLED,
     WeightNormalizationOptions.CLAMP,
     WeightNormalizationOptions.L2_SCALE,
@@ -228,7 +226,7 @@ SEARCH_SPACE_WEIGHT_NORMALIZATION: list = [
     WeightNormalizationOptions.RMS,
     WeightNormalizationOptions.SIGMOID_SCALE,
 ]
-SEARCH_SPACE_WEIGHT_NORMALIZATION_POSITION: list = [
+SEARCH_SPACE_WEIGHT_NORMALIZATION_POSITION_OPTION: list = [
     WeightNormalizationPositionOptions.DISABLED,
     WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT,
     WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT,
@@ -239,13 +237,13 @@ SEARCH_SPACE_WEIGHT_BANK_EXPANSION_FACTOR: list = [
     BankExpansionFactorOptions.FACTOR_OF_THREE,
     BankExpansionFactorOptions.FACTOR_OF_FOUR,
 ]
+
 #########################################################################
-# BIAS GENERATOR HYPERPARAMETERS
+# DYNAMIC BIAS GENERATOR OPTION, DECAY, AND BANK EXPANSION HYPERPARAMETERS
 SEARCH_SPACE_BIAS_OPTION: list = [
     None,
     AffineTransformDynamicBiasConfig,
     AdditiveDynamicBiasConfig,
-    GeneratorDynamicBiasConfig,
     SigmoidGatedDynamicBiasConfig,
     WeightedBankDynamicBiasConfig,
     MultiplicativeDynamicBiasConfig,
@@ -265,6 +263,37 @@ SEARCH_SPACE_BIAS_BANK_EXPANSION_FACTOR: list = [
     BankExpansionFactorOptions.FACTOR_OF_THREE,
     BankExpansionFactorOptions.FACTOR_OF_FOUR,
 ]
+
+#########################################################################
+# DYNAMIC DIAGONAL GENERATOR OPTION AND DEPTH HYPERPARAMETERS
+SEARCH_SPACE_DIAGONAL_OPTION: list = [
+    None,
+    StandardDynamicDiagonalConfig,
+    AntiDynamicDiagonalConfig,
+    CombinedDynamicDiagonalConfig,
+]
+
+#########################################################################
+# DYNAMIC MASK GENERATOR OPTION, DEPTH, DIMENSION, AND SURROGATE SHAPING HYPERPARAMETERS
+SEARCH_SPACE_ROW_MASK_OPTION: list = [
+    None,
+    DiagonalAxisMaskConfig,
+    OuterProductMaskConfig,
+    PerAxisScoreMaskConfig,
+    TopSliceAxisMaskConfig,
+    WeightInformedScoreAxisMaskConfig,
+]
+SEARCH_SPACE_MASK_THRESHOLD: list = [0.1, 0.3, 0.5, 0.7, 0.9]
+SEARCH_SPACE_MASK_SURROGATE_SCALE: list = [1.0, 5.0, 10.0, 20.0]
+SEARCH_SPACE_MASK_FLOOR: list = [0.0, 0.1, 0.25, 0.5]
+SEARCH_SPACE_MASK_TRANSITION_WIDTH: list = [0.05, 0.1, 0.2, 0.5]
+SEARCH_SPACE_MASK_DIMENSION_OPTION: list = [
+    MaskDimensionOptions.ROW,
+    MaskDimensionOptions.COLUMN,
+]
+
+#########################################################################
+# AUGMENTATION GENERATOR LAYER STACK HYPERPARAMETERS
 SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: list = [1, 2, 3]
 SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: list = [64, 128, 256]
 SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2]

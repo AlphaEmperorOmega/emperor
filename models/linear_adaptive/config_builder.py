@@ -24,6 +24,12 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
 )
 from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
+    DynamicWeightConfig,
+    HypernetworkDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+    LowRankDynamicWeightConfig,
+    SingleModelDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     BankExpansionFactorOptions,
@@ -39,7 +45,7 @@ from emperor.base.enums import (
     LayerNormPositionOptions,
 )
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -54,17 +60,18 @@ class LinearAdaptiveConfigBuilder:
         hidden_dim: int = config.HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         bias_flag: bool = config.BIAS_FLAG,
-        layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
+        layer_norm_position: LayerNormPositionOptions = config.STACK_LAYER_NORM_POSITION,
         stack_layer_norm_position: LayerNormPositionOptions | None = None,
         generator_depth: DynamicDepthOptions = config.WEIGHT_GENERATOR_DEPTH,
         diagonal_option: type[DynamicDiagonalConfig] | None = config.DIAGONAL_OPTION,
         bias_option: type[DynamicBiasConfig] | None = config.BIAS_OPTION,
-        weight_flag: bool = config.WEIGHT_FLAG,
-        weight_normalization: WeightNormalizationOptions = config.WEIGHT_NORMALIZATION,
-        weight_normalization_position: WeightNormalizationPositionOptions = config.WEIGHT_NORMALIZATION_POSITION,
+        weight_option: type[DynamicWeightConfig] | None = config.WEIGHT_OPTION,
+        weight_normalization_option: WeightNormalizationOptions = config.WEIGHT_NORMALIZATION_OPTION,
+        weight_normalization_position_option: WeightNormalizationPositionOptions = config.WEIGHT_NORMALIZATION_POSITION_OPTION,
         weight_decay_schedule: WeightDecayScheduleOptions = config.WEIGHT_DECAY_SCHEDULE,
         weight_decay_rate: float = config.WEIGHT_DECAY_RATE,
         weight_decay_warmup_batches: int = config.WEIGHT_DECAY_WARMUP_BATCHES,
+        weight_bank_expansion_factor: BankExpansionFactorOptions = config.WEIGHT_BANK_EXPANSION_FACTOR,
         bias_decay_schedule: WeightDecayScheduleOptions = config.BIAS_DECAY_SCHEDULE,
         bias_decay_rate: float = config.BIAS_DECAY_RATE,
         bias_decay_warmup_batches: int = config.BIAS_DECAY_WARMUP_BATCHES,
@@ -107,14 +114,14 @@ class LinearAdaptiveConfigBuilder:
         halting_gate_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_GATE_STACK_LAST_LAYER_BIAS_OPTION,
         halting_gate_stack_apply_output_pipeline_flag: bool = config.HALTING_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         halting_gate_bias_flag: bool = config.HALTING_GATE_BIAS_FLAG,
-        adaptive_generator_stack_num_layers: int = config.AUGMENTATION_GENERATOR_STACK_NUM_LAYERS,
-        adaptive_generator_stack_hidden_dim: int = config.AUGMENTATION_GENERATOR_STACK_HIDDEN_DIM,
-        adaptive_generator_stack_activation: ActivationOptions = config.AUGMENTATION_GENERATOR_STACK_ACTIVATION,
-        adaptive_generator_stack_residual_flag: bool = config.AUGMENTATION_GENERATOR_STACK_RESIDUAL_FLAG,
-        adaptive_generator_stack_dropout_probability: float = config.AUGMENTATION_GENERATOR_STACK_DROPOUT_PROBABILITY,
-        adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.AUGMENTATION_GENERATOR_STACK_LAYER_NORM_POSITION,
-        adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.AUGMENTATION_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        adaptive_generator_stack_apply_output_pipeline_flag: bool = config.AUGMENTATION_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        adaptive_generator_stack_num_layers: int = config.ADAPTIVE_STACK_NUM_LAYERS,
+        adaptive_generator_stack_hidden_dim: int = config.ADAPTIVE_STACK_HIDDEN_DIM,
+        adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_STACK_ACTIVATION,
+        adaptive_generator_stack_residual_flag: bool = config.ADAPTIVE_STACK_RESIDUAL_FLAG,
+        adaptive_generator_stack_dropout_probability: float = config.ADAPTIVE_STACK_DROPOUT_PROBABILITY,
+        adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.ADAPTIVE_STACK_LAYER_NORM_POSITION,
+        adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.ADAPTIVE_STACK_LAST_LAYER_BIAS_OPTION,
+        adaptive_generator_stack_apply_output_pipeline_flag: bool = config.ADAPTIVE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
     ) -> None:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -127,12 +134,13 @@ class LinearAdaptiveConfigBuilder:
         self.generator_depth = generator_depth
         self.diagonal_option = diagonal_option
         self.bias_option = bias_option
-        self.weight_flag = weight_flag
-        self.weight_normalization = weight_normalization
-        self.weight_normalization_position = weight_normalization_position
+        self.weight_option = weight_option
+        self.weight_normalization_option = weight_normalization_option
+        self.weight_normalization_position_option = weight_normalization_position_option
         self.weight_decay_schedule = weight_decay_schedule
         self.weight_decay_rate = weight_decay_rate
         self.weight_decay_warmup_batches = weight_decay_warmup_batches
+        self.weight_bank_expansion_factor = weight_bank_expansion_factor
         self.bias_decay_schedule = bias_decay_schedule
         self.bias_decay_rate = bias_decay_rate
         self.bias_decay_warmup_batches = bias_decay_warmup_batches
@@ -326,23 +334,37 @@ class LinearAdaptiveConfigBuilder:
             ),
         )
 
-    def _build_weight_config(self) -> DualModelDynamicWeightConfig | None:
-        if not self.weight_flag:
+    def _build_weight_config(self) -> DynamicWeightConfig | None:
+        if self.weight_option is None:
             return None
-        return DualModelDynamicWeightConfig(
+        kwargs: dict[str, Any] = dict(
             generator_depth=self.generator_depth,
-            normalization_option=self.weight_normalization,
-            normalization_position_option=self.weight_normalization_position,
             decay_schedule=self.weight_decay_schedule,
             decay_rate=self.weight_decay_rate,
             decay_warmup_batches=self.weight_decay_warmup_batches,
         )
+        if self.weight_option in {
+            SingleModelDynamicWeightConfig,
+            DualModelDynamicWeightConfig,
+        }:
+            kwargs["normalization_option"] = self.weight_normalization_option
+            kwargs["normalization_position_option"] = self.weight_normalization_position_option
+        elif self.weight_option in {
+            LowRankDynamicWeightConfig,
+            HypernetworkDynamicWeightConfig,
+        }:
+            kwargs["normalization_option"] = self.weight_normalization_option
+        elif self.weight_option in {
+            LayeredWeightedBankDynamicWeightConfig,
+            SoftWeightedBankDynamicWeightConfig,
+        }:
+            kwargs["bank_expansion_factor"] = self.weight_bank_expansion_factor
+        return self.weight_option(**kwargs)
 
     def _build_bias_config(self) -> DynamicBiasConfig | None:
         if self.bias_option is None:
             return None
-        kwargs = dict(
-            bias_flag=self.bias_flag,
+        kwargs: dict[str, Any] = dict(
             decay_schedule=self.bias_decay_schedule,
             decay_rate=self.bias_decay_rate,
             decay_warmup_batches=self.bias_decay_warmup_batches,
@@ -359,7 +381,7 @@ class LinearAdaptiveConfigBuilder:
     def _build_mask_config(self) -> AxisMaskConfig | None:
         if self.row_mask_option is None:
             return None
-        kwargs = dict(
+        kwargs: dict[str, Any] = dict(
             mask_threshold=self.mask_threshold,
             mask_surrogate_scale=self.mask_surrogate_scale,
             mask_floor=self.mask_floor,
