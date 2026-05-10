@@ -131,7 +131,7 @@ WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
 #########################################################################
 # BIAS OPTIONS
 # If `BIAS_OPTION` is None, the bias-specific parameters below are ignored.
-BIAS_OPTION: type[DynamicBiasConfig] | None = AdditiveDynamicBiasConfig
+BIAS_OPTION: type[DynamicBiasConfig] | None = None
 BIAS_DECAY_SCHEDULE: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED
 BIAS_DECAY_RATE: float = 0.0
 BIAS_DECAY_WARMUP_BATCHES: int = 0
@@ -142,7 +142,7 @@ BIAS_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
 #########################################################################
 # DIAGONAL OPTIONS
 # If `DIAGONAL_OPTION` is None, the diagonal-specific parameters below are ignored.
-DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = CombinedDynamicDiagonalConfig
+DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
 
 #########################################################################
 # MASK OPTIONS
