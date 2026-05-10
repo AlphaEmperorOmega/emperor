@@ -24,6 +24,10 @@ list_flags() {
   echo "  --option <option>       ## Run one experiment option"
   echo "                          $COMMAND <experiment> --option <option>"
   echo ""
+  echo "  --print-model           ## Print model structure instead of running training"
+  echo "                          $COMMAND <experiment> --option <option> --print-model"
+  echo "                          $COMMAND <experiment> --all-options --print-model"
+  echo ""
   echo "  --all-options           ## Run all experiment options sequentially"
   echo "                          $COMMAND <experiment> --all-options"
   echo ""
@@ -38,7 +42,7 @@ list_flags() {
 }
 
 list_options() {
-  python3 -c "from models.$1 import ExperimentOptions; [print(f'  {n}') for n in ExperimentOptions.names()]"
+  python3 -c "from models.$1 import ExperimentOptions; [print(f'  {option.name}' + (f'  ## {option.value}' if isinstance(option.value, str) else '')) for option in ExperimentOptions]"
 }
 
 if [ -z "$1" ]; then
@@ -62,5 +66,19 @@ elif [ "$2" = "--list-options" ]; then
 else
   EXPERIMENT="$1"
   shift
-  python3 -m "models.$EXPERIMENT" "$@"
+  PRINT_MODEL=false
+  ARGS=()
+  for arg in "$@"; do
+    if [ "$arg" = "--print-model" ]; then
+      PRINT_MODEL=true
+    else
+      ARGS+=("$arg")
+    fi
+  done
+
+  if [ "$PRINT_MODEL" = true ]; then
+    python3 -m models.model_inspector --model "$EXPERIMENT" "${ARGS[@]}"
+  else
+    python3 -m "models.$EXPERIMENT" "${ARGS[@]}"
+  fi
 fi
