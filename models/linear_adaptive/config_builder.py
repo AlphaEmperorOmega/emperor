@@ -337,18 +337,20 @@ class LinearAdaptiveConfigBuilder:
     def _build_weight_config(self) -> DynamicWeightConfig | None:
         if self.weight_option is None:
             return None
-        kwargs: dict[str, Any] = dict(
-            generator_depth=self.generator_depth,
-            decay_schedule=self.weight_decay_schedule,
-            decay_rate=self.weight_decay_rate,
-            decay_warmup_batches=self.weight_decay_warmup_batches,
-        )
+        kwargs: dict[str, Any] = {
+            "generator_depth": self.generator_depth,
+            "decay_schedule": self.weight_decay_schedule,
+            "decay_rate": self.weight_decay_rate,
+            "decay_warmup_batches": self.weight_decay_warmup_batches,
+        }
         if self.weight_option in {
             SingleModelDynamicWeightConfig,
             DualModelDynamicWeightConfig,
         }:
             kwargs["normalization_option"] = self.weight_normalization_option
-            kwargs["normalization_position_option"] = self.weight_normalization_position_option
+            kwargs["normalization_position_option"] = (
+                self.weight_normalization_position_option
+            )
         elif self.weight_option in {
             LowRankDynamicWeightConfig,
             HypernetworkDynamicWeightConfig,
@@ -364,11 +366,11 @@ class LinearAdaptiveConfigBuilder:
     def _build_bias_config(self) -> DynamicBiasConfig | None:
         if self.bias_option is None:
             return None
-        kwargs: dict[str, Any] = dict(
-            decay_schedule=self.bias_decay_schedule,
-            decay_rate=self.bias_decay_rate,
-            decay_warmup_batches=self.bias_decay_warmup_batches,
-        )
+        kwargs: dict[str, Any] = {
+            "decay_schedule": self.bias_decay_schedule,
+            "decay_rate": self.bias_decay_rate,
+            "decay_warmup_batches": self.bias_decay_warmup_batches,
+        }
         if self.bias_option is WeightedBankDynamicBiasConfig:
             kwargs["bank_expansion_factor"] = self.bias_bank_expansion_factor
         return self.bias_option(**kwargs)
@@ -381,11 +383,11 @@ class LinearAdaptiveConfigBuilder:
     def _build_mask_config(self) -> AxisMaskConfig | None:
         if self.row_mask_option is None:
             return None
-        kwargs: dict[str, Any] = dict(
-            mask_threshold=self.mask_threshold,
-            mask_surrogate_scale=self.mask_surrogate_scale,
-            mask_floor=self.mask_floor,
-        )
+        kwargs: dict[str, Any] = {
+            "mask_threshold": self.mask_threshold,
+            "mask_surrogate_scale": self.mask_surrogate_scale,
+            "mask_floor": self.mask_floor,
+        }
         if self.row_mask_option in {
             WeightInformedScoreAxisMaskConfig,
             PerAxisScoreMaskConfig,
