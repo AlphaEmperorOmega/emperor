@@ -106,8 +106,6 @@ class LinearConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        gate_config = self._build_gate_config()
-        halting_config = self._build_halting_config()
         input_model_config = LayerConfig(
             activation=self.stack_activation,
             layer_norm_position=self.layer_norm_position,
@@ -121,6 +119,8 @@ class LinearConfigBuilder:
             ),
         )
 
+        gate_config = self._build_gate_config()
+        halting_config = self._build_halting_config()
         model_config = LayerStackConfig(
             hidden_dim=self.hidden_dim,
             num_layers=self.stack_num_layers,

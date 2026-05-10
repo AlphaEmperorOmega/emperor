@@ -207,14 +207,6 @@ class LinearAdaptiveConfigBuilder:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        gate_config = self._build_gate_config()
-        halting_config = self._build_halting_config()
-        adaptive_weight_config = self._build_weight_config()
-        adaptive_bias_config = self._build_bias_config()
-        adaptive_diagonal_config = self._build_diagonal_config()
-        adaptive_mask_config = self._build_mask_config()
-        adaptive_model_config = self._build_model_config()
-
         input_model_config = LayerConfig(
             activation=self.stack_activation,
             layer_norm_position=self.layer_norm_position,
@@ -228,6 +220,13 @@ class LinearAdaptiveConfigBuilder:
             ),
         )
 
+        gate_config = self._build_gate_config()
+        halting_config = self._build_halting_config()
+        adaptive_weight_config = self._build_weight_config()
+        adaptive_bias_config = self._build_bias_config()
+        adaptive_diagonal_config = self._build_diagonal_config()
+        adaptive_mask_config = self._build_mask_config()
+        adaptive_model_config = self._build_model_config()
         model_config = LayerStackConfig(
             hidden_dim=self.hidden_dim,
             num_layers=self.stack_num_layers,
