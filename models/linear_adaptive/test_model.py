@@ -159,40 +159,40 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             stack_halting_flag=True,
             halting_threshold=0.5,
             halting_dropout=0.2,
-            halting_gate_hidden_dim=48,
-            halting_gate_output_dim=2,
-            halting_gate_layer_norm_position=LayerNormPositionOptions.BEFORE,
-            halting_gate_stack_num_layers=5,
-            halting_gate_stack_activation=ActivationOptions.MISH,
-            halting_gate_stack_residual_flag=False,
-            halting_gate_stack_dropout_probability=0.3,
-            halting_gate_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            halting_gate_stack_apply_output_pipeline_flag=True,
-            halting_gate_bias_flag=False,
+            halting_hidden_dim=48,
+            halting_output_dim=2,
+            halting_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            halting_stack_num_layers=5,
+            halting_stack_activation=ActivationOptions.MISH,
+            halting_stack_residual_flag=False,
+            halting_stack_dropout_probability=0.3,
+            halting_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            halting_stack_apply_output_pipeline_flag=True,
+            halting_bias_flag=False,
         ).build()
 
         halting_cfg = cfg.experiment_config.model_config.layer_config.halting_config
-        halting_gate_cfg = halting_cfg.halting_gate_config
+        halting_stack_cfg = halting_cfg.halting_gate_config
 
         self.assertEqual(halting_cfg.threshold, 0.5)
         self.assertEqual(halting_cfg.halting_dropout, 0.2)
-        self.assertEqual(halting_gate_cfg.hidden_dim, 48)
-        self.assertEqual(halting_gate_cfg.output_dim, 2)
-        self.assertEqual(halting_gate_cfg.num_layers, 5)
+        self.assertEqual(halting_stack_cfg.hidden_dim, 48)
+        self.assertEqual(halting_stack_cfg.output_dim, 2)
+        self.assertEqual(halting_stack_cfg.num_layers, 5)
         self.assertEqual(
-            halting_gate_cfg.last_layer_bias_option, LastLayerBiasOptions.DISABLED
+            halting_stack_cfg.last_layer_bias_option, LastLayerBiasOptions.DISABLED
         )
-        self.assertTrue(halting_gate_cfg.apply_output_pipeline_flag)
+        self.assertTrue(halting_stack_cfg.apply_output_pipeline_flag)
         self.assertEqual(
-            halting_gate_cfg.layer_config.layer_norm_position,
+            halting_stack_cfg.layer_config.layer_norm_position,
             LayerNormPositionOptions.BEFORE,
         )
         self.assertEqual(
-            halting_gate_cfg.layer_config.activation, ActivationOptions.MISH
+            halting_stack_cfg.layer_config.activation, ActivationOptions.MISH
         )
-        self.assertFalse(halting_gate_cfg.layer_config.residual_flag)
-        self.assertEqual(halting_gate_cfg.layer_config.dropout_probability, 0.3)
-        self.assertFalse(halting_gate_cfg.layer_config.layer_model_config.bias_flag)
+        self.assertFalse(halting_stack_cfg.layer_config.residual_flag)
+        self.assertEqual(halting_stack_cfg.layer_config.dropout_probability, 0.3)
+        self.assertFalse(halting_stack_cfg.layer_config.layer_model_config.bias_flag)
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(

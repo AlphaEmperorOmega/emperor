@@ -104,16 +104,16 @@ class LinearAdaptiveConfigBuilder:
         halting_hidden_state_mode: HaltingHiddenStateModeOptions = (
             config.HALTING_HIDDEN_STATE_MODE
         ),
-        halting_gate_hidden_dim: int = config.HALTING_GATE_HIDDEN_DIM,
-        halting_gate_output_dim: int = config.HALTING_GATE_OUTPUT_DIM,
-        halting_gate_layer_norm_position: LayerNormPositionOptions = config.HALTING_GATE_LAYER_NORM_POSITION,
-        halting_gate_stack_num_layers: int = config.HALTING_GATE_STACK_NUM_LAYERS,
-        halting_gate_stack_activation: ActivationOptions = config.HALTING_GATE_STACK_ACTIVATION,
-        halting_gate_stack_residual_flag: bool = config.HALTING_GATE_STACK_RESIDUAL_FLAG,
-        halting_gate_stack_dropout_probability: float = config.HALTING_GATE_STACK_DROPOUT_PROBABILITY,
-        halting_gate_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-        halting_gate_stack_apply_output_pipeline_flag: bool = config.HALTING_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        halting_gate_bias_flag: bool = config.HALTING_GATE_BIAS_FLAG,
+        halting_hidden_dim: int = config.HALTING_HIDDEN_DIM,
+        halting_output_dim: int = config.HALTING_OUTPUT_DIM,
+        halting_layer_norm_position: LayerNormPositionOptions = config.HALTING_LAYER_NORM_POSITION,
+        halting_stack_num_layers: int = config.HALTING_STACK_NUM_LAYERS,
+        halting_stack_activation: ActivationOptions = config.HALTING_STACK_ACTIVATION,
+        halting_stack_residual_flag: bool = config.HALTING_STACK_RESIDUAL_FLAG,
+        halting_stack_dropout_probability: float = config.HALTING_STACK_DROPOUT_PROBABILITY,
+        halting_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
+        halting_stack_apply_output_pipeline_flag: bool = config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        halting_bias_flag: bool = config.HALTING_BIAS_FLAG,
         adaptive_generator_stack_num_layers: int = config.ADAPTIVE_STACK_NUM_LAYERS,
         adaptive_generator_stack_hidden_dim: int = config.ADAPTIVE_STACK_HIDDEN_DIM,
         adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_STACK_ACTIVATION,
@@ -173,22 +173,18 @@ class LinearAdaptiveConfigBuilder:
         self.halting_threshold = halting_threshold
         self.halting_dropout = halting_dropout
         self.halting_hidden_state_mode = halting_hidden_state_mode
-        self.halting_gate_hidden_dim = halting_gate_hidden_dim
-        self.halting_gate_output_dim = halting_gate_output_dim
-        self.halting_gate_layer_norm_position = halting_gate_layer_norm_position
-        self.halting_gate_stack_num_layers = halting_gate_stack_num_layers
-        self.halting_gate_stack_activation = halting_gate_stack_activation
-        self.halting_gate_stack_residual_flag = halting_gate_stack_residual_flag
-        self.halting_gate_stack_dropout_probability = (
-            halting_gate_stack_dropout_probability
+        self.halting_hidden_dim = halting_hidden_dim
+        self.halting_output_dim = halting_output_dim
+        self.halting_layer_norm_position = halting_layer_norm_position
+        self.halting_stack_num_layers = halting_stack_num_layers
+        self.halting_stack_activation = halting_stack_activation
+        self.halting_stack_residual_flag = halting_stack_residual_flag
+        self.halting_stack_dropout_probability = halting_stack_dropout_probability
+        self.halting_stack_last_layer_bias_option = halting_stack_last_layer_bias_option
+        self.halting_stack_apply_output_pipeline_flag = (
+            halting_stack_apply_output_pipeline_flag
         )
-        self.halting_gate_stack_last_layer_bias_option = (
-            halting_gate_stack_last_layer_bias_option
-        )
-        self.halting_gate_stack_apply_output_pipeline_flag = (
-            halting_gate_stack_apply_output_pipeline_flag
-        )
-        self.halting_gate_bias_flag = halting_gate_bias_flag
+        self.halting_bias_flag = halting_bias_flag
         self.adaptive_generator_stack_num_layers = adaptive_generator_stack_num_layers
         self.adaptive_generator_stack_hidden_dim = adaptive_generator_stack_hidden_dim
         self.adaptive_generator_stack_activation = adaptive_generator_stack_activation
@@ -314,21 +310,21 @@ class LinearAdaptiveConfigBuilder:
             halting_dropout=self.halting_dropout,
             hidden_state_mode=self.halting_hidden_state_mode,
             halting_gate_config=LayerStackConfig(
-                hidden_dim=self.halting_gate_hidden_dim or self.output_dim,
-                output_dim=self.halting_gate_output_dim,
-                num_layers=self.halting_gate_stack_num_layers,
-                last_layer_bias_option=self.halting_gate_stack_last_layer_bias_option,
-                apply_output_pipeline_flag=self.halting_gate_stack_apply_output_pipeline_flag,
+                hidden_dim=self.halting_hidden_dim or self.output_dim,
+                output_dim=self.halting_output_dim,
+                num_layers=self.halting_stack_num_layers,
+                last_layer_bias_option=self.halting_stack_last_layer_bias_option,
+                apply_output_pipeline_flag=self.halting_stack_apply_output_pipeline_flag,
                 layer_config=LayerConfig(
-                    activation=self.halting_gate_stack_activation,
-                    layer_norm_position=self.halting_gate_layer_norm_position,
-                    residual_flag=self.halting_gate_stack_residual_flag,
-                    dropout_probability=self.halting_gate_stack_dropout_probability,
+                    activation=self.halting_stack_activation,
+                    layer_norm_position=self.halting_layer_norm_position,
+                    residual_flag=self.halting_stack_residual_flag,
+                    dropout_probability=self.halting_stack_dropout_probability,
                     halting_config=None,
                     shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
-                        bias_flag=self.halting_gate_bias_flag,
+                        bias_flag=self.halting_bias_flag,
                     ),
                 ),
             ),
