@@ -9,12 +9,16 @@ from emperor.augmentations.adaptive_parameters.core.bias import (
 )
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     CombinedDynamicDiagonalConfig,
+    StandardDynamicDiagonalConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.mask import (
     WeightInformedScoreAxisMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+    LowRankDynamicWeightConfig,
+    SingleModelDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     MaskDimensionOptions,
@@ -125,6 +129,69 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             augmentation_config.mask_config.mask_dimension_option,
             MaskDimensionOptions.ROW,
         )
+
+    def test_combo_presets_do_not_include_masks(self):
+        expected_configs = {
+            ExperimentOptions.COMBO_1: (
+                SingleModelDynamicWeightConfig,
+                AdditiveDynamicBiasConfig,
+                CombinedDynamicDiagonalConfig,
+            ),
+            ExperimentOptions.COMBO_2: (
+                DualModelDynamicWeightConfig,
+                AdditiveDynamicBiasConfig,
+                CombinedDynamicDiagonalConfig,
+            ),
+            ExperimentOptions.COMBO_3: (
+                LayeredWeightedBankDynamicWeightConfig,
+                AdditiveDynamicBiasConfig,
+                CombinedDynamicDiagonalConfig,
+            ),
+            ExperimentOptions.COMBO_4: (
+                LowRankDynamicWeightConfig,
+                AdditiveDynamicBiasConfig,
+                CombinedDynamicDiagonalConfig,
+            ),
+            ExperimentOptions.COMBO_5: (
+                SingleModelDynamicWeightConfig,
+                AdditiveDynamicBiasConfig,
+                StandardDynamicDiagonalConfig,
+            ),
+            ExperimentOptions.COMBO_6: (
+                DualModelDynamicWeightConfig,
+                AdditiveDynamicBiasConfig,
+                StandardDynamicDiagonalConfig,
+            ),
+            ExperimentOptions.COMBO_7: (
+                LayeredWeightedBankDynamicWeightConfig,
+                AdditiveDynamicBiasConfig,
+                StandardDynamicDiagonalConfig,
+            ),
+            ExperimentOptions.COMBO_8: (
+                LowRankDynamicWeightConfig,
+                AdditiveDynamicBiasConfig,
+                StandardDynamicDiagonalConfig,
+            ),
+        }
+
+        for option, expected_types in expected_configs.items():
+            with self.subTest(option=option.name):
+                cfg = ExperimentPresets().get_config(option)[0]
+                augmentation_config = (
+                    cfg.experiment_config.model_config.layer_config.layer_model_config
+                    .adaptive_augmentation_config
+                )
+
+                self.assertIsInstance(
+                    augmentation_config.weight_config, expected_types[0]
+                )
+                self.assertIsInstance(
+                    augmentation_config.bias_config, expected_types[1]
+                )
+                self.assertIsInstance(
+                    augmentation_config.diagonal_config, expected_types[2]
+                )
+                self.assertIsNone(augmentation_config.mask_config)
 
     def test_gate_config_uses_builder_overrides(self):
         cfg = LinearAdaptiveConfigBuilder(
