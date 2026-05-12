@@ -18,9 +18,13 @@ NUM_EPOCHS: int = 30
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Trainer
-TRAINER_ACCELERATOR: str = "cpu"
+TRAINER_ACCELERATOR: str = "auto"
+TRAINER_DEVICES: int = 1
 TRAINER_GRADIENT_CLIP_VAL: float = 1.0
-CALLBACK_EARLY_STOPPING_PATIENCE: int = 5
+CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
+
+# Callback
+CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
 # CALLBACK_LINEAR_MONITOR = LinearMonitorCallback(log_every_n_steps=100)
 
 # Model

@@ -27,6 +27,8 @@ class TestLinearModel(unittest.TestCase):
                     cfg = presets.get_config(option, dataset)[0]
                     model = Model(cfg)
                     X = self._fake_batch(dataset, batch_size)
+                    if option == ExperimentOptions.GATING_HALTING:
+                        test = 1234
 
                     output = model(X)
                     logits = output[0] if isinstance(output, tuple) else output

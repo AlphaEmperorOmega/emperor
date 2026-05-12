@@ -51,9 +51,13 @@ LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
 # Trainer
-TRAINER_ACCELERATOR: str = "cpu"
+TRAINER_ACCELERATOR: str = "auto"
+TRAINER_DEVICES: int = 1
 TRAINER_GRADIENT_CLIP_VAL: float = 1.0
-CALLBACK_EARLY_STOPPING_PATIENCE: int = 5
+CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
+
+# Callback
+CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
 
 # Model
 INPUT_DIM: int = 28**2
