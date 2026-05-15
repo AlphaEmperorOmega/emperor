@@ -1,5 +1,5 @@
 from torch import Tensor
-from emperor.parametric.utils.mixtures.options import (
+from emperor.parametric.core.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from emperor.parametric.utils.layers import ParametricLayer
-    from emperor.parametric.utils.handlers import ParameterHanlderBase
+    from emperor.parametric.core.layers import ParametricLayer
+    from emperor.parametric.core.handlers import ParameterHanlderBase
 
 
 class _ParametricLayerValidator:
@@ -27,7 +27,6 @@ class _ParametricLayerValidator:
             "adaptive_weight_option",
             "adaptive_bias_option",
             "init_sampler_model_option",
-            "time_tracker_flag",
         ]
 
         for attr_name in required_attributes:
@@ -43,7 +42,7 @@ class _ParametricLayerValidator:
             )
 
     def __ensure_correct_input_types(self) -> None:
-        from emperor.parametric.utils.config import AdaptiveRouterOptions
+        from emperor.parametric.core.config import AdaptiveRouterOptions
 
         required_types = {
             "input_dim": int,
@@ -51,7 +50,6 @@ class _ParametricLayerValidator:
             "init_sampler_model_option": AdaptiveRouterOptions,
             "adaptive_weight_option": AdaptiveWeightOptions,
             "adaptive_bias_option": AdaptiveBiasOptions,
-            "time_tracker_flag": bool,
         }
 
         for attr_name, expected_type in required_types.items():
@@ -91,7 +89,7 @@ class _ParametricLayerValidator:
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:
-        from emperor.parametric.utils.config import AdaptiveRouterOptions
+        from emperor.parametric.core.config import AdaptiveRouterOptions
 
         is_vector_option = (
             self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
@@ -122,7 +120,7 @@ class _ParametricHandlerValidator:
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:
-        from emperor.parametric.utils.config import AdaptiveRouterOptions
+        from emperor.parametric.core.config import AdaptiveRouterOptions
 
         is_vector_option = (
             self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
@@ -137,7 +135,7 @@ class _ParametricHandlerValidator:
             )
 
     def ensure_shared_sampler_is_disabled(self) -> None:
-        from emperor.parametric.utils.config import AdaptiveRouterOptions
+        from emperor.parametric.core.config import AdaptiveRouterOptions
 
         is_shared_router = (
             self.model.init_sampler_model_option == AdaptiveRouterOptions.SHARED_ROUTER

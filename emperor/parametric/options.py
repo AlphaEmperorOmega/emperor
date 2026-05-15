@@ -1,6 +1,6 @@
 from emperor.base.enums import BaseOptions
-from emperor.parametric.utils.layers import ParametricLayer
-from emperor.parametric.utils.stack import ParametricLayerStack
+from emperor.parametric.core.layers import ParametricLayer
+from emperor.parametric.core.stack import ParametricLayerStack
 
 
 class ParametricLayerOptions(BaseOptions):

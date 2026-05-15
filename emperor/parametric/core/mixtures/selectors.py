@@ -1,15 +1,15 @@
-from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
+from emperor.parametric.core.mixtures.base import AdaptiveMixtureConfig
 from emperor.base.utils import Module
-from emperor.parametric.utils.mixtures.types.vector import VectorWeightsMixture
-from emperor.parametric.utils.mixtures.types.matrix import (
+from emperor.parametric.core.mixtures.types.vector import VectorWeightsMixture
+from emperor.parametric.core.mixtures.types.matrix import (
     MatrixBiasMixture,
     MatrixWeightsMixture,
 )
-from emperor.parametric.utils.mixtures.types.generator import (
+from emperor.parametric.core.mixtures.types.generator import (
     GeneratorBiasMixture,
     GeneratorWeightsMixture,
 )
-from emperor.parametric.utils.mixtures.options import (
+from emperor.parametric.core.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
@@ -17,8 +17,8 @@ from emperor.parametric.utils.mixtures.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
-    from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
+    from emperor.parametric.core.config import ParametricLayerConfig, AdaptiveRouterOptions
+    from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 
 
 # TODO: In the future move those selectors in the

@@ -1,24 +1,23 @@
 import torch
 
 from torch import Tensor
-from emperor.base.decorators import timer
 from emperor.base.utils import Module
 from emperor.sampler.utils.samplers import SamplerConfig
 from emperor.sampler.utils.routers import RouterConfig
-from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase
-from emperor.parametric.utils._validator import _ParametricLayerValidator
-from emperor.parametric.utils.mixtures.selectors import (
+from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
+from emperor.parametric.core._validator import _ParametricLayerValidator
+from emperor.parametric.core.mixtures.selectors import (
     AdaptiveWeightSelector,
     AdaptiveBiasSelector,
 )
 from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterAugmentation
 from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
-from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
-from emperor.parametric.utils.mixtures.options import (
+from emperor.parametric.core.config import ParametricLayerConfig, AdaptiveRouterOptions
+from emperor.parametric.core.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.parametric.utils.handlers import (
+from emperor.parametric.core.handlers import (
     GeneratorParameterHandler,
     MatrixParameterHandler,
     VectorParameterHandler,
@@ -46,7 +45,6 @@ class ParametricLayer(Module):
         self.adaptive_weight_option = self.cfg.adaptive_weight_option
         self.adaptive_bias_option = self.cfg.adaptive_bias_option
         self.init_sampler_model_option = self.cfg.init_sampler_model_option
-        self.time_tracker_flag = self.cfg.time_tracker_flag
 
         self.adaptive_behaviour_config = self.cfg.adaptive_behaviour_config
         self.router_config = self.cfg.router_config
@@ -78,7 +76,7 @@ class ParametricLayer(Module):
         return AdaptiveWeightSelector(self.cfg, overrides).build_model()
 
     def __init_bias_model(self) -> AdaptiveMixtureBase | None:
-        from emperor.parametric.utils.mixtures.options import AdaptiveBiasOptions
+        from emperor.parametric.core.mixtures.options import AdaptiveBiasOptions
 
         if self.adaptive_bias_option == AdaptiveBiasOptions.DISABLED:
             return None
@@ -109,16 +107,6 @@ class ParametricLayer(Module):
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor]:
         _ParametricLayerValidator.validate_input_shape(input)
-        if self.time_tracker_flag:
-            return self._track_layer_output_time(input, skip_mask)
-        return self._compute_layer_output(input, skip_mask)
-
-    @timer
-    def _track_layer_output_time(
-        self,
-        input: Tensor,
-        skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None, Tensor]:
         return self._compute_layer_output(input, skip_mask)
 
     def _compute_layer_output(

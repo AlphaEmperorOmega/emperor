@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import Module, ConfigBase
-from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
-from emperor.parametric.utils.mixtures._validator import _AdaptiveMixtureBaseValidator
+from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.core.mixtures._validator import _AdaptiveMixtureBaseValidator
 
 from typing import TYPE_CHECKING
 
