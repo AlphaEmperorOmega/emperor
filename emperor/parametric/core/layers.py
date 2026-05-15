@@ -46,12 +46,12 @@ class ParametricLayer(Module):
         self.adaptive_bias_option = self.cfg.adaptive_bias_option
         self.init_sampler_model_option = self.cfg.init_sampler_model_option
 
-        self.adaptive_behaviour_config = self.cfg.adaptive_behaviour_config
+        self.adaptive_augmentation_config = self.cfg.adaptive_augmentation_config
         self.router_config = self.cfg.router_config
         self.sampler_config = self.cfg.sampler_config
 
         self.validator = _ParametricLayerValidator(self)
-        self.adaptive_behaviour = self.__init_adaptive_behaviour()
+        self.adaptive_augmentation = self.__init_adaptive_augmentation()
         self.weight_parameter_model = self.__init_weight_model()
         self.bias_parameter_model = self.__init_bias_model()
 
@@ -60,14 +60,14 @@ class ParametricLayer(Module):
             self.parameter_handler.build_sampler_models()
         )
 
-    def __init_adaptive_behaviour(self):
-        if self.adaptive_behaviour_config is None:
+    def __init_adaptive_augmentation(self):
+        if self.adaptive_augmentation_config is None:
             return None
         overrides = AdaptiveParameterAugmentationConfig(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return AdaptiveParameterAugmentation(self.adaptive_behaviour_config, overrides)
+        return AdaptiveParameterAugmentation(self.adaptive_augmentation_config, overrides)
 
     def __init_weight_model(self) -> AdaptiveMixtureBase:
         overrides = ParametricLayerConfig(
@@ -117,7 +117,7 @@ class ParametricLayer(Module):
         weight_parameters, biase_parameters, loss = self._generate_parameters(
             input, skip_mask
         )
-        output = self.adaptive_behaviour(
+        output = self.adaptive_augmentation(
             self._compute_affine_transformation_callback,
             weight_parameters,
             biase_parameters,

@@ -61,16 +61,16 @@ class _ParametricLayerValidator:
     def __ensure_adaptive_bias_option_is_disabled_for_behaviour_bias(
         self,
     ) -> None:
-        if self.model.adaptive_behaviour_config is not None:
+        if self.model.adaptive_augmentation_config is not None:
             is_bias_disabled = (
                 self.model.adaptive_bias_option != AdaptiveBiasOptions.DISABLED
             )
             is_behaviour_bias_enabled = (
-                self.model.adaptive_behaviour_config.bias_option is not None
+                self.model.adaptive_augmentation_config.bias_option is not None
             )
             if is_bias_disabled and is_behaviour_bias_enabled:
                 raise ValueError(
-                    "Configuration Error: 'adaptive_behaviour_config.bias_option' can be used for `ParametricLayer` only when 'adaptive_bias_option' is `DISABLED`"
+                    "Configuration Error: 'adaptive_augmentation_config.bias_option' can be used for `ParametricLayer` only when 'adaptive_bias_option' is `DISABLED`"
                 )
 
     def __ensure_no_parameter_depth_mapping_can_be_used(
@@ -78,14 +78,14 @@ class _ParametricLayerValidator:
     ) -> None:
         from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
 
-        if self.model.adaptive_behaviour_config is not None:
+        if self.model.adaptive_augmentation_config is not None:
             is_generator_depth_disabled = (
-                self.model.adaptive_behaviour_config.generator_depth
+                self.model.adaptive_augmentation_config.generator_depth
                 != DynamicDepthOptions.DISABLED
             )
             if is_generator_depth_disabled:
                 raise ValueError(
-                    f"Configuration Error: 'adaptive_behaviour_config.generator_depth' needs to be disabled for `ParametricLayer`, got: {self.model.adaptive_behaviour_config.generator_depth}"
+                    f"Configuration Error: 'adaptive_augmentation_config.generator_depth' needs to be disabled for `ParametricLayer`, got: {self.model.adaptive_augmentation_config.generator_depth}"
                 )
 
     def ensure_indepentent_router_for_vector_option(self) -> None:

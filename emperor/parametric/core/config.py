@@ -40,7 +40,7 @@ class ParametricLayerConfig(ConfigBase):
     sampler_config: "SamplerConfig | None" = optional_field(
         "Configuration for the sampler model."
     )
-    adaptive_behaviour_config: "AdaptiveParameterAugmentationConfig | None" = (
+    adaptive_augmentation_config: "AdaptiveParameterAugmentationConfig | None" = (
         optional_field("Input-dependent parameter application config.")
     )
 
