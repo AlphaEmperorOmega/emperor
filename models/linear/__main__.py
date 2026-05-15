@@ -2,9 +2,9 @@ from models.parser import get_experiment_parser, resolve_experiment_mode
 from models.linear import Experiment, ExperimentOptions
 
 if __name__ == "__main__":
-    parser = get_experiment_parser(ExperimentOptions.names())
+    parser = get_experiment_parser(ExperimentOptions.names(), "models.linear")
     args = parser.parse_args()
-    config_option, search_mode, search_keys = resolve_experiment_mode(
+    config_option, search_mode, search_keys, config_overrides, search_overrides = resolve_experiment_mode(
         args,
         ExperimentOptions,
         no_search_options=[],
@@ -14,4 +14,6 @@ if __name__ == "__main__":
         search_mode=search_mode,
         log_folder=args.logdir,
         search_keys=search_keys,
+        config_overrides=config_overrides,
+        search_overrides=search_overrides,
     )

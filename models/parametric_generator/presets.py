@@ -55,12 +55,25 @@ class ExperimentPresets(ExperimentPresetsBase):
         dataset: type = Mnist,
         search_mode: SearchMode = None,
         log_folder: str | None = None,
+        search_keys: list[str] | None = None,
+        config_overrides: dict | None = None,
+        search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
         match model_config_options:
             case ExperimentOptions.PRESET:
-                return self._create_default_preset_configs(dataset)
+                return self._create_default_preset_configs(
+                    dataset,
+                    config_overrides=config_overrides,
+                    search_overrides=search_overrides,
+                )
             case ExperimentOptions.CONFIG:
-                return self._create_preset_search_space_configs(dataset, search_mode)
+                return self._create_preset_search_space_configs(
+                    dataset,
+                    search_mode,
+                    search_keys=search_keys,
+                    config_overrides=config_overrides,
+                    search_overrides=search_overrides,
+                )
             case _:
                 raise ValueError(
                     "The specified option is not supported. Please choose a valid `ExperimentOptions`."

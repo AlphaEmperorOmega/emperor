@@ -105,21 +105,21 @@ class ExperimentOptions(BaseOptions):
         "[MASK] Adaptive linear stack with the top-slice axis row mask generator."
     )
     WEIGHT_INFORMED_SCORE_MASK = "[MASK] Adaptive linear stack with the weight-informed score axis row mask generator."
-    COMBO_1 = "[BIAS+DIAGONAL+WEIGHT] Additive bias + combined diagonal + single-model weight."
+    COMBO_1 = "[WEIGHT+BIAS+DIAGONAL] Single-model weight + additive bias + combined diagonal."
     COMBO_2 = (
-        "[BIAS+DIAGONAL+WEIGHT] Additive bias + combined diagonal + dual-model weight."
+        "[WEIGHT+BIAS+DIAGONAL] Dual-model weight + additive bias + combined diagonal."
     )
-    COMBO_3 = "[BIAS+DIAGONAL+WEIGHT] Additive bias + combined diagonal + layered weighted bank weight."
+    COMBO_3 = "[WEIGHT+BIAS+DIAGONAL] Layered weighted bank weight + additive bias + combined diagonal."
     COMBO_4 = (
-        "[BIAS+DIAGONAL+WEIGHT] Additive bias + combined diagonal + low-rank weight."
+        "[WEIGHT+BIAS+DIAGONAL] Low-rank weight + additive bias + combined diagonal."
     )
-    COMBO_5 = "[BIAS+DIAGONAL+WEIGHT] Additive bias + standard diagonal + single-model weight."
+    COMBO_5 = "[WEIGHT+BIAS+DIAGONAL] Single-model weight + additive bias + standard diagonal."
     COMBO_6 = (
-        "[BIAS+DIAGONAL+WEIGHT] Additive bias + standard diagonal + dual-model weight."
+        "[WEIGHT+BIAS+DIAGONAL] Dual-model weight + additive bias + standard diagonal."
     )
-    COMBO_7 = "[BIAS+DIAGONAL+WEIGHT] Additive bias + standard diagonal + layered weighted bank weight."
+    COMBO_7 = "[WEIGHT+BIAS+DIAGONAL] Layered weighted bank weight + additive bias + standard diagonal."
     COMBO_8 = (
-        "[BIAS+DIAGONAL+WEIGHT] Additive bias + standard diagonal + low-rank weight."
+        "[WEIGHT+BIAS+DIAGONAL] Low-rank weight + additive bias + standard diagonal."
     )
 
 
@@ -134,10 +134,17 @@ class ExperimentPresets(ExperimentPresetsBase):
         search_mode: SearchMode = None,
         log_folder: str | None = None,
         search_keys: list[str] | None = None,
+        config_overrides: dict | None = None,
+        search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
         preset_callback = self._preset_callback_for_option(model_config_options)
         return self._create_preset_search_space_configs(
-            dataset, search_mode, preset_callback, search_keys
+            dataset,
+            search_mode,
+            preset_callback,
+            search_keys,
+            config_overrides=config_overrides,
+            search_overrides=search_overrides,
         )
 
     def _preset_callback_for_option(self, option: ExperimentOptions):
@@ -183,148 +190,164 @@ class ExperimentPresets(ExperimentPresetsBase):
         return self._preset(**kwargs)
 
     def _single_model_weight_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, weight_option=SingleModelDynamicWeightConfig)
+        return self._preset(**{"weight_option": SingleModelDynamicWeightConfig, **kwargs})
 
     def _dual_model_weight_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, weight_option=DualModelDynamicWeightConfig)
+        return self._preset(**{"weight_option": DualModelDynamicWeightConfig, **kwargs})
 
     def _low_rank_weight_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, weight_option=LowRankDynamicWeightConfig)
+        return self._preset(**{"weight_option": LowRankDynamicWeightConfig, **kwargs})
 
     def _hypernetwork_weight_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, weight_option=HypernetworkDynamicWeightConfig)
+        return self._preset(**{"weight_option": HypernetworkDynamicWeightConfig, **kwargs})
 
     def _layered_weighted_bank_weight_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(
-            **kwargs, weight_option=LayeredWeightedBankDynamicWeightConfig
+            **{"weight_option": LayeredWeightedBankDynamicWeightConfig, **kwargs}
         )
 
     def _soft_weighted_bank_weight_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, weight_option=SoftWeightedBankDynamicWeightConfig)
+        return self._preset(**{"weight_option": SoftWeightedBankDynamicWeightConfig, **kwargs})
 
     def _affine_transform_bias_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, bias_option=AffineTransformDynamicBiasConfig)
+        return self._preset(**{"bias_option": AffineTransformDynamicBiasConfig, **kwargs})
 
     def _additive_bias_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, bias_option=AdditiveDynamicBiasConfig)
+        return self._preset(**{"bias_option": AdditiveDynamicBiasConfig, **kwargs})
 
     def _generator_bias_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, bias_option=GeneratorDynamicBiasConfig)
+        return self._preset(**{"bias_option": GeneratorDynamicBiasConfig, **kwargs})
 
     def _multiplicative_bias_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, bias_option=MultiplicativeDynamicBiasConfig)
+        return self._preset(**{"bias_option": MultiplicativeDynamicBiasConfig, **kwargs})
 
     def _sigmoid_gated_bias_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, bias_option=SigmoidGatedDynamicBiasConfig)
+        return self._preset(**{"bias_option": SigmoidGatedDynamicBiasConfig, **kwargs})
 
     def _tanh_gated_bias_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, bias_option=TanhGatedDynamicBiasConfig)
+        return self._preset(**{"bias_option": TanhGatedDynamicBiasConfig, **kwargs})
 
     def _weighted_bank_bias_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, bias_option=WeightedBankDynamicBiasConfig)
+        return self._preset(**{"bias_option": WeightedBankDynamicBiasConfig, **kwargs})
 
     def _standard_diagonal_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, diagonal_option=StandardDynamicDiagonalConfig)
+        return self._preset(**{"diagonal_option": StandardDynamicDiagonalConfig, **kwargs})
 
     def _anti_diagonal_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, diagonal_option=AntiDynamicDiagonalConfig)
+        return self._preset(**{"diagonal_option": AntiDynamicDiagonalConfig, **kwargs})
 
     def _combined_diagonal_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, diagonal_option=CombinedDynamicDiagonalConfig)
+        return self._preset(**{"diagonal_option": CombinedDynamicDiagonalConfig, **kwargs})
 
     def _diagonal_axis_mask_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, row_mask_option=DiagonalAxisMaskConfig)
+        return self._preset(**{"row_mask_option": DiagonalAxisMaskConfig, **kwargs})
 
     def _outer_product_mask_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, row_mask_option=OuterProductMaskConfig)
+        return self._preset(**{"row_mask_option": OuterProductMaskConfig, **kwargs})
 
     def _per_axis_score_mask_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, row_mask_option=PerAxisScoreMaskConfig)
+        return self._preset(**{"row_mask_option": PerAxisScoreMaskConfig, **kwargs})
 
     def _top_slice_axis_mask_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, row_mask_option=TopSliceAxisMaskConfig)
+        return self._preset(**{"row_mask_option": TopSliceAxisMaskConfig, **kwargs})
 
     def _weight_informed_score_mask_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**kwargs, row_mask_option=WeightInformedScoreAxisMaskConfig)
+        return self._preset(**{"row_mask_option": WeightInformedScoreAxisMaskConfig, **kwargs})
 
     def _single_model_weight_additive_bias_combined_diagonal_preset(
         self, **kwargs
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            weight_option=SingleModelDynamicWeightConfig,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option=CombinedDynamicDiagonalConfig,
+            **{
+                "weight_option": SingleModelDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": CombinedDynamicDiagonalConfig,
+                **kwargs,
+            },
         )
 
     def _dual_model_weight_additive_bias_combined_diagonal_preset(
         self, **kwargs
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            weight_option=DualModelDynamicWeightConfig,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option=CombinedDynamicDiagonalConfig,
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": CombinedDynamicDiagonalConfig,
+                **kwargs,
+            },
         )
 
     def _layered_weighted_bank_weight_additive_bias_combined_diagonal_preset(
         self, **kwargs
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            weight_option=LayeredWeightedBankDynamicWeightConfig,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option=CombinedDynamicDiagonalConfig,
+            **{
+                "weight_option": LayeredWeightedBankDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": CombinedDynamicDiagonalConfig,
+                **kwargs,
+            },
         )
 
     def _low_rank_weight_additive_bias_combined_diagonal_preset(
         self, **kwargs
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            weight_option=LowRankDynamicWeightConfig,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option=CombinedDynamicDiagonalConfig,
+            **{
+                "weight_option": LowRankDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": CombinedDynamicDiagonalConfig,
+                **kwargs,
+            },
         )
 
     def _single_model_weight_additive_bias_standard_diagonal_preset(
         self, **kwargs
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            weight_option=SingleModelDynamicWeightConfig,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option=StandardDynamicDiagonalConfig,
+            **{
+                "weight_option": SingleModelDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": StandardDynamicDiagonalConfig,
+                **kwargs,
+            },
         )
 
     def _dual_model_weight_additive_bias_standard_diagonal_preset(
         self, **kwargs
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            weight_option=DualModelDynamicWeightConfig,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option=StandardDynamicDiagonalConfig,
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": StandardDynamicDiagonalConfig,
+                **kwargs,
+            },
         )
 
     def _layered_weighted_bank_weight_additive_bias_standard_diagonal_preset(
         self, **kwargs
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            weight_option=LayeredWeightedBankDynamicWeightConfig,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option=StandardDynamicDiagonalConfig,
+            **{
+                "weight_option": LayeredWeightedBankDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": StandardDynamicDiagonalConfig,
+                **kwargs,
+            },
         )
 
     def _low_rank_weight_additive_bias_standard_diagonal_preset(
         self, **kwargs
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            weight_option=LowRankDynamicWeightConfig,
-            bias_option=AdditiveDynamicBiasConfig,
-            diagonal_option=StandardDynamicDiagonalConfig,
+            **{
+                "weight_option": LowRankDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": StandardDynamicDiagonalConfig,
+                **kwargs,
+            },
         )
 
     def _preset(self, **kwargs) -> "ModelConfig":

@@ -73,6 +73,8 @@ class ExperimentPresetsBase:
         search_mode: SearchMode = None,
         log_folder: str | None = None,
         search_keys: list[str] | None = None,
+        config_overrides: dict | None = None,
+        search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
         raise NotImplementedError(
             "The method 'train_model' must be implemented in the subclass."
@@ -87,9 +89,18 @@ class ExperimentPresetsBase:
         self,
         dataset: type = Mnist,
         search_keys: list[str] | None = None,
+        config_overrides: dict | None = None,
+        search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
-        base_config = self._dataset_config(dataset)
-        return create_search_space(self._preset, base_config)
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._model_config_overrides(config_overrides),
+        }
+        return create_search_space(
+            self._preset,
+            base_config,
+            search_overrides or {},
+        )
 
     def _create_preset_search_space_configs(
         self,
@@ -97,12 +108,24 @@ class ExperimentPresetsBase:
         search_mode: SearchMode = None,
         preset_callback: Callable | None = None,
         search_keys: list[str] | None = None,
+        config_overrides: dict | None = None,
+        search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
-        base_config = {**self._dataset_config(dataset)}
+        base_config = {
+            **self._dataset_config(dataset),
+            **self._model_config_overrides(config_overrides),
+        }
+        if search_overrides and search_keys is None:
+            search_space = {**search_overrides}
+        else:
+            search_space = self._extract_search_space_from_config(
+                search_mode, search_keys
+            )
+            search_space.update(search_overrides or {})
         return create_search_space(
             preset_callback or self._preset,
             base_config,
-            self._extract_search_space_from_config(search_mode, search_keys),
+            search_space,
             search_mode,
         )
 
@@ -110,6 +133,16 @@ class ExperimentPresetsBase:
         return {
             "input_dim": dataset.flattened_input_dim,
             "output_dim": dataset.num_classes,
+        }
+
+    def _model_config_overrides(self, config_overrides: dict | None = None) -> dict:
+        ignored_prefixes = ("trainer_", "callback_")
+        ignored_keys = {"num_epochs"}
+        return {
+            key: value
+            for key, value in (config_overrides or {}).items()
+            if key not in ignored_keys
+            and not any(key.startswith(prefix) for prefix in ignored_prefixes)
         }
 
     def _best_params(self, dataset: type, log_folder: str | None = None) -> dict:
@@ -186,22 +219,24 @@ class ExperimentBase:
             "The method '_experiment_enumeration' must be implemented in the subclass."
         )
 
-    def _load_trainer_config(self) -> dict:
+    def _load_trainer_config(self, config_overrides: dict | None = None) -> dict:
         package = type(self.preset_generator).__module__.rsplit(".", 1)[0]
         config = importlib.import_module(f"{package}.config")
+        config_overrides = config_overrides or {}
 
-        early_stopping_patience = getattr(config, "CALLBACK_EARLY_STOPPING_PATIENCE", 0)
-        early_stopping_metric = getattr(
-            config, "CALLBACK_EARLY_STOPPING_METRIC", "validation/loss"
+        def config_value(key: str, default=None):
+            return config_overrides.get(key.lower(), getattr(config, key, default))
+
+        early_stopping_patience = config_value("CALLBACK_EARLY_STOPPING_PATIENCE", 0)
+        early_stopping_metric = config_value(
+            "CALLBACK_EARLY_STOPPING_METRIC", "validation/loss"
         )
-        early_stopping_min_delta = getattr(
-            config, "CALLBACK_EARLY_STOPPING_MIN_DELTA", 0.0
+        early_stopping_min_delta = config_value("CALLBACK_EARLY_STOPPING_MIN_DELTA", 0.0)
+        early_stopping_strict = config_value("CALLBACK_EARLY_STOPPING_STRICT", True)
+        early_stopping_check_finite = config_value(
+            "CALLBACK_EARLY_STOPPING_CHECK_FINITE", True
         )
-        early_stopping_strict = getattr(config, "CALLBACK_EARLY_STOPPING_STRICT", True)
-        early_stopping_check_finite = getattr(
-            config, "CALLBACK_EARLY_STOPPING_CHECK_FINITE", True
-        )
-        checkpoint_flag = getattr(config, "CALLBACK_CHECKPOINT_FLAG", False)
+        checkpoint_flag = config_value("CALLBACK_CHECKPOINT_FLAG", False)
 
         callbacks = []
         if early_stopping_patience > 0:
@@ -237,7 +272,14 @@ class ExperimentBase:
                 continue
 
             clean_key = key[len("TRAINER_") :].lower()
-            trainer_args[clean_key] = value
+            trainer_args[clean_key] = config_overrides.get(key.lower(), value)
+
+        for key, value in config_overrides.items():
+            if not key.startswith("trainer_"):
+                continue
+            clean_key = key[len("trainer_") :]
+            if value is not None:
+                trainer_args[clean_key] = value
 
         return {
             "trainer_args": trainer_args,
@@ -249,15 +291,26 @@ class ExperimentBase:
         search_mode: SearchMode = None,
         log_folder: str | None = None,
         search_keys: list[str] | None = None,
+        config_overrides: dict | None = None,
+        search_overrides: dict | None = None,
     ) -> None:
+        config_overrides = config_overrides or {}
+        search_overrides = search_overrides or {}
+        num_epochs = config_overrides.get("num_epochs", self.num_epochs)
         options = [self.option] if self.option else self.options_enumeration
         top5 = self._load_best_results(log_folder)
         for option in options:
             for dataset_type in self.dataset_options:
                 for config in self.preset_generator.get_config(
-                    option, dataset_type, search_mode, log_folder, search_keys
+                    option,
+                    dataset_type,
+                    search_mode,
+                    log_folder,
+                    search_keys,
+                    config_overrides=config_overrides,
+                    search_overrides=search_overrides,
                 ):
-                    trainer_config = self._load_trainer_config()
+                    trainer_config = self._load_trainer_config(config_overrides)
                     dataset = dataset_type(batch_size=config.batch_size)
                     model = self.model_type(cfg=config)
                     logger = TensorBoardLogger(
@@ -267,7 +320,7 @@ class ExperimentBase:
                         ),
                     )
                     trainer = Trainer(
-                        max_epochs=self.num_epochs,
+                        max_epochs=num_epochs,
                         logger=logger,
                         callbacks=trainer_config["callbacks"],
                         **trainer_config["trainer_args"],

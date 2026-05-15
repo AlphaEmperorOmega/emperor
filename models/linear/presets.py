@@ -33,10 +33,17 @@ class ExperimentPresets(ExperimentPresetsBase):
         search_mode: SearchMode = None,
         log_folder: str | None = None,
         search_keys: list[str] | None = None,
+        config_overrides: dict | None = None,
+        search_overrides: dict | None = None,
     ) -> list["ModelConfig"]:
         preset_callback = self._preset_callback_for_option(model_config_options)
         return self._create_preset_search_space_configs(
-            dataset, search_mode, preset_callback, search_keys
+            dataset,
+            search_mode,
+            preset_callback,
+            search_keys,
+            config_overrides=config_overrides,
+            search_overrides=search_overrides,
         )
 
     def _preset_callback_for_option(self, option: ExperimentOptions):
@@ -62,22 +69,24 @@ class ExperimentPresets(ExperimentPresetsBase):
         self,
         **kwargs,
     ) -> "ModelConfig":
-        return self._preset(**kwargs, stack_gate_flag=True)
+        return self._preset(**{"stack_gate_flag": True, **kwargs})
 
     def _halting_preset(
         self,
         **kwargs,
     ) -> "ModelConfig":
-        return self._preset(**kwargs, stack_halting_flag=True)
+        return self._preset(**{"stack_halting_flag": True, **kwargs})
 
     def _gating_halting_preset(
         self,
         **kwargs,
     ) -> "ModelConfig":
         return self._preset(
-            **kwargs,
-            stack_gate_flag=True,
-            stack_halting_flag=True,
+            **{
+                "stack_gate_flag": True,
+                "stack_halting_flag": True,
+                **kwargs,
+            },
         )
 
     def _preset(self, **kwargs) -> "ModelConfig":

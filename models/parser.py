@@ -1,6 +1,13 @@
 import argparse
+import importlib
 from emperor.base.enums import BaseOptions
 from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
+from models.config_overrides import (
+    add_config_override_arguments,
+    extract_config_overrides,
+    normalize_key,
+    print_config_options,
+)
 
 
 class _ExperimentParser(argparse.ArgumentParser):
@@ -9,6 +16,7 @@ class _ExperimentParser(argparse.ArgumentParser):
 
 def get_experiment_parser(
     config_choices: list | None = None,
+    experiment_package: str | None = None,
 ) -> _ExperimentParser:
     parser = _ExperimentParser(
         description="Run an experiment with a named configuration.",
@@ -16,25 +24,35 @@ def get_experiment_parser(
     )
 
     choices_text = ""
+    cli_config_choices = None
     if config_choices:
-        choices_text = "\nAvailable configurations:\n" + "\n".join(
-            f"  {c}" for c in config_choices
+        cli_config_choices = [preset_name_to_cli(choice) for choice in config_choices]
+        choices_text = "\nAvailable presets:\n" + "\n".join(
+            f"  {choice}" for choice in cli_config_choices
         )
 
     option_group = parser.add_mutually_exclusive_group(required=True)
 
     option_group.add_argument(
-        "--option",
+        "--preset",
+        dest="option",
         type=str,
-        help="Name of the experiment option to run." + choices_text,
-        choices=config_choices,
-        metavar="OPTION_NAME",
+        help="Name of the experiment preset to run." + choices_text,
+        choices=cli_config_choices,
+        metavar="PRESET_NAME",
     )
 
     option_group.add_argument(
-        "--all-options",
+        "--all-presets",
+        dest="all_options",
         action="store_true",
-        help="Run all experiment options sequentially.",
+        help="Run all experiment presets sequentially.",
+    )
+
+    option_group.add_argument(
+        "--list-config",
+        action="store_true",
+        help="Print overridable config flags and defaults, then exit.",
     )
 
     search_group = parser.add_mutually_exclusive_group()
@@ -68,14 +86,43 @@ def get_experiment_parser(
         help="Custom folder name for storing experiment logs. If not provided, the model file name is used.\nUse the same folder across models to compare them in TensorBoard.",
     )
 
+    parser.add_argument(
+        "--config",
+        action="store_true",
+        help="Group config override flags, e.g. --config --num-epochs 30.",
+    )
+
+    parser.set_defaults(_config_override_dests={})
+    if experiment_package is not None:
+        config_module = importlib.import_module(f"{experiment_package}.config")
+        parser.set_defaults(
+            _config_module=config_module,
+            _config_experiment=experiment_package.rsplit(".", 1)[-1],
+            _config_override_dests=add_config_override_arguments(parser, config_module),
+        )
+
     return parser
+
+
+def preset_name_to_cli(name: str) -> str:
+    return name.lower().replace("_", "-")
 
 
 def resolve_experiment_mode(
     args: argparse.Namespace,
     options_enum: type[BaseOptions],
     no_search_options: list[str] = ["PRESET"],
-) -> tuple[BaseOptions | None, SearchMode, list[str] | None]:
+) -> tuple[
+    BaseOptions | None,
+    SearchMode,
+    list[str] | None,
+    dict,
+    dict,
+]:
+    if getattr(args, "list_config", False):
+        print_config_options(getattr(args, "_config_experiment", ""))
+        raise SystemExit(0)
+
     config_option = None if args.all_options else options_enum.get_option(args.option)
     if args.random_search is not None:
         search_mode: SearchMode = RandomSearch(args.random_search)
@@ -83,17 +130,36 @@ def resolve_experiment_mode(
         search_mode = GridSearch()
     else:
         search_mode = None
-    if not args.all_options and search_mode is not None and args.option in no_search_options:
+    if (
+        not args.all_options
+        and search_mode is not None
+        and config_option.name in no_search_options
+    ):
         raise ValueError(
             f"'{args.option}' does not support --grid-search or --random-search. Use CONFIG instead."
         )
     if args.search_keys is not None and search_mode is None:
-        raise ValueError(
-            "--search-keys requires --grid-search or --random-search."
-        )
+        raise ValueError("--search-keys requires --grid-search or --random-search.")
+    if getattr(args, "search_set", None) and search_mode is None:
+        raise ValueError("--search-set requires --grid-search or --random-search.")
     search_keys = (
-        [key.lower() for key in args.search_keys]
+        [normalize_key(key) for key in args.search_keys]
         if args.search_keys is not None
         else None
     )
-    return config_option, search_mode, search_keys
+    config_module = getattr(args, "_config_module", None)
+    if config_module is None:
+        config_overrides, search_overrides = {}, {}
+    else:
+        config_overrides, search_overrides = extract_config_overrides(
+            args,
+            config_module,
+            getattr(args, "_config_override_dests", {}),
+        )
+    return (
+        config_option,
+        search_mode,
+        search_keys,
+        config_overrides,
+        search_overrides,
+    )
