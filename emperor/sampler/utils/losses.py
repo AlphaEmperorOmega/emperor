@@ -7,7 +7,7 @@ from emperor.base.utils import Module
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.sampler.utils.samplers import SamplerConfig
+    from emperor.sampler.utils.config import SamplerConfig
 
 
 class AuxiliaryLossBase:

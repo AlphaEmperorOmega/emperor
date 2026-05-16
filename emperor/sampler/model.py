@@ -1,10 +1,11 @@
 from torch import Tensor
 from emperor.base.utils import Module
-from emperor.sampler.utils.routers import RouterConfig, RouterModel
+from emperor.sampler.utils.routers import RouterModel
+from emperor.sampler.utils.config import RouterConfig, SamplerConfig
+from emperor.sampler.utils.tracker import SamplerUsageTrackerManager
 from emperor.sampler.utils._validator import SamplerModelValidator
 from emperor.sampler.utils.samplers import (
     SamplerBase,
-    SamplerConfig,
     SamplerFull,
     SamplerSparse,
     SamplerTopk,
@@ -14,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from emperor.sampler.utils.tracker import SamplerUsageTracker
 
 
 class SamplerModel(Module):
@@ -31,9 +33,13 @@ class SamplerModel(Module):
 
         self.num_experts: int = self.sampler_config.num_experts
         self.router_config: "RouterConfig" = self.sampler_config.router_config
-        self.validator = SamplerModelValidator(self)
+        SamplerModelValidator.validate(self)
         self.sampler_model = self.__init_sampler_model()
         self.router = self.__maybe_init_router()
+
+    @property
+    def usage_tracker(self) -> "SamplerUsageTracker | None":
+        return self._modules.get("_usage_tracker")
 
     def __init_sampler_model(self) -> SamplerBase:
         if self.sampler_config.top_k == 1:
@@ -46,15 +52,18 @@ class SamplerModel(Module):
     def __maybe_init_router(self) -> RouterModel | None:
         if self.router_config is None:
             return None
-        return RouterModel(self.router_config)
+        return self.router_config.build()
 
     def sample_probabilities_and_indices(
         self,
         input_matrix: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
+        SamplerModelValidator.validate_input_matrix(input_matrix)
         logits = self.__maybe_compute_routing(input_matrix)
-        return self.sampler_model.get_probabilities_and_indices(logits, skip_mask)
+        output = self.sampler_model.get_probabilities_and_indices(logits, skip_mask)
+        SamplerUsageTrackerManager.maybe_record_sampler_output(self, output)
+        return output
 
     def __maybe_compute_routing(self, input_matrix: Tensor) -> Tensor:
         if self.router is not None:
