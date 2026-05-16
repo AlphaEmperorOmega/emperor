@@ -1,11 +1,9 @@
-from typing import Tuple
 import torch
 import unittest
 from math import prod
 
-from emperor.config import ModelConfig
 from emperor.sampler.model import SamplerModel
-from emperor.sampler.utils.presets import SamplerPresets
+from emperor.sampler.utils.config import SamplerConfig
 from emperor.sampler.utils.samplers import (
     SamplerBase,
     SamplerFull,
@@ -14,35 +12,41 @@ from emperor.sampler.utils.samplers import (
 )
 
 
-class TestProbabilitySampler(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.batch_size = None
-        self.input_dim = None
-        self.output_dim = None
-
-    def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = (
-            SamplerPresets.sampler_preset(
-                return_model_config_flag=True,
-            )
-            if config is None
-            else config
+class SamplerTestCase(unittest.TestCase):
+    def preset(
+        self,
+        top_k: int = 3,
+        threshold: float = 0.0,
+        filter_above_threshold: bool = False,
+        num_topk_samples: int = 0,
+        normalize_probabilities_flag: bool = False,
+        noisy_topk_flag: bool = False,
+        num_experts: int = 5,
+        coefficient_of_variation_loss_weight: float = 0.0,
+        switch_loss_weight: float = 0.0,
+        zero_centred_loss_weight: float = 0.0,
+        mutual_information_loss_weight: float = 0.0,
+    ) -> SamplerConfig:
+        return SamplerConfig(
+            top_k=top_k,
+            threshold=threshold,
+            filter_above_threshold=filter_above_threshold,
+            num_topk_samples=num_topk_samples,
+            normalize_probabilities_flag=normalize_probabilities_flag,
+            noisy_topk_flag=noisy_topk_flag,
+            num_experts=num_experts,
+            coefficient_of_variation_loss_weight=coefficient_of_variation_loss_weight,
+            switch_loss_weight=switch_loss_weight,
+            zero_centred_loss_weight=zero_centred_loss_weight,
+            mutual_information_loss_weight=mutual_information_loss_weight,
+            router_config=None,
         )
 
-        self.batch_size = self.cfg.batch_size
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
 
+class TestProbabilitySampler(SamplerTestCase):
     def test_init(self):
-        cfg = SamplerPresets.sampler_preset(
-            return_model_config_flag=True,
-        )
-        c = cfg.sampler_model_config
+        cfg = self.preset()
+        c = cfg
         m = SamplerBase(cfg)
 
         self.assertEqual(m.top_k, c.top_k)
@@ -60,8 +64,7 @@ class TestProbabilitySampler(unittest.TestCase):
         for flag in normalize_probs:
             message = f"Testing configuration with normalize_probabilities_flag={flag}"
             with self.subTest(msg=message):
-                cfg = SamplerPresets.sampler_preset(
-                    return_model_config_flag=True,
+                cfg = self.preset(
                     normalize_probabilities_flag=flag,
                 )
                 m = SamplerBase(cfg)
@@ -90,7 +93,7 @@ class TestProbabilitySampler(unittest.TestCase):
                     )
 
     def test__probability_sampling_strategy(self):
-        cfg = SamplerPresets.sampler_preset()
+        cfg = self.preset()
         m = SamplerBase(cfg)
         probabilities = torch.randn(2, 4)
 
@@ -108,8 +111,7 @@ class TestProbabilitySampler(unittest.TestCase):
                     f"filter_above_threshold={filter_flag}"
                 )
                 with self.subTest(msg=message):
-                    cfg = SamplerPresets.sampler_preset(
-                        return_model_config_flag=True,
+                    cfg = self.preset(
                         threshold=threshold_option,
                         filter_above_threshold=filter_flag,
                     )
@@ -159,8 +161,7 @@ class TestProbabilitySampler(unittest.TestCase):
         for threshold_option in threshold_options:
             message = f"Testing configuration with threshold={threshold_option}, "
             with self.subTest(msg=message):
-                cfg = SamplerPresets.sampler_preset(
-                    return_model_config_flag=True,
+                cfg = self.preset(
                     threshold=threshold_option,
                 )
                 m = SamplerBase(cfg)
@@ -212,8 +213,7 @@ class TestProbabilitySampler(unittest.TestCase):
                 f"Testing configuration with noisy_topk_flag={noisy_topk_flag_option}"
             )
             with self.subTest(msg=message):
-                cfg = SamplerPresets.sampler_preset(
-                    return_model_config_flag=True,
+                cfg = self.preset(
                     noisy_topk_flag=noisy_topk_flag_option,
                 )
                 m = SamplerBase(cfg)
@@ -247,8 +247,7 @@ class TestProbabilitySampler(unittest.TestCase):
                     f"noisy_topk_flag_option={noisy_topk_flag_option}"
                 )
                 with self.subTest(msg=message):
-                    cfg = SamplerPresets.sampler_preset(
-                        return_model_config_flag=True,
+                    cfg = self.preset(
                         noisy_topk_flag=noisy_topk_flag_option,
                         threshold=threshold_option,
                     )
@@ -300,42 +299,67 @@ class TestProbabilitySampler(unittest.TestCase):
                             )
                         )
                     elif noisy_topk_flag_option and (threshold_option == 0.0):
-                        self.assertTrue(
-                            masked_probabilities.shape, (batch_size, num_expert_dim)
+                        self.assertEqual(
+                            masked_probabilities.shape,
+                            (batch_size * sequence_length, m.num_experts),
                         )
                     else:
-                        self.assertTrue(
+                        self.assertEqual(
                             masked_probabilities.shape,
                             router_logit_scores.shape,
                         )
 
+    def test_get_probabilities_and_indices_rejects_invalid_inputs(self):
+        cfg = self.preset(top_k=2, num_experts=4)
+        m = SamplerTopk(cfg)
 
-class TestSamplerSparse(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
+        invalid_logits = [
+            [1.0, 2.0, 3.0, 4.0],
+            torch.ones(4),
+            torch.ones(2, 3, 4),
+            torch.ones(2, 5),
+        ]
+        for logits in invalid_logits:
+            with self.subTest(logits=logits):
+                with self.assertRaises((TypeError, ValueError)):
+                    m.get_probabilities_and_indices(logits)
 
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.batch_size = None
-        self.input_dim = None
-        self.output_dim = None
+        with self.assertRaises(TypeError):
+            m.get_probabilities_and_indices(torch.ones(2, 4), skip_mask=[1, 1])
 
-    def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = (
-            SamplerPresets.sampler_preset(
-                return_model_config_flag=True,
+        with self.assertRaises(ValueError):
+            m.get_probabilities_and_indices(
+                torch.ones(2, 4),
+                skip_mask=torch.ones(3, 1),
             )
-            if config is None
-            else config
+
+    def test_get_probabilities_and_indices_stores_loss_and_skip_mask(self):
+        cfg = self.preset(
+            top_k=2,
+            num_experts=4,
+            threshold=0.2,
+            filter_above_threshold=False,
+        )
+        m = SamplerTopk(cfg)
+        logits = torch.tensor(
+            [
+                [4.0, 3.0, 2.0, 1.0],
+                [-4.0, -3.0, -2.0, -1.0],
+            ]
+        )
+        skip_mask = torch.ones(2, 1)
+
+        _, _, updated_skip_mask, loss = m.get_probabilities_and_indices(
+            logits, skip_mask
         )
 
-        self.batch_size = self.cfg.batch_size
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
+        self.assertIs(m.updated_skip_mask, updated_skip_mask)
+        self.assertIs(m.auxiliary_loss, loss)
 
+
+class TestSamplerSparse(SamplerTestCase):
     def test_sample_probabilities_and_indices(self):
-        cfg = SamplerPresets.sampler_preset()
+        cfg = self.preset()
         m = SamplerSparse(cfg)
 
         batch_size = 3
@@ -344,6 +368,21 @@ class TestSamplerSparse(unittest.TestCase):
         probability, indices = m._sample_probabilities_and_indices(probabilities)
         self.assertEqual(probability.shape, (batch_size,))
         self.assertEqual(indices.shape, (batch_size,))
+
+    def test_sample_probabilities_and_indices_selects_max_deterministically(self):
+        cfg = self.preset()
+        m = SamplerSparse(cfg)
+        probabilities = torch.tensor(
+            [
+                [0.1, 0.7, 0.2, 0.0, 0.0],
+                [0.4, 0.1, 0.3, 0.2, 0.0],
+            ]
+        )
+
+        probability, indices = m._sample_probabilities_and_indices(probabilities)
+
+        torch.testing.assert_close(probability, torch.tensor([0.7, 0.4]))
+        torch.testing.assert_close(indices, torch.tensor([1, 0]))
 
     def test_get_probabilities_and_indices(self):
         loss_options = [0.0, 0.1]
@@ -367,14 +406,12 @@ class TestSamplerSparse(unittest.TestCase):
                             with self.subTest(msg=message):
                                 if normalize_flag:
                                     with self.assertRaises(ValueError):
-                                        cfg = SamplerPresets.sampler_preset(
-                                            return_model_config_flag=True,
+                                        cfg = self.preset(
                                             normalize_probabilities_flag=normalize_flag,
                                         )
                                         m = SamplerSparse(cfg)
                                 else:
-                                    cfg = SamplerPresets.sampler_preset(
-                                        return_model_config_flag=True,
+                                    cfg = self.preset(
                                         noisy_topk_flag=noisy_flag,
                                         threshold=thresh,
                                         filter_above_threshold=filter_flag,
@@ -388,9 +425,14 @@ class TestSamplerSparse(unittest.TestCase):
 
                                     batch_size = 3
                                     sequence_length = 4
+                                    router_output_dim = (
+                                        m.num_experts * 2
+                                        if noisy_flag
+                                        else m.num_experts
+                                    )
                                     shape = (
                                         batch_size * sequence_length,
-                                        m.num_experts,
+                                        router_output_dim,
                                     )
                                     logits = torch.softmax(torch.randn(*shape), dim=-1)
                                     mask = torch.ones(
@@ -415,7 +457,7 @@ class TestSamplerSparse(unittest.TestCase):
         for input_mask in input_options:
             message = f"Testing configuration with skip_mask={input_mask}"
             with self.subTest(msg=message):
-                cfg = SamplerPresets.sampler_preset()
+                cfg = self.preset()
                 m = SamplerSparse(cfg)
 
                 skip_maks = m._SamplerSparse__prepare_loss_skip_mask(input_mask)
@@ -433,8 +475,7 @@ class TestSamplerSparse(unittest.TestCase):
                     )
 
     def test__prepare_loss_gates(self):
-        cfg = SamplerPresets.sampler_preset(
-            return_model_config_flag=True,
+        cfg = self.preset(
             top_k=1,
         )
         m = SamplerSparse(cfg)
@@ -464,8 +505,7 @@ class TestSamplerSparse(unittest.TestCase):
                 for zero_option in loss_options:
                     message = f"Running test with cross_option={cross_option}, coeff_option={coeff_option}, zero_option={zero_option}"
                     with self.subTest(msg=message):
-                        cfg = SamplerPresets.sampler_preset(
-                            return_model_config_flag=True,
+                        cfg = self.preset(
                             top_k=1,
                             noisy_topk_flag=True,
                             threshold=0.8,
@@ -484,10 +524,12 @@ class TestSamplerSparse(unittest.TestCase):
 
                         logits = torch.randn(*shape)
                         full_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-                        sampled_probabilities = torch.softmax(
-                            torch.randn(*shape), dim=-1
+                        sampled_probabilities = torch.rand(
+                            batch_size * sequence_length
                         )
-                        indices = torch.randint(0, m.num_experts, (batch_size, m.top_k))
+                        indices = torch.randint(
+                            0, m.num_experts, (batch_size * sequence_length, m.top_k)
+                        )
                         mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
                         unmasked_token = 0
                         mask[unmasked_token, :] = 1
@@ -511,32 +553,9 @@ class TestSamplerSparse(unittest.TestCase):
                         self.assertIsInstance(total_loss, torch.Tensor)
 
 
-class TestSamplerTopk(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.batch_size = None
-        self.input_dim = None
-        self.output_dim = None
-
-    def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = (
-            SamplerPresets.sampler_preset(
-                return_model_config_flag=True,
-            )
-            if config is None
-            else config
-        )
-
-        self.batch_size = self.cfg.batch_size
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
-
+class TestSamplerTopk(SamplerTestCase):
     def test_sample_probabilities_and_indices(self):
-        cfg = SamplerPresets.sampler_preset()
+        cfg = self.preset()
         m = SamplerTopk(cfg)
 
         batch_size = 3
@@ -545,6 +564,60 @@ class TestSamplerTopk(unittest.TestCase):
         probability, indices = m._sample_probabilities_and_indices(probabilities)
         self.assertEqual(probability.shape, (batch_size, m.top_k))
         self.assertEqual(indices.shape, (batch_size, m.top_k))
+
+    def test_sample_probabilities_and_indices_selects_topk_deterministically(self):
+        cfg = self.preset(top_k=3, num_experts=5)
+        m = SamplerTopk(cfg)
+        probabilities = torch.tensor(
+            [
+                [0.1, 0.7, 0.2, 0.0, 0.4],
+                [0.4, 0.1, 0.3, 0.2, 0.0],
+            ]
+        )
+
+        probability, indices = m._sample_probabilities_and_indices(probabilities)
+
+        torch.testing.assert_close(
+            probability,
+            torch.tensor(
+                [
+                    [0.7, 0.4, 0.2],
+                    [0.4, 0.3, 0.2],
+                ]
+            ),
+        )
+        torch.testing.assert_close(
+            indices,
+            torch.tensor(
+                [
+                    [1, 4, 2],
+                    [0, 2, 3],
+                ]
+            ),
+        )
+
+    def test_sample_probabilities_and_indices_uses_random_topk_training_branch(self):
+        cfg = self.preset(top_k=3, num_experts=5, num_topk_samples=1)
+        m = SamplerTopk(cfg)
+        m.train()
+        probabilities = torch.tensor(
+            [
+                [0.5, 0.4, 0.3, 0.2, 0.1],
+                [0.1, 0.2, 0.3, 0.4, 0.5],
+            ]
+        )
+        torch.manual_seed(7)
+
+        probability, indices = m._sample_probabilities_and_indices(probabilities)
+
+        self.assertEqual(probability.shape, (2, 3))
+        self.assertEqual(indices.shape, (2, 3))
+        torch.testing.assert_close(indices[:, :2], torch.tensor([[0, 1], [4, 3]]))
+        self.assertFalse(torch.any(indices[0, 2:] == 0))
+        self.assertFalse(torch.any(indices[0, 2:] == 1))
+        self.assertFalse(torch.any(indices[1, 2:] == 4))
+        self.assertFalse(torch.any(indices[1, 2:] == 3))
+        torch.testing.assert_close(probability, torch.gather(probabilities, 1, indices))
 
     def test_get_probabilities_and_indices(self):
         loss_options = [0.0, 0.1]
@@ -566,8 +639,7 @@ class TestSamplerTopk(unittest.TestCase):
                                 f"normalize_flag={normalize_flag}"
                             )
                             with self.subTest(msg=message):
-                                cfg = SamplerPresets.sampler_preset(
-                                    return_model_config_flag=True,
+                                cfg = self.preset(
                                     top_k=3,
                                     noisy_topk_flag=noisy_flag,
                                     threshold=thresh,
@@ -611,7 +683,7 @@ class TestSamplerTopk(unittest.TestCase):
         for input_mask in input_options:
             message = f"Testing configuration with skip_mask={input_mask}"
             with self.subTest(msg=message):
-                cfg = SamplerPresets.sampler_preset()
+                cfg = self.preset()
                 m = SamplerTopk(cfg)
 
                 skip_maks = m._SamplerTopk__prepare_loss_skip_mask(input_mask)
@@ -628,7 +700,7 @@ class TestSamplerTopk(unittest.TestCase):
                     )
 
     def test__prepare_loss_gates(self):
-        cfg = SamplerPresets.sampler_preset(top_k=1)
+        cfg = self.preset(top_k=1)
         m = SamplerTopk(cfg)
 
         batch_size = 3
@@ -656,8 +728,7 @@ class TestSamplerTopk(unittest.TestCase):
                     for mutual_option in loss_options:
                         message = f"Running test with cross_option={cross_option}, coeff_option={coeff_option}, zero_option={zero_option}, mutual_option={mutual_option}"
                         with self.subTest(msg=message):
-                            cfg = SamplerPresets.sampler_preset(
-                                return_model_config_flag=True,
+                            cfg = self.preset(
                                 top_k=3,
                                 noisy_topk_flag=True,
                                 threshold=0.8,
@@ -710,33 +781,9 @@ class TestSamplerTopk(unittest.TestCase):
                             self.assertIsInstance(total_loss, torch.Tensor)
 
 
-class TestSamplerFull(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.batch_size = None
-        self.input_dim = None
-        self.output_dim = None
-
-    def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = (
-            SamplerPresets.sampler_preset(
-                return_model_config_flag=True,
-            )
-            if config is None
-            else config
-        )
-
-        self.batch_size = self.cfg.batch_size
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
-
+class TestSamplerFull(SamplerTestCase):
     def test_sample_probabilities_and_indices(self):
-        cfg = SamplerPresets.sampler_preset(
-            return_model_config_flag=True,
+        cfg = self.preset(
             top_k=10,
             num_experts=10,
         )
@@ -753,55 +800,50 @@ class TestSamplerFull(unittest.TestCase):
         noisy_flag_options = [True, False]
         threshold_options = [0.0, 0.2]
         filter_above_threshold_options = [True, False]
-        normalize_probabilities_flag = [True, False]
-
         for noisy_flag in noisy_flag_options:
             for thresh in threshold_options:
                 for filter_flag in filter_above_threshold_options:
-                    for normalize_flag in normalize_probabilities_flag:
-                        message = (
-                            f"noisy_flag={noisy_flag}, "
-                            f"threshold={thresh}, "
-                            f"filter_flag={filter_flag}, "
-                            f"normalize_flag={normalize_flag}"
+                    message = (
+                        f"noisy_flag={noisy_flag}, "
+                        f"threshold={thresh}, "
+                        f"filter_flag={filter_flag}"
+                    )
+                    with self.subTest(msg=message):
+                        cfg = self.preset(
+                            top_k=10,
+                            num_experts=10,
+                            noisy_topk_flag=noisy_flag,
+                            threshold=thresh,
+                            filter_above_threshold=filter_flag,
+                            coefficient_of_variation_loss_weight=0.0,
+                            switch_loss_weight=0.0,
+                            zero_centred_loss_weight=0.0,
+                            mutual_information_loss_weight=0.0,
                         )
-                        with self.subTest(msg=message):
-                            cfg = SamplerPresets.sampler_preset(
-                                return_model_config_flag=True,
-                                top_k=10,
-                                num_experts=10,
-                                noisy_topk_flag=noisy_flag,
-                                threshold=thresh,
-                                filter_above_threshold=filter_flag,
-                                coefficient_of_variation_loss_weight=0.0,
-                                switch_loss_weight=0.0,
-                                zero_centred_loss_weight=0.0,
-                                mutual_information_loss_weight=0.0,
-                            )
-                            m = SamplerFull(cfg)
+                        m = SamplerFull(cfg)
 
-                            batch_size = 3
-                            sequence_length = 4
-                            num_expert_dim = m.num_experts
-                            if noisy_flag:
-                                num_expert_dim = m.num_experts * 2
-                            shape = (
-                                batch_size * sequence_length,
-                                num_expert_dim,
-                            )
-                            logits = torch.softmax(torch.randn(*shape), dim=-1)
-                            mask = torch.ones(batch_size, sequence_length).reshape(
-                                -1, 1
-                            )
-                            probabilities, selected_indices, skip_mask, loss = (
-                                m.get_probabilities_and_indices(logits, mask)
-                            )
-                            self.assertEqual(
-                                probabilities.shape,
-                                (batch_size * sequence_length, m.top_k),
-                            )
-                            self.assertIsNone(selected_indices)
-                            self.assertTrue(loss == 0)
+                        batch_size = 3
+                        sequence_length = 4
+                        num_expert_dim = m.num_experts
+                        if noisy_flag:
+                            num_expert_dim = m.num_experts * 2
+                        shape = (
+                            batch_size * sequence_length,
+                            num_expert_dim,
+                        )
+                        logits = torch.softmax(torch.randn(*shape), dim=-1)
+                        mask = torch.ones(batch_size, sequence_length).reshape(
+                            -1, 1
+                        )
+                        probabilities, selected_indices, skip_mask, loss = (
+                            m.get_probabilities_and_indices(logits, mask)
+                        )
+                        self.assertEqual(
+                            probabilities.shape,
+                            (batch_size * sequence_length, m.top_k),
+                        )
+                        self.assertIsNone(selected_indices)
+                        self.assertTrue(loss == 0)
 
     def test__apply_dynamic_topk_threshold_mask(self):
         threshold_options = [0.0, 0.1]
@@ -809,8 +851,7 @@ class TestSamplerFull(unittest.TestCase):
         for threshold_option in threshold_options:
             message = f"threshold={threshold_option}"
             with self.subTest(msg=message):
-                cfg = SamplerPresets.sampler_preset(
-                    return_model_config_flag=True,
+                cfg = self.preset(
                     top_k=10,
                     num_experts=10,
                     threshold=threshold_option,
@@ -847,33 +888,43 @@ class TestSamplerFull(unittest.TestCase):
                         )
                     )
 
-
-class TestSamplerModel(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.batch_size = None
-        self.input_dim = None
-        self.output_dim = None
-
-    def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = (
-            SamplerPresets.sampler_preset(
-                return_model_config_flag=True,
-            )
-            if config is None
-            else config
+    def test_apply_dynamic_topk_threshold_mask_normalizes_unmasked_values(self):
+        cfg = self.preset(
+            top_k=4,
+            num_experts=4,
+            threshold=0.25,
+            normalize_probabilities_flag=True,
+        )
+        m = SamplerFull(cfg)
+        probabilities = torch.tensor(
+            [
+                [0.1, 0.2, 0.3, 0.4],
+                [0.5, 0.1, 0.3, 0.1],
+            ]
         )
 
-        self.batch_size = self.cfg.batch_size
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
+        masked_probabilities = m._SamplerFull__apply_dynamic_topk_threshold_mask(
+            probabilities
+        )
 
+        expected = torch.tensor(
+            [
+                [0.0, 0.0, 0.3 / 0.7, 0.4 / 0.7],
+                [0.5 / 0.8, 0.0, 0.3 / 0.8, 0.0],
+            ]
+        )
+        torch.testing.assert_close(masked_probabilities, expected, atol=1e-6, rtol=1e-5)
+        torch.testing.assert_close(
+            masked_probabilities.sum(dim=-1),
+            torch.ones(2),
+            atol=1e-5,
+            rtol=1e-5,
+        )
+
+
+class TestSamplerModel(SamplerTestCase):
     def test_init(self):
-        cfg = SamplerPresets.sampler_preset()
+        cfg = self.preset()
         model = SamplerModel(cfg)
         self.assertTrue(isinstance(model.sampler_model, SamplerTopk))
 
@@ -884,8 +935,7 @@ class TestSamplerModel(unittest.TestCase):
         for top_k, model_type in zip(topk_options, model_types):
             message = f"Testing configuration with top_k={top_k}"
             with self.subTest(msg=message):
-                cfg = SamplerPresets.sampler_preset(
-                    return_model_config_flag=True,
+                cfg = self.preset(
                     top_k=top_k,
                     num_experts=5,
                 )
@@ -901,8 +951,7 @@ class TestSamplerModel(unittest.TestCase):
             with self.subTest(msg=message):
                 num_experts = 5
                 loss = 0.0 if num_experts == top_k else 0.5
-                cfg = SamplerPresets.sampler_preset(
-                    return_model_config_flag=True,
+                cfg = self.preset(
                     top_k=top_k,
                     num_experts=num_experts,
                     coefficient_of_variation_loss_weight=loss,
@@ -946,8 +995,7 @@ class TestSamplerModel(unittest.TestCase):
             with self.subTest(msg=message):
                 num_experts = 5
                 loss = 0.0 if num_experts == top_k else 0.5
-                cfg = SamplerPresets.sampler_preset(
-                    return_model_config_flag=True,
+                cfg = self.preset(
                     top_k=top_k,
                     num_experts=num_experts,
                     coefficient_of_variation_loss_weight=loss,
