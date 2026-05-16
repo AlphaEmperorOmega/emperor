@@ -1,5 +1,4 @@
 import torch
-from math import prod
 from torch import Tensor
 from emperor.base.utils import expand_dims
 from emperor.base.utils import Module
@@ -96,9 +95,9 @@ class SamplerBase(Module):
         if not self.noisy_topk_flag:
             return logit_scores_matrix
 
-        num_chuncks = 2
+        num_chunks = 2
         logit_scores_matrix_chunk, raw_noise_std_matrix = logit_scores_matrix.chunk(
-            num_chuncks, dim=-1
+            num_chunks, dim=-1
         )
         logit_scores_matrix = logit_scores_matrix_chunk
 
@@ -200,7 +199,7 @@ class SamplerSparse(SamplerBase):
     def __prepare_loss_gates(
         self, sampled_probabilities: Tensor, indices: Tensor
     ) -> Tensor:
-        input_dim = prod(torch.tensor(sampled_probabilities.shape))
+        input_dim = sampled_probabilities.numel()
         gates_buffer = torch.zeros(input_dim, self.num_experts).to(self.device)
         gates = gates_buffer.scatter(
             1,
@@ -246,7 +245,9 @@ class SamplerTopk(SamplerBase):
         _, topk_deterministic_indices = probabilities.topk(num_deterministic, dim=-1)
 
         masked_probs = probabilities + 1e-6
-        batch_indices = expand_dims(torch.arange(probabilities.size(0)), dim=1)
+        batch_indices = expand_dims(
+            torch.arange(probabilities.size(0), device=probabilities.device), dim=1
+        )
         masked_probs[batch_indices, topk_deterministic_indices] = 0
         topk_random_indices = torch.multinomial(masked_probs, self.num_topk_samples)
 
@@ -278,7 +279,7 @@ class SamplerTopk(SamplerBase):
     def __prepare_loss_gates(
         self, sampled_probabilities: Tensor, indices: Tensor
     ) -> Tensor:
-        input_dim = prod(torch.tensor(sampled_probabilities.shape))
+        input_dim = sampled_probabilities.numel()
         gates_buffer = torch.zeros(input_dim, self.num_experts).to(self.device)
         gates = gates_buffer.scatter(
             1,
