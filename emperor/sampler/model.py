@@ -39,7 +39,7 @@ class SamplerModel(Module):
 
     @property
     def usage_tracker(self) -> "SamplerUsageTracker | None":
-        return self._modules.get("_usage_tracker")
+        return self._modules.get(SamplerUsageTrackerManager.TRACKER_MODULE_NAME)
 
     def __init_sampler_model(self) -> SamplerBase:
         if self.sampler_config.top_k == 1:
