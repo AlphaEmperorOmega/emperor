@@ -1,10 +1,15 @@
 from emperor.config import ModelConfig
-from emperor.base.layer import LayerStackConfig
-from emperor.sampler.utils.presets import SamplerPresets
+from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.sampler.utils.config import RouterConfig, SamplerConfig
 from emperor.linears.core.presets import LinearPresets
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.enums import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.experts.utils.enums import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
@@ -20,6 +25,74 @@ from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfi
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     DynamicDiagonalConfig,
 )
+
+
+def _build_router_config(
+    input_dim: int,
+    num_experts: int,
+    bias_flag: bool,
+    noisy_topk_flag: bool,
+    layer_stack_option: LinearLayerStackOptions,
+    stack_num_layers: int,
+    stack_hidden_dim: int,
+    stack_activation: ActivationOptions,
+    stack_residual_flag: bool,
+    stack_dropout_probability: float,
+) -> RouterConfig:
+    output_dim = num_experts * 2 if noisy_topk_flag else num_experts
+    model_config = LayerStackConfig(
+        input_dim=input_dim,
+        hidden_dim=stack_hidden_dim,
+        output_dim=output_dim,
+        num_layers=stack_num_layers,
+        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+        apply_output_pipeline_flag=False,
+        layer_config=LayerConfig(
+            activation=stack_activation,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_flag=stack_residual_flag,
+            dropout_probability=stack_dropout_probability,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            shared_halting_flag=False,
+            layer_model_config=LinearLayerConfig(bias_flag=bias_flag),
+        ),
+    )
+    return RouterConfig(
+        input_dim=input_dim,
+        model_config=model_config,
+        num_experts=num_experts,
+        noisy_topk_flag=noisy_topk_flag,
+    )
+
+
+def _build_sampler_config(
+    num_experts: int,
+    top_k: int,
+    threshold: float,
+    filter_above_threshold: bool,
+    num_topk_samples: int,
+    normalize_probabilities_flag: bool,
+    noisy_topk_flag: bool,
+    coefficient_of_variation_loss_weight: float,
+    switch_loss_weight: float,
+    zero_centred_loss_weight: float,
+    mutual_information_loss_weight: float,
+) -> SamplerConfig:
+    return SamplerConfig(
+        top_k=top_k,
+        threshold=threshold,
+        filter_above_threshold=filter_above_threshold,
+        num_topk_samples=num_topk_samples,
+        normalize_probabilities_flag=normalize_probabilities_flag,
+        noisy_topk_flag=noisy_topk_flag,
+        num_experts=num_experts,
+        coefficient_of_variation_loss_weight=coefficient_of_variation_loss_weight,
+        switch_loss_weight=switch_loss_weight,
+        zero_centred_loss_weight=zero_centred_loss_weight,
+        mutual_information_loss_weight=mutual_information_loss_weight,
+    )
 
 
 class MixtureOfExpertsPresets:
@@ -112,25 +185,19 @@ class MixtureOfExpertsPresets:
             weighting_position_option=experts_weighting_position_option,
             init_sampler_option=experts_init_sampler_option,
             override_config=expert_model_config,
-            router_model_config=SamplerPresets.router_preset(
+            router_model_config=_build_router_config(
                 input_dim=input_dim,
                 num_experts=experts_num_experts,
                 bias_flag=router_model_bias_flag,
                 noisy_topk_flag=router_model_noisy_topk_flag,
                 layer_stack_option=router_model_layer_stack_option,
-                bias_option=router_model_bias_option,
-                memory_option=router_model_memory_option,
-                generator_depth=router_model_generator_depth,
-                diagonal_option=router_model_diagonal_option,
-                memory_size_option=router_model_memory_size_option,
-                memory_position_option=router_model_memory_position_option,
                 stack_num_layers=stack_num_layers,
                 stack_hidden_dim=stack_hidden_dim,
                 stack_activation=stack_activation,
                 stack_residual_flag=stack_residual_flag,
                 stack_dropout_probability=stack_dropout_probability,
             ),
-            sampler_model_config=SamplerPresets.sampler_preset(
+            sampler_model_config=_build_sampler_config(
                 num_experts=experts_num_experts,
                 top_k=experts_top_k,
                 threshold=sampler_threshold,

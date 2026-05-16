@@ -1,110 +1,147 @@
 import torch
 import unittest
 
-from emperor.config import ModelConfig
-from emperor.linears.options import LinearLayerStackOptions
-from emperor.sampler.utils.presets import SamplerPresets
+from emperor.base.enums import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.sampler.utils.config import RouterConfig
 from emperor.sampler.utils.routers import RouterModel
-from emperor.augmentations.adaptive_parameters.options import (
-    DynamicDepthOptions,
-    DynamicMemoryOptions,
-    MemorySizeOptions,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    GeneratorDynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    CombinedDynamicDiagonalConfig,
-)
 
 
 class TestRouterModel(unittest.TestCase):
-    def setUp(self):
-        self.rebuild_presets()
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.batch_size = None
-        self.input_dim = None
-        self.output_dim = None
-
-    def rebuild_presets(self, config: ModelConfig | None = None):
-        self.cfg = (
-            SamplerPresets.router_preset(
-                return_model_config_flag=True,
+    def preset(
+        self,
+        input_dim: int = 8,
+        hidden_dim: int = 12,
+        num_experts: int = 4,
+        noisy_topk_flag: bool = False,
+        num_layers: int = 2,
+        model_config: LayerStackConfig | None = None,
+    ) -> RouterConfig:
+        if model_config is None:
+            model_config = self.layer_stack_config(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                output_dim=num_experts,
+                num_layers=num_layers,
             )
-            if config is None
-            else config
+        return RouterConfig(
+            input_dim=input_dim,
+            num_experts=num_experts,
+            noisy_topk_flag=noisy_topk_flag,
+            model_config=model_config,
         )
 
-        self.batch_size = self.cfg.batch_size
-        self.input_dim = self.cfg.input_dim
-        self.output_dim = self.cfg.output_dim
+    def layer_stack_config(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+        num_layers: int,
+    ) -> LayerStackConfig:
+        return LayerStackConfig(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_layers=num_layers,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=True,
+            layer_config=LayerConfig(
+                activation=ActivationOptions.RELU,
+                residual_flag=False,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                shared_halting_flag=False,
+                layer_model_config=LinearLayerConfig(bias_flag=True),
+            ),
+        )
 
-    def test_ensure_invalid_inputs_throw_errors(self):
-        num_experts = [0, -1]
-        for n in num_experts:
-            message = f"AssertionError should be raised for the inputs: {n}"
-            with self.subTest(msg=message):
-                with self.assertRaises(AssertionError):
-                    config = SamplerPresets.router_preset(num_experts=n)
-                    RouterModel(config)
+    def test_init_stores_config_attributes(self):
+        cfg = self.preset(input_dim=8, num_experts=4, noisy_topk_flag=False)
+        model = RouterModel(cfg)
 
-    def test_init_with_different_configs(self):
-        num_experts_options = [1, 4, 8]
-        noisy_flag_options = [True, False]
+        self.assertEqual(model.input_dim, 8)
+        self.assertEqual(model.num_experts, 4)
+        self.assertFalse(model.noisy_topk_flag)
+        self.assertEqual(model.model_config, cfg.model_config)
 
-        for num_experts in num_experts_options:
-            for noisy_flag_opition in noisy_flag_options:
-                message = f"Testing configuration with num_experts={num_experts} and noisy_flag_option={noisy_flag_opition}"
-                with self.subTest(msg=message):
-                    config = SamplerPresets.router_preset(
-                        return_model_config_flag=True,
-                        num_experts=num_experts,
-                        noisy_topk_flag=noisy_flag_opition,
-                    )
-                    model = RouterModel(config)
-                    self.assertEqual(model.noisy_topk_flag, noisy_flag_opition)
-                    if noisy_flag_opition:
-                        self.assertEqual(model.num_experts, num_experts * 2)
-                    else:
-                        self.assertEqual(model.num_experts, num_experts)
+    def test_noisy_topk_doubles_router_output_dim(self):
+        cfg = self.preset(input_dim=8, num_experts=4, noisy_topk_flag=True)
+        model = RouterModel(cfg)
 
-    def test_forward(self):
-        num_layer_options = [1, 2, 3]
-        num_experts_options = [4, 8]
-        noisy_flag_options = [True, False]
+        self.assertEqual(model.num_experts, 4)
+        self.assertEqual(model.router_output_dim, 8)
 
-        for num_layers in num_layer_options:
-            for layer_stack_option in LinearLayerStackOptions:
-                for num_experts in num_experts_options:
-                    for noisy_flag_option in noisy_flag_options:
-                        message = f"Testing the configuration with num_layers={num_layers}, layer_stack_option={layer_stack_option}, num_experts={num_experts}, and noisy_flag_option={noisy_flag_option}"
-                        with self.subTest(msg=message):
-                            cfg = SamplerPresets.router_preset(
-                                return_model_config_flag=True,
-                                layer_stack_option=layer_stack_option,
-                                num_experts=num_experts,
-                                noisy_topk_flag=noisy_flag_option,
-                                stack_num_layers=num_layers,
-                                bias_option=GeneratorDynamicBiasConfig,
-                                memory_option=DynamicMemoryOptions.WEIGHTED,
-                                generator_depth=DynamicDepthOptions.DEPTH_OF_THREE,
-                                diagonal_option=CombinedDynamicDiagonalConfig,
-                                memory_size_option=MemorySizeOptions.LARGE,
-                            )
-                            model = RouterModel(cfg)
+    def test_invalid_config_values_raise(self):
+        cases = [
+            ("input_dim", 0, ValueError),
+            ("input_dim", -1, ValueError),
+            ("input_dim", True, ValueError),
+            ("input_dim", 1.5, TypeError),
+            ("num_experts", 0, ValueError),
+            ("num_experts", -1, ValueError),
+            ("num_experts", True, ValueError),
+            ("num_experts", 1.5, TypeError),
+            ("noisy_topk_flag", None, ValueError),
+            ("noisy_topk_flag", 1, TypeError),
+            ("model_config", None, ValueError),
+            ("model_config", object(), TypeError),
+        ]
+        for field_name, value, error_type in cases:
+            with self.subTest(field_name=field_name, value=value):
+                cfg = self.preset()
+                setattr(cfg, field_name, value)
+                with self.assertRaises(error_type):
+                    RouterModel(cfg)
 
-                            input_batch = torch.randn(cfg.batch_size, cfg.input_dim)
-                            output = model.compute_logit_scores(input_batch)
-                            if noisy_flag_option:
-                                self.assertEqual(
-                                    output.shape, (cfg.batch_size, num_experts * 2)
-                                )
-                                self.assertEqual(model.num_experts, num_experts * 2)
-                            else:
-                                self.assertEqual(model.num_experts, num_experts)
-                                self.assertEqual(
-                                    output.shape, (cfg.batch_size, num_experts)
-                                )
+    def test_compute_logit_scores_returns_expected_shape(self):
+        cases = [
+            (1, 4, False, 4),
+            (2, 4, False, 4),
+            (3, 4, True, 8),
+        ]
+        for num_layers, num_experts, noisy_topk_flag, expected_dim in cases:
+            with self.subTest(
+                num_layers=num_layers,
+                num_experts=num_experts,
+                noisy_topk_flag=noisy_topk_flag,
+            ):
+                cfg = self.preset(
+                    input_dim=8,
+                    num_experts=num_experts,
+                    noisy_topk_flag=noisy_topk_flag,
+                    num_layers=num_layers,
+                )
+                model = RouterModel(cfg)
+
+                input_batch = torch.randn(3, cfg.input_dim)
+                output = model.compute_logit_scores(input_batch)
+
+                self.assertIsInstance(output, torch.Tensor)
+                self.assertEqual(output.shape, (3, expected_dim))
+
+    def test_compute_logit_scores_rejects_invalid_input_shape(self):
+        model = RouterModel(self.preset(input_dim=8))
+        invalid_inputs = [
+            torch.randn(8),
+            torch.randn(2, 3, 8),
+            torch.randn(2, 7),
+        ]
+
+        for input_batch in invalid_inputs:
+            with self.subTest(shape=tuple(input_batch.shape)):
+                with self.assertRaises(ValueError):
+                    model.compute_logit_scores(input_batch)
+
+    def test_compute_logit_scores_rejects_non_tensor_input(self):
+        model = RouterModel(self.preset(input_dim=8))
+
+        with self.assertRaises(TypeError):
+            model.compute_logit_scores([[1.0] * 8])
