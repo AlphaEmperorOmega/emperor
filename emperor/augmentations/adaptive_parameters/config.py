@@ -1,7 +1,4 @@
 from dataclasses import dataclass
-from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
-    DepthMappingHandlerConfig,
-)
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     DynamicDiagonalConfig,
 )
@@ -20,12 +17,8 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
 
 @dataclass
 class AdaptiveParameterAugmentationConfig(ConfigBase):
-    input_dim: int | None = optional_field(
-        "Input feature dimension."
-    )
-    output_dim: int | None = optional_field(
-        "Output feature dimension."
-    )
+    input_dim: int | None = optional_field("Input feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
     diagonal_config: DynamicDiagonalConfig | None = optional_field(
         "Optional dynamic diagonal adjustment."
     )
@@ -35,9 +28,14 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
     bias_config: DynamicBiasConfig | None = optional_field(
         "Optional dynamic bias adjustment."
     )
-    mask_config: AxisMaskConfig | None = optional_field(
-        "Optional dynamic weight mask."
-    )
+    mask_config: AxisMaskConfig | None = optional_field("Optional dynamic weight mask.")
     model_config: LayerStackConfig | None = optional_field(
         "Internal generator network config."
     )
+
+    def _registry_owner(self) -> type:
+        from emperor.augmentations.adaptive_parameters.model import (
+            AdaptiveParameterAugmentation,
+        )
+
+        return AdaptiveParameterAugmentation
