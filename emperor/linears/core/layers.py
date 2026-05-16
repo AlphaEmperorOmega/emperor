@@ -69,7 +69,6 @@ class AdaptiveLinearLayer(LinearAbstract):
 
     def __init_behaviour(self):
         from emperor.augmentations.adaptive_parameters import (
-            AdaptiveParameterAugmentation,
             AdaptiveParameterAugmentationConfig,
         )
 
@@ -77,9 +76,7 @@ class AdaptiveLinearLayer(LinearAbstract):
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return AdaptiveParameterAugmentation(
-            self.adaptive_augmentation_config, overrides
-        )
+        return self.adaptive_augmentation_config.build(overrides)
 
     def forward(self, X: Tensor) -> Tensor:
         LinearValidator.validate_input_is_2d(X)
