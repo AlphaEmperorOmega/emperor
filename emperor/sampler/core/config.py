@@ -16,7 +16,7 @@ class RouterConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.sampler.utils.routers import RouterModel
+        from emperor.sampler.core.routers import RouterModel
 
         return RouterModel
 

@@ -1,10 +1,10 @@
 from torch import Tensor
 from emperor.base.utils import Module
-from emperor.sampler.utils.routers import RouterModel
-from emperor.sampler.utils.config import RouterConfig, SamplerConfig
-from emperor.sampler.utils.tracker import SamplerUsageTrackerManager
-from emperor.sampler.utils._validator import SamplerModelValidator
-from emperor.sampler.utils.samplers import (
+from emperor.sampler.core.routers import RouterModel
+from emperor.sampler.core.config import RouterConfig, SamplerConfig
+from emperor.sampler.core.tracker import SamplerUsageTrackerManager
+from emperor.sampler.core._validator import SamplerModelValidator
+from emperor.sampler.core.samplers import (
     SamplerBase,
     SamplerFull,
     SamplerSparse,
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-    from emperor.sampler.utils.tracker import SamplerUsageTracker
+    from emperor.sampler.core.tracker import SamplerUsageTracker
 
 
 class SamplerModel(Module):

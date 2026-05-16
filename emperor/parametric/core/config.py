@@ -8,8 +8,8 @@ from emperor.augmentations.adaptive_parameters.config import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.sampler.utils.samplers import SamplerConfig
-    from emperor.sampler.utils.routers import RouterConfig
+    from emperor.sampler.core.samplers import SamplerConfig
+    from emperor.sampler.core.routers import RouterConfig
     from emperor.parametric.core.mixtures.options import (
         AdaptiveBiasOptions,
         AdaptiveWeightOptions,

@@ -3,9 +3,9 @@ from math import prod
 from torch import Tensor
 from emperor.base.utils import expand_dims
 from emperor.base.utils import Module
-from emperor.sampler.utils.config import SamplerConfig
-from emperor.sampler.utils.losses import SamplerAuxiliaryLosses
-from emperor.sampler.utils._validator import (
+from emperor.sampler.core.config import SamplerConfig
+from emperor.sampler.core.losses import SamplerAuxiliaryLosses
+from emperor.sampler.core._validator import (
     SamplerBaseValidator,
     SamplerSparseValidator,
     SamplerTopkValidator,

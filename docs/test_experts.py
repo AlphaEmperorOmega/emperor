@@ -4,7 +4,7 @@ import unittest
 from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.sampler.model import SamplerModel
-from emperor.sampler.utils.routers import RouterModel
+from emperor.sampler.core.routers import RouterModel
 from emperor.experts.utils.layers import (
     MixtureOfExperts,
     MixtureOfExpertsMap,
@@ -17,7 +17,7 @@ from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.experts.utils.model import MixtureOfExpertsModel
 from emperor.experts.utils.stack import MixtureOfExpertsStack
 from emperor.experts.utils.presets import MixtureOfExpertsPresets
-from emperor.sampler.utils.samplers import SamplerFull, SamplerSparse, SamplerTopk
+from emperor.sampler.core.samplers import SamplerFull, SamplerSparse, SamplerTopk
 from emperor.experts.utils.enums import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,

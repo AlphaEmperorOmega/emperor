@@ -12,8 +12,8 @@ from emperor.parametric.utils.config import ParametricLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.utils.samplers import SamplerConfig
-from emperor.sampler.utils.routers import RouterConfig
+from emperor.sampler.core.samplers import SamplerConfig
+from emperor.sampler.core.routers import RouterConfig
 from emperor.neuron.neuron import (
     AxonsConfig,
     NeuronClusterConfig,

@@ -50,8 +50,8 @@ class _ValidatorHandler:
 
     def __ensure_values_have_correct_types(self):
         from emperor.linears.options import LinearLayerStackOptions
-        from emperor.sampler.utils.samplers import SamplerConfig
-        from emperor.sampler.utils.routers import RouterConfig
+        from emperor.sampler.core.samplers import SamplerConfig
+        from emperor.sampler.core.routers import RouterConfig
 
         if not isinstance(self.model.input_dim, int):
             raise TypeError(

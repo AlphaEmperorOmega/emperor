@@ -1,6 +1,6 @@
 from emperor.base.utils import Module
 from emperor.sampler.model import SamplerModel
-from emperor.sampler.utils.routers import RouterConfig, RouterModel
+from emperor.sampler.core.routers import RouterConfig, RouterModel
 from emperor.parametric.core.routers import VectorRouterModel
 from emperor.parametric.core._validator import _ParametricHandlerValidator
 

@@ -7,7 +7,7 @@ from emperor.sampler.model import SamplerModel
 from emperor.linears.core.layers import LinearAbstract
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.experts.utils.enums import InitSamplerOptions
-from emperor.sampler.utils.routers import RouterConfig, RouterModel
+from emperor.sampler.core.routers import RouterConfig, RouterModel
 from emperor.experts.utils.layers import (
     MixtureOfExperts,
     MixtureOfExpertsConfig,

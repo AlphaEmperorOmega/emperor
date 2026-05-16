@@ -28,7 +28,7 @@ class SamplerMonitorCallback(Callback):
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         from emperor.sampler.model import SamplerModel
-        from emperor.sampler.utils.tracker import SamplerUsageTrackerManager
+        from emperor.sampler.core.tracker import SamplerUsageTrackerManager
 
         self._tracker_manager = SamplerUsageTrackerManager()
         for name, module in pl_module.named_modules():

@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from torch.nn.parameter import Parameter
 from emperor.base.utils import matmul
-from emperor.sampler.utils.routers import RouterConfig, RouterModel
+from emperor.sampler.core.routers import RouterConfig, RouterModel
 
 
 from typing import TYPE_CHECKING

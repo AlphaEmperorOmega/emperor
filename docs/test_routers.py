@@ -8,8 +8,8 @@ from emperor.base.enums import (
 )
 from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.utils.config import RouterConfig
-from emperor.sampler.utils.routers import RouterModel
+from emperor.sampler.core.config import RouterConfig
+from emperor.sampler.core.routers import RouterModel
 
 
 class TestRouterModel(unittest.TestCase):

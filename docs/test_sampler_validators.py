@@ -1,8 +1,8 @@
 import torch
 import unittest
 
-from emperor.sampler.utils.config import SamplerConfig
-from emperor.sampler.utils.samplers import (
+from emperor.sampler.core.config import SamplerConfig
+from emperor.sampler.core.samplers import (
     SamplerBase,
     SamplerFull,
     SamplerSparse,

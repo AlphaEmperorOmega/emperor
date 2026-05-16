@@ -4,8 +4,8 @@ import unittest
 from torch.types import Tensor
 from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.sampler.model import SamplerModel
-from emperor.sampler.utils.routers import RouterModel
-from emperor.sampler.utils.presets import SamplerPresets
+from emperor.sampler.core.routers import RouterModel
+from emperor.sampler.core.presets import SamplerPresets
 from emperor.experts.utils.layers import MixtureOfExperts
 from emperor.parametric.utils.presets import ParametricLayerPresets
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureBase

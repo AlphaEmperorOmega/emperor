@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.sampler.model import SamplerModel
-    from emperor.sampler.utils.routers import RouterModel
-    from emperor.sampler.utils.samplers import (
+    from emperor.sampler.core.routers import RouterModel
+    from emperor.sampler.core.samplers import (
         SamplerBase,
         SamplerSparse,
         SamplerTopk,
@@ -44,7 +44,7 @@ class SamplerModelValidator(ValidatorBase):
     def validate_router_config(router_config) -> None:
         if router_config is None:
             return
-        from emperor.sampler.utils.config import RouterConfig
+        from emperor.sampler.core.config import RouterConfig
 
         if not isinstance(router_config, RouterConfig):
             raise TypeError(

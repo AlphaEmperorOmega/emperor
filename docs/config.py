@@ -11,8 +11,8 @@ from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.utils.routers import RouterConfig
-from emperor.sampler.utils.samplers import SamplerConfig
+from emperor.sampler.core.routers import RouterConfig
+from emperor.sampler.core.samplers import SamplerConfig
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.feed_forward import (
     FeedForwardConfig,

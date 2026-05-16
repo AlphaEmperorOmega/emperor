@@ -19,9 +19,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-    from emperor.sampler.utils.samplers import SamplerConfig
+    from emperor.sampler.core.samplers import SamplerConfig
     from emperor.linears.options import LinearLayerStackOptions
-    from emperor.sampler.utils.routers import RouterConfig, RouterModel
+    from emperor.sampler.core.routers import RouterConfig, RouterModel
 
 
 @dataclass
@@ -143,7 +143,7 @@ class MixtureOfExperts(Module):
     def __maybe_create_router_and_sampler(
         self,
     ) -> tuple["RouterModel | None", "SamplerModel | None"]:
-        from emperor.sampler.utils.routers import RouterConfig, RouterModel
+        from emperor.sampler.core.routers import RouterConfig, RouterModel
 
         if self.init_sampler_option != InitSamplerOptions.LAYER:
             return None, None

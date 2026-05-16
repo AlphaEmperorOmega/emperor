@@ -9,8 +9,8 @@ from emperor.base.enums import (
 from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.model import SamplerModel
-from emperor.sampler.utils.config import RouterConfig, SamplerConfig
-from emperor.sampler.utils.samplers import SamplerFull, SamplerSparse, SamplerTopk
+from emperor.sampler.core.config import RouterConfig, SamplerConfig
+from emperor.sampler.core.samplers import SamplerFull, SamplerSparse, SamplerTopk
 
 
 class TestSamplerModelValidator(unittest.TestCase):

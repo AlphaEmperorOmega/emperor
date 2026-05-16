@@ -5,8 +5,8 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.sampler.utils.routers import RouterConfig
-from emperor.sampler.utils.samplers import SamplerConfig
+from emperor.sampler.core.routers import RouterConfig
+from emperor.sampler.core.samplers import SamplerConfig
 from emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,

@@ -14,8 +14,8 @@ from emperor.augmentations.adaptive_parameters.core.diagonal import (
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.base.layer import LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.utils.routers import RouterConfig
-from emperor.sampler.utils.samplers import SamplerConfig
+from emperor.sampler.core.routers import RouterConfig
+from emperor.sampler.core.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions
 from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig

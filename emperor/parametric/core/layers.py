@@ -2,8 +2,8 @@ import torch
 
 from torch import Tensor
 from emperor.base.utils import Module
-from emperor.sampler.utils.samplers import SamplerConfig
-from emperor.sampler.utils.routers import RouterConfig
+from emperor.sampler.core.samplers import SamplerConfig
+from emperor.sampler.core.routers import RouterConfig
 from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.core._validator import _ParametricLayerValidator
 from emperor.parametric.core.mixtures.selectors import (

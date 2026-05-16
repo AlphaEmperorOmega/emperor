@@ -1,8 +1,8 @@
 import torch
 import unittest
 
-from emperor.sampler.utils.config import SamplerConfig
-from emperor.sampler.utils.losses import (
+from emperor.sampler.core.config import SamplerConfig
+from emperor.sampler.core.losses import (
     CoefficientOfVariationLoss,
     MutualInformationLoss,
     SamplerAuxiliaryLosses,

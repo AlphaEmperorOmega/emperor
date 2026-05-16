@@ -3,8 +3,8 @@ import models.parametric_matrix.config as config
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.base.layer import LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.utils.routers import RouterConfig
-from emperor.sampler.utils.samplers import SamplerConfig
+from emperor.sampler.core.routers import RouterConfig
+from emperor.sampler.core.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions
 from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
 from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
