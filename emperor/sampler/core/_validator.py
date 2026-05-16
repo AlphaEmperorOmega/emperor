@@ -86,7 +86,7 @@ class RouterModelValidator(ValidatorBase):
 
     @staticmethod
     def validate_positive_integer(name: str, value: int) -> None:
-        if isinstance(value, bool):
+        if isinstance(value, bool) or value <= 0:
             raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
     @staticmethod
