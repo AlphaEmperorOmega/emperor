@@ -1,5 +1,6 @@
 import torch
 import unittest
+from types import SimpleNamespace
 from torch.nn import Sequential
 
 from emperor.base.layer import Layer
@@ -78,7 +79,6 @@ def make_bias_config(
     input_dim: int, output_dim: int, bias_flag: bool = True
 ) -> GeneratorDynamicBiasConfig:
     return GeneratorDynamicBiasConfig(
-        bias_flag=bias_flag,
         decay_schedule=WeightDecayScheduleOptions.DISABLED,
         decay_rate=0.0,
         decay_warmup_batches=0,
@@ -277,11 +277,10 @@ class TestLinearLayer(unittest.TestCase):
         self.assertEqual(m.bias_flag, True)
 
     def test_model_config_dispatch_extracts_linear_layer_config(self):
-        from emperor.config import ModelConfig
-
-        wrapper = ModelConfig()
-        wrapper.linear_layer_config = LinearLayerConfig(
-            input_dim=5, output_dim=3, bias_flag=True
+        wrapper = SimpleNamespace(
+            linear_layer_config=LinearLayerConfig(
+                input_dim=5, output_dim=3, bias_flag=True
+            )
         )
         m = LinearLayer(wrapper)
 
@@ -486,6 +485,17 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
         with self.assertRaises(ValueError):
             AdaptiveLinearLayer(cfg)
 
+    def test_init_raises_when_dynamic_bias_is_configured_without_layer_bias(self):
+        cfg = self.preset(
+            input_dim=4,
+            output_dim=3,
+            bias_flag=False,
+            bias_config=make_bias_config(4, 3),
+        )
+
+        with self.assertRaises(ValueError):
+            AdaptiveLinearLayer(cfg)
+
     def test_output_matches_linear_layer_when_all_sub_configs_disabled(self):
         input_dim = 4
         output_dim = 3
@@ -539,7 +549,7 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
                                 )
                                 bias_config = (
                                     bias_builder(input_dim, output_dim)
-                                    if bias_builder
+                                    if bias_builder and bias_flag
                                     else None
                                 )
                                 diagonal_config = (
@@ -602,10 +612,8 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
                                             else None
                                         )
                                         bias_config = (
-                                            bias_builder(
-                                                input_dim, output_dim, bias_flag
-                                            )
-                                            if bias_builder
+                                            bias_builder(input_dim, output_dim)
+                                            if bias_builder and bias_flag
                                             else None
                                         )
                                         diagonal_config = (
@@ -773,8 +781,8 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                                     else None
                                 )
                                 bias_config = (
-                                    bias_builder(input_dim, output_dim, bias_flag)
-                                    if bias_builder
+                                    bias_builder(input_dim, output_dim)
+                                    if bias_builder and bias_flag
                                     else None
                                 )
                                 diagonal_config = (
@@ -835,8 +843,8 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                                         else None
                                     )
                                     bias_config = (
-                                        bias_builder(input_dim, output_dim, bias_flag)
-                                        if bias_builder
+                                        bias_builder(input_dim, output_dim)
+                                        if bias_builder and bias_flag
                                         else None
                                     )
                                     diagonal_config = (
