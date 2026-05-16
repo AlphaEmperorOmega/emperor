@@ -24,10 +24,11 @@ class AuxiliaryLossBase:
         return self.loss_weight == 0.0
 
     def _accumulate(self, attr, value):
-        if getattr(self, attr) is None:
+        current = getattr(self, attr)
+        if current is None:
             setattr(self, attr, value)
         else:
-            getattr(self, attr).add_(value)
+            setattr(self, attr, current + value)
 
     def _is_accumulation_none(self, accumulation: Tensor | None) -> None:
         if accumulation is None:
@@ -53,7 +54,7 @@ class AuxiliaryLossBase:
 
     def _compute_loss(self, *args, **kwargs) -> Tensor:
         raise NotImplementedError(
-            "`_cumpute_loss` method must be implemented by subclasses of AuxiliaryLossBase"
+            "`_compute_loss` method must be implemented by subclasses of AuxiliaryLossBase"
         )
 
 
@@ -74,11 +75,11 @@ class CoefficientOfVariationLoss(AuxiliaryLossBase):
         self._accumulate("gates_accumulation", probability)
 
     def _compute_loss(self) -> Tensor:
-        if self.__is_accumulation_shape_valid():
+        if self.__has_single_sample():
             return self.default_error
         return self.__compute_coefficient_of_variation()
 
-    def __is_accumulation_shape_valid(self) -> bool:
+    def __has_single_sample(self) -> bool:
         self._is_accumulation_none(self.gates_accumulation)
         return self.gates_accumulation.shape[0] == 1
 
@@ -145,7 +146,7 @@ class ZeroCentredLoss(AuxiliaryLossBase):
         self._is_valid_input(logits, self)
         squared_log_sum_exp = self.__compute_squared_log_sum_exp(logits)
         self._accumulate("squared_log_sum_exp_accumulation", squared_log_sum_exp)
-        count = torch.tensor(logits.size(0))
+        count = torch.tensor(logits.size(0), device=logits.device)
         self._accumulate("count_accumulation", count)
 
     def __compute_squared_log_sum_exp(self, logits: Tensor) -> Tensor:
