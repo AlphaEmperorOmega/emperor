@@ -4,7 +4,7 @@ from torch import Tensor
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStack, LayerStackConfig
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.parametric.utils.stack import ParametricLayerStack
+from emperor.parametric.core.stack import ParametricLayerStack
 from models.parametric_vector.config import ExperimentConfig
 
 from typing import TYPE_CHECKING

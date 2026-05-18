@@ -5,13 +5,13 @@ from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.core.routers import RouterConfig
 from emperor.sampler.core.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions
-from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
-from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
-from emperor.parametric.utils.mixtures.options import (
+from emperor.parametric.core.config import ParametricLayerConfig, AdaptiveRouterOptions
+from emperor.parametric.core.mixtures.base import AdaptiveMixtureConfig
+from emperor.parametric.core.mixtures.options import (
     AdaptiveBiasOptions,
     AdaptiveWeightOptions,
 )
-from emperor.parametric.utils.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.experts.utils.layers import MixtureOfExpertsConfig
 from emperor.experts.utils.enums import (
