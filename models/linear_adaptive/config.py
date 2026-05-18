@@ -5,10 +5,13 @@ from emperor.base.enums import (
     LayerNormPositionOptions,
 )
 from emperor.datasets.image.classification.mnist import Mnist
+from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
-from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.augmentations.adaptive_parameters.core.monitor import (
+    AdaptiveParameterMonitorCallback,
+)
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     WeightNormalizationOptions,
@@ -46,7 +49,7 @@ from emperor.augmentations.adaptive_parameters import (
 
 # Global
 BATCH_SIZE: int = 128
-NUM_EPOCHS: int = 30
+NUM_EPOCHS: int = 10
 LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
 
@@ -58,6 +61,12 @@ CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 # Callback
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
+# CALLBACK_LINEAR_MONITOR = LinearMonitorCallback(log_every_n_steps=100)
+CALLBACK_ADAPTIVE_PARAMETER_MONITOR = AdaptiveParameterMonitorCallback(
+    log_every_n_steps=100,
+    log_histograms=False,
+    log_internal_stats=True,
+)
 
 # Model
 INPUT_DIM: int = 28**2
