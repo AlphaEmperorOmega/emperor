@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from emperor.parametric.utils.config import ParametricLayerConfig, AdaptiveRouterOptions
-from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
+from emperor.parametric.core.config import ParametricLayerConfig, AdaptiveRouterOptions
+from emperor.parametric.core.mixtures.base import AdaptiveMixtureConfig
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
 from emperor.base.layer import LayerStackConfig

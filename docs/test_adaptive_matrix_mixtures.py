@@ -3,12 +3,12 @@ import unittest
 import torch.nn.functional as F
 
 from torch.nn import Parameter
-from emperor.parametric.utils.presets import ParametricLayerPresets
-from emperor.parametric.utils.mixtures.base import (
+from emperor.parametric.core.presets import ParametricLayerPresets
+from emperor.parametric.core.mixtures.base import (
     AdaptiveMixtureBase,
     AdaptiveMixtureConfig,
 )
-from emperor.parametric.utils.mixtures.types.matrix import (
+from emperor.parametric.core.mixtures.types.matrix import (
     MatrixBiasMixture,
     MatrixMixtureBase,
     MatrixWeightsMixture,

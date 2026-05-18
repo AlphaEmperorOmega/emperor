@@ -8,7 +8,7 @@ from emperor.experts.utils.enums import InitSamplerOptions
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.parametric.options import AdaptiveLayerStackOptions
 from emperor.attention.utils.presets import MultiHeadAttentionPresets
-from emperor.parametric.utils.mixtures.options import AdaptiveWeightOptions
+from emperor.parametric.core.mixtures.options import AdaptiveWeightOptions
 from emperor.attention.utils.handlers.projector import (
     IndependentProjector,
     MixtureOfAttentionHeadsProjector,
