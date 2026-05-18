@@ -73,7 +73,6 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         common_kwargs = dict(
             input_dim=input_dim,
             output_dim=output_dim,
-            bias_flag=bias_flag,
             decay_schedule=decay_schedule,
             decay_rate=decay_rate,
             decay_warmup_batches=decay_warmup_batches,

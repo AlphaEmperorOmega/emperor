@@ -92,10 +92,12 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         decay_schedule: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED,
         decay_rate: float = 0.0,
         decay_warmup_batches: int = 0,
+        model_config: LayerStackConfig | None = None,
     ) -> DynamicWeightConfig:
-        model_config = self._make_layer_stack_config(
-            input_dim=input_dim, output_dim=output_dim
-        )
+        if model_config is None:
+            model_config = self._make_layer_stack_config(
+                input_dim=input_dim, output_dim=output_dim
+            )
         common_kwargs = dict(
             input_dim=input_dim,
             output_dim=output_dim,
@@ -191,7 +193,6 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         common_kwargs = dict(
             input_dim=input_dim,
             output_dim=output_dim,
-            bias_flag=bias_flag,
             decay_schedule=decay_schedule,
             decay_rate=decay_rate,
             decay_warmup_batches=decay_warmup_batches,
@@ -620,6 +621,111 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 cfg = AdaptiveParameterAugmentationConfig(**config_kwargs)
                 with self.assertRaises(ValueError):
                     AdaptiveParameterAugmentation(cfg)
+
+    def test_init_raises_on_invalid_sub_config_type(self):
+        cases = [
+            ("weight_config", DynamicBiasConfig()),
+            ("diagonal_config", self._make_weight_config()),
+            ("bias_config", self._make_mask_config()),
+            ("mask_config", self._make_diagonal_config()),
+        ]
+
+        for field_name, sub_config in cases:
+            with self.subTest(field_name=field_name):
+                cfg = self.preset(**{field_name: sub_config})
+                with self.assertRaises(TypeError):
+                    AdaptiveParameterAugmentation(cfg)
+
+    def test_init_raises_on_invalid_model_config_type(self):
+        cases = [
+            {"model_config": LinearLayerConfig(bias_flag=True)},
+            {
+                "weight_config": self._make_weight_config(
+                    config_cls=DualModelDynamicWeightConfig,
+                    model_config=LinearLayerConfig(bias_flag=True),
+                )
+            },
+        ]
+
+        for kwargs in cases:
+            with self.subTest(kwargs=kwargs):
+                cfg = self.preset(**kwargs)
+                with self.assertRaises(TypeError):
+                    AdaptiveParameterAugmentation(cfg)
+
+    def test_forward_validates_runtime_inputs(self):
+        model = AdaptiveParameterAugmentation(self.preset(input_dim=12, output_dim=24))
+        callback = self._make_affine_callback()
+        weight_params, bias_params = self._make_weight_and_bias_params(12, 24)
+        input_tensor = torch.randn(2, 12)
+
+        cases = [
+            ("callback", None, weight_params, bias_params, input_tensor, TypeError),
+            ("weight_type", callback, [[1.0]], bias_params, input_tensor, TypeError),
+            (
+                "weight_rank",
+                callback,
+                torch.randn(2, 3, 12, 24),
+                bias_params,
+                input_tensor,
+                ValueError,
+            ),
+            (
+                "weight_shape",
+                callback,
+                torch.randn(12, 23),
+                bias_params,
+                input_tensor,
+                ValueError,
+            ),
+            (
+                "weight_batch",
+                callback,
+                torch.randn(3, 12, 24),
+                bias_params,
+                input_tensor,
+                ValueError,
+            ),
+            ("bias_type", callback, weight_params, [0.0], input_tensor, TypeError),
+            (
+                "bias_shape",
+                callback,
+                weight_params,
+                torch.randn(23),
+                input_tensor,
+                ValueError,
+            ),
+            (
+                "bias_batch",
+                callback,
+                weight_params,
+                torch.randn(3, 24),
+                input_tensor,
+                ValueError,
+            ),
+            ("input_type", callback, weight_params, bias_params, [[0.0]], TypeError),
+            (
+                "input_rank",
+                callback,
+                weight_params,
+                bias_params,
+                torch.randn(2, 3, 12),
+                ValueError,
+            ),
+            (
+                "input_shape",
+                callback,
+                weight_params,
+                bias_params,
+                torch.randn(2, 11),
+                ValueError,
+            ),
+        ]
+
+        for case, cb, weights, bias, inputs, error_type in cases:
+            with self.subTest(case=case):
+                with self.assertRaises(error_type):
+                    model(cb, weights, bias, inputs)
 
     def test_init_raises_on_missing_model_config_for_all_enabled_sub_configs(self):
         def make_sub_config(name, option):

@@ -347,6 +347,19 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         with self.assertRaises(ValueError):
             model(input_tensor)
 
+    def test_non_tensor_input_raises_error(self):
+        cfg = self.preset(generator_depth=DynamicDepthOptions.DEPTH_OF_TWO)
+        model = DepthMappingLayerStack(cfg)
+        with self.assertRaises(TypeError):
+            model([[0.0] * cfg.input_dim])
+
+    def test_wrong_input_feature_dimension_raises_error(self):
+        cfg = self.preset(generator_depth=DynamicDepthOptions.DEPTH_OF_TWO)
+        model = DepthMappingLayerStack(cfg)
+        input_tensor = torch.randn(2, cfg.input_dim - 1)
+        with self.assertRaises(ValueError):
+            model(input_tensor)
+
     def test_disabled_depth_raises_error(self):
         cfg = self.preset(generator_depth=DynamicDepthOptions.DISABLED)
         with self.assertRaises(ValueError):
