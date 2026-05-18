@@ -6,7 +6,7 @@ from torch.nn import ModuleDict
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase, Module
 from emperor.parametric.options import AdaptiveLayerOptions
-from emperor.parametric.utils.routers import RouterModel
+from emperor.parametric.core.routers import RouterModel
 from emperor.sampler.model import SamplerModel
 
 
