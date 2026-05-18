@@ -54,6 +54,9 @@ class AdaptiveParameterAugmentation(Module):
         bias_params: Tensor | None,
         input: Tensor,
     ) -> Tensor:
+        AdaptiveParameterAugmentationValidator.validate_forward_inputs(
+            self, affine_transform_callback, weight_params, bias_params, input
+        )
         weights, bias = self.__apply_adaptive_adjustments(
             weight_params, bias_params, input
         )

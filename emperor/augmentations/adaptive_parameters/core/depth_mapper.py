@@ -128,7 +128,7 @@ class DepthMappingLayerStack(Module):
         return layer_stack_config
 
     def forward(self, X: Tensor) -> Tensor:
-        DepthMappingValidator.validate_input_is_2d(X)
+        DepthMappingValidator.validate_input_is_2d(X, self.input_dim)
 
         X = X.unsqueeze(1)
         X = X.repeat(1, self.depth_value, 1)

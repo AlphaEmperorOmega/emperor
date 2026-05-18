@@ -92,6 +92,91 @@ class AdaptiveGeneratorValidatorBase:
                 f"received {decay_warmup_batches!r}."
             )
 
+    @staticmethod
+    def validate_input_batch(model, input_batch) -> None:
+        if not isinstance(input_batch, Tensor):
+            raise TypeError(
+                "input must be a Tensor, "
+                f"received {type(input_batch).__name__}."
+            )
+        if input_batch.dim() != 2:
+            raise ValueError(
+                f"{type(model).__name__} expects a 2D input tensor "
+                "(batch_size, input_dim), received a "
+                f"{input_batch.dim()}D tensor with shape {tuple(input_batch.shape)}."
+            )
+        if input_batch.shape[-1] != model.input_dim:
+            raise ValueError(
+                f"{type(model).__name__} input feature dimension must match input_dim, "
+                f"received input_dim={model.input_dim} and input shape "
+                f"{tuple(input_batch.shape)}."
+            )
+
+    @staticmethod
+    def validate_weight_params(model, weight_params) -> None:
+        if not isinstance(weight_params, Tensor):
+            raise TypeError(
+                "weight_params must be a Tensor, "
+                f"received {type(weight_params).__name__}."
+            )
+        if weight_params.dim() not in {2, 3}:
+            raise ValueError(
+                "weight_params must be a 2D tensor (input_dim, output_dim) "
+                "or a 3D tensor (batch_size, input_dim, output_dim), "
+                f"received a {weight_params.dim()}D tensor with shape "
+                f"{tuple(weight_params.shape)}."
+            )
+        expected_shape = (model.input_dim, model.output_dim)
+        if tuple(weight_params.shape[-2:]) != expected_shape:
+            raise ValueError(
+                "weight_params trailing dimensions must match "
+                "(input_dim, output_dim), "
+                f"expected {expected_shape}, received shape "
+                f"{tuple(weight_params.shape)}."
+            )
+
+    @staticmethod
+    def validate_batched_weight_params(model, weight_params, input_batch) -> None:
+        AdaptiveGeneratorValidatorBase.validate_weight_params(model, weight_params)
+        if weight_params.dim() == 3 and weight_params.shape[0] != input_batch.shape[0]:
+            raise ValueError(
+                "weight_params batch dimension must match input batch dimension, "
+                f"received weight_params shape {tuple(weight_params.shape)} and "
+                f"input shape {tuple(input_batch.shape)}."
+            )
+
+    @staticmethod
+    def validate_bias_params(model, bias_params, input_batch=None) -> None:
+        if bias_params is None:
+            return
+        if not isinstance(bias_params, Tensor):
+            raise TypeError(
+                "bias_params must be a Tensor when provided, "
+                f"received {type(bias_params).__name__}."
+            )
+        if bias_params.dim() not in {1, 2}:
+            raise ValueError(
+                "bias_params must be a 1D tensor (output_dim) or a 2D tensor "
+                "(batch_size, output_dim), received a "
+                f"{bias_params.dim()}D tensor with shape {tuple(bias_params.shape)}."
+            )
+        if bias_params.shape[-1] != model.output_dim:
+            raise ValueError(
+                "bias_params feature dimension must match output_dim, "
+                f"received output_dim={model.output_dim} and bias_params shape "
+                f"{tuple(bias_params.shape)}."
+            )
+        if (
+            input_batch is not None
+            and bias_params.dim() == 2
+            and bias_params.shape[0] != input_batch.shape[0]
+        ):
+            raise ValueError(
+                "bias_params batch dimension must match input batch dimension, "
+                f"received bias_params shape {tuple(bias_params.shape)} and "
+                f"input shape {tuple(input_batch.shape)}."
+            )
+
 
 class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     OPTIONAL_FIELDS = {"bank_expansion_factor"}
@@ -261,11 +346,22 @@ class DepthMappingValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_input_is_2d(input_batch: Tensor) -> None:
+    def validate_input_is_2d(input_batch: Tensor, input_dim: int | None = None) -> None:
+        if not isinstance(input_batch, Tensor):
+            raise TypeError(
+                "DepthMappingLayerStack input must be a Tensor, "
+                f"received {type(input_batch).__name__}."
+            )
         if not input_batch.dim() == 2:
             raise ValueError(
                 f"DepthMappingLayerStack expects a 2D input tensor (batch_size, features), "
                 f"received a {input_batch.dim()}D tensor with shape {tuple(input_batch.shape)}."
+            )
+        if input_dim is not None and input_batch.shape[-1] != input_dim:
+            raise ValueError(
+                "DepthMappingLayerStack input feature dimension must match input_dim, "
+                f"received input_dim={input_dim} and input shape "
+                f"{tuple(input_batch.shape)}."
             )
 
     @staticmethod
@@ -303,10 +399,23 @@ class DepthMappingValidator(ValidatorBase):
             )
 
 
-class AdaptiveParameterAugmentationValidator:
+class AdaptiveParameterAugmentationValidator(ValidatorBase):
+    OPTIONAL_FIELDS = {
+        "diagonal_config",
+        "weight_config",
+        "bias_config",
+        "mask_config",
+        "model_config",
+    }
+
     @staticmethod
     def validate(model: "AdaptiveParameterAugmentation") -> None:
+        AdaptiveParameterAugmentationValidator.validate_required_fields(model.cfg)
+        AdaptiveParameterAugmentationValidator.validate_field_types(model.cfg)
         AdaptiveParameterAugmentationValidator.validate_dimensions(model)
+        AdaptiveParameterAugmentationValidator.validate_model_config(
+            "model_config", model.model_config
+        )
         AdaptiveParameterAugmentationValidator.validate_sub_configs(model)
 
     @staticmethod
@@ -330,25 +439,69 @@ class AdaptiveParameterAugmentationValidator:
 
     @staticmethod
     def validate_sub_configs(model: "AdaptiveParameterAugmentation") -> None:
-        from emperor.base.utils import ConfigBase
-        from emperor.base.layer.config import LayerStackConfig
+        from emperor.augmentations.adaptive_parameters.core.weight import (
+            DynamicWeightConfig,
+        )
+        from emperor.augmentations.adaptive_parameters.core.diagonal import (
+            DynamicDiagonalConfig,
+        )
+        from emperor.augmentations.adaptive_parameters.core.bias import (
+            DynamicBiasConfig,
+        )
+        from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
 
         sub_configs = [
-            ("weight_config", model.weight_config),
-            ("diagonal_config", model.diagonal_config),
-            ("bias_config", model.bias_config),
-            ("mask_config", model.mask_config),
+            ("weight_config", model.weight_config, DynamicWeightConfig),
+            ("diagonal_config", model.diagonal_config, DynamicDiagonalConfig),
+            ("bias_config", model.bias_config, DynamicBiasConfig),
+            ("mask_config", model.mask_config, AxisMaskConfig),
         ]
-        for name, config in sub_configs:
+        for name, config, expected_type in sub_configs:
             if config is None:
                 continue
-            if not isinstance(config, ConfigBase):
+            if not isinstance(config, expected_type):
                 raise TypeError(
-                    f"{name} must be a ConfigBase instance, "
+                    f"{name} must be a {expected_type.__name__} instance, "
                     f"got {type(config).__name__}."
                 )
+            AdaptiveParameterAugmentationValidator.validate_model_config(
+                f"{name}.model_config", config.model_config
+            )
             if config.model_config is None and model.model_config is None:
                 raise ValueError(
                     f"{type(config).__name__} requires a model_config but none was provided "
                     f"on the sub-config or the parent AdaptiveParameterAugmentationConfig."
                 )
+
+    @staticmethod
+    def validate_model_config(name: str, model_config) -> None:
+        if model_config is None:
+            return
+        from emperor.base.layer.config import LayerStackConfig
+
+        if not isinstance(model_config, LayerStackConfig):
+            raise TypeError(
+                f"{name} must be a LayerStackConfig when provided, "
+                f"got {type(model_config).__name__}."
+            )
+
+    @staticmethod
+    def validate_forward_inputs(
+        model: "AdaptiveParameterAugmentation",
+        affine_transform_callback,
+        weight_params,
+        bias_params,
+        input_batch,
+    ) -> None:
+        if not callable(affine_transform_callback):
+            raise TypeError(
+                "affine_transform_callback must be callable, "
+                f"received {type(affine_transform_callback).__name__}."
+            )
+        AdaptiveGeneratorValidatorBase.validate_input_batch(model, input_batch)
+        AdaptiveGeneratorValidatorBase.validate_batched_weight_params(
+            model, weight_params, input_batch
+        )
+        AdaptiveGeneratorValidatorBase.validate_bias_params(
+            model, bias_params, input_batch
+        )
