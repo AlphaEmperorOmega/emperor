@@ -4,8 +4,8 @@ import unittest
 from torch.nn import Sequential
 from emperor.halting.config import HaltingConfig, StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.base.enums import LayerNormPositionOptions
-from emperor.base.enums import ActivationOptions, LastLayerBiasOptions
+from emperor.base.options import LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LastLayerBiasOptions
 from emperor.base.layer import (
     Layer,
     LayerConfig,

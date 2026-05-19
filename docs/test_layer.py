@@ -2,10 +2,10 @@ import torch
 import unittest
 import torch.nn as nn
 
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.base.layer import Layer, LayerConfig, LayerStackConfig, LayerState
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.base.enums import LastLayerBiasOptions
+from emperor.base.options import LastLayerBiasOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 

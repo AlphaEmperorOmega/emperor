@@ -4,7 +4,7 @@ import torch.nn as nn
 
 from emperor.base.utils import Module
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,

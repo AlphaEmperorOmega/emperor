@@ -18,7 +18,7 @@ from emperor.linears.core.layers import (
 )
 
 from emperor.base.layer import LayerStackConfig
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,

@@ -3,7 +3,7 @@ import unittest
 from emperor.augmentations.adaptive_parameters.core.weight import (
     LowRankDynamicWeightConfig,
 )
-from emperor.base.enums import ActivationOptions
+from emperor.base.options import ActivationOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import GridSearch
 from models.linear_adaptive import ExperimentOptions

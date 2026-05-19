@@ -1,6 +1,6 @@
 import torch
 
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.text.language_modeling.penn_treebank import PennTreebank
 from emperor.datasets.text.language_modeling.wiki_text_2 import WikiText2
 from emperor.linears.core.config import LinearLayerConfig

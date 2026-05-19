@@ -1,7 +1,7 @@
 from torch import Tensor
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStack
-from emperor.experts.utils.model import MixtureOfExpertsModel
+from emperor.experts.model import MixtureOfExpertsModel
 from emperor.experiments.classifier import ClassifierExperiment
 from models.experts.config import ExperimentConfig
 

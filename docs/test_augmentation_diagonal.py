@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,

@@ -5,7 +5,7 @@ from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.linears.core.monitor import LinearMonitorCallback
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,

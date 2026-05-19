@@ -1,10 +1,10 @@
 import models.experts.config as config
 
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig
-from emperor.experts.utils.layers import MixtureOfExpertsConfig
+from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.sampler.core.routers import RouterConfig
 from emperor.sampler.core.samplers import SamplerConfig
 from emperor.experiments.base import (
@@ -13,10 +13,10 @@ from emperor.experiments.base import (
     create_search_space,
     SearchMode,
 )
-from emperor.experts.utils.enums import (
+from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
-    InitSamplerOptions,
+    RoutingInitializationMode,
 )
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
@@ -154,7 +154,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         experts_compute_expert_mixture_flag: bool = config.EXPERTS_COMPUTE_EXPERT_MIXTURE_FLAG,
         experts_weighted_parameters_flag: bool = config.EXPERTS_WEIGHTED_PARAMETERS_FLAG,
         experts_weighting_position_option: ExpertWeightingPositionOptions = config.EXPERTS_WEIGHTING_POSITION_OPTION,
-        experts_init_sampler_option: InitSamplerOptions = config.EXPERTS_INIT_SAMPLER_OPTION,
+        experts_routing_initialization_mode: RoutingInitializationMode = config.EXPERTS_ROUTING_INITIALIZATION_MODE,
         experts_capacity_factor: float = config.EXPERTS_CAPACITY_FACTOR,
         experts_dropped_token_behavior: DroppedTokenOptions = config.EXPERTS_DROPPED_TOKEN_BEHAVIOR,
         experts_model_generator_depth: DynamicDepthOptions = config.EXPERTS_MODEL_GENERATOR_DEPTH,
@@ -202,7 +202,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                         compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                         weighted_parameters_flag=experts_weighted_parameters_flag,
                         weighting_position_option=experts_weighting_position_option,
-                        init_sampler_option=experts_init_sampler_option,
+                        routing_initialization_mode=experts_routing_initialization_mode,
                         capacity_factor=experts_capacity_factor,
                         dropped_token_behavior=experts_dropped_token_behavior,
                         override_config=LayerStackConfig(
@@ -253,7 +253,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                                 ),
                             ),
                         ),
-                        router_model_config=RouterConfig(
+                        router_config=RouterConfig(
                             input_dim=input_dim,
                             layer_stack_option=LinearLayerStackOptions.BASE,
                             num_experts=experts_num_experts,
@@ -278,7 +278,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                                 ),
                             ),
                         ),
-                        sampler_model_config=SamplerConfig(
+                        sampler_config=SamplerConfig(
                             top_k=experts_top_k,
                             threshold=sampler_threshold,
                             filter_above_threshold=sampler_filter_above_threshold,

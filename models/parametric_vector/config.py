@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStackConfig
-from emperor.base.enums import ActivationOptions
+from emperor.base.options import ActivationOptions
 from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10

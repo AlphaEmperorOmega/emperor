@@ -1,4 +1,4 @@
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
@@ -143,7 +143,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                         output_dim=hidden_dim,
                         adaptive_weight_option=AdaptiveWeightOptions.VECTOR,
                         adaptive_bias_option=AdaptiveBiasOptions.DISABLED,
-                        init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
+                        routing_initialization_mode=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
                         time_tracker_flag=False,
                         adaptive_behaviour_config=AdaptiveParameterAugmentationConfig(
                             input_dim=hidden_dim,

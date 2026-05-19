@@ -29,7 +29,7 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
 )
-from emperor.base.enums import BaseOptions
+from emperor.base.options import BaseOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
     ExperimentBase,

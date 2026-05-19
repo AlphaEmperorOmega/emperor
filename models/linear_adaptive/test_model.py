@@ -23,7 +23,7 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
 from emperor.augmentations.adaptive_parameters.options import (
     MaskDimensionOptions,
 )
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,

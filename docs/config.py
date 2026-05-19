@@ -4,11 +4,11 @@ import torch.nn as nn
 from emperor.parametric.core.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.parametric.core.mixtures.base import AdaptiveMixtureConfig
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.base.layer import LayerStackConfig
 from emperor.config import ModelConfig
-from emperor.experts.utils.enums import InitSamplerOptions
-from emperor.experts.utils.layers import MixtureOfExpertsConfig
+from emperor.experts.core.options import RoutingInitializationMode
+from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.core.routers import RouterConfig
@@ -124,7 +124,7 @@ def default_unittest_config():
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
-            init_sampler_option=InitSamplerOptions.LAYER,
+            routing_initialization_mode=RoutingInitializationMode.LAYER,
         ),
         output_moe_layer_config=MixtureOfExpertsConfig(
             input_dim=64,
@@ -133,7 +133,7 @@ def default_unittest_config():
             num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
-            init_sampler_option=InitSamplerOptions.LAYER,
+            routing_initialization_mode=RoutingInitializationMode.LAYER,
         ),
         multi_head_attention_model_config=MultiHeadAttentionConfig(
             model_type=LinearLayerStackOptions.ADAPTIVE,

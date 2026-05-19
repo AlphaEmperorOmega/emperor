@@ -1,7 +1,7 @@
 import torch
 import unittest
 
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,

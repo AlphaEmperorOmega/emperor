@@ -1,4 +1,4 @@
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.base.layer import LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
@@ -13,10 +13,10 @@ from emperor.parametric.core.mixtures.options import (
 )
 from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
-from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.experts.utils.enums import (
+from emperor.experts.core.config import MixtureOfExpertsConfig
+from emperor.experts.core.options import (
     ExpertWeightingPositionOptions,
-    InitSamplerOptions,
+    RoutingInitializationMode,
 )
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.augmentations.adaptive_parameters.options import (
@@ -136,7 +136,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                         output_dim=output_dim,
                         adaptive_weight_option=AdaptiveWeightOptions.GENERATOR,
                         adaptive_bias_option=adaptive_bias_option,
-                        init_sampler_model_option=AdaptiveRouterOptions.SHARED_ROUTER,
+                        routing_initialization_mode=AdaptiveRouterOptions.SHARED_ROUTER,
                         time_tracker_flag=False,
                         adaptive_behaviour_config=AdaptiveParameterAugmentationConfig(
                             input_dim=input_dim,
@@ -225,7 +225,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                                 compute_expert_mixture_flag=False,
                                 weighted_parameters_flag=False,
                                 weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-                                init_sampler_option=InitSamplerOptions.SHARED,
+                                routing_initialization_mode=RoutingInitializationMode.SHARED,
                                 override_config=LayerStackConfig(
                                     model_type=LinearLayerOptions.BASE,
                                     input_dim=input_dim,
@@ -245,7 +245,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                                         parameter_monitor=None,
                                     ),
                                 ),
-                                router_model_config=RouterConfig(
+                                router_config=RouterConfig(
                                     input_dim=input_dim,
                                     layer_stack_option=LinearLayerStackOptions.BASE,
                                     num_experts=adaptive_mixture_num_experts,
@@ -272,7 +272,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                                         ),
                                     ),
                                 ),
-                                sampler_model_config=SamplerConfig(
+                                sampler_config=SamplerConfig(
                                     top_k=adaptive_mixture_top_k,
                                     threshold=0.0,
                                     filter_above_threshold=False,

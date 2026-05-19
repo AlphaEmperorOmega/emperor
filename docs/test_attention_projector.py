@@ -2,9 +2,9 @@ import torch
 import unittest
 
 from torch.nn import Sequential
-from emperor.experts.utils.layers import MixtureOfExperts
+from emperor.experts.core.layers import MixtureOfExperts
 from emperor.attention.utils.enums import AttentionOptions
-from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.experts.core.options import RoutingInitializationMode
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.parametric.options import AdaptiveLayerStackOptions
 from emperor.attention.utils.presets import MultiHeadAttentionPresets
@@ -350,7 +350,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                                 projector_experts_compute_expert_mixture_flag=False,
                                 projector_experts_layer_stack_option=model_type,
                                 projector_experts_stack_num_layers=1,
-                                projector_experts_init_sampler_option=InitSamplerOptions.LAYER,
+                                projector_experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
                             )
                             m = MixtureOfAttentionHeadsProjector(c)
 

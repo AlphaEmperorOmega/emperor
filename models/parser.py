@@ -1,6 +1,6 @@
 import argparse
 import importlib
-from emperor.base.enums import BaseOptions
+from emperor.base.options import BaseOptions
 from emperor.experiments.base import GridSearch, RandomSearch, SearchMode
 from models.config_overrides import (
     add_config_override_arguments,

@@ -7,7 +7,7 @@ from emperor.sampler.core.routers import RouterConfig
 from emperor.sampler.core.samplers import SamplerConfig
 from emperor.parametric.options import AdaptiveLayerOptions
 from emperor.parametric.core.mixtures.base import AdaptiveMixtureConfig
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.parametric.core.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.parametric.core.mixtures.options import (
@@ -111,7 +111,7 @@ class ExperimentPresets(ExperimentPresetsBase):
                         output_dim=output_dim,
                         adaptive_weight_option=AdaptiveWeightOptions.MATRIX,
                         adaptive_bias_option=adaptive_bias_option,
-                        init_sampler_model_option=AdaptiveRouterOptions.SHARED_ROUTER,
+                        routing_initialization_mode=AdaptiveRouterOptions.SHARED_ROUTER,
                         time_tracker_flag=False,
                         adaptive_behaviour_config=AdaptiveParameterAugmentationConfig(
                             input_dim=input_dim,

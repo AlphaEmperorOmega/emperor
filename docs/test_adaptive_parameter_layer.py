@@ -5,7 +5,7 @@ from torch.types import Tensor
 from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.config import ModelConfig
-from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.experts.core.options import RoutingInitializationMode
 from emperor.parametric.core.layers import ParametricLayer
 from emperor.parametric.core.stack import ParametricLayerStack
 from emperor.parametric.core.presets import ParametricLayerPresets
@@ -46,7 +46,7 @@ class TestParametricLayer(unittest.TestCase):
                         cfg = ParametricLayerPresets.parametric_layer_preset(
                             adaptive_weight_option=adaptive_weight_otpion,
                             adaptive_bias_option=adaptive_bias_option,
-                            init_sampler_model_option=adaptive_router_otpion,
+                            routing_initialization_mode=adaptive_router_otpion,
                             **overrides,
                         )
 
@@ -74,7 +74,7 @@ class TestParametricLayer(unittest.TestCase):
                             m.adaptive_bias_option, cfg.adaptive_bias_option
                         )
                         self.assertEqual(
-                            m.init_sampler_model_option, cfg.init_sampler_model_option
+                            m.routing_initialization_mode, cfg.routing_initialization_mode
                         )
                         self.assertIsInstance(
                             m.adaptive_behaviour, AdaptiveParameterAugmentation
@@ -116,7 +116,7 @@ class TestParametricLayer(unittest.TestCase):
                     options = {
                         "input_dim": 8,
                         "output_dim": 8,
-                        "init_sampler_model_option": AdaptiveRouterOptions.INDEPENTENT_ROUTER,
+                        "routing_initialization_mode": AdaptiveRouterOptions.INDEPENTENT_ROUTER,
                     }
                 cfg = ParametricLayerPresets.parametric_layer_preset(
                     adaptive_weight_option=adaptive_weight_option,
@@ -162,7 +162,7 @@ class TestParametricLayer(unittest.TestCase):
                             "output_dim": 8,
                         }
                     cfg = ParametricLayerPresets.parametric_layer_preset(
-                        init_sampler_model_option=init_sampler_model_flag,
+                        routing_initialization_mode=init_sampler_model_flag,
                         adaptive_weight_option=adaptive_weight_option,
                         **options,
                     )
@@ -204,7 +204,7 @@ class TestParametricLayer(unittest.TestCase):
                 message = f"Testing inputs: init_sampler_model_flag: {init_sampler_model_flag}, adaptive_bias_option: {adaptive_bias_option}"
                 with self.subTest(error=message):
                     cfg = ParametricLayerPresets.parametric_layer_preset(
-                        init_sampler_model_option=init_sampler_model_flag,
+                        routing_initialization_mode=init_sampler_model_flag,
                         adaptive_bias_option=adaptive_bias_option,
                     )
 
@@ -237,8 +237,8 @@ class TestParametricLayer(unittest.TestCase):
                     output_dim=8,
                     experts_compute_expert_mixture_flag=True,
                     adaptive_weight_option=adaptive_weight_option,
-                    init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                    experts_init_sampler_option=InitSamplerOptions.LAYER,
+                    routing_initialization_mode=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
+                    experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
                     **options,
                 )
 
@@ -270,8 +270,8 @@ class TestParametricLayer(unittest.TestCase):
                     input_dim=8,
                     output_dim=8,
                     adaptive_bias_option=adaptive_bias_option,
-                    init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                    experts_init_sampler_option=InitSamplerOptions.LAYER,
+                    routing_initialization_mode=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
+                    experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
                     experts_compute_expert_mixture_flag=True,
                     **options,
                 )
@@ -301,8 +301,8 @@ class TestParametricLayer(unittest.TestCase):
     def test_generate_parameters(self):
         for adaptive_weight_option in AdaptiveWeightOptions:
             for adaptive_bias_option in AdaptiveBiasOptions:
-                for init_sampler_model_option in AdaptiveRouterOptions:
-                    message = f"Test failed for the inputs: adaptive_weight_option: {adaptive_weight_option}, adaptive_bias_option: {adaptive_bias_option}, init_sampler_model_option: {init_sampler_model_option}"
+                for routing_initialization_mode in AdaptiveRouterOptions:
+                    message = f"Test failed for the inputs: adaptive_weight_option: {adaptive_weight_option}, adaptive_bias_option: {adaptive_bias_option}, routing_initialization_mode: {routing_initialization_mode}"
                     with self.subTest(error=message):
                         options = {}
                         if adaptive_weight_option == AdaptiveWeightOptions.VECTOR:
@@ -312,13 +312,13 @@ class TestParametricLayer(unittest.TestCase):
                             }
 
                             shared_option = AdaptiveRouterOptions.SHARED_ROUTER
-                            if init_sampler_model_option == shared_option:
+                            if routing_initialization_mode == shared_option:
                                 cfg = ParametricLayerPresets.parametric_layer_preset(
                                     experts_compute_expert_mixture_flag=True,
                                     adaptive_weight_option=adaptive_weight_option,
                                     adaptive_bias_option=adaptive_bias_option,
-                                    init_sampler_model_option=init_sampler_model_option,
-                                    experts_init_sampler_option=InitSamplerOptions.LAYER,
+                                    routing_initialization_mode=routing_initialization_mode,
+                                    experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
                                     **options,
                                 )
                                 with self.assertRaises(ValueError):
@@ -330,18 +330,18 @@ class TestParametricLayer(unittest.TestCase):
                             or adaptive_bias_option == AdaptiveBiasOptions.GENERATOR
                         ):
                             if (
-                                init_sampler_model_option
+                                routing_initialization_mode
                                 == AdaptiveRouterOptions.INDEPENTENT_ROUTER
                             ):
-                                options["experts_init_sampler_option"] = (
-                                    InitSamplerOptions.LAYER
+                                options["experts_routing_initialization_mode"] = (
+                                    RoutingInitializationMode.LAYER
                                 )
 
                         cfg = ParametricLayerPresets.parametric_layer_preset(
                             experts_compute_expert_mixture_flag=True,
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
-                            init_sampler_model_option=init_sampler_model_option,
+                            routing_initialization_mode=routing_initialization_mode,
                             **options,
                         )
                         batch_size = 5
@@ -412,8 +412,8 @@ class TestParametricLayer(unittest.TestCase):
     def test_forward(self):
         for adaptive_weight_option in AdaptiveWeightOptions:
             for adaptive_bias_option in AdaptiveBiasOptions:
-                for init_sampler_model_option in AdaptiveRouterOptions:
-                    message = f"Test failed for the inputs: adaptive_weight_option: {adaptive_weight_option}, adaptive_bias_option: {adaptive_bias_option}, init_sampler_model_option: {init_sampler_model_option}"
+                for routing_initialization_mode in AdaptiveRouterOptions:
+                    message = f"Test failed for the inputs: adaptive_weight_option: {adaptive_weight_option}, adaptive_bias_option: {adaptive_bias_option}, routing_initialization_mode: {routing_initialization_mode}"
                     with self.subTest(error=message):
                         options = {}
                         if adaptive_weight_option == AdaptiveWeightOptions.VECTOR:
@@ -423,13 +423,13 @@ class TestParametricLayer(unittest.TestCase):
                             }
 
                             shared_option = AdaptiveRouterOptions.SHARED_ROUTER
-                            if init_sampler_model_option == shared_option:
+                            if routing_initialization_mode == shared_option:
                                 cfg = ParametricLayerPresets.parametric_layer_preset(
                                     experts_compute_expert_mixture_flag=True,
                                     adaptive_weight_option=adaptive_weight_option,
                                     adaptive_bias_option=adaptive_bias_option,
-                                    init_sampler_model_option=init_sampler_model_option,
-                                    experts_init_sampler_option=InitSamplerOptions.LAYER,
+                                    routing_initialization_mode=routing_initialization_mode,
+                                    experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
                                     **options,
                                 )
                                 with self.assertRaises(ValueError):
@@ -441,18 +441,18 @@ class TestParametricLayer(unittest.TestCase):
                             or adaptive_bias_option == AdaptiveBiasOptions.GENERATOR
                         ):
                             if (
-                                init_sampler_model_option
+                                routing_initialization_mode
                                 == AdaptiveRouterOptions.INDEPENTENT_ROUTER
                             ):
-                                options["experts_init_sampler_option"] = (
-                                    InitSamplerOptions.LAYER
+                                options["experts_routing_initialization_mode"] = (
+                                    RoutingInitializationMode.LAYER
                                 )
 
                         cfg = ParametricLayerPresets.parametric_layer_preset(
                             experts_compute_expert_mixture_flag=True,
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
-                            init_sampler_model_option=init_sampler_model_option,
+                            routing_initialization_mode=routing_initialization_mode,
                             **options,
                         )
                         m = ParametricLayer(cfg)
@@ -507,8 +507,8 @@ class TestParametricLayerStack(unittest.TestCase):
                             num_layers=num_layers,
                             adaptive_weight_option=adaptive_weight_option,
                             adaptive_bias_option=adaptive_bias_option,
-                            adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                            experts_init_sampler_option=InitSamplerOptions.LAYER,
+                            adaptive_routing_initialization_mode=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
+                            experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
                         )
                         m = ParametricLayerStack(cfg).build_model()
 
@@ -536,8 +536,8 @@ class TestParametricLayerStack(unittest.TestCase):
                                 experts_compute_expert_mixture_flag=True,
                                 adaptive_weight_option=adaptive_weight_option,
                                 adaptive_bias_option=adaptive_bias_option,
-                                adaptive_init_sampler_model_option=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
-                                experts_init_sampler_option=InitSamplerOptions.LAYER,
+                                adaptive_routing_initialization_mode=AdaptiveRouterOptions.INDEPENTENT_ROUTER,
+                                experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
                             )
                             m = ParametricLayerStack(cfg).build_model()
 

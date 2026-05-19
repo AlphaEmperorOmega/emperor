@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStackConfig
-from emperor.base.enums import ActivationOptions
+from emperor.base.options import ActivationOptions
 from emperor.datasets.text.language_modeling.penn_treebank import PennTreebank
 from emperor.datasets.text.language_modeling.wiki_text_2 import WikiText2
 from emperor.transformer.utils.layers import TransformerConfig

@@ -1,11 +1,11 @@
 import torch
 import unittest
 
-from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.experts.core.options import RoutingInitializationMode
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.transformer.utils.feed_forward import FeedForward
 from emperor.parametric.options import AdaptiveLayerStackOptions
-from emperor.experts.options import MixtureOfExpertsStackOptions
+from emperor.experts.model import MixtureOfExpertsModel
 from emperor.transformer.utils.presets import TransformerPresets
 
 
@@ -15,11 +15,11 @@ class TestFeedForward(unittest.TestCase):
         stack_options = [
             LinearLayerStackOptions,
             AdaptiveLayerStackOptions,
-            MixtureOfExpertsStackOptions,
+            [MixtureOfExpertsModel],
         ]
         expert_sampler_options = [
-            InitSamplerOptions.LAYER,
-            InitSamplerOptions.SHARED,
+            RoutingInitializationMode.LAYER,
+            RoutingInitializationMode.SHARED,
         ]
 
         for expert_sampler_option in expert_sampler_options:
@@ -28,9 +28,9 @@ class TestFeedForward(unittest.TestCase):
                     for num_layers in num_layers_list:
                         message = f"Testing configuration with model_type={model_type}, num_layers={num_layers}"
                         options = {}
-                        if model_type == MixtureOfExpertsStackOptions.BASE:
+                        if model_type == MixtureOfExpertsModel:
                             options = {
-                                "experts_init_sampler_option": expert_sampler_option,
+                                "experts_routing_initialization_mode": expert_sampler_option,
                             }
                         with self.subTest(msg=message):
                             c = TransformerPresets.transformer_feed_forward_preset(
@@ -59,11 +59,11 @@ class TestFeedForward(unittest.TestCase):
         stack_options = [
             LinearLayerStackOptions,
             AdaptiveLayerStackOptions,
-            MixtureOfExpertsStackOptions,
+            [MixtureOfExpertsModel],
         ]
         expert_sampler_options = [
-            InitSamplerOptions.LAYER,
-            InitSamplerOptions.SHARED,
+            RoutingInitializationMode.LAYER,
+            RoutingInitializationMode.SHARED,
         ]
         for expert_sampler_option in expert_sampler_options:
             for stack_type in stack_options:
@@ -73,9 +73,9 @@ class TestFeedForward(unittest.TestCase):
                             message = f"Testing FeedForward configuration with model_type={model_type}, num_layers={num_layers}, matrix_input_flag={matrix_input_flag}"
                             with self.subTest(msg=message):
                                 options = {}
-                                if model_type == MixtureOfExpertsStackOptions.BASE:
+                                if model_type == MixtureOfExpertsModel:
                                     options = {
-                                        "experts_init_sampler_option": expert_sampler_option,
+                                        "experts_routing_initialization_mode": expert_sampler_option,
                                     }
                                 c = TransformerPresets.transformer_feed_forward_preset(
                                     layer_stack_option=model_type,

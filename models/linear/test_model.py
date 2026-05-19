@@ -4,7 +4,7 @@ import torch
 
 import models.linear.config as config
 
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,

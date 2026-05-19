@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStackConfig
-from emperor.base.enums import ActivationOptions
+from emperor.base.options import ActivationOptions
 from emperor.parametric.core.mixtures.options import AdaptiveBiasOptions
 from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.augmentations.adaptive_parameters.options import (
@@ -19,7 +19,7 @@ from emperor.augmentations.adaptive_parameters.core.diagonal import (
     DynamicDiagonalConfig,
 )
 from emperor.linears.options import LinearLayerStackOptions
-from emperor.base.enums import LayerNormPositionOptions
+from emperor.base.options import LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100

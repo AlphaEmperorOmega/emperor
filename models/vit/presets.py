@@ -1,6 +1,6 @@
 import torch
 
-from emperor.base.enums import BaseOptions, ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import BaseOptions, ActivationOptions, LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.layer import LayerStackConfig

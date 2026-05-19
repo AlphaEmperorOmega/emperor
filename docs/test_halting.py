@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.nn import Sequential
 from emperor.base.layer import Layer
 
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.base.layer import (
     LayerConfig,
     LayerStackConfig,
@@ -17,7 +17,7 @@ from emperor.halting.utils.options.stick_breaking import (
     StickBreakingState,
 )
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.base.enums import LastLayerBiasOptions
+from emperor.base.options import LastLayerBiasOptions
 
 
 class TestHalting(unittest.TestCase):

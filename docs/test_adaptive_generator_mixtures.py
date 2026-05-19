@@ -2,11 +2,11 @@ import torch
 import unittest
 
 from torch.types import Tensor
-from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.experts.core.options import RoutingInitializationMode
 from emperor.sampler.model import SamplerModel
 from emperor.sampler.core.routers import RouterModel
 from emperor.sampler.core.presets import SamplerPresets
-from emperor.experts.utils.layers import MixtureOfExperts
+from emperor.experts.core.layers import MixtureOfExperts
 from emperor.parametric.core.presets import ParametricLayerPresets
 from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
@@ -50,19 +50,19 @@ class TestGeneratorMixture(unittest.TestCase):
 
     def test__compute_outer_product(self):
         top_k_values = [1, 3, 6]
-        init_sampler_model_options = [
-            InitSamplerOptions.DISABLED,
-            InitSamplerOptions.LAYER,
+        routing_initialization_modes = [
+            RoutingInitializationMode.DISABLED,
+            RoutingInitializationMode.LAYER,
         ]
 
         c = self.cfg
         for top_k in top_k_values:
-            for init_sampler_model_option in init_sampler_model_options:
-                message = f"Testing top_k value: {top_k}, init_sampler_model_option: {init_sampler_model_option}"
+            for routing_initialization_mode in routing_initialization_modes:
+                message = f"Testing top_k value: {top_k}, routing_initialization_mode: {routing_initialization_mode}"
                 with self.subTest(msg=message):
                     c = ParametricLayerPresets.adaptive_generator_mixture_generator_preset(
                         top_k=top_k,
-                        experts_init_sampler_option=init_sampler_model_option,
+                        experts_routing_initialization_mode=routing_initialization_mode,
                         experts_weighted_parameters_flag=True,
                     )
                     m = GeneratorWeightsMixture(c)
@@ -70,7 +70,7 @@ class TestGeneratorMixture(unittest.TestCase):
                     batch_size = 5
                     input_batch = torch.randn(batch_size, m.input_dim)
                     probabilities, indices = None, None
-                    if init_sampler_model_option == InitSamplerOptions.DISABLED:
+                    if routing_initialization_mode == RoutingInitializationMode.DISABLED:
                         router_cfg = SamplerPresets.router_preset(input_dim=8)
                         sampler_cfg = SamplerPresets.sampler_preset(top_k=top_k)
                         router = RouterModel(router_cfg)
@@ -214,22 +214,22 @@ class TestGeneratorMixture(unittest.TestCase):
         num_experts = 6
         top_k_values = [1, 3, 6]
         boolean_flags = [True, False]
-        init_sampler_model_options = [
-            InitSamplerOptions.DISABLED,
-            InitSamplerOptions.LAYER,
+        routing_initialization_modes = [
+            RoutingInitializationMode.DISABLED,
+            RoutingInitializationMode.LAYER,
         ]
         c = self.cfg
 
         for top_k in top_k_values:
-            for init_sampler_model_option in init_sampler_model_options:
+            for routing_initialization_mode in routing_initialization_modes:
                 for weighted_parameters_flag in boolean_flags:
                     for clip_parameter_option in ClipParameterOptions:
-                        message = f"Testing top_k={top_k}, init_sampler_model_option={init_sampler_model_option}, weighted_parameters_flag={weighted_parameters_flag}, clip_parameter_option={clip_parameter_option}"
+                        message = f"Testing top_k={top_k}, routing_initialization_mode={routing_initialization_mode}, weighted_parameters_flag={weighted_parameters_flag}, clip_parameter_option={clip_parameter_option}"
                         with self.subTest(msg=message):
                             c = ParametricLayerPresets.adaptive_generator_mixture_generator_preset(
                                 top_k=top_k,
                                 num_experts=num_experts,
-                                experts_init_sampler_option=init_sampler_model_option,
+                                experts_routing_initialization_mode=routing_initialization_mode,
                                 weighted_parameters_flag=weighted_parameters_flag,
                                 experts_weighted_parameters_flag=not weighted_parameters_flag,
                                 clip_parameter_option=clip_parameter_option,
@@ -240,11 +240,11 @@ class TestGeneratorMixture(unittest.TestCase):
                             input_batch = torch.randn(batch_size, m.input_dim)
                             probabilities, indices = None, None
                             if (
-                                init_sampler_model_option == InitSamplerOptions.DISABLED
+                                routing_initialization_mode == RoutingInitializationMode.DISABLED
                                 or m.weighted_parameters_flag
                                 or m.num_experts == m.top_k
-                                and init_sampler_model_option
-                                == InitSamplerOptions.DISABLED
+                                and routing_initialization_mode
+                                == RoutingInitializationMode.DISABLED
                             ):
                                 router_cfg = SamplerPresets.router_preset(input_dim=8)
                                 sampler_cfg = SamplerPresets.sampler_preset(top_k=top_k)

@@ -5,7 +5,7 @@ from models.linear.model import Model
 from emperor.experiments.base import SearchMode
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
-from emperor.base.enums import BaseOptions
+from emperor.base.options import BaseOptions
 
 from typing import TYPE_CHECKING
 

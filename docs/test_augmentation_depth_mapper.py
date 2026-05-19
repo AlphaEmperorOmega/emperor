@@ -6,7 +6,7 @@ from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.augmentations.adaptive_parameters import DynamicDepthOptions
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
