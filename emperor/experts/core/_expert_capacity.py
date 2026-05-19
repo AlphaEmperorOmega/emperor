@@ -1,12 +1,12 @@
 import torch
 
 from torch import Tensor
-from emperor.experts.utils.enums import DroppedTokenOptions
+from emperor.experts.core.options import DroppedTokenOptions
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.experts.utils.layers import MixtureOfExpertsConfig
+    from emperor.experts.core.config import MixtureOfExpertsConfig
 
 
 class _ExpertCapacityHandler:

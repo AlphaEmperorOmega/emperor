@@ -6,7 +6,7 @@ class ExpertWeightingPositionOptions(Enum):
     AFTER_EXPERTS = 2
 
 
-class InitSamplerOptions(Enum):
+class RoutingInitializationMode(Enum):
     DISABLED = 1
     SHARED = 2
     LAYER = 3

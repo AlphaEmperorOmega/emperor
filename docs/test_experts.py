@@ -1,116 +1,546 @@
 import torch
 import unittest
 
+from types import SimpleNamespace
 from torch.nn import Sequential
-from emperor.base.layer import Layer
+from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.sampler.model import SamplerModel
 from emperor.sampler.core.routers import RouterModel
-from emperor.experts.utils.layers import (
+from emperor.sampler.core.config import RouterConfig, SamplerConfig
+from emperor.experts.core.config import MixtureOfExpertsConfig
+from emperor.experts.core.layers import (
     MixtureOfExperts,
     MixtureOfExpertsMap,
     MixtureOfExpertsReduce,
-    MixtureOfExpertsConfig,
     _ExpertInputData,
 )
-from emperor.experts.utils._expert_capacity import _ExpertCapacityHandler
-from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from emperor.experts.utils.model import MixtureOfExpertsModel
-from emperor.experts.utils.stack import MixtureOfExpertsStack
-from emperor.experts.utils.presets import MixtureOfExpertsPresets
+from emperor.experts.core._validator import MixtureOfExpertsValidator
+from emperor.experts.core._expert_capacity import _ExpertCapacityHandler
+from emperor.linears.core.config import LinearLayerConfig
+from emperor.experts.model import MixtureOfExpertsModel
+from emperor.experts.core.stack import MixtureOfExpertsStack
 from emperor.sampler.core.samplers import SamplerFull, SamplerSparse, SamplerTopk
-from emperor.experts.utils.enums import (
+from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
-    InitSamplerOptions,
+    RoutingInitializationMode,
 )
 
 
-class TestMixtureOfExperts(unittest.TestCase):
+class MixtureOfExpertsPresetMixin:
+    def config_values(self, cfg):
+        return {
+            field_name: getattr(cfg, field_name)
+            for field_name in cfg.__dataclass_fields__
+        }
+
+    def router_config(
+        self,
+        input_dim: int = 8,
+        num_experts: int = 6,
+        bias_flag: bool = False,
+        noisy_topk_flag: bool = False,
+        stack_num_layers: int = 2,
+        stack_hidden_dim: int = 0,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+        stack_dropout_probability: float = 0.0,
+    ) -> RouterConfig:
+        hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else max(input_dim, num_experts)
+        output_dim = num_experts * 2 if noisy_topk_flag else num_experts
+        return RouterConfig(
+            input_dim=input_dim,
+            num_experts=num_experts,
+            noisy_topk_flag=noisy_topk_flag,
+            model_config=LayerStackConfig(
+                input_dim=input_dim,
+                hidden_dim=hidden_dim,
+                output_dim=output_dim,
+                num_layers=stack_num_layers,
+                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
+                    activation=stack_activation,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_flag=stack_residual_flag,
+                    dropout_probability=stack_dropout_probability,
+                    gate_config=None,
+                    halting_config=None,
+                    memory_config=None,
+                    shared_halting_flag=False,
+                    layer_model_config=LinearLayerConfig(bias_flag=bias_flag),
+                ),
+            ),
+        )
+
+    def sampler_config(
+        self,
+        num_experts: int = 6,
+        top_k: int = 3,
+        threshold: float = 0.0,
+        filter_above_threshold: bool = False,
+        num_topk_samples: int = 0,
+        normalize_probabilities_flag: bool = False,
+        noisy_topk_flag: bool = False,
+        coefficient_of_variation_loss_weight: float = 0.0,
+        switch_loss_weight: float = 0.0,
+        zero_centred_loss_weight: float = 0.0,
+        mutual_information_loss_weight: float = 0.0,
+    ) -> SamplerConfig:
+        return SamplerConfig(
+            top_k=top_k,
+            threshold=threshold,
+            filter_above_threshold=filter_above_threshold,
+            num_topk_samples=num_topk_samples,
+            normalize_probabilities_flag=normalize_probabilities_flag,
+            noisy_topk_flag=noisy_topk_flag,
+            num_experts=num_experts,
+            coefficient_of_variation_loss_weight=coefficient_of_variation_loss_weight,
+            switch_loss_weight=switch_loss_weight,
+            zero_centred_loss_weight=zero_centred_loss_weight,
+            mutual_information_loss_weight=mutual_information_loss_weight,
+        )
+
+    def expert_model_config(
+        self,
+        input_dim: int = 8,
+        output_dim: int = 6,
+        bias_flag: bool = False,
+        stack_num_layers: int = 2,
+        stack_hidden_dim: int = 0,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+        stack_dropout_probability: float = 0.0,
+    ) -> LayerStackConfig:
+        hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else max(input_dim, output_dim)
+        return LayerStackConfig(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_layers=stack_num_layers,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                activation=stack_activation,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                residual_flag=stack_residual_flag,
+                dropout_probability=stack_dropout_probability,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                shared_halting_flag=False,
+                layer_model_config=LinearLayerConfig(bias_flag=bias_flag),
+            ),
+        )
+
+    def preset(
+        self,
+        return_model_config_flag: bool = False,
+        batch_size: int = 2,
+        input_dim: int = 8,
+        output_dim: int = 6,
+        router_model_bias_flag: bool = False,
+        router_model_noisy_topk_flag: bool = False,
+        sampler_threshold: float = 0.0,
+        sampler_filter_above_threshold: bool = False,
+        sampler_num_topk_samples: int = 0,
+        sampler_normalize_probabilities_flag: bool = False,
+        sampler_switch_loss_weight: float = 0.0,
+        sampler_zero_centred_loss_weight: float = 0.0,
+        sampler_mutual_information_loss_weight: float = 0.0,
+        sampler_coefficient_of_variation_loss_weight: float = 0.0,
+        experts_top_k: int = 3,
+        experts_num_experts: int = 6,
+        experts_compute_expert_mixture_flag: bool = False,
+        experts_weighting_position_option: ExpertWeightingPositionOptions = ExpertWeightingPositionOptions.BEFORE_EXPERTS,
+        experts_routing_initialization_mode: RoutingInitializationMode = RoutingInitializationMode.DISABLED,
+        experts_weighted_parameters_flag: bool = False,
+        experts_capacity_factor: float = 0.0,
+        experts_dropped_token_behavior: DroppedTokenOptions = DroppedTokenOptions.ZEROS,
+        experts_model_bias_flag: bool = False,
+        stack_num_layers: int = 2,
+        stack_hidden_dim: int = 0,
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_residual_flag: bool = False,
+        stack_dropout_probability: float = 0.0,
+    ) -> MixtureOfExpertsConfig | SimpleNamespace:
+        config = MixtureOfExpertsConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            expert_model_config=self.expert_model_config(
+                input_dim=input_dim,
+                output_dim=output_dim,
+                bias_flag=experts_model_bias_flag,
+                stack_num_layers=stack_num_layers,
+                stack_hidden_dim=stack_hidden_dim,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=stack_dropout_probability,
+            ),
+            top_k=experts_top_k,
+            num_experts=experts_num_experts,
+            capacity_factor=experts_capacity_factor,
+            dropped_token_behavior=experts_dropped_token_behavior,
+            compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
+            weighted_parameters_flag=experts_weighted_parameters_flag,
+            weighting_position_option=experts_weighting_position_option,
+            routing_initialization_mode=experts_routing_initialization_mode,
+            router_config=self.router_config(
+                input_dim=input_dim,
+                num_experts=experts_num_experts,
+                bias_flag=router_model_bias_flag,
+                noisy_topk_flag=router_model_noisy_topk_flag,
+                stack_num_layers=stack_num_layers,
+                stack_hidden_dim=stack_hidden_dim,
+                stack_activation=stack_activation,
+                stack_residual_flag=stack_residual_flag,
+                stack_dropout_probability=stack_dropout_probability,
+            ),
+            sampler_config=self.sampler_config(
+                num_experts=experts_num_experts,
+                top_k=experts_top_k,
+                threshold=sampler_threshold,
+                filter_above_threshold=sampler_filter_above_threshold,
+                num_topk_samples=sampler_num_topk_samples,
+                normalize_probabilities_flag=sampler_normalize_probabilities_flag,
+                noisy_topk_flag=router_model_noisy_topk_flag,
+                coefficient_of_variation_loss_weight=sampler_coefficient_of_variation_loss_weight,
+                switch_loss_weight=sampler_switch_loss_weight,
+                zero_centred_loss_weight=sampler_zero_centred_loss_weight,
+                mutual_information_loss_weight=sampler_mutual_information_loss_weight,
+            ),
+        )
+        if not return_model_config_flag:
+            return config
+        return SimpleNamespace(
+            batch_size=batch_size,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            mixture_of_experts_config=config,
+        )
+
+    def stack_preset(
+        self,
+        return_model_config_flag: bool = False,
+        batch_size: int = 8,
+        input_dim: int = 8,
+        output_dim: int = 6,
+        experts_stack_num_layers: int = 2,
+        experts_stack_activation: ActivationOptions = ActivationOptions.RELU,
+        experts_stack_residual_flag: bool = False,
+        experts_stack_dropout_probability: float = 0.0,
+        **kwargs: object,
+    ) -> LayerStackConfig | SimpleNamespace:
+        hidden_dim = max(input_dim, output_dim)
+        config = LayerStackConfig(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_layers=experts_stack_num_layers,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                activation=experts_stack_activation,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                residual_flag=experts_stack_residual_flag,
+                dropout_probability=experts_stack_dropout_probability,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                shared_halting_flag=False,
+                layer_model_config=self.preset(
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    **kwargs,
+                ),
+            ),
+        )
+        if not return_model_config_flag:
+            return config
+        return SimpleNamespace(
+            batch_size=batch_size,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            layer_stack_config=config,
+        )
+
+
+class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
     def test_init_with_different_configs(self):
         top_k_options = [1, 3, 6]
         num_experts = 6
-        init_sampler_options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
+        routing_initialization_modes = [RoutingInitializationMode.DISABLED, RoutingInitializationMode.LAYER]
 
-        for layer_stack_option in LinearLayerStackOptions:
-            for top_k in top_k_options:
-                for init_sampler_option in init_sampler_options:
-                    message = f"Testing configuration with num_experts={num_experts}, top_k={top_k}, layer_stack_option={layer_stack_option}, and init_sampler_option={init_sampler_option}"
-                    with self.subTest(msg=message):
-                        c = MixtureOfExpertsPresets.experts_preset(
-                            return_model_config_flag=True,
-                            experts_layer_stack_option=layer_stack_option,
-                            experts_num_experts=num_experts,
-                            experts_top_k=top_k,
-                            experts_init_sampler_option=init_sampler_option,
-                        )
+        for top_k in top_k_options:
+            for routing_initialization_mode in routing_initialization_modes:
+                message = f"Testing configuration with num_experts={num_experts}, top_k={top_k}, and routing_initialization_mode={routing_initialization_mode}"
+                with self.subTest(msg=message):
+                    c = self.preset(
+                        return_model_config_flag=True,
+                        experts_num_experts=num_experts,
+                        experts_top_k=top_k,
+                        experts_routing_initialization_mode=routing_initialization_mode,
+                    )
 
-                        m = MixtureOfExperts(c)
-                        cfg = m.cfg
-                        self.assertIsInstance(m, MixtureOfExperts)
-                        self.assertEqual(m.input_dim, cfg.input_dim)
-                        self.assertEqual(m.output_dim, cfg.output_dim)
-                        self.assertEqual(
-                            m.layer_stack_model.value, layer_stack_option.value
-                        )
-                        self.assertEqual(m.top_k, top_k)
-                        self.assertEqual(m.num_experts, num_experts)
-                        self.assertEqual(m.capacity_factor, cfg.capacity_factor)
-                        self.assertEqual(
-                            m.dropped_token_behavior,
-                            cfg.dropped_token_behavior or DroppedTokenOptions.ZEROS,
-                        )
-                        self.assertEqual(
-                            m.compute_expert_mixture_flag,
-                            cfg.compute_expert_mixture_flag,
-                        )
-                        self.assertEqual(
-                            m.weighted_parameters_flag, cfg.weighted_parameters_flag
-                        )
-                        self.assertEqual(m.init_sampler_option, cfg.init_sampler_option)
-                        self.assertEqual(
-                            m.weighting_position_option,
-                            cfg.weighting_position_option,
-                        )
-                        self.assertEqual(m.router_model_config, cfg.router_model_config)
-                        self.assertEqual(
-                            m.sampler_model_config, cfg.sampler_model_config
-                        )
+                    m = MixtureOfExperts(c)
+                    cfg = m.cfg
+                    self.assertIsInstance(m, MixtureOfExperts)
+                    self.assertEqual(m.input_dim, cfg.input_dim)
+                    self.assertEqual(m.output_dim, cfg.output_dim)
+                    self.assertEqual(m.expert_model_config, cfg.expert_model_config)
+                    self.assertEqual(m.top_k, top_k)
+                    self.assertEqual(m.num_experts, num_experts)
+                    self.assertEqual(m.capacity_factor, cfg.capacity_factor)
+                    self.assertEqual(
+                        m.dropped_token_behavior,
+                        cfg.dropped_token_behavior or DroppedTokenOptions.ZEROS,
+                    )
+                    self.assertEqual(
+                        m.compute_expert_mixture_flag,
+                        cfg.compute_expert_mixture_flag,
+                    )
+                    self.assertEqual(
+                        m.weighted_parameters_flag, cfg.weighted_parameters_flag
+                    )
+                    self.assertEqual(
+                        m.routing_initialization_mode, cfg.routing_initialization_mode
+                    )
+                    self.assertEqual(
+                        m.weighting_position_option,
+                        cfg.weighting_position_option,
+                    )
+                    self.assertEqual(m.router_config, cfg.router_config)
+                    self.assertEqual(m.sampler_config, cfg.sampler_config)
+
+    def test_validator_rejects_invalid_config_values(self):
+        cases = [
+            {"input_dim": 0},
+            {"input_dim": True},
+            {"output_dim": 0},
+            {"experts_top_k": 0},
+            {"experts_top_k": True},
+            {"experts_top_k": 7, "experts_num_experts": 6},
+            {"experts_num_experts": 0},
+            {"experts_capacity_factor": -0.1},
+            {
+                "input_dim": 8,
+                "output_dim": 6,
+                "experts_capacity_factor": 1.0,
+            },
+            {
+                "experts_top_k": 6,
+                "experts_num_experts": 6,
+                "experts_capacity_factor": 1.0,
+            },
+        ]
+
+        for overrides in cases:
+            with self.subTest(overrides=overrides):
+                with self.assertRaises(ValueError):
+                    MixtureOfExperts(self.preset(**overrides))
+
+    def test_validator_rejects_invalid_forward_reference_types(self):
+        cases = [
+            {"expert_model_config": object()},
+            {"weighting_position_option": object()},
+            {"routing_initialization_mode": object()},
+            {"dropped_token_behavior": object()},
+        ]
+        cfg = self.preset()
+
+        for override in cases:
+            field_name = next(iter(override))
+            with self.subTest(field_name=field_name):
+                values = self.config_values(cfg)
+                values.update(override)
+                with self.assertRaises(TypeError):
+                    MixtureOfExperts(MixtureOfExpertsConfig(**values))
+
+        layer_routing_cases = [
+            {"router_config": object()},
+            {"sampler_config": object()},
+        ]
+        cfg = self.preset(
+            experts_routing_initialization_mode=RoutingInitializationMode.LAYER
+        )
+
+        for override in layer_routing_cases:
+            field_name = next(iter(override))
+            with self.subTest(field_name=field_name):
+                values = self.config_values(cfg)
+                values.update(override)
+                with self.assertRaises(TypeError):
+                    MixtureOfExperts(MixtureOfExpertsConfig(**values))
+
+    def test_validator_allows_missing_owned_routing_configs_when_not_layer_owned(self):
+        for routing_initialization_mode in (
+            RoutingInitializationMode.DISABLED,
+            RoutingInitializationMode.SHARED,
+        ):
+            with self.subTest(routing_initialization_mode=routing_initialization_mode):
+                cfg = self.preset(
+                    experts_routing_initialization_mode=routing_initialization_mode
+                )
+                values = self.config_values(cfg)
+                values.update(router_config=None, sampler_config=None)
+
+                model = MixtureOfExperts(MixtureOfExpertsConfig(**values))
+
+                self.assertIsNone(model.router_config)
+                self.assertIsNone(model.sampler_config)
+
+    def test_validator_allows_optional_dropped_token_behavior(self):
+        cfg = self.preset(experts_dropped_token_behavior=None)
+
+        model = MixtureOfExperts(cfg)
+
+        self.assertIsNone(model.cfg.dropped_token_behavior)
+        self.assertEqual(model.dropped_token_behavior, DroppedTokenOptions.ZEROS)
+
+    def test_validator_rejects_external_indices_when_layer_owns_routing(self):
+        cfg = self.preset(
+            experts_routing_initialization_mode=RoutingInitializationMode.LAYER
+        )
+        model = MixtureOfExperts(cfg)
+
+        with self.assertRaises(ValueError):
+            MixtureOfExpertsValidator.validate_no_sampler_with_indices(model)
+
+    def test_forward_validator_rejects_invalid_runtime_inputs(self):
+        cfg = self.preset(
+            experts_routing_initialization_mode=RoutingInitializationMode.DISABLED,
+            experts_top_k=3,
+            experts_num_experts=6,
+        )
+        model = MixtureOfExperts(cfg)
+        input_batch = torch.randn(5, cfg.input_dim)
+        probabilities = torch.rand(5, cfg.top_k)
+        indices = torch.randint(0, cfg.num_experts, (5, cfg.top_k))
+
+        cases = [
+            (
+                "input_batch",
+                [[1.0] * cfg.input_dim],
+                probabilities,
+                indices,
+                TypeError,
+            ),
+            ("input_batch", torch.randn(5), probabilities, indices, ValueError),
+            (
+                "input_batch",
+                torch.randn(5, cfg.input_dim + 1),
+                probabilities,
+                indices,
+                ValueError,
+            ),
+            ("probabilities", input_batch, [0.1, 0.2], indices, TypeError),
+            (
+                "probabilities",
+                input_batch,
+                torch.rand(4, cfg.top_k),
+                indices,
+                ValueError,
+            ),
+            (
+                "probabilities",
+                input_batch,
+                torch.rand(5, cfg.top_k + 1),
+                indices,
+                ValueError,
+            ),
+            ("indices", input_batch, probabilities, torch.rand(5, cfg.top_k), TypeError),
+            (
+                "indices",
+                input_batch,
+                probabilities,
+                torch.randint(0, cfg.num_experts, (4, cfg.top_k)),
+                ValueError,
+            ),
+            (
+                "indices",
+                input_batch,
+                probabilities,
+                torch.randint(0, cfg.num_experts, (5, cfg.top_k + 1)),
+                ValueError,
+            ),
+            (
+                "indices",
+                input_batch,
+                probabilities,
+                torch.full((5, cfg.top_k), cfg.num_experts),
+                ValueError,
+            ),
+        ]
+
+        for field_name, batch, probs, route_indices, error_type in cases:
+            with self.subTest(field_name=field_name):
+                with self.assertRaises(error_type):
+                    model.forward(batch, probs, route_indices)
+
+    def test_forward_validator_requires_external_routing_inputs(self):
+        cfg = self.preset(
+            experts_routing_initialization_mode=RoutingInitializationMode.DISABLED,
+            experts_top_k=3,
+            experts_num_experts=6,
+        )
+        model = MixtureOfExperts(cfg)
+        input_batch = torch.randn(5, cfg.input_dim)
+        probabilities = torch.rand(5, cfg.top_k)
+
+        with self.assertRaises(ValueError):
+            model.forward(input_batch)
+
+        with self.assertRaises(ValueError):
+            model.forward(input_batch, probabilities=probabilities)
+
+    def test_forward_validator_accepts_dense_routing_without_indices(self):
+        cfg = self.preset(
+            experts_routing_initialization_mode=RoutingInitializationMode.DISABLED,
+            experts_top_k=6,
+            experts_num_experts=6,
+            experts_compute_expert_mixture_flag=True,
+        )
+        model = MixtureOfExperts(cfg)
+        input_batch = torch.randn(5, cfg.input_dim)
+        probabilities = torch.rand(5, cfg.top_k)
+
+        output, loss = model.forward(input_batch, probabilities=probabilities)
+
+        self.assertEqual(output.shape, (5, cfg.output_dim))
+        self.assertEqual(loss.item(), 0.0)
 
     def test__create_experts(self):
-        for layer_stack_option, linear_option in zip(
-            LinearLayerStackOptions, LinearLayerOptions
-        ):
-            message = f"Testing configuration with layer_stack_option={layer_stack_option.name}"
-            with self.subTest(msg=message):
-                c = MixtureOfExpertsPresets.experts_preset(
-                    return_model_config_flag=True,
-                    experts_layer_stack_option=layer_stack_option,
-                )
+        c = self.preset(return_model_config_flag=True)
 
-                m = MixtureOfExperts(c)
-                expert_models = m._MixtureOfExperts__create_experts()
-                self.assertEqual(len(m.expert_modules), m.num_experts)
-                for expert in expert_models:
-                    self.assertIsInstance(expert, Sequential)
-                    for layer in expert:
-                        self.assertIsInstance(layer, Layer)
+        m = MixtureOfExperts(c)
+        expert_models = m._MixtureOfExperts__create_experts()
+        self.assertEqual(len(m.expert_modules), m.num_experts)
+        for expert in expert_models:
+            self.assertIsInstance(expert, Sequential)
+            for layer in expert:
+                self.assertIsInstance(layer, Layer)
 
     def test__maybe_create_router_and_sampler(self):
         num_experts = 6
         expert_options = [1, 3, 6]
-        init_sampler_options = [
-            InitSamplerOptions.DISABLED,
-            InitSamplerOptions.LAYER,
+        routing_initialization_modes = [
+            RoutingInitializationMode.DISABLED,
+            RoutingInitializationMode.LAYER,
         ]
         sampler_options = [SamplerSparse, SamplerTopk, SamplerFull]
 
-        for init_sampler_option in init_sampler_options:
+        for routing_initialization_mode in routing_initialization_modes:
             for sampler_option, expert_option in zip(sampler_options, expert_options):
                 message = f"Testing configuration with sampler_option={sampler_option.__name__}, num_experts={num_experts}, top_k={expert_option}"
                 with self.subTest(msg=message):
-                    c = MixtureOfExpertsPresets.experts_preset(
+                    c = self.preset(
                         return_model_config_flag=True,
-                        experts_init_sampler_option=init_sampler_option,
+                        experts_routing_initialization_mode=routing_initialization_mode,
                         experts_num_experts=num_experts,
                         experts_top_k=expert_option,
                     )
@@ -119,7 +549,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     router, sampler = (
                         m._MixtureOfExperts__maybe_create_router_and_sampler()
                     )
-                    if init_sampler_option == InitSamplerOptions.LAYER:
+                    if routing_initialization_mode == RoutingInitializationMode.LAYER:
                         self.assertIsInstance(router, RouterModel)
                         self.assertIsInstance(sampler, SamplerModel)
                         self.assertIsInstance(sampler.sampler_model, sampler_option)
@@ -131,24 +561,24 @@ class TestMixtureOfExperts(unittest.TestCase):
     def test__maybe_compute_expert_indices(self):
         num_experts = 6
         top_k_options = [1, 3, 6]
-        init_sampler_option_options = [
-            InitSamplerOptions.DISABLED,
-            InitSamplerOptions.LAYER,
+        routing_initialization_mode_options = [
+            RoutingInitializationMode.DISABLED,
+            RoutingInitializationMode.LAYER,
         ]
 
         for top_k in top_k_options:
-            for init_sampler_option in init_sampler_option_options:
-                message = f"Testing configuration with init_sampler_option={init_sampler_option}, top_k={top_k}"
+            for routing_initialization_mode in routing_initialization_mode_options:
+                message = f"Testing configuration with routing_initialization_mode={routing_initialization_mode}, top_k={top_k}"
                 with self.subTest(msg=message):
-                    c = MixtureOfExpertsPresets.experts_preset(
+                    c = self.preset(
                         return_model_config_flag=True,
-                        experts_init_sampler_option=init_sampler_option,
+                        experts_routing_initialization_mode=routing_initialization_mode,
                         experts_num_experts=num_experts,
                         experts_top_k=top_k,
                     )
 
                     m = MixtureOfExperts(c)
-                    if init_sampler_option == InitSamplerOptions.LAYER:
+                    if routing_initialization_mode == RoutingInitializationMode.LAYER:
                         inputs = torch.randn(5, c.input_dim)
                         input_indices = None
                         input_probabilities = None
@@ -164,7 +594,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                         self.assertIsInstance(probabilities, torch.Tensor)
                         self.assertIsInstance(sampler_loss, torch.Tensor)
                         self.assertEqual(sampler_loss.item(), 0.0)
-                    elif init_sampler_option == InitSamplerOptions.DISABLED:
+                    elif routing_initialization_mode == RoutingInitializationMode.DISABLED:
                         inputs = torch.randn(5, c.input_dim)
                         indices_input = torch.randint(0, m.num_experts, (5, top_k))
                         indices, probabilities, sampler_loss = (
@@ -187,7 +617,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     message = f"Testing with top_k={top_k}, capacity_factor={capacity_factor}, expert_index={expert_index}"
                     with self.subTest(msg=message):
                         dim = 8
-                        c = MixtureOfExpertsPresets.experts_preset(
+                        c = self.preset(
                             return_model_config_flag=True,
                             input_dim=dim,
                             output_dim=dim,
@@ -234,7 +664,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     message = f"Testing with top_k={top_k}, capacity_factor={capacity_factor}, expert_index={expert_index}"
                     with self.subTest(msg=message):
                         dim = 8
-                        c = MixtureOfExpertsPresets.experts_preset(
+                        c = self.preset(
                             return_model_config_flag=True,
                             input_dim=dim,
                             output_dim=dim,
@@ -284,7 +714,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 for expert_index in range(num_experts):
                     message = f"Testing with weighting_position_option={weighting_position_option.name}, top_k={top_k}, expert_index={expert_index}"
                     with self.subTest(msg=message):
-                        c = MixtureOfExpertsPresets.experts_preset(
+                        c = self.preset(
                             return_model_config_flag=True,
                             experts_num_experts=num_experts,
                             experts_top_k=top_k,
@@ -341,7 +771,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                 message = f"Testing with dropped_token_behavior={dropped_token_behavior.name}, dropped_indices_size={dropped_indices.size(0)}"
                 with self.subTest(msg=message):
                     input_dim = 8
-                    c = MixtureOfExpertsPresets.experts_preset(
+                    c = self.preset(
                         return_model_config_flag=True,
                         input_dim=input_dim,
                         output_dim=input_dim,
@@ -389,7 +819,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                     message = f"Testing with top_k={top_k}, capacity_factor={capacity_factor}, weighting_position_option={weighting_position_option.name}"
                     with self.subTest(msg=message):
                         input_dim = 8
-                        c = MixtureOfExpertsPresets.experts_preset(
+                        c = self.preset(
                             return_model_config_flag=True,
                             input_dim=input_dim,
                             output_dim=input_dim,
@@ -455,7 +885,7 @@ class TestMixtureOfExperts(unittest.TestCase):
     def test__build_routed_expert_inputs_skips_empty_experts(self):
         input_dim = 8
         num_experts = 6
-        c = MixtureOfExpertsPresets.experts_preset(
+        c = self.preset(
             return_model_config_flag=True,
             input_dim=input_dim,
             output_dim=input_dim,
@@ -488,7 +918,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         for weighting_position_option in ExpertWeightingPositionOptions:
             message = f"Testing with weighting_position_option={weighting_position_option.name}"
             with self.subTest(msg=message):
-                c = MixtureOfExpertsPresets.experts_preset(
+                c = self.preset(
                     return_model_config_flag=True,
                     input_dim=input_dim,
                     output_dim=input_dim,
@@ -543,7 +973,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         for top_k in top_k_options:
             message = f"Testing with top_k={top_k}"
             with self.subTest(msg=message):
-                c = MixtureOfExpertsPresets.experts_preset(
+                c = self.preset(
                     return_model_config_flag=True,
                     input_dim=input_dim,
                     output_dim=input_dim,
@@ -593,70 +1023,68 @@ class TestMixtureOfExperts(unittest.TestCase):
         top_k_options = [1, 3, 6]
         weighted_parameters_flag_options = [True, False]
 
-        for layer_stack_option in LinearLayerStackOptions:
-            for weighting_position_option in ExpertWeightingPositionOptions:
-                for top_k in top_k_options:
-                    for weighted_parameters_flag in weighted_parameters_flag_options:
-                        message = f"Testing configuration with layer_stack_option={layer_stack_option}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, weighting_position={weighting_position_option}"
-                        with self.subTest(msg=message):
-                            c = MixtureOfExpertsPresets.experts_preset(
-                                return_model_config_flag=True,
-                                experts_layer_stack_option=layer_stack_option,
-                                experts_weighted_parameters_flag=weighted_parameters_flag,
-                                experts_weighting_position_option=weighting_position_option,
-                                experts_num_experts=num_experts,
-                                experts_top_k=top_k,
-                            )
+        for weighting_position_option in ExpertWeightingPositionOptions:
+            for top_k in top_k_options:
+                for weighted_parameters_flag in weighted_parameters_flag_options:
+                    message = f"Testing configuration with weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, weighting_position={weighting_position_option}"
+                    with self.subTest(msg=message):
+                        c = self.preset(
+                            return_model_config_flag=True,
+                            experts_weighted_parameters_flag=weighted_parameters_flag,
+                            experts_weighting_position_option=weighting_position_option,
+                            experts_num_experts=num_experts,
+                            experts_top_k=top_k,
+                        )
 
-                            m = MixtureOfExperts(c)
+                        m = MixtureOfExperts(c)
 
-                            assert c.input_dim is not None
-                            assert c.output_dim is not None
+                        assert c.input_dim is not None
+                        assert c.output_dim is not None
 
-                            num_samples = batch_size * top_k
-                            expert_samples = torch.randn(num_samples, c.input_dim)
-                            probabilities = torch.randperm(num_samples).float()
-                            expert_input_slice = _ExpertInputData(
+                        num_samples = batch_size * top_k
+                        expert_samples = torch.randn(num_samples, c.input_dim)
+                        probabilities = torch.randperm(num_samples).float()
+                        expert_input_slice = _ExpertInputData(
+                            expert_index=0,
+                            expert_samples=expert_samples,
+                            dropped_samples=torch.zeros(0),
+                            expert_routing_positions=None,
+                            dropped_routing_positions=None,
+                            probabilities=probabilities,
+                        )
+
+                        output, loss = m._MixtureOfExperts__compute_expert_output(  # type: ignore[operator]
+                            expert_input_slice
+                        )
+
+                        self.assertIsInstance(output, torch.Tensor)
+                        self.assertEqual(output.shape, (num_samples, c.output_dim))
+                        self.assertTrue(torch.isfinite(output).all())
+                        self.assertEqual(loss.item(), 0.0)
+
+                        applies_before = (
+                            weighting_position_option
+                            == ExpertWeightingPositionOptions.BEFORE_EXPERTS
+                        )
+                        if applies_before and weighted_parameters_flag:
+                            zero_probs_slice = _ExpertInputData(
                                 expert_index=0,
                                 expert_samples=expert_samples,
                                 dropped_samples=torch.zeros(0),
                                 expert_routing_positions=None,
                                 dropped_routing_positions=None,
-                                probabilities=probabilities,
+                                probabilities=torch.zeros(num_samples),
                             )
-
-                            output, loss = m._MixtureOfExperts__compute_expert_output(  # type: ignore[operator]
-                                expert_input_slice
+                            zero_output, _ = (
+                                m._MixtureOfExperts__compute_expert_output(  # type: ignore[operator]
+                                    zero_probs_slice
+                                )
                             )
-
-                            self.assertIsInstance(output, torch.Tensor)
-                            self.assertEqual(output.shape, (num_samples, c.output_dim))
-                            self.assertTrue(torch.isfinite(output).all())
-                            self.assertEqual(loss.item(), 0.0)
-
-                            applies_before = (
-                                weighting_position_option
-                                == ExpertWeightingPositionOptions.BEFORE_EXPERTS
+                            expert_model: torch.nn.Module = m.expert_modules[0]  # type: ignore[assignment]
+                            expected = Layer.forward_with_state(
+                                expert_model, torch.zeros_like(expert_samples)
                             )
-                            if applies_before and weighted_parameters_flag:
-                                zero_probs_slice = _ExpertInputData(
-                                    expert_index=0,
-                                    expert_samples=expert_samples,
-                                    dropped_samples=torch.zeros(0),
-                                    expert_routing_positions=None,
-                                    dropped_routing_positions=None,
-                                    probabilities=torch.zeros(num_samples),
-                                )
-                                zero_output, _ = (
-                                    m._MixtureOfExperts__compute_expert_output(  # type: ignore[operator]
-                                        zero_probs_slice
-                                    )
-                                )
-                                expert_model: torch.nn.Module = m.expert_modules[0]  # type: ignore[assignment]
-                                expected = expert_model(
-                                    torch.zeros_like(expert_samples)
-                                )
-                                self.assertTrue(torch.allclose(zero_output, expected))
+                            self.assertTrue(torch.allclose(zero_output, expected))
 
     def test__compute_expert_mixture(self):
         num_experts = 6
@@ -674,7 +1102,7 @@ class TestMixtureOfExperts(unittest.TestCase):
                             f"weighting_position_option={weighting_position_option}"
                         )
                         with self.subTest(msg=message):
-                            c = MixtureOfExpertsPresets.experts_preset(
+                            c = self.preset(
                                 return_model_config_flag=True,
                                 experts_weighted_parameters_flag=weighted_parameters_flag,
                                 experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
@@ -736,7 +1164,7 @@ class TestMixtureOfExperts(unittest.TestCase):
             with self.subTest(
                 msg=f"sorting num_experts={num_experts}, should_sort={should_sort}"
             ):
-                c = MixtureOfExpertsPresets.experts_preset(
+                c = self.preset(
                     return_model_config_flag=True,
                     experts_weighted_parameters_flag=False,
                     experts_compute_expert_mixture_flag=False,
@@ -765,7 +1193,7 @@ class TestMixtureOfExperts(unittest.TestCase):
         num_experts = 6
         top_k_options = [1, 3, 6]
         flag_options = [True, False]
-        init_sampler_options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
+        routing_initialization_modes = [RoutingInitializationMode.DISABLED, RoutingInitializationMode.LAYER]
         num_layers_options = [1, 2, 3]
         capacity_factor_options = [0.0, 1.0, 1.5]
         dropped_token_behavior_options = [
@@ -774,274 +1202,60 @@ class TestMixtureOfExperts(unittest.TestCase):
         ]
 
         for num_layers in num_layers_options:
-            for layer_stack_option in LinearLayerStackOptions:
-                for weighting_position_option in ExpertWeightingPositionOptions:
-                    for top_k in top_k_options:
-                        for init_sampler_option in init_sampler_options:
-                            for compute_expert_mixture_flag in flag_options:
-                                for weighted_parameters_flag in flag_options:
-                                    for capacity_factor in capacity_factor_options:
-                                        for (
-                                            dropped_token_behavior
-                                        ) in dropped_token_behavior_options:
-                                            message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, init_sampler_option={init_sampler_option}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}, capacity_factor={capacity_factor}, dropped_token_behavior={dropped_token_behavior}"
-                                            with self.subTest(msg=message):
-                                                if (
-                                                    capacity_factor > 0
-                                                    and top_k == num_experts
-                                                ):
-                                                    continue  # validator rejects capacity + top_k==num_experts
-                                                output_dim = (
-                                                    8 if capacity_factor > 0 else 6
-                                                )
-                                                c = MixtureOfExpertsPresets.experts_preset(
-                                                    return_model_config_flag=True,
-                                                    batch_size=10,
-                                                    input_dim=8,
-                                                    output_dim=output_dim,
-                                                    experts_layer_stack_option=layer_stack_option,
-                                                    experts_top_k=top_k,
-                                                    experts_weighting_position_option=weighting_position_option,
-                                                    experts_init_sampler_option=init_sampler_option,
-                                                    experts_weighted_parameters_flag=weighted_parameters_flag,
-                                                    experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
-                                                    experts_num_experts=num_experts,
-                                                    experts_capacity_factor=capacity_factor,
-                                                    experts_dropped_token_behavior=dropped_token_behavior,
-                                                    stack_num_layers=num_layers,
-                                                )
-
-                                                m = MixtureOfExperts(c)
-
-                                                input = torch.randn(
-                                                    c.batch_size, c.input_dim
-                                                )
-                                                indices = probabilities = None
-                                                if (
-                                                    init_sampler_option
-                                                    == InitSamplerOptions.DISABLED
-                                                ):
-                                                    router_cfg = c.mixture_of_experts_config.router_model_config
-                                                    sampler_cfg = c.mixture_of_experts_config.sampler_model_config
-                                                    router = RouterModel(router_cfg)
-                                                    sampler = SamplerModel(sampler_cfg)
-
-                                                    logits = (
-                                                        router.compute_logit_scores(
-                                                            input
-                                                        )
-                                                    )
-                                                    probabilities, indices, _, _ = (
-                                                        sampler.sample_probabilities_and_indices(
-                                                            logits
-                                                        )
-                                                    )
-
-                                                output, total_loss = m.forward(
-                                                    input, probabilities, indices
-                                                )
-
-                                                expected_shape = (
-                                                    c.batch_size * top_k,
-                                                    c.output_dim,
-                                                )
-                                                if compute_expert_mixture_flag:
-                                                    expected_shape = (
-                                                        c.batch_size,
-                                                        c.output_dim,
-                                                    )
-                                                self.assertEqual(
-                                                    output.shape, expected_shape
-                                                )
-                                                self.assertEqual(total_loss.item(), 0.0)
-
-
-class TestMixtureOfExpertsStack(unittest.TestCase):
-    def test_init_with_default_config(self):
-        num_layer_options = [1, 2, 3]
-
-        for layer_stack_option in LinearLayerStackOptions:
-            for num_layers in num_layer_options:
-                message = f"Testing configuration with layer_stack_option={layer_stack_option.name}, num_layers={num_layers}"
-                with self.subTest(msg=message):
-                    c = MixtureOfExpertsPresets.experts_stack_preset(
-                        return_model_config_flag=True,
-                        experts_stack_num_layers=num_layers,
-                        experts_layer_stack_option=layer_stack_option,
-                    )
-                    m = MixtureOfExpertsStack(c).build_model()
-                    if num_layers == 1:
-                        self.assertIsInstance(m, Layer)
-                    else:
-                        self.assertIsInstance(m, Sequential)
-
-    def test_forward(self):
-        num_experts = 6
-        top_k_options = [1, 3, 6]
-        flag_options = [True, False]
-        num_layers_options = [1, 2, 3]
-        init_sampler_options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
-
-        for num_layers in num_layers_options:
-            for layer_stack_option in LinearLayerStackOptions:
-                for weighting_position_option in ExpertWeightingPositionOptions:
-                    for top_k in top_k_options:
-                        for init_sampler_option in init_sampler_options:
+            for weighting_position_option in ExpertWeightingPositionOptions:
+                for top_k in top_k_options:
+                    for routing_initialization_mode in routing_initialization_modes:
+                        for compute_expert_mixture_flag in flag_options:
                             for weighted_parameters_flag in flag_options:
-                                message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, init_sampler_option={init_sampler_option}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
-                                with self.subTest(msg=message):
-                                    c = MixtureOfExpertsPresets.experts_stack_preset(
-                                        return_model_config_flag=True,
-                                        experts_layer_stack_option=layer_stack_option,
-                                        experts_top_k=top_k,
-                                        experts_weighting_position_option=weighting_position_option,
-                                        experts_init_sampler_option=init_sampler_option,
-                                        experts_weighted_parameters_flag=weighted_parameters_flag,
-                                        experts_compute_expert_mixture_flag=True,
-                                        experts_num_experts=num_experts,
-                                        experts_stack_num_layers=num_layers,
-                                    )
-                                    m = MixtureOfExpertsStack(c).build_model()
-
-                                    batch_size = 10
-
-                                    input = torch.randn(batch_size, c.input_dim)
-                                    indices = probabilities = None
-                                    if (
-                                        init_sampler_option
-                                        == InitSamplerOptions.DISABLED
-                                    ):
-                                        router_cfg = c.layer_stack_config.override_config.router_model_config
-                                        sampler_cfg = c.layer_stack_config.override_config.sampler_model_config
-                                        router = RouterModel(router_cfg)
-                                        sampler = SamplerModel(sampler_cfg)
-
-                                        logits = router.compute_logit_scores(input)
-                                        probabilities, indices, _, _ = (
-                                            sampler.sample_probabilities_and_indices(
-                                                logits
-                                            )
-                                        )
-
-                                    loss = torch.tensor(0.0)
-                                    inputs = {
-                                        "input_batch": input,
-                                        "probabilities": probabilities,
-                                        "indices": indices,
-                                        "loss": loss,
-                                    }
-                                    output, loss = m(inputs)
-
-                                    expected_shape = (
-                                        batch_size,
-                                        c.output_dim,
-                                    )
-                                    self.assertEqual(output.shape, expected_shape)
-                                    self.assertEqual(loss.item(), 0.0)
-
-
-class TestMixtureOfExpertsModel(unittest.TestCase):
-    def test_init_with_default_config(self):
-        num_layer_options = [1, 2, 3]
-
-        for layer_stack_option in LinearLayerStackOptions:
-            for num_layers in num_layer_options:
-                message = f"Testing configuration with num_layers={num_layers}"
-                with self.subTest(msg=message):
-                    c = MixtureOfExpertsPresets.experts_stack_preset(
-                        return_model_config_flag=True,
-                        experts_stack_num_layers=num_layers,
-                        experts_layer_stack_option=layer_stack_option,
-                    )
-                    m = MixtureOfExpertsModel(c)
-                    if num_layers == 1:
-                        self.assertIsInstance(m.expert_stack, Layer)
-                    else:
-                        self.assertIsInstance(m.expert_stack, Sequential)
-
-    def test__maybe_create_router_and_sampler(self):
-        num_experts = 6
-        expert_options = [1, 3, 6]
-        init_sampler_options = [
-            InitSamplerOptions.DISABLED,
-            InitSamplerOptions.SHARED,
-        ]
-        sampler_options = [SamplerSparse, SamplerTopk, SamplerFull]
-
-        for layer_stack_option in LinearLayerStackOptions:
-            for init_sampler_option in init_sampler_options:
-                for sampler_option, expert_option in zip(
-                    sampler_options, expert_options
-                ):
-                    message = f"Testing configuration with layer_stack_option={layer_stack_option.name}, sampler_option={sampler_option.__name__}, num_experts={num_experts}, top_k={expert_option}"
-                    with self.subTest(msg=message):
-                        c = MixtureOfExpertsPresets.experts_stack_preset(
-                            return_model_config_flag=True,
-                            experts_init_sampler_option=init_sampler_option,
-                            experts_num_experts=num_experts,
-                            experts_top_k=expert_option,
-                            router_model_layer_stack_option=layer_stack_option,
-                        )
-
-                        m = MixtureOfExpertsModel(c)
-                        router, sampler = (
-                            m._MixtureOfExpertsModel__maybe_create_router_and_sampler()
-                        )
-                        if init_sampler_option == InitSamplerOptions.SHARED:
-                            self.assertIsInstance(router, RouterModel)
-                            self.assertIsInstance(sampler, SamplerModel)
-                            self.assertIsInstance(sampler.sampler_model, sampler_option)
-                            self.assertEqual(sampler.sampler_model.top_k, expert_option)
-                            continue
-                        self.assertIsNone(router)
-                        self.assertIsNone(sampler)
-
-    def test_forward(self):
-        num_experts = 6
-        top_k_options = [1, 3, 6]
-        flag_options = [True, False]
-        num_layers_options = [1, 2, 3]
-
-        for num_layers in num_layers_options:
-            for router_layer_stack_option in LinearLayerStackOptions:
-                for expert_layer_stack_option in LinearLayerStackOptions:
-                    for weighting_position_option in ExpertWeightingPositionOptions:
-                        for top_k in top_k_options:
-                            for init_sampler_option in InitSamplerOptions:
-                                for compute_expert_mixture_flag in flag_options:
-                                    for weighted_parameters_flag in flag_options:
-                                        message = f"Testing with router_layer_stack_option={router_layer_stack_option.name}, expert_layer_stack_option={expert_layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, init_sampler_option={init_sampler_option}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
+                                for capacity_factor in capacity_factor_options:
+                                    for (
+                                        dropped_token_behavior
+                                    ) in dropped_token_behavior_options:
+                                        message = f"Testing with weighting_position_option={weighting_position_option.name}, routing_initialization_mode={routing_initialization_mode}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}, capacity_factor={capacity_factor}, dropped_token_behavior={dropped_token_behavior}"
                                         with self.subTest(msg=message):
-                                            c = MixtureOfExpertsPresets.experts_stack_preset(
+                                            if (
+                                                capacity_factor > 0
+                                                and top_k == num_experts
+                                            ):
+                                                continue  # validator rejects capacity + top_k==num_experts
+                                            output_dim = (
+                                                8 if capacity_factor > 0 else 6
+                                            )
+                                            c = self.preset(
                                                 return_model_config_flag=True,
-                                                router_model_layer_stack_option=router_layer_stack_option,
-                                                experts_layer_stack_option=expert_layer_stack_option,
+                                                batch_size=10,
+                                                input_dim=8,
+                                                output_dim=output_dim,
                                                 experts_top_k=top_k,
                                                 experts_weighting_position_option=weighting_position_option,
-                                                experts_init_sampler_option=init_sampler_option,
+                                                experts_routing_initialization_mode=routing_initialization_mode,
                                                 experts_weighted_parameters_flag=weighted_parameters_flag,
-                                                experts_compute_expert_mixture_flag=True,
+                                                experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
                                                 experts_num_experts=num_experts,
-                                                experts_stack_num_layers=num_layers,
+                                                experts_capacity_factor=capacity_factor,
+                                                experts_dropped_token_behavior=dropped_token_behavior,
+                                                stack_num_layers=num_layers,
                                             )
 
-                                            m = MixtureOfExpertsModel(c)
+                                            m = MixtureOfExperts(c)
 
-                                            batch_size = 10
-
-                                            input = torch.randn(batch_size, c.input_dim)
+                                            input = torch.randn(
+                                                c.batch_size, c.input_dim
+                                            )
                                             indices = probabilities = None
                                             if (
-                                                init_sampler_option
-                                                == InitSamplerOptions.DISABLED
+                                                routing_initialization_mode
+                                                == RoutingInitializationMode.DISABLED
                                             ):
-                                                router_cfg = c.layer_stack_config.override_config.router_model_config
-                                                sampler_cfg = c.layer_stack_config.override_config.sampler_model_config
+                                                router_cfg = c.mixture_of_experts_config.router_config
+                                                sampler_cfg = c.mixture_of_experts_config.sampler_config
                                                 router = RouterModel(router_cfg)
                                                 sampler = SamplerModel(sampler_cfg)
 
-                                                logits = router.compute_logit_scores(
-                                                    input
+                                                logits = (
+                                                    router.compute_logit_scores(
+                                                        input
+                                                    )
                                                 )
                                                 probabilities, indices, _, _ = (
                                                     sampler.sample_probabilities_and_indices(
@@ -1049,24 +1263,161 @@ class TestMixtureOfExpertsModel(unittest.TestCase):
                                                     )
                                                 )
 
-                                            loss = torch.tensor(0.0)
-                                            output, loss = m(
-                                                input=input,
-                                                probabilities=probabilities,
-                                                indices=indices,
+                                            output, total_loss = m.forward(
+                                                input, probabilities, indices
                                             )
 
                                             expected_shape = (
-                                                batch_size,
+                                                c.batch_size * top_k,
                                                 c.output_dim,
                                             )
+                                            if compute_expert_mixture_flag:
+                                                expected_shape = (
+                                                    c.batch_size,
+                                                    c.output_dim,
+                                                )
                                             self.assertEqual(
                                                 output.shape, expected_shape
                                             )
-                                            self.assertEqual(loss.item(), 0.0)
+                                            self.assertEqual(total_loss.item(), 0.0)
 
 
-class TestMixtureOfExpertsMap(unittest.TestCase):
+class TestMixtureOfExpertsStack(MixtureOfExpertsPresetMixin, unittest.TestCase):
+    def test_init_with_default_config(self):
+        num_layer_options = [1, 2, 3]
+
+        for num_layers in num_layer_options:
+            message = f"Testing configuration with num_layers={num_layers}"
+            with self.subTest(msg=message):
+                c = self.stack_preset(
+                    return_model_config_flag=True,
+                    experts_stack_num_layers=num_layers,
+                )
+                m = MixtureOfExpertsStack(c).build()
+                if num_layers == 1:
+                    self.assertIsInstance(m, Layer)
+                else:
+                    self.assertIsInstance(m, Sequential)
+
+    def test_forward(self):
+        num_experts = 6
+        top_k_options = [1, 3, 6]
+        flag_options = [True, False]
+        num_layers_options = [1, 2, 3]
+        routing_initialization_modes = [RoutingInitializationMode.DISABLED, RoutingInitializationMode.LAYER]
+
+        for num_layers in num_layers_options:
+            for weighting_position_option in ExpertWeightingPositionOptions:
+                for top_k in top_k_options:
+                    for routing_initialization_mode in routing_initialization_modes:
+                        for weighted_parameters_flag in flag_options:
+                            message = f"Testing with weighting_position_option={weighting_position_option.name}, routing_initialization_mode={routing_initialization_mode}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
+                            with self.subTest(msg=message):
+                                c = self.stack_preset(
+                                    return_model_config_flag=True,
+                                    experts_top_k=top_k,
+                                    experts_weighting_position_option=weighting_position_option,
+                                    experts_routing_initialization_mode=routing_initialization_mode,
+                                    experts_weighted_parameters_flag=weighted_parameters_flag,
+                                    experts_compute_expert_mixture_flag=True,
+                                    experts_num_experts=num_experts,
+                                    experts_stack_num_layers=num_layers,
+                                )
+                                m = MixtureOfExpertsStack(c).build()
+
+                                batch_size = 10
+
+                                input = torch.randn(batch_size, c.input_dim)
+                                indices = probabilities = None
+                                if (
+                                    routing_initialization_mode
+                                    == RoutingInitializationMode.DISABLED
+                                ):
+                                    moe_cfg = c.layer_stack_config.layer_config.layer_model_config
+                                    router_cfg = moe_cfg.router_config
+                                    sampler_cfg = moe_cfg.sampler_config
+                                    router = RouterModel(router_cfg)
+                                    sampler = SamplerModel(sampler_cfg)
+
+                                    logits = router.compute_logit_scores(input)
+                                    probabilities, indices, _, _ = (
+                                        sampler.sample_probabilities_and_indices(
+                                            logits
+                                        )
+                                    )
+
+                                loss = torch.tensor(0.0)
+                                inputs = {
+                                    "input_batch": input,
+                                    "probabilities": probabilities,
+                                    "indices": indices,
+                                    "loss": loss,
+                                }
+                                output, loss = m(inputs)
+
+                                expected_shape = (
+                                    batch_size,
+                                    c.output_dim,
+                                )
+                                self.assertEqual(output.shape, expected_shape)
+                                self.assertEqual(loss.item(), 0.0)
+
+
+class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
+    def test_init_with_default_config(self):
+        num_layer_options = [1, 2, 3]
+
+        for num_layers in num_layer_options:
+            message = f"Testing configuration with num_layers={num_layers}"
+            with self.subTest(msg=message):
+                c = self.stack_preset(
+                    return_model_config_flag=True,
+                    stack_num_layers=num_layers,
+                )
+                moe_config = c.layer_stack_config.layer_config.layer_model_config
+                m = MixtureOfExpertsModel(moe_config)
+                self.assertIsInstance(m.expert_stack, MixtureOfExperts)
+                for expert in m.expert_stack.expert_modules:
+                    if num_layers == 1:
+                        self.assertIsInstance(expert, Layer)
+                    else:
+                        self.assertIsInstance(expert, Sequential)
+
+    def test__maybe_create_router_and_sampler(self):
+        num_experts = 6
+        expert_options = [1, 3, 6]
+        routing_initialization_modes = [
+            RoutingInitializationMode.DISABLED,
+            RoutingInitializationMode.SHARED,
+        ]
+        sampler_options = [SamplerSparse, SamplerTopk, SamplerFull]
+
+        for routing_initialization_mode in routing_initialization_modes:
+            for sampler_option, expert_option in zip(
+                sampler_options, expert_options
+            ):
+                message = f"Testing configuration with sampler_option={sampler_option.__name__}, num_experts={num_experts}, top_k={expert_option}"
+                with self.subTest(msg=message):
+                    c = self.preset(
+                        return_model_config_flag=True,
+                        experts_routing_initialization_mode=routing_initialization_mode,
+                        experts_num_experts=num_experts,
+                        experts_top_k=expert_option,
+                    )
+
+                    m = MixtureOfExpertsModel(c.mixture_of_experts_config)
+                    router, sampler = (
+                        m._MixtureOfExpertsModel__maybe_create_router_and_sampler()
+                    )
+                    if routing_initialization_mode == RoutingInitializationMode.SHARED:
+                        self.assertIsInstance(router, RouterModel)
+                        self.assertIsInstance(sampler, SamplerModel)
+                        self.assertIsInstance(sampler.sampler_model, sampler_option)
+                        self.assertEqual(sampler.sampler_model.top_k, expert_option)
+                        continue
+                    self.assertIsNone(router)
+                    self.assertIsNone(sampler)
+
     def test_forward(self):
         num_experts = 6
         top_k_options = [1, 3, 6]
@@ -1074,129 +1425,260 @@ class TestMixtureOfExpertsMap(unittest.TestCase):
         num_layers_options = [1, 2, 3]
 
         for num_layers in num_layers_options:
-            for layer_stack_option in LinearLayerStackOptions:
-                for weighting_position_option in ExpertWeightingPositionOptions:
-                    for top_k in top_k_options:
+            for weighting_position_option in ExpertWeightingPositionOptions:
+                for top_k in top_k_options:
+                    for routing_initialization_mode in RoutingInitializationMode:
                         for compute_expert_mixture_flag in flag_options:
                             for weighted_parameters_flag in flag_options:
-                                message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
+                                message = f"Testing with weighting_position_option={weighting_position_option.name}, routing_initialization_mode={routing_initialization_mode}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
                                 with self.subTest(msg=message):
-                                    c = MixtureOfExpertsPresets.experts_preset(
+                                    c = self.preset(
                                         return_model_config_flag=True,
-                                        batch_size=10,
-                                        experts_layer_stack_option=layer_stack_option,
                                         experts_top_k=top_k,
                                         experts_weighting_position_option=weighting_position_option,
+                                        experts_routing_initialization_mode=routing_initialization_mode,
                                         experts_weighted_parameters_flag=weighted_parameters_flag,
-                                        experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
+                                        experts_compute_expert_mixture_flag=True,
                                         experts_num_experts=num_experts,
                                         stack_num_layers=num_layers,
                                     )
 
-                                    m = MixtureOfExpertsMap(c)
+                                    moe_cfg = c.mixture_of_experts_config
+                                    m = MixtureOfExpertsModel(moe_cfg)
 
-                                    input = torch.randn(c.batch_size, c.input_dim)
+                                    batch_size = 10
+
+                                    input = torch.randn(batch_size, c.input_dim)
                                     indices = probabilities = None
-                                    router_cfg = (
-                                        c.mixture_of_experts_config.router_model_config
-                                    )
-                                    sampler_cfg = (
-                                        c.mixture_of_experts_config.sampler_model_config
-                                    )
-                                    router = RouterModel(router_cfg)
-                                    sampler = SamplerModel(sampler_cfg)
+                                    if (
+                                        routing_initialization_mode
+                                        == RoutingInitializationMode.DISABLED
+                                    ):
+                                        router_cfg = moe_cfg.router_config
+                                        sampler_cfg = moe_cfg.sampler_config
+                                        router = RouterModel(router_cfg)
+                                        sampler = SamplerModel(sampler_cfg)
 
-                                    logits = router.compute_logit_scores(input)
-                                    probabilities, indices, _, _ = (
-                                        sampler.sample_probabilities_and_indices(logits)
-                                    )
+                                        logits = router.compute_logit_scores(
+                                            input
+                                        )
+                                        probabilities, indices, _, _ = (
+                                            sampler.sample_probabilities_and_indices(
+                                                logits
+                                            )
+                                        )
 
-                                    output, total_loss = m.forward(
-                                        input, probabilities, indices
+                                    loss = torch.tensor(0.0)
+                                    output, loss = m(
+                                        input=input,
+                                        probabilities=probabilities,
+                                        indices=indices,
                                     )
 
                                     expected_shape = (
-                                        c.batch_size * top_k,
+                                        batch_size,
                                         c.output_dim,
                                     )
+                                    self.assertEqual(
+                                        output.shape, expected_shape
+                                    )
+                                    self.assertEqual(loss.item(), 0.0)
 
-                                    self.assertEqual(output.shape, expected_shape)
+
+class TestMixtureOfExpertsMap(MixtureOfExpertsPresetMixin, unittest.TestCase):
+    def test_forward(self):
+        num_experts = 6
+        top_k_options = [1, 3, 6]
+        flag_options = [True, False]
+        num_layers_options = [1, 2, 3]
+
+        for num_layers in num_layers_options:
+            for weighting_position_option in ExpertWeightingPositionOptions:
+                for top_k in top_k_options:
+                    for compute_expert_mixture_flag in flag_options:
+                        for weighted_parameters_flag in flag_options:
+                            message = f"Testing with weighting_position_option={weighting_position_option.name}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
+                            with self.subTest(msg=message):
+                                c = self.preset(
+                                    return_model_config_flag=True,
+                                    batch_size=10,
+                                    experts_top_k=top_k,
+                                    experts_weighting_position_option=weighting_position_option,
+                                    experts_weighted_parameters_flag=weighted_parameters_flag,
+                                    experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
+                                    experts_num_experts=num_experts,
+                                    stack_num_layers=num_layers,
+                                )
+
+                                m = MixtureOfExpertsMap(c)
+
+                                input = torch.randn(c.batch_size, c.input_dim)
+                                indices = probabilities = None
+                                router_cfg = (
+                                    c.mixture_of_experts_config.router_config
+                                )
+                                sampler_cfg = (
+                                    c.mixture_of_experts_config.sampler_config
+                                )
+                                router = RouterModel(router_cfg)
+                                sampler = SamplerModel(sampler_cfg)
+
+                                logits = router.compute_logit_scores(input)
+                                probabilities, indices, _, _ = (
+                                    sampler.sample_probabilities_and_indices(logits)
+                                )
+
+                                output, total_loss = m.forward(
+                                    input, probabilities, indices
+                                )
+
+                                expected_shape = (
+                                    c.batch_size * top_k,
+                                    c.output_dim,
+                                )
+
+                                self.assertEqual(output.shape, expected_shape)
 
 
-class TestMixtureOfExpertsReduce(unittest.TestCase):
+class TestMixtureOfExpertsReduce(MixtureOfExpertsPresetMixin, unittest.TestCase):
+    def test_forward_validator_rejects_invalid_runtime_inputs(self):
+        cfg = self.preset(
+            input_dim=6,
+            output_dim=8,
+            experts_top_k=3,
+            experts_num_experts=6,
+            experts_weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
+            experts_weighted_parameters_flag=True,
+            experts_compute_expert_mixture_flag=True,
+        )
+        model = MixtureOfExpertsReduce(cfg)
+        input_batch = torch.randn(15, cfg.input_dim)
+        probabilities = torch.rand(5, cfg.top_k)
+        indices = torch.randint(0, cfg.num_experts, (5, cfg.top_k))
+
+        cases = [
+            ("input_batch", torch.randn(15), probabilities, indices, ValueError),
+            (
+                "input_batch",
+                torch.randn(15, cfg.input_dim + 1),
+                probabilities,
+                indices,
+                ValueError,
+            ),
+            ("probabilities", input_batch, [0.1, 0.2], indices, TypeError),
+            (
+                "probabilities",
+                input_batch,
+                torch.rand(5, cfg.top_k + 1),
+                indices,
+                ValueError,
+            ),
+            (
+                "probabilities",
+                torch.randn(14, cfg.input_dim),
+                probabilities,
+                indices,
+                ValueError,
+            ),
+            ("indices", input_batch, probabilities, torch.rand(5, cfg.top_k), TypeError),
+            (
+                "indices",
+                input_batch,
+                probabilities,
+                torch.randint(0, cfg.num_experts, (5, cfg.top_k + 1)),
+                ValueError,
+            ),
+            (
+                "indices",
+                input_batch,
+                probabilities,
+                torch.full((5, cfg.top_k), cfg.num_experts),
+                ValueError,
+            ),
+            (
+                "indices",
+                torch.randn(14, cfg.input_dim),
+                probabilities,
+                indices,
+                ValueError,
+            ),
+        ]
+
+        for field_name, batch, probs, route_indices, error_type in cases:
+            with self.subTest(field_name=field_name):
+                with self.assertRaises(error_type):
+                    model.forward(batch, probs, route_indices)
+
     def test_forward(self):
         num_experts = 6
         top_k_options = [1, 3]
         flag_options = [True, False]
-        # init_sampler_options = [InitSamplerOptions.DISABLED, InitSamplerOptions.LAYER]
+        # routing_initialization_modes = [RoutingInitializationMode.DISABLED, RoutingInitializationMode.LAYER]
         num_layers_options = [1, 2, 3]
 
         for num_layers in num_layers_options:
-            for layer_stack_option in LinearLayerStackOptions:
-                for weighting_position_option in ExpertWeightingPositionOptions:
-                    for top_k in top_k_options:
-                        for compute_expert_mixture_flag in flag_options:
-                            for weighted_parameters_flag in flag_options:
-                                message = f"Testing with layer_stack_option={layer_stack_option.name}, weighting_position_option={weighting_position_option.name}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
-                                with self.subTest(msg=message):
-                                    c = MixtureOfExpertsPresets.experts_preset(
-                                        input_dim=8,
-                                        output_dim=6,
-                                        return_model_config_flag=True,
-                                        batch_size=10,
-                                        experts_layer_stack_option=layer_stack_option,
-                                        experts_top_k=top_k,
-                                        experts_weighting_position_option=weighting_position_option,
-                                        experts_weighted_parameters_flag=weighted_parameters_flag,
-                                        experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
-                                        experts_num_experts=num_experts,
-                                        stack_num_layers=num_layers,
-                                    )
+            for weighting_position_option in ExpertWeightingPositionOptions:
+                for top_k in top_k_options:
+                    for compute_expert_mixture_flag in flag_options:
+                        for weighted_parameters_flag in flag_options:
+                            message = f"Testing with weighting_position_option={weighting_position_option.name}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
+                            with self.subTest(msg=message):
+                                c = self.preset(
+                                    input_dim=8,
+                                    output_dim=6,
+                                    return_model_config_flag=True,
+                                    batch_size=10,
+                                    experts_top_k=top_k,
+                                    experts_weighting_position_option=weighting_position_option,
+                                    experts_weighted_parameters_flag=weighted_parameters_flag,
+                                    experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
+                                    experts_num_experts=num_experts,
+                                    stack_num_layers=num_layers,
+                                )
 
-                                    m = MixtureOfExpertsMap(c)
+                                m = MixtureOfExpertsMap(c)
 
-                                    rc = MixtureOfExpertsPresets.experts_preset(
-                                        input_dim=6,
-                                        output_dim=8,
-                                        return_model_config_flag=True,
-                                        batch_size=10,
-                                        experts_layer_stack_option=layer_stack_option,
-                                        experts_top_k=top_k,
-                                        experts_weighting_position_option=weighting_position_option,
-                                        experts_weighted_parameters_flag=weighted_parameters_flag,
-                                        experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
-                                        experts_num_experts=num_experts,
-                                        stack_num_layers=num_layers,
-                                    )
-                                    r = MixtureOfExpertsReduce(rc)
+                                rc = self.preset(
+                                    input_dim=6,
+                                    output_dim=8,
+                                    return_model_config_flag=True,
+                                    batch_size=10,
+                                    experts_top_k=top_k,
+                                    experts_weighting_position_option=weighting_position_option,
+                                    experts_weighted_parameters_flag=weighted_parameters_flag,
+                                    experts_compute_expert_mixture_flag=compute_expert_mixture_flag,
+                                    experts_num_experts=num_experts,
+                                    stack_num_layers=num_layers,
+                                )
+                                r = MixtureOfExpertsReduce(rc)
 
-                                    input = torch.randn(c.batch_size, c.input_dim)
-                                    indices = probabilities = None
+                                input = torch.randn(c.batch_size, c.input_dim)
+                                indices = probabilities = None
 
-                                    router_cfg = (
-                                        c.mixture_of_experts_config.router_model_config
-                                    )
-                                    sampler_cfg = (
-                                        c.mixture_of_experts_config.sampler_model_config
-                                    )
-                                    router = RouterModel(router_cfg)
-                                    sampler = SamplerModel(sampler_cfg)
+                                router_cfg = (
+                                    c.mixture_of_experts_config.router_config
+                                )
+                                sampler_cfg = (
+                                    c.mixture_of_experts_config.sampler_config
+                                )
+                                router = RouterModel(router_cfg)
+                                sampler = SamplerModel(sampler_cfg)
 
-                                    logits = router.compute_logit_scores(input)
-                                    probabilities, indices, _, _ = (
-                                        sampler.sample_probabilities_and_indices(logits)
-                                    )
+                                logits = router.compute_logit_scores(input)
+                                probabilities, indices, _, _ = (
+                                    sampler.sample_probabilities_and_indices(logits)
+                                )
 
-                                    output, total_loss = m.forward(
-                                        input, probabilities, indices
-                                    )
-                                    output, total_loss = r.forward(
-                                        output, probabilities, indices
-                                    )
+                                output, total_loss = m.forward(
+                                    input, probabilities, indices
+                                )
+                                output, total_loss = r.forward(
+                                    output, probabilities, indices
+                                )
 
-                                    expected_shape = (c.batch_size, rc.output_dim)
+                                expected_shape = (c.batch_size, rc.output_dim)
 
-                                    self.assertEqual(output.shape, expected_shape)
+                                self.assertEqual(output.shape, expected_shape)
 
 
 class TestExpertCapacityHandler(unittest.TestCase):
@@ -1305,4 +1787,3 @@ class TestExpertCapacityHandler(unittest.TestCase):
                 )
                 self.assertTrue(torch.equal(expert_samples, input_batch[indices]))
                 self.assertTrue(torch.equal(dropped, expected_dropped[behavior]))
-

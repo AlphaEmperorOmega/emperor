@@ -2,94 +2,26 @@ import torch
 import torch.nn as nn
 
 from torch import Tensor, device
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from emperor.sampler.model import SamplerModel
-from emperor.base.layer import LayerStackConfig
-from emperor.base.utils import ConfigBase, Module
-from emperor.experts.utils._expert_capacity import _ExpertCapacityHandler
-from emperor.experts.utils._expert_weighting import _ExpertWeightingHandler
-from emperor.experts.utils._validator import _ValidatorHandler
-from emperor.experts.utils.enums import (
+from emperor.base.layer import Layer, LayerStackConfig
+from emperor.base.utils import Module
+from emperor.experts.core.config import MixtureOfExpertsConfig
+from emperor.experts.core._expert_capacity import _ExpertCapacityHandler
+from emperor.experts.core._expert_weighting import _ExpertWeightingHandler
+from emperor.experts.core._validator import MixtureOfExpertsValidator
+from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
-    InitSamplerOptions,
+    RoutingInitializationMode,
 )
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-    from emperor.sampler.core.samplers import SamplerConfig
-    from emperor.linears.options import LinearLayerStackOptions
-    from emperor.sampler.core.routers import RouterConfig, RouterModel
-
-
-@dataclass
-class MixtureOfExpertsConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    layer_stack_option: "LinearLayerStackOptions | None" = field(
-        default=None,
-        metadata={"help": "Number of layers added to the router"},
-    )
-    top_k: int | None = field(
-        default=None,
-        metadata={
-            "help": "Top-k probabilities and indices to be selected from a distribution"
-        },
-    )
-    num_experts: int | None = field(
-        default=None,
-        metadata={"help": "Number of experts in the model"},
-    )
-    capacity_factor: float | None = field(
-        default=None,
-        metadata={
-            "help": "Limits tokens per expert to prevent load imbalance. Tokens over capacity are dropped. 0.0=disabled, 1.0=fair share, >1.0=buffer."
-        },
-    )
-    dropped_token_behavior: DroppedTokenOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Controls dropped tokens. ZERO: become zero vectors (default). IDENTITY: retain original input."
-        },
-    )
-    compute_expert_mixture_flag: bool | None = field(
-        default=None,
-        metadata={"help": "When true computes the expert mixture for this layer."},
-    )
-    weighted_parameters_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When `True` the sepected parameters will be multiplied by their probs."
-        },
-    )
-    weighting_position_option: ExpertWeightingPositionOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Dictates if the weights are applided before or after the experts."
-        },
-    )
-    init_sampler_option: InitSamplerOptions | None = field(
-        default=None,
-        metadata={
-            "help": "Use `SHARED` for a single router and sampler across all layers, or `LAYER` for one per layer."
-        },
-    )
-    router_model_config: "RouterConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
-    sampler_model_config: "SamplerConfig | None" = field(
-        default=None,
-        metadata={"help": ""},
-    )
+    from emperor.sampler.core.config import RouterConfig, SamplerConfig
+    from emperor.sampler.core.routers import RouterModel
 
 
 @dataclass
@@ -111,11 +43,11 @@ class MixtureOfExperts(Module):
         super().__init__()
         config = getattr(cfg, "mixture_of_experts_config", cfg)
         self.cfg: "MixtureOfExpertsConfig" = self._override_config(config, overrides)
-        self.main_cfg: "LayerStackConfig" = self._resolve_main_config(self.cfg, cfg)
+        self.main_cfg: "LayerStackConfig" = self.cfg.expert_model_config
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
-        self.layer_stack_model: "LinearLayerStackOptions" = self.cfg.layer_stack_option
+        self.expert_model_config: "LayerStackConfig" = self.cfg.expert_model_config
         self.top_k: int = self.cfg.top_k
         self.num_experts: int = self.cfg.num_experts
         self.capacity_factor: float = self.cfg.capacity_factor
@@ -124,14 +56,14 @@ class MixtureOfExperts(Module):
         )
         self.compute_expert_mixture_flag: bool = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag: bool = self.cfg.weighted_parameters_flag
-        self.init_sampler_option: "InitSamplerOptions" = self.cfg.init_sampler_option
+        self.routing_initialization_mode: "RoutingInitializationMode" = self.cfg.routing_initialization_mode
         self.weighting_position_option: "ExpertWeightingPositionOptions" = (
             self.cfg.weighting_position_option
         )
-        self.router_model_config: "RouterConfig" = self.cfg.router_model_config
-        self.sampler_model_config: "SamplerConfig" = self.cfg.sampler_model_config
+        self.router_config: "RouterConfig" = self.cfg.router_config
+        self.sampler_config: "SamplerConfig" = self.cfg.sampler_config
 
-        self.validator_handler = _ValidatorHandler(self)
+        MixtureOfExpertsValidator.validate(self)
         self.capacity_handler = _ExpertCapacityHandler(self.cfg)
         self.expert_weighting_handler = _ExpertWeightingHandler(self.cfg)
         self.router, self.sampler = self.__maybe_create_router_and_sampler()
@@ -143,16 +75,18 @@ class MixtureOfExperts(Module):
     def __maybe_create_router_and_sampler(
         self,
     ) -> tuple["RouterModel | None", "SamplerModel | None"]:
-        from emperor.sampler.core.routers import RouterConfig, RouterModel
+        from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
-        if self.init_sampler_option != InitSamplerOptions.LAYER:
+        if self.routing_initialization_mode != RoutingInitializationMode.LAYER:
             return None, None
-        self.validator_handler.ensure_router_config_exists()
-        self.validator_handler.ensure_sampler_config_exists()
+        MixtureOfExpertsValidator.validate_router_config_exists(self)
+        MixtureOfExpertsValidator.validate_sampler_config_exists(self)
         router_overrides = RouterConfig(input_dim=self.input_dim)
-        router = RouterModel(self.router_model_config, router_overrides)
-        sampler = SamplerModel(self.sampler_model_config)
-        return router, sampler
+        router_config = self._override_config(self.router_config, router_overrides)
+        sampler_overrides = SamplerConfig(router_config=router_config)
+        sampler_config = self._override_config(self.sampler_config, sampler_overrides)
+        sampler = SamplerModel(sampler_config)
+        return sampler.router, sampler
 
     def __create_experts(self) -> nn.ModuleList:
         expert_list = []
@@ -160,9 +94,7 @@ class MixtureOfExperts(Module):
             overrides = LayerStackConfig(
                 input_dim=self.input_dim, output_dim=self.output_dim
             )
-            model_stack = self.layer_stack_model.value(
-                self.main_cfg, overrides
-            ).build_model()
+            model_stack = self.main_cfg.build(overrides)
 
             expert_list.append(model_stack)
         return nn.ModuleList(expert_list)
@@ -173,9 +105,9 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        self.validator_handler.ensure_tensor_is_vector_or_matrix(input_batch)
-        self.validator_handler.ensure_tensor_is_vector_or_matrix(probabilities)
-        self.validator_handler.ensure_tensor_is_vector_or_matrix(indices)
+        MixtureOfExpertsValidator.validate_forward_inputs(
+            self, input_batch, probabilities, indices
+        )
         probabilities, indices, sampler_loss = self._maybe_compute_expert_indices(
             input_batch, probabilities, indices
         )
@@ -199,19 +131,18 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        if self.init_sampler_option != InitSamplerOptions.LAYER or (
+        if self.routing_initialization_mode != RoutingInitializationMode.LAYER or (
             indices is not None or probabilities is not None
         ):
             return probabilities, indices, torch.tensor(0.0)
-        self.validator_handler.ensure_sampler_is_initialized()
-        self.validator_handler.ensure_external_probabilities_are_not_given(
+        MixtureOfExpertsValidator.validate_sampler_is_initialized(self)
+        MixtureOfExpertsValidator.validate_external_probabilities_are_not_given(
             probabilities, indices
         )
-        logits = self.router.compute_logit_scores(inputs)
         # TODO: In the future see if `skip_mask` needs to be implemented
         skip_mask = None
         probabilities, indices, skip_mask, sampler_loss = (
-            self.sampler.sample_probabilities_and_indices(logits, skip_mask)
+            self.sampler.sample_probabilities_and_indices(inputs, skip_mask)
         )
         return probabilities, indices, sampler_loss
 
@@ -351,7 +282,7 @@ class MixtureOfExperts(Module):
         )
 
         expert_model = self.expert_modules[expert_data.expert_index]
-        output = expert_model(expert_samples)
+        output = Layer.forward_with_state(expert_model, expert_samples)
         return output, torch.tensor(0.0)
 
     def __append_expert_output(
@@ -438,11 +369,11 @@ class MixtureOfExpertsMap(MixtureOfExperts):
             return MixtureOfExpertsConfig(
                 weighted_parameters_flag=False,
                 compute_expert_mixture_flag=False,
-                init_sampler_option=InitSamplerOptions.DISABLED,
+                routing_initialization_mode=RoutingInitializationMode.DISABLED,
             )
         overrides.weighted_parameters_flag = False
         overrides.compute_expert_mixture_flag = False
-        overrides.init_sampler_option = InitSamplerOptions.DISABLED
+        overrides.routing_initialization_mode = RoutingInitializationMode.DISABLED
 
         return overrides
 
@@ -464,14 +395,14 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
                 weighted_parameters_flag=True,
                 compute_expert_mixture_flag=True,
                 weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
-                init_sampler_option=InitSamplerOptions.DISABLED,
+                routing_initialization_mode=RoutingInitializationMode.DISABLED,
             )
         overrides.weighted_parameters_flag = True
         overrides.compute_expert_mixture_flag = True
         overrides.weighting_position_option = (
             ExpertWeightingPositionOptions.AFTER_EXPERTS
         )
-        overrides.init_sampler_option = InitSamplerOptions.DISABLED
+        overrides.routing_initialization_mode = RoutingInitializationMode.DISABLED
 
         return overrides
 
@@ -517,9 +448,9 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        self.validator_handler.ensure_tensor_is_vector_or_matrix(input_batch)
-        self.validator_handler.ensure_tensor_is_vector_or_matrix(probabilities)
-        self.validator_handler.ensure_tensor_is_vector_or_matrix(indices)
+        MixtureOfExpertsValidator.validate_reduce_forward_inputs(
+            self, input_batch, probabilities, indices
+        )
 
         expert_input_data = self._split_tokens_per_expert(
             input_batch, probabilities, indices
