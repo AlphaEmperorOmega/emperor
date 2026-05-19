@@ -10,19 +10,17 @@ from emperor.linears.core._validator import LinearValidator
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.config import ModelConfig
     from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
 
 
 class LinearAbstract(Module):
     def __init__(
         self,
-        cfg: "LinearLayerConfig | ModelConfig",
+        cfg: "LinearLayerConfig",
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "linear_layer_config", cfg)
-        self.cfg: "LinearLayerConfig" = self._override_config(config, overrides)
+        self.cfg: "LinearLayerConfig" = self._override_config(cfg, overrides)
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.bias_flag: bool = self.cfg.bias_flag
@@ -47,7 +45,7 @@ class LinearAbstract(Module):
 class LinearLayer(LinearAbstract):
     def __init__(
         self,
-        cfg: "LinearLayerConfig | ModelConfig",
+        cfg: "LinearLayerConfig",
         overrides: "LinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
@@ -60,7 +58,7 @@ class LinearLayer(LinearAbstract):
 class AdaptiveLinearLayer(LinearAbstract):
     def __init__(
         self,
-        cfg: "AdaptiveLinearLayerConfig | ModelConfig",
+        cfg: "AdaptiveLinearLayerConfig",
         overrides: "AdaptiveLinearLayerConfig | None" = None,
     ):
         super().__init__(cfg, overrides)

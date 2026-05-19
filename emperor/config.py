@@ -179,21 +179,6 @@ class ModelConfig(ConfigBase):
         default=None,
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
-    linear_layer_config: LinearLayerConfig | LinearLayerConfig = field(
-        default_factory=lambda: LinearLayerConfig(
-            input_dim=INPUT_DIM,
-            output_dim=OUTPUT_DIM,
-            bias_flag=True,
-        ),
-        metadata={"help": "`LinearLayerConfig` configuration"},
-    )
-    mixture_of_experts_config: MixtureOfExpertsConfig = field(
-        default_factory=lambda: MixtureOfExpertsConfig(
-            expert_model_config=default_expert_model_config(),
-            weighted_parameters_flag=True,
-        ),
-        metadata={"help": "`MixtureOfExpertsConfig` configuration"},
-    )
     input_moe_layer_config: MixtureOfExpertsConfig = field(
         default_factory=lambda: MixtureOfExpertsConfig(
             expert_model_config=default_expert_model_config(INPUT_DIM, 64),

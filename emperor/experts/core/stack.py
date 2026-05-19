@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.base.utils import Module
-    from emperor.config import ModelConfig
     from emperor.base.options import ActivationOptions
     from emperor.base.options import LayerNormPositionOptions
 
@@ -21,12 +20,11 @@ if TYPE_CHECKING:
 class MixtureOfExpertsStack(Module):
     def __init__(
         self,
-        cfg: "LayerStackConfig | ModelConfig",
+        cfg: "LayerStackConfig",
         overrides: "LayerStackConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "layer_stack_config", cfg)
-        self.cfg: "LayerStackConfig" = self._override_config(config, overrides)
+        self.cfg: "LayerStackConfig" = self._override_config(cfg, overrides)
 
     def build(self) -> Layer | Sequential:
         layers = []

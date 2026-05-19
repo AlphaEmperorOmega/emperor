@@ -276,19 +276,6 @@ class TestLinearLayer(unittest.TestCase):
         self.assertEqual(m.output_dim, 6)
         self.assertEqual(m.bias_flag, True)
 
-    def test_model_config_dispatch_extracts_linear_layer_config(self):
-        wrapper = SimpleNamespace(
-            linear_layer_config=LinearLayerConfig(
-                input_dim=5, output_dim=3, bias_flag=True
-            )
-        )
-        m = LinearLayer(wrapper)
-
-        self.assertEqual(m.input_dim, 5)
-        self.assertEqual(m.output_dim, 3)
-        self.assertEqual(m.bias_flag, True)
-        self.assertEqual(m.weight_params.shape, (5, 3))
-
     def test_config_build_returns_linear_layer(self):
         cfg = self.preset(input_dim=5, output_dim=3, bias_flag=True)
         m = cfg.build()
