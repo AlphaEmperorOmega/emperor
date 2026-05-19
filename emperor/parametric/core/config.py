@@ -31,7 +31,7 @@ class ParametricLayerConfig(ConfigBase):
     adaptive_bias_option: "AdaptiveBiasOptions | None" = optional_field(
         "Bias parameter generation strategy."
     )
-    init_sampler_model_option: "AdaptiveRouterOptions | None" = optional_field(
+    routing_initialization_mode: "AdaptiveRouterOptions | None" = optional_field(
         "Router/sampler sharing mode."
     )
     router_config: "RouterConfig | None" = optional_field(

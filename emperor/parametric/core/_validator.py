@@ -26,7 +26,7 @@ class _ParametricLayerValidator:
             "output_dim",
             "adaptive_weight_option",
             "adaptive_bias_option",
-            "init_sampler_model_option",
+            "routing_initialization_mode",
         ]
 
         for attr_name in required_attributes:
@@ -47,7 +47,7 @@ class _ParametricLayerValidator:
         required_types = {
             "input_dim": int,
             "output_dim": int,
-            "init_sampler_model_option": AdaptiveRouterOptions,
+            "routing_initialization_mode": AdaptiveRouterOptions,
             "adaptive_weight_option": AdaptiveWeightOptions,
             "adaptive_bias_option": AdaptiveBiasOptions,
         }
@@ -95,12 +95,12 @@ class _ParametricLayerValidator:
             self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
         )
         is_shared_router = (
-            self.model.init_sampler_model_option == AdaptiveRouterOptions.SHARED_ROUTER
+            self.model.routing_initialization_mode == AdaptiveRouterOptions.SHARED_ROUTER
         )
 
         if is_vector_option and is_shared_router:
             raise ValueError(
-                "When `adaptive_weight_option` is set to `VECTOR`, the `init_sampler_model_option` cannot be `SHARED_ROUTER`. This configuration is not supported."
+                "When `adaptive_weight_option` is set to `VECTOR`, the `routing_initialization_mode` cannot be `SHARED_ROUTER`. This configuration is not supported."
             )
 
 
@@ -126,19 +126,19 @@ class _ParametricHandlerValidator:
             self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
         )
         is_shared_router = (
-            self.model.init_sampler_model_option == AdaptiveRouterOptions.SHARED_ROUTER
+            self.model.routing_initialization_mode == AdaptiveRouterOptions.SHARED_ROUTER
         )
 
         if is_vector_option and is_shared_router:
             raise ValueError(
-                "When `adaptive_weight_option` is set to `VECTOR`, the `init_sampler_model_option` cannot be `SHARED_ROUTER`. This configuration is not supported."
+                "When `adaptive_weight_option` is set to `VECTOR`, the `routing_initialization_mode` cannot be `SHARED_ROUTER`. This configuration is not supported."
             )
 
     def ensure_shared_sampler_is_disabled(self) -> None:
         from emperor.parametric.core.config import AdaptiveRouterOptions
 
         is_shared_router = (
-            self.model.init_sampler_model_option == AdaptiveRouterOptions.SHARED_ROUTER
+            self.model.routing_initialization_mode == AdaptiveRouterOptions.SHARED_ROUTER
         )
 
         if is_shared_router:

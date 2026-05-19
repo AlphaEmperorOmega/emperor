@@ -4,13 +4,16 @@ from dataclasses import dataclass, field
 
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.base.utils import ConfigBase
-from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.experts.core.options import RoutingInitializationMode
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
-from emperor.experts.utils.layers import MixtureOfExpertsConfig
-from emperor.parametric.utils.config import ParametricLayerConfig
-from emperor.base.layer import LayerStackConfig
-from emperor.parametric.utils.mixtures.base import AdaptiveMixtureConfig
+from emperor.experts.core.config import MixtureOfExpertsConfig
+from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.sampler.core.samplers import SamplerConfig
 from emperor.sampler.core.routers import RouterConfig
@@ -74,6 +77,32 @@ MIXTURE_ANTI_DIAGONAL_FLAG = True
 PARAMETER_GENERATOR_BIAS_PARAMETER_FLAG = BIAS_PARAMETER_FLAG
 PARAMETER_GENERATOR_TRACK_TIME_FLAG = False
 PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG = True
+
+
+def default_expert_model_config(
+    input_dim: int = INPUT_DIM,
+    output_dim: int = OUTPUT_DIM,
+) -> LayerStackConfig:
+    hidden_dim = max(input_dim, output_dim)
+    return LayerStackConfig(
+        input_dim=input_dim,
+        hidden_dim=hidden_dim,
+        output_dim=output_dim,
+        num_layers=2,
+        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+        apply_output_pipeline_flag=False,
+        layer_config=LayerConfig(
+            activation=ActivationOptions.RELU,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_flag=False,
+            dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            shared_halting_flag=False,
+            layer_model_config=LinearLayerConfig(bias_flag=True),
+        ),
+    )
 
 
 @dataclass
@@ -142,20 +171,12 @@ class ModelConfig(ConfigBase):
         ),
         metadata={"help": "`SamplerConfig` configuration"},
     )
-    mixture_model_config: AdaptiveMixtureConfig = field(
-        default_factory=lambda: AdaptiveMixtureConfig(
-            input_dim=MIXTURE_INPUT_DIM,
-            output_dim=MIXTURE_OUTPUT_DIM,
-            top_k=MIXTURE_TOP_K,
-            weighted_parameters_flag=MIXTURE_WEIGHTED_PARAMETERS_FLAG,
-            num_experts=MIXTURE_NUM_EXPERTS,
-        ),
+    mixture_model_config: "AdaptiveMixtureConfig | None" = field(
+        default=None,
         metadata={"help": "`MixtureConfig` configuration"},
     )
-    parameter_generator_model_config: ParametricLayerConfig = field(
-        default_factory=lambda: ParametricLayerConfig(
-            time_tracker_flag=PARAMETER_GENERATOR_TRACK_TIME_FLAG,
-        ),
+    parameter_generator_model_config: "ParametricLayerConfig | None" = field(
+        default=None,
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
     linear_layer_config: LinearLayerConfig | LinearLayerConfig = field(
@@ -168,28 +189,30 @@ class ModelConfig(ConfigBase):
     )
     mixture_of_experts_config: MixtureOfExpertsConfig = field(
         default_factory=lambda: MixtureOfExpertsConfig(
+            expert_model_config=default_expert_model_config(),
             weighted_parameters_flag=True,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
     input_moe_layer_config: MixtureOfExpertsConfig = field(
         default_factory=lambda: MixtureOfExpertsConfig(
+            expert_model_config=default_expert_model_config(INPUT_DIM, 64),
             top_k=MIXTURE_TOP_K,
             num_experts=12,
             compute_expert_mixture_flag=False,
             weighted_parameters_flag=False,
-            init_sampler_option=InitSamplerOptions.SHARED,
+            routing_initialization_mode=RoutingInitializationMode.SHARED,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )
     output_moe_layer_config: MixtureOfExpertsConfig = field(
         default_factory=lambda: MixtureOfExpertsConfig(
-            layer_stack_option=1,
+            expert_model_config=default_expert_model_config(64, INPUT_DIM),
             top_k=MIXTURE_TOP_K,
             num_experts=12,
             compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
-            init_sampler_option=InitSamplerOptions.SHARED,
+            routing_initialization_mode=RoutingInitializationMode.SHARED,
         ),
         metadata={"help": "`MixtureOfExpertsConfig` configuration"},
     )

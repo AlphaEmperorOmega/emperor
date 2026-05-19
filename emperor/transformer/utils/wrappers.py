@@ -1,7 +1,7 @@
 from torch import Tensor
 from emperor.base.layer import Layer
 from emperor.base.utils import Module
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 
 
 class SelfAttentionLayer(Layer):

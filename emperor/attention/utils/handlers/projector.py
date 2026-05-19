@@ -6,11 +6,11 @@ from torch.nn.modules import Sequential
 from emperor.sampler.model import SamplerModel
 from emperor.linears.core.layers import LinearAbstract
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.experts.utils.enums import InitSamplerOptions
+from emperor.experts.core.options import RoutingInitializationMode
 from emperor.sampler.core.routers import RouterConfig, RouterModel
-from emperor.experts.utils.layers import (
+from emperor.experts.core.config import MixtureOfExpertsConfig
+from emperor.experts.core.layers import (
     MixtureOfExperts,
-    MixtureOfExpertsConfig,
     MixtureOfExpertsMap,
     MixtureOfExpertsReduce,
 )
@@ -217,8 +217,8 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
     ):
         super().__init__(cfg, overrides)
 
-        self.router_config = self.experts_config.router_model_config
-        self.sampler_config = self.experts_config.sampler_model_config
+        self.router_config = self.experts_config.router_config
+        self.sampler_config = self.experts_config.sampler_config
 
         qk_dims = (self.embedding_dim, self.query_key_projection_dim)
         v_dims = (self.embedding_dim, self.value_projection_dim)
@@ -239,8 +239,8 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         self,
     ) -> tuple["RouterModel", "SamplerModel"]:
         router_overrides = RouterConfig(input_dim=self.embedding_dim)
-        router = RouterModel(self.experts_config.router_model_config, router_overrides)
-        sampler = SamplerModel(self.experts_config.sampler_model_config)
+        router = RouterModel(self.experts_config.router_config, router_overrides)
+        sampler = SamplerModel(self.experts_config.sampler_config)
         return router, sampler
 
     def _create_q_model(self, input_dim: int, output_dim: int):
@@ -269,7 +269,7 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         overrides = MixtureOfExpertsConfig(
             input_dim=self.value_projection_dim,
             output_dim=self.embedding_dim,
-            init_sampler_option=InitSamplerOptions.DISABLED,
+            routing_initialization_mode=RoutingInitializationMode.DISABLED,
         )
         return MixtureOfExpertsReduce(self.experts_config, overrides)
 

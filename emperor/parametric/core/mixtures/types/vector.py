@@ -4,10 +4,8 @@ from torch import Tensor
 from emperor.parametric.core.mixtures.types.utils._validator import (
     _VectorMixtureValidator,
 )
-from emperor.parametric.core.mixtures.base import (
-    AdaptiveMixtureBase,
-    AdaptiveMixtureConfig,
-)
+from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
+from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
 
 from typing import TYPE_CHECKING
 

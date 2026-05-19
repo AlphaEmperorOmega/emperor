@@ -1,7 +1,7 @@
 import torch
 
 from torch.types import Tensor
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.base.layer import Layer
 from emperor.base.utils import Module
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from typing import Callable
 from emperor.config import ModelConfig
-from emperor.base.enums import BaseOptions
+from emperor.base.options import BaseOptions
 from lightning import Trainer, seed_everything
 from lightning.pytorch.loggers import TensorBoardLogger
 from emperor.datasets.image.classification.mnist import Mnist

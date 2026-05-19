@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-    from emperor.base.enums import LayerNormPositionOptions
+    from emperor.base.options import LayerNormPositionOptions
     from emperor.transformer.utils.patch.options.base import PatchConfig
     from emperor.embedding.absolute.config import (
         AbsolutePositionalEmbeddingConfig,

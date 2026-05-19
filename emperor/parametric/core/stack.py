@@ -1,6 +1,6 @@
 from torch.types import Tensor
 from emperor.base.utils import Module
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 
 from typing import TYPE_CHECKING

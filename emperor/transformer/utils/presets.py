@@ -6,21 +6,21 @@ from emperor.linears.options import LinearLayerStackOptions
 from emperor.parametric.options import AdaptiveLayerStackOptions
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.parametric.core.config import AdaptiveRouterOptions
-from emperor.experts.options import MixtureOfExpertsStackOptions
-from emperor.experts.utils.presets import MixtureOfExpertsPresets
+from emperor.experts.model import MixtureOfExpertsModel
+from emperor.experts.core.presets import MixtureOfExpertsPresets
 from emperor.transformer.utils.patch.selector import PatchOptions
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.transformer.utils.patch.options.base import PatchConfig
 from emperor.attention.utils.presets import MultiHeadAttentionPresets
 from emperor.parametric.core.presets import ParametricLayerPresets
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.embedding.options import AbsolutePositionalEmbeddingOptions, RelativePositionalEmbeddingOptions
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.embedding.relative.config import RelativePositionalEmbeddingConfig
-from emperor.experts.utils.enums import (
+from emperor.experts.core.options import (
     ExpertWeightingPositionOptions,
-    InitSamplerOptions,
+    RoutingInitializationMode,
 )
 from emperor.parametric.core.mixtures.options import (
     AdaptiveBiasOptions,
@@ -143,7 +143,7 @@ class TransformerPresets:
         adaptive_mixture_weighted_parameters_flag=False,
         adaptive_mixture_clip_parameter_option=ClipParameterOptions.BEFORE,
         adaptive_mixture_clip_range=5.0,
-        adaptive_init_sampler_model_option: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
+        adaptive_routing_initialization_mode: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
         adaptive_time_tracker_flag: bool = False,
         adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         adaptive_behaviour_diagonal_option: type[DynamicDiagonalConfig] | None = None,
@@ -171,7 +171,7 @@ class TransformerPresets:
         experts_layer_stack_option=LinearLayerStackOptions.BASE,
         experts_compute_expert_mixture_flag=True,
         experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        experts_init_sampler_option=InitSamplerOptions.SHARED,
+        experts_routing_initialization_mode=RoutingInitializationMode.SHARED,
         experts_weighted_parameters_flag=False,
         experts_bias_flag: bool = False,
         experts_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
@@ -195,7 +195,7 @@ class TransformerPresets:
         stack_hidden_dim = stack_hidden_dim if stack_hidden_dim > 0 else _hidden_dim
 
         projector_config = None
-        if layer_stack_option == MixtureOfExpertsStackOptions.BASE:
+        if layer_stack_option == MixtureOfExpertsModel:
             projector_config = MixtureOfExpertsPresets.experts_stack_preset(
                 input_dim=input_dim,
                 output_dim=output_dim,
@@ -219,7 +219,7 @@ class TransformerPresets:
                 experts_layer_stack_option=experts_layer_stack_option,
                 experts_compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                 experts_weighting_position_option=experts_weighting_position_option,
-                experts_init_sampler_option=experts_init_sampler_option,
+                experts_routing_initialization_mode=experts_routing_initialization_mode,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_model_bias_flag=experts_bias_flag,
                 experts_model_generator_depth=experts_generator_depth,
@@ -255,7 +255,7 @@ class TransformerPresets:
                 adaptive_mixture_weighted_parameters_flag=adaptive_mixture_weighted_parameters_flag,
                 adaptive_mixture_clip_parameter_option=adaptive_mixture_clip_parameter_option,
                 adaptive_mixture_clip_range=adaptive_mixture_clip_range,
-                adaptive_init_sampler_model_option=adaptive_init_sampler_model_option,
+                adaptive_routing_initialization_mode=adaptive_routing_initialization_mode,
                 adaptive_time_tracker_flag=adaptive_time_tracker_flag,
                 adaptive_behaviour_generator_depth=adaptive_behaviour_generator_depth,
                 adaptive_behaviour_diagonal_option=adaptive_behaviour_diagonal_option,
@@ -283,7 +283,7 @@ class TransformerPresets:
                 experts_layer_stack_option=experts_layer_stack_option,
                 experts_compute_expert_mixture_flag=experts_compute_expert_mixture_flag,
                 experts_weighting_position_option=experts_weighting_position_option,
-                experts_init_sampler_option=experts_init_sampler_option,
+                experts_routing_initialization_mode=experts_routing_initialization_mode,
                 experts_weighted_parameters_flag=experts_weighted_parameters_flag,
                 experts_model_bias_flag=experts_bias_flag,
                 experts_model_generator_depth=experts_generator_depth,
@@ -460,7 +460,7 @@ class TransformerPresets:
         attention_adaptive_mixture_weighted_parameters_flag=False,
         attention_adaptive_mixture_clip_parameter_option=ClipParameterOptions.BEFORE,
         attention_adaptive_mixture_clip_range=5.0,
-        attention_adaptive_init_sampler_model_option: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
+        attention_adaptive_routing_initialization_mode: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
         attention_adaptive_time_tracker_flag: bool = False,
         attention_adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         attention_adaptive_behaviour_diagonal_option: type[DynamicDiagonalConfig] | None = None,
@@ -488,7 +488,7 @@ class TransformerPresets:
         attention_experts_layer_stack_option=LinearLayerStackOptions.BASE,
         attention_experts_compute_expert_mixture_flag=True,
         attention_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        attention_experts_init_sampler_option=InitSamplerOptions.DISABLED,
+        attention_experts_routing_initialization_mode=RoutingInitializationMode.DISABLED,
         attention_experts_weighted_parameters_flag=False,
         attention_experts_bias_flag: bool = False,
         attention_experts_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
@@ -508,7 +508,7 @@ class TransformerPresets:
         forward_adaptive_mixture_weighted_parameters_flag=False,
         forward_adaptive_mixture_clip_parameter_option=ClipParameterOptions.BEFORE,
         forward_adaptive_mixture_clip_range=5.0,
-        forward_adaptive_init_sampler_model_option: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
+        forward_adaptive_routing_initialization_mode: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
         forward_adaptive_time_tracker_flag: bool = False,
         forward_adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         forward_adaptive_behaviour_diagonal_option: type[DynamicDiagonalConfig] | None = None,
@@ -536,7 +536,7 @@ class TransformerPresets:
         forward_experts_layer_stack_option=LinearLayerStackOptions.BASE,
         forward_experts_compute_expert_mixture_flag=True,
         forward_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        forward_experts_init_sampler_option=InitSamplerOptions.DISABLED,
+        forward_experts_routing_initialization_mode=RoutingInitializationMode.DISABLED,
         forward_experts_weighted_parameters_flag=False,
         forward_experts_bias_flag: bool = False,
         forward_experts_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
@@ -600,7 +600,7 @@ class TransformerPresets:
             projector_adaptive_mixture_weighted_parameters_flag=attention_adaptive_mixture_weighted_parameters_flag,
             projector_adaptive_mixture_clip_parameter_option=attention_adaptive_mixture_clip_parameter_option,
             projector_adaptive_mixture_clip_range=attention_adaptive_mixture_clip_range,
-            projector_adaptive_init_sampler_model_option=attention_adaptive_init_sampler_model_option,
+            projector_adaptive_routing_initialization_mode=attention_adaptive_routing_initialization_mode,
             projector_adaptive_time_tracker_flag=attention_adaptive_time_tracker_flag,
             projector_adaptive_behaviour_generator_depth=attention_adaptive_behaviour_generator_depth,
             projector_adaptive_behaviour_diagonal_option=attention_adaptive_behaviour_diagonal_option,
@@ -628,7 +628,7 @@ class TransformerPresets:
             projector_experts_layer_stack_option=attention_experts_layer_stack_option,
             projector_experts_compute_expert_mixture_flag=attention_experts_compute_expert_mixture_flag,
             projector_experts_weighting_position_option=attention_experts_weighting_position_option,
-            projector_experts_init_sampler_option=attention_experts_init_sampler_option,
+            projector_experts_routing_initialization_mode=attention_experts_routing_initialization_mode,
             projector_experts_weighted_parameters_flag=attention_experts_weighted_parameters_flag,
             projector_experts_bias_flag=attention_experts_bias_flag,
             projector_experts_generator_depth=attention_experts_generator_depth,
@@ -663,7 +663,7 @@ class TransformerPresets:
             adaptive_mixture_weighted_parameters_flag=forward_adaptive_mixture_weighted_parameters_flag,
             adaptive_mixture_clip_parameter_option=forward_adaptive_mixture_clip_parameter_option,
             adaptive_mixture_clip_range=forward_adaptive_mixture_clip_range,
-            adaptive_init_sampler_model_option=forward_adaptive_init_sampler_model_option,
+            adaptive_routing_initialization_mode=forward_adaptive_routing_initialization_mode,
             adaptive_time_tracker_flag=forward_adaptive_time_tracker_flag,
             adaptive_behaviour_generator_depth=forward_adaptive_behaviour_generator_depth,
             adaptive_behaviour_diagonal_option=forward_adaptive_behaviour_diagonal_option,
@@ -691,7 +691,7 @@ class TransformerPresets:
             experts_layer_stack_option=forward_experts_layer_stack_option,
             experts_compute_expert_mixture_flag=forward_experts_compute_expert_mixture_flag,
             experts_weighting_position_option=forward_experts_weighting_position_option,
-            experts_init_sampler_option=forward_experts_init_sampler_option,
+            experts_routing_initialization_mode=forward_experts_routing_initialization_mode,
             experts_weighted_parameters_flag=forward_experts_weighted_parameters_flag,
             experts_bias_flag=forward_experts_bias_flag,
             experts_generator_depth=forward_experts_generator_depth,

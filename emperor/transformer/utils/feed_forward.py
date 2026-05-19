@@ -5,7 +5,7 @@ from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase, Module
 from emperor.parametric.options import AdaptiveLayerStackOptions
-from emperor.experts.options import MixtureOfExpertsStackOptions
+from emperor.experts.model import MixtureOfExpertsModel
 from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from emperor.transformer.utils._validator import FeedForwardValidator
 
@@ -25,7 +25,7 @@ class FeedForwardConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    layer_stack_option: "LinearLayerStackOptions | AdaptiveLayerStackOptions | MixtureOfExpertsStackOptions | None" = field(
+    layer_stack_option: "LinearLayerStackOptions | AdaptiveLayerStackOptions | type[MixtureOfExpertsModel] | None" = field(
         default=None,
         metadata={"help": "Number of layers added to the router"},
     )
@@ -47,7 +47,12 @@ class FeedForward(Module):
 
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
-        self.layer_stack_option = self.cfg.layer_stack_option.value
+        layer_stack_option = self.cfg.layer_stack_option
+        self.layer_stack_option = (
+            layer_stack_option.value
+            if hasattr(layer_stack_option, "value")
+            else layer_stack_option
+        )
         self.num_layers = self.cfg.num_layers
         self.validator = FeedForwardValidator(self)
         self.model = self._create_model()
@@ -61,7 +66,7 @@ class FeedForward(Module):
         )
         model = self.layer_stack_option(self.main_cfg, overrides)
         if isinstance(model, LayerStack):
-            return model.build_model()
+            return model.build()
         return model
 
     def _store_shape_attributes(self):

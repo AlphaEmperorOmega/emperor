@@ -3,16 +3,16 @@ from emperor.linears.core.presets import LinearPresets
 from emperor.attention.utils.enums import AttentionOptions
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.parametric.core.config import AdaptiveRouterOptions
-from emperor.experts.utils.presets import MixtureOfExpertsPresets
+from emperor.experts.core.presets import MixtureOfExpertsPresets
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.parametric.core.presets import ParametricLayerPresets
-from emperor.base.enums import ActivationOptions, LayerNormPositionOptions
+from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.embedding.options import RelativePositionalEmbeddingOptions
 from emperor.embedding.relative.config import RelativePositionalEmbeddingConfig
-from emperor.experts.utils.enums import (
+from emperor.experts.core.options import (
     ExpertWeightingPositionOptions,
-    InitSamplerOptions,
+    RoutingInitializationMode,
 )
 from emperor.parametric.core.mixtures.options import (
     AdaptiveBiasOptions,
@@ -65,7 +65,7 @@ class MultiHeadAttentionPresets:
         projector_adaptive_mixture_weighted_parameters_flag=False,
         projector_adaptive_mixture_clip_parameter_option=ClipParameterOptions.BEFORE,
         projector_adaptive_mixture_clip_range=5.0,
-        projector_adaptive_init_sampler_model_option: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
+        projector_adaptive_routing_initialization_mode: AdaptiveRouterOptions = AdaptiveRouterOptions.SHARED_ROUTER,
         projector_adaptive_time_tracker_flag: bool = False,
         projector_adaptive_behaviour_generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
         projector_adaptive_behaviour_diagonal_option: type[DynamicDiagonalConfig] | None = None,
@@ -93,7 +93,7 @@ class MultiHeadAttentionPresets:
         projector_experts_layer_stack_option=LinearLayerStackOptions.BASE,
         projector_experts_compute_expert_mixture_flag=True,
         projector_experts_weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        projector_experts_init_sampler_option=InitSamplerOptions.LAYER,
+        projector_experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
         projector_experts_stack_num_layers: int = 2,
         projector_experts_weighted_parameters_flag=False,
         projector_experts_bias_flag: bool = False,
@@ -135,7 +135,7 @@ class MultiHeadAttentionPresets:
             adaptive_mixture_weighted_parameters_flag=projector_adaptive_mixture_weighted_parameters_flag,
             adaptive_mixture_clip_parameter_option=projector_adaptive_mixture_clip_parameter_option,
             adaptive_mixture_clip_range=projector_adaptive_mixture_clip_range,
-            adaptive_init_sampler_model_option=projector_adaptive_init_sampler_model_option,
+            adaptive_routing_initialization_mode=projector_adaptive_routing_initialization_mode,
             adaptive_time_tracker_flag=projector_adaptive_time_tracker_flag,
             adaptive_behaviour_generator_depth=projector_adaptive_behaviour_generator_depth,
             adaptive_behaviour_diagonal_option=projector_adaptive_behaviour_diagonal_option,
@@ -163,7 +163,7 @@ class MultiHeadAttentionPresets:
             experts_layer_stack_option=projector_experts_layer_stack_option,
             experts_compute_expert_mixture_flag=projector_experts_compute_expert_mixture_flag,
             experts_weighting_position_option=projector_experts_weighting_position_option,
-            experts_init_sampler_option=projector_experts_init_sampler_option,
+            experts_routing_initialization_mode=projector_experts_routing_initialization_mode,
             experts_weighted_parameters_flag=projector_experts_weighted_parameters_flag,
             experts_model_bias_flag=projector_experts_bias_flag,
             experts_model_generator_depth=projector_experts_generator_depth,
@@ -233,7 +233,7 @@ class MultiHeadAttentionPresets:
             experts_layer_stack_option=projector_experts_layer_stack_option,
             experts_compute_expert_mixture_flag=projector_experts_compute_expert_mixture_flag,
             experts_weighting_position_option=projector_experts_weighting_position_option,
-            experts_init_sampler_option=projector_experts_init_sampler_option,
+            experts_routing_initialization_mode=projector_experts_routing_initialization_mode,
             experts_weighted_parameters_flag=projector_experts_weighted_parameters_flag,
             experts_model_bias_flag=projector_experts_bias_flag,
             experts_model_generator_depth=projector_experts_generator_depth,

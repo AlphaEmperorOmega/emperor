@@ -1,4 +1,4 @@
-from emperor.parametric.core.mixtures.base import AdaptiveMixtureConfig
+from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
 from emperor.base.utils import Module
 from emperor.parametric.core.mixtures.types.vector import VectorWeightsMixture
 from emperor.parametric.core.mixtures.types.matrix import (

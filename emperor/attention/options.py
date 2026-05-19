@@ -1,5 +1,5 @@
 from emperor.attention.utils.layer import MultiHeadAttention
-from emperor.base.enums import BaseOptions
+from emperor.base.options import BaseOptions
 
 
 class AdaptiveLayerOptions(BaseOptions):

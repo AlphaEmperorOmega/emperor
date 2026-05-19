@@ -4,14 +4,14 @@ from torch import Tensor
 from emperor.base.utils import Module
 from emperor.sampler.core.samplers import SamplerConfig
 from emperor.sampler.core.routers import RouterConfig
-from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.core._validator import _ParametricLayerValidator
 from emperor.parametric.core.mixtures.selectors import (
     AdaptiveWeightSelector,
     AdaptiveBiasSelector,
 )
-from emperor.augmentations.adaptive_parameters.model import AdaptiveParameterAugmentation
-from emperor.augmentations.adaptive_parameters.config import AdaptiveParameterAugmentationConfig
+from emperor.augmentations.adaptive_parameters.config import (
+    AdaptiveParameterAugmentationConfig,
+)
 from emperor.parametric.core.config import ParametricLayerConfig, AdaptiveRouterOptions
 from emperor.parametric.core.mixtures.options import (
     AdaptiveBiasOptions,
@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 
 
 class ParametricLayer(Module):
@@ -37,14 +38,12 @@ class ParametricLayer(Module):
     ):
         super().__init__()
         config = getattr(cfg, "parameter_generator_model_config", cfg)
-        self.cfg: "ParametricLayerConfig" = self._override_config(
-            config, overrides
-        )
+        self.cfg: "ParametricLayerConfig" = self._override_config(config, overrides)
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.adaptive_weight_option = self.cfg.adaptive_weight_option
         self.adaptive_bias_option = self.cfg.adaptive_bias_option
-        self.init_sampler_model_option = self.cfg.init_sampler_model_option
+        self.routing_initialization_mode = self.cfg.routing_initialization_mode
 
         self.adaptive_augmentation_config = self.cfg.adaptive_augmentation_config
         self.router_config = self.cfg.router_config
@@ -67,15 +66,15 @@ class ParametricLayer(Module):
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return AdaptiveParameterAugmentation(self.adaptive_augmentation_config, overrides)
+        return self.adaptive_augmentation_config.build(overrides)
 
-    def __init_weight_model(self) -> AdaptiveMixtureBase:
+    def __init_weight_model(self) -> "AdaptiveMixtureBase":
         overrides = ParametricLayerConfig(
             input_dim=self.input_dim, output_dim=self.output_dim
         )
         return AdaptiveWeightSelector(self.cfg, overrides).build_model()
 
-    def __init_bias_model(self) -> AdaptiveMixtureBase | None:
+    def __init_bias_model(self) -> "AdaptiveMixtureBase | None":
         from emperor.parametric.core.mixtures.options import AdaptiveBiasOptions
 
         if self.adaptive_bias_option == AdaptiveBiasOptions.DISABLED:
@@ -188,7 +187,7 @@ class ParametricLayer(Module):
             return None, loss
 
         indepentent_option = AdaptiveRouterOptions.INDEPENTENT_ROUTER
-        if self.init_sampler_model_option == indepentent_option:
+        if self.routing_initialization_mode == indepentent_option:
             probabilities, indices, bias_skip_mask, bias_loss = (
                 self.__sample_bias_probabilities_and_indices(input, skip_mask=skip_mask)
             )

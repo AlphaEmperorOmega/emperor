@@ -74,7 +74,7 @@ class MixtureOfAttentionHeadsProjectorValidator:
             raise ValueError("Configuration Error: 'use_kv_expert_models_flag' is None")
 
     def __ensure_required_config_options_are_correct_types(self):
-        from emperor.experts.utils.layers import MixtureOfExpertsConfig
+        from emperor.experts.core.config import MixtureOfExpertsConfig
 
         if not isinstance(self.model.experts_config, MixtureOfExpertsConfig):
             raise TypeError(

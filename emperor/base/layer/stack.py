@@ -2,7 +2,7 @@ from copy import deepcopy
 
 from torch.nn import Sequential
 from emperor.base.utils import Module
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,

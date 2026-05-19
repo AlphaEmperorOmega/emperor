@@ -1,16 +1,15 @@
 import torch
 
 from torch import Tensor
-from emperor.experts.utils.enums import InitSamplerOptions
-from emperor.experts.utils.layers import MixtureOfExperts, MixtureOfExpertsConfig
+from emperor.experts.core.options import RoutingInitializationMode
+from emperor.experts.core.config import MixtureOfExpertsConfig
+from emperor.experts.core.layers import MixtureOfExperts
 from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
 from emperor.parametric.core.mixtures.types.utils._validator import (
     _GeneratorMixtureValidator,
 )
-from emperor.parametric.core.mixtures.base import (
-    AdaptiveMixtureBase,
-    AdaptiveMixtureConfig,
-)
+from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
+from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
 
 
 from typing import TYPE_CHECKING
@@ -56,7 +55,7 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
             options = {
                 "compute_expert_mixture_flag": False,
                 "weighted_parameters_flag": False,
-                "init_sampler_option": InitSamplerOptions.DISABLED,
+                "routing_initialization_mode": RoutingInitializationMode.DISABLED,
             }
         input_overrides = MixtureOfExpertsConfig(
             input_dim=self.input_dim, output_dim=self.input_dim, **options

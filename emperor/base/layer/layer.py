@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.types import Tensor
 from torch.nn import Sequential
 from emperor.base.utils import ConfigBase, Module
-from emperor.base.enums import (
+from emperor.base.options import (
     ActivationOptions,
     LayerNormPositionOptions,
 )

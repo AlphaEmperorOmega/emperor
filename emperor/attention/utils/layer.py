@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from torch.types import _dtype as DType
     from emperor.linears.options import LinearLayerStackOptions
     from emperor.parametric.options import AdaptiveLayerStackOptions
-    from emperor.experts.utils.layers import MixtureOfExpertsConfig
+    from emperor.experts.core.config import MixtureOfExpertsConfig
 
 
 @dataclass

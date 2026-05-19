@@ -1,5 +1,5 @@
 from emperor.base.layer.config import LayerStackConfig
-from emperor.base.enums import LastLayerBiasOptions
+from emperor.base.options import LastLayerBiasOptions
 
 from typing import TYPE_CHECKING
 

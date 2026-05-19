@@ -1,4 +1,4 @@
-from emperor.base.enums import BaseOptions
+from emperor.base.options import BaseOptions
 from emperor.base.utils import Module
 from emperor.transformer.utils.patch.options.base import PatchConfig
 from emperor.transformer.utils.patch.options.patch_embedding_linear import (

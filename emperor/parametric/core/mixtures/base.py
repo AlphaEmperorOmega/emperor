@@ -1,50 +1,11 @@
-from dataclasses import dataclass, field
-from emperor.base.utils import Module, ConfigBase
-from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
+from emperor.base.utils import Module
 from emperor.parametric.core.mixtures._validator import _AdaptiveMixtureBaseValidator
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-
-
-@dataclass
-class AdaptiveMixtureConfig(ConfigBase):
-    input_dim: int | None = field(
-        default=None,
-        metadata={"help": "Mixture model input dimension"},
-    )
-    output_dim: int | None = field(
-        default=None,
-        metadata={"help": "Mixture model output dimension"},
-    )
-    top_k: int | None = field(
-        default=None,
-        metadata={
-            "help": "Inidicates the top-k probs and indices to be selected from a distribution"
-        },
-    )
-    num_experts: int | None = field(
-        default=None,
-        metadata={"help": "Router output dimension"},
-    )
-    weighted_parameters_flag: bool | None = field(
-        default=None,
-        metadata={
-            "help": "When `True` the sepected parameters will be multiplied by their probs"
-        },
-    )
-    clip_parameter_option: ClipParameterOptions | None = field(
-        default=None,
-        metadata={"help": "Specifies the clipping strategy for the mixture parameters"},
-    )
-    clip_range: float | None = field(
-        default=None,
-        metadata={
-            "help": "Specifies the clipping range for the generated mixture parameters. The range will be between +- `clip_range`"
-        },
-    )
+    from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
 
 
 class AdaptiveMixtureBase(Module):

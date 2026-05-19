@@ -21,7 +21,7 @@ class ParameterHanlderBase(Module):
         self.output_dim = self.cfg.output_dim
         self.adaptive_weight_option = self.cfg.adaptive_weight_option
         self.adaptive_bias_option = self.cfg.adaptive_bias_option
-        self.init_sampler_model_option = self.cfg.init_sampler_model_option
+        self.routing_initialization_mode = self.cfg.routing_initialization_mode
         self.router_config = self.cfg.router_config
         self.router_overrides = RouterConfig(input_dim=self.input_dim)
         self.sampler_config = self.cfg.sampler_config
@@ -33,7 +33,7 @@ class ParameterHanlderBase(Module):
         from emperor.parametric.core.config import AdaptiveRouterOptions
 
         shared_option = AdaptiveRouterOptions.SHARED_ROUTER
-        if self.init_sampler_model_option == shared_option:
+        if self.routing_initialization_mode == shared_option:
             return self._init_shared_sampler()
         return self._init_independent_sampler()
 

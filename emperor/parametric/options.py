@@ -1,4 +1,4 @@
-from emperor.base.enums import BaseOptions
+from emperor.base.options import BaseOptions
 from emperor.parametric.core.layers import ParametricLayer
 from emperor.parametric.core.stack import ParametricLayerStack
 

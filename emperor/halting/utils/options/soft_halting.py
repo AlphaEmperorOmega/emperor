@@ -6,7 +6,7 @@ from torch import Tensor
 from torch.nn import Sequential
 from dataclasses import dataclass, field
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.base.enums import LastLayerBiasOptions
+from emperor.base.options import LastLayerBiasOptions
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
 
