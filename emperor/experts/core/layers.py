@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from torch import Tensor, device
+from torch import Tensor
 from dataclasses import dataclass
 from emperor.sampler.model import SamplerModel
 from emperor.base.layer import Layer, LayerStackConfig
@@ -19,9 +19,7 @@ from emperor.experts.core.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.config import ModelConfig
     from emperor.sampler.core.config import RouterConfig, SamplerConfig
-    from emperor.sampler.core.routers import RouterModel
 
 
 @dataclass
@@ -37,12 +35,11 @@ class _ExpertInputData:
 class MixtureOfExperts(Module):
     def __init__(
         self,
-        cfg: "MixtureOfExpertsConfig | ModelConfig",
+        cfg: "MixtureOfExpertsConfig",
         overrides: "MixtureOfExpertsConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "mixture_of_experts_config", cfg)
-        self.cfg: "MixtureOfExpertsConfig" = self._override_config(config, overrides)
+        self.cfg: "MixtureOfExpertsConfig" = self._override_config(cfg, overrides)
         self.main_cfg: "LayerStackConfig" = self.cfg.expert_model_config
 
         self.input_dim: int = self.cfg.input_dim
@@ -56,7 +53,9 @@ class MixtureOfExperts(Module):
         )
         self.compute_expert_mixture_flag: bool = self.cfg.compute_expert_mixture_flag
         self.weighted_parameters_flag: bool = self.cfg.weighted_parameters_flag
-        self.routing_initialization_mode: "RoutingInitializationMode" = self.cfg.routing_initialization_mode
+        self.routing_initialization_mode: "RoutingInitializationMode" = (
+            self.cfg.routing_initialization_mode
+        )
         self.weighting_position_option: "ExpertWeightingPositionOptions" = (
             self.cfg.weighting_position_option
         )
@@ -66,27 +65,26 @@ class MixtureOfExperts(Module):
         MixtureOfExpertsValidator.validate(self)
         self.capacity_handler = _ExpertCapacityHandler(self.cfg)
         self.expert_weighting_handler = _ExpertWeightingHandler(self.cfg)
-        self.router, self.sampler = self.__maybe_create_router_and_sampler()
+        self.sampler = self.__maybe_create_sampler()
         self.expert_modules = self.__create_experts()
 
     def get_top_k(self) -> int:
         return self.top_k
 
-    def __maybe_create_router_and_sampler(
+    def __maybe_create_sampler(
         self,
-    ) -> tuple["RouterModel | None", "SamplerModel | None"]:
+    ) -> "SamplerModel | None":
         from emperor.sampler.core.config import RouterConfig, SamplerConfig
 
         if self.routing_initialization_mode != RoutingInitializationMode.LAYER:
-            return None, None
+            return None
         MixtureOfExpertsValidator.validate_router_config_exists(self)
         MixtureOfExpertsValidator.validate_sampler_config_exists(self)
         router_overrides = RouterConfig(input_dim=self.input_dim)
         router_config = self._override_config(self.router_config, router_overrides)
         sampler_overrides = SamplerConfig(router_config=router_config)
         sampler_config = self._override_config(self.sampler_config, sampler_overrides)
-        sampler = SamplerModel(sampler_config)
-        return sampler.router, sampler
+        return SamplerModel(sampler_config)
 
     def __create_experts(self) -> nn.ModuleList:
         expert_list = []
@@ -134,7 +132,7 @@ class MixtureOfExperts(Module):
         if self.routing_initialization_mode != RoutingInitializationMode.LAYER or (
             indices is not None or probabilities is not None
         ):
-            return probabilities, indices, torch.tensor(0.0)
+            return probabilities, indices, inputs.new_zeros(())
         MixtureOfExpertsValidator.validate_sampler_is_initialized(self)
         MixtureOfExpertsValidator.validate_external_probabilities_are_not_given(
             probabilities, indices
@@ -253,7 +251,7 @@ class MixtureOfExperts(Module):
     ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
         expert_outputs_list = []
         sample_indices_for_expert_list = []
-        total_loss = torch.tensor(0.0)
+        total_loss = experts_data[0].expert_samples.new_zeros(())
 
         for expert_data in experts_data:
             expert_output, loss = self.__compute_expert_output(expert_data)
@@ -283,7 +281,7 @@ class MixtureOfExperts(Module):
 
         expert_model = self.expert_modules[expert_data.expert_index]
         output = Layer.forward_with_state(expert_model, expert_samples)
-        return output, torch.tensor(0.0)
+        return output, expert_samples.new_zeros(())
 
     def __append_expert_output(
         self,
@@ -352,7 +350,7 @@ class MixtureOfExperts(Module):
 class MixtureOfExpertsMap(MixtureOfExperts):
     def __init__(
         self,
-        cfg: "MixtureOfExpertsConfig | ModelConfig",
+        cfg: "MixtureOfExpertsConfig",
         overrides: "MixtureOfExpertsConfig | None" = None,
     ):
         overrides = self.__update_overrides(overrides)
@@ -381,7 +379,7 @@ class MixtureOfExpertsMap(MixtureOfExperts):
 class MixtureOfExpertsReduce(MixtureOfExperts):
     def __init__(
         self,
-        cfg: "MixtureOfExpertsConfig | ModelConfig",
+        cfg: "MixtureOfExpertsConfig",
         overrides: "MixtureOfExpertsConfig | None" = None,
     ):
         overrides = self.__update_overrides(overrides)

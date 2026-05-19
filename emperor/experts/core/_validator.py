@@ -345,9 +345,10 @@ class MixtureOfExpertsValidator(ValidatorBase):
         probabilities: Tensor | None,
         indices: Tensor | None,
     ) -> None:
-        if model.routing_initialization_mode == RoutingInitializationMode.LAYER and (
-            probabilities is None and indices is None
-        ):
+        if model.routing_initialization_mode == RoutingInitializationMode.LAYER:
+            MixtureOfExpertsValidator.validate_external_probabilities_are_not_given(
+                probabilities, indices
+            )
             return
         if probabilities is None:
             raise ValueError(
@@ -421,19 +422,3 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
                 "`MixtureOfExpertsConfig` instance."
             )
 
-    @staticmethod
-    def validate_no_sampler_with_indices(model: "MixtureOfExpertsModel") -> None:
-        if model.routing_initialization_mode == RoutingInitializationMode.DISABLED:
-            raise ValueError(
-                "Invalid configuration: `routing_initialization_mode` must not be "
-                "`RoutingInitializationMode.DISABLED` when `indices` are provided. This "
-                "prevents creating duplicate `RouterModel` and `SamplerModel` "
-                "instances in the current layer."
-            )
-
-    @staticmethod
-    def validate_tensor_is_vector_or_matrix(tensor: Tensor | None) -> None:
-        if tensor is not None and tensor.dim() > 2:
-            raise ValueError(
-                "Input Error: tensor must be a 1-dimensional or 2-dimensional tensor."
-            )
