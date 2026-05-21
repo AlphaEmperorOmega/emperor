@@ -4,7 +4,7 @@ from emperor.base.utils import Module
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.experts.core.layers import MixtureOfExperts
 from emperor.experts.core.options import RoutingInitializationMode
-from emperor.experts.core.stack import MixtureOfExpertsStack
+from emperor.experts.core.state import MixtureOfExpertsLayerState
 from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core._validator import MixtureOfExpertsModelValidator
 
@@ -22,7 +22,6 @@ class MixtureOfExpertsModel(Module):
         self.top_k = self.cfg.top_k
         self.input_dim = self.cfg.input_dim
         self.routing_initialization_mode = self.cfg.routing_initialization_mode
-        self.router_config = self.cfg.router_config
         self.sampler_config = self.cfg.sampler_config
 
         self.expert_stack = self._create_expert_stack()
@@ -58,7 +57,7 @@ class MixtureOfExpertsModel(Module):
         if self.routing_initialization_mode == RoutingInitializationMode.SHARED:
             return MixtureOfExperts(self.__create_shared_mixture_config())
         if self.stack_config is not None:
-            return MixtureOfExpertsStack(self.stack_config).build()
+            return self.stack_config.build()
         return MixtureOfExperts(self.cfg)
 
     def __create_shared_mixture_config(self) -> MixtureOfExpertsConfig:
@@ -83,10 +82,11 @@ class MixtureOfExpertsModel(Module):
     ) -> tuple[Tensor, Tensor]:
         if isinstance(self.expert_stack, MixtureOfExperts):
             return self.expert_stack(input, probabilities, indices)
-        inputs = {
-            "input_batch": input,
-            "probabilities": probabilities,
-            "indices": indices,
-            "loss": None,
-        }
-        return self.expert_stack(inputs)
+        state = MixtureOfExpertsLayerState(
+            hidden=input,
+            probabilities=probabilities,
+            indices=indices,
+            loss=None,
+        )
+        state = self.expert_stack(state)
+        return state.hidden, state.loss

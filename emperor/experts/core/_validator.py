@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class MixtureOfExpertsValidator(ValidatorBase):
-    OPTIONAL_FIELDS = {"dropped_token_behavior", "router_config", "sampler_config"}
+    OPTIONAL_FIELDS = {"dropped_token_behavior", "sampler_config"}
 
     @staticmethod
     def validate(model: "MixtureOfExperts") -> None:
@@ -70,17 +70,17 @@ class MixtureOfExpertsValidator(ValidatorBase):
 
         if model.routing_initialization_mode != RoutingInitializationMode.LAYER:
             return
-        if not isinstance(model.router_config, RouterConfig):
-            raise TypeError(
-                "Configuration Error: 'router_config' must be of type "
-                "RouterConfig when 'routing_initialization_mode' is LAYER, "
-                f"received type {type(model.router_config).__name__}"
-            )
         if not isinstance(model.sampler_config, SamplerConfig):
             raise TypeError(
                 "Configuration Error: 'sampler_config' must be of type "
                 "SamplerConfig when 'routing_initialization_mode' is LAYER, "
                 f"received type {type(model.sampler_config).__name__}"
+            )
+        if not isinstance(model.sampler_config.router_config, RouterConfig):
+            raise TypeError(
+                "Configuration Error: 'sampler_config.router_config' must be of "
+                "type RouterConfig when 'routing_initialization_mode' is LAYER, "
+                f"received type {type(model.sampler_config.router_config).__name__}"
             )
 
     @staticmethod
@@ -163,17 +163,6 @@ class MixtureOfExpertsValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_no_sampler_with_indices(model: "MixtureOfExperts") -> None:
-        if model.routing_initialization_mode == RoutingInitializationMode.LAYER:
-            raise ValueError(
-                "Invalid configuration: `routing_initialization_mode` must be "
-                "`RoutingInitializationMode.DISABLED` or "
-                "`RoutingInitializationMode.SHARED` when external `indices` are "
-                "provided. Current value: "
-                f"{model.routing_initialization_mode}"
-            )
-
-    @staticmethod
     def validate_probabilities_exist(probabilities: Tensor | None) -> None:
         if probabilities is None:
             raise ValueError(
@@ -183,11 +172,11 @@ class MixtureOfExpertsValidator(ValidatorBase):
 
     @staticmethod
     def validate_router_config_exists(model: "MixtureOfExperts") -> None:
-        if model.router_config is None:
+        if model.sampler_config.router_config is None:
             raise ValueError(
-                "Configuration Error: `router_config` must be defined to "
-                "properly initialize and utilize the router model in the mixture "
-                "of experts layer."
+                "Configuration Error: `sampler_config.router_config` must be "
+                "defined to properly initialize and utilize the router model in "
+                "the mixture of experts layer."
             )
 
     @staticmethod

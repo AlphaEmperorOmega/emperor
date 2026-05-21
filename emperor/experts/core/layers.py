@@ -3,12 +3,11 @@ import torch.nn as nn
 
 from torch import Tensor
 from dataclasses import dataclass
-from emperor.sampler.model import SamplerModel
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.base.utils import Module
 from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core._expert_capacity import _ExpertCapacityHandler
-from emperor.experts.core._expert_weighting import _ExpertWeightingHandler
+from emperor.experts.core._expert_capacity import ExpertCapacityHandler
+from emperor.experts.core._expert_weighting import ExpertWeightingHandler
 from emperor.experts.core._validator import MixtureOfExpertsValidator
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -19,11 +18,13 @@ from emperor.experts.core.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from emperor.experts.core.state import MixtureOfExpertsLayerState
     from emperor.sampler.core.config import RouterConfig, SamplerConfig
+    from emperor.sampler.model import SamplerModel
 
 
 @dataclass
-class _ExpertInputData:
+class ExpertInputData:
     expert_index: int
     expert_samples: Tensor
     dropped_samples: Tensor
@@ -59,12 +60,11 @@ class MixtureOfExperts(Module):
         self.weighting_position_option: "ExpertWeightingPositionOptions" = (
             self.cfg.weighting_position_option
         )
-        self.router_config: "RouterConfig" = self.cfg.router_config
         self.sampler_config: "SamplerConfig" = self.cfg.sampler_config
 
         MixtureOfExpertsValidator.validate(self)
-        self.capacity_handler = _ExpertCapacityHandler(self.cfg)
-        self.expert_weighting_handler = _ExpertWeightingHandler(self.cfg)
+        self.capacity_handler = ExpertCapacityHandler(self.cfg)
+        self.expert_weighting_handler = ExpertWeightingHandler(self.cfg)
         self.sampler = self.__maybe_create_sampler()
         self.expert_modules = self.__create_experts()
 
@@ -78,13 +78,14 @@ class MixtureOfExperts(Module):
 
         if self.routing_initialization_mode != RoutingInitializationMode.LAYER:
             return None
-        MixtureOfExpertsValidator.validate_router_config_exists(self)
         MixtureOfExpertsValidator.validate_sampler_config_exists(self)
+        MixtureOfExpertsValidator.validate_router_config_exists(self)
         router_overrides = RouterConfig(input_dim=self.input_dim)
-        router_config = self._override_config(self.router_config, router_overrides)
+        router_config = self._override_config(
+            self.sampler_config.router_config, router_overrides
+        )
         sampler_overrides = SamplerConfig(router_config=router_config)
-        sampler_config = self._override_config(self.sampler_config, sampler_overrides)
-        return SamplerModel(sampler_config)
+        return self.sampler_config.build(sampler_overrides)
 
     def __create_experts(self) -> nn.ModuleList:
         expert_list = []
@@ -149,7 +150,7 @@ class MixtureOfExperts(Module):
         input_batch: Tensor,
         probabilities: Tensor,
         indices: Tensor | None,
-    ) -> list[_ExpertInputData]:
+    ) -> list[ExpertInputData]:
         if self.num_experts == self.top_k:
             return self.__build_dense_expert_inputs(input_batch, probabilities)
         return self.__build_routed_expert_inputs(input_batch, probabilities, indices)
@@ -158,7 +159,7 @@ class MixtureOfExperts(Module):
         self,
         input_batch: Tensor,
         probabilities: Tensor,
-    ) -> list[_ExpertInputData]:
+    ) -> list[ExpertInputData]:
         empty = torch.tensor([], dtype=input_batch.dtype, device=input_batch.device)
         expert_input_data = []
         for expert_index in range(self.num_experts):
@@ -168,7 +169,7 @@ class MixtureOfExperts(Module):
                 )
             )
             expert_input_data.append(
-                _ExpertInputData(
+                ExpertInputData(
                     expert_index=expert_index,
                     expert_samples=input_batch,
                     dropped_samples=empty,
@@ -184,7 +185,7 @@ class MixtureOfExperts(Module):
         input_batch: Tensor,
         probabilities: Tensor,
         indices: Tensor,
-    ) -> list[_ExpertInputData]:
+    ) -> list[ExpertInputData]:
         expert_input_data = []
         for expert_index in range(self.num_experts):
             expert_sample_indices, dropped_sample_indices = (
@@ -206,7 +207,7 @@ class MixtureOfExperts(Module):
                 )
             )
             expert_input_data.append(
-                _ExpertInputData(
+                ExpertInputData(
                     expert_index=expert_index,
                     expert_samples=expert_samples,
                     dropped_samples=dropped_samples,
@@ -246,7 +247,7 @@ class MixtureOfExperts(Module):
 
     def _compute_experts(
         self,
-        experts_data: list[_ExpertInputData],
+        experts_data: list[ExpertInputData],
         full_probabilities: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
         expert_outputs_list = []
@@ -273,7 +274,7 @@ class MixtureOfExperts(Module):
 
     def __compute_expert_output(
         self,
-        expert_data: _ExpertInputData,
+        expert_data: ExpertInputData,
     ) -> tuple[Tensor, Tensor]:
         expert_samples = self.expert_weighting_handler.maybe_apply_probabilities_before(
             expert_data.expert_samples, expert_data.probabilities
@@ -287,7 +288,7 @@ class MixtureOfExperts(Module):
         self,
         expert_outputs_list: list[Tensor],
         expert_output: Tensor,
-        expert_data: _ExpertInputData,
+        expert_data: ExpertInputData,
     ) -> None:
         if expert_data.dropped_samples.numel() > 0:
             expert_output = torch.cat(
@@ -298,7 +299,7 @@ class MixtureOfExperts(Module):
     def __append_sample_indices(
         self,
         sample_indices_for_expert_list: list[Tensor],
-        expert_data: _ExpertInputData,
+        expert_data: ExpertInputData,
     ) -> None:
         if self.top_k != self.num_experts:
             sample_indices = torch.cat(
@@ -345,6 +346,19 @@ class MixtureOfExperts(Module):
         if self.top_k > 1:
             experts_output = experts_output.view(-1, self.top_k, output_dim)
         return experts_output.sum(dim=1)
+
+
+class MixtureOfExpertsLayer(Layer):
+    def _handle_model_processing(
+        self,
+        main_model_input: Tensor,
+        state: "MixtureOfExpertsLayerState",
+    ) -> Tensor:
+        output, loss = self.model(
+            main_model_input, state.probabilities, state.indices
+        )
+        state.loss = loss if state.loss is None else state.loss + loss
+        return output
 
 
 class MixtureOfExpertsMap(MixtureOfExperts):
@@ -409,7 +423,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         input_batch: Tensor,
         probabilities: Tensor | None,
         indices: Tensor | None,
-    ) -> list[_ExpertInputData]:
+    ) -> list[ExpertInputData]:
         expert_input_data = []
         empty_dropped = torch.zeros(
             0, dtype=input_batch.dtype, device=input_batch.device
@@ -429,7 +443,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
                 else input_batch
             )
             expert_input_data.append(
-                _ExpertInputData(
+                ExpertInputData(
                     expert_index=expert_index,
                     expert_samples=expert_samples,
                     dropped_samples=empty_dropped,

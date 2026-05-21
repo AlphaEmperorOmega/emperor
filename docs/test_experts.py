@@ -1,6 +1,7 @@
 import torch
 import unittest
 
+from dataclasses import replace
 from torch.nn import Sequential
 from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
 from emperor.base.options import (
@@ -16,13 +17,14 @@ from emperor.experts.core.layers import (
     MixtureOfExperts,
     MixtureOfExpertsMap,
     MixtureOfExpertsReduce,
-    _ExpertInputData,
+    ExpertInputData,
 )
 from emperor.experts.core._validator import MixtureOfExpertsValidator
-from emperor.experts.core._expert_capacity import _ExpertCapacityHandler
+from emperor.experts.core._expert_capacity import ExpertCapacityHandler
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.experts.model import MixtureOfExpertsModel
-from emperor.experts.core.stack import MixtureOfExpertsStack
+from emperor.experts.core.config import MixtureOfExpertsLayerConfig
+from emperor.experts.core.state import MixtureOfExpertsLayerState
 from emperor.sampler.core.samplers import SamplerFull, SamplerSparse, SamplerTopk
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -90,6 +92,7 @@ class MixtureOfExpertsPresetMixin:
         switch_loss_weight: float = 0.0,
         zero_centred_loss_weight: float = 0.0,
         mutual_information_loss_weight: float = 0.0,
+        router_config: "RouterConfig | None" = None,
     ) -> SamplerConfig:
         return SamplerConfig(
             top_k=top_k,
@@ -103,6 +106,7 @@ class MixtureOfExpertsPresetMixin:
             switch_loss_weight=switch_loss_weight,
             zero_centred_loss_weight=zero_centred_loss_weight,
             mutual_information_loss_weight=mutual_information_loss_weight,
+            router_config=router_config,
         )
 
     def expert_model_config(
@@ -187,17 +191,6 @@ class MixtureOfExpertsPresetMixin:
             weighted_parameters_flag=experts_weighted_parameters_flag,
             weighting_position_option=experts_weighting_position_option,
             routing_initialization_mode=experts_routing_initialization_mode,
-            router_config=self.router_config(
-                input_dim=input_dim,
-                num_experts=experts_num_experts,
-                bias_flag=router_model_bias_flag,
-                noisy_topk_flag=router_model_noisy_topk_flag,
-                stack_num_layers=stack_num_layers,
-                stack_hidden_dim=stack_hidden_dim,
-                stack_activation=stack_activation,
-                stack_residual_flag=stack_residual_flag,
-                stack_dropout_probability=stack_dropout_probability,
-            ),
             sampler_config=self.sampler_config(
                 num_experts=experts_num_experts,
                 top_k=experts_top_k,
@@ -210,6 +203,17 @@ class MixtureOfExpertsPresetMixin:
                 switch_loss_weight=sampler_switch_loss_weight,
                 zero_centred_loss_weight=sampler_zero_centred_loss_weight,
                 mutual_information_loss_weight=sampler_mutual_information_loss_weight,
+                router_config=self.router_config(
+                    input_dim=input_dim,
+                    num_experts=experts_num_experts,
+                    bias_flag=router_model_bias_flag,
+                    noisy_topk_flag=router_model_noisy_topk_flag,
+                    stack_num_layers=stack_num_layers,
+                    stack_hidden_dim=stack_hidden_dim,
+                    stack_activation=stack_activation,
+                    stack_residual_flag=stack_residual_flag,
+                    stack_dropout_probability=stack_dropout_probability,
+                ),
             ),
         )
 
@@ -231,7 +235,7 @@ class MixtureOfExpertsPresetMixin:
             num_layers=experts_stack_num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=False,
-            layer_config=LayerConfig(
+            layer_config=MixtureOfExpertsLayerConfig(
                 activation=experts_stack_activation,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 residual_flag=experts_stack_residual_flag,
@@ -292,7 +296,6 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                         m.weighting_position_option,
                         cfg.weighting_position_option,
                     )
-                    self.assertEqual(m.router_config, cfg.router_config)
                     self.assertEqual(m.sampler_config, cfg.sampler_config)
 
     def test_validator_rejects_invalid_config_values(self):
@@ -339,21 +342,21 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                 with self.assertRaises(TypeError):
                     MixtureOfExperts(MixtureOfExpertsConfig(**values))
 
-        layer_routing_cases = [
-            {"router_config": object()},
-            {"sampler_config": object()},
-        ]
         cfg = self.preset(
             experts_routing_initialization_mode=RoutingInitializationMode.LAYER
         )
 
-        for override in layer_routing_cases:
-            field_name = next(iter(override))
-            with self.subTest(field_name=field_name):
-                values = self.config_values(cfg)
-                values.update(override)
-                with self.assertRaises(TypeError):
-                    MixtureOfExperts(MixtureOfExpertsConfig(**values))
+        with self.subTest(field_name="sampler_config"):
+            values = self.config_values(cfg)
+            values.update(sampler_config=object())
+            with self.assertRaises(TypeError):
+                MixtureOfExperts(MixtureOfExpertsConfig(**values))
+
+        with self.subTest(field_name="sampler_config.router_config"):
+            values = self.config_values(cfg)
+            values.update(sampler_config=self.sampler_config(router_config=object()))
+            with self.assertRaises(TypeError):
+                MixtureOfExperts(MixtureOfExpertsConfig(**values))
 
     def test_validator_allows_missing_owned_routing_configs_when_not_layer_owned(self):
         for routing_initialization_mode in (
@@ -365,11 +368,10 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                     experts_routing_initialization_mode=routing_initialization_mode
                 )
                 values = self.config_values(cfg)
-                values.update(router_config=None, sampler_config=None)
+                values.update(sampler_config=None)
 
                 model = MixtureOfExperts(MixtureOfExpertsConfig(**values))
 
-                self.assertIsNone(model.router_config)
                 self.assertIsNone(model.sampler_config)
 
     def test_validator_allows_optional_dropped_token_behavior(self):
@@ -379,15 +381,6 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
 
         self.assertIsNone(model.cfg.dropped_token_behavior)
         self.assertEqual(model.dropped_token_behavior, DroppedTokenOptions.ZEROS)
-
-    def test_validator_rejects_external_indices_when_layer_owns_routing(self):
-        cfg = self.preset(
-            experts_routing_initialization_mode=RoutingInitializationMode.LAYER
-        )
-        model = MixtureOfExperts(cfg)
-
-        with self.assertRaises(ValueError):
-            MixtureOfExpertsValidator.validate_no_sampler_with_indices(model)
 
     def test_forward_rejects_external_routing_when_layer_owns_routing(self):
         cfg = self.preset(
@@ -863,7 +856,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                         )
 
                         for item in result:
-                            self.assertIsInstance(item, _ExpertInputData)
+                            self.assertIsInstance(item, ExpertInputData)
                             self.assertGreaterEqual(item.expert_index, 0)
                             self.assertLess(item.expert_index, num_experts)
 
@@ -946,7 +939,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                 self.assertEqual(len(result), num_experts)
 
                 for expert_index, item in enumerate(result):
-                    self.assertIsInstance(item, _ExpertInputData)
+                    self.assertIsInstance(item, ExpertInputData)
                     self.assertEqual(item.expert_index, expert_index)
 
                     self.assertTrue(torch.equal(item.expert_samples, input_batch))
@@ -1048,7 +1041,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                         num_samples = batch_size * top_k
                         expert_samples = torch.randn(num_samples, c.input_dim)
                         probabilities = torch.randperm(num_samples).float()
-                        expert_input_slice = _ExpertInputData(
+                        expert_input_slice = ExpertInputData(
                             expert_index=0,
                             expert_samples=expert_samples,
                             dropped_samples=torch.zeros(0),
@@ -1071,7 +1064,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                             == ExpertWeightingPositionOptions.BEFORE_EXPERTS
                         )
                         if applies_before and weighted_parameters_flag:
-                            zero_probs_slice = _ExpertInputData(
+                            zero_probs_slice = ExpertInputData(
                                 expert_index=0,
                                 expert_samples=expert_samples,
                                 dropped_samples=torch.zeros(0),
@@ -1247,8 +1240,10 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                                 routing_initialization_mode
                                                 == RoutingInitializationMode.DISABLED
                                             ):
-                                                router_cfg = c.router_config
-                                                sampler_cfg = c.sampler_config
+                                                router_cfg = c.sampler_config.router_config
+                                                sampler_cfg = replace(
+                                                    c.sampler_config, router_config=None
+                                                )
                                                 router = RouterModel(router_cfg)
                                                 sampler = SamplerModel(sampler_cfg)
 
@@ -1292,7 +1287,7 @@ class TestMixtureOfExpertsStack(MixtureOfExpertsPresetMixin, unittest.TestCase):
                 c = self.stack_preset(
                                         experts_stack_num_layers=num_layers,
                 )
-                m = MixtureOfExpertsStack(c).build()
+                m = c.build()
                 if num_layers == 1:
                     self.assertIsInstance(m, Layer)
                 else:
@@ -1321,7 +1316,7 @@ class TestMixtureOfExpertsStack(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                     experts_num_experts=num_experts,
                                     experts_stack_num_layers=num_layers,
                                 )
-                                m = MixtureOfExpertsStack(c).build()
+                                m = c.build()
 
                                 batch_size = 10
 
@@ -1332,8 +1327,10 @@ class TestMixtureOfExpertsStack(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                     == RoutingInitializationMode.DISABLED
                                 ):
                                     moe_cfg = c.layer_config.layer_model_config
-                                    router_cfg = moe_cfg.router_config
-                                    sampler_cfg = moe_cfg.sampler_config
+                                    router_cfg = moe_cfg.sampler_config.router_config
+                                    sampler_cfg = replace(
+                                        moe_cfg.sampler_config, router_config=None
+                                    )
                                     router = RouterModel(router_cfg)
                                     sampler = SamplerModel(sampler_cfg)
 
@@ -1345,13 +1342,14 @@ class TestMixtureOfExpertsStack(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                     )
 
                                 loss = torch.tensor(0.0)
-                                inputs = {
-                                    "input_batch": input,
-                                    "probabilities": probabilities,
-                                    "indices": indices,
-                                    "loss": loss,
-                                }
-                                output, loss = m(inputs)
+                                state = MixtureOfExpertsLayerState(
+                                    hidden=input,
+                                    probabilities=probabilities,
+                                    indices=indices,
+                                    loss=loss,
+                                )
+                                state = m(state)
+                                output, loss = state.hidden, state.loss
 
                                 expected_shape = (
                                     batch_size,
@@ -1436,8 +1434,10 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                         routing_initialization_mode
                                         == RoutingInitializationMode.DISABLED
                                     ):
-                                        router_cfg = moe_cfg.router_config
-                                        sampler_cfg = moe_cfg.sampler_config
+                                        router_cfg = moe_cfg.sampler_config.router_config
+                                        sampler_cfg = replace(
+                                            moe_cfg.sampler_config, router_config=None
+                                        )
                                         router = RouterModel(router_cfg)
                                         sampler = SamplerModel(sampler_cfg)
 
@@ -1495,10 +1495,10 @@ class TestMixtureOfExpertsMap(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                 input = torch.randn(10, c.input_dim)
                                 indices = probabilities = None
                                 router_cfg = (
-                                    c.router_config
+                                    c.sampler_config.router_config
                                 )
-                                sampler_cfg = (
-                                    c.sampler_config
+                                sampler_cfg = replace(
+                                    c.sampler_config, router_config=None
                                 )
                                 router = RouterModel(router_cfg)
                                 sampler = SamplerModel(sampler_cfg)
@@ -1632,10 +1632,10 @@ class TestMixtureOfExpertsReduce(MixtureOfExpertsPresetMixin, unittest.TestCase)
                                 indices = probabilities = None
 
                                 router_cfg = (
-                                    c.router_config
+                                    c.sampler_config.router_config
                                 )
-                                sampler_cfg = (
-                                    c.sampler_config
+                                sampler_cfg = replace(
+                                    c.sampler_config, router_config=None
                                 )
                                 router = RouterModel(router_cfg)
                                 sampler = SamplerModel(sampler_cfg)
@@ -1670,7 +1670,7 @@ class TestExpertCapacityHandler(unittest.TestCase):
                     top_k=2,
                     dropped_token_behavior=DroppedTokenOptions.ZEROS,
                 )
-                handler = _ExpertCapacityHandler(cfg)
+                handler = ExpertCapacityHandler(cfg)
                 expert_tokens, dropped_tokens = (
                     handler.maybe_apply_capacity_limit_token_indices(
                         token_indices, batch_size=10
@@ -1691,7 +1691,7 @@ class TestExpertCapacityHandler(unittest.TestCase):
                     top_k=2,
                     dropped_token_behavior=DroppedTokenOptions.ZEROS,
                 )
-                handler = _ExpertCapacityHandler(cfg)
+                handler = ExpertCapacityHandler(cfg)
                 capacity = max(1, int(10 / 5 * capacity_factor))
                 tokens_to_drop = 2
                 token_indices = torch.arange(capacity + tokens_to_drop)
@@ -1713,7 +1713,7 @@ class TestExpertCapacityHandler(unittest.TestCase):
             top_k=2,
             dropped_token_behavior=DroppedTokenOptions.ZEROS,
         )
-        handler = _ExpertCapacityHandler(cfg)
+        handler = ExpertCapacityHandler(cfg)
         self.assertIsNone(handler.shuffle_indices)
         token_indices = torch.tensor([0, 1, 2, 3])
         result, dropped = handler.maybe_apply_capacity_limit_routing_positions(
@@ -1729,7 +1729,7 @@ class TestExpertCapacityHandler(unittest.TestCase):
             top_k=2,
             dropped_token_behavior=DroppedTokenOptions.ZEROS,
         )
-        handler = _ExpertCapacityHandler(cfg)
+        handler = ExpertCapacityHandler(cfg)
         handler.shuffle_indices = torch.tensor([1, 0, 2, 3])
         token_indices = torch.tensor([10, 20, 30, 40])
         result, dropped = handler.maybe_apply_capacity_limit_routing_positions(
@@ -1757,7 +1757,7 @@ class TestExpertCapacityHandler(unittest.TestCase):
                     top_k=2,
                     dropped_token_behavior=behavior,
                 )
-                handler = _ExpertCapacityHandler(cfg)
+                handler = ExpertCapacityHandler(cfg)
                 expert_samples, dropped = handler.select_expert_and_dropped_samples(
                     input_batch, indices, dropped_indices
                 )

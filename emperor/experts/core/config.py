@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from emperor.base.layer import LayerConfig
 from emperor.base.utils import ConfigBase, optional_field
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.base.layer import LayerStackConfig
-    from emperor.sampler.core.config import RouterConfig, SamplerConfig
+    from emperor.sampler.core.config import SamplerConfig
 
 
 @dataclass
@@ -40,11 +41,9 @@ class MixtureOfExpertsConfig(ConfigBase):
     routing_initialization_mode: RoutingInitializationMode | None = optional_field(
         "Use `SHARED` for a single router and sampler across all layers, or `LAYER` for one per layer."
     )
-    router_config: "RouterConfig | None" = optional_field(
-        "Router configuration used when the layer owns its router."
-    )
     sampler_config: "SamplerConfig | None" = optional_field(
-        "Sampler configuration used when the layer owns its sampler."
+        "Sampler configuration used when the layer owns its sampler. The router "
+        "lives at sampler_config.router_config."
     )
     expert_model_config: "LayerStackConfig | None" = optional_field(
         "Expert stack configuration used to build each expert."
@@ -54,3 +53,11 @@ class MixtureOfExpertsConfig(ConfigBase):
         from emperor.experts.core.layers import MixtureOfExperts
 
         return MixtureOfExperts
+
+
+@dataclass
+class MixtureOfExpertsLayerConfig(LayerConfig):
+    def _registry_owner(self) -> type:
+        from emperor.experts.core.layers import MixtureOfExpertsLayer
+
+        return MixtureOfExpertsLayer

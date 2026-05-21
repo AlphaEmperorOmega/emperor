@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from emperor.experts.core.config import MixtureOfExpertsConfig
 
 
-class _ExpertWeightingHandler:
+class ExpertWeightingHandler:
     def __init__(
         self,
         cfg: "MixtureOfExpertsConfig",
