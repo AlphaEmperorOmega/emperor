@@ -9,3 +9,7 @@ torchenv/
 logs
 lightning_logs/
 emperor.egg-info
+.agents/
+.claude/
+.codex/
+.pytest_cache/
