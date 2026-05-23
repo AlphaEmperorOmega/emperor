@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 DOCS_DIR="docs"
+export PYTHONPATH="$DOCS_DIR:$PYTHONPATH"
 
 if [ -n "$1" ]; then
   FILE="$1"
