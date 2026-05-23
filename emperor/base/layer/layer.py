@@ -111,8 +111,12 @@ class Layer(Module):
         self.last_layer_flag = True
 
     @staticmethod
+    def forward_returning_state(model: "Module", X: Tensor) -> "LayerState":
+        return model(LayerState(hidden=X))
+
+    @staticmethod
     def forward_with_state(model: "Module", X: Tensor) -> Tensor:
-        return model(LayerState(hidden=X)).hidden
+        return Layer.forward_returning_state(model, X).hidden
 
     def forward(
         self,
