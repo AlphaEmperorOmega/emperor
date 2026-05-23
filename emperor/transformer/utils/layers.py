@@ -1,13 +1,11 @@
 import torch
 
 from torch import Tensor
-from emperor.attention.utils.enums import AttentionOptions
 from emperor.base.layer import Layer
 from dataclasses import dataclass, field
 from emperor.base.utils import ConfigBase, Module
 from emperor.transformer.utils.feed_forward import FeedForward, FeedForwardConfig
 from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-from emperor.attention.utils.layer import MultiHeadAttention, MultiHeadAttentionConfig
 from emperor.transformer.utils.wrappers import (
     CrossAttentionLayer,
     FeedForwardLayer,
@@ -22,6 +20,10 @@ if TYPE_CHECKING:
     from emperor.transformer.utils.patch.options.base import PatchConfig
     from emperor.embedding.absolute.config import (
         AbsolutePositionalEmbeddingConfig,
+    )
+    from emperor.attention.utils.layer import (
+        MultiHeadAttention,
+        MultiHeadAttentionConfig,
     )
 
 
@@ -107,6 +109,12 @@ class TransformerLayerBase(Module):
         self.feed_forward_config: "FeedForwardConfig" = self.cfg.feed_forward_config
 
     def _create_self_attention_model(self) -> Layer:
+        from emperor.attention.utils.enums import AttentionOptions
+        from emperor.attention.utils.layer import (
+            MultiHeadAttention,
+            MultiHeadAttentionConfig,
+        )
+
         wrapper_class = SelfAttentionLayer
         overrides = MultiHeadAttentionConfig(
             attention_option=AttentionOptions.SELF_ATTENTION,
@@ -117,6 +125,12 @@ class TransformerLayerBase(Module):
         return self.__create_layer_block(wrapper_class, model)
 
     def _create_cross_attention_model(self) -> Layer:
+        from emperor.attention.utils.enums import AttentionOptions
+        from emperor.attention.utils.layer import (
+            MultiHeadAttention,
+            MultiHeadAttentionConfig,
+        )
+
         wrapper_class = CrossAttentionLayer
         overrides = MultiHeadAttentionConfig(
             attention_option=AttentionOptions.INDEPENDENT
@@ -132,7 +146,7 @@ class TransformerLayerBase(Module):
     def __create_layer_block(
         self,
         wrapper_class: type[Layer],
-        model: MultiHeadAttention | FeedForward,
+        model: "MultiHeadAttention | FeedForward",
     ) -> Layer:
         return wrapper_class(
             model=model,
