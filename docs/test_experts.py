@@ -1401,8 +1401,8 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
         model = MixtureOfExpertsModel(c, overrides)
 
         self.assertTrue(model.cfg.compute_expert_mixture_flag)
-        input = torch.randn(10, c.input_dim)
-        output, _ = model(input=input)
+        hidden = torch.randn(10, c.input_dim)
+        output, _ = model(hidden=hidden)
         self.assertEqual(output.shape, (10, c.output_dim))
 
     def test_stack_config_override_is_applied(self):
@@ -1419,16 +1419,16 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
         model = MixtureOfExpertsModel(c, overrides)
 
         self.assertEqual(model.stack_config.num_layers, 3)
-        input = torch.randn(10, c.input_dim)
-        output, _ = model(input=input)
+        hidden = torch.randn(10, c.input_dim)
+        output, _ = model(hidden=hidden)
         self.assertEqual(output.shape, (10, model.cfg.output_dim))
 
-    def test_get_top_k_returns_configured_value(self):
+    def test_top_k_returns_configured_value(self):
         for top_k in (1, 3, 6):
             with self.subTest(top_k=top_k):
                 c = self.preset(experts_num_experts=6, experts_top_k=top_k)
                 model = MixtureOfExpertsModel(c)
-                self.assertEqual(model.get_top_k(), top_k)
+                self.assertEqual(model.top_k, top_k)
 
     def test_shared_routing_from_flat_config_builds_layer_owned_mixture(self):
         c = self.preset(
@@ -1448,8 +1448,8 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
         )
         self.assertIsInstance(model.expert_stack.sampler, SamplerModel)
 
-        input = torch.randn(10, c.input_dim)
-        output, loss = model(input=input)
+        hidden = torch.randn(10, c.input_dim)
+        output, loss = model(hidden=hidden)
         self.assertEqual(output.shape, (10, c.output_dim))
         self.assertEqual(loss.item(), 0.0)
 
