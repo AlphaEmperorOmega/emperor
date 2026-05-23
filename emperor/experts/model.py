@@ -12,8 +12,8 @@ from emperor.experts.core._validator import MixtureOfExpertsModelValidator
 class MixtureOfExpertsModel(Module):
     def __init__(
         self,
-        cfg: "MixtureOfExpertsConfig | LayerStackConfig",
-        overrides: "MixtureOfExpertsConfig | LayerStackConfig | None" = None,
+        cfg: MixtureOfExpertsConfig | LayerStackConfig,
+        overrides: MixtureOfExpertsConfig | LayerStackConfig | None = None,
     ) -> None:
         super().__init__()
         self.cfg = self.__resolve_mixture_config(cfg, overrides)
@@ -29,9 +29,9 @@ class MixtureOfExpertsModel(Module):
 
     def __resolve_stack_config(
         self,
-        cfg: "MixtureOfExpertsConfig | LayerStackConfig",
-        overrides: "MixtureOfExpertsConfig | LayerStackConfig | None",
-    ) -> "LayerStackConfig | None":
+        cfg: MixtureOfExpertsConfig | LayerStackConfig,
+        overrides: MixtureOfExpertsConfig | LayerStackConfig | None,
+    ) -> LayerStackConfig | None:
         if not isinstance(cfg, LayerStackConfig):
             return None
         if isinstance(overrides, LayerStackConfig):
@@ -40,18 +40,15 @@ class MixtureOfExpertsModel(Module):
 
     def __resolve_mixture_config(
         self,
-        cfg: "MixtureOfExpertsConfig | LayerStackConfig",
-        overrides: "MixtureOfExpertsConfig | LayerStackConfig | None",
-    ) -> "MixtureOfExpertsConfig":
+        cfg: MixtureOfExpertsConfig | LayerStackConfig,
+        overrides: MixtureOfExpertsConfig | LayerStackConfig | None,
+    ) -> MixtureOfExpertsConfig:
         config = cfg
         if isinstance(config, LayerStackConfig):
             config = config.layer_config.layer_model_config
         if isinstance(overrides, MixtureOfExpertsConfig):
             return self._override_config(config, overrides)
         return config
-
-    def get_top_k(self) -> int:
-        return self.top_k
 
     def _create_expert_stack(self) -> Layer | Sequential | MixtureOfExperts:
         if self.routing_initialization_mode == RoutingInitializationMode.SHARED:
@@ -76,14 +73,14 @@ class MixtureOfExpertsModel(Module):
 
     def forward(
         self,
-        input: Tensor,
+        hidden: Tensor,
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor | None]:
         if isinstance(self.expert_stack, MixtureOfExperts):
-            return self.expert_stack(input, probabilities, indices)
+            return self.expert_stack(hidden, probabilities, indices)
         state = MixtureOfExpertsLayerState(
-            hidden=input,
+            hidden=hidden,
             probabilities=probabilities,
             indices=indices,
             loss=None,
