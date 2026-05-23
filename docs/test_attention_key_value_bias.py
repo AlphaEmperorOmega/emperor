@@ -1,8 +1,8 @@
 import torch
 import unittest
 
-from emperor.attention.utils.presets import MultiHeadAttentionPresets
-from emperor.attention.utils.handlers.bias import KeyValueBias
+from emperor.attention.core.handlers.bias import KeyValueBias
+from _attention_test_helpers import build_attention_config
 
 
 class TestKeyValueBias(unittest.TestCase):
@@ -14,7 +14,7 @@ class TestKeyValueBias(unittest.TestCase):
             for embedding_dim, qk_dim, v_dim in dimension_options:
                 message = f"Test failed for the options: add_key_value_bias_flag={add_key_value_bias_flag}, embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
                 with self.subTest(i=message):
-                    cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                    cfg = build_attention_config(
                         embedding_dim=embedding_dim,
                         query_key_projection_dim=qk_dim,
                         value_projection_dim=v_dim,
@@ -45,7 +45,7 @@ class TestKeyValueBias(unittest.TestCase):
         for embedding_dim, qk_dim, v_dim in dimension_options:
             message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
             with self.subTest(i=message):
-                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                cfg = build_attention_config(
                     embedding_dim=embedding_dim,
                     query_key_projection_dim=qk_dim,
                     value_projection_dim=v_dim,
@@ -84,7 +84,7 @@ class TestKeyValueBias(unittest.TestCase):
         for embedding_dim, qk_dim, v_dim in dimension_options:
             message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
             with self.subTest(i=message):
-                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                cfg = build_attention_config(
                     embedding_dim=embedding_dim,
                     query_key_projection_dim=qk_dim,
                     value_projection_dim=v_dim,
@@ -136,7 +136,7 @@ class TestKeyValueBias(unittest.TestCase):
         for embedding_dim, qk_dim, v_dim in dimension_options:
             message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
             with self.subTest(i=message):
-                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                cfg = build_attention_config(
                     embedding_dim=embedding_dim,
                     query_key_projection_dim=qk_dim,
                     value_projection_dim=v_dim,
@@ -170,7 +170,7 @@ class TestKeyValueBias(unittest.TestCase):
         for embedding_dim, qk_dim, v_dim in dimension_options:
             message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
             with self.subTest(i=message):
-                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                cfg = build_attention_config(
                     embedding_dim=embedding_dim,
                     query_key_projection_dim=qk_dim,
                     value_projection_dim=v_dim,
@@ -225,7 +225,7 @@ class TestKeyValueBias(unittest.TestCase):
         for embedding_dim, qk_dim, v_dim in dimension_options:
             message = f"Test failed for the options: embedding_dim={embedding_dim}, qk_dim={qk_dim}, v_dim={v_dim}"
             with self.subTest(i=message):
-                cfg = MultiHeadAttentionPresets.multi_head_attention_preset(
+                cfg = build_attention_config(
                     embedding_dim=embedding_dim,
                     query_key_projection_dim=qk_dim,
                     value_projection_dim=v_dim,

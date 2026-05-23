@@ -2,10 +2,9 @@ import torch
 import unittest
 
 from dataclasses import asdict
-from docs.config import default_unittest_config
-from emperor.attention.utils.handlers.maks import Mask
-from emperor.attention.utils.layer import MultiHeadAttentionConfig
-from emperor.attention.utils.handlers.validators._mask import MaskValidator
+from emperor.attention.core.config import MultiHeadAttentionConfig
+from emperor.attention.core._validator import AttentionValidatorBase
+from _attention_test_helpers import build_attention_config
 
 
 class TestMaskValidator(unittest.TestCase):
@@ -27,15 +26,13 @@ class TestMaskValidator(unittest.TestCase):
         self.qkv_model = None
 
     def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.multi_head_attention_model_config
+        self.config = build_attention_config()
         if config is not None:
             for k in asdict(config):
                 if hasattr(self.config, k) and getattr(config, k) is not None:
                     setattr(self.config, k, getattr(config, k))
 
-        model = Mask(self.config)
-        self.model = MaskValidator(model)
+        self.model = AttentionValidatorBase
 
         self.batch_size = self.config.batch_size
         self.embedding_dim = self.config.embedding_dim
@@ -56,7 +53,7 @@ class Test_ensure_mask_is_float_or_bool(TestMaskValidator):
         maks_name = "test_mask"
 
         with self.assertRaises(RuntimeError) as context:
-            self.model.ensure_mask_is_float_or_bool(integer_mask, maks_name)
+            self.model.validate_mask_is_float_or_bool(integer_mask, maks_name)
 
     def test_ensure_no_error_is_thrown_when_float_mask_is_given(self):
         mask_shape = (
@@ -67,7 +64,7 @@ class Test_ensure_mask_is_float_or_bool(TestMaskValidator):
         float_mask = torch.randn(mask_shape)
         maks_name = "test_mask"
 
-        output = self.model.ensure_mask_is_float_or_bool(float_mask, maks_name)
+        output = self.model.validate_mask_is_float_or_bool(float_mask, maks_name)
         self.assertIsNone(output)
 
     def test_ensure_no_error_is_thrown_when_boolean_mask_is_given(self):
@@ -79,7 +76,7 @@ class Test_ensure_mask_is_float_or_bool(TestMaskValidator):
         boolean_mask = torch.randn(mask_shape) > 0
         maks_name = "test_mask"
 
-        output = self.model.ensure_mask_is_float_or_bool(boolean_mask, maks_name)
+        output = self.model.validate_mask_is_float_or_bool(boolean_mask, maks_name)
         self.assertIsNone(output)
 
 
@@ -99,7 +96,7 @@ class Test_ensure_mask_is_correct_dtype(TestMaskValidator):
         check_other = True
 
         with self.assertRaises(RuntimeError) as context:
-            self.model.ensure_mask_is_correct_dtype(
+            self.model.validate_mask_dtype_matches(
                 mask, maks_name, other_type, other_name, check_other
             )
 
@@ -118,7 +115,7 @@ class Test_ensure_mask_is_correct_dtype(TestMaskValidator):
         other_name = "real_maks_dtype"
         check_other = False
 
-        output = self.model.ensure_mask_is_correct_dtype(
+        output = self.model.validate_mask_dtype_matches(
             mask, maks_name, other_type, other_name, check_other
         )
         self.assertIsNone(output)
@@ -136,7 +133,7 @@ class Test_ensure_mask_is_correct_dtype(TestMaskValidator):
         other_name = "real_maks_dtype"
         check_other = True
 
-        output = self.model.ensure_mask_is_correct_dtype(
+        output = self.model.validate_mask_dtype_matches(
             mask, maks_name, other_type, other_name, check_other
         )
         self.assertIsNone(output)
@@ -156,7 +153,7 @@ class Test_ensure_mask_is_correct_dtype(TestMaskValidator):
         other_name = "real_maks_dtype"
         check_other = True
 
-        output = self.model.ensure_mask_is_correct_dtype(
+        output = self.model.validate_mask_dtype_matches(
             mask, maks_name, other_type, other_name, check_other
         )
         self.assertIsNone(output)
@@ -167,14 +164,14 @@ class Test_ensure_attention_mask_for_required_causal_mask(TestMaskValidator):
         attention_mask = None
         causal_attention_mask_flag = True
         with self.assertRaises(RuntimeError) as context:
-            self.model.ensure_attention_mask_for_required_causal_mask(
+            self.model.validate_attention_mask_for_required_causal_mask(
                 attention_mask, causal_attention_mask_flag
             )
 
     def test_no_input_with_causal_mask_flag_set_to_False(self):
         attention_mask = None
         causal_attention_mask_flag = False
-        output = self.model.ensure_attention_mask_for_required_causal_mask(
+        output = self.model.validate_attention_mask_for_required_causal_mask(
             attention_mask, causal_attention_mask_flag
         )
         self.assertIsNone(output)
@@ -186,7 +183,7 @@ class Test_ensure_attention_mask_for_required_causal_mask(TestMaskValidator):
             self.target_sequence_length,
         )
 
-        output = self.model.ensure_attention_mask_for_required_causal_mask(
+        output = self.model.validate_attention_mask_for_required_causal_mask(
             attention_mask, False
         )
         self.assertIsNone(output)
@@ -198,7 +195,7 @@ class Test_ensure_attention_mask_for_required_causal_mask(TestMaskValidator):
             self.target_sequence_length,
         )
 
-        output = self.model.ensure_attention_mask_for_required_causal_mask(
+        output = self.model.validate_attention_mask_for_required_causal_mask(
             attention_mask, True
         )
         self.assertIsNone(output)

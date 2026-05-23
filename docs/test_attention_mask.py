@@ -2,9 +2,9 @@ import torch
 import unittest
 
 from dataclasses import asdict
-from docs.config import default_unittest_config
-from emperor.attention.utils.handlers.maks import Mask
-from emperor.attention.utils.layer import MultiHeadAttentionConfig
+from emperor.attention.core.handlers.mask import Mask
+from emperor.attention.core.config import MultiHeadAttentionConfig
+from _attention_test_helpers import build_attention_config
 
 
 class TestMask(unittest.TestCase):
@@ -26,8 +26,7 @@ class TestMask(unittest.TestCase):
         self.qkv_model = None
 
     def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.multi_head_attention_model_config
+        self.config = build_attention_config()
         if config is not None:
             for k in asdict(config):
                 if hasattr(self.config, k) and getattr(config, k) is not None:

@@ -1,483 +1,272 @@
-import copy
 import torch
 import unittest
 
-from dataclasses import asdict
-from docs.config import default_unittest_config
-from emperor.attention.utils.layer import MultiHeadAttentionConfig
-from emperor.attention.utils._validator import MultiHeadAttentionValidator
+from types import SimpleNamespace
+from emperor.attention import (
+    SelfAttentionConfig,
+    IndependentAttentionConfig,
+    MixtureOfAttentionHeadsConfig,
+)
+from emperor.attention.core._validator import AttentionValidatorBase
+from emperor.attention.self_attention.validator import SelfAttentionValidator
+from emperor.attention.independent_attention.validator import (
+    IndependentAttentionValidator,
+)
+from emperor.attention.mixture_of_attention_heads.validator import (
+    MixtureOfAttentionHeadsValidator,
+)
+from _attention_test_helpers import build_attention_config
+
+BATCH_SIZE = 4
+NUM_HEADS = 4
+EMBEDDING_DIM = 12
+TARGET_SEQUENCE_LENGTH = 8
+SOURCE_SEQUENCE_LENGTH = 8
+HEAD_DIM = EMBEDDING_DIM // NUM_HEADS
 
 
-class TestValidator(unittest.TestCase):
+class TestValidateInputShapes(unittest.TestCase):
+    def _batched_qkv(self):
+        query = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        key = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        value = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        return query, key, value
+
+    def test_raises_on_1d_query(self):
+        with self.assertRaises(RuntimeError):
+            AttentionValidatorBase.validate_input_shapes(
+                torch.randn(EMBEDDING_DIM),
+                torch.randn(SOURCE_SEQUENCE_LENGTH, EMBEDDING_DIM),
+                torch.randn(SOURCE_SEQUENCE_LENGTH, EMBEDDING_DIM),
+            )
+
+    def test_raises_on_4d_query(self):
+        with self.assertRaises(RuntimeError):
+            AttentionValidatorBase.validate_input_shapes(
+                torch.randn(2, 2, 2, 2),
+                torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM),
+                torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM),
+            )
+
+    def test_passes_on_unbatched_2d(self):
+        query = torch.randn(TARGET_SEQUENCE_LENGTH, EMBEDDING_DIM)
+        key = torch.randn(SOURCE_SEQUENCE_LENGTH, EMBEDDING_DIM)
+        value = torch.randn(SOURCE_SEQUENCE_LENGTH, EMBEDDING_DIM)
+        self.assertIsNone(
+            AttentionValidatorBase.validate_input_shapes(query, key, value)
+        )
+
+    def test_passes_on_batched_3d(self):
+        query, key, value = self._batched_qkv()
+        self.assertIsNone(
+            AttentionValidatorBase.validate_input_shapes(query, key, value)
+        )
+
+    def test_raises_on_kv_dim_mismatch(self):
+        query, _, _ = self._batched_qkv()
+        with self.assertRaises(RuntimeError):
+            AttentionValidatorBase.validate_input_shapes(
+                query,
+                torch.randn(SOURCE_SEQUENCE_LENGTH, EMBEDDING_DIM),
+                torch.randn(SOURCE_SEQUENCE_LENGTH, EMBEDDING_DIM),
+            )
+
+    def test_raises_on_bad_key_padding_mask_dims(self):
+        query, key, value = self._batched_qkv()
+        bad_key_padding_mask = torch.randn(
+            SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM
+        )
+        with self.assertRaises(RuntimeError):
+            AttentionValidatorBase.validate_input_shapes(
+                query, key, value, bad_key_padding_mask
+            )
+
+    def test_raises_on_4d_attention_mask(self):
+        query, key, value = self._batched_qkv()
+        bad_attention_mask = torch.randn(
+            NUM_HEADS, BATCH_SIZE, TARGET_SEQUENCE_LENGTH, SOURCE_SEQUENCE_LENGTH
+        )
+        with self.assertRaises(RuntimeError):
+            AttentionValidatorBase.validate_input_shapes(
+                query, key, value, None, bad_attention_mask
+            )
+
+    def test_passes_on_2d_and_3d_attention_mask(self):
+        query, key, value = self._batched_qkv()
+        two_d = torch.randn(TARGET_SEQUENCE_LENGTH, SOURCE_SEQUENCE_LENGTH)
+        three_d = torch.randn(
+            BATCH_SIZE * NUM_HEADS, TARGET_SEQUENCE_LENGTH, SOURCE_SEQUENCE_LENGTH
+        )
+        self.assertIsNone(
+            AttentionValidatorBase.validate_input_shapes(
+                query, key, value, None, two_d
+            )
+        )
+        self.assertIsNone(
+            AttentionValidatorBase.validate_input_shapes(
+                query, key, value, None, three_d
+            )
+        )
+
+
+class TestValidateKeyValueProjectionShapes(unittest.TestCase):
+    def test_passes_when_shapes_match(self):
+        key = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        value = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        self.assertIsNone(
+            AttentionValidatorBase.validate_key_value_projection_shapes(key, value)
+        )
+
+    def test_raises_when_sequence_length_mismatch(self):
+        key = torch.randn(SOURCE_SEQUENCE_LENGTH + 1, BATCH_SIZE, EMBEDDING_DIM)
+        value = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        with self.assertRaises(RuntimeError):
+            AttentionValidatorBase.validate_key_value_projection_shapes(key, value)
+
+
+class TestValidateStaticProjectionShapes(unittest.TestCase):
     def setUp(self):
-        self.rebuild_presets()
-
-    def tearDown(self):
-        self.cfg = None
-        self.config = None
-        self.model = None
-        self.batch_size = None
-        self.embedding_dim = None
-        self.target_sequence_length = None
-        self.num_heads = None
-        self.head_dim = None
-        self.query_model = None
-        self.key_model = None
-        self.value_model = None
-        self.qkv_model = None
-
-    def rebuild_presets(self, config: MultiHeadAttentionConfig | None = None):
-        self.cfg = default_unittest_config()
-        self.config = self.cfg.multi_head_attention_model_config
-        if config is not None:
-            for k in asdict(config):
-                if hasattr(self.config, k) and getattr(config, k) is not None:
-                    setattr(self.config, k, getattr(config, k))
-
-        self.model = MultiHeadAttentionValidator(self.config)
-
-        self.batch_size = self.config.batch_size
-        self.embedding_dim = self.config.embedding_dim
-        self.target_sequence_length = self.config.target_sequence_length
-        self.source_sequence_length = self.config.source_sequence_length
-        self.num_heads = self.config.num_heads
-        self.head_dim = self.embedding_dim // self.num_heads
-
-
-class Test___check_query_dims(TestValidator):
-    def test_incorrect_1D_tensor(self):
-        query = torch.randn(self.embedding_dim)
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_query_dims(query)
-
-    def test_correct_2D_tensor(self):
-        query = torch.randn(self.target_sequence_length, self.embedding_dim)
-
-        output = self.model._MultiHeadAttentionValidator__check_query_dims(query)
-        self.assertIsNone(output)
-
-    def test_correct_3D_tensor(self):
-        query = torch.randn(
-            self.target_sequence_length, self.batch_size, self.embedding_dim
+        self.model = SimpleNamespace(
+            batch_size=BATCH_SIZE, num_heads=NUM_HEADS, head_dim=HEAD_DIM
         )
 
-        output = self.model._MultiHeadAttentionValidator__check_query_dims(query)
-        self.assertIsNone(output)
-
-    def test_incorrect_4D_tensor(self):
-        query = torch.randn(
-            self.target_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-            self.embedding_dim,
-        )
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_query_dims(query)
-
-
-class Test___check_query_key_value_dimension_count(TestValidator):
-    def test_check_incorrect_input_dim_count_with_batched_input_flag_set_to_False(
-        self,
-    ):
-        self.model.batched_input_flag = False
-
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length * self.batch_size, self.embedding_dim
-        )
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_query_key_value_dimension_count(
-                key, value
-            )
-
-    def test_check_incorrect_input_dim_count_with_batched_input_flag_True(
-        self,
-    ):
-        self.model.batched_input_flag = True
-        key = torch.randn(self.source_sequence_length, self.embedding_dim)
-        value = torch.randn(self.source_sequence_length, self.embedding_dim)
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_query_key_value_dimension_count(
-                key, value
-            )
-
-    def test_check_correct_input_dim_count_with_batched_input_flag_set_to_False(
-        self,
-    ):
-        self.model.batched_input_flag = False
-
-        key = torch.randn(self.source_sequence_length, self.embedding_dim)
-        value = torch.randn(self.source_sequence_length, self.embedding_dim)
-        output = self.model._MultiHeadAttentionValidator__check_query_key_value_dimension_count(
-            key, value
-        )
-        self.assertIsNone(output)
-
-    def test_check_correct_input_dim_count_with_batched_input_flag_set_to_True(
-        self,
-    ):
-        self.model.batched_input_flag = True
-
-        key = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        value = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        output = self.model._MultiHeadAttentionValidator__check_query_key_value_dimension_count(
-            key, value
-        )
-        self.assertIsNone(output)
-
-
-class Test___check_key_padding_mask_dimension_count(TestValidator):
-    def test_no_padding_mask_input(self):
-        output = self.model._MultiHeadAttentionValidator__check_key_padding_mask_dimension_count()
-        self.assertIsNone(output)
-
-    def test_incorrect_3D_input_padding_mask(self):
-        key_padding_mask = torch.randn(
-            self.source_sequence_length, self.batch_size, self.embedding_dim
-        )
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_key_padding_mask_dimension_count(
-                key_padding_mask
-            )
-
-    def test_correct_2D_padding_mask_input_with_batched_input_flag_set_to_True(self):
-        self.model.batched_input_flag = True
-        key_padding_mask = torch.randn(self.batch_size, self.source_sequence_length)
-        output = self.model._MultiHeadAttentionValidator__check_key_padding_mask_dimension_count(
-            key_padding_mask
-        )
-        self.assertIsNone(output)
-
-    def test_correct_1D_padding_mask_input_with_batched_input_flag_set_to_False(self):
-        self.model.batched_input_flag = False
-        key_padding_mask = torch.randn(self.source_sequence_length)
-        output = self.model._MultiHeadAttentionValidator__check_key_padding_mask_dimension_count(
-            key_padding_mask
-        )
-        self.assertIsNone(output)
-
-
-class Test___check_attention_mask_dim_count_and_shape(TestValidator):
-    def test_no_attention_mask_input(self):
-        output = self.model._MultiHeadAttentionValidator__check_attention_mask_dim_count_and_shape()
-        self.assertIsNone(output)
-
-    def test_incorrect_1D_input(self):
-        attention_mask = torch.randn(self.source_sequence_length)
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_attention_mask_dim_count_and_shape(
-                attention_mask
-            )
-
-    def test_input_with_correct_2D_dim_count_correct_shape(self):
-        attention_mask = torch.randn(
-            self.target_sequence_length, self.source_sequence_length
-        )
-
-        output = self.model._MultiHeadAttentionValidator__check_attention_mask_dim_count_and_shape(
-            attention_mask
-        )
-        self.assertIsNone(output)
-
-    def test_input_with_correct_3D_dim_count_but_correct_shape(self):
-        attention_mask = torch.randn(
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            self.source_sequence_length,
-        )
-
-        output = self.model._MultiHeadAttentionValidator__check_attention_mask_dim_count_and_shape(
-            attention_mask
-        )
-        self.assertIsNone(output)
-
-    def test_incorrect_4D_input(self):
-        attention_mask = torch.randn(
-            self.num_heads,
-            self.batch_size,
-            self.source_sequence_length,
-            self.target_sequence_length,
-        )
-
-        with self.assertRaises(RuntimeError) as context:
-            self.model._MultiHeadAttentionValidator__check_attention_mask_dim_count_and_shape(
-                attention_mask
-            )
-
-
-class Test_check_attention_input_shapes(TestValidator):
-    def test_all_inputs_batched(self):
-        q_input_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-        )
-        kv_input_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-        )
-        query = torch.randn(q_input_shape)
-        key = torch.randn(kv_input_shape)
-        value = torch.randn(kv_input_shape)
-
-        key_padding_mask = torch.randint(
-            0, 2, (self.batch_size, self.source_sequence_length)
-        )
-        attention_mask = torch.randn(
-            self.batch_size * self.num_heads,
-            self.target_sequence_length,
-            self.source_sequence_length,
-        )
-
-        output = self.model.check_attention_input_shapes(
-            query, key, value, key_padding_mask, attention_mask
-        )
-
-        self.assertTrue(output)
-
-    def test_all_inputs_not_batched(self):
-        q_input_shape = (
-            self.target_sequence_length,
-            self.embedding_dim,
-        )
-        kv_input_shape = (
-            self.source_sequence_length,
-            self.embedding_dim,
-        )
-        query = torch.randn(q_input_shape)
-        key = torch.randn(kv_input_shape)
-        value = torch.randn(kv_input_shape)
-        key_padding_mask = torch.randint(0, 2, (self.source_sequence_length,))
-        attention_mask = torch.randn(
-            self.target_sequence_length,
-            self.source_sequence_length,
-        )
-
-        output = self.model.check_attention_input_shapes(
-            query, key, value, key_padding_mask, attention_mask
-        )
-
-        self.assertFalse(output)
-
-    def test_all_inputs_no_attention_mask(self):
-        q_input_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-        )
-        kv_input_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-        )
-        query = torch.randn(q_input_shape)
-        key = torch.randn(kv_input_shape)
-        value = torch.randn(kv_input_shape)
-
-        key_padding_mask = torch.randint(
-            0, 2, (self.batch_size, self.source_sequence_length)
-        )
-
-        output = self.model.check_attention_input_shapes(
-            query, key, value, key_padding_mask
-        )
-
-        self.assertTrue(output)
-
-    def test_no_key_and_attention_masks(self):
-        q_input_shape = (
-            self.target_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-        )
-        kv_input_shape = (
-            self.source_sequence_length,
-            self.batch_size,
-            self.embedding_dim,
-        )
-        query = torch.randn(q_input_shape)
-        key = torch.randn(kv_input_shape)
-        value = torch.randn(kv_input_shape)
-
-        output = self.model.check_attention_input_shapes(query, key, value)
-
-        self.assertTrue(output)
-
-
-class Test_check_self_attention_projection_inputs(TestValidator):
-    def test__method(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = MultiHeadAttentionValidator(config)
-
-        batch_size = config.batch_size
-        source_sequence_length = config.source_sequence_length
-        embedding_dim = config.embedding_dim
-
-        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
-        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
-
-        output = m.check_self_attention_projection_inputs(key, value)
-
-        self.assertIsNone(output)
-
-    def test__is_error_raised(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = MultiHeadAttentionValidator(config)
-
-        batch_size = config.batch_size
-        source_sequence_length = config.source_sequence_length
-        embedding_dim = config.embedding_dim
-
-        changed_sequence_length = source_sequence_length + 1
-        key = torch.randn(changed_sequence_length, batch_size, embedding_dim)
-        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
-
-        with self.assertRaises(RuntimeError) as context:
-            m.check_self_attention_projection_inputs(key, value)
-
-
-class Test_check_indepentent_projections_inputs(TestValidator):
-    def test__method(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = MultiHeadAttentionValidator(config)
-
-        batch_size = config.batch_size
-        source_sequence_length = config.source_sequence_length
-        embedding_dim = config.embedding_dim
-
-        key = torch.randn(source_sequence_length, batch_size, embedding_dim)
-        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
-
-        output = m.check_self_attention_projection_inputs(key, value)
-
-        self.assertIsNone(output)
-
-    def test__is_error_raised(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = MultiHeadAttentionValidator(config)
-
-        batch_size = config.batch_size
-        source_sequence_length = config.source_sequence_length
-        embedding_dim = config.embedding_dim
-
-        changed_sequence_length = source_sequence_length + 1
-        key = torch.randn(changed_sequence_length, batch_size, embedding_dim)
-        value = torch.randn(source_sequence_length, batch_size, embedding_dim)
-
-        with self.assertRaises(RuntimeError) as context:
-            m.check_self_attention_projection_inputs(key, value)
-
-
-class Test___resolve_static_projection_type(TestValidator):
-    def test__value_tensor_flag__False(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = MultiHeadAttentionValidator(config)
-
-        value_tensor_flag = False
-
-        output = m._MultiHeadAttentionValidator__resolve_static_projection_type(
-            value_tensor_flag
-        )
-
-        self.assertEqual(output, "static_keys")
-
-    def test__value_tensor_flag__True(self):
-        c = copy.deepcopy(self.cfg)
-        config = c.multi_head_attention_model_config
-        m = MultiHeadAttentionValidator(config)
-
-        value_tensor_flag = True
-
-        output = m._MultiHeadAttentionValidator__resolve_static_projection_type(
-            value_tensor_flag
-        )
-        self.assertEqual(output, "static_values")
-
-
-class Test___resolve_static_projection_shape(TestValidator):
-    def test_no_input_tensor(self):
-        static_tensor = None
-        output = (
-            self.model._MultiHeadAttentionValidator__resolve_static_projection_shape(
-                static_tensor
+    def test_none_inputs(self):
+        self.assertIsNone(
+            AttentionValidatorBase.validate_static_projection_shapes(
+                self.model, None, None
             )
         )
 
-        self.assertIsNone(output)
-
-    def test_correct_input_tensor(self):
-        static_tensor = torch.randn(
-            self.batch_size * self.num_heads, self.source_sequence_length, self.head_dim
-        )
-        output = (
-            self.model._MultiHeadAttentionValidator__resolve_static_projection_shape(
-                static_tensor
+    def test_correct_static_shapes(self):
+        static = torch.randn(BATCH_SIZE * NUM_HEADS, SOURCE_SEQUENCE_LENGTH, HEAD_DIM)
+        self.assertIsNone(
+            AttentionValidatorBase.validate_static_projection_shapes(
+                self.model, static, static
             )
         )
 
-        self.assertIsNone(output)
-
-    def test_input_tensor_with_incorrect_shape(self):
-        wrong_static_tensor = torch.randn(
-            self.batch_size, self.source_sequence_length, self.head_dim
-        )
-        with self.assertRaises(AssertionError) as context:
-            self.model._MultiHeadAttentionValidator__resolve_static_projection_shape(
-                wrong_static_tensor
+    def test_wrong_static_first_dim(self):
+        wrong = torch.randn(BATCH_SIZE, SOURCE_SEQUENCE_LENGTH, HEAD_DIM)
+        with self.assertRaises(ValueError):
+            AttentionValidatorBase.validate_static_projection_shapes(
+                self.model, wrong, None
             )
 
 
-class Test_check_static_projection_shapes(TestValidator):
-    def test_no_inputs(self):
-        static_keys = None
-        static_values = None
-
-        output = self.model.check_static_projection_shapes(static_keys, static_values)
-
-        self.assertIsNone(output)
-
-    def test_check_correct_static_projection_inputs(self):
-        static_keys = torch.randn(
-            self.batch_size * self.num_heads,
-            self.source_sequence_length,
-            self.head_dim,
-            self.embedding_dim,
+class TestValidateHeadDivisibility(unittest.TestCase):
+    def test_passes_when_divisible(self):
+        model = SimpleNamespace(
+            embedding_dim=12,
+            num_heads=4,
+            query_key_projection_dim=0,
+            value_projection_dim=0,
         )
-        static_values = torch.randn(
-            self.batch_size * self.num_heads,
-            self.source_sequence_length,
-            self.head_dim,
-            self.embedding_dim,
+        self.assertIsNone(
+            AttentionValidatorBase.validate_head_divisibility(model)
         )
 
-        output = self.model.check_static_projection_shapes(static_keys, static_values)
-        self.assertIsNone(output)
-
-    def test_check_wrong_static_projection_inputs(self):
-        static_keys = torch.randn(
-            self.batch_size,
-            self.source_sequence_length,
-            self.head_dim,
-            self.embedding_dim,
+    def test_raises_when_embedding_not_divisible(self):
+        model = SimpleNamespace(
+            embedding_dim=13,
+            num_heads=4,
+            query_key_projection_dim=0,
+            value_projection_dim=0,
         )
-        static_values = torch.randn(
-            self.batch_size * self.num_heads,
-            self.source_sequence_length,
-            self.head_dim,
-            self.embedding_dim,
+        with self.assertRaises(ValueError):
+            AttentionValidatorBase.validate_head_divisibility(model)
+
+    def test_raises_when_projection_not_divisible(self):
+        model = SimpleNamespace(
+            embedding_dim=12,
+            num_heads=4,
+            query_key_projection_dim=14,
+            value_projection_dim=0,
+        )
+        with self.assertRaises(ValueError):
+            AttentionValidatorBase.validate_head_divisibility(model)
+
+
+class TestAttentionWeightsForSelfAttentionOnly(unittest.TestCase):
+    def test_passes_when_flag_false(self):
+        model = SimpleNamespace(return_attention_weights_flag=False)
+        self.assertIsNone(
+            AttentionValidatorBase.validate_attention_weights_returned_for_self_attention_only(
+                model
+            )
         )
 
-        with self.assertRaises(AssertionError) as context:
-            self.model.check_static_projection_shapes(static_keys, static_values)
+    def test_raises_when_flag_true(self):
+        model = SimpleNamespace(return_attention_weights_flag=True)
+        with self.assertRaises(RuntimeError):
+            AttentionValidatorBase.validate_attention_weights_returned_for_self_attention_only(
+                model
+            )
+
+
+class TestSelfAttentionValidator(unittest.TestCase):
+    def test_validate_passes_for_equal_dims(self):
+        model = build_attention_config(
+            SelfAttentionConfig,
+            embedding_dim=EMBEDDING_DIM,
+            query_key_projection_dim=EMBEDDING_DIM,
+            value_projection_dim=EMBEDDING_DIM,
+        ).build()
+        self.assertIsNone(SelfAttentionValidator.validate(model))
+
+    def test_dimensions_equal_raises_for_unequal(self):
+        model = SimpleNamespace(
+            embedding_dim=12, query_key_projection_dim=16, value_projection_dim=12
+        )
+        with self.assertRaises(RuntimeError):
+            SelfAttentionValidator.validate_self_attention_dimensions_equal(model)
+
+    def test_query_key_value_same_tensor_passes(self):
+        tensor = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        self.assertIsNone(
+            SelfAttentionValidator.validate_query_key_value_are_same_tensor(
+                tensor, tensor, tensor
+            )
+        )
+
+    def test_query_key_value_distinct_raises(self):
+        query = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        key = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        with self.assertRaises(RuntimeError):
+            SelfAttentionValidator.validate_query_key_value_are_same_tensor(
+                query, key, key
+            )
+
+
+class TestIndependentAttentionValidator(unittest.TestCase):
+    def test_forward_inputs_raise_when_returning_weights(self):
+        model = build_attention_config(
+            IndependentAttentionConfig,
+            return_attention_weights_flag=True,
+        ).build()
+        query = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        key = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        value = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        with self.assertRaises(RuntimeError):
+            IndependentAttentionValidator.validate_forward_inputs(
+                model, query, key, value
+            )
+
+
+class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
+    def test_validate_passes_with_experts_config(self):
+        model = build_attention_config(
+            MixtureOfAttentionHeadsConfig,
+            embedding_dim=EMBEDDING_DIM,
+            query_key_projection_dim=EMBEDDING_DIM,
+            value_projection_dim=EMBEDDING_DIM,
+        ).build()
+        self.assertIsNone(MixtureOfAttentionHeadsValidator.validate(model))
+
+    def test_validate_experts_configuration_raises_when_missing(self):
+        model = SimpleNamespace(
+            cfg=SimpleNamespace(
+                experts_config=None, use_kv_expert_models_flag=False
+            )
+        )
+        with self.assertRaises(ValueError):
+            MixtureOfAttentionHeadsValidator.validate_experts_configuration(model)
