@@ -405,9 +405,9 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
     def validate_main_config_is_derived(model: "MixtureOfExpertsModel") -> None:
         from emperor.experts.core.config import MixtureOfExpertsConfig
 
-        if not isinstance(model.main_cfg, MixtureOfExpertsConfig):
+        if not isinstance(model.cfg, MixtureOfExpertsConfig):
             raise ValueError(
-                "Invalid configuration: `main_cfg` must be a "
-                "`MixtureOfExpertsConfig` instance."
+                "Invalid configuration: `cfg` must resolve to a "
+                "`MixtureOfExpertsConfig` instance after construction."
             )
 

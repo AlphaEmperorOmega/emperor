@@ -8,6 +8,7 @@ from emperor.experts.core.state import MixtureOfExpertsLayerState
 from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core._validator import MixtureOfExpertsModelValidator
 
+
 class MixtureOfExpertsModel(Module):
     def __init__(
         self,
@@ -15,9 +16,8 @@ class MixtureOfExpertsModel(Module):
         overrides: "MixtureOfExpertsConfig | LayerStackConfig | None" = None,
     ) -> None:
         super().__init__()
-        self.stack_config = self.__resolve_stack_config(cfg, overrides)
         self.cfg = self.__resolve_mixture_config(cfg, overrides)
-        self.main_cfg: "MixtureOfExpertsConfig" = self.cfg
+        self.stack_config = self.__resolve_stack_config(cfg, overrides)
 
         self.top_k = self.cfg.top_k
         self.input_dim = self.cfg.input_dim
