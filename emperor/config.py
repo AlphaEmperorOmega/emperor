@@ -1,20 +1,11 @@
 import torch.nn as nn
-from torch import float32
 from dataclasses import dataclass, field
 
-from emperor.attention.utils.layer import MultiHeadAttentionConfig
-from emperor.base.utils import ConfigBase
-from emperor.experts.core.options import RoutingInitializationMode
+from emperor.base.utils import ConfigBase, optional_field
 from emperor.transformer.utils.layers import TransformerConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.base.layer import LayerStackConfig
 from emperor.sampler.core.samplers import SamplerConfig
 from emperor.sampler.core.routers import RouterConfig
 from emperor.neuron.neuron import (
@@ -22,7 +13,6 @@ from emperor.neuron.neuron import (
     NeuronClusterConfig,
     NucleusConfig,
     TerminalConfig,
-    TerminalRangeOptions,
 )
 
 # MODEL WISE CONFI
@@ -79,32 +69,6 @@ PARAMETER_GENERATOR_TRACK_TIME_FLAG = False
 PARAMETER_GENERATOR_DYNAMIC_DIAGONAL_PARAMS_FLAG = True
 
 
-def default_expert_model_config(
-    input_dim: int = INPUT_DIM,
-    output_dim: int = OUTPUT_DIM,
-) -> LayerStackConfig:
-    hidden_dim = max(input_dim, output_dim)
-    return LayerStackConfig(
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        num_layers=2,
-        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=False,
-        layer_config=LayerConfig(
-            activation=ActivationOptions.RELU,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
-            dropout_probability=0.0,
-            gate_config=None,
-            halting_config=None,
-            memory_config=None,
-            shared_halting_flag=False,
-            layer_model_config=LinearLayerConfig(bias_flag=True),
-        ),
-    )
-
-
 @dataclass
 class ModelConfig(ConfigBase):
     batch_size: int = field(
@@ -148,28 +112,11 @@ class ModelConfig(ConfigBase):
             "help": "Flag to control frequency of gathering operations for the purpose of visualization"
         },
     )
-    router_model_config: RouterConfig = field(
-        default_factory=lambda: RouterConfig(
-            num_experts=ROUTER_OUTPUT_DIM,
-            noisy_topk_flag=ROUTER_NOISY_TOPK_FLAG,
-        ),
-        metadata={"help": "`RouterModel` configuration"},
+    router_model_config: "RouterConfig | None" = optional_field(
+        "`RouterModel` configuration"
     )
-    sampler_model_config: SamplerConfig = field(
-        default_factory=lambda: SamplerConfig(
-            top_k=SAMPLER_TOP_K,
-            threshold=SAMPLER_THRESHOLD,
-            filter_above_threshold=SAMPLER_FILTER_THRESHOLD,
-            num_topk_samples=SAMPLER_NUM_TOPK_SAMPLES,
-            normalize_probabilities_flag=SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
-            noisy_topk_flag=SAMPLER_NOISY_TOPK_FLAG,
-            num_experts=SAMPLER_ROUTER_OUTPUT_DIM,
-            coefficient_of_variation_loss_weight=SAMPLER_COEFFICIENT_OF_VARIATION_WEIGHT,
-            switch_loss_weight=SAMPLER_SWITCH_WEIGHT,
-            zero_centred_loss_weight=SAMPLER_ZERO_CENTRED_WEIGHT,
-            mutual_information_loss_weight=SAMPLER_MUTUAL_INFORMATION_WEIGHT,
-        ),
-        metadata={"help": "`SamplerConfig` configuration"},
+    sampler_model_config: "SamplerConfig | None" = optional_field(
+        "`SamplerConfig` configuration"
     )
     mixture_model_config: "AdaptiveMixtureConfig | None" = field(
         default=None,
@@ -179,107 +126,37 @@ class ModelConfig(ConfigBase):
         default=None,
         metadata={"help": "`ParameterGeneratorConfig` configuration"},
     )
-    input_moe_layer_config: MixtureOfExpertsConfig = field(
-        default_factory=lambda: MixtureOfExpertsConfig(
-            expert_model_config=default_expert_model_config(INPUT_DIM, 64),
-            top_k=MIXTURE_TOP_K,
-            num_experts=12,
-            compute_expert_mixture_flag=False,
-            weighted_parameters_flag=False,
-            routing_initialization_mode=RoutingInitializationMode.SHARED,
-        ),
-        metadata={"help": "`MixtureOfExpertsConfig` configuration"},
+    input_moe_layer_config: "MixtureOfExpertsConfig | None" = optional_field(
+        "`MixtureOfExpertsConfig` configuration"
     )
-    output_moe_layer_config: MixtureOfExpertsConfig = field(
-        default_factory=lambda: MixtureOfExpertsConfig(
-            expert_model_config=default_expert_model_config(64, INPUT_DIM),
-            top_k=MIXTURE_TOP_K,
-            num_experts=12,
-            compute_expert_mixture_flag=True,
-            weighted_parameters_flag=True,
-            routing_initialization_mode=RoutingInitializationMode.SHARED,
-        ),
-        metadata={"help": "`MixtureOfExpertsConfig` configuration"},
+    output_moe_layer_config: "MixtureOfExpertsConfig | None" = optional_field(
+        "`MixtureOfExpertsConfig` configuration"
     )
-    multi_head_attention_model_config: MultiHeadAttentionConfig = field(
-        default_factory=lambda: MultiHeadAttentionConfig(
-            model_type=1,
-            batch_size=BATCH_SIZE,
-            num_heads=NUM_EXPERTS,
-            query_key_projection_dim=16,
-            value_projection_dim=32,
-            embedding_dim=64,
-            target_sequence_length=16,
-            source_sequence_length=32,
-            target_dtype=float32,
-            attention_option=False,
-            dropout_probability=0.0,
-            key_value_bias_flag=False,
-            zero_attention_flag=False,
-            causal_attention_mask_flag=False,
-            add_key_value_bias_flag=False,
-        ),
+    multi_head_attention_model_config: "MultiHeadAttentionConfig | None" = field(
+        default=None,
         metadata={"help": "`MultiHeadAttention` configuration"},
     )
-    layer_stack_config: LayerStackConfig = field(
-        default_factory=lambda: LayerStackConfig(
-            input_dim=INPUT_DIM,
-            hidden_dim=HIDDEN_DIM,
-            output_dim=OUTPUT_DIM,
-            num_layers=2,
-        ),
-        metadata={"help": "`MultiHeadAttention` configuration"},
+    layer_stack_config: "LayerStackConfig | None" = optional_field(
+        "`LayerStack` configuration"
     )
-    transformer_feed_forward_config: FeedForwardConfig = field(
-        default_factory=lambda: FeedForwardConfig(
-            layer_stack_option=1,
-            num_layers=1,
-        ),
-        metadata={"help": "`MultiHeadAttention` configuration"},
+    transformer_feed_forward_config: "FeedForwardConfig | None" = optional_field(
+        "`FeedForward` configuration"
     )
-    transformer_layer_config: TransformerConfig = field(
-        default_factory=lambda: TransformerConfig(),
-        metadata={"help": "`MultiHeadAttention` configuration"},
+    transformer_layer_config: "TransformerConfig | None" = optional_field(
+        "`Transformer` layer configuration"
     )
-    transformer_config: TransformerConfig | None = field(
-        default_factory=lambda: TransformerConfig(
-            num_layers=2,
-            source_sequence_length=0,
-            target_sequence_length=0,
-            causal_attention_mask_flag=False,
-        ),
-        metadata={
-            "help": "`TransformerEncoder` and `TransformerDecoder` configuration"
-        },
+    transformer_config: "TransformerConfig | None" = optional_field(
+        "`TransformerEncoder` and `TransformerDecoder` configuration"
     )
-    neuron_nucleus_config: NucleusConfig | None = field(
-        default_factory=lambda: NucleusConfig(
-            model_type=1,
-        ),
-        metadata={"help": "`Nucleus` configuration"},
+    neuron_nucleus_config: "NucleusConfig | None" = optional_field(
+        "`Nucleus` configuration"
     )
-    neuron_axon_config: AxonsConfig | None = field(
-        default_factory=lambda: AxonsConfig(
-            memory_type=None,
-        ),
-        metadata={"help": "Neuron `Axon` configuration"},
+    neuron_axon_config: "AxonsConfig | None" = optional_field(
+        "Neuron `Axon` configuration"
     )
-    neuron_terminal_config: TerminalConfig | None = field(
-        default_factory=lambda: TerminalConfig(
-            x_axis_position=0,
-            y_axis_position=0,
-            z_axis_position=0,
-            xy_axis_range=TerminalRangeOptions.TWO,
-            z_axis_range=TerminalRangeOptions.TWO,
-            z_axis_offset=1,
-        ),
-        metadata={"help": "Neuron `Axon` configuration"},
+    neuron_terminal_config: "TerminalConfig | None" = optional_field(
+        "Neuron `Terminal` configuration"
     )
-    neuron_cluster_config: NeuronClusterConfig | None = field(
-        default_factory=lambda: NeuronClusterConfig(
-            x_axis_total_neurons=10,
-            y_axis_total_neurons=10,
-            z_axis_total_neurons=10,
-        ),
-        metadata={"help": "Neuron `Cluster` configuration"},
+    neuron_cluster_config: "NeuronClusterConfig | None" = optional_field(
+        "Neuron `Cluster` configuration"
     )
