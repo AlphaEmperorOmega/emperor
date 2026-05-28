@@ -399,11 +399,22 @@ class MixtureOfExpertsValidator(ValidatorBase):
 class MixtureOfExpertsModelValidator(ValidatorBase):
     @staticmethod
     def validate(model: "MixtureOfExpertsModel") -> None:
+        MixtureOfExpertsModelValidator.validate_cfg_type(model)
         MixtureOfExpertsModelValidator.validate_stack_config_type(model)
-        MixtureOfExpertsModelValidator.validate_main_config_is_derived(model)
         MixtureOfExpertsModelValidator.validate_shared_routing_config_when_shared(
             model
         )
+
+    @staticmethod
+    def validate_cfg_type(model: "MixtureOfExpertsModel") -> None:
+        from emperor.experts.config import MixtureOfExpertsModelConfig
+
+        if not isinstance(model.cfg, MixtureOfExpertsModelConfig):
+            raise TypeError(
+                "Configuration Error: `cfg` must be of type "
+                "MixtureOfExpertsModelConfig, received type "
+                f"{type(model.cfg).__name__}"
+            )
 
     @staticmethod
     def validate_stack_config_type(model: "MixtureOfExpertsModel") -> None:
@@ -414,16 +425,6 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
                 "Configuration Error: 'stack_config' must be of type "
                 "LayerStackConfig, received type "
                 f"{type(model.stack_config).__name__}"
-            )
-
-    @staticmethod
-    def validate_main_config_is_derived(model: "MixtureOfExpertsModel") -> None:
-        from emperor.experts.core.config import MixtureOfExpertsConfig
-
-        if not isinstance(model.cfg, MixtureOfExpertsConfig):
-            raise ValueError(
-                "Invalid configuration: `cfg` must resolve to a "
-                "`MixtureOfExpertsConfig` instance after construction."
             )
 
     @staticmethod
