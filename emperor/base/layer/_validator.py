@@ -1,4 +1,5 @@
 from emperor.base.utils import ConfigBase
+from emperor.base.options import LayerNormPositionOptions
 from emperor.base.validator import ValidatorBase
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
 
@@ -29,6 +30,8 @@ class LayerValidator(ValidatorBase):
             cfg.input_dim, cfg.output_dim, cfg.residual_flag
         )
         LayerValidator.__validate_model_config(cfg.layer_model_config)
+        LayerValidator.__validate_layer_norm_with_spatial_model(cfg)
+        LayerValidator.__validate_residual_with_strided_model(cfg)
         LayerValidator.__validate_gate_config(cfg.gate_config)
         LayerValidator.__validate_halting_config(
             cfg.halting_config, cfg.shared_halting_flag
@@ -66,6 +69,40 @@ class LayerValidator(ValidatorBase):
                 f"model_config must be an instance of ConfigBase, "
                 f"got {type(model_config).__name__}"
             )
+
+    @staticmethod
+    def __validate_layer_norm_with_spatial_model(cfg: LayerConfig) -> None:
+        layer_model_config = cfg.layer_model_config
+        if layer_model_config is None:
+            return
+        if not hasattr(layer_model_config, "kernel_size"):
+            return
+        if cfg.layer_norm_position == LayerNormPositionOptions.DISABLED:
+            return
+        raise ValueError(
+            f"layer_norm_position must be DISABLED when layer_model_config "
+            f"is a spatial (Conv2d-like) module, received "
+            f"{cfg.layer_norm_position}. nn.LayerNorm normalizes over the last "
+            f"tensor dim; for (B, C, H, W) inputs that is W, which is not "
+            f"channel normalization. Use BatchNorm2d or GroupNorm externally, "
+            f"or disable layer norm."
+        )
+
+    @staticmethod
+    def __validate_residual_with_strided_model(cfg: LayerConfig) -> None:
+        layer_model_config = cfg.layer_model_config
+        if layer_model_config is None:
+            return
+        stride = getattr(layer_model_config, "stride", None)
+        if stride is None or stride <= 1:
+            return
+        if not cfg.residual_flag:
+            return
+        raise ValueError(
+            f"residual_flag cannot be True when layer_model_config has "
+            f"stride > 1 (received stride={stride}). Spatial reduction "
+            f"breaks the residual addition shape contract."
+        )
 
     @staticmethod
     def __validate_gate_config(gate_config: "LayerStackConfig | None") -> None:
@@ -141,6 +178,7 @@ class LayerStackValidator(ValidatorBase):
     OPTIONAL_FIELDS = {
         "layer_type",
         "override_config",
+        "last_layer_overrides",
     }
 
     @staticmethod

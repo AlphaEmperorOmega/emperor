@@ -71,25 +71,38 @@ class LayerStack(Module):
 
     def __add_output_layer(self, layers: list) -> None:
         layer_input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
-        bias_overrides = self.__resolve_last_layer_bias_override()
-        if self.apply_output_pipeline_flag:
-            layer = self.__create_layer(
-                layer_input_dim, self.output_dim, bias_overrides
-            )
-            layer.mark_as_last_layer()
-            layers.append(layer)
-            return
-        overrides = LayerConfig(
-            activation=ActivationOptions.DISABLED,
-            residual_flag=False,
-            dropout_probability=0.0,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-        )
-        if bias_overrides is not None:
-            overrides = self._override_config(overrides, bias_overrides)
+        overrides = self.__resolve_output_layer_overrides()
         layer = self.__create_layer(layer_input_dim, self.output_dim, overrides)
         layer.mark_as_last_layer()
         layers.append(layer)
+
+    def __resolve_output_layer_overrides(self) -> "LayerConfig | None":
+        overrides: "LayerConfig | None" = None
+        if not self.apply_output_pipeline_flag:
+            overrides = LayerConfig(
+                activation=ActivationOptions.DISABLED,
+                residual_flag=False,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+            )
+        overrides = self.__merge_layer_override(
+            overrides, self.__resolve_last_layer_bias_override()
+        )
+        overrides = self.__merge_layer_override(
+            overrides, self.cfg.last_layer_overrides
+        )
+        return overrides
+
+    def __merge_layer_override(
+        self,
+        base: "LayerConfig | None",
+        addition: "LayerConfig | None",
+    ) -> "LayerConfig | None":
+        if addition is None:
+            return base
+        if base is None:
+            return addition
+        return self._override_config(base, addition)
 
     def __resolve_last_layer_bias_override(self) -> LayerConfig | None:
         if self.last_layer_bias_option == LastLayerBiasOptions.DEFAULT:
