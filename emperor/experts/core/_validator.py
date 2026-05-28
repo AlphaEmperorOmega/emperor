@@ -399,7 +399,22 @@ class MixtureOfExpertsValidator(ValidatorBase):
 class MixtureOfExpertsModelValidator(ValidatorBase):
     @staticmethod
     def validate(model: "MixtureOfExpertsModel") -> None:
+        MixtureOfExpertsModelValidator.validate_stack_config_type(model)
         MixtureOfExpertsModelValidator.validate_main_config_is_derived(model)
+        MixtureOfExpertsModelValidator.validate_shared_routing_config_when_shared(
+            model
+        )
+
+    @staticmethod
+    def validate_stack_config_type(model: "MixtureOfExpertsModel") -> None:
+        from emperor.base.layer import LayerStackConfig
+
+        if not isinstance(model.stack_config, LayerStackConfig):
+            raise TypeError(
+                "Configuration Error: 'stack_config' must be of type "
+                "LayerStackConfig, received type "
+                f"{type(model.stack_config).__name__}"
+            )
 
     @staticmethod
     def validate_main_config_is_derived(model: "MixtureOfExpertsModel") -> None:
@@ -409,5 +424,26 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
             raise ValueError(
                 "Invalid configuration: `cfg` must resolve to a "
                 "`MixtureOfExpertsConfig` instance after construction."
+            )
+
+    @staticmethod
+    def validate_shared_routing_config_when_shared(
+        model: "MixtureOfExpertsModel",
+    ) -> None:
+        from emperor.sampler.core.config import RouterConfig, SamplerConfig
+
+        if model.routing_initialization_mode != RoutingInitializationMode.SHARED:
+            return
+        if not isinstance(model.sampler_config, SamplerConfig):
+            raise TypeError(
+                "Configuration Error: 'sampler_config' must be of type "
+                "SamplerConfig when 'routing_initialization_mode' is SHARED, "
+                f"received type {type(model.sampler_config).__name__}"
+            )
+        if not isinstance(model.sampler_config.router_config, RouterConfig):
+            raise TypeError(
+                "Configuration Error: 'sampler_config.router_config' must be of "
+                "type RouterConfig when 'routing_initialization_mode' is SHARED, "
+                f"received type {type(model.sampler_config.router_config).__name__}"
             )
 
