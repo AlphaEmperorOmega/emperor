@@ -9,6 +9,7 @@ from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core._expert_capacity import ExpertCapacityHandler
 from emperor.experts.core._expert_weighting import ExpertWeightingHandler
 from emperor.experts.core._validator import MixtureOfExpertsValidator
+from emperor.experts.core.state import MixtureOfExpertsLayerState
 from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
@@ -18,7 +19,6 @@ from emperor.experts.core.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.experts.core.state import MixtureOfExpertsLayerState
     from emperor.sampler.core.config import RouterConfig, SamplerConfig
     from emperor.sampler.model import SamplerModel
 
@@ -74,18 +74,11 @@ class MixtureOfExperts(Module):
     def __maybe_create_sampler(
         self,
     ) -> "SamplerModel | None":
-        from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
         if self.routing_initialization_mode != RoutingInitializationMode.LAYER:
             return None
         MixtureOfExpertsValidator.validate_sampler_config_exists(self)
         MixtureOfExpertsValidator.validate_router_config_exists(self)
-        router_overrides = RouterConfig(input_dim=self.input_dim)
-        router_config = self._override_config(
-            self.sampler_config.router_config, router_overrides
-        )
-        sampler_overrides = SamplerConfig(router_config=router_config)
-        return self.sampler_config.build(sampler_overrides)
+        return self.sampler_config.build_with_router_input_dim(self.input_dim)
 
     def __create_experts(self) -> nn.ModuleList:
         expert_list = []
@@ -104,6 +97,14 @@ class MixtureOfExperts(Module):
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
+        return self.__compute_routed_expert_output(input_batch, probabilities, indices)
+
+    def __compute_routed_expert_output(
+        self,
+        input_batch: Tensor,
+        probabilities: Tensor | None,
+        indices: Tensor | None,
+    ) -> tuple[Tensor, Tensor]:
         MixtureOfExpertsValidator.validate_forward_inputs(
             self, input_batch, probabilities, indices
         )
@@ -116,11 +117,9 @@ class MixtureOfExperts(Module):
         expert_outputs, routing_positions, probabilities, expert_loss = (
             self._compute_experts(expert_input_data, probabilities)
         )
-
         output = self.__compute_expert_mixture(
             expert_outputs, routing_positions, probabilities
         )
-
         total_loss = sampler_loss + expert_loss
         return output, total_loss
 
