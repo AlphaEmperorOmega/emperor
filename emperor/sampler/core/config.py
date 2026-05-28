@@ -1,7 +1,13 @@
-from dataclasses import dataclass
+import copy
 
+from dataclasses import dataclass
 from emperor.base.layer import LayerStackConfig
 from emperor.base.utils import ConfigBase, optional_field
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emperor.sampler.model import SamplerModel
 
 
 @dataclass
@@ -54,3 +60,23 @@ class SamplerConfig(ConfigBase):
         from emperor.sampler.model import SamplerModel
 
         return SamplerModel
+
+    def build_with_router_input_dim(self, input_dim: int) -> "SamplerModel":
+        router_overrides = RouterConfig(input_dim=input_dim)
+        router_config = self.__override_router_config(router_overrides)
+        return self.build(SamplerConfig(router_config=router_config))
+
+    def __override_router_config(self, overrides: "RouterConfig") -> "RouterConfig":
+        if self.router_config is None:
+            raise ValueError(
+                "SamplerConfig.router_config must be set before overriding."
+            )
+        router_config = copy.deepcopy(self.router_config)
+        for field_name in router_config.__dataclass_fields__:
+            if field_name not in overrides.__dataclass_fields__:
+                continue
+            override_value = getattr(overrides, field_name)
+            if override_value is None:
+                continue
+            setattr(router_config, field_name, override_value)
+        return router_config
