@@ -357,9 +357,10 @@ class Module(LightningModule):
 
     def _resolve_main_config(
         self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> None:
-        if sub_config.override_config is not None:
-            return sub_config.override_config
+    ) -> "ConfigBase":
+        override = getattr(sub_config, "override_config", None)
+        if override is not None:
+            return override
         return main_cfg
 
     def _init_parameter_bank(
