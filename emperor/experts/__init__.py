@@ -7,6 +7,7 @@ from emperor.experts.core.config import (
     MixtureOfExpertsConfig,
     MixtureOfExpertsLayerConfig,
 )
+from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.layers import (
     MixtureOfExperts,
     MixtureOfExpertsMap,
@@ -25,5 +26,6 @@ __all__ = [
     "MixtureOfExpertsLayerState",
     "MixtureOfExpertsMap",
     "MixtureOfExpertsModel",
+    "MixtureOfExpertsModelConfig",
     "MixtureOfExpertsReduce",
 ]
