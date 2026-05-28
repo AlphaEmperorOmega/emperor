@@ -354,9 +354,7 @@ class MixtureOfExpertsLayer(Layer):
         main_model_input: Tensor,
         state: "MixtureOfExpertsLayerState",
     ) -> Tensor:
-        output, loss = self.model(
-            main_model_input, state.probabilities, state.indices
-        )
+        output, loss = self.model(main_model_input, state.probabilities, state.indices)
         state.loss = loss if state.loss is None else state.loss + loss
         return output
 
