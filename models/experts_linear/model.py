@@ -3,7 +3,7 @@ import torch
 from torch import Tensor
 from emperor.base.layer.config import LayerConfig
 from emperor.base.layer.layer import Layer
-from emperor.experts.core.config import MixtureOfExpertsConfig
+from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.model import MixtureOfExpertsModel
 from emperor.experiments.classifier import ClassifierExperiment
 from models.experts_linear.experiment_config import ExperimentConfig
@@ -34,7 +34,7 @@ class Model(ClassifierExperiment):
         )
 
     def _build_main_model(self) -> MixtureOfExpertsModel:
-        override = MixtureOfExpertsConfig(
+        override = MixtureOfExpertsModelConfig(
             input_dim=self.main_cfg.hidden_dim,
             output_dim=self.main_cfg.hidden_dim,
         )
@@ -66,7 +66,6 @@ class Model(ClassifierExperiment):
         X = X.to(self.device)
         X = torch.flatten(X, start_dim=1)
         X = Layer.forward_with_state(self.input_model, X)
-        out = self.main_model(X)
-        X = out[0] if isinstance(out, tuple) else out
+        X = Layer.forward_with_state(self.main_model, X)
         X = Layer.forward_with_state(self.output_model, X)
         return X

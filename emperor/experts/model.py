@@ -1,6 +1,7 @@
 from torch import Tensor
+from emperor.base.layer.state import LayerState
 from emperor.base.utils import Module
-from emperor.base.layer import LayerStackConfig
+from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.options import RoutingInitializationMode
 from emperor.experts.core.state import MixtureOfExpertsLayerState
 from emperor.experts.core._validator import MixtureOfExpertsModelValidator
@@ -14,17 +15,18 @@ if TYPE_CHECKING:
 class MixtureOfExpertsModel(Module):
     def __init__(
         self,
-        cfg: LayerStackConfig,
-        overrides: LayerStackConfig | None = None,
+        cfg: MixtureOfExpertsModelConfig,
+        overrides: MixtureOfExpertsModelConfig | None = None,
     ) -> None:
         super().__init__()
-        self.stack_config = self._override_config(cfg, overrides)
-        self.cfg = self.stack_config.layer_config.layer_model_config
+        self.cfg: MixtureOfExpertsModelConfig = self._override_config(cfg, overrides)
 
         self.top_k = self.cfg.top_k
         self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
         self.routing_initialization_mode = self.cfg.routing_initialization_mode
         self.sampler_config = self.cfg.sampler_config
+        self.stack_config = self.cfg.stack_config
 
         MixtureOfExpertsModelValidator.validate(self)
         self.shared_sampler = self._maybe_create_shared_sampler()
@@ -33,37 +35,30 @@ class MixtureOfExpertsModel(Module):
     def _maybe_create_shared_sampler(self) -> "SamplerModel | None":
         if self.routing_initialization_mode != RoutingInitializationMode.SHARED:
             return None
-        from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
-        router_overrides = RouterConfig(input_dim=self.input_dim)
-        router_config = self._override_config(
-            self.sampler_config.router_config, router_overrides
-        )
-        sampler_overrides = SamplerConfig(router_config=router_config)
-        return self.sampler_config.build(sampler_overrides)
+        return self.sampler_config.build_with_router_input_dim(self.input_dim)
 
     def _build_expert_stack(self) -> Module:
         return self.stack_config.build()
 
-    def forward(
-        self,
-        hidden: Tensor,
-        probabilities: Tensor | None = None,
-        indices: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor | None]:
+    def forward(self, state: LayerState) -> MixtureOfExpertsLayerState:
         probabilities, indices, shared_sampler_loss = (
-            self.__maybe_apply_shared_routing(hidden, probabilities, indices)
+            self.__maybe_apply_shared_routing(
+                state.hidden,
+                getattr(state, "probabilities", None),
+                getattr(state, "indices", None),
+            )
         )
-        state = MixtureOfExpertsLayerState(
-            hidden=hidden,
+        mixture_of_experts_state = MixtureOfExpertsLayerState(
+            hidden=state.hidden,
             probabilities=probabilities,
             indices=indices,
-            loss=None,
+            loss=state.loss,
         )
-        state = self.expert_stack(state)
-        return state.hidden, self.__combine_losses(
-            shared_sampler_loss, state.loss
+        mixture_of_experts_state = self.expert_stack(mixture_of_experts_state)
+        mixture_of_experts_state.loss = self.__combine_losses(
+            shared_sampler_loss, mixture_of_experts_state.loss
         )
+        return mixture_of_experts_state
 
     def __maybe_apply_shared_routing(
         self,

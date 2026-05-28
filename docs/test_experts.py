@@ -12,6 +12,7 @@ from emperor.base.options import (
 from emperor.sampler.model import SamplerModel
 from emperor.sampler.core.routers import RouterModel
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
+from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import MixtureOfExpertsConfig
 from emperor.experts.core.layers import (
     MixtureOfExperts,
@@ -254,6 +255,18 @@ class MixtureOfExpertsPresetMixin:
                     **kwargs,
                 ),
             ),
+        )
+
+    def model_preset(self, **kwargs: object) -> MixtureOfExpertsModelConfig:
+        stack_config = self.stack_preset(**kwargs)
+        leaf_config = stack_config.layer_config.layer_model_config
+        return MixtureOfExpertsModelConfig(
+            input_dim=stack_config.input_dim,
+            output_dim=stack_config.output_dim,
+            top_k=leaf_config.top_k,
+            routing_initialization_mode=leaf_config.routing_initialization_mode,
+            sampler_config=leaf_config.sampler_config,
+            stack_config=stack_config,
         )
 
 
@@ -1356,57 +1369,53 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
         for num_layers in num_layer_options:
             message = f"Testing configuration with num_layers={num_layers}"
             with self.subTest(msg=message):
-                c = self.stack_preset(
+                c = self.model_preset(
                     stack_num_layers=num_layers,
+                    experts_stack_num_layers=num_layers,
                 )
-                moe_config = c.layer_config.layer_model_config
-                m = MixtureOfExpertsModel(moe_config)
-                self.assertIsInstance(m.expert_stack, MixtureOfExperts)
-                for expert in m.expert_stack.expert_modules:
+                m = MixtureOfExpertsModel(c)
+
+                if num_layers == 1:
+                    self.assertIsInstance(m.expert_stack, Layer)
+                    moe_layer = m.expert_stack
+                else:
+                    self.assertIsInstance(m.expert_stack, Sequential)
+                    moe_layer = m.expert_stack[0]
+
+                for expert in moe_layer.model.expert_modules:
                     if num_layers == 1:
                         self.assertIsInstance(expert, Layer)
                     else:
                         self.assertIsInstance(expert, Sequential)
 
-    def test_shared_routing_builds_single_mixture_with_stack_depth_in_experts(self):
+    def test_shared_routing_creates_model_owned_sampler(self):
         num_layers = 3
-        c = self.stack_preset(
+        c = self.model_preset(
             experts_stack_num_layers=num_layers,
             experts_routing_initialization_mode=RoutingInitializationMode.SHARED,
+            experts_compute_expert_mixture_flag=True,
             stack_num_layers=1,
         )
 
         model = MixtureOfExpertsModel(c)
 
-        self.assertIsInstance(model.expert_stack, MixtureOfExperts)
-        self.assertEqual(
-            model.expert_stack.routing_initialization_mode,
-            RoutingInitializationMode.LAYER,
-        )
-        self.assertIsInstance(model.expert_stack.sampler, SamplerModel)
-        self.assertIsInstance(model.expert_stack.sampler.router, RouterModel)
-        self.assertEqual(model.expert_stack.expert_model_config.num_layers, num_layers)
-        for expert in model.expert_stack.expert_modules:
-            self.assertIsInstance(expert, Sequential)
+        self.assertIsInstance(model.shared_sampler, SamplerModel)
+        self.assertIsInstance(model.shared_sampler.router, RouterModel)
+        self.assertIsInstance(model.expert_stack, Sequential)
+        self.assertEqual(len(model.expert_stack), num_layers)
+        for moe_layer in model.expert_stack:
+            self.assertEqual(
+                moe_layer.model.routing_initialization_mode,
+                RoutingInitializationMode.SHARED,
+            )
+            self.assertIsNone(moe_layer.model.sampler)
 
-    def test_mixture_config_override_is_applied(self):
-        c = self.preset(
-            experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
-            experts_compute_expert_mixture_flag=False,
-            experts_num_experts=6,
-            experts_top_k=3,
-        )
-        overrides = MixtureOfExpertsConfig(compute_expert_mixture_flag=True)
-
-        model = MixtureOfExpertsModel(c, overrides)
-
-        self.assertTrue(model.cfg.compute_expert_mixture_flag)
-        hidden = torch.randn(10, c.input_dim)
-        output, _ = model(hidden=hidden)
-        self.assertEqual(output.shape, (10, c.output_dim))
+        hidden = torch.randn(10, model.input_dim)
+        result_state = Layer.forward_returning_state(model, hidden)
+        self.assertEqual(result_state.hidden.shape, (10, model.cfg.output_dim))
 
     def test_stack_config_override_is_applied(self):
-        c = self.stack_preset(
+        c = self.model_preset(
             experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
             experts_compute_expert_mixture_flag=True,
             experts_num_experts=6,
@@ -1414,44 +1423,23 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
             stack_num_layers=2,
             experts_stack_num_layers=2,
         )
-        overrides = LayerStackConfig(num_layers=3)
+        overrides = MixtureOfExpertsModelConfig(
+            stack_config=replace(c.stack_config, num_layers=3)
+        )
 
         model = MixtureOfExpertsModel(c, overrides)
 
         self.assertEqual(model.stack_config.num_layers, 3)
         hidden = torch.randn(10, c.input_dim)
-        output, _ = model(hidden=hidden)
-        self.assertEqual(output.shape, (10, model.cfg.output_dim))
+        result_state = Layer.forward_returning_state(model, hidden)
+        self.assertEqual(result_state.hidden.shape, (10, model.cfg.output_dim))
 
     def test_top_k_returns_configured_value(self):
         for top_k in (1, 3, 6):
             with self.subTest(top_k=top_k):
-                c = self.preset(experts_num_experts=6, experts_top_k=top_k)
+                c = self.model_preset(experts_num_experts=6, experts_top_k=top_k)
                 model = MixtureOfExpertsModel(c)
                 self.assertEqual(model.top_k, top_k)
-
-    def test_shared_routing_from_flat_config_builds_layer_owned_mixture(self):
-        c = self.preset(
-            experts_routing_initialization_mode=RoutingInitializationMode.SHARED,
-            experts_compute_expert_mixture_flag=True,
-            experts_num_experts=6,
-            experts_top_k=3,
-        )
-
-        model = MixtureOfExpertsModel(c)
-
-        self.assertIsNone(model.stack_config)
-        self.assertIsInstance(model.expert_stack, MixtureOfExperts)
-        self.assertEqual(
-            model.expert_stack.routing_initialization_mode,
-            RoutingInitializationMode.LAYER,
-        )
-        self.assertIsInstance(model.expert_stack.sampler, SamplerModel)
-
-        hidden = torch.randn(10, c.input_dim)
-        output, loss = model(hidden=hidden)
-        self.assertEqual(output.shape, (10, c.output_dim))
-        self.assertEqual(loss.item(), 0.0)
 
     def test_forward_via_layer_stack_runs_state_branch(self):
         num_experts = 6
@@ -1463,7 +1451,7 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
                 for top_k in top_k_options:
                     message = f"Testing with weighting_position_option={weighting_position_option.name}, top_k={top_k}, num_layers={num_layers}"
                     with self.subTest(msg=message):
-                        c = self.stack_preset(
+                        c = self.model_preset(
                             experts_top_k=top_k,
                             experts_weighting_position_option=weighting_position_option,
                             experts_routing_initialization_mode=RoutingInitializationMode.LAYER,
@@ -1483,10 +1471,13 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
 
                         batch_size = 10
                         input = torch.randn(batch_size, c.input_dim)
-                        output, loss = m(input=input)
+                        result_state = Layer.forward_returning_state(m, input)
 
-                        self.assertEqual(output.shape, (batch_size, c.output_dim))
-                        self.assertEqual(loss.item(), 0.0)
+                        self.assertEqual(
+                            result_state.hidden.shape,
+                            (batch_size, c.output_dim),
+                        )
+                        self.assertEqual(result_state.loss.item(), 0.0)
 
     def test_forward(self):
         num_experts = 6
@@ -1502,18 +1493,17 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
                             for weighted_parameters_flag in flag_options:
                                 message = f"Testing with weighting_position_option={weighting_position_option.name}, routing_initialization_mode={routing_initialization_mode}, compute_expert_mixture_flag={compute_expert_mixture_flag}, weighted_parameters_flag={weighted_parameters_flag}, top_k={top_k}, num_layers={num_layers}"
                                 with self.subTest(msg=message):
-                                    c = self.preset(
+                                    c = self.model_preset(
                                         experts_top_k=top_k,
                                         experts_weighting_position_option=weighting_position_option,
                                         experts_routing_initialization_mode=routing_initialization_mode,
                                         experts_weighted_parameters_flag=weighted_parameters_flag,
                                         experts_compute_expert_mixture_flag=True,
                                         experts_num_experts=num_experts,
-                                        stack_num_layers=num_layers,
+                                        experts_stack_num_layers=num_layers,
                                     )
 
-                                    moe_cfg = c
-                                    m = MixtureOfExpertsModel(moe_cfg)
+                                    m = MixtureOfExpertsModel(c)
 
                                     batch_size = 10
 
@@ -1523,11 +1513,10 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                         routing_initialization_mode
                                         == RoutingInitializationMode.DISABLED
                                     ):
-                                        router_cfg = (
-                                            moe_cfg.sampler_config.router_config
-                                        )
+                                        leaf_cfg = c.stack_config.layer_config.layer_model_config
+                                        router_cfg = leaf_cfg.sampler_config.router_config
                                         sampler_cfg = replace(
-                                            moe_cfg.sampler_config, router_config=None
+                                            leaf_cfg.sampler_config, router_config=None
                                         )
                                         router = RouterModel(router_cfg)
                                         sampler = SamplerModel(sampler_cfg)
@@ -1539,19 +1528,21 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                             )
                                         )
 
-                                    loss = torch.tensor(0.0)
-                                    output, loss = m(
-                                        input=input,
+                                    input_state = MixtureOfExpertsLayerState(
+                                        hidden=input,
                                         probabilities=probabilities,
                                         indices=indices,
                                     )
+                                    result_state = m(input_state)
 
                                     expected_shape = (
                                         batch_size,
                                         c.output_dim,
                                     )
-                                    self.assertEqual(output.shape, expected_shape)
-                                    self.assertEqual(loss.item(), 0.0)
+                                    self.assertEqual(
+                                        result_state.hidden.shape, expected_shape
+                                    )
+                                    self.assertEqual(result_state.loss.item(), 0.0)
 
 
 class TestMixtureOfExpertsMap(MixtureOfExpertsPresetMixin, unittest.TestCase):
