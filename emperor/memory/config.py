@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from emperor.base.layer import LayerStackConfig
 from emperor.base.utils import ConfigBase, optional_field
-from emperor.memory.options import DynamicMemoryOptions, MemoryPositionOptions
+from emperor.memory.options import MemoryPositionOptions
 
 
 @dataclass
@@ -12,12 +12,6 @@ class DynamicMemoryConfig(ConfigBase):
     )
     output_dim: int | None = optional_field(
         "Output dimensionality of the dynamic memory module."
-    )
-    model_type: DynamicMemoryOptions | None = optional_field(
-        "Memory strategy used to blend a learned memory representation with the layer input or output."
-    )
-    num_memory_slots: int | None = optional_field(
-        "Number of memory slots used by attention-style dynamic memory."
     )
     memory_position_option: MemoryPositionOptions | None = optional_field(
         "Specifies whether memory is applied before or after the affine transformation."
@@ -33,6 +27,47 @@ class DynamicMemoryConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.memory.core.base import DynamicMemoryAbstract
+        raise ValueError(
+            "DynamicMemoryConfig is an abstract base config. Use a concrete "
+            "memory config such as GatedResidualDynamicMemoryConfig, "
+            "WeightedDynamicMemoryConfig, ElementWiseWeightedDynamicMemoryConfig, "
+            "or AttentionDynamicMemoryConfig."
+        )
 
-        return DynamicMemoryAbstract
+
+@dataclass
+class GatedResidualDynamicMemoryConfig(DynamicMemoryConfig):
+    def _registry_owner(self) -> type:
+        from emperor.memory.core.gated_residual import GatedResidualDynamicMemory
+
+        return GatedResidualDynamicMemory
+
+
+@dataclass
+class WeightedDynamicMemoryConfig(DynamicMemoryConfig):
+    def _registry_owner(self) -> type:
+        from emperor.memory.core.weighted import WeightedDynamicMemory
+
+        return WeightedDynamicMemory
+
+
+@dataclass
+class ElementWiseWeightedDynamicMemoryConfig(DynamicMemoryConfig):
+    def _registry_owner(self) -> type:
+        from emperor.memory.core.element_wise_weighted import (
+            ElementWiseWeightedDynamicMemory,
+        )
+
+        return ElementWiseWeightedDynamicMemory
+
+
+@dataclass
+class AttentionDynamicMemoryConfig(DynamicMemoryConfig):
+    num_memory_slots: int | None = optional_field(
+        "Number of memory slots used by attention-style dynamic memory."
+    )
+
+    def _registry_owner(self) -> type:
+        from emperor.memory.core.attention import AttentionDynamicMemory
+
+        return AttentionDynamicMemory

@@ -1,8 +1,29 @@
-from .config import DynamicMemoryConfig
-from .options import DynamicMemoryOptions, MemoryPositionOptions
+from .config import (
+    AttentionDynamicMemoryConfig,
+    DynamicMemoryConfig,
+    ElementWiseWeightedDynamicMemoryConfig,
+    GatedResidualDynamicMemoryConfig,
+    WeightedDynamicMemoryConfig,
+)
+from .core import (
+    AttentionDynamicMemory,
+    DynamicMemoryAbstract,
+    ElementWiseWeightedDynamicMemory,
+    GatedResidualDynamicMemory,
+    WeightedDynamicMemory,
+)
+from .options import MemoryPositionOptions
 
 __all__ = [
+    "AttentionDynamicMemory",
+    "AttentionDynamicMemoryConfig",
     "DynamicMemoryConfig",
-    "DynamicMemoryOptions",
+    "DynamicMemoryAbstract",
+    "ElementWiseWeightedDynamicMemory",
+    "ElementWiseWeightedDynamicMemoryConfig",
+    "GatedResidualDynamicMemory",
+    "GatedResidualDynamicMemoryConfig",
     "MemoryPositionOptions",
+    "WeightedDynamicMemory",
+    "WeightedDynamicMemoryConfig",
 ]

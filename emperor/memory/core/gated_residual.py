@@ -4,16 +4,15 @@ from torch import Tensor
 from torch.nn import Sequential
 
 from emperor.base.layer import Layer, LayerStackConfig
-from emperor.memory.config import DynamicMemoryConfig
+from emperor.memory.config import DynamicMemoryConfig, GatedResidualDynamicMemoryConfig
 from emperor.memory.core.base import DynamicMemoryAbstract
-from emperor.memory.options import DynamicMemoryOptions
+from emperor.memory.core._validator import DynamicMemoryValidator
 
 
-@DynamicMemoryAbstract.register(DynamicMemoryOptions.FUSION)
 class GatedResidualDynamicMemory(DynamicMemoryAbstract):
     def __init__(
         self,
-        cfg: DynamicMemoryConfig,
+        cfg: GatedResidualDynamicMemoryConfig,
         overrides: DynamicMemoryConfig | None = None,
     ):
         super().__init__(cfg, overrides)
@@ -47,16 +46,17 @@ class GatedResidualDynamicMemory(DynamicMemoryAbstract):
         return self._init_model(layer_overrides)
 
     def forward(self, logits: Tensor) -> Tensor:
+        DynamicMemoryValidator.validate_forward_inputs(logits, self.memory_dim)
         if self.test_time_training_flag:
             memory = self._adapt_and_retrieve(
                 logits, self.memory_model, self.memory_decoder
             )
         else:
-            memory = self.memory_model(logits)
+            memory = self._run_model(self.memory_model, logits)
         memory_gate = self.__compute_memory_gate(logits, memory)
         return logits + memory_gate * memory
 
     def __compute_memory_gate(self, logits: Tensor, memory: Tensor) -> Tensor:
         combined = torch.cat([logits, memory], dim=-1)
-        gate_logits = self.memory_gate_model(combined)
+        gate_logits = self._run_model(self.memory_gate_model, combined)
         return torch.sigmoid(gate_logits)
