@@ -39,15 +39,8 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         self.skip_mask = None
 
     def __create_sampler(self):
-        from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
         sampler_config = self.experts_config.sampler_config
-        router_overrides = RouterConfig(input_dim=self.embedding_dim)
-        router_config = self._override_config(
-            sampler_config.router_config, router_overrides
-        )
-        sampler_overrides = SamplerConfig(router_config=router_config)
-        return sampler_config.build(sampler_overrides)
+        return sampler_config.build_with_router_input_dim(self.embedding_dim)
 
     def _create_q_model(self, input_dim: int, output_dim: int) -> MixtureOfExperts:
         overrides = MixtureOfExpertsConfig(input_dim=input_dim, output_dim=output_dim)
