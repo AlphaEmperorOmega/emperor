@@ -9,8 +9,7 @@ from emperor.transformer.utils.layers import TransformerConfig
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
+from emperor.embedding.absolute.config import TextLearnedPositionalEmbeddingConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 import models.bert.config as config
 from models.bert.config import ExperimentConfig
@@ -95,15 +94,12 @@ class ExperimentPresets(ExperimentPresetsBase):
             hidden_dim=hidden_dim,
             output_dim=output_dim,
             override_config=ExperimentConfig(
-                positional_embedding_config=AbsolutePositionalEmbeddingConfig(
-                    text_processing_flag=True,
-                    positional_embedding_option=AbsolutePositionalEmbeddingOptions.LEARNED,
+                positional_embedding_config=TextLearnedPositionalEmbeddingConfig(
                     num_embeddings=sequence_length,
                     embedding_dim=hidden_dim,
                     padding_idx=0,
                     init_size=sequence_length,
                     auto_expand_flag=False,
-                    class_token_flag=False,
                 ),
                 encoder_config=TransformerConfig(
                     num_layers=transformer_num_layers,

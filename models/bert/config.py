@@ -4,7 +4,7 @@ from emperor.base.layer import LayerStackConfig
 from emperor.base.options import ActivationOptions
 from emperor.datasets.text.language_modeling.penn_treebank import PennTreebank
 from emperor.datasets.text.language_modeling.wiki_text_2 import WikiText2
-from emperor.transformer.utils.layers import TransformerConfig
+from emperor.transformer import TransformerEncoderStackConfig
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.linears.options import LinearLayerStackOptions
 from models.trainer_config import *
@@ -48,7 +48,7 @@ class ExperimentConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    encoder_config: "TransformerConfig | None" = field(
+    encoder_config: "TransformerEncoderStackConfig | None" = field(
         default=None,
         metadata={"help": ""},
     )

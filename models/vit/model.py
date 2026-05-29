@@ -1,10 +1,7 @@
 from torch import Tensor
-from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStack
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.transformer.utils.stack import TransformerEncoderStack
-from emperor.transformer.utils.patch.selector import PatchSelector
-from emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
+from emperor.transformer import TransformerEncoderStack
 from models.vit.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
@@ -26,19 +23,10 @@ class Model(ClassifierExperiment):
         self.encoder_config = self.main_cfg.encoder_config
         self.output_config = self.main_cfg.output_config
 
-        self.patch = PatchSelector(self.patch_config).build()
-        self.positional_embedding = AbsolutePositionalEmbeddingFactory(
-            self.embedding_config
-        ).build()
+        self.patch = self.patch_config.build()
+        self.positional_embedding = self.embedding_config.build()
         self.transformer = TransformerEncoderStack(self.encoder_config)
         self.output = LayerStack(self.output_config).build_model()
-
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> "ExperimentConfig":
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
 
     def forward(
         self,

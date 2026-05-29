@@ -6,8 +6,8 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
-from emperor.transformer.utils.layers import TransformerConfig
-from emperor.transformer.utils.patch.options.base import PatchConfig
+from emperor.transformer import TransformerEncoderStackConfig
+from emperor.patch import PatchConfig
 from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
@@ -81,7 +81,7 @@ class ExperimentConfig(ConfigBase):
         default=None,
         metadata={"help": ""},
     )
-    encoder_config: "TransformerConfig | None" = field(
+    encoder_config: "TransformerEncoderStackConfig | None" = field(
         default=None,
         metadata={"help": ""},
     )

@@ -11,8 +11,7 @@ from emperor.transformer.utils.patch.options.base import PatchConfig
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
+from emperor.embedding.absolute.config import ImageLearnedPositionalEmbeddingConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
@@ -149,14 +148,13 @@ class ExperimentPresets(ExperimentPresetsBase):
                         ),
                     ),
                 ),
-                positional_embedding_config=AbsolutePositionalEmbeddingConfig(
-                    text_processing_flag=False,
-                    positional_embedding_option=AbsolutePositionalEmbeddingOptions.LEARNED,
+                positional_embedding_config=ImageLearnedPositionalEmbeddingConfig(
                     num_embeddings=num_embeddings,
                     embedding_dim=hidden_dim,
                     padding_idx=0,
                     init_size=1024,
                     auto_expand_flag=False,
+                    class_token_flag=True,
                 ),
                 encoder_config=TransformerConfig(
                     num_layers=transformer_num_layers,
@@ -332,14 +330,13 @@ class ExperimentPresets(ExperimentPresetsBase):
                         ),
                     ),
                 ),
-                positional_embedding_config=AbsolutePositionalEmbeddingConfig(
-                    text_processing_flag=False,
-                    positional_embedding_option=AbsolutePositionalEmbeddingOptions.LEARNED,
+                positional_embedding_config=ImageLearnedPositionalEmbeddingConfig(
                     num_embeddings=num_embeddings,
                     embedding_dim=hidden_dim,
                     padding_idx=0,
                     init_size=1024,
                     auto_expand_flag=False,
+                    class_token_flag=True,
                 ),
                 encoder_config=TransformerPresets.transformer_linear_adaptive_preset(
                     batch_size=batch_size,

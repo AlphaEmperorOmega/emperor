@@ -4,8 +4,7 @@ from torch import Tensor
 from emperor.base.utils import ConfigBase
 from emperor.base.layer import LayerStack
 from emperor.experiments.language_model import LanguageModelExperiment
-from emperor.transformer.utils.stack import TransformerEncoderStack
-from emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
+from emperor.transformer import TransformerEncoderStack
 from models.bert.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
@@ -27,9 +26,7 @@ class Model(LanguageModelExperiment):
         self.output_config = self.main_cfg.output_config
 
         self.token_embedding = nn.Embedding(cfg.input_dim, cfg.hidden_dim)
-        self.positional_embedding = AbsolutePositionalEmbeddingFactory(
-            self.embedding_config
-        ).build()
+        self.positional_embedding = self.embedding_config.build()
         self.transformer = TransformerEncoderStack(self.encoder_config)
         self.output = LayerStack(self.output_config).build_model()
 
