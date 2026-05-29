@@ -1,14 +1,478 @@
-import torch
 import unittest
+
+import torch
 
 from emperor.sampler.core.config import SamplerConfig
 from emperor.sampler.core.losses import (
+    AuxiliaryLossBase,
     CoefficientOfVariationLoss,
     MutualInformationLoss,
     SamplerAuxiliaryLosses,
     SwitchLoss,
     ZeroCentredLoss,
 )
+
+
+def available_devices() -> list[torch.device]:
+    devices = [torch.device("cpu")]
+    if torch.cuda.is_available():
+        devices.append(torch.device("cuda"))
+    if torch.backends.mps.is_available():
+        devices.append(torch.device("mps"))
+    return devices
+
+
+class TestCoefficientOfVariationLoss(unittest.TestCase):
+    def gates(self) -> torch.Tensor:
+        return torch.tensor(
+            [
+                [1.0, 0.0, 2.0],
+                [0.0, 3.0, 1.0],
+            ]
+        )
+
+    def test_init_stores_loss_weight(self):
+        loss = CoefficientOfVariationLoss(loss_weight=0.25)
+
+        self.assertEqual(loss.loss_weight, 0.25)
+        self.assertEqual(loss.eps, 1e-10)
+        self.assertIsNone(loss.gates_accumulation)
+        self.assertFalse(hasattr(loss, "default_error"))
+        self.assertIsInstance(loss, AuxiliaryLossBase)
+
+    def test_zero_weight_update_is_noop(self):
+        loss = CoefficientOfVariationLoss(loss_weight=0.0)
+
+        loss.update_accumulation(self.gates())
+
+        self.assertIsNone(loss.gates_accumulation)
+
+    def test_update_accumulation_sums_gates(self):
+        loss = CoefficientOfVariationLoss(loss_weight=1.0)
+
+        loss.update_accumulation(self.gates())
+
+        torch.testing.assert_close(
+            loss.gates_accumulation,
+            torch.tensor([1.0, 3.0, 3.0]),
+        )
+
+    def test_consecutive_updates_accumulate_gates(self):
+        loss = CoefficientOfVariationLoss(loss_weight=1.0)
+
+        loss.update_accumulation(self.gates())
+        loss.update_accumulation(self.gates())
+
+        torch.testing.assert_close(
+            loss.gates_accumulation,
+            torch.tensor([2.0, 6.0, 6.0]),
+        )
+
+    def test_compute_loss_matches_coefficient_of_variation(self):
+        loss = CoefficientOfVariationLoss(loss_weight=1.0)
+        loss.update_accumulation(self.gates())
+
+        output = loss._compute_loss()
+
+        self.assertIsInstance(output, torch.Tensor)
+        torch.testing.assert_close(output, torch.tensor(12.0 / 49.0))
+
+    def test_single_sample_returns_zero_scalar_on_accumulation_device(self):
+        for device in available_devices():
+            with self.subTest(device=device):
+                loss = CoefficientOfVariationLoss(loss_weight=0.1)
+                gates = torch.ones(2, 1, device=device)
+
+                loss.update_accumulation(gates)
+                total_loss = loss.get_weighted_loss(gates.new_zeros(()))
+
+                self.assertEqual(total_loss.shape, torch.Size([]))
+                self.assertEqual(total_loss.device, loss.gates_accumulation.device)
+                torch.testing.assert_close(
+                    total_loss, loss.gates_accumulation.new_zeros(())
+                )
+
+    def test_missing_input_raises_value_error(self):
+        loss = CoefficientOfVariationLoss(loss_weight=1.0)
+
+        with self.assertRaises(ValueError):
+            loss.update_accumulation(None)
+
+    def test_compute_loss_without_accumulation_raises_value_error(self):
+        loss = CoefficientOfVariationLoss(loss_weight=1.0)
+
+        with self.assertRaises(ValueError):
+            loss._compute_loss()
+
+    def test_reset_clears_accumulation(self):
+        loss = CoefficientOfVariationLoss(loss_weight=1.0)
+        loss.update_accumulation(self.gates())
+
+        loss.reset_loss()
+
+        self.assertIsNone(loss.gates_accumulation)
+
+    def test_weighted_loss_returns_caller_default_when_disabled(self):
+        loss = CoefficientOfVariationLoss(loss_weight=0.0)
+        default_loss = torch.ones(())
+
+        output = loss.get_weighted_loss(default_loss)
+
+        self.assertIs(output, default_loss)
+
+    def test_weighted_loss_scales_by_loss_weight(self):
+        loss = CoefficientOfVariationLoss(loss_weight=2.5)
+        loss.update_accumulation(self.gates())
+
+        output = loss.get_weighted_loss(torch.zeros(()))
+
+        torch.testing.assert_close(output, torch.tensor((12.0 / 49.0) * 2.5))
+
+
+class TestSwitchLoss(unittest.TestCase):
+    def probabilities(self) -> torch.Tensor:
+        return torch.tensor(
+            [
+                [0.7, 0.2, 0.1],
+                [0.1, 0.6, 0.3],
+                [0.2, 0.2, 0.6],
+            ]
+        )
+
+    def gates(self) -> torch.Tensor:
+        return torch.tensor(
+            [
+                [0.7, 0.0, 0.0],
+                [0.0, 0.6, 0.0],
+                [0.2, 0.0, 0.6],
+            ]
+        )
+
+    def test_init_stores_num_experts_and_loss_weight(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=0.25)
+
+        self.assertEqual(loss.loss_weight, 0.25)
+        self.assertEqual(loss.num_experts, 3)
+        self.assertIsNone(loss.probability_accumulation)
+        self.assertIsNone(loss.frequency_accumulation)
+        self.assertFalse(hasattr(loss, "default_error"))
+        self.assertIsInstance(loss, AuxiliaryLossBase)
+
+    def test_zero_weight_update_is_noop(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=0.0)
+
+        loss.update_accumulation(self.probabilities(), self.gates())
+
+        self.assertIsNone(loss.probability_accumulation)
+        self.assertIsNone(loss.frequency_accumulation)
+
+    def test_update_accumulation_sums_probabilities_and_gate_frequency(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=1.0)
+
+        loss.update_accumulation(self.probabilities(), self.gates())
+
+        torch.testing.assert_close(
+            loss.probability_accumulation,
+            torch.tensor([1.0, 1.0, 1.0]),
+        )
+        torch.testing.assert_close(
+            loss.frequency_accumulation,
+            torch.tensor([2.0, 1.0, 1.0]),
+        )
+
+    def test_consecutive_updates_accumulate_probabilities_and_gate_frequency(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=1.0)
+
+        loss.update_accumulation(self.probabilities(), self.gates())
+        loss.update_accumulation(self.probabilities(), self.gates())
+
+        torch.testing.assert_close(
+            loss.probability_accumulation,
+            torch.tensor([2.0, 2.0, 2.0]),
+        )
+        torch.testing.assert_close(
+            loss.frequency_accumulation,
+            torch.tensor([4.0, 2.0, 2.0]),
+        )
+
+    def test_compute_loss_matches_switch_loss(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=1.0)
+        loss.update_accumulation(self.probabilities(), self.gates())
+
+        output = loss._compute_loss()
+
+        self.assertIsInstance(output, torch.Tensor)
+        torch.testing.assert_close(output, torch.tensor(1.0))
+
+    def test_missing_inputs_raise_value_error(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=1.0)
+
+        with self.assertRaises(ValueError):
+            loss.update_accumulation(None, self.gates())
+
+        with self.assertRaises(ValueError):
+            loss.update_accumulation(self.probabilities(), None)
+
+    def test_compute_loss_without_accumulation_raises_value_error(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=1.0)
+
+        with self.assertRaises(ValueError):
+            loss._compute_loss()
+
+    def test_reset_clears_accumulation(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=1.0)
+        loss.update_accumulation(self.probabilities(), self.gates())
+
+        loss.reset_loss()
+
+        self.assertIsNone(loss.probability_accumulation)
+        self.assertIsNone(loss.frequency_accumulation)
+
+    def test_weighted_loss_returns_caller_default_when_disabled(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=0.0)
+        default_loss = torch.ones(())
+
+        output = loss.get_weighted_loss(default_loss)
+
+        self.assertIs(output, default_loss)
+
+    def test_weighted_loss_scales_by_loss_weight(self):
+        loss = SwitchLoss(num_experts=3, loss_weight=2.0)
+        loss.update_accumulation(self.probabilities(), self.gates())
+
+        output = loss.get_weighted_loss(torch.zeros(()))
+
+        torch.testing.assert_close(output, torch.tensor(2.0))
+
+
+class TestZeroCentredLoss(unittest.TestCase):
+    def logits(self) -> torch.Tensor:
+        return torch.zeros(2, 3)
+
+    def expected_squared_log_sum_exp(self) -> torch.Tensor:
+        return 2 * torch.log(torch.tensor(3.0)) ** 2
+
+    def expected_loss(self) -> torch.Tensor:
+        return torch.log(torch.tensor(3.0)) ** 2
+
+    def test_init_stores_loss_weight(self):
+        loss = ZeroCentredLoss(loss_weight=0.25)
+
+        self.assertEqual(loss.loss_weight, 0.25)
+        self.assertIsNone(loss.squared_log_sum_exp_accumulation)
+        self.assertIsNone(loss.count_accumulation)
+        self.assertFalse(hasattr(loss, "default_error"))
+        self.assertIsInstance(loss, AuxiliaryLossBase)
+
+    def test_zero_weight_update_is_noop(self):
+        loss = ZeroCentredLoss(loss_weight=0.0)
+
+        loss.update_accumulation(self.logits())
+
+        self.assertIsNone(loss.squared_log_sum_exp_accumulation)
+        self.assertIsNone(loss.count_accumulation)
+
+    def test_update_accumulation_sums_squared_log_sum_exp_and_count(self):
+        loss = ZeroCentredLoss(loss_weight=1.0)
+
+        loss.update_accumulation(self.logits())
+
+        torch.testing.assert_close(
+            loss.squared_log_sum_exp_accumulation,
+            self.expected_squared_log_sum_exp(),
+        )
+        self.assertEqual(loss.count_accumulation.item(), 2)
+
+    def test_consecutive_updates_accumulate_squared_log_sum_exp_and_count(self):
+        loss = ZeroCentredLoss(loss_weight=1.0)
+
+        loss.update_accumulation(self.logits())
+        loss.update_accumulation(self.logits())
+
+        torch.testing.assert_close(
+            loss.squared_log_sum_exp_accumulation,
+            self.expected_squared_log_sum_exp() * 2,
+        )
+        self.assertEqual(loss.count_accumulation.item(), 4)
+
+    def test_compute_loss_matches_zero_centred_loss(self):
+        loss = ZeroCentredLoss(loss_weight=1.0)
+        loss.update_accumulation(self.logits())
+
+        output = loss._compute_loss()
+
+        self.assertIsInstance(output, torch.Tensor)
+        torch.testing.assert_close(output, self.expected_loss())
+
+    def test_missing_input_raises_value_error(self):
+        loss = ZeroCentredLoss(loss_weight=1.0)
+
+        with self.assertRaises(ValueError):
+            loss.update_accumulation(None)
+
+    def test_compute_loss_without_accumulation_raises_value_error(self):
+        loss = ZeroCentredLoss(loss_weight=1.0)
+
+        with self.assertRaises(ValueError):
+            loss._compute_loss()
+
+    def test_reset_clears_accumulation(self):
+        loss = ZeroCentredLoss(loss_weight=1.0)
+        loss.update_accumulation(self.logits())
+
+        loss.reset_loss()
+
+        self.assertIsNone(loss.squared_log_sum_exp_accumulation)
+        self.assertIsNone(loss.count_accumulation)
+
+    def test_weighted_loss_returns_caller_default_when_disabled(self):
+        loss = ZeroCentredLoss(loss_weight=0.0)
+        default_loss = torch.ones(())
+
+        output = loss.get_weighted_loss(default_loss)
+
+        self.assertIs(output, default_loss)
+
+    def test_weighted_loss_scales_by_loss_weight(self):
+        loss = ZeroCentredLoss(loss_weight=2.0)
+        loss.update_accumulation(self.logits())
+
+        output = loss.get_weighted_loss(torch.zeros(()))
+
+        torch.testing.assert_close(output, self.expected_loss() * 2)
+
+
+class TestMutualInformationLoss(unittest.TestCase):
+    def statistics(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        probabilities = torch.tensor(
+            [
+                [0.8, 0.2],
+                [0.25, 0.75],
+            ]
+        )
+        logits = probabilities.log()
+        skip_masks = torch.ones(2, 1)
+        return logits, probabilities, skip_masks
+
+    def expected_loss(self) -> torch.Tensor:
+        conditional_entropy_term = 0.5 * (
+            0.8 * torch.log(torch.tensor(0.8))
+            + 0.2 * torch.log(torch.tensor(0.2))
+            + 0.25 * torch.log(torch.tensor(0.25))
+            + 0.75 * torch.log(torch.tensor(0.75))
+        )
+        marginal_entropy_term = (
+            0.525 * torch.log(torch.tensor(0.525))
+            + 0.475 * torch.log(torch.tensor(0.475))
+        )
+        return -(conditional_entropy_term + marginal_entropy_term)
+
+    def test_init_stores_loss_weight(self):
+        loss = MutualInformationLoss(loss_weight=0.25)
+
+        self.assertEqual(loss.loss_weight, 0.25)
+        self.assertListEqual(loss.log_probabilities, [])
+        self.assertListEqual(loss.probabilities, [])
+        self.assertListEqual(loss.skip_masks, [])
+        self.assertFalse(hasattr(loss, "default_error"))
+        self.assertIsInstance(loss, AuxiliaryLossBase)
+
+    def test_zero_weight_update_is_noop(self):
+        loss = MutualInformationLoss(loss_weight=0.0)
+        logits, probabilities, skip_masks = self.statistics()
+
+        loss.update_accumulation(logits, probabilities, skip_masks)
+
+        self.assertListEqual(loss.log_probabilities, [])
+        self.assertListEqual(loss.probabilities, [])
+        self.assertListEqual(loss.skip_masks, [])
+
+    def test_update_accumulation_stores_log_probabilities_probabilities_and_masks(self):
+        loss = MutualInformationLoss(loss_weight=1.0)
+        logits, probabilities, skip_masks = self.statistics()
+
+        loss.update_accumulation(logits, probabilities, skip_masks)
+
+        self.assertEqual(len(loss.log_probabilities), 1)
+        torch.testing.assert_close(loss.log_probabilities[0], probabilities.log())
+        self.assertEqual(len(loss.probabilities), 1)
+        torch.testing.assert_close(loss.probabilities[0], probabilities)
+        self.assertEqual(len(loss.skip_masks), 1)
+        torch.testing.assert_close(loss.skip_masks[0], skip_masks)
+
+    def test_consecutive_updates_append_accumulations(self):
+        loss = MutualInformationLoss(loss_weight=1.0)
+        logits, probabilities, skip_masks = self.statistics()
+
+        loss.update_accumulation(logits, probabilities, skip_masks)
+        loss.update_accumulation(logits, probabilities, skip_masks)
+
+        self.assertEqual(len(loss.log_probabilities), 2)
+        torch.testing.assert_close(loss.log_probabilities[0], probabilities.log())
+        torch.testing.assert_close(loss.log_probabilities[1], probabilities.log())
+        self.assertEqual(len(loss.probabilities), 2)
+        torch.testing.assert_close(loss.probabilities[0], probabilities)
+        torch.testing.assert_close(loss.probabilities[1], probabilities)
+        self.assertEqual(len(loss.skip_masks), 2)
+        torch.testing.assert_close(loss.skip_masks[0], skip_masks)
+        torch.testing.assert_close(loss.skip_masks[1], skip_masks)
+
+    def test_compute_loss_matches_mutual_information_loss(self):
+        loss = MutualInformationLoss(loss_weight=1.0)
+        logits, probabilities, skip_masks = self.statistics()
+        loss.update_accumulation(logits, probabilities, skip_masks)
+
+        output = loss._compute_loss()
+
+        self.assertIsInstance(output, torch.Tensor)
+        torch.testing.assert_close(output, self.expected_loss())
+
+    def test_missing_inputs_raise_value_error(self):
+        loss = MutualInformationLoss(loss_weight=1.0)
+        logits, probabilities, skip_masks = self.statistics()
+
+        with self.assertRaises(ValueError):
+            loss.update_accumulation(None, probabilities, skip_masks)
+
+        with self.assertRaises(ValueError):
+            loss.update_accumulation(logits, None, skip_masks)
+
+        with self.assertRaises(ValueError):
+            loss.update_accumulation(logits, probabilities, None)
+
+    def test_compute_loss_without_accumulation_raises_value_error(self):
+        loss = MutualInformationLoss(loss_weight=1.0)
+
+        with self.assertRaises(ValueError):
+            loss._compute_loss()
+
+    def test_reset_clears_accumulation(self):
+        loss = MutualInformationLoss(loss_weight=1.0)
+        logits, probabilities, skip_masks = self.statistics()
+        loss.update_accumulation(logits, probabilities, skip_masks)
+
+        loss.reset_loss()
+
+        self.assertListEqual(loss.log_probabilities, [])
+        self.assertListEqual(loss.probabilities, [])
+        self.assertListEqual(loss.skip_masks, [])
+
+    def test_weighted_loss_returns_caller_default_when_disabled(self):
+        loss = MutualInformationLoss(loss_weight=0.0)
+        default_loss = torch.ones(())
+
+        output = loss.get_weighted_loss(default_loss)
+
+        self.assertIs(output, default_loss)
+
+    def test_weighted_loss_scales_by_loss_weight(self):
+        loss = MutualInformationLoss(loss_weight=2.0)
+        logits, probabilities, skip_masks = self.statistics()
+        loss.update_accumulation(logits, probabilities, skip_masks)
+
+        output = loss.get_weighted_loss(torch.zeros(()))
+
+        torch.testing.assert_close(output, self.expected_loss() * 2)
 
 
 class TestSamplerAuxiliaryLosses(unittest.TestCase):
@@ -78,8 +542,20 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
         model.update_accumulated_statistics()
         total_loss = model.get_auxiliary_loss_and_clear()
 
-        torch.testing.assert_close(total_loss, torch.tensor(0.0))
+        torch.testing.assert_close(total_loss, model.default_loss)
+        self.assertEqual(total_loss.shape, torch.Size([]))
+        self.assertEqual(total_loss.device, model.default_loss.device)
         self.assert_accumulations_clear(model)
+
+    def test_disabled_total_loss_follows_module_device(self):
+        for device in available_devices():
+            with self.subTest(device=device):
+                model = SamplerAuxiliaryLosses(self.preset()).to(device)
+
+                total_loss = model.get_auxiliary_loss_and_clear()
+
+                self.assertEqual(total_loss.shape, torch.Size([]))
+                self.assertEqual(total_loss.device, model.default_loss.device)
 
     def test_update_accumulated_statistics_updates_enabled_losses(self):
         cfg = self.preset(
@@ -207,11 +683,12 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
         model.update_accumulated_statistics(logits, probabilities, gates, skip_mask)
 
         total_loss = model._SamplerAuxiliaryLosses__compute_total_loss()
+        default_loss = model.default_loss
         expected = (
-            model.coefficient_of_variation_loss.get_weighted_loss()
-            + model.switch_loss.get_weighted_loss()
-            + model.zero_centred_loss.get_weighted_loss()
-            + model.mutual_information_loss.get_weighted_loss()
+            model.coefficient_of_variation_loss.get_weighted_loss(default_loss)
+            + model.switch_loss.get_weighted_loss(default_loss)
+            + model.zero_centred_loss.get_weighted_loss(default_loss)
+            + model.mutual_information_loss.get_weighted_loss(default_loss)
         )
 
         torch.testing.assert_close(total_loss, expected)
