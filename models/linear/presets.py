@@ -5,7 +5,7 @@ from models.linear.model import Model
 from emperor.experiments.base import SearchMode
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
-from emperor.base.options import BaseOptions
+from emperor.base.options import BaseOptions, LayerNormPositionOptions
 
 from typing import TYPE_CHECKING
 
@@ -21,6 +21,7 @@ class ExperimentOptions(BaseOptions):
         "Linear stack with both learned gating and adaptive computation halting."
     )
     RESIDUAL = "Linear stack with residual (skip) connections on hidden layers."
+    POST_NORM = "Linear stack with layer norm applied after each layer (post-norm)."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -54,6 +55,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.HALTING: self._halting_preset,
             ExperimentOptions.GATING_HALTING: self._gating_halting_preset,
             ExperimentOptions.RESIDUAL: self._residual_preset,
+            ExperimentOptions.POST_NORM: self._post_norm_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -93,6 +95,11 @@ class ExperimentPresets(ExperimentPresetsBase):
 
     def _residual_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(**{"stack_residual_flag": True, **kwargs})
+
+    def _post_norm_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{"layer_norm_position": LayerNormPositionOptions.AFTER, **kwargs}
+        )
 
     def _preset(self, **kwargs) -> "ModelConfig":
         return LinearConfigBuilder(**kwargs).build()
