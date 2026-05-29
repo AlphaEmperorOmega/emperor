@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from torch.nn import Sequential
     from emperor.base.layer.layer import Layer
+    from emperor.base.layer.recurrent import RecurrentLayer
     from emperor.halting.config import HaltingConfig
     from emperor.memory.config import DynamicMemoryConfig
 
@@ -55,15 +56,9 @@ class LayerConfig(ConfigBase):
 
 @dataclass
 class LayerStackConfig(ConfigBase):
-    input_dim: int | None = optional_field(
-        "Input feature dimension."
-    )
-    hidden_dim: int | None = optional_field(
-        "Hidden feature dimension."
-    )
-    output_dim: int | None = optional_field(
-        "Output feature dimension."
-    )
+    input_dim: int | None = optional_field("Input feature dimension.")
+    hidden_dim: int | None = optional_field("Hidden feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
     num_layers: int | None = optional_field("Total number of layers in the stack.")
     last_layer_bias_option: "LastLayerBiasOptions | None" = optional_field(
         "Bias behavior for the final layer."
@@ -86,3 +81,24 @@ class LayerStackConfig(ConfigBase):
         from emperor.base.layer.stack import LayerStack
 
         return LayerStack(self, overrides).build()
+
+
+@dataclass
+class RecurrentLayerConfig(ConfigBase):
+    input_dim: int | None = optional_field("Input feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
+    max_steps: int | None = optional_field("Maximum recurrent applications.")
+    block_config: "LayerConfig | LayerStackConfig | None" = optional_field(
+        "Layer or LayerStack config to reuse at every recurrent step."
+    )
+    gate_config: "LayerStackConfig | None" = optional_field(
+        "Optional recurrent gate stack. Set to None to disable."
+    )
+    halting_config: "HaltingConfig | None" = optional_field(
+        "Optional recurrent adaptive computation module. Set to None to disable."
+    )
+
+    def _registry_owner(self) -> type:
+        from emperor.base.layer.recurrent import RecurrentLayer
+
+        return RecurrentLayer
