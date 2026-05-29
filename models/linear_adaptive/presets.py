@@ -130,6 +130,7 @@ class ExperimentOptions(BaseOptions):
     NORM_L2_WEIGHT = "[NORM] Dual-model weight with L2-scale weight normalization."
     DEEP_GENERATOR = "[CAPACITY] Dual-model weight produced by a depth-8 generator network."
     FULL_STACK = "[WEIGHT+BIAS+DIAGONAL+MASK] Dual-model weight + additive bias + combined diagonal + weight-informed mask."
+    ADAPTIVE_HALTING = "[ADAPTIVE+ACT] Dual-model weight with adaptive computation halting enabled."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -192,6 +193,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.NORM_L2_WEIGHT: self._norm_l2_weight_preset,
             ExperimentOptions.DEEP_GENERATOR: self._deep_generator_preset,
             ExperimentOptions.FULL_STACK: self._full_stack_preset,
+            ExperimentOptions.ADAPTIVE_HALTING: self._adaptive_halting_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -399,6 +401,15 @@ class ExperimentPresets(ExperimentPresetsBase):
                 "bias_option": AdditiveDynamicBiasConfig,
                 "diagonal_option": CombinedDynamicDiagonalConfig,
                 "row_mask_option": WeightInformedScoreAxisMaskConfig,
+                **kwargs,
+            },
+        )
+
+    def _adaptive_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "stack_halting_flag": True,
                 **kwargs,
             },
         )
