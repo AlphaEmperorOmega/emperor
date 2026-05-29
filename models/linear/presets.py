@@ -22,6 +22,7 @@ class ExperimentOptions(BaseOptions):
     )
     RESIDUAL = "Linear stack with residual (skip) connections on hidden layers."
     POST_NORM = "Linear stack with layer norm applied after each layer (post-norm)."
+    RECURRENT = "Linear stack applied recurrently for a fixed number of steps."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -56,6 +57,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.GATING_HALTING: self._gating_halting_preset,
             ExperimentOptions.RESIDUAL: self._residual_preset,
             ExperimentOptions.POST_NORM: self._post_norm_preset,
+            ExperimentOptions.RECURRENT: self._recurrent_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -100,6 +102,9 @@ class ExperimentPresets(ExperimentPresetsBase):
         return self._preset(
             **{"layer_norm_position": LayerNormPositionOptions.AFTER, **kwargs}
         )
+
+    def _recurrent_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(**{"recurrent_flag": True, **kwargs})
 
     def _preset(self, **kwargs) -> "ModelConfig":
         return LinearConfigBuilder(**kwargs).build()
