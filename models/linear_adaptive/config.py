@@ -123,6 +123,12 @@ HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 HALTING_BIAS_FLAG: bool = BIAS_FLAG
 
 #########################################################################
+# RECURRENT LAYER OPTIONS
+# If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
+RECURRENT_FLAG: bool = False
+RECURRENT_MAX_STEPS: int = 4
+
+#########################################################################
 # WEIGHT OPTIONS
 # If `WEIGHT_OPTION` is None, the weight-specific parameters below are ignored.
 WEIGHT_OPTION: type[DynamicWeightConfig] | None = None

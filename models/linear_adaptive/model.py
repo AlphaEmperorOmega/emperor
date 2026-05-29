@@ -4,7 +4,7 @@ from torch import Tensor
 from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.base.layer.stack import LayerStack
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer.config import LayerConfig, LayerStackConfig, RecurrentLayerConfig
 from emperor.experiments.classifier import ClassifierExperiment
 from models.linear_adaptive.experiment_config import ExperimentConfig
 
@@ -33,9 +33,17 @@ class Model(ClassifierExperiment):
             output_dim=self.main_cfg.hidden_dim,
         )
 
-    def _build_model(self) -> Layer | Sequential:
+    def _build_model(self) -> "torch.nn.Module":
+        model_config = self.cfg.model_config
+        if isinstance(model_config, RecurrentLayerConfig):
+            return model_config.build(
+                overrides=RecurrentLayerConfig(
+                    input_dim=self.main_cfg.hidden_dim,
+                    output_dim=self.main_cfg.hidden_dim,
+                )
+            )
         return self._build_layer_stack(
-            self.cfg.model_config,
+            model_config,
             input_dim=self.main_cfg.hidden_dim,
             output_dim=self.main_cfg.hidden_dim,
         )
