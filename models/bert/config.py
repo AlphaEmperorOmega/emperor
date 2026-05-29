@@ -5,7 +5,7 @@ from emperor.base.options import ActivationOptions
 from emperor.datasets.text.language_modeling.penn_treebank import PennTreebank
 from emperor.datasets.text.language_modeling.wiki_text_2 import WikiText2
 from emperor.transformer import TransformerEncoderStackConfig
-from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
+from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
 from emperor.linears.options import LinearLayerStackOptions
 from models.trainer_config import *
 

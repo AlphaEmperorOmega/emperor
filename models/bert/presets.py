@@ -9,7 +9,7 @@ from emperor.transformer.utils.layers import TransformerConfig
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from emperor.embedding.absolute.config import TextLearnedPositionalEmbeddingConfig
+from emperor.embedding.absolute.core.config import TextLearnedPositionalEmbeddingConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 import models.bert.config as config
 from models.bert.config import ExperimentConfig

@@ -8,7 +8,7 @@ from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.transformer import TransformerEncoderStackConfig
 from emperor.patch import PatchConfig
-from emperor.embedding.absolute.config import AbsolutePositionalEmbeddingConfig
+from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
 from emperor.linears.options import LinearLayerStackOptions
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig

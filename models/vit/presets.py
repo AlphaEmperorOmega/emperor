@@ -11,7 +11,7 @@ from emperor.transformer.utils.patch.options.base import PatchConfig
 from emperor.attention.utils.layer import MultiHeadAttentionConfig
 from emperor.transformer.utils.feed_forward import FeedForwardConfig
 from emperor.linears.options import LinearLayerOptions, LinearLayerStackOptions
-from emperor.embedding.absolute.config import ImageLearnedPositionalEmbeddingConfig
+from emperor.embedding.absolute.core.config import ImageLearnedPositionalEmbeddingConfig
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig

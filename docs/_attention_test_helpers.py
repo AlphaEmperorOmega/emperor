@@ -23,7 +23,7 @@ from emperor.experts.core.options import (
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-from emperor.embedding.relative.config import (
+from emperor.embedding.relative.core.config import (
     DynamicPositionalBiasConfig,
     RelativePositionalEmbeddingConfig,
 )

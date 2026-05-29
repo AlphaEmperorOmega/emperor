@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from torch.types import _dtype as DType
     from emperor.base.layer import LayerStackConfig
-    from emperor.embedding.relative.config import RelativePositionalEmbeddingConfig
+    from emperor.embedding.relative.core.config import RelativePositionalEmbeddingConfig
 
 
 @dataclass
