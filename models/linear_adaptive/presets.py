@@ -129,6 +129,7 @@ class ExperimentOptions(BaseOptions):
     DECAY_EXPONENTIAL_WEIGHT = "[DECAY] Dual-model weight that decays exponentially toward a static linear layer."
     NORM_L2_WEIGHT = "[NORM] Dual-model weight with L2-scale weight normalization."
     DEEP_GENERATOR = "[CAPACITY] Dual-model weight produced by a depth-8 generator network."
+    FULL_STACK = "[WEIGHT+BIAS+DIAGONAL+MASK] Dual-model weight + additive bias + combined diagonal + weight-informed mask."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -190,6 +191,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.DECAY_EXPONENTIAL_WEIGHT: self._decay_exponential_weight_preset,
             ExperimentOptions.NORM_L2_WEIGHT: self._norm_l2_weight_preset,
             ExperimentOptions.DEEP_GENERATOR: self._deep_generator_preset,
+            ExperimentOptions.FULL_STACK: self._full_stack_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -386,6 +388,17 @@ class ExperimentPresets(ExperimentPresetsBase):
             **{
                 "weight_option": DualModelDynamicWeightConfig,
                 "generator_depth": DynamicDepthOptions.DEPTH_OF_EIGHT,
+                **kwargs,
+            },
+        )
+
+    def _full_stack_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "bias_option": AdditiveDynamicBiasConfig,
+                "diagonal_option": CombinedDynamicDiagonalConfig,
+                "row_mask_option": WeightInformedScoreAxisMaskConfig,
                 **kwargs,
             },
         )
