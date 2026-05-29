@@ -31,6 +31,7 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
 )
 from emperor.augmentations.adaptive_parameters.options import (
     WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
 )
 from emperor.base.options import BaseOptions
 from emperor.datasets.image.classification.mnist import Mnist
@@ -125,6 +126,7 @@ class ExperimentOptions(BaseOptions):
         "[WEIGHT+BIAS+DIAGONAL] Low-rank weight + additive bias + standard diagonal."
     )
     DECAY_EXPONENTIAL_WEIGHT = "[DECAY] Dual-model weight that decays exponentially toward a static linear layer."
+    NORM_L2_WEIGHT = "[NORM] Dual-model weight with L2-scale weight normalization."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -184,6 +186,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.COMBO_7: self._layered_weighted_bank_weight_additive_bias_standard_diagonal_preset,
             ExperimentOptions.COMBO_8: self._low_rank_weight_additive_bias_standard_diagonal_preset,
             ExperimentOptions.DECAY_EXPONENTIAL_WEIGHT: self._decay_exponential_weight_preset,
+            ExperimentOptions.NORM_L2_WEIGHT: self._norm_l2_weight_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -362,6 +365,15 @@ class ExperimentPresets(ExperimentPresetsBase):
                 "weight_decay_schedule": WeightDecayScheduleOptions.EXPONENTIAL,
                 "weight_decay_rate": 1e-3,
                 "weight_decay_warmup_batches": 500,
+                **kwargs,
+            },
+        )
+
+    def _norm_l2_weight_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "weight_normalization_option": WeightNormalizationOptions.L2_SCALE,
                 **kwargs,
             },
         )
