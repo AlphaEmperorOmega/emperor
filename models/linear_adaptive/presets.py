@@ -30,6 +30,7 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     SoftWeightedBankDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters.options import (
+    DynamicDepthOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
 )
@@ -127,6 +128,7 @@ class ExperimentOptions(BaseOptions):
     )
     DECAY_EXPONENTIAL_WEIGHT = "[DECAY] Dual-model weight that decays exponentially toward a static linear layer."
     NORM_L2_WEIGHT = "[NORM] Dual-model weight with L2-scale weight normalization."
+    DEEP_GENERATOR = "[CAPACITY] Dual-model weight produced by a depth-8 generator network."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -187,6 +189,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.COMBO_8: self._low_rank_weight_additive_bias_standard_diagonal_preset,
             ExperimentOptions.DECAY_EXPONENTIAL_WEIGHT: self._decay_exponential_weight_preset,
             ExperimentOptions.NORM_L2_WEIGHT: self._norm_l2_weight_preset,
+            ExperimentOptions.DEEP_GENERATOR: self._deep_generator_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -374,6 +377,15 @@ class ExperimentPresets(ExperimentPresetsBase):
             **{
                 "weight_option": DualModelDynamicWeightConfig,
                 "weight_normalization_option": WeightNormalizationOptions.L2_SCALE,
+                **kwargs,
+            },
+        )
+
+    def _deep_generator_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "generator_depth": DynamicDepthOptions.DEPTH_OF_EIGHT,
                 **kwargs,
             },
         )
