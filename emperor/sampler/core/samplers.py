@@ -45,7 +45,7 @@ class SamplerBase(Module):
 
         self.noise_epsilon = 1e-2
         self.auxiliary_loss_model = SamplerAuxiliaryLosses(self.cfg)
-        self.register_buffer("default_loss", torch.tensor(0.0))
+        self.register_buffer("default_loss", torch.zeros(()))
         self.updated_skip_mask = None
         self.auxiliary_loss = self.default_loss
 

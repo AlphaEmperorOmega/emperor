@@ -13,11 +13,10 @@ if TYPE_CHECKING:
 class AuxiliaryLossBase:
     def __init__(self, loss_weight: float = 0.0):
         self.loss_weight = loss_weight
-        self.default_error = torch.tensor(0.0)
 
-    def get_weighted_loss(self) -> Tensor:
+    def get_weighted_loss(self, default_loss: Tensor) -> Tensor:
         if self.is_loss_weight_zero():
-            return self.default_error
+            return default_loss
         return self.loss_weight * self._compute_loss()
 
     def is_loss_weight_zero(self) -> bool:
@@ -76,7 +75,7 @@ class CoefficientOfVariationLoss(AuxiliaryLossBase):
 
     def _compute_loss(self) -> Tensor:
         if self.__has_single_sample():
-            return self.default_error
+            return self.gates_accumulation.new_zeros(())
         return self.__compute_coefficient_of_variation()
 
     def __has_single_sample(self) -> bool:
@@ -250,6 +249,7 @@ class SamplerAuxiliaryLosses(Module):
         self.mutual_information_loss = MutualInformationLoss(
             self.mutual_information_loss_weight
         )
+        self.register_buffer("default_loss", torch.zeros(()))
 
     def update_accumulated_statistics(
         self,
@@ -272,10 +272,10 @@ class SamplerAuxiliaryLosses(Module):
 
     def __compute_total_loss(self) -> Tensor:
         return (
-            self.coefficient_of_variation_loss.get_weighted_loss()
-            + self.switch_loss.get_weighted_loss()
-            + self.zero_centred_loss.get_weighted_loss()
-            + self.mutual_information_loss.get_weighted_loss()
+            self.coefficient_of_variation_loss.get_weighted_loss(self.default_loss)
+            + self.switch_loss.get_weighted_loss(self.default_loss)
+            + self.zero_centred_loss.get_weighted_loss(self.default_loss)
+            + self.mutual_information_loss.get_weighted_loss(self.default_loss)
         )
 
     def __reset_all_accumulations(self) -> None:
