@@ -71,6 +71,7 @@ class MultiHeadAttentionAbstract(Module):
                 q, k, v, k_padding_mask, attention_mask
             )
         )
+        attention_mask = self.masks.resolve_causal_attention_mask(q, attention_mask)
         k_padding_mask, attention_mask = self.masks.process_attention_masks(
             k_padding_mask, attention_mask
         )

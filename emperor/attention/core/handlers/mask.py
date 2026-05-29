@@ -19,6 +19,8 @@ class Mask:
         self.target_dtype = self.cfg.target_dtype
         self.causal_attention_mask_flag = self.cfg.causal_attention_mask_flag
         self.return_attention_weights_flag = self.cfg.return_attention_weights_flag
+        self.source_sequence_length = self.cfg.source_sequence_length
+        self.target_sequence_length = self.cfg.target_sequence_length
 
     def process_attention_masks(
         self,
@@ -39,20 +41,40 @@ class Mask:
 
         return key_padding_mask, attention_mask
 
+    def resolve_causal_attention_mask(
+        self,
+        query: Tensor,
+        attention_mask: Tensor | None,
+    ) -> Tensor | None:
+        if attention_mask is not None:
+            return attention_mask
+        if not self.causal_attention_mask_flag:
+            return None
+        return self.__generate_causal_mask(query.device)
+
+    def __generate_causal_mask(self, device: torch.device) -> Tensor:
+        mask_shape = (self.target_sequence_length, self.source_sequence_length)
+        negative_infinity_tensor = torch.full(
+            mask_shape, float("-inf"), dtype=self.target_dtype, device=device
+        )
+        return torch.triu(negative_infinity_tensor, diagonal=1)
+
     def __validate_attention_mask(
         self,
         key_padding_mask: Tensor | None,
         attention_mask: Tensor | None,
     ) -> Tensor | None:
-        if self.__should_skip_attention_mask(key_padding_mask):
+        if attention_mask is None and self.__should_skip_attention_mask(
+            key_padding_mask
+        ):
             return
 
         AttentionValidatorBase.validate_attention_mask_for_required_causal_mask(
             attention_mask, self.causal_attention_mask_flag
         )
 
-        if key_padding_mask is not None:
-            self.causal_attention_mask_flag = False
+        # if key_padding_mask is not None:
+        #     self.causal_attention_mask_flag = False
 
         attention_mask = self.__canonical_mask(
             mask=attention_mask,
