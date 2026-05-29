@@ -2,440 +2,281 @@ import torch
 import unittest
 import torch.nn as nn
 
-from torch import Tensor
-from emperor.transformer.utils.presets import TransformerPresets
-from emperor.embedding.absolute.options.learned_embedding import (
-    TextLearnedPositionalEmbedding,
+from emperor.embedding.absolute import (
+    AbsolutePositionalEmbeddingConfig,
     ImageLearnedPositionalEmbedding,
-)
-from emperor.embedding.absolute.options.sinusoidal_embedding import (
-    TextSinusoidalPositionalEmbedding,
+    ImageLearnedPositionalEmbeddingConfig,
     ImageSinusoidalPositionalEmbedding,
+    ImageSinusoidalPositionalEmbeddingConfig,
+    TextLearnedPositionalEmbedding,
+    TextLearnedPositionalEmbeddingConfig,
+    TextSinusoidalPositionalEmbedding,
+    TextSinusoidalPositionalEmbeddingConfig,
 )
-from emperor.embedding.options import AbsolutePositionalEmbeddingOptions
-from emperor.embedding.absolute.factory import AbsolutePositionalEmbeddingFactory
+
+
+class TestAbsolutePositionalEmbeddingConfig(unittest.TestCase):
+    def test_base_config_cannot_build(self):
+        cfg = AbsolutePositionalEmbeddingConfig(
+            num_embeddings=8,
+            embedding_dim=6,
+            init_size=8,
+            padding_idx=0,
+            auto_expand_flag=False,
+        )
+
+        with self.assertRaises(NotImplementedError):
+            cfg.build()
 
 
 class TestTextLearnedPositionalEmbedding(unittest.TestCase):
-    def test_init(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        auto_expand_flag = True
-
-        c = TransformerPresets.transformer_positional_embedding_preset(
-            text_processing_flag=True,
+    def preset(
+        self,
+        num_embeddings: int = 8,
+        embedding_dim: int = 6,
+        init_size: int = 8,
+        padding_idx: int | None = 0,
+        auto_expand_flag: bool = False,
+    ) -> TextLearnedPositionalEmbeddingConfig:
+        return TextLearnedPositionalEmbeddingConfig(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
             init_size=init_size,
+            padding_idx=padding_idx,
             auto_expand_flag=auto_expand_flag,
         )
-        m = TextLearnedPositionalEmbedding(c)
 
-        self.assertEqual(m.embedding_dim, embedding_dim)
-        self.assertEqual(m.padding_idx, padding_idx)
-        self.assertEqual(m.num_embeddings, num_embeddings + 1)
-        self.assertEqual(m.init_size, init_size)
-        self.assertEqual(m.auto_expand_flag, auto_expand_flag)
-        self.assertIsInstance(m.embedding_model, nn.Embedding)
+    def test_init(self):
+        cfg = self.preset(num_embeddings=10, embedding_dim=4)
+        model = TextLearnedPositionalEmbedding(cfg)
+
+        self.assertEqual(model.embedding_dim, cfg.embedding_dim)
+        self.assertEqual(model.padding_idx, cfg.padding_idx)
+        self.assertEqual(model.num_embeddings, cfg.num_embeddings + 1)
+        self.assertEqual(model.init_size, cfg.init_size)
+        self.assertEqual(model.auto_expand_flag, cfg.auto_expand_flag)
+        self.assertIsInstance(model.embedding_model, nn.Embedding)
 
     def test_forward(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        auto_expand_flag = True
+        cfg = self.preset(num_embeddings=10, embedding_dim=4)
+        model = TextLearnedPositionalEmbedding(cfg)
+        input_tokens = torch.randint(1, cfg.num_embeddings, (3, 5))
 
-        c = TransformerPresets.transformer_positional_embedding_preset(
-            text_processing_flag=True,
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
-            init_size=init_size,
-            auto_expand_flag=auto_expand_flag,
-        )
-        m = TextLearnedPositionalEmbedding(c)
+        output = model(input_tokens)
 
-        batch_size = 4
-        sequence_length = num_embeddings
-        input_tokens = torch.randint(0, num_embeddings, (batch_size, sequence_length))
-        output = m(input_tokens)
-
-        expected_shape = (batch_size, sequence_length, embedding_dim)
-        self.assertIsInstance(output, Tensor)
-        self.assertEqual(output.shape, expected_shape)
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(output.shape, (3, 5, cfg.embedding_dim))
 
     def test_forward_incremental(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
+        cfg = self.preset(num_embeddings=10, embedding_dim=4)
+        model = TextLearnedPositionalEmbedding(cfg)
+        input_tokens = torch.randint(1, cfg.num_embeddings, (3, 1))
 
-        c = TransformerPresets.transformer_positional_embedding_preset(
-            text_processing_flag=True,
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
-            init_size=init_size,
-        )
-        m = TextLearnedPositionalEmbedding(c)
+        output = model(input_tokens, incremental_state={})
 
-        batch_size = 4
-        sequence_length = 1
-        input_tokens = torch.randint(1, num_embeddings, (batch_size, sequence_length))
-        output = m(input_tokens, incremental_state={})
-
-        expected_shape = (1, 1, embedding_dim)
-        self.assertIsInstance(output, Tensor)
-        self.assertEqual(output.shape, expected_shape)
+        self.assertEqual(output.shape, (1, 1, cfg.embedding_dim))
 
     def test_forward_explicit_positions(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
+        cfg = self.preset(num_embeddings=10, embedding_dim=4)
+        model = TextLearnedPositionalEmbedding(cfg)
+        input_tokens = torch.randint(1, cfg.num_embeddings, (3, 5))
+        positions = torch.arange(1, 6).unsqueeze(0).expand(3, -1)
 
-        c = TransformerPresets.transformer_positional_embedding_preset(
-            text_processing_flag=True,
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
-            init_size=init_size,
+        output = model(input_tokens, positions=positions)
+
+        self.assertEqual(output.shape, (3, 5, cfg.embedding_dim))
+
+    def test_config_build_returns_text_learned_embedding(self):
+        cfg = self.preset()
+        model = cfg.build()
+
+        self.assertIsInstance(model, TextLearnedPositionalEmbedding)
+        self.assertIsInstance(model, cfg._registry_owner())
+
+    def test_config_build_applies_overrides(self):
+        cfg = self.preset(num_embeddings=8, embedding_dim=4)
+        overrides = TextLearnedPositionalEmbeddingConfig(
+            num_embeddings=12,
+            embedding_dim=6,
+            init_size=12,
+            padding_idx=0,
+            auto_expand_flag=True,
         )
-        m = TextLearnedPositionalEmbedding(c)
+        model = cfg.build(overrides)
 
-        batch_size = 4
-        sequence_length = num_embeddings
-        input_tokens = torch.randint(0, num_embeddings, (batch_size, sequence_length))
-        positions = (
-            torch.arange(1, sequence_length + 1).unsqueeze(0).expand(batch_size, -1)
-        )
-        output = m(input_tokens, positions=positions)
+        self.assertEqual(model.embedding_dim, overrides.embedding_dim)
+        self.assertEqual(model.num_embeddings, overrides.num_embeddings + 1)
+        self.assertEqual(model.auto_expand_flag, overrides.auto_expand_flag)
 
-        expected_shape = (batch_size, sequence_length, embedding_dim)
-        self.assertIsInstance(output, Tensor)
-        self.assertEqual(output.shape, expected_shape)
+    def test_init_raises_on_missing_or_invalid_fields(self):
+        invalid_cases = [
+            ("missing_num_embeddings", TextLearnedPositionalEmbeddingConfig(
+                embedding_dim=4,
+                init_size=8,
+                padding_idx=0,
+                auto_expand_flag=False,
+            )),
+            ("zero_embedding_dim", self.preset(embedding_dim=0)),
+            ("negative_padding_idx", self.preset(padding_idx=-1)),
+        ]
+
+        for case, cfg in invalid_cases:
+            with self.subTest(case=case):
+                with self.assertRaises(ValueError):
+                    TextLearnedPositionalEmbedding(cfg)
 
 
 class TestImageLearnedPositionalEmbedding(unittest.TestCase):
-    def test_init(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        auto_expand_flag = True
+    def preset(
+        self,
+        num_embeddings: int = 4,
+        embedding_dim: int = 6,
+        init_size: int = 4,
+        padding_idx: int | None = 0,
+        auto_expand_flag: bool = False,
+        class_token_flag: bool = True,
+    ) -> ImageLearnedPositionalEmbeddingConfig:
+        return ImageLearnedPositionalEmbeddingConfig(
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            init_size=init_size,
+            padding_idx=padding_idx,
+            auto_expand_flag=auto_expand_flag,
+            class_token_flag=class_token_flag,
+        )
 
+    def test_init_and_forward_with_class_token_options(self):
         for class_token_flag in [True, False]:
-            message = f"Test failed for class_token_flag: {class_token_flag}"
-            with self.subTest(i=message):
-                c = TransformerPresets.transformer_positional_embedding_preset(
-                    num_embeddings=num_embeddings,
-                    embedding_dim=embedding_dim,
-                    padding_idx=padding_idx,
-                    init_size=init_size,
-                    auto_expand_flag=auto_expand_flag,
-                    class_token_flag=class_token_flag,
-                )
-                m = ImageLearnedPositionalEmbedding(c)
+            with self.subTest(class_token_flag=class_token_flag):
+                cfg = self.preset(class_token_flag=class_token_flag)
+                model = ImageLearnedPositionalEmbedding(cfg)
+                sequence_length = cfg.num_embeddings + int(class_token_flag)
+                patch_embeddings = torch.randn(2, sequence_length, cfg.embedding_dim)
 
-                expected_num_embeddings = (
-                    num_embeddings + padding_idx + 1
-                    if class_token_flag
-                    else num_embeddings
-                )
-                self.assertEqual(m.embedding_dim, embedding_dim)
-                self.assertEqual(m.padding_idx, padding_idx)
-                self.assertEqual(m.num_embeddings, expected_num_embeddings)
-                self.assertEqual(m.init_size, init_size)
-                self.assertEqual(m.auto_expand_flag, auto_expand_flag)
-                self.assertEqual(m.class_token_flag, class_token_flag)
-                self.assertIsInstance(m.embedding_model, nn.Embedding)
+                output = model(patch_embeddings)
 
-    def test_forward(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        auto_expand_flag = True
+                self.assertEqual(model.class_token_flag, class_token_flag)
+                self.assertEqual(model.embedding_model.num_embeddings, sequence_length)
+                self.assertEqual(output.shape, patch_embeddings.shape)
 
-        for class_token_flag in [True, False]:
-            message = f"Test failed for class_token_flag: {class_token_flag}"
-            with self.subTest(i=message):
-                c = TransformerPresets.transformer_positional_embedding_preset(
-                    num_embeddings=num_embeddings,
-                    embedding_dim=embedding_dim,
-                    padding_idx=padding_idx,
-                    init_size=init_size,
-                    auto_expand_flag=auto_expand_flag,
-                    class_token_flag=class_token_flag,
-                )
-                m = ImageLearnedPositionalEmbedding(c)
+    def test_config_build_returns_image_learned_embedding(self):
+        cfg = self.preset()
+        model = cfg.build()
 
-                batch_size = 4
-                patch_features = torch.randn(batch_size, num_embeddings, embedding_dim)
+        self.assertIsInstance(model, ImageLearnedPositionalEmbedding)
+        self.assertIsInstance(model, cfg._registry_owner())
 
-                if class_token_flag:
-                    cls_token = nn.Parameter(torch.zeros(1, 1, embedding_dim))
-                    cls_tokens = cls_token.expand(batch_size, -1, -1)
-                    input_features = torch.cat([cls_tokens, patch_features], dim=1)
-                    expected_shape = (batch_size, num_embeddings + 1, embedding_dim)
-                else:
-                    input_features = patch_features
-                    expected_shape = (batch_size, num_embeddings, embedding_dim)
+    def test_init_raises_without_class_token_flag(self):
+        cfg = ImageLearnedPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=6,
+            init_size=4,
+            padding_idx=0,
+            auto_expand_flag=False,
+        )
 
-                output = m(input_features)
-
-                self.assertIsInstance(output, Tensor)
-                self.assertEqual(output.shape, expected_shape)
+        with self.assertRaises(ValueError):
+            ImageLearnedPositionalEmbedding(cfg)
 
 
 class TestTextSinusoidalPositionalEmbedding(unittest.TestCase):
-    def test_init(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        auto_expand_flag = True
-
-        c = TransformerPresets.transformer_positional_embedding_preset(
-            text_processing_flag=True,
+    def preset(
+        self,
+        num_embeddings: int = 8,
+        embedding_dim: int = 6,
+        init_size: int = 8,
+        padding_idx: int | None = 0,
+        auto_expand_flag: bool = False,
+    ) -> TextSinusoidalPositionalEmbeddingConfig:
+        return TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
             init_size=init_size,
+            padding_idx=padding_idx,
             auto_expand_flag=auto_expand_flag,
         )
-        m = TextSinusoidalPositionalEmbedding(c)
 
-        self.assertEqual(m.embedding_dim, embedding_dim)
-        self.assertEqual(m.padding_idx, padding_idx)
-        self.assertEqual(m.num_embeddings, num_embeddings)
-        self.assertEqual(m.init_size, init_size + padding_idx + 1)
-        self.assertEqual(m.auto_expand_flag, auto_expand_flag)
-        self.assertIsInstance(m.weights, Tensor)
+    def test_init(self):
+        cfg = self.preset(num_embeddings=10, embedding_dim=6)
+        model = TextSinusoidalPositionalEmbedding(cfg)
+
+        self.assertEqual(model.embedding_dim, cfg.embedding_dim)
+        self.assertEqual(model.padding_idx, cfg.padding_idx)
+        self.assertEqual(model.num_embeddings, cfg.num_embeddings)
+        self.assertEqual(model.init_size, cfg.num_embeddings + cfg.padding_idx + 1)
+        self.assertIsInstance(model.weights, torch.Tensor)
+        torch.testing.assert_close(
+            model.weights[cfg.padding_idx], torch.zeros(cfg.embedding_dim)
+        )
 
     def test_forward(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        auto_expand_flag = True
+        cfg = self.preset(num_embeddings=10, embedding_dim=6)
+        model = TextSinusoidalPositionalEmbedding(cfg)
+        input_tokens = torch.randint(1, cfg.num_embeddings, (3, 5))
 
-        c = TransformerPresets.transformer_positional_embedding_preset(
-            text_processing_flag=True,
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
-            init_size=init_size,
-            auto_expand_flag=auto_expand_flag,
-        )
-        m = TextSinusoidalPositionalEmbedding(c)
+        output = model(input_tokens)
 
-        batch_size = 4
-        sequence_length = num_embeddings
-        input_tokens = torch.randint(0, num_embeddings, (batch_size, sequence_length))
-        output = m(input_tokens)
-
-        expected_shape = (batch_size, sequence_length, embedding_dim)
-        self.assertIsInstance(output, Tensor)
-        self.assertEqual(output.shape, expected_shape)
-
-    def test_auto_expand(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        batch_size = 4
-        sequence_within_bounds = init_size
-        sequence_beyond_bounds = init_size + 10
-
-        for auto_expand_flag in [True, False]:
-            message = f"Test failed for auto_expand_flag: {auto_expand_flag}"
-            with self.subTest(i=message):
-                c = TransformerPresets.transformer_positional_embedding_preset(
-                    text_processing_flag=True,
-                    num_embeddings=num_embeddings,
-                    embedding_dim=embedding_dim,
-                    padding_idx=padding_idx,
-                    init_size=init_size,
-                    auto_expand_flag=auto_expand_flag,
-                )
-                m = TextSinusoidalPositionalEmbedding(c)
-                initial_weights_size = m.weights.size(0)
-
-                input_within = torch.randint(
-                    1, num_embeddings, (batch_size, sequence_within_bounds)
-                )
-                m(input_within)
-                self.assertEqual(m.weights.size(0), initial_weights_size)
-
-                input_beyond = torch.randint(
-                    1, num_embeddings, (batch_size, sequence_beyond_bounds)
-                )
-                expected_expanded_size = padding_idx + 1 + sequence_beyond_bounds
-
-                if auto_expand_flag:
-                    output = m(input_beyond)
-                    self.assertIsInstance(output, Tensor)
-                    self.assertEqual(
-                        output.shape,
-                        (batch_size, sequence_beyond_bounds, embedding_dim),
-                    )
-                    self.assertEqual(m.weights.size(0), expected_expanded_size)
-                else:
-                    self.assertEqual(m.weights.size(0), initial_weights_size)
+        self.assertEqual(output.shape, (3, 5, cfg.embedding_dim))
 
     def test_forward_incremental(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        batch_size = 4
-        sequence_length = 6
+        cfg = self.preset(num_embeddings=10, embedding_dim=6)
+        model = TextSinusoidalPositionalEmbedding(cfg)
+        input_tokens = torch.randint(1, cfg.num_embeddings, (3, 1))
 
-        for use_timestep in [True, False]:
-            message = f"Test failed for use_timestep: {use_timestep}"
-            with self.subTest(i=message):
-                c = TransformerPresets.transformer_positional_embedding_preset(
-                    text_processing_flag=True,
-                    num_embeddings=num_embeddings,
-                    embedding_dim=embedding_dim,
-                    padding_idx=padding_idx,
-                    init_size=init_size,
-                    auto_expand_flag=True,
-                )
-                m = TextSinusoidalPositionalEmbedding(c)
-                input_tokens = torch.randint(
-                    1, num_embeddings, (batch_size, sequence_length)
-                )
+        output = model(input_tokens, incremental_state={})
 
-                if use_timestep:
-                    timestep = torch.tensor([sequence_length - 1])
-                    output = m(input_tokens, incremental_state={}, timestep=timestep)
-                else:
-                    output = m(input_tokens, incremental_state={})
+        self.assertEqual(output.shape, (3, 1, cfg.embedding_dim))
 
-                expected_shape = (batch_size, 1, embedding_dim)
-                self.assertIsInstance(output, Tensor)
-                self.assertEqual(output.shape, expected_shape)
+    def test_auto_expand(self):
+        cfg = self.preset(num_embeddings=4, embedding_dim=6, auto_expand_flag=True)
+        model = TextSinusoidalPositionalEmbedding(cfg)
+        input_tokens = torch.ones(2, 10)
 
-    def test_padding_masking(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
+        output = model(input_tokens)
 
-        c = TransformerPresets.transformer_positional_embedding_preset(
-            text_processing_flag=True,
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
-            init_size=init_size,
-            auto_expand_flag=True,
-        )
-        m = TextSinusoidalPositionalEmbedding(c)
+        self.assertEqual(output.shape, (2, 10, cfg.embedding_dim))
+        self.assertGreaterEqual(model.weights.size(0), 11)
 
-        batch_size = 2
-        sequence_length = 8
-        input_tokens = torch.randint(1, num_embeddings, (batch_size, sequence_length))
-        input_tokens[:, 0] = padding_idx
+    def test_config_build_returns_text_sinusoidal_embedding(self):
+        cfg = self.preset()
+        model = cfg.build()
 
-        output = m(input_tokens)
-
-        self.assertTrue(output[:, 0, :].eq(0).all())
-        self.assertFalse(output[:, 1:, :].eq(0).all())
+        self.assertIsInstance(model, TextSinusoidalPositionalEmbedding)
+        self.assertIsInstance(model, cfg._registry_owner())
 
 
 class TestImageSinusoidalPositionalEmbedding(unittest.TestCase):
-    def test_init(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-
-        c = TransformerPresets.transformer_positional_embedding_preset(
+    def preset(
+        self,
+        num_embeddings: int = 4,
+        embedding_dim: int = 6,
+        init_size: int = 4,
+        padding_idx: int | None = 0,
+        auto_expand_flag: bool = False,
+        class_token_flag: bool = True,
+    ) -> ImageSinusoidalPositionalEmbeddingConfig:
+        return ImageSinusoidalPositionalEmbeddingConfig(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
             init_size=init_size,
+            padding_idx=padding_idx,
+            auto_expand_flag=auto_expand_flag,
+            class_token_flag=class_token_flag,
         )
-        m = ImageSinusoidalPositionalEmbedding(c)
-
-        self.assertEqual(m.embedding_dim, embedding_dim)
-        self.assertEqual(m.padding_idx, padding_idx)
-        self.assertEqual(m.num_embeddings, num_embeddings)
-        self.assertEqual(m.init_size, init_size + padding_idx + 1)
-        self.assertIsInstance(m.weights, Tensor)
 
     def test_forward(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
+        cfg = self.preset()
+        model = ImageSinusoidalPositionalEmbedding(cfg)
+        patch_embeddings = torch.randn(2, cfg.num_embeddings + 1, cfg.embedding_dim)
 
-        c = TransformerPresets.transformer_positional_embedding_preset(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            padding_idx=padding_idx,
-            init_size=init_size,
-        )
-        m = ImageSinusoidalPositionalEmbedding(c)
+        output = model(patch_embeddings)
 
-        batch_size = 4
-        sequence_length = init_size + padding_idx + 1
-        input_features = torch.randn(batch_size, sequence_length, embedding_dim)
-        output = m(input_features)
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(output.shape, patch_embeddings.shape)
 
-        expected_shape = (batch_size, sequence_length, embedding_dim)
-        self.assertIsInstance(output, Tensor)
-        self.assertEqual(output.shape, expected_shape)
+    def test_config_build_returns_image_sinusoidal_embedding(self):
+        cfg = self.preset()
+        model = cfg.build()
 
-
-class TestAbsolutePositionalEmbeddingFactory(unittest.TestCase):
-    def test_init(self):
-        num_embeddings = 64
-        embedding_dim = 10
-        padding_idx = 0
-        init_size = num_embeddings
-        auto_expand_flag = True
-
-        for text_processing_flag in [True, False]:
-            for positional_embedding_option in AbsolutePositionalEmbeddingOptions:
-                message = f"Testing option: {positional_embedding_option.value}, text_processing_flag: {text_processing_flag}"
-                with self.subTest(msg=message):
-                    c = TransformerPresets.transformer_positional_embedding_preset(
-                        text_processing_flag=text_processing_flag,
-                        positional_embedding_option=positional_embedding_option,
-                        num_embeddings=num_embeddings,
-                        embedding_dim=embedding_dim,
-                        padding_idx=padding_idx,
-                        init_size=init_size,
-                        auto_expand_flag=auto_expand_flag,
-                    )
-                    if (
-                        positional_embedding_option
-                        == AbsolutePositionalEmbeddingOptions.DISABLED
-                    ):
-                        with self.assertRaises(ValueError):
-                            AbsolutePositionalEmbeddingFactory(c).build()
-                        continue
-
-                    m = AbsolutePositionalEmbeddingFactory(c).build()
-                    if (
-                        positional_embedding_option
-                        == AbsolutePositionalEmbeddingOptions.SINUSOIDAL
-                    ):
-                        if text_processing_flag:
-                            self.assertIsInstance(m, TextSinusoidalPositionalEmbedding)
-                        else:
-                            self.assertIsInstance(m, ImageSinusoidalPositionalEmbedding)
-                    if (
-                        positional_embedding_option
-                        == AbsolutePositionalEmbeddingOptions.LEARNED
-                    ):
-                        if text_processing_flag:
-                            self.assertIsInstance(m, TextLearnedPositionalEmbedding)
-                        else:
-                            self.assertIsInstance(m, ImageLearnedPositionalEmbedding)
+        self.assertIsInstance(model, ImageSinusoidalPositionalEmbedding)
+        self.assertIsInstance(model, cfg._registry_owner())

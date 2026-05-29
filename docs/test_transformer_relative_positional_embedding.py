@@ -1,147 +1,187 @@
 import torch
 import unittest
-import torch.nn as nn
 
-from torch import Tensor
-from emperor.transformer.utils.presets import TransformerPresets
-from emperor.embedding.relative.options.dynamic_positional_bias import DynamicPostionalBias
-from emperor.embedding.options import RelativePositionalEmbeddingOptions
-from emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
+from emperor.embedding.relative import (
+    DynamicPositionalBias,
+    DynamicPositionalBiasConfig,
+    RelativePositionalEmbeddingConfig,
+)
 
 
-class TestDynamicPostionalBias(unittest.TestCase):
-    def test_init(self):
-        num_embeddings = 64
-        embedding_dim = 8
-        num_heads = 4
-        max_positions = 32
-        padding_idx = 0
-        init_size = 64
-        auto_expand_flag = False
+class TestRelativePositionalEmbeddingConfig(unittest.TestCase):
+    def test_base_config_cannot_build(self):
+        cfg = RelativePositionalEmbeddingConfig(
+            text_processing_flag=False,
+            num_heads=2,
+            num_embeddings=16,
+            embedding_dim=8,
+            init_size=16,
+            padding_idx=0,
+            auto_expand_flag=False,
+            max_positions=8,
+        )
 
-        c = TransformerPresets.transformer_relative_positional_embedding_preset(
+        with self.assertRaises(NotImplementedError):
+            cfg.build()
+
+
+class TestDynamicPositionalBias(unittest.TestCase):
+    def preset(
+        self,
+        text_processing_flag: bool = False,
+        num_heads: int = 2,
+        num_embeddings: int = 16,
+        embedding_dim: int = 8,
+        init_size: int = 16,
+        padding_idx: int | None = 0,
+        auto_expand_flag: bool = False,
+        max_positions: int = 8,
+    ) -> DynamicPositionalBiasConfig:
+        return DynamicPositionalBiasConfig(
+            text_processing_flag=text_processing_flag,
+            num_heads=num_heads,
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            num_heads=num_heads,
-            max_positions=max_positions,
-            padding_idx=padding_idx,
             init_size=init_size,
+            padding_idx=padding_idx,
             auto_expand_flag=auto_expand_flag,
+            max_positions=max_positions,
         )
-        m = DynamicPostionalBias(c)
 
-        expected_head_dim = embedding_dim // num_heads
-        expected_num_embeddings = num_embeddings + padding_idx + 1
+    def test_init(self):
+        cfg = self.preset(num_heads=4, embedding_dim=12, max_positions=6)
+        model = DynamicPositionalBias(cfg)
 
-        self.assertEqual(m.embedding_dim, embedding_dim)
-        self.assertEqual(m.padding_idx, padding_idx)
-        self.assertEqual(m.num_heads, num_heads)
-        self.assertEqual(m.head_dim, expected_head_dim)
-        self.assertEqual(m.max_positions, max_positions)
-        self.assertEqual(m.init_size, init_size)
-        self.assertEqual(m.auto_expand_flag, auto_expand_flag)
-        self.assertEqual(m.num_embeddings, expected_num_embeddings)
-        self.assertIsInstance(m.relative_positional_emnbeddings, nn.Parameter)
+        self.assertIsInstance(model, DynamicPositionalBias)
+        self.assertEqual(model.embedding_dim, cfg.embedding_dim)
+        self.assertEqual(model.num_heads, cfg.num_heads)
+        self.assertEqual(model.head_dim, cfg.embedding_dim // cfg.num_heads)
+        self.assertEqual(model.max_positions, cfg.max_positions)
         self.assertEqual(
-            m.relative_positional_emnbeddings.shape,
-            (num_heads, expected_head_dim, max_positions * 2 + 1),
+            model.relative_positional_embeddings.shape,
+            (cfg.num_heads, model.head_dim, cfg.max_positions * 2 + 1),
         )
 
     def test_forward(self):
-        num_embeddings = 64
-        embedding_dim = 8
-        num_heads = 4
-        max_positions = 32
-        padding_idx = 0
-        init_size = 64
-        auto_expand_flag = False
-
-        c = TransformerPresets.transformer_relative_positional_embedding_preset(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            num_heads=num_heads,
-            max_positions=max_positions,
-            padding_idx=padding_idx,
-            init_size=init_size,
-            auto_expand_flag=auto_expand_flag,
+        cfg = self.preset(num_heads=2, embedding_dim=8, max_positions=4)
+        model = DynamicPositionalBias(cfg)
+        batch_size = 3
+        sequence_length = 5
+        query = torch.randn(
+            batch_size,
+            cfg.num_heads,
+            sequence_length,
+            cfg.embedding_dim // cfg.num_heads,
         )
-        m = DynamicPostionalBias(c)
 
-        batch_size = 4
-        seq_len = 6
-        head_dim = embedding_dim // num_heads
-        query = torch.randn(batch_size, num_heads, seq_len, head_dim)
-        output = m(query, sequence_length=seq_len)
+        output = model(query, sequence_length)
 
-        expected_shape = (batch_size, num_heads, seq_len, seq_len)
-        self.assertIsInstance(output, Tensor)
-        self.assertEqual(output.shape, expected_shape)
-
-    def test_forward_last(self):
-        num_embeddings = 64
-        embedding_dim = 8
-        num_heads = 4
-        max_positions = 32
-        padding_idx = 0
-        init_size = 64
-        auto_expand_flag = False
-
-        c = TransformerPresets.transformer_relative_positional_embedding_preset(
-            num_embeddings=num_embeddings,
-            embedding_dim=embedding_dim,
-            num_heads=num_heads,
-            max_positions=max_positions,
-            padding_idx=padding_idx,
-            init_size=init_size,
-            auto_expand_flag=auto_expand_flag,
+        self.assertIsInstance(output, torch.Tensor)
+        self.assertEqual(
+            output.shape,
+            (batch_size, cfg.num_heads, sequence_length, sequence_length),
         )
-        m = DynamicPostionalBias(c)
 
-        batch_size = 4
-        seq_len = 1
-        head_dim = embedding_dim // num_heads
-        query = torch.randn(batch_size, num_heads, seq_len, head_dim)
-        output = m(query, sequence_length=seq_len, last=True)
+    def test_forward_last_position(self):
+        cfg = self.preset(num_heads=2, embedding_dim=8, max_positions=4)
+        model = DynamicPositionalBias(cfg)
+        query = torch.randn(3, cfg.num_heads, 1, cfg.embedding_dim // cfg.num_heads)
 
-        expected_shape = (batch_size, num_heads, seq_len, seq_len)
-        self.assertIsInstance(output, Tensor)
-        self.assertEqual(output.shape, expected_shape)
+        output = model(query, sequence_length=5, last=True)
 
+        self.assertEqual(output.shape, (3, cfg.num_heads, 1, 5))
 
-class TestRelativePositionalEmbeddingFactory(unittest.TestCase):
-    def test_init(self):
-        num_embeddings = 64
-        embedding_dim = 8
-        num_heads = 4
-        max_positions = 32
-        padding_idx = 0
-        init_size = 64
-        auto_expand_flag = False
+    def test_output_matches_constant_embedding_projection(self):
+        cfg = self.preset(num_heads=2, embedding_dim=8, max_positions=4)
+        model = DynamicPositionalBias(cfg)
+        with torch.no_grad():
+            model.relative_positional_embeddings.fill_(1.0)
+        query = torch.ones(1, cfg.num_heads, 3, cfg.embedding_dim // cfg.num_heads)
 
-        for positional_embedding_option in RelativePositionalEmbeddingOptions:
-            message = f"Testing option: {positional_embedding_option.value}"
-            with self.subTest(msg=message):
-                c = TransformerPresets.transformer_relative_positional_embedding_preset(
-                    positional_embedding_option=positional_embedding_option,
-                    num_embeddings=num_embeddings,
-                    embedding_dim=embedding_dim,
-                    num_heads=num_heads,
-                    max_positions=max_positions,
-                    padding_idx=padding_idx,
-                    init_size=init_size,
-                    auto_expand_flag=auto_expand_flag,
-                )
-                if (
-                    positional_embedding_option
-                    == RelativePositionalEmbeddingOptions.DISABLED
-                ):
-                    with self.assertRaises(ValueError):
-                        RelativePositionalEmbeddingFactory(c).build()
-                    continue
+        output = model(query, sequence_length=3)
 
-                m = RelativePositionalEmbeddingFactory(c).build()
-                if (
-                    positional_embedding_option
-                    == RelativePositionalEmbeddingOptions.LEARNED
-                ):
-                    self.assertIsInstance(m, DynamicPostionalBias)
+        expected = torch.full(
+            (1, cfg.num_heads, 3, 3),
+            float(model.head_dim),
+            dtype=query.dtype,
+        )
+        torch.testing.assert_close(output, expected)
+
+    def test_gradients_flow_through_relative_embeddings(self):
+        cfg = self.preset()
+        model = DynamicPositionalBias(cfg)
+        query = torch.randn(
+            2,
+            cfg.num_heads,
+            4,
+            cfg.embedding_dim // cfg.num_heads,
+            requires_grad=True,
+        )
+
+        output = model(query, sequence_length=4)
+        output.sum().backward()
+
+        self.assertIsNotNone(model.relative_positional_embeddings.grad)
+        self.assertIsNotNone(query.grad)
+
+    def test_config_build_returns_dynamic_positional_bias(self):
+        cfg = self.preset()
+        model = cfg.build()
+
+        self.assertIsInstance(model, DynamicPositionalBias)
+        self.assertIsInstance(model, DynamicPositionalBias)
+        self.assertIsInstance(model, cfg._registry_owner())
+
+    def test_config_build_applies_overrides(self):
+        cfg = self.preset(num_heads=2, embedding_dim=8)
+        overrides = DynamicPositionalBiasConfig(
+            text_processing_flag=True,
+            num_heads=4,
+            num_embeddings=32,
+            embedding_dim=12,
+            init_size=32,
+            padding_idx=0,
+            auto_expand_flag=True,
+            max_positions=6,
+        )
+        model = cfg.build(overrides)
+
+        self.assertEqual(model.text_processing_flag, overrides.text_processing_flag)
+        self.assertEqual(model.num_heads, overrides.num_heads)
+        self.assertEqual(model.embedding_dim, overrides.embedding_dim)
+        self.assertEqual(model.max_positions, overrides.max_positions)
+
+    def test_init_raises_on_missing_or_invalid_fields(self):
+        invalid_cases = [
+            ("missing_num_heads", DynamicPositionalBiasConfig(
+                text_processing_flag=False,
+                num_embeddings=16,
+                embedding_dim=8,
+                init_size=16,
+                padding_idx=0,
+                auto_expand_flag=False,
+                max_positions=8,
+            )),
+            ("zero_max_positions", self.preset(max_positions=0)),
+            ("non_divisible_heads", self.preset(num_heads=3, embedding_dim=8)),
+            ("negative_padding_idx", self.preset(padding_idx=-1)),
+        ]
+
+        for case, cfg in invalid_cases:
+            with self.subTest(case=case):
+                with self.assertRaises(ValueError):
+                    DynamicPositionalBias(cfg)
+
+    def test_forward_raises_on_invalid_input(self):
+        model = DynamicPositionalBias(self.preset())
+
+        invalid_cases = [
+            ("non_tensor", [1, 2, 3], 4, TypeError),
+            ("rank_3", torch.randn(2, 2, 4), 4, ValueError),
+            ("zero_sequence_length", torch.randn(2, 2, 4, 4), 0, ValueError),
+        ]
+
+        for case, query, sequence_length, error_type in invalid_cases:
+            with self.subTest(case=case):
+                with self.assertRaises(error_type):
+                    model(query, sequence_length)
