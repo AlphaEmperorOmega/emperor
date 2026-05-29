@@ -29,6 +29,9 @@ from emperor.augmentations.adaptive_parameters.core.weight import (
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
 )
+from emperor.augmentations.adaptive_parameters.options import (
+    WeightDecayScheduleOptions,
+)
 from emperor.base.options import BaseOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
@@ -121,6 +124,7 @@ class ExperimentOptions(BaseOptions):
     COMBO_8 = (
         "[WEIGHT+BIAS+DIAGONAL] Low-rank weight + additive bias + standard diagonal."
     )
+    DECAY_EXPONENTIAL_WEIGHT = "[DECAY] Dual-model weight that decays exponentially toward a static linear layer."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -179,6 +183,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.COMBO_6: self._dual_model_weight_additive_bias_standard_diagonal_preset,
             ExperimentOptions.COMBO_7: self._layered_weighted_bank_weight_additive_bias_standard_diagonal_preset,
             ExperimentOptions.COMBO_8: self._low_rank_weight_additive_bias_standard_diagonal_preset,
+            ExperimentOptions.DECAY_EXPONENTIAL_WEIGHT: self._decay_exponential_weight_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -346,6 +351,17 @@ class ExperimentPresets(ExperimentPresetsBase):
                 "weight_option": LowRankDynamicWeightConfig,
                 "bias_option": AdditiveDynamicBiasConfig,
                 "diagonal_option": StandardDynamicDiagonalConfig,
+                **kwargs,
+            },
+        )
+
+    def _decay_exponential_weight_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "weight_decay_schedule": WeightDecayScheduleOptions.EXPONENTIAL,
+                "weight_decay_rate": 1e-3,
+                "weight_decay_warmup_batches": 500,
                 **kwargs,
             },
         )
