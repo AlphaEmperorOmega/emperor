@@ -1,13 +1,7 @@
 from emperor.base.options import BaseOptions
 
 
-class AdaptiveWeightOptions(BaseOptions):
-    VECTOR = 1
-    MATRIX = 2
-    GENERATOR = 3
-
-
-class AdaptiveBiasOptions(BaseOptions):
+class ClipParameterOptions(BaseOptions):
     DISABLED = 0
-    MATRIX = 1
-    GENERATOR = 2
+    BEFORE = 1
+    AFTER = 2

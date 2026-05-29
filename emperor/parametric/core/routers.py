@@ -1,15 +1,25 @@
 import torch
 
 from torch import Tensor
+from dataclasses import dataclass
 from torch.nn.parameter import Parameter
-from emperor.base.utils import matmul
-from emperor.sampler.core.routers import RouterConfig, RouterModel
+from emperor.sampler.core.config import RouterConfig
+from emperor.sampler.core.routers import RouterModel
+from emperor.sampler.core._validator import RouterModelValidator
 
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+
+
+@dataclass
+class VectorRouterConfig(RouterConfig):
+    def _registry_owner(self) -> type:
+        from emperor.parametric.core.routers import VectorRouterModel
+
+        return VectorRouterModel
 
 
 class VectorRouterModel(RouterModel):
@@ -32,4 +42,5 @@ class VectorRouterModel(RouterModel):
         self,
         input_batch: Tensor,
     ) -> Tensor:
-        return matmul(input_batch, self.parameter_bank)
+        RouterModelValidator.validate_input_batch(self, input_batch)
+        return torch.einsum("bi,ijn->bjn", input_batch, self.parameter_bank)

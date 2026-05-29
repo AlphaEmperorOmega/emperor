@@ -1,4 +1,12 @@
-from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
+from torch import Tensor
+
+from emperor.base.validator import ValidatorBase
+from emperor.parametric.core.mixtures.config import (
+    AdaptiveMixtureConfig,
+    GeneratorBiasMixtureConfig,
+    GeneratorWeightsMixtureConfig,
+    VectorWeightsMixtureConfig,
+)
 
 from typing import TYPE_CHECKING
 
@@ -6,54 +14,119 @@ if TYPE_CHECKING:
     from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 
 
-class _AdaptiveMixtureBaseValidator:
-    def __init__(self, model: "AdaptiveMixtureBase"):
-        self.model = model
-        self.__ensure_values_are_not_none()
-        self.__ensure_correct_input_types()
+class AdaptiveMixtureValidator(ValidatorBase):
+    @staticmethod
+    def validate(model: "AdaptiveMixtureBase") -> None:
+        AdaptiveMixtureValidator.validate_required_fields(model.cfg)
+        AdaptiveMixtureValidator.validate_field_types(model.cfg)
+        AdaptiveMixtureValidator.validate_dimensions(
+            input_dim=model.input_dim,
+            output_dim=model.output_dim,
+            top_k=model.top_k,
+            num_experts=model.num_experts,
+        )
+        AdaptiveMixtureValidator.__validate_positive_integer("input_dim", model.input_dim)
+        AdaptiveMixtureValidator.__validate_positive_integer(
+            "output_dim", model.output_dim
+        )
+        AdaptiveMixtureValidator.__validate_positive_integer("top_k", model.top_k)
+        AdaptiveMixtureValidator.__validate_positive_integer(
+            "num_experts", model.num_experts
+        )
+        AdaptiveMixtureValidator.__validate_top_k(model.cfg)
+        AdaptiveMixtureValidator.__validate_clip_range(model.cfg)
+        AdaptiveMixtureValidator.__validate_vector_dimensions(model.cfg)
+        AdaptiveMixtureValidator.__validate_generator_config(model.cfg)
 
-    def __ensure_values_are_not_none(self) -> None:
-        if self.model.input_dim is None:
-            raise ValueError("Configuration Error: 'input_dim' is None.")
-        if self.model.output_dim is None:
-            raise ValueError("Configuration Error: 'output_dim' is None.")
-        if self.model.top_k is None:
-            raise ValueError("Configuration Error: 'top_k' is None.")
-        if self.model.num_experts is None:
-            raise ValueError("Configuration Error: 'num_experts' is None.")
-        if self.model.weighted_parameters_flag is None:
-            raise ValueError("Configuration Error: 'weighted_parameters_flag' is None.")
-        if self.model.clip_parameter_option is None:
-            raise ValueError("Configuration Error: 'clip_parameter_option' is None.")
-        if self.model.clip_range is None:
-            raise ValueError("Configuration Error: 'clip_range' is None.")
+    @staticmethod
+    def validate_input_batch_2d(input_batch: Tensor) -> None:
+        if not isinstance(input_batch, Tensor):
+            raise TypeError(
+                "input_batch must be a Tensor, "
+                f"received {type(input_batch).__name__}."
+            )
+        if input_batch.dim() != 2:
+            raise ValueError(
+                f"Input batch must be a 2D tensor, got {input_batch.ndim}D "
+                f"with shape {tuple(input_batch.shape)}."
+            )
 
-    def __ensure_correct_input_types(self) -> None:
-        if not isinstance(self.model.input_dim, int):
-            raise TypeError(
-                f"Type Error: 'input_dim' should be int, but got {type(self.model.input_dim).__name__}."
+    @staticmethod
+    def validate_weighted_probabilities(
+        cfg: AdaptiveMixtureConfig,
+        probabilities: Tensor | None,
+    ) -> None:
+        if cfg.weighted_parameters_flag and probabilities is None:
+            raise ValueError(
+                "Probabilities must be provided when weighted_parameters_flag is True."
             )
-        if not isinstance(self.model.output_dim, int):
-            raise TypeError(
-                f"Type Error: 'output_dim' should be int, but got {type(self.model.output_dim).__name__}."
+
+    @staticmethod
+    def __validate_positive_integer(name: str, value: int) -> None:
+        if isinstance(value, bool) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer, received {value!r}.")
+
+    @staticmethod
+    def __validate_top_k(cfg: AdaptiveMixtureConfig) -> None:
+        if cfg.top_k > cfg.num_experts:
+            raise ValueError(
+                "top_k cannot exceed num_experts for AdaptiveMixtureConfig, "
+                f"received top_k={cfg.top_k}, num_experts={cfg.num_experts}."
             )
-        if not isinstance(self.model.top_k, int):
-            raise TypeError(
-                f"Type Error: 'top_k' should be int, but got {type(self.model.top_k).__name__}."
+
+    @staticmethod
+    def __validate_clip_range(cfg: AdaptiveMixtureConfig) -> None:
+        if cfg.clip_range < 0.0:
+            raise ValueError(
+                f"clip_range must be non-negative, received {cfg.clip_range}."
             )
-        if not isinstance(self.model.num_experts, int):
-            raise TypeError(
-                f"Type Error: 'num_experts' should be int, but got {type(self.model.num_experts).__name__}."
+
+    @staticmethod
+    def __validate_vector_dimensions(cfg: AdaptiveMixtureConfig) -> None:
+        if not isinstance(cfg, VectorWeightsMixtureConfig):
+            return
+        if cfg.input_dim != cfg.output_dim:
+            raise ValueError(
+                "input_dim and output_dim must match for VectorWeightsMixtureConfig, "
+                f"received input_dim={cfg.input_dim}, output_dim={cfg.output_dim}."
             )
-        if not isinstance(self.model.weighted_parameters_flag, bool):
+
+    @staticmethod
+    def __validate_generator_config(cfg: AdaptiveMixtureConfig) -> None:
+        if not isinstance(cfg, (GeneratorWeightsMixtureConfig, GeneratorBiasMixtureConfig)):
+            return
+
+        from emperor.experts.core.config import MixtureOfExpertsConfig
+
+        if not isinstance(cfg.generator_config, MixtureOfExpertsConfig):
             raise TypeError(
-                f"Type Error: 'weighted_parameters_flag' should be bool, but got {type(self.model.weighted_parameters_flag).__name__}."
+                "generator_config must be a MixtureOfExpertsConfig for generator "
+                f"mixtures, got {type(cfg.generator_config).__name__}."
             )
-        if not isinstance(self.model.clip_parameter_option, ClipParameterOptions):
-            raise TypeError(
-                f"Type Error: 'clip_parameter_option' should be ClipParameterOptions, but got {type(self.model.clip_parameter_option).__name__}."
+
+        generator_config = cfg.generator_config
+        if generator_config.top_k != cfg.top_k:
+            raise ValueError(
+                "generator_config.top_k must match the mixture top_k, "
+                f"received {generator_config.top_k} and {cfg.top_k}."
             )
-        if not isinstance(self.model.clip_range, float):
-            raise TypeError(
-                f"Type Error: 'clip_range' should be float, but got {type(self.model.clip_range).__name__}."
+        if generator_config.num_experts != cfg.num_experts:
+            raise ValueError(
+                "generator_config.num_experts must match the mixture num_experts, "
+                f"received {generator_config.num_experts} and {cfg.num_experts}."
+            )
+
+        sampler_config = generator_config.sampler_config
+        if sampler_config is None:
+            return
+        if sampler_config.top_k != cfg.top_k:
+            raise ValueError(
+                "generator_config.sampler_config.top_k must match the mixture top_k, "
+                f"received {sampler_config.top_k} and {cfg.top_k}."
+            )
+        if sampler_config.num_experts != cfg.num_experts:
+            raise ValueError(
+                "generator_config.sampler_config.num_experts must match the mixture "
+                f"num_experts, received {sampler_config.num_experts} and "
+                f"{cfg.num_experts}."
             )

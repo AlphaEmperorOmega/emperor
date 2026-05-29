@@ -1,147 +1,246 @@
 from torch import Tensor
-from emperor.parametric.core.mixtures.options import (
-    AdaptiveBiasOptions,
-    AdaptiveWeightOptions,
+
+from emperor.base.layer import LayerState
+from emperor.base.validator import ValidatorBase
+from emperor.parametric.core.config import (
+    AdaptiveRouterOptions,
+    ParametricLayerConfig,
+    ParametricLayerHandlerConfig,
+)
+from emperor.parametric.core.mixtures.config import (
+    AdaptiveMixtureConfig,
+    GeneratorBiasMixtureConfig,
+    GeneratorWeightsMixtureConfig,
+    MatrixBiasMixtureConfig,
+    MatrixWeightsMixtureConfig,
+    VectorWeightsMixtureConfig,
 )
 
 from typing import TYPE_CHECKING
 
-
 if TYPE_CHECKING:
+    from emperor.parametric.core.handlers import ParameterHandlerBase
     from emperor.parametric.core.layers import ParametricLayer
-    from emperor.parametric.core.handlers import ParameterHanlderBase
+    from emperor.parametric.core.handlers import ParametricLayerHandler
 
 
-class _ParametricLayerValidator:
-    def __init__(self, model: "ParametricLayer"):
-        self.model = model
-        self.__ensure_values_are_not_none()
-        self.__ensure_correct_input_types()
-        self.__ensure_adaptive_bias_option_is_disabled_for_behaviour_bias()
-        self.__ensure_no_parameter_depth_mapping_can_be_used()
-
-    def __ensure_values_are_not_none(self) -> None:
-        required_attributes = [
-            "input_dim",
-            "output_dim",
-            "adaptive_weight_option",
-            "adaptive_bias_option",
-            "routing_initialization_mode",
-        ]
-
-        for attr_name in required_attributes:
-            if getattr(self.model, attr_name) is None:
-                raise ValueError(f"Configuration Error: '{attr_name}' is None.")
+class ParametricLayerValidator(ValidatorBase):
+    OPTIONAL_FIELDS = {"bias_mixture_config"}
 
     @staticmethod
-    def validate_input_shape(X: Tensor) -> None:
-        if X.dim() != 2:
+    def validate(model: "ParametricLayer") -> None:
+        ParametricLayerValidator.validate_required_fields(model.cfg)
+        ParametricLayerValidator.validate_field_types(model.cfg)
+        ParametricLayerValidator.validate_dimensions(
+            input_dim=model.input_dim,
+            output_dim=model.output_dim,
+        )
+        ParametricLayerValidator.__validate_positive_integer(
+            "input_dim", model.input_dim
+        )
+        ParametricLayerValidator.__validate_positive_integer(
+            "output_dim", model.output_dim
+        )
+        ParametricLayerValidator.__validate_weight_mixture_config(
+            model.weight_mixture_config
+        )
+        ParametricLayerValidator.__validate_bias_mixture_config(
+            model.bias_mixture_config
+        )
+        ParametricLayerValidator.__validate_router_and_sampler_configs(model)
+        ParametricLayerValidator.__validate_sampler_matches_mixtures(model)
+        ParametricLayerValidator.__validate_vector_shared_router(model)
+        ParametricLayerValidator.__validate_adaptive_augmentation_config(model)
+
+    @staticmethod
+    def validate_forward_inputs(input_batch: Tensor, expected_input_dim: int) -> None:
+        if not isinstance(input_batch, Tensor):
+            raise TypeError(
+                "input_batch must be a Tensor, "
+                f"received {type(input_batch).__name__}."
+            )
+        if input_batch.dim() != 2:
             raise ValueError(
-                f"Input must be a 2D matrix (batch, input_dim), "
-                f"got {X.dim()}D tensor with shape {X.shape}"
+                "Input must be a 2D matrix (batch, input_dim), "
+                f"got {input_batch.dim()}D tensor with shape "
+                f"{tuple(input_batch.shape)}."
+            )
+        if input_batch.shape[-1] != expected_input_dim:
+            raise ValueError(
+                "Input feature dimension must match input_dim, "
+                f"received input_dim={expected_input_dim} and input shape "
+                f"{tuple(input_batch.shape)}."
             )
 
-    def __ensure_correct_input_types(self) -> None:
-        from emperor.parametric.core.config import AdaptiveRouterOptions
+    @staticmethod
+    def __validate_positive_integer(name: str, value: int) -> None:
+        if isinstance(value, bool) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
-        required_types = {
-            "input_dim": int,
-            "output_dim": int,
-            "routing_initialization_mode": AdaptiveRouterOptions,
-            "adaptive_weight_option": AdaptiveWeightOptions,
-            "adaptive_bias_option": AdaptiveBiasOptions,
-        }
+    @staticmethod
+    def __validate_weight_mixture_config(config: AdaptiveMixtureConfig) -> None:
+        weight_configs = (
+            VectorWeightsMixtureConfig,
+            MatrixWeightsMixtureConfig,
+            GeneratorWeightsMixtureConfig,
+        )
+        if not isinstance(config, weight_configs):
+            raise TypeError(
+                "weight_mixture_config must be a weight mixture config, "
+                f"got {type(config).__name__}."
+            )
 
-        for attr_name, expected_type in required_types.items():
-            if not isinstance(getattr(self.model, attr_name), expected_type):
-                raise TypeError(
-                    f"Type Error: '{attr_name}' should be {expected_type.__name__}, but got {type(getattr(self.model, attr_name)).__name__}."
-                )
-
-    def __ensure_adaptive_bias_option_is_disabled_for_behaviour_bias(
-        self,
+    @staticmethod
+    def __validate_bias_mixture_config(
+        config: AdaptiveMixtureConfig | None,
     ) -> None:
-        if self.model.adaptive_augmentation_config is not None:
-            is_bias_disabled = (
-                self.model.adaptive_bias_option != AdaptiveBiasOptions.DISABLED
+        if config is None:
+            return
+        bias_configs = (MatrixBiasMixtureConfig, GeneratorBiasMixtureConfig)
+        if not isinstance(config, bias_configs):
+            raise TypeError(
+                "bias_mixture_config must be None or a bias mixture config, "
+                f"got {type(config).__name__}."
             )
-            is_behaviour_bias_enabled = (
-                self.model.adaptive_augmentation_config.bias_option is not None
-            )
-            if is_bias_disabled and is_behaviour_bias_enabled:
-                raise ValueError(
-                    "Configuration Error: 'adaptive_augmentation_config.bias_option' can be used for `ParametricLayer` only when 'adaptive_bias_option' is `DISABLED`"
-                )
 
-    def __ensure_no_parameter_depth_mapping_can_be_used(
-        self,
+    @staticmethod
+    def __validate_router_and_sampler_configs(model: "ParametricLayer") -> None:
+        from emperor.sampler.core.config import RouterConfig, SamplerConfig
+
+        if not isinstance(model.router_config, RouterConfig):
+            raise TypeError(
+                "router_config must be a RouterConfig for ParametricLayer, "
+                f"got {type(model.router_config).__name__}."
+            )
+        if not isinstance(model.sampler_config, SamplerConfig):
+            raise TypeError(
+                "sampler_config must be a SamplerConfig for ParametricLayer, "
+                f"got {type(model.sampler_config).__name__}."
+            )
+
+    @staticmethod
+    def __validate_sampler_matches_mixtures(model: "ParametricLayer") -> None:
+        sampler_config = model.sampler_config
+        ParametricLayerValidator.__validate_count_match(
+            "sampler_config.top_k",
+            sampler_config.top_k,
+            "weight_mixture_config.top_k",
+            model.weight_mixture_config.top_k,
+        )
+        ParametricLayerValidator.__validate_count_match(
+            "sampler_config.num_experts",
+            sampler_config.num_experts,
+            "weight_mixture_config.num_experts",
+            model.weight_mixture_config.num_experts,
+        )
+        if model.bias_mixture_config is None:
+            return
+        ParametricLayerValidator.__validate_count_match(
+            "sampler_config.top_k",
+            sampler_config.top_k,
+            "bias_mixture_config.top_k",
+            model.bias_mixture_config.top_k,
+        )
+        ParametricLayerValidator.__validate_count_match(
+            "sampler_config.num_experts",
+            sampler_config.num_experts,
+            "bias_mixture_config.num_experts",
+            model.bias_mixture_config.num_experts,
+        )
+
+    @staticmethod
+    def __validate_count_match(
+        left_name: str,
+        left_value: int,
+        right_name: str,
+        right_value: int,
     ) -> None:
-        from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
-
-        if self.model.adaptive_augmentation_config is not None:
-            is_generator_depth_disabled = (
-                self.model.adaptive_augmentation_config.generator_depth
-                != DynamicDepthOptions.DISABLED
+        if left_value != right_value:
+            raise ValueError(
+                f"{left_name} must match {right_name}, received "
+                f"{left_value} and {right_value}."
             )
-            if is_generator_depth_disabled:
+
+    @staticmethod
+    def __validate_vector_shared_router(model: "ParametricLayer") -> None:
+        if not isinstance(model.weight_mixture_config, VectorWeightsMixtureConfig):
+            return
+        if model.routing_initialization_mode != AdaptiveRouterOptions.SHARED_ROUTER:
+            return
+        raise ValueError(
+            "VectorWeightsMixtureConfig does not support SHARED_ROUTER routing."
+        )
+
+    @staticmethod
+    def __validate_adaptive_augmentation_config(model: "ParametricLayer") -> None:
+        from emperor.augmentations.adaptive_parameters.config import (
+            AdaptiveParameterAugmentationConfig,
+        )
+
+        if not isinstance(
+            model.adaptive_augmentation_config, AdaptiveParameterAugmentationConfig
+        ):
+            raise TypeError(
+                "adaptive_augmentation_config must be an "
+                "AdaptiveParameterAugmentationConfig for ParametricLayer, "
+                f"got {type(model.adaptive_augmentation_config).__name__}."
+            )
+        if model.bias_mixture_config is None:
+            return
+        if model.adaptive_augmentation_config.bias_config is not None:
+            raise ValueError(
+                "adaptive_augmentation_config.bias_config can only be used when "
+                "bias_mixture_config is None."
+            )
+
+
+class ParametricHandlerValidator(ValidatorBase):
+    @staticmethod
+    def validate(model: "ParameterHandlerBase | ParametricLayerHandler") -> None:
+        if hasattr(model, "weight_mixture_config"):
+            ParametricHandlerValidator.__validate_parameter_handler(model)
+            return
+        ParametricHandlerValidator.__validate_layer_handler(model)
+
+    @staticmethod
+    def validate_state(state: LayerState) -> None:
+        if not isinstance(state, LayerState):
+            raise TypeError(
+                "state must be a LayerState for ParametricLayerHandler, "
+                f"got {type(state).__name__}."
+            )
+        if not isinstance(state.hidden, Tensor):
+            raise TypeError(
+                "state.hidden must be a Tensor for ParametricLayerHandler, "
+                f"got {type(state.hidden).__name__}."
+            )
+
+    @staticmethod
+    def __validate_parameter_handler(model: "ParameterHandlerBase") -> None:
+        if not isinstance(model.cfg, ParametricLayerConfig):
+            raise TypeError(
+                "ParameterHandlerBase cfg must be ParametricLayerConfig, "
+                f"got {type(model.cfg).__name__}."
+            )
+        if model.router_config is None or model.sampler_config is None:
+            raise ValueError(
+                "router_config and sampler_config are required for parametric routing."
+            )
+        if isinstance(model.weight_mixture_config, VectorWeightsMixtureConfig):
+            if model.routing_initialization_mode == AdaptiveRouterOptions.SHARED_ROUTER:
                 raise ValueError(
-                    f"Configuration Error: 'adaptive_augmentation_config.generator_depth' needs to be disabled for `ParametricLayer`, got: {self.model.adaptive_augmentation_config.generator_depth}"
+                    "VectorWeightsMixtureConfig does not support SHARED_ROUTER routing."
                 )
 
-    def ensure_indepentent_router_for_vector_option(self) -> None:
-        from emperor.parametric.core.config import AdaptiveRouterOptions
-
-        is_vector_option = (
-            self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
-        )
-        is_shared_router = (
-            self.model.routing_initialization_mode == AdaptiveRouterOptions.SHARED_ROUTER
-        )
-
-        if is_vector_option and is_shared_router:
-            raise ValueError(
-                "When `adaptive_weight_option` is set to `VECTOR`, the `routing_initialization_mode` cannot be `SHARED_ROUTER`. This configuration is not supported."
+    @staticmethod
+    def __validate_layer_handler(model: "ParametricLayerHandler") -> None:
+        if not isinstance(model.cfg, ParametricLayerHandlerConfig):
+            raise TypeError(
+                "ParametricLayerHandler cfg must be ParametricLayerHandlerConfig, "
+                f"got {type(model.cfg).__name__}."
             )
-
-
-class _ParametricHandlerValidator:
-    def __init__(self, model: "ParameterHanlderBase"):
-        self.model = model
-
-    def ensure_router_and_sampler_configs_exist(self) -> None:
-        required_types = [
-            "router_config",
-            "sampler_config",
-        ]
-        for attr_name in required_types:
-            if getattr(self.model, attr_name) is None:
-                raise ValueError(
-                    f"Ensure that both `router_config` and `sampler_config` are provided when `init_sampler_model_flag` is `True` in `ParametricLayer`. Current value: {getattr(self.model, attr_name)}."
-                )
-
-    def ensure_indepentent_router_for_vector_option(self) -> None:
-        from emperor.parametric.core.config import AdaptiveRouterOptions
-
-        is_vector_option = (
-            self.model.adaptive_weight_option == AdaptiveWeightOptions.VECTOR
-        )
-        is_shared_router = (
-            self.model.routing_initialization_mode == AdaptiveRouterOptions.SHARED_ROUTER
-        )
-
-        if is_vector_option and is_shared_router:
-            raise ValueError(
-                "When `adaptive_weight_option` is set to `VECTOR`, the `routing_initialization_mode` cannot be `SHARED_ROUTER`. This configuration is not supported."
-            )
-
-    def ensure_shared_sampler_is_disabled(self) -> None:
-        from emperor.parametric.core.config import AdaptiveRouterOptions
-
-        is_shared_router = (
-            self.model.routing_initialization_mode == AdaptiveRouterOptions.SHARED_ROUTER
-        )
-
-        if is_shared_router:
-            raise ValueError(
-                f"Shared router is not supported for: {self.model.adaptive_weight_option}"
+        if not isinstance(model.layer_model_config, ParametricLayerConfig):
+            raise TypeError(
+                "ParametricLayerHandler.layer_model_config must be "
+                f"ParametricLayerConfig, got {type(model.layer_model_config).__name__}."
             )

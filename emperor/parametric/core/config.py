@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from emperor.base.layer import LayerConfig
 from emperor.base.utils import ConfigBase, optional_field
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
@@ -8,28 +9,24 @@ from emperor.augmentations.adaptive_parameters.config import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.sampler.core.samplers import SamplerConfig
-    from emperor.sampler.core.routers import RouterConfig
-    from emperor.parametric.core.mixtures.options import (
-        AdaptiveBiasOptions,
-        AdaptiveWeightOptions,
-    )
+    from emperor.sampler.core.config import RouterConfig, SamplerConfig
+    from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
 
 
 class AdaptiveRouterOptions(Enum):
     SHARED_ROUTER = 1
-    INDEPENTENT_ROUTER = 2
+    INDEPENDENT_ROUTER = 2
 
 
 @dataclass
 class ParametricLayerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input feature dimension.")
     output_dim: int | None = optional_field("Output feature dimension.")
-    adaptive_weight_option: "AdaptiveWeightOptions | None" = optional_field(
-        "Weight parameter generation strategy."
+    weight_mixture_config: "AdaptiveMixtureConfig | None" = optional_field(
+        "Config for the input-dependent weight mixture model."
     )
-    adaptive_bias_option: "AdaptiveBiasOptions | None" = optional_field(
-        "Bias parameter generation strategy."
+    bias_mixture_config: "AdaptiveMixtureConfig | None" = optional_field(
+        "Optional config for the input-dependent bias mixture model."
     )
     routing_initialization_mode: "AdaptiveRouterOptions | None" = optional_field(
         "Router/sampler sharing mode."
@@ -48,3 +45,11 @@ class ParametricLayerConfig(ConfigBase):
         from emperor.parametric.core.layers import ParametricLayer
 
         return ParametricLayer
+
+
+@dataclass
+class ParametricLayerHandlerConfig(LayerConfig):
+    def _registry_owner(self) -> type:
+        from emperor.parametric.core.handlers import ParametricLayerHandler
+
+        return ParametricLayerHandler

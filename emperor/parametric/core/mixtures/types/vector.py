@@ -1,9 +1,6 @@
 import torch
 
 from torch import Tensor
-from emperor.parametric.core.mixtures.types.utils._validator import (
-    _VectorMixtureValidator,
-)
 from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
 
@@ -21,8 +18,6 @@ class VectorMixtureBase(AdaptiveMixtureBase):
     ) -> None:
         super().__init__(cfg, overrides)
         self.depth_dim = self.num_experts
-
-        self.validator = _VectorMixtureValidator(self)
 
     def _init_parameter_select_range(self) -> Tensor:
         input_range = torch.arange(self.range_dim)

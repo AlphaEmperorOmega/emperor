@@ -1,5 +1,5 @@
 from emperor.base.utils import Module
-from emperor.parametric.core.mixtures._validator import _AdaptiveMixtureBaseValidator
+from emperor.parametric.core.mixtures._validator import AdaptiveMixtureValidator
 
 from typing import TYPE_CHECKING
 
@@ -27,4 +27,4 @@ class AdaptiveMixtureBase(Module):
         self.clip_parameter_option = self.cfg.clip_parameter_option
         self.clip_range = self.cfg.clip_range
 
-        self.validator = _AdaptiveMixtureBaseValidator(self)
+        AdaptiveMixtureValidator.validate(self)

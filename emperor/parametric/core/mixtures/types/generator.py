@@ -3,11 +3,8 @@ import torch
 from torch import Tensor
 from emperor.experts.core.options import RoutingInitializationMode
 from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core.layers import MixtureOfExperts
-from emperor.parametric.core.mixtures.types.utils.enums import ClipParameterOptions
-from emperor.parametric.core.mixtures.types.utils._validator import (
-    _GeneratorMixtureValidator,
-)
+from emperor.parametric.core.mixtures.options import ClipParameterOptions
+from emperor.parametric.core.mixtures._validator import AdaptiveMixtureValidator
 from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
 from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
 
@@ -25,9 +22,20 @@ class GeneratorMixtureBase(AdaptiveMixtureBase):
         overrides: "AdaptiveMixtureConfig | None" = None,
     ) -> None:
         super().__init__(cfg, overrides)
+        self.generator_config = self.cfg.generator_config
 
     def _is_topk_sparse(self) -> bool:
         return self.top_k == 1
+
+    def _build_generator(self, output_dim: int, **kwargs):
+        overrides = MixtureOfExpertsConfig(
+            input_dim=self.input_dim,
+            output_dim=output_dim,
+            top_k=self.top_k,
+            num_experts=self.num_experts,
+            **kwargs,
+        )
+        return self.generator_config.build(overrides)
 
 
 class GeneratorWeightsMixture(GeneratorMixtureBase):
@@ -45,8 +53,6 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
             self.__init_generators()
         )
 
-        self.validator = _GeneratorMixtureValidator(self)
-
     def __init_generators(self):
         options = {
             "compute_expert_mixture_flag": False,
@@ -57,14 +63,8 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
                 "weighted_parameters_flag": False,
                 "routing_initialization_mode": RoutingInitializationMode.DISABLED,
             }
-        input_overrides = MixtureOfExpertsConfig(
-            input_dim=self.input_dim, output_dim=self.input_dim, **options
-        )
-        output_overrides = MixtureOfExpertsConfig(
-            input_dim=self.input_dim, output_dim=self.output_dim, **options
-        )
-        input_vector_generator = MixtureOfExperts(self.main_cfg, input_overrides)
-        output_vector_generator = MixtureOfExperts(self.main_cfg, output_overrides)
+        input_vector_generator = self._build_generator(self.input_dim, **options)
+        output_vector_generator = self._build_generator(self.output_dim, **options)
         return input_vector_generator, output_vector_generator
 
     def compute_mixture(
@@ -72,8 +72,11 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         probabilities: Tensor | None,
         indices: Tensor | None,
         input_batch: Tensor,
-    ) -> tuple[Tensor | Tensor]:
-        self.validator.ensure_input_batch_is_2D_tensor(input_batch)
+    ) -> tuple[Tensor, Tensor]:
+        AdaptiveMixtureValidator.validate_input_batch_2d(input_batch)
+        AdaptiveMixtureValidator.validate_weighted_probabilities(
+            self.cfg, probabilities
+        )
         experts_inputs = (input_batch, probabilities, indices)
         input_vectors, input_loss = self.input_vector_generator(*experts_inputs)
         output_vectors, output_loss = self.output_vector_generator(*experts_inputs)
@@ -107,7 +110,7 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
     def __compute_parameter_mixture(
         self,
         selected_parameters: Tensor,
-        probabilities: Tensor,
+        probabilities: Tensor | None,
     ) -> Tensor:
         weighted_parameters = selected_parameters
         if self.__should_compute_weighted_parameters(probabilities):
@@ -139,9 +142,6 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         is_weight_flag = self.weighted_parameters_flag
         are_probabilities = probabilities is not None
 
-        self.validator.ensure_mixture_weighted_flag_is_false()
-        self.validator.ensure_probabilities_exist_for_weighted_flag(probabilities)
-
         return is_weight_flag and are_probabilities
 
 
@@ -156,17 +156,17 @@ class GeneratorBiasMixture(GeneratorMixtureBase):
         self.bias_generator = self.__init_generator()
 
     def __init_generator(self):
-        output_overrides = MixtureOfExpertsConfig(
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
+        return self._build_generator(
+            self.output_dim,
+            compute_expert_mixture_flag=True,
             weighted_parameters_flag=True,
         )
-        return MixtureOfExperts(self.main_cfg, output_overrides)
 
     def compute_mixture(
         self,
-        probabilities: Tensor,
+        probabilities: Tensor | None,
         indices: Tensor | None,
         input_batch: Tensor,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
+        AdaptiveMixtureValidator.validate_input_batch_2d(input_batch)
         return self.bias_generator(input_batch, probabilities, indices)
