@@ -1,5 +1,5 @@
 from torch import Tensor
-from emperor.embedding.relative.factory import RelativePositionalEmbeddingFactory
+from emperor.base.utils import Module
 
 from typing import TYPE_CHECKING
 
@@ -9,15 +9,16 @@ if TYPE_CHECKING:
     from emperor.attention.core.handlers.reshaper import ReshaperBase
 
 
-class ProcessorBase:
+class ProcessorBase(Module):
     def __init__(
         self,
         cfg: "MultiHeadAttentionConfig",
         projector: "ProjectorBase",
         reshaper: "ReshaperBase",
     ):
+        super().__init__()
         self.cfg = cfg
-        self.projector = projector
+        object.__setattr__(self, "projector", projector)
         self.reshaper = reshaper
         self.num_heads: int = self.cfg.num_heads
         self.batch_size: int = self.cfg.batch_size
@@ -49,9 +50,7 @@ class ProcessorBase:
 
     def __maybe_initialize_relative_positional_embedding(self):
         if self.cfg.relative_positional_embedding_config is not None:
-            return RelativePositionalEmbeddingFactory(
-                self.cfg.relative_positional_embedding_config
-            ).build()
+            return self.cfg.relative_positional_embedding_config.build()
         return None
 
     def __resolve_qkv_head_dim(self) -> tuple[int, int]:

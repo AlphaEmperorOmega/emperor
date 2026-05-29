@@ -1,17 +1,21 @@
-from emperor.embedding.absolute.core import (
-    AbsolutePositionalEmbeddingBase,
+from emperor.embedding.absolute.core.config import (
     AbsolutePositionalEmbeddingConfig,
-    AbsolutePositionalEmbeddingValidator,
-    ImageLearnedPositionalEmbedding,
     ImageLearnedPositionalEmbeddingConfig,
-    ImageSinusoidalPositionalEmbedding,
     ImageSinusoidalPositionalEmbeddingConfig,
+    TextLearnedPositionalEmbeddingConfig,
+    TextSinusoidalPositionalEmbeddingConfig,
+)
+from emperor.embedding.absolute.core.layers import (
+    AbsolutePositionalEmbeddingBase,
+    ImageLearnedPositionalEmbedding,
+    ImageSinusoidalPositionalEmbedding,
     LearnedPositionalEmbedding,
     SinusoidalPositionalEmbedding,
     TextLearnedPositionalEmbedding,
-    TextLearnedPositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbedding,
-    TextSinusoidalPositionalEmbeddingConfig,
+)
+from emperor.embedding.absolute.core._validator import (
+    AbsolutePositionalEmbeddingValidator,
 )
 
 __all__ = [
