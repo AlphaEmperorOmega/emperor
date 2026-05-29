@@ -8,6 +8,7 @@ from emperor.base.options import (
 from emperor.base.layer import LayerStackConfig
 from emperor.base.layer.config import LayerConfig
 from emperor.linears.core.config import LinearLayerConfig
+from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import (
     MixtureOfExpertsConfig,
     MixtureOfExpertsLayerConfig,
@@ -203,7 +204,7 @@ class ExpertsLinearConfigBuilder:
             ),
         )
 
-        model_config = self._build_main_stack_config()
+        model_config = self._build_main_model_config()
 
         output_model_config = LayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -229,6 +230,16 @@ class ExpertsLinearConfigBuilder:
                 model_config=model_config,
                 output_model_config=output_model_config,
             ),
+        )
+
+    def _build_main_model_config(self) -> MixtureOfExpertsModelConfig:
+        return MixtureOfExpertsModelConfig(
+            input_dim=self.hidden_dim,
+            output_dim=self.hidden_dim,
+            top_k=self.top_k,
+            routing_initialization_mode=self.routing_initialization_mode,
+            sampler_config=self._build_sampler_config(),
+            stack_config=self._build_main_stack_config(),
         )
 
     def _build_main_stack_config(self) -> LayerStackConfig:
