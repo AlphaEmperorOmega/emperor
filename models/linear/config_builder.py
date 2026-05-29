@@ -6,7 +6,7 @@ from emperor.base.options import (
     LayerNormPositionOptions,
 )
 from emperor.base.layer import LayerStackConfig
-from emperor.base.layer.config import LayerConfig
+from emperor.base.layer.config import LayerConfig, RecurrentLayerConfig
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
@@ -60,6 +60,8 @@ class LinearConfigBuilder:
         halting_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
         halting_stack_apply_output_pipeline_flag: bool = config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         halting_bias_flag: bool = config.HALTING_BIAS_FLAG,
+        recurrent_flag: bool = config.RECURRENT_FLAG,
+        recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
     ) -> None:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -102,6 +104,8 @@ class LinearConfigBuilder:
             halting_stack_apply_output_pipeline_flag
         )
         self.halting_bias_flag = halting_bias_flag
+        self.recurrent_flag = recurrent_flag
+        self.recurrent_max_steps = recurrent_max_steps
 
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
@@ -139,6 +143,7 @@ class LinearConfigBuilder:
                 ),
             ),
         )
+        model_config = self._maybe_wrap_recurrent(model_config)
 
         output_model_config = LayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -164,6 +169,16 @@ class LinearConfigBuilder:
                 model_config=model_config,
                 output_model_config=output_model_config,
             ),
+        )
+
+    def _maybe_wrap_recurrent(
+        self, block_config: LayerStackConfig
+    ) -> "LayerStackConfig | RecurrentLayerConfig":
+        if not self.recurrent_flag:
+            return block_config
+        return RecurrentLayerConfig(
+            max_steps=self.recurrent_max_steps,
+            block_config=block_config,
         )
 
     def _build_gate_config(self) -> LayerStackConfig | None:

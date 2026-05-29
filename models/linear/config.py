@@ -83,6 +83,12 @@ HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 HALTING_BIAS_FLAG: bool = BIAS_FLAG
 
 #########################################################################
+# RECURRENT LAYER OPTIONS
+# If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
+RECURRENT_FLAG: bool = False
+RECURRENT_MAX_STEPS: int = 4
+
+#########################################################################
 # HYPERPARAMETER SEARCH SPACE
 # These values define the parameter ranges explored when search mode is enabled.
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]

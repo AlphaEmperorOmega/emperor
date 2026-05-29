@@ -1,7 +1,7 @@
 import torch
 
 from torch import Tensor
-from emperor.base.layer.config import LayerConfig
+from emperor.base.layer.config import LayerConfig, RecurrentLayerConfig
 from emperor.base.layer.layer import Layer
 from emperor.base.layer import LayerStack, LayerStackConfig
 from emperor.experiments.classifier import ClassifierExperiment
@@ -33,9 +33,17 @@ class Model(ClassifierExperiment):
             output_dim=self.main_cfg.hidden_dim,
         )
 
-    def _build_model(self) -> "Layer | Sequential":
+    def _build_model(self) -> "torch.nn.Module":
+        model_config = self.cfg.model_config
+        if isinstance(model_config, RecurrentLayerConfig):
+            return model_config.build(
+                overrides=RecurrentLayerConfig(
+                    input_dim=self.main_cfg.hidden_dim,
+                    output_dim=self.main_cfg.hidden_dim,
+                )
+            )
         return self._build_layer_stack(
-            self.cfg.model_config,
+            model_config,
             input_dim=self.main_cfg.hidden_dim,
             output_dim=self.main_cfg.hidden_dim,
         )
