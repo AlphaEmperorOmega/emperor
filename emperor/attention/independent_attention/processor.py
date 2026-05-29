@@ -55,7 +55,7 @@ class IndependentProcessor(ProcessorBase):
             key,
             value,
             attention_mask,
-            self.dropout_probability,
+            self.dropout_probability if self.training else 0.0,
         )
 
         weighted_values = weighted_values.permute(2, 0, 1, 3)

@@ -32,7 +32,9 @@ class SelfAttentionProcessor(ProcessorBase):
         )
         weights = F.softmax(raw_weights, dim=-1)
         if self.dropout_probability > 0.0:
-            weights = F.dropout(weights, p=self.dropout_probability)
+            weights = F.dropout(
+                weights, p=self.dropout_probability, training=self.training
+            )
         return weights
 
     def __scale_query(self, query: Tensor) -> Tensor:
