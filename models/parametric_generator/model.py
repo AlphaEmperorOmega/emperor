@@ -1,9 +1,10 @@
 import torch
 
 from torch import Tensor
-from emperor.base.utils import ConfigBase
-from emperor.base.layer import LayerStack, LayerStackConfig
+
+from emperor.base.layer import LayerStackConfig
 from emperor.experiments.classifier import ClassifierExperiment
+from emperor.parametric.core.state import ParametricLayerState
 from models.parametric_generator.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
@@ -18,22 +19,22 @@ class Model(ClassifierExperiment):
         cfg: "ModelConfig",
     ):
         super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
-        self.model_config: LayerStackConfig = self.main_cfg.model_config
-        self.model = LayerStack(self.model_config).build_model()
+        if not isinstance(cfg.experiment_config, ExperimentConfig):
+            raise TypeError(
+                "cfg.experiment_config must be a parametric_generator "
+                "ExperimentConfig."
+            )
 
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> None:
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
+        self.main_cfg: ExperimentConfig = cfg.experiment_config
+        self.model_config: LayerStackConfig = self.main_cfg.model_config
+        self.model = self.model_config.build()
 
     def forward(
         self,
         X: Tensor,
-    ) -> Tensor:
-        X = X.to(self.device)
-        X = torch.flatten(X, start_dim=1)
-        X = self.model(X)
-        return X
+    ) -> tuple[Tensor, Tensor]:
+        X = torch.flatten(X.to(self.device), start_dim=1)
+        state = ParametricLayerState(hidden=X)
+        state = self.model(state)
+        loss = state.loss if state.loss is not None else state.hidden.new_zeros(())
+        return state.hidden, loss

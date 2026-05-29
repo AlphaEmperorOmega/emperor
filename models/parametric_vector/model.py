@@ -1,10 +1,10 @@
 import torch
 
 from torch import Tensor
-from emperor.base.utils import ConfigBase
-from emperor.base.layer import LayerStack, LayerStackConfig
+
+from emperor.base.layer import Layer, LayerStackConfig
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.parametric.core.stack import ParametricLayerStack
+from emperor.parametric.core.state import ParametricLayerState
 from models.parametric_vector.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
@@ -19,28 +19,30 @@ class Model(ClassifierExperiment):
         cfg: "ModelConfig",
     ):
         super().__init__(cfg)
-        self.cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
-        self.input_config: LayerStackConfig = self.cfg.input_model_config
-        self.model_config: LayerStackConfig = self.cfg.model_config
-        self.output_config: LayerStackConfig = self.cfg.output_model_config
+        if not isinstance(cfg.experiment_config, ExperimentConfig):
+            raise TypeError(
+                "cfg.experiment_config must be a parametric_vector ExperimentConfig."
+            )
 
-        self.input_model = LayerStack(self.input_config).build_model()
-        self.model = ParametricLayerStack(self.model_config).build_model()
-        self.output_model = LayerStack(self.output_config).build_model()
+        self.main_cfg: ExperimentConfig = cfg.experiment_config
+        self.input_config: LayerStackConfig = self.main_cfg.input_model_config
+        self.model_config: LayerStackConfig = self.main_cfg.model_config
+        self.output_config: LayerStackConfig = self.main_cfg.output_model_config
 
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> None:
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
+        self.input_model = self.input_config.build()
+        self.model = self.model_config.build()
+        self.output_model = self.output_config.build()
 
     def forward(
         self,
         X: Tensor,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
         X = torch.flatten(X.to(self.device), start_dim=1)
-        X = self.input_model(X)
-        X, _, _ = self.model(X)
-        X = self.output_model(X)
-        return X
+        X = Layer.forward_with_state(self.input_model, X)
+
+        state = ParametricLayerState(hidden=X)
+        state = self.model(state)
+
+        logits = Layer.forward_with_state(self.output_model, state.hidden)
+        loss = state.loss if state.loss is not None else logits.new_zeros(())
+        return logits, loss
