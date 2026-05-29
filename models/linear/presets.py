@@ -20,6 +20,7 @@ class ExperimentOptions(BaseOptions):
     GATING_HALTING = (
         "Linear stack with both learned gating and adaptive computation halting."
     )
+    RESIDUAL = "Linear stack with residual (skip) connections on hidden layers."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -52,6 +53,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.GATING: self._gating_preset,
             ExperimentOptions.HALTING: self._halting_preset,
             ExperimentOptions.GATING_HALTING: self._gating_halting_preset,
+            ExperimentOptions.RESIDUAL: self._residual_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -88,6 +90,9 @@ class ExperimentPresets(ExperimentPresetsBase):
                 **kwargs,
             },
         )
+
+    def _residual_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(**{"stack_residual_flag": True, **kwargs})
 
     def _preset(self, **kwargs) -> "ModelConfig":
         return LinearConfigBuilder(**kwargs).build()
