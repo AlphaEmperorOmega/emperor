@@ -23,8 +23,10 @@ from emperor.experts.core.options import (
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-from emperor.embedding.options import RelativePositionalEmbeddingOptions
-from emperor.embedding.relative.config import RelativePositionalEmbeddingConfig
+from emperor.embedding.relative.config import (
+    DynamicPositionalBiasConfig,
+    RelativePositionalEmbeddingConfig,
+)
 from emperor.attention.core.config import MultiHeadAttentionConfig
 from emperor.attention.self_attention.config import SelfAttentionConfig
 from emperor.attention.independent_attention.config import IndependentAttentionConfig
@@ -39,6 +41,11 @@ ATTENTION_CONFIG_CLASSES = (
     SelfAttentionConfig,
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
+)
+
+RELATIVE_POSITIONAL_EMBEDDING_CASES = (
+    ("disabled", None),
+    ("dynamic_positional_bias", DynamicPositionalBiasConfig),
 )
 
 
@@ -181,15 +188,65 @@ def make_experts_config(
     )
 
 
+def make_mixture_of_experts_model_config(
+    input_dim: int,
+    output_dim: int,
+    top_k: int = 3,
+    num_experts: int = 6,
+    routing_initialization_mode: RoutingInitializationMode = RoutingInitializationMode.LAYER,
+    expert_stack_num_layers: int = 2,
+    num_layers: int = 2,
+):
+    """MixtureOfExpertsModelConfig for use as a feed-forward stack_config. Wraps a
+    MixtureOfExpertsConfig leaf (via make_experts_config) in a MixtureOfExpertsLayer
+    stack, mirroring test_experts' model_preset without a test-to-test dependency."""
+    from emperor.experts.config import MixtureOfExpertsModelConfig
+    from emperor.experts.core.config import MixtureOfExpertsLayerConfig
+
+    leaf_config = make_experts_config(
+        input_dim=input_dim,
+        output_dim=output_dim,
+        top_k=top_k,
+        num_experts=num_experts,
+        routing_initialization_mode=routing_initialization_mode,
+        stack_num_layers=expert_stack_num_layers,
+    )
+    stack_config = LayerStackConfig(
+        input_dim=input_dim,
+        hidden_dim=max(input_dim, output_dim),
+        output_dim=output_dim,
+        num_layers=num_layers,
+        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+        apply_output_pipeline_flag=False,
+        layer_config=MixtureOfExpertsLayerConfig(
+            activation=ActivationOptions.RELU,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_flag=False,
+            dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
+            shared_halting_flag=False,
+            layer_model_config=leaf_config,
+        ),
+    )
+    return MixtureOfExpertsModelConfig(
+        input_dim=input_dim,
+        output_dim=output_dim,
+        top_k=top_k,
+        routing_initialization_mode=routing_initialization_mode,
+        sampler_config=leaf_config.sampler_config,
+        stack_config=stack_config,
+    )
+
+
 def make_relative_positional_embedding_config(
-    positional_embedding_option: RelativePositionalEmbeddingOptions,
+    config_cls: type[RelativePositionalEmbeddingConfig] | None,
     num_heads: int,
     embedding_dim: int,
 ) -> RelativePositionalEmbeddingConfig | None:
-    if positional_embedding_option == RelativePositionalEmbeddingOptions.DISABLED:
+    if config_cls is None:
         return None
-    return RelativePositionalEmbeddingConfig(
-        positional_embedding_option=positional_embedding_option,
+    return config_cls(
         num_heads=num_heads,
         embedding_dim=embedding_dim,
         num_embeddings=64,
@@ -218,7 +275,9 @@ def build_attention_config(
     return_attention_weights_flag: bool = False,
     use_kv_expert_models_flag: bool = False,
     projection_kind: str = "base",
-    positional_embedding_option: RelativePositionalEmbeddingOptions = RelativePositionalEmbeddingOptions.DISABLED,
+    relative_positional_embedding_config_cls: (
+        type[RelativePositionalEmbeddingConfig] | None
+    ) = None,
     experts_top_k: int = 3,
     experts_num_experts: int = 6,
     experts_compute_expert_mixture_flag: bool = True,
@@ -228,7 +287,7 @@ def build_attention_config(
     from torch import float32
 
     relative_positional_embedding_config = make_relative_positional_embedding_config(
-        positional_embedding_option, num_heads, embedding_dim
+        relative_positional_embedding_config_cls, num_heads, embedding_dim
     )
     shared_kwargs = dict(
         batch_size=batch_size,

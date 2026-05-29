@@ -9,7 +9,6 @@ from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
 )
 from emperor.attention.core.config import MultiHeadAttentionConfig
-from emperor.embedding.options import RelativePositionalEmbeddingOptions
 from emperor.attention.core.handlers.reshaper import AttentionReshaper
 from emperor.attention.mixture_of_attention_heads.reshaper import (
     MixtureOfAttentionHeadsReshaper,
@@ -24,7 +23,10 @@ from emperor.attention.independent_attention.processor import IndependentProcess
 from emperor.attention.mixture_of_attention_heads.processor import (
     MixtureOfAttentionHeadsProcessor,
 )
-from _attention_test_helpers import build_attention_config
+from _attention_test_helpers import (
+    RELATIVE_POSITIONAL_EMBEDDING_CASES,
+    build_attention_config,
+)
 
 PROJECTION_KINDS = ["base", "adaptive"]
 
@@ -120,9 +122,13 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         attention_mask = create_attention_mask(c)
         attention_mask_options = [None, attention_mask]
 
-        for positional_embedding_option in RelativePositionalEmbeddingOptions:
+        for relative_case, relative_config_cls in RELATIVE_POSITIONAL_EMBEDDING_CASES:
             for attention_mask_option in attention_mask_options:
-                message = f"Testing configuration: attention_mask_option: {type(attention_mask_option)}"
+                message = (
+                    "Testing configuration: "
+                    f"relative_positional_embedding: {relative_case}, "
+                    f"attention_mask_option: {type(attention_mask_option)}"
+                )
                 with self.subTest(i=message):
                     c = build_attention_config(
                         source_sequence_length=source_sequence_length,
@@ -131,7 +137,7 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                         query_key_projection_dim=query_key_projection_dim,
                         value_projection_dim=value_projection_dim,
                         return_attention_weights_flag=return_attention_weights_flag,
-                        positional_embedding_option=positional_embedding_option,
+                        relative_positional_embedding_config_cls=relative_config_cls,
                     )
                     projector = SelfAttentionProjector(c)
                     m = SelfAttentionProcessor(c, projector, AttentionReshaper(c))
@@ -151,8 +157,7 @@ class TestSelfAttentionProcessor(unittest.TestCase):
 
                     if (
                         attention_mask_option is not None
-                        and positional_embedding_option
-                        == RelativePositionalEmbeddingOptions.DISABLED
+                        and relative_config_cls is None
                     ):
                         transposed_keys = key.transpose(-2, -1)
                         for idx in range(key.size(0)):
@@ -749,10 +754,15 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         attention_mask_options = [None, attention_mask]
         boolean_options = [True, False]
 
-        for positional_embedding_option in RelativePositionalEmbeddingOptions:
+        for relative_case, relative_config_cls in RELATIVE_POSITIONAL_EMBEDDING_CASES:
             for use_kv_expert_models_flag in boolean_options:
                 for attention_mask_option in attention_mask_options:
-                    message = f"Testing configuration: attention_mask_option: {type(attention_mask_option)}, use_kv_expert_models_flag: {use_kv_expert_models_flag}"
+                    message = (
+                        "Testing configuration: "
+                        f"relative_positional_embedding: {relative_case}, "
+                        f"attention_mask_option: {type(attention_mask_option)}, "
+                        f"use_kv_expert_models_flag: {use_kv_expert_models_flag}"
+                    )
                     with self.subTest(i=message):
                         c = build_attention_config(
                             config_class=MixtureOfAttentionHeadsConfig,
@@ -762,7 +772,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                             query_key_projection_dim=query_key_projection_dim,
                             value_projection_dim=value_projection_dim,
                             return_attention_weights_flag=return_attention_weights_flag,
-                            positional_embedding_option=positional_embedding_option,
+                            relative_positional_embedding_config_cls=relative_config_cls,
                             use_kv_expert_models_flag=use_kv_expert_models_flag,
                         )
                         key_shape = (
