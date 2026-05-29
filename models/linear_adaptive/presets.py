@@ -131,6 +131,7 @@ class ExperimentOptions(BaseOptions):
     DEEP_GENERATOR = "[CAPACITY] Dual-model weight produced by a depth-8 generator network."
     FULL_STACK = "[WEIGHT+BIAS+DIAGONAL+MASK] Dual-model weight + additive bias + combined diagonal + weight-informed mask."
     ADAPTIVE_HALTING = "[ADAPTIVE+ACT] Dual-model weight with adaptive computation halting enabled."
+    RECURRENT = "[RECURRENT] Adaptive linear stack applied recurrently for a fixed number of steps."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -194,6 +195,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.DEEP_GENERATOR: self._deep_generator_preset,
             ExperimentOptions.FULL_STACK: self._full_stack_preset,
             ExperimentOptions.ADAPTIVE_HALTING: self._adaptive_halting_preset,
+            ExperimentOptions.RECURRENT: self._recurrent_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -413,6 +415,9 @@ class ExperimentPresets(ExperimentPresetsBase):
                 **kwargs,
             },
         )
+
+    def _recurrent_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(**{"recurrent_flag": True, **kwargs})
 
     def _preset(self, **kwargs) -> "ModelConfig":
         from models.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
