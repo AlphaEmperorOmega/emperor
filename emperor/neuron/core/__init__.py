@@ -1,7 +1,5 @@
-from emperor.neuron.config import NeuronClusterConfig, NeuronConfig
 from emperor.neuron.core.config import AxonsConfig, NucleusConfig, TerminalConfig
 from emperor.neuron.core.layers import Axons, Neuron, Nucleus, Terminal
-from emperor.neuron.model import NeuronCluster
 from emperor.neuron.core.options import (
     TerminalRangeOptions,
     TerminalZAxisOffsetOptions,
@@ -11,9 +9,6 @@ __all__ = [
     "Axons",
     "AxonsConfig",
     "Neuron",
-    "NeuronCluster",
-    "NeuronClusterConfig",
-    "NeuronConfig",
     "Nucleus",
     "NucleusConfig",
     "Terminal",
