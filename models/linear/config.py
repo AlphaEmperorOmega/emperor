@@ -87,6 +87,8 @@ HALTING_BIAS_FLAG: bool = BIAS_FLAG
 # If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
 RECURRENT_FLAG: bool = False
 RECURRENT_MAX_STEPS: int = 4
+RECURRENT_GATE_FLAG: bool = False
+RECURRENT_HALTING_FLAG: bool = False
 
 #########################################################################
 # HYPERPARAMETER SEARCH SPACE

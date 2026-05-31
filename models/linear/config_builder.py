@@ -62,6 +62,8 @@ class LinearConfigBuilder:
         halting_bias_flag: bool = config.HALTING_BIAS_FLAG,
         recurrent_flag: bool = config.RECURRENT_FLAG,
         recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
+        recurrent_gate_flag: bool = config.RECURRENT_GATE_FLAG,
+        recurrent_halting_flag: bool = config.RECURRENT_HALTING_FLAG,
     ) -> None:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -106,6 +108,8 @@ class LinearConfigBuilder:
         self.halting_bias_flag = halting_bias_flag
         self.recurrent_flag = recurrent_flag
         self.recurrent_max_steps = recurrent_max_steps
+        self.recurrent_gate_flag = recurrent_gate_flag
+        self.recurrent_halting_flag = recurrent_halting_flag
 
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
@@ -179,10 +183,14 @@ class LinearConfigBuilder:
         return RecurrentLayerConfig(
             max_steps=self.recurrent_max_steps,
             block_config=block_config,
+            gate_config=self._build_gate_config(self.recurrent_gate_flag),
+            halting_config=self._build_halting_config(self.recurrent_halting_flag),
         )
 
-    def _build_gate_config(self) -> LayerStackConfig | None:
-        if not self.stack_gate_flag:
+    def _build_gate_config(self, enabled: bool | None = None) -> LayerStackConfig | None:
+        if enabled is None:
+            enabled = self.stack_gate_flag
+        if not enabled:
             return None
         return LayerStackConfig(
             hidden_dim=self.gate_hidden_dim,
@@ -203,8 +211,13 @@ class LinearConfigBuilder:
             ),
         )
 
-    def _build_halting_config(self) -> StickBreakingConfig | None:
-        if not self.stack_halting_flag:
+    def _build_halting_config(
+        self,
+        enabled: bool | None = None,
+    ) -> StickBreakingConfig | None:
+        if enabled is None:
+            enabled = self.stack_halting_flag
+        if not enabled:
             return None
         return StickBreakingConfig(
             threshold=self.halting_threshold,
