@@ -9,7 +9,6 @@ from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.transformer import TransformerEncoderStackConfig
 from emperor.patch import PatchConfig
 from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
-from emperor.linears.options import LinearLayerStackOptions
 from emperor.augmentations.adaptive_parameters.options import DynamicDepthOptions
 from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
@@ -50,8 +49,6 @@ FF_NUM_LAYERS: int = 2
 # Preset
 ATTN_BIAS_FLAG: bool = False
 ATTN_NUM_HEADS: int = 4
-ATTN_MODEL_TYPE: LinearLayerStackOptions = LinearLayerStackOptions.BASE
-FF_MODEL_TYPE: LinearLayerStackOptions = LinearLayerStackOptions.BASE
 OUTPUT_NUM_LAYERS: int = 2
 
 # Adaptive preset

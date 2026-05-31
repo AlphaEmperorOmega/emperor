@@ -1,5 +1,5 @@
 from torch import Tensor
-from emperor.base.layer import LayerStack
+from emperor.base.layer import Layer
 from emperor.experiments.classifier import ClassifierExperiment
 from emperor.transformer import TransformerEncoderStack
 from models.vit.config import ExperimentConfig
@@ -16,7 +16,9 @@ class Model(ClassifierExperiment):
         cfg: "ModelConfig",
     ):
         super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
+        if not isinstance(cfg.experiment_config, ExperimentConfig):
+            raise TypeError("cfg.experiment_config must be a vit ExperimentConfig.")
+        self.main_cfg: ExperimentConfig = cfg.experiment_config
 
         self.patch_config = self.main_cfg.patch_config
         self.embedding_config = self.main_cfg.positional_embedding_config
@@ -26,7 +28,7 @@ class Model(ClassifierExperiment):
         self.patch = self.patch_config.build()
         self.positional_embedding = self.embedding_config.build()
         self.transformer = TransformerEncoderStack(self.encoder_config)
-        self.output = LayerStack(self.output_config).build_model()
+        self.output = self.output_config.build()
 
     def forward(
         self,
@@ -37,5 +39,5 @@ class Model(ClassifierExperiment):
         X = self.positional_embedding(X)
         X, loss = self.transformer(X)
         X = X[:, 0, :]
-        X = self.output(X)
+        X = Layer.forward_with_state(self.output, X)
         return X
