@@ -28,6 +28,10 @@ dependencies = [
   "lightning",
   "torchinfo",
   "gymnasium",
+  "fastapi>=0.115,<0.116",
+  "uvicorn[standard]>=0.34,<0.35",
+  "pydantic-settings",
+  "httpx>=0.28,<0.29",
 ]
 
 [project.urls]
