@@ -13,3 +13,7 @@ emperor.egg-info
 .claude/
 .codex/
 .pytest_cache/
+viewer/frontend/.next/
+viewer/frontend/node_modules/
+viewer/frontend/tsconfig.tsbuildinfo
+viewer/.runtime/
