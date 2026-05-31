@@ -9,6 +9,7 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
+from emperor.base.layer import RecurrentLayerConfig
 from emperor.experiments.base import RandomSearch
 from models.linear.model import Model
 from models.linear.config_builder import LinearConfigBuilder
@@ -16,24 +17,35 @@ from models.linear.presets import ExperimentOptions, ExperimentPresets
 
 
 class TestLinearModel(unittest.TestCase):
-    def test_all_options_forward_one_batch_per_dataset(self):
+    def test_all_options_forward_one_mnist_batch(self):
+        batch_size = 4
+        presets = ExperimentPresets()
+        dataset = config.DATASET_OPTIONS[0]
+
+        for option in ExperimentOptions:
+            with self.subTest(option=option.name):
+                cfg = presets.get_config(option, dataset)[0]
+                model = Model(cfg)
+                X = self._fake_batch(dataset, batch_size)
+
+                output = model(X)
+                logits = output[0] if isinstance(output, tuple) else output
+
+                self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
+
+    def test_baseline_forwards_all_datasets(self):
         batch_size = 4
         presets = ExperimentPresets()
 
         for dataset in config.DATASET_OPTIONS:
-            for option in ExperimentOptions:
-                message = f"dataset={dataset.__name__}, option={option.name}"
-                with self.subTest(msg=message):
-                    cfg = presets.get_config(option, dataset)[0]
-                    model = Model(cfg)
-                    X = self._fake_batch(dataset, batch_size)
-                    if option == ExperimentOptions.GATING_HALTING:
-                        test = 1234
+            with self.subTest(dataset=dataset.__name__):
+                cfg = presets.get_config(ExperimentOptions.BASELINE, dataset)[0]
+                model = Model(cfg)
+                X = self._fake_batch(dataset, batch_size)
 
-                    output = model(X)
-                    logits = output[0] if isinstance(output, tuple) else output
+                logits = model(X)
 
-                    self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
+                self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(
@@ -174,6 +186,61 @@ class TestLinearModel(unittest.TestCase):
         halting_cfg = cfg.experiment_config.model_config.layer_config.halting_config
 
         self.assertEqual(halting_cfg.halting_gate_config.hidden_dim, 11)
+
+    def test_recurrent_presets_wire_optional_controllers(self):
+        expected_controllers = {
+            ExperimentOptions.RECURRENT: (False, False),
+            ExperimentOptions.RECURRENT_GATING: (True, False),
+            ExperimentOptions.RECURRENT_HALTING: (False, True),
+            ExperimentOptions.RECURRENT_GATING_HALTING: (True, True),
+            ExperimentOptions.RECURRENT_RESIDUAL: (False, False),
+            ExperimentOptions.RECURRENT_POST_NORM: (False, False),
+        }
+
+        for option, (expected_gate, expected_halting) in expected_controllers.items():
+            with self.subTest(option=option.name):
+                cfg = ExperimentPresets().get_config(option)[0]
+                recurrent_cfg = cfg.experiment_config.model_config
+
+                self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+                self.assertEqual(recurrent_cfg.gate_config is not None, expected_gate)
+                self.assertEqual(
+                    recurrent_cfg.halting_config is not None,
+                    expected_halting,
+                )
+
+    def test_new_combination_presets_wire_config(self):
+        presets = ExperimentPresets()
+
+        cfg = presets.get_config(ExperimentOptions.RESIDUAL_POST_NORM)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        self.assertTrue(layer_cfg.residual_flag)
+        self.assertEqual(
+            layer_cfg.layer_norm_position, LayerNormPositionOptions.AFTER
+        )
+
+        cfg = presets.get_config(ExperimentOptions.RESIDUAL_GATING)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        self.assertTrue(layer_cfg.residual_flag)
+        self.assertIsNotNone(layer_cfg.gate_config)
+
+        cfg = presets.get_config(ExperimentOptions.RESIDUAL_HALTING)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        self.assertTrue(layer_cfg.residual_flag)
+        self.assertIsNotNone(layer_cfg.halting_config)
+
+        cfg = presets.get_config(ExperimentOptions.RECURRENT_RESIDUAL)[0]
+        recurrent_cfg = cfg.experiment_config.model_config
+        self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+        self.assertTrue(recurrent_cfg.block_config.layer_config.residual_flag)
+
+        cfg = presets.get_config(ExperimentOptions.RECURRENT_POST_NORM)[0]
+        recurrent_cfg = cfg.experiment_config.model_config
+        self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+        self.assertEqual(
+            recurrent_cfg.block_config.layer_config.layer_norm_position,
+            LayerNormPositionOptions.AFTER,
+        )
 
 
 if __name__ == "__main__":

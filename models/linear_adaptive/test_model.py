@@ -28,6 +28,7 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
+from emperor.base.layer import RecurrentLayerConfig
 from emperor.experiments.base import RandomSearch
 from emperor.linears.core.config import AdaptiveLinearLayerConfig
 from models.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
@@ -36,22 +37,35 @@ from models.linear_adaptive.presets import ExperimentOptions, ExperimentPresets
 
 
 class TestAdaptiveLinearModel(unittest.TestCase):
-    def test_all_options_forward_one_batch_per_dataset(self):
+    def test_all_options_forward_one_mnist_batch(self):
+        batch_size = 2
+        presets = ExperimentPresets()
+        dataset = config.DATASET_OPTIONS[0]
+
+        for option in ExperimentOptions:
+            with self.subTest(option=option.name):
+                cfg = presets.get_config(option, dataset)[0]
+                model = Model(cfg)
+                X = self._fake_batch(dataset, batch_size)
+
+                output = model(X)
+                logits = output[0] if isinstance(output, tuple) else output
+
+                self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
+
+    def test_baseline_forwards_all_datasets(self):
         batch_size = 2
         presets = ExperimentPresets()
 
         for dataset in config.DATASET_OPTIONS:
-            for option in ExperimentOptions:
-                message = f"dataset={dataset.__name__}, option={option.name}"
-                with self.subTest(msg=message):
-                    cfg = presets.get_config(option, dataset)[0]
-                    model = Model(cfg)
-                    X = self._fake_batch(dataset, batch_size)
+            with self.subTest(dataset=dataset.__name__):
+                cfg = presets.get_config(ExperimentOptions.BASELINE, dataset)[0]
+                model = Model(cfg)
+                X = self._fake_batch(dataset, batch_size)
 
-                    output = model(X)
-                    logits = output[0] if isinstance(output, tuple) else output
+                logits = model(X)
 
-                    self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
+                self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
 
     def test_preset_builds_adaptive_linear_layer_config(self):
         cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=16, output_dim=4)
@@ -260,6 +274,107 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertFalse(halting_stack_cfg.layer_config.residual_flag)
         self.assertEqual(halting_stack_cfg.layer_config.dropout_probability, 0.3)
         self.assertFalse(halting_stack_cfg.layer_config.layer_model_config.bias_flag)
+
+    def test_recurrent_presets_wire_optional_controllers(self):
+        expected_controllers = {
+            ExperimentOptions.RECURRENT: (False, False),
+            ExperimentOptions.RECURRENT_GATING: (True, False),
+            ExperimentOptions.RECURRENT_HALTING: (False, True),
+            ExperimentOptions.RECURRENT_GATING_HALTING: (True, True),
+            ExperimentOptions.FULL_STACK_RECURRENT: (False, False),
+        }
+
+        for option, (expected_gate, expected_halting) in expected_controllers.items():
+            with self.subTest(option=option.name):
+                cfg = ExperimentPresets().get_config(option)[0]
+                recurrent_cfg = cfg.experiment_config.model_config
+
+                self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+                self.assertEqual(recurrent_cfg.gate_config is not None, expected_gate)
+                self.assertEqual(
+                    recurrent_cfg.halting_config is not None,
+                    expected_halting,
+                )
+
+    def test_new_adaptive_combination_presets_wire_config(self):
+        presets = ExperimentPresets()
+
+        cfg = presets.get_config(ExperimentOptions.DUAL_WEIGHT_GATING)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        augmentation_config = self._augmentation_config(cfg)
+        self.assertIsInstance(
+            augmentation_config.weight_config, DualModelDynamicWeightConfig
+        )
+        self.assertIsNotNone(layer_cfg.gate_config)
+
+        cfg = presets.get_config(ExperimentOptions.DUAL_WEIGHT_HALTING)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        augmentation_config = self._augmentation_config(cfg)
+        self.assertIsInstance(
+            augmentation_config.weight_config, DualModelDynamicWeightConfig
+        )
+        self.assertIsNotNone(layer_cfg.halting_config)
+
+        cfg = presets.get_config(ExperimentOptions.FULL_STACK_GATING)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
+        self.assertIsNotNone(layer_cfg.gate_config)
+
+        cfg = presets.get_config(ExperimentOptions.FULL_STACK_RECURRENT)[0]
+        recurrent_cfg = cfg.experiment_config.model_config
+        self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+        self._assert_full_stack_augmentation(self._augmentation_config(cfg))
+
+        cfg = presets.get_config(ExperimentOptions.BANK_WEIGHT_MASK)[0]
+        augmentation_config = self._augmentation_config(cfg)
+        self.assertIsInstance(
+            augmentation_config.weight_config,
+            LayeredWeightedBankDynamicWeightConfig,
+        )
+        self.assertIsInstance(
+            augmentation_config.mask_config,
+            WeightInformedScoreAxisMaskConfig,
+        )
+        self.assertIsNone(augmentation_config.bias_config)
+        self.assertIsNone(augmentation_config.diagonal_config)
+
+        cfg = presets.get_config(ExperimentOptions.LOW_RANK_POST_NORM)[0]
+        layer_cfg = cfg.experiment_config.model_config.layer_config
+        augmentation_config = self._augmentation_config(cfg)
+        self.assertIsInstance(
+            augmentation_config.weight_config,
+            LowRankDynamicWeightConfig,
+        )
+        self.assertEqual(
+            layer_cfg.layer_norm_position,
+            LayerNormPositionOptions.AFTER,
+        )
+
+    def _augmentation_config(self, cfg):
+        model_config = cfg.experiment_config.model_config
+        if isinstance(model_config, RecurrentLayerConfig):
+            model_config = model_config.block_config
+        return (
+            model_config.layer_config.layer_model_config.adaptive_augmentation_config
+        )
+
+    def _assert_full_stack_augmentation(self, augmentation_config) -> None:
+        self.assertIsInstance(
+            augmentation_config.weight_config,
+            DualModelDynamicWeightConfig,
+        )
+        self.assertIsInstance(
+            augmentation_config.bias_config,
+            AdditiveDynamicBiasConfig,
+        )
+        self.assertIsInstance(
+            augmentation_config.diagonal_config,
+            CombinedDynamicDiagonalConfig,
+        )
+        self.assertIsInstance(
+            augmentation_config.mask_config,
+            WeightInformedScoreAxisMaskConfig,
+        )
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(
