@@ -10,6 +10,29 @@ SKIP_CONFIG_KEYS = {
     "DATASET_OPTIONS",
 }
 
+MODEL_PARAM_ALIASES = {
+    "adaptive_stack_activation": "adaptive_generator_stack_activation",
+    "adaptive_stack_apply_output_pipeline_flag": "adaptive_generator_stack_apply_output_pipeline_flag",
+    "adaptive_stack_dropout_probability": "adaptive_generator_stack_dropout_probability",
+    "adaptive_stack_hidden_dim": "adaptive_generator_stack_hidden_dim",
+    "adaptive_stack_last_layer_bias_option": "adaptive_generator_stack_last_layer_bias_option",
+    "adaptive_stack_layer_norm_position": "adaptive_generator_stack_layer_norm_position",
+    "adaptive_stack_num_layers": "adaptive_generator_stack_num_layers",
+    "adaptive_stack_residual_flag": "adaptive_generator_stack_residual_flag",
+    "expert_capacity_factor": "capacity_factor",
+    "expert_compute_expert_mixture_flag": "compute_expert_mixture_flag",
+    "expert_dropped_token_behavior": "dropped_token_behavior",
+    "expert_num_experts": "num_experts",
+    "expert_routing_initialization_mode": "routing_initialization_mode",
+    "expert_top_k": "top_k",
+    "expert_weighted_parameters_flag": "weighted_parameters_flag",
+    "expert_weighting_position_option": "weighting_position_option",
+    "gate_flag": "stack_gate_flag",
+    "halting_flag": "stack_halting_flag",
+    "stack_layer_norm_position": "layer_norm_position",
+    "weight_generator_depth": "generator_depth",
+}
+
 
 def normalize_key(key: str) -> str:
     return key.strip().replace("-", "_").lower()
@@ -21,6 +44,11 @@ def config_key_to_flag(key: str) -> str:
 
 def config_key_to_param(key: str) -> str:
     return key.lower()
+
+
+def config_key_to_model_param(key: str) -> str:
+    param = config_key_to_param(key)
+    return MODEL_PARAM_ALIASES.get(param, param)
 
 
 def search_key_to_config_key(key: str) -> str:
@@ -180,7 +208,7 @@ def parse_search_set(
         if hasattr(config_module, search_config_key)
         else value_config_key
     )
-    return key, [
+    return config_key_to_model_param(value_config_key), [
         parse_config_value(config_module, parse_key, value) for value in values
     ]
 
@@ -219,7 +247,7 @@ def extract_config_overrides(
     for dest, key in dest_to_key.items():
         value = getattr(args, dest, None)
         if value is not None:
-            overrides[config_key_to_param(key)] = parse_config_value(
+            overrides[config_key_to_model_param(key)] = parse_config_value(
                 config_module, key, value
             )
 
