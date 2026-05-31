@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any, Literal
+
+from torch.nn import Module
+from torch.nn.parameter import is_lazy
+
+GraphRole = Literal["architecture", "internal", "runtime"]
+
+ROOT_NODE_ID = "__root__"
+ROOT_NODE_PATH = "model"
+
+ARCHITECTURE_ROLE: GraphRole = "architecture"
+INTERNAL_ROLE: GraphRole = "internal"
+RUNTIME_ROLE: GraphRole = "runtime"
+
+INTERNAL_GRAPH_TYPE_NAMES = {
+    "Dropout",
+    "KeyValueBias",
+    "LayerNorm",
+    "SamplerAuxiliaryLosses",
+    "SelfAttentionProcessor",
+    "SelfAttentionProjector",
+    "Unfold",
+}
+
+RUNTIME_GRAPH_TYPE_NAMES = {
+    "ClassifierMetricsLogger",
+    "CrossEntropyLoss",
+    "LanguageModelMetricsLogger",
+    "MulticlassAccuracy",
+    "MulticlassF1Score",
+    "SequenceClassifierMetricsLogger",
+}
+
+
+def _display_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.name
+    if isinstance(value, type):
+        return value.__name__
+    return value
+
+
+def _bool_from_optional_model(module: Module, attr_name: str) -> bool | None:
+    if not hasattr(module, attr_name):
+        return None
+    return getattr(module, attr_name) is not None
+
+
+def _first_detail_value(module: Module, attr_paths: tuple[str, ...]) -> Any:
+    for attr_path in attr_paths:
+        value: Any = module
+        for attr_name in attr_path.split("."):
+            if not hasattr(value, attr_name):
+                value = None
+                break
+            value = getattr(value, attr_name)
+        if value is not None:
+            return value
+    return None
+
+
+def module_details(module: Module) -> dict[str, Any]:
+    details: dict[str, Any] = {}
+
+    input_dim = getattr(module, "input_dim", None)
+    output_dim = getattr(module, "output_dim", None)
+    hidden_dim = getattr(module, "hidden_dim", None)
+    if input_dim is not None:
+        details["inputDim"] = input_dim
+    if hidden_dim is not None:
+        details["hiddenDim"] = hidden_dim
+    if output_dim is not None:
+        details["outputDim"] = output_dim
+    if input_dim is not None and output_dim is not None:
+        details["dims"] = f"{input_dim} -> {output_dim}"
+
+    for source_attr, detail_key in (
+        ("embedding_dim", "embeddingDim"),
+        ("num_heads", "numHeads"),
+        ("num_layers", "numLayers"),
+        ("source_sequence_length", "sourceSequenceLength"),
+        ("target_sequence_length", "targetSequenceLength"),
+    ):
+        value = getattr(module, source_attr, None)
+        if value is not None:
+            details[detail_key] = _display_value(value)
+
+    for detail_key, attr_paths in (
+        ("topK", ("top_k", "sampler_config.top_k", "cfg.top_k")),
+        (
+            "numExperts",
+            ("num_experts", "sampler_config.num_experts", "cfg.num_experts"),
+        ),
+        (
+            "routingMode",
+            ("routing_initialization_mode", "cfg.routing_initialization_mode"),
+        ),
+    ):
+        value = _first_detail_value(module, attr_paths)
+        if value is not None:
+            details[detail_key] = _display_value(value)
+
+    dropout = getattr(module, "dropout_probability", None)
+    if dropout is not None:
+        details["dropout"] = dropout
+
+    gate = _bool_from_optional_model(module, "gate_model")
+    if gate is not None:
+        details["gate"] = gate
+
+    halting = _bool_from_optional_model(module, "halting_model")
+    if halting is not None:
+        details["halting"] = halting
+
+    activation = getattr(module, "activation_function", None)
+    if activation is not None:
+        details["activation"] = _display_value(activation)
+
+    layer_norm = getattr(module, "layer_norm_position", None)
+    if layer_norm is not None:
+        details["layerNorm"] = _display_value(layer_norm)
+
+    max_steps = getattr(module, "max_steps", None)
+    if max_steps is not None:
+        details["recurrent"] = {
+            "maxSteps": max_steps,
+            "gate": bool(getattr(module, "gate_model", None) is not None),
+            "halting": bool(getattr(module, "halting_model", None) is not None),
+        }
+
+    causal = getattr(module, "causal_attention_mask_flag", None)
+    if causal is not None:
+        details["causalAttention"] = causal
+
+    return details
+
+
+def graph_role(module: Module) -> GraphRole:
+    type_name = type(module).__name__
+    if type_name in INTERNAL_GRAPH_TYPE_NAMES:
+        return INTERNAL_ROLE
+    if type_name in RUNTIME_GRAPH_TYPE_NAMES:
+        return RUNTIME_ROLE
+    if type(module).__module__.startswith("torchmetrics."):
+        return RUNTIME_ROLE
+    return ARCHITECTURE_ROLE
+
+
+def parameter_count(module: Module) -> int:
+    count = 0
+    for parameter in module.parameters(recurse=True):
+        if is_lazy(parameter):
+            continue
+        count += parameter.numel()
+    return count
+
+
+def _node(node_id: str, path: str, module: Module) -> dict[str, Any]:
+    type_name = type(module).__name__
+    return {
+        "id": node_id,
+        "label": type_name,
+        "typeName": type_name,
+        "path": path,
+        "graphRole": graph_role(module),
+        "parameterCount": parameter_count(module),
+        "details": module_details(module),
+    }
+
+
+def serialize_graph(module: Module) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    nodes = [_node(ROOT_NODE_ID, ROOT_NODE_PATH, module)]
+    edges: list[dict[str, str]] = []
+
+    def visit(parent: Module, parent_id: str, parent_path: str) -> None:
+        for child_name, child in parent.named_children():
+            child_path = (
+                child_name if not parent_path else f"{parent_path}.{child_name}"
+            )
+            child_id = child_path
+            nodes.append(_node(child_id, child_path, child))
+            edges.append(
+                {
+                    "id": f"{parent_id}-{child_id}",
+                    "source": parent_id,
+                    "target": child_id,
+                }
+            )
+            visit(child, child_id, child_path)
+
+    visit(module, ROOT_NODE_ID, "")
+    return nodes, edges
