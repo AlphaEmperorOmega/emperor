@@ -1,0 +1,69 @@
+@import "@xyflow/react/dist/style.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  background: #f3f5f2;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+body {
+  color: #18221d;
+  background:
+    linear-gradient(#f3f5f2, #f3f5f2) padding-box,
+    repeating-linear-gradient(90deg, rgba(24, 34, 29, 0.045) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(0deg, rgba(24, 34, 29, 0.04) 0 1px, transparent 1px 28px);
+  font-family:
+    var(--font-ibm-plex-sans), Aptos, "Segoe UI", ui-sans-serif, system-ui,
+    -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  touch-action: manipulation;
+}
+
+.react-flow {
+  background:
+    radial-gradient(circle at 18px 18px, rgba(21, 112, 95, 0.08) 0 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(243, 245, 242, 0.88));
+  background-size: 36px 36px, auto;
+}
+
+.react-flow__controls {
+  border: 1px solid #d8ded9;
+  box-shadow: 0 10px 24px rgba(24, 34, 29, 0.08);
+}
+
+.react-flow__controls-button {
+  border-bottom-color: #d8ded9;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
