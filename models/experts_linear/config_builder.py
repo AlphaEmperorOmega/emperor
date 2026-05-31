@@ -6,7 +6,7 @@ from emperor.base.options import (
     LayerNormPositionOptions,
 )
 from emperor.base.layer import LayerStackConfig
-from emperor.base.layer.config import LayerConfig
+from emperor.base.layer.config import LayerConfig, RecurrentLayerConfig
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import (
@@ -103,6 +103,10 @@ class ExpertsLinearConfigBuilder:
         halting_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
         halting_stack_apply_output_pipeline_flag: bool = config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         halting_bias_flag: bool = config.HALTING_BIAS_FLAG,
+        recurrent_flag: bool = config.RECURRENT_FLAG,
+        recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
+        recurrent_gate_flag: bool = config.RECURRENT_GATE_FLAG,
+        recurrent_halting_flag: bool = config.RECURRENT_HALTING_FLAG,
     ) -> None:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -187,6 +191,10 @@ class ExpertsLinearConfigBuilder:
             halting_stack_apply_output_pipeline_flag
         )
         self.halting_bias_flag = halting_bias_flag
+        self.recurrent_flag = recurrent_flag
+        self.recurrent_max_steps = recurrent_max_steps
+        self.recurrent_gate_flag = recurrent_gate_flag
+        self.recurrent_halting_flag = recurrent_halting_flag
 
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
@@ -204,7 +212,7 @@ class ExpertsLinearConfigBuilder:
             ),
         )
 
-        model_config = self._build_main_model_config()
+        model_config = self._maybe_wrap_recurrent(self._build_main_model_config())
 
         output_model_config = LayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -240,6 +248,19 @@ class ExpertsLinearConfigBuilder:
             routing_initialization_mode=self.routing_initialization_mode,
             sampler_config=self._build_sampler_config(),
             stack_config=self._build_main_stack_config(),
+        )
+
+    def _maybe_wrap_recurrent(
+        self,
+        block_config: MixtureOfExpertsModelConfig,
+    ) -> "MixtureOfExpertsModelConfig | RecurrentLayerConfig":
+        if not self.recurrent_flag:
+            return block_config
+        return RecurrentLayerConfig(
+            max_steps=self.recurrent_max_steps,
+            block_config=block_config,
+            gate_config=self._build_gate_config(self.recurrent_gate_flag),
+            halting_config=self._build_halting_config(self.recurrent_halting_flag),
         )
 
     def _build_main_stack_config(self) -> LayerStackConfig:
@@ -278,8 +299,13 @@ class ExpertsLinearConfigBuilder:
             expert_model_config=self._build_expert_model_config(),
         )
 
-    def _build_gate_config(self) -> LayerStackConfig | None:
-        if not self.stack_gate_flag:
+    def _build_gate_config(
+        self,
+        enabled: bool | None = None,
+    ) -> LayerStackConfig | None:
+        if enabled is None:
+            enabled = self.stack_gate_flag
+        if not enabled:
             return None
         return LayerStackConfig(
             hidden_dim=self.gate_hidden_dim,
@@ -300,8 +326,13 @@ class ExpertsLinearConfigBuilder:
             ),
         )
 
-    def _build_halting_config(self) -> StickBreakingConfig | None:
-        if not self.stack_halting_flag:
+    def _build_halting_config(
+        self,
+        enabled: bool | None = None,
+    ) -> StickBreakingConfig | None:
+        if enabled is None:
+            enabled = self.stack_halting_flag
+        if not enabled:
             return None
         return StickBreakingConfig(
             threshold=self.halting_threshold,

@@ -85,6 +85,14 @@ HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 HALTING_BIAS_FLAG: bool = BIAS_FLAG
 
 #########################################################################
+# RECURRENT LAYER OPTIONS
+# If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
+RECURRENT_FLAG: bool = False
+RECURRENT_MAX_STEPS: int = 4
+RECURRENT_GATE_FLAG: bool = False
+RECURRENT_HALTING_FLAG: bool = False
+
+#########################################################################
 # MIXTURE-OF-EXPERTS SCALAR PARAMS
 EXPERT_TOP_K: int = 2
 EXPERT_NUM_EXPERTS: int = 4
