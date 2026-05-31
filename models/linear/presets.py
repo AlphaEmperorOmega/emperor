@@ -22,7 +22,24 @@ class ExperimentOptions(BaseOptions):
     )
     RESIDUAL = "Linear stack with residual (skip) connections on hidden layers."
     POST_NORM = "Linear stack with layer norm applied after each layer (post-norm)."
+    RESIDUAL_POST_NORM = (
+        "Linear stack with residual connections and post-layer normalization."
+    )
+    RESIDUAL_GATING = "Linear stack with residual connections and learned gating."
+    RESIDUAL_HALTING = (
+        "Linear stack with residual connections and adaptive computation halting."
+    )
     RECURRENT = "Linear stack applied recurrently for a fixed number of steps."
+    RECURRENT_GATING = "Linear stack applied recurrently with a learned recurrent gate."
+    RECURRENT_HALTING = (
+        "Linear stack applied recurrently with adaptive recurrent halting."
+    )
+    RECURRENT_GATING_HALTING = (
+        "Linear stack applied recurrently with both learned recurrent gating and "
+        "adaptive recurrent halting."
+    )
+    RECURRENT_RESIDUAL = "Residual linear stack applied recurrently."
+    RECURRENT_POST_NORM = "Post-normalized linear stack applied recurrently."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -57,7 +74,15 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.GATING_HALTING: self._gating_halting_preset,
             ExperimentOptions.RESIDUAL: self._residual_preset,
             ExperimentOptions.POST_NORM: self._post_norm_preset,
+            ExperimentOptions.RESIDUAL_POST_NORM: self._residual_post_norm_preset,
+            ExperimentOptions.RESIDUAL_GATING: self._residual_gating_preset,
+            ExperimentOptions.RESIDUAL_HALTING: self._residual_halting_preset,
             ExperimentOptions.RECURRENT: self._recurrent_preset,
+            ExperimentOptions.RECURRENT_GATING: self._recurrent_gating_preset,
+            ExperimentOptions.RECURRENT_HALTING: self._recurrent_halting_preset,
+            ExperimentOptions.RECURRENT_GATING_HALTING: self._recurrent_gating_halting_preset,
+            ExperimentOptions.RECURRENT_RESIDUAL: self._recurrent_residual_preset,
+            ExperimentOptions.RECURRENT_POST_NORM: self._recurrent_post_norm_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -103,8 +128,81 @@ class ExperimentPresets(ExperimentPresetsBase):
             **{"layer_norm_position": LayerNormPositionOptions.AFTER, **kwargs}
         )
 
+    def _residual_post_norm_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "stack_residual_flag": True,
+                "layer_norm_position": LayerNormPositionOptions.AFTER,
+                **kwargs,
+            },
+        )
+
+    def _residual_gating_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "stack_residual_flag": True,
+                "stack_gate_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _residual_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "stack_residual_flag": True,
+                "stack_halting_flag": True,
+                **kwargs,
+            },
+        )
+
     def _recurrent_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(**{"recurrent_flag": True, **kwargs})
+
+    def _recurrent_gating_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_gate_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _recurrent_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_halting_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _recurrent_gating_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_gate_flag": True,
+                "recurrent_halting_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _recurrent_residual_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "stack_residual_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _recurrent_post_norm_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "layer_norm_position": LayerNormPositionOptions.AFTER,
+                **kwargs,
+            },
+        )
 
     def _preset(self, **kwargs) -> "ModelConfig":
         return LinearConfigBuilder(**kwargs).build()
