@@ -1,3 +1,5 @@
+from dataclasses import fields
+
 from emperor.base.utils import ConfigBase
 from emperor.base.options import LayerNormPositionOptions
 from emperor.base.validator import ValidatorBase
@@ -13,6 +15,36 @@ if TYPE_CHECKING:
     from torch import Tensor
     from emperor.base.layer.state import LayerState
     from emperor.halting.config import HaltingConfig
+
+
+def _validate_gate_config(
+    gate_config: "LayerStackConfig | None",
+    owner_name: str | None = None,
+) -> None:
+    if gate_config is None:
+        return
+    if not isinstance(gate_config, LayerStackConfig):
+        owner_context = f" for {owner_name}" if owner_name is not None else ""
+        raise TypeError(
+            f"gate_config must be an instance of LayerStackConfig{owner_context}, "
+            f"got {type(gate_config).__name__}"
+        )
+    layer_config = gate_config.layer_config
+    if layer_config is None:
+        return
+
+    if layer_config.gate_config is not None:
+        raise ValueError(
+            "gate_config.layer_config.gate_config must be None, nested gates are not allowed"
+        )
+    if layer_config.halting_config is not None:
+        raise ValueError(
+            "gate_config.layer_config.halting_config must be None, halting is not allowed in gates"
+        )
+    if layer_config.shared_halting_flag:
+        raise ValueError(
+            "gate_config.layer_config.shared_halting_flag must be False, halting is not allowed in gates"
+        )
 
 
 class LayerValidator(ValidatorBase):
@@ -112,29 +144,7 @@ class LayerValidator(ValidatorBase):
 
     @staticmethod
     def __validate_gate_config(gate_config: "LayerStackConfig | None") -> None:
-        if gate_config is None:
-            return
-        if not isinstance(gate_config, LayerStackConfig):
-            raise TypeError(
-                f"gate_config must be an instance of LayerStackConfig, "
-                f"got {type(gate_config).__name__}"
-            )
-        layer_config = gate_config.layer_config
-        if layer_config is None:
-            return
-
-        if layer_config.gate_config is not None:
-            raise ValueError(
-                "gate_config.layer_config.gate_config must be None, nested gates are not allowed"
-            )
-        if layer_config.halting_config is not None:
-            raise ValueError(
-                "gate_config.layer_config.halting_config must be None, halting is not allowed in gates"
-            )
-        if layer_config.shared_halting_flag:
-            raise ValueError(
-                "gate_config.layer_config.shared_halting_flag must be False, halting is not allowed in gates"
-            )
+        _validate_gate_config(gate_config)
 
     @staticmethod
     def __validate_halting_config(
@@ -338,40 +348,27 @@ class RecurrentLayerValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_block_config(
-        block_config: "LayerConfig | LayerStackConfig",
-    ) -> None:
-        if not isinstance(block_config, (LayerConfig, LayerStackConfig)):
+    def __validate_block_config(block_config: ConfigBase) -> None:
+        if not isinstance(block_config, ConfigBase):
             raise TypeError(
-                f"block_config must be an instance of LayerConfig or "
-                f"LayerStackConfig for RecurrentLayerConfig, "
+                f"block_config must be an instance of ConfigBase for "
+                f"RecurrentLayerConfig, "
                 f"got {type(block_config).__name__}"
+            )
+
+        field_names = {field.name for field in fields(block_config)}
+        missing_fields = {"input_dim", "output_dim"} - field_names
+        if missing_fields:
+            missing_field_list = ", ".join(sorted(missing_fields))
+            raise TypeError(
+                f"block_config must declare dataclass fields input_dim and "
+                f"output_dim for RecurrentLayerConfig; "
+                f"{type(block_config).__name__} is missing {missing_field_list}"
             )
 
     @staticmethod
     def __validate_gate_config(gate_config: "LayerStackConfig | None") -> None:
-        if gate_config is None:
-            return
-        if not isinstance(gate_config, LayerStackConfig):
-            raise TypeError(
-                f"gate_config must be an instance of LayerStackConfig for "
-                f"RecurrentLayerConfig, got {type(gate_config).__name__}"
-            )
-        layer_config = gate_config.layer_config
-        if layer_config is None:
-            return
-        if layer_config.gate_config is not None:
-            raise ValueError(
-                "gate_config.layer_config.gate_config must be None, nested gates are not allowed"
-            )
-        if layer_config.halting_config is not None:
-            raise ValueError(
-                "gate_config.layer_config.halting_config must be None, halting is not allowed in gates"
-            )
-        if layer_config.shared_halting_flag:
-            raise ValueError(
-                "gate_config.layer_config.shared_halting_flag must be False, halting is not allowed in gates"
-            )
+        _validate_gate_config(gate_config, owner_name="RecurrentLayerConfig")
 
     @staticmethod
     def __validate_halting_config(

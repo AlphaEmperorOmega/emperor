@@ -88,8 +88,9 @@ class RecurrentLayerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input feature dimension.")
     output_dim: int | None = optional_field("Output feature dimension.")
     max_steps: int | None = optional_field("Maximum recurrent applications.")
-    block_config: "LayerConfig | LayerStackConfig | None" = optional_field(
-        "Layer or LayerStack config to reuse at every recurrent step."
+    block_config: ConfigBase | None = optional_field(
+        "ConfigBase block reused at every recurrent step. The built module must consume "
+        "and return LayerState-compatible values and declare input_dim and output_dim fields."
     )
     gate_config: "LayerStackConfig | None" = optional_field(
         "Optional recurrent gate stack. Set to None to disable."
