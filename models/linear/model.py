@@ -82,10 +82,12 @@ class Model(ClassifierExperiment):
     def forward(
         self,
         X: Tensor,
-    ) -> Tensor:
+    ) -> Tensor | tuple[Tensor, Tensor]:
         X = X.to(self.device)
         X = torch.flatten(X, start_dim=1)
         X = Layer.forward_with_state(self.input_model, X)
-        X = Layer.forward_with_state(self.main_model, X)
-        X = Layer.forward_with_state(self.output_model, X)
-        return X
+        state = Layer.forward_returning_state(self.main_model, X)
+        logits = Layer.forward_with_state(self.output_model, state.hidden)
+        if state.loss is not None:
+            return logits, state.loss
+        return logits

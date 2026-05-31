@@ -1,7 +1,7 @@
 import torch
 
 from torch import Tensor
-from emperor.base.layer.config import LayerConfig
+from emperor.base.layer.config import LayerConfig, RecurrentLayerConfig
 from emperor.base.layer.layer import Layer
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.model import MixtureOfExpertsModel
@@ -33,12 +33,20 @@ class Model(ClassifierExperiment):
             output_dim=self.main_cfg.hidden_dim,
         )
 
-    def _build_main_model(self) -> MixtureOfExpertsModel:
+    def _build_main_model(self) -> "torch.nn.Module":
+        model_config = self.cfg.model_config
+        if isinstance(model_config, RecurrentLayerConfig):
+            return model_config.build(
+                overrides=RecurrentLayerConfig(
+                    input_dim=self.main_cfg.hidden_dim,
+                    output_dim=self.main_cfg.hidden_dim,
+                )
+            )
         override = MixtureOfExpertsModelConfig(
             input_dim=self.main_cfg.hidden_dim,
             output_dim=self.main_cfg.hidden_dim,
         )
-        return MixtureOfExpertsModel(self.cfg.model_config, override)
+        return MixtureOfExpertsModel(model_config, override)
 
     def _build_output_model(self) -> Layer:
         return self._build_layer(
@@ -62,10 +70,12 @@ class Model(ClassifierExperiment):
     def forward(
         self,
         X: Tensor,
-    ) -> Tensor:
+    ) -> Tensor | tuple[Tensor, Tensor]:
         X = X.to(self.device)
         X = torch.flatten(X, start_dim=1)
         X = Layer.forward_with_state(self.input_model, X)
-        X = Layer.forward_with_state(self.main_model, X)
-        X = Layer.forward_with_state(self.output_model, X)
-        return X
+        state = Layer.forward_returning_state(self.main_model, X)
+        logits = Layer.forward_with_state(self.output_model, state.hidden)
+        if state.loss is not None:
+            return logits, state.loss
+        return logits
