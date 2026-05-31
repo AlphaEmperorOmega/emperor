@@ -34,7 +34,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
 )
-from emperor.base.options import BaseOptions
+from emperor.base.options import BaseOptions, LayerNormPositionOptions
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
     ExperimentBase,
@@ -131,7 +131,32 @@ class ExperimentOptions(BaseOptions):
     DEEP_GENERATOR = "[CAPACITY] Dual-model weight produced by a depth-8 generator network."
     FULL_STACK = "[WEIGHT+BIAS+DIAGONAL+MASK] Dual-model weight + additive bias + combined diagonal + weight-informed mask."
     ADAPTIVE_HALTING = "[ADAPTIVE+ACT] Dual-model weight with adaptive computation halting enabled."
+    DUAL_WEIGHT_GATING = (
+        "[WEIGHT+GATE] Dual-model dynamic weight with learned stack gating."
+    )
+    DUAL_WEIGHT_HALTING = (
+        "[WEIGHT+HALT] Dual-model dynamic weight with adaptive computation halting."
+    )
+    FULL_STACK_GATING = (
+        "[WEIGHT+BIAS+DIAGONAL+MASK+GATE] Full adaptive stack with learned gating."
+    )
+    FULL_STACK_RECURRENT = (
+        "[WEIGHT+BIAS+DIAGONAL+MASK+RECURRENT] Full adaptive stack applied recurrently."
+    )
+    BANK_WEIGHT_MASK = (
+        "[WEIGHT+MASK] Layered weighted-bank dynamic weight with weight-informed mask."
+    )
+    LOW_RANK_POST_NORM = (
+        "[WEIGHT+NORM] Low-rank dynamic weight with post-layer normalization."
+    )
     RECURRENT = "[RECURRENT] Adaptive linear stack applied recurrently for a fixed number of steps."
+    RECURRENT_GATING = (
+        "[RECURRENT+GATE] Adaptive linear stack applied recurrently with a learned recurrent gate."
+    )
+    RECURRENT_HALTING = (
+        "[RECURRENT+HALT] Adaptive linear stack applied recurrently with adaptive recurrent halting."
+    )
+    RECURRENT_GATING_HALTING = "[RECURRENT+GATE+HALT] Adaptive linear stack applied recurrently with both learned recurrent gating and adaptive recurrent halting."
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -195,7 +220,16 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.DEEP_GENERATOR: self._deep_generator_preset,
             ExperimentOptions.FULL_STACK: self._full_stack_preset,
             ExperimentOptions.ADAPTIVE_HALTING: self._adaptive_halting_preset,
+            ExperimentOptions.DUAL_WEIGHT_GATING: self._dual_weight_gating_preset,
+            ExperimentOptions.DUAL_WEIGHT_HALTING: self._dual_weight_halting_preset,
+            ExperimentOptions.FULL_STACK_GATING: self._full_stack_gating_preset,
+            ExperimentOptions.FULL_STACK_RECURRENT: self._full_stack_recurrent_preset,
+            ExperimentOptions.BANK_WEIGHT_MASK: self._bank_weight_mask_preset,
+            ExperimentOptions.LOW_RANK_POST_NORM: self._low_rank_post_norm_preset,
             ExperimentOptions.RECURRENT: self._recurrent_preset,
+            ExperimentOptions.RECURRENT_GATING: self._recurrent_gating_preset,
+            ExperimentOptions.RECURRENT_HALTING: self._recurrent_halting_preset,
+            ExperimentOptions.RECURRENT_GATING_HALTING: self._recurrent_gating_halting_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -396,16 +430,16 @@ class ExperimentPresets(ExperimentPresetsBase):
             },
         )
 
+    def _full_stack_kwargs(self) -> dict:
+        return {
+            "weight_option": DualModelDynamicWeightConfig,
+            "bias_option": AdditiveDynamicBiasConfig,
+            "diagonal_option": CombinedDynamicDiagonalConfig,
+            "row_mask_option": WeightInformedScoreAxisMaskConfig,
+        }
+
     def _full_stack_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(
-            **{
-                "weight_option": DualModelDynamicWeightConfig,
-                "bias_option": AdditiveDynamicBiasConfig,
-                "diagonal_option": CombinedDynamicDiagonalConfig,
-                "row_mask_option": WeightInformedScoreAxisMaskConfig,
-                **kwargs,
-            },
-        )
+        return self._preset(**{**self._full_stack_kwargs(), **kwargs})
 
     def _adaptive_halting_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(
@@ -416,8 +450,90 @@ class ExperimentPresets(ExperimentPresetsBase):
             },
         )
 
+    def _dual_weight_gating_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "stack_gate_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _dual_weight_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "stack_halting_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _full_stack_gating_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                **self._full_stack_kwargs(),
+                "stack_gate_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _full_stack_recurrent_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                **self._full_stack_kwargs(),
+                "recurrent_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _bank_weight_mask_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": LayeredWeightedBankDynamicWeightConfig,
+                "row_mask_option": WeightInformedScoreAxisMaskConfig,
+                **kwargs,
+            },
+        )
+
+    def _low_rank_post_norm_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": LowRankDynamicWeightConfig,
+                "layer_norm_position": LayerNormPositionOptions.AFTER,
+                **kwargs,
+            },
+        )
+
     def _recurrent_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(**{"recurrent_flag": True, **kwargs})
+
+    def _recurrent_gating_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_gate_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _recurrent_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_halting_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _recurrent_gating_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_gate_flag": True,
+                "recurrent_halting_flag": True,
+                **kwargs,
+            },
+        )
 
     def _preset(self, **kwargs) -> "ModelConfig":
         from models.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
