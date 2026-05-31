@@ -6,6 +6,24 @@ from emperor.experiments.base import SearchMode
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
 from emperor.base.options import BaseOptions
+from emperor.experts.core.options import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    RoutingInitializationMode,
+)
+from emperor.augmentations.adaptive_parameters.core.bias import (
+    AdditiveDynamicBiasConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    CombinedDynamicDiagonalConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.mask import (
+    WeightInformedScoreAxisMaskConfig,
+)
+from emperor.augmentations.adaptive_parameters.core.weight import (
+    DualModelDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+)
 
 from typing import TYPE_CHECKING
 
@@ -18,6 +36,35 @@ class ExperimentOptions(BaseOptions):
     GATING = "Mixture-of-experts stack with per-layer gating enabled."
     HALTING = "Mixture-of-experts stack with per-layer halting enabled."
     GATING_HALTING = "Mixture-of-experts stack with both per-layer gating and halting enabled."
+    RECURRENT = "Mixture-of-experts model applied recurrently for a fixed number of steps."
+    RECURRENT_GATING = (
+        "Mixture-of-experts model applied recurrently with a learned recurrent gate."
+    )
+    RECURRENT_HALTING = (
+        "Mixture-of-experts model applied recurrently with adaptive recurrent halting."
+    )
+    RECURRENT_GATING_HALTING = (
+        "Mixture-of-experts model applied recurrently with both learned recurrent "
+        "gating and adaptive recurrent halting."
+    )
+    ADAPTIVE_SHARED_ROUTER = (
+        "Adaptive mixture-of-experts model with dual-model dynamic weights and shared routing."
+    )
+    ADAPTIVE_AFTER_WEIGHT = (
+        "Adaptive mixture-of-experts model with dual-model dynamic weights and weighting after experts."
+    )
+    ADAPTIVE_TOP1_SWITCH = (
+        "Adaptive mixture-of-experts model with top-1 routing and switch auxiliary loss."
+    )
+    ADAPTIVE_FULL_SHARED = (
+        "Adaptive mixture-of-experts model with full adaptive augmentation and shared routing."
+    )
+    ADAPTIVE_FULL_CAPACITY = (
+        "Adaptive mixture-of-experts model with full adaptive augmentation and top-1 capacity limiting."
+    )
+    ADAPTIVE_BANK_ROUTER = (
+        "Adaptive mixture-of-experts model with weighted-bank dynamic weights and shared routing."
+    )
 
 
 class ExperimentPresets(ExperimentPresetsBase):
@@ -50,6 +97,16 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.GATING: self._gating_preset,
             ExperimentOptions.HALTING: self._halting_preset,
             ExperimentOptions.GATING_HALTING: self._gating_halting_preset,
+            ExperimentOptions.RECURRENT: self._recurrent_preset,
+            ExperimentOptions.RECURRENT_GATING: self._recurrent_gating_preset,
+            ExperimentOptions.RECURRENT_HALTING: self._recurrent_halting_preset,
+            ExperimentOptions.RECURRENT_GATING_HALTING: self._recurrent_gating_halting_preset,
+            ExperimentOptions.ADAPTIVE_SHARED_ROUTER: self._adaptive_shared_router_preset,
+            ExperimentOptions.ADAPTIVE_AFTER_WEIGHT: self._adaptive_after_weight_preset,
+            ExperimentOptions.ADAPTIVE_TOP1_SWITCH: self._adaptive_top1_switch_preset,
+            ExperimentOptions.ADAPTIVE_FULL_SHARED: self._adaptive_full_shared_preset,
+            ExperimentOptions.ADAPTIVE_FULL_CAPACITY: self._adaptive_full_capacity_preset,
+            ExperimentOptions.ADAPTIVE_BANK_ROUTER: self._adaptive_bank_router_preset,
         }
         if option not in callbacks:
             raise ValueError(
@@ -69,6 +126,104 @@ class ExperimentPresets(ExperimentPresetsBase):
     def _gating_halting_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(
             **{"stack_gate_flag": True, "stack_halting_flag": True, **kwargs}
+        )
+
+    def _recurrent_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(**{"recurrent_flag": True, **kwargs})
+
+    def _recurrent_gating_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_gate_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _recurrent_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_halting_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _recurrent_gating_halting_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "recurrent_flag": True,
+                "recurrent_gate_flag": True,
+                "recurrent_halting_flag": True,
+                **kwargs,
+            },
+        )
+
+    def _full_adaptive_kwargs(self) -> dict:
+        return {
+            "weight_option": DualModelDynamicWeightConfig,
+            "bias_option": AdditiveDynamicBiasConfig,
+            "diagonal_option": CombinedDynamicDiagonalConfig,
+            "row_mask_option": WeightInformedScoreAxisMaskConfig,
+        }
+
+    def _adaptive_shared_router_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "routing_initialization_mode": RoutingInitializationMode.SHARED,
+                **kwargs,
+            },
+        )
+
+    def _adaptive_after_weight_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "weighting_position_option": ExpertWeightingPositionOptions.AFTER_EXPERTS,
+                **kwargs,
+            },
+        )
+
+    def _adaptive_top1_switch_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": DualModelDynamicWeightConfig,
+                "top_k": 1,
+                "sampler_normalize_probabilities_flag": False,
+                "sampler_switch_loss_weight": 0.1,
+                **kwargs,
+            },
+        )
+
+    def _adaptive_full_shared_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                **self._full_adaptive_kwargs(),
+                "routing_initialization_mode": RoutingInitializationMode.SHARED,
+                **kwargs,
+            },
+        )
+
+    def _adaptive_full_capacity_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                **self._full_adaptive_kwargs(),
+                "top_k": 1,
+                "capacity_factor": 1.0,
+                "dropped_token_behavior": DroppedTokenOptions.ZEROS,
+                "sampler_normalize_probabilities_flag": False,
+                **kwargs,
+            },
+        )
+
+    def _adaptive_bank_router_preset(self, **kwargs) -> "ModelConfig":
+        return self._preset(
+            **{
+                "weight_option": LayeredWeightedBankDynamicWeightConfig,
+                "routing_initialization_mode": RoutingInitializationMode.SHARED,
+                **kwargs,
+            },
         )
 
     def _preset(self, **kwargs) -> "ModelConfig":
