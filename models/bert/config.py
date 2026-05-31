@@ -6,7 +6,6 @@ from emperor.datasets.text.language_modeling.penn_treebank import PennTreebank
 from emperor.datasets.text.language_modeling.wiki_text_2 import WikiText2
 from emperor.transformer import TransformerEncoderStackConfig
 from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
-from emperor.linears.options import LinearLayerStackOptions
 from models.trainer_config import *
 
 # Global
@@ -35,9 +34,7 @@ FF_NUM_LAYERS: int = 2
 # Preset
 ATTN_BIAS_FLAG: bool = False
 ATTN_NUM_HEADS: int = 4
-ATTN_MODEL_TYPE: LinearLayerStackOptions = LinearLayerStackOptions.BASE
 FF_BIAS_FLAG: bool = True
-FF_MODEL_TYPE: LinearLayerStackOptions = LinearLayerStackOptions.BASE
 OUTPUT_NUM_LAYERS: int = 1
 OUTPUT_BIAS_FLAG: bool = True
 

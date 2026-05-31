@@ -1,8 +1,7 @@
 import torch.nn as nn
 
 from torch import Tensor
-from emperor.base.utils import ConfigBase
-from emperor.base.layer import LayerStack
+from emperor.base.layer import Layer
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.transformer import TransformerEncoderStack
 from models.bert.config import ExperimentConfig
@@ -19,7 +18,9 @@ class Model(LanguageModelExperiment):
         cfg: "ModelConfig",
     ):
         super().__init__(cfg)
-        self.main_cfg: ExperimentConfig = self._resolve_main_config(self.cfg, cfg)
+        if not isinstance(cfg.experiment_config, ExperimentConfig):
+            raise TypeError("cfg.experiment_config must be a bert ExperimentConfig.")
+        self.main_cfg: ExperimentConfig = cfg.experiment_config
 
         self.embedding_config = self.main_cfg.positional_embedding_config
         self.encoder_config = self.main_cfg.encoder_config
@@ -28,14 +29,7 @@ class Model(LanguageModelExperiment):
         self.token_embedding = nn.Embedding(cfg.input_dim, cfg.hidden_dim)
         self.positional_embedding = self.embedding_config.build()
         self.transformer = TransformerEncoderStack(self.encoder_config)
-        self.output = LayerStack(self.output_config).build_model()
-
-    def _resolve_main_config(
-        self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
-    ) -> "ExperimentConfig":
-        if sub_config.override_config is not None:
-            return sub_config.override_config
-        return main_cfg
+        self.output = self.output_config.build()
 
     def forward(
         self,
@@ -46,5 +40,8 @@ class Model(LanguageModelExperiment):
         pos_emb = self.positional_embedding(X)
         X = token_emb + pos_emb
         X, loss = self.transformer(X)
-        X = self.output(X)
+        batch_size, sequence_length, hidden_dim = X.shape
+        X = X.reshape(batch_size * sequence_length, hidden_dim)
+        X = Layer.forward_with_state(self.output, X)
+        X = X.reshape(batch_size, sequence_length, -1)
         return X
