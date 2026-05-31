@@ -125,7 +125,7 @@ run_model_command() {
   if [ "$print_model" = true ] && [ "$all_presets" = true ]; then
     show_all_presets_print_model_error "$model"
   elif [ "$print_model" = true ]; then
-    python3 -m models.model_inspector --model "$model" "${args[@]}"
+    python3 -m viewer.backend.cli --model "$model" "${args[@]}"
   else
     python3 -m "models.$model" "${args[@]}"
   fi
