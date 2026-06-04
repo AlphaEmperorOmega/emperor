@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import fields, is_dataclass
 from enum import Enum
 from typing import Any, Literal
 
+from emperor.base.utils import ConfigBase
 from torch.nn import Module
 from torch.nn.parameter import is_lazy
 
@@ -43,6 +45,50 @@ def _display_value(value: Any) -> Any:
     return value
 
 
+def _config_field_value(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, Enum):
+        return value.name
+    if isinstance(value, ConfigBase):
+        return type(value).__name__
+    if isinstance(value, type):
+        return value.__name__
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    if is_dataclass(value):
+        return type(value).__name__
+    return str(value)
+
+
+def _module_config(module: Module) -> dict[str, Any] | None:
+    config = getattr(module, "_emperor_config", None)
+    if config is None:
+        config = getattr(module, "cfg", None)
+    if config is None or isinstance(config, type) or not is_dataclass(config):
+        return None
+
+    return {
+        "typeName": type(config).__name__,
+        "fields": [
+            {
+                "key": field.name,
+                "value": _config_field_value(getattr(config, field.name)),
+            }
+            for field in fields(config)
+        ],
+    }
+
+
+def _shape_value(value: Any) -> str | None:
+    if is_lazy(value):
+        return None
+    dimensions = tuple(value.shape)
+    if not dimensions:
+        return "scalar"
+    return " x ".join(str(dimension) for dimension in dimensions)
+
+
 def _bool_from_optional_model(module: Module, attr_name: str) -> bool | None:
     if not hasattr(module, attr_name):
         return None
@@ -62,8 +108,80 @@ def _first_detail_value(module: Module, attr_paths: tuple[str, ...]) -> Any:
     return None
 
 
+def _coordinate_from_neuron_name(name: str) -> list[int] | None:
+    parts = name.split("_")
+    if len(parts) != 4 or parts[0] != "neuron":
+        return None
+    try:
+        return [int(parts[1]), int(parts[2]), int(parts[3])]
+    except ValueError:
+        return None
+
+
+def _neuron_cluster_details(module: Module) -> dict[str, Any] | None:
+    if not hasattr(module, "x_axis_total_neurons") or not hasattr(module, "cluster"):
+        return None
+    coordinates = sorted(
+        coordinate
+        for coordinate in (
+            _coordinate_from_neuron_name(name) for name in module.cluster.keys()
+        )
+        if coordinate is not None
+    )
+    return {
+        "capacity": [
+            module.x_axis_total_neurons,
+            module.y_axis_total_neurons,
+            module.z_axis_total_neurons,
+        ],
+        "initial": [
+            getattr(module, "initial_x_axis_total_neurons", None),
+            getattr(module, "initial_y_axis_total_neurons", None),
+            getattr(module, "initial_z_axis_total_neurons", None),
+        ],
+        "instantiated": len(coordinates),
+        "coordinates": coordinates,
+        "maxSteps": getattr(module, "max_steps", None),
+        "growthThreshold": getattr(module, "growth_threshold", None),
+    }
+
+
+def _terminal_reach_details(module: Module) -> dict[str, Any] | None:
+    # The reach lives on a Terminal; surface it on the parent Neuron too so a
+    # neuron click shows the area its sampler can route to.
+    source = module
+    if not hasattr(source, "neuron_connections") and hasattr(module, "terminal"):
+        source = module.terminal
+    connections = getattr(source, "neuron_connections", None)
+    if connections is None or not hasattr(source, "x_axis_position"):
+        return None
+    return {
+        "position": [
+            source.x_axis_position,
+            source.y_axis_position,
+            source.z_axis_position,
+        ],
+        "connections": connections.detach().cpu().tolist(),
+        "total": getattr(source, "total_neuron_connections", connections.shape[0]),
+    }
+
+
 def module_details(module: Module) -> dict[str, Any]:
     details: dict[str, Any] = {}
+
+    direct_parameters = dict(module.named_parameters(recurse=False))
+    for detail_key, parameter_names in (
+        ("weightShape", ("weight", "weight_params", "weights")),
+        ("biasShape", ("bias", "bias_params", "biases")),
+    ):
+        for parameter_name in parameter_names:
+            parameter = direct_parameters.get(parameter_name)
+            if parameter is None:
+                continue
+            shape = _shape_value(parameter)
+            if shape is not None:
+                details[detail_key] = shape
+                break
 
     input_dim = getattr(module, "input_dim", None)
     output_dim = getattr(module, "output_dim", None)
@@ -123,8 +241,16 @@ def module_details(module: Module) -> dict[str, Any]:
     if layer_norm is not None:
         details["layerNorm"] = _display_value(layer_norm)
 
+    cluster = _neuron_cluster_details(module)
+    if cluster is not None:
+        details["cluster"] = cluster
+
+    terminal_reach = _terminal_reach_details(module)
+    if terminal_reach is not None:
+        details["terminalReach"] = terminal_reach
+
     max_steps = getattr(module, "max_steps", None)
-    if max_steps is not None:
+    if max_steps is not None and cluster is None:
         details["recurrent"] = {
             "maxSteps": max_steps,
             "gate": bool(getattr(module, "gate_model", None) is not None),
@@ -168,6 +294,7 @@ def _node(node_id: str, path: str, module: Module) -> dict[str, Any]:
         "graphRole": graph_role(module),
         "parameterCount": parameter_count(module),
         "details": module_details(module),
+        "config": _module_config(module),
     }
 
 

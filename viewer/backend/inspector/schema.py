@@ -9,12 +9,15 @@ from typing import Any, Union, get_args, get_origin
 
 from models.config_overrides import (
     config_key_to_flag,
+    config_key_to_model_param,
     config_key_to_param,
     iter_supported_config_keys,
+    normalize_key,
 )
 
 from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.discovery import load_model_parts
+from viewer.backend.inspector.errors import InspectorError
 
 DEFAULT_SECTION = "General"
 
@@ -60,7 +63,11 @@ def _section_title(comment: str) -> str | None:
     return None
 
 
-def _source_metadata(config_module: ModuleType) -> dict[str, dict[str, int | str]]:
+def _source_metadata(
+    config_module: ModuleType,
+    *,
+    include_search_space: bool = False,
+) -> dict[str, dict[str, int | str]]:
     config_file = getattr(config_module, "__file__", None)
     if not config_file:
         return {}
@@ -75,7 +82,9 @@ def _source_metadata(config_module: ModuleType) -> dict[str, dict[str, int | str
     assignments_by_line: dict[int, list[str]] = {}
     for node in tree.body:
         key = _assignment_key(node)
-        if key is None or not key.isupper() or key.startswith("SEARCH_SPACE_"):
+        if key is None or not key.isupper():
+            continue
+        if key.startswith("SEARCH_SPACE_") and not include_search_space:
             continue
         assignments_by_line.setdefault(node.lineno, []).append(key)
 
@@ -188,7 +197,6 @@ def _class_choices(config_module: ModuleType, annotation: Any, current_value: An
 
 def _choices_for(
     config_module: ModuleType,
-    key: str,
     value: Any,
     annotation: Any,
     kind: str,
@@ -199,21 +207,26 @@ def _choices_for(
         return _enum_choices(value, annotation)
     if kind == "class":
         return _class_choices(config_module, annotation, value)
-    search_values = getattr(config_module, f"SEARCH_SPACE_{key}", None)
-    if isinstance(search_values, list):
-        return [_serialize_value(item) for item in search_values]
     return []
 
 
-def _search_choices(config_module: ModuleType, key: str) -> list[Any]:
-    search_values = getattr(config_module, f"SEARCH_SPACE_{key}", None)
-    if not isinstance(search_values, list):
-        return []
-    return [_serialize_value(item) for item in search_values]
-
-
-def config_schema(model_name: str) -> dict[str, Any]:
+def preset_locks(model_name: str, preset_name: str | None) -> dict[str, Any]:
     parts = load_model_parts(model_name)
+    if preset_name is None:
+        return {}
+    try:
+        option = parts.experiment_options.get_option(preset_name)
+    except Exception as exc:
+        raise InspectorError(f"Unknown preset '{preset_name}' for model '{model_name}'.") from exc
+    locked_fields = getattr(parts.presets, "locked_fields", None)
+    if not callable(locked_fields):
+        return {}
+    return locked_fields(option)
+
+
+def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, Any]:
+    parts = load_model_parts(model_name)
+    locks = preset_locks(model_name, preset_name)
     annotations = getattr(parts.config_module, "__annotations__", {})
     metadata = _source_metadata(parts.config_module)
     supported_keys = sorted(
@@ -226,6 +239,10 @@ def config_schema(model_name: str) -> dict[str, Any]:
         annotation = annotations.get(key)
         kind = _value_kind(value, annotation)
         field_metadata = metadata.get(key, {})
+        model_param = config_key_to_model_param(key)
+        lock = locks.get(model_param)
+        locked_value = getattr(lock, "value", None) if lock is not None else None
+        locked_reason = getattr(lock, "reason", "") if lock is not None else ""
         fields.append(
             {
                 "key": config_key_to_param(key),
@@ -238,12 +255,80 @@ def config_schema(model_name: str) -> dict[str, Any]:
                 "nullable": value is None or _annotation_is_nullable(annotation),
                 "choices": _choices_for(
                     parts.config_module,
-                    key,
                     value,
                     annotation,
                     kind,
                 ),
-                "searchChoices": _search_choices(parts.config_module, key),
+                "locked": lock is not None,
+                "lockedValue": _serialize_value(locked_value) if lock is not None else None,
+                "lockedReason": locked_reason,
             }
         )
     return {"model": model_name, "fields": fields}
+
+
+def _search_axis_kind(config_module: ModuleType, config_key: str, values: list[Any]) -> str:
+    annotations = getattr(config_module, "__annotations__", {})
+    if hasattr(config_module, config_key):
+        return _value_kind(
+            getattr(config_module, config_key, None),
+            annotations.get(config_key),
+        )
+    sample = next((value for value in values if value is not None), None)
+    return _value_kind(sample, annotations.get(config_key))
+
+
+def search_space_schema(
+    model_name: str,
+    preset_name: str | None = None,
+) -> dict[str, Any]:
+    parts = load_model_parts(model_name)
+    locks = preset_locks(model_name, preset_name)
+    metadata = _source_metadata(parts.config_module, include_search_space=True)
+    config_fields = {
+        field["configKey"]: field
+        for field in config_schema(model_name, preset_name)["fields"]
+    }
+    prefix = "SEARCH_SPACE_"
+    search_keys = sorted(
+        (
+            key
+            for key, value in vars(parts.config_module).items()
+            if key.startswith(prefix) and isinstance(value, list)
+        ),
+        key=lambda key: int(metadata.get(key, {}).get("line", 10**9)),
+    )
+
+    axes = []
+    for search_key in search_keys:
+        config_key = search_key[len(prefix) :]
+        values = getattr(parts.config_module, search_key, [])
+        field = config_fields.get(config_key)
+        model_param = config_key_to_model_param(config_key)
+        lock = locks.get(model_param)
+        locked_value = getattr(lock, "value", None) if lock is not None else None
+        locked_reason = getattr(lock, "reason", "") if lock is not None else ""
+        axes.append(
+            {
+                "key": normalize_key(config_key),
+                "configKey": config_key,
+                "searchKey": search_key,
+                "label": (
+                    field["label"]
+                    if field is not None
+                    else config_key.lower().replace("_", " ")
+                ),
+                "section": (
+                    field["section"]
+                    if field is not None
+                    else metadata.get(search_key, {}).get("section", DEFAULT_SECTION)
+                ),
+                "type": _search_axis_kind(parts.config_module, config_key, values),
+                "values": [_serialize_value(value) for value in values],
+                "locked": lock is not None,
+                "lockedValue": _serialize_value(locked_value) if lock is not None else None,
+                "lockedReason": locked_reason,
+            }
+        )
+
+    return {"model": model_name, "preset": preset_name, "axes": axes}
