@@ -1,0 +1,148 @@
+import { Badge } from "@/components/ui/badge";
+import { ConfigFieldValueEditor } from "@/components/features/viewer/config/config-field-control";
+import {
+  type ConfigSearchOption,
+  type OverrideValues,
+  defaultLabel,
+  fieldValue,
+  hasOverride,
+} from "@/lib/config";
+import { cn } from "@/lib/utils";
+
+function ConfigSearchResultItem({
+  option,
+  popupId,
+  overrides,
+  isActive,
+  isSelected,
+  onSelect,
+  onFieldChange,
+  onFieldReset,
+}: {
+  option: ConfigSearchOption;
+  popupId: string;
+  overrides: OverrideValues;
+  isActive: boolean;
+  isSelected: boolean;
+  onSelect: (option: ConfigSearchOption) => void;
+  onFieldChange: (key: string, value: string) => void;
+  onFieldReset: (key: string) => void;
+}) {
+  const titleId = `${popupId}-field-${option.key}-title`;
+  const editorId = `${popupId}-field-${option.key}-value`;
+  const isOverridden = hasOverride(overrides, option.field.key);
+  const isPresetOwned = Boolean(option.field.locked);
+  const showCurrentValue = isOverridden || isPresetOwned;
+  const currentValueLabel = fieldValue(option.field, overrides);
+  const defaultValueLabel = defaultLabel(option.field);
+
+  return (
+    <div
+      role="group"
+      aria-label="Config search result"
+      data-config-search-result={option.key}
+      className={cn(
+        "grid min-w-0 gap-2 rounded-[10px] border px-3 py-2.5 transition",
+        isPresetOwned ? "border-amber/35 bg-amber/[0.055]" : "border-line-soft bg-black/15",
+        isSelected && "border-violet/45 bg-violet/10",
+        isActive ? "ring-1 ring-violet/45" : "hover:border-line hover:bg-white/[0.035]",
+      )}
+    >
+      <span className="flex min-w-0 items-start justify-between gap-2">
+        <button
+          id={titleId}
+          type="button"
+          onClick={() => onSelect(option)}
+          className="min-w-0 truncate rounded-[6px] text-left text-sm font-semibold text-ink underline-offset-4 transition hover:text-violet hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          {option.label}
+        </button>
+        <span className="flex shrink-0 flex-wrap justify-end gap-1">
+          {isOverridden && <Badge variant="override">override</Badge>}
+          {isPresetOwned && <Badge variant="preset">preset</Badge>}
+        </span>
+      </span>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="min-w-0 truncate font-mono text-xs text-ink-dim">
+          {option.key}
+        </span>
+        <span className="min-w-0 truncate font-mono text-xs text-ink-dim">
+          {option.flag}
+        </span>
+      </span>
+      <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-dim">
+        <span className="min-w-0 truncate">{option.sectionTitle}</span>
+        {showCurrentValue && (
+          <span className="min-w-0 truncate">
+            current <span className="font-mono text-ink">{currentValueLabel}</span>
+          </span>
+        )}
+        <span className="min-w-0 truncate">
+          default <span className="font-mono text-ink">{defaultValueLabel}</span>
+        </span>
+      </span>
+      <ConfigFieldValueEditor
+        field={option.field}
+        overrides={overrides}
+        onChange={onFieldChange}
+        onReset={onFieldReset}
+        controlId={editorId}
+        controlLabel="Current value"
+        resetLabel="Reset search result override"
+        resetTitle={`Reset ${option.label} override`}
+        density="compact"
+        hideDisabledReset={false}
+        className="mt-0"
+      />
+    </div>
+  );
+}
+
+export function ConfigSearchResults({
+  popupId,
+  visibleOptions,
+  hiddenResultCount,
+  activeIndex,
+  selectedFieldKey,
+  overrides,
+  onSelect,
+  onFieldChange,
+  onFieldReset,
+}: {
+  popupId: string;
+  visibleOptions: ConfigSearchOption[];
+  hiddenResultCount: number;
+  activeIndex: number;
+  selectedFieldKey: string | null;
+  overrides: OverrideValues;
+  onSelect: (option: ConfigSearchOption) => void;
+  onFieldChange: (key: string, value: string) => void;
+  onFieldReset: (key: string) => void;
+}) {
+  if (visibleOptions.length === 0) {
+    return <div className="px-3 py-2.5 text-sm text-ink-dim">No matching fields</div>;
+  }
+
+  return (
+    <>
+      {visibleOptions.map((option, index) => (
+        <ConfigSearchResultItem
+          key={option.key}
+          option={option}
+          popupId={popupId}
+          overrides={overrides}
+          isActive={index === activeIndex}
+          isSelected={option.key === selectedFieldKey}
+          onSelect={onSelect}
+          onFieldChange={onFieldChange}
+          onFieldReset={onFieldReset}
+        />
+      ))}
+      {hiddenResultCount > 0 && (
+        <div className="px-3 py-2 text-xs text-ink-dim">
+          {hiddenResultCount} more matches
+        </div>
+      )}
+    </>
+  );
+}
