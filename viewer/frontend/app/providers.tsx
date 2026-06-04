@@ -1,4 +1,5 @@
 "use client";
+// Client boundary: React Query needs a browser-side QueryClient instance.
 
 import { type ReactNode, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";

@@ -4,8 +4,33 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
-  background: #f3f5f2;
+  color-scheme: dark;
+  --bg: #06060c;
+  --bg-2: #090910;
+  --panel: #0c0c15;
+  --panel-2: #0f0f1a;
+  --card-a: #161622;
+  --card-b: #0e0e18;
+  --ink: #ecebf5;
+  --ink-dim: #9c9cb6;
+  --ink-faint: #62627c;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-soft: rgba(255, 255, 255, 0.045);
+  --violet: #a78bfa;
+  --violet-deep: #8b5cf6;
+  --blue: #6ea8ff;
+  --cyan: #7fd0ff;
+  --ok: #56d6a0;
+  --amber: #ffd166;
+  --grad: linear-gradient(135deg, #a98bff 0%, #7c8dff 48%, #6fc3ff 100%);
+  --grad-edge: linear-gradient(
+    150deg,
+    rgba(169, 139, 255, 0.45),
+    rgba(255, 255, 255, 0.03) 42%,
+    rgba(255, 255, 255, 0.02) 64%,
+    rgba(111, 195, 255, 0.34)
+  );
+  background: var(--bg);
 }
 
 * {
@@ -16,41 +41,243 @@ html,
 body {
   min-height: 100%;
   margin: 0;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 body {
-  color: #18221d;
-  background:
-    linear-gradient(#f3f5f2, #f3f5f2) padding-box,
-    repeating-linear-gradient(90deg, rgba(24, 34, 29, 0.045) 0 1px, transparent 1px 28px),
-    repeating-linear-gradient(0deg, rgba(24, 34, 29, 0.04) 0 1px, transparent 1px 28px);
+  position: relative;
+  color: var(--ink);
+  background: var(--bg);
   font-family:
-    var(--font-ibm-plex-sans), Aptos, "Segoe UI", ui-sans-serif, system-ui,
-    -apple-system, BlinkMacSystemFont, sans-serif;
+    var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(820px 620px at 88% -8%, rgba(124, 92, 255, 0.18), transparent 60%),
+    radial-gradient(720px 560px at 6% 108%, rgba(58, 122, 255, 0.16), transparent 58%),
+    radial-gradient(900px 700px at 50% 120%, rgba(120, 60, 200, 0.1), transparent 60%);
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   touch-action: manipulation;
 }
 
+select,
+input,
+textarea {
+  color-scheme: dark;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 20px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+  background-clip: padding-box;
+}
+
+.edge {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(155deg, var(--card-a), var(--card-b));
+  border-radius: 16px;
+}
+
+.edge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--grad-edge);
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.full-config-dialog-shell::before {
+  z-index: 20;
+}
+
+.full-config-dialog-chrome {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018) 42%),
+    linear-gradient(155deg, rgba(22, 22, 34, 0.92), rgba(14, 14, 24, 0.9));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.full-config-dialog-header::after,
+.full-config-dialog-footer::before {
+  content: "";
+  position: absolute;
+  right: 1px;
+  left: 1px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.075),
+    rgba(169, 139, 255, 0.11),
+    transparent
+  );
+}
+
+.full-config-dialog-header::after {
+  bottom: 0;
+}
+
+.full-config-dialog-footer::before {
+  top: 0;
+}
+
+.full-config-dialog-body {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 18%),
+    rgba(255, 255, 255, 0.008);
+}
+
+.edge-sel {
+  background:
+    linear-gradient(180deg, rgba(168, 139, 255, 0.08), rgba(255, 255, 255, 0) 40%),
+    linear-gradient(155deg, #1a1730, #110f1f);
+  box-shadow:
+    0 0 0 1px rgba(146, 113, 255, 0.18),
+    0 18px 50px -20px rgba(124, 92, 255, 0.7),
+    0 0 60px -12px rgba(124, 92, 255, 0.35);
+}
+
+.edge-sel::before {
+  padding: 1.4px;
+  background: linear-gradient(
+    150deg,
+    rgba(169, 139, 255, 0.9),
+    rgba(124, 141, 255, 0.35) 45%,
+    rgba(111, 195, 255, 0.6)
+  );
+}
+
+.gradient-text {
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 .react-flow {
   background:
-    radial-gradient(circle at 18px 18px, rgba(21, 112, 95, 0.08) 0 1px, transparent 1px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.64), rgba(243, 245, 242, 0.88));
-  background-size: 36px 36px, auto;
+    radial-gradient(620px 480px at 28% 38%, rgba(124, 92, 255, 0.07), transparent 60%),
+    radial-gradient(560px 460px at 78% 72%, rgba(58, 122, 255, 0.06), transparent 60%),
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-color: transparent;
+  background-size: auto, auto, 26px 26px;
+}
+
+.react-flow__background {
+  display: none;
+}
+
+.react-flow__pane {
+  cursor: grab;
+}
+
+.react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.react-flow__handle {
+  width: 9px;
+  height: 9px;
+  border: 1.6px solid rgba(146, 113, 255, 0.7);
+  background: #0b0b14;
+}
+
+.react-flow__edge-path {
+  stroke-linecap: round;
 }
 
 .react-flow__controls {
-  border: 1px solid #d8ded9;
-  box-shadow: 0 10px 24px rgba(24, 34, 29, 0.08);
+  position: absolute;
+  overflow: hidden;
+  border: 0;
+  border-radius: 11px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(155deg, var(--card-a), var(--card-b));
+  box-shadow: 0 18px 40px -24px rgba(0, 0, 0, 0.95);
+}
+
+.react-flow__controls::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--grad-edge);
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
 }
 
 .react-flow__controls-button {
-  border-bottom-color: #d8ded9;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--ink-dim);
+  transition:
+    background 0.14s,
+    color 0.14s;
+}
+
+.react-flow__controls-button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
 }
 
 .react-flow__attribution {
