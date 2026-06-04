@@ -8,7 +8,11 @@ from typing import Any
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from models.parser import get_experiment_parser, resolve_experiment_mode
+from models.parser import (
+    get_experiment_parser,
+    resolve_dataset_names,
+    resolve_experiment_mode,
+)
 
 from viewer.backend.inspector.discovery import (
     load_model_parts,
@@ -109,6 +113,7 @@ def main() -> None:
     parts = load_model_parts(args.model)
     (
         _,
+        selected_options,
         search_mode,
         search_keys,
         config_overrides,
@@ -116,18 +121,23 @@ def main() -> None:
     ) = resolve_experiment_mode(args, parts.experiment_options)
     if search_mode is not None or search_keys is not None or search_overrides:
         raise SystemExit("--print-model inspection does not support search modes.")
+    if selected_options is not None:
+        raise SystemExit("--print-model inspection requires one --preset.")
 
     options = (
         list(parts.experiment_options)
         if args.all_options
         else [parts.experiment_options.get_option(args.option)]
     )
+    datasets = resolve_dataset_names(parts.dataset_options, args.datasets)
+    dataset = datasets[0].__name__
 
     results = []
     for option in options:
         result = inspect_model(
             args.model,
             option_cli_name(parts.experiment_options, option),
+            dataset=dataset,
             parsed_overrides=config_overrides,
         )
         results.append((option, result))
