@@ -1,4 +1,4 @@
-import { FullPageStatus } from "@/components/layout/page-status";
+import { StatusCard } from "@/components/features/viewer/shared/status-card";
 
 export function FullPageError({
   message,
@@ -8,14 +8,14 @@ export function FullPageError({
   onRetry: () => void;
 }) {
   return (
-    <FullPageStatus
+    <StatusCard
       title="Something went wrong"
       detail={
         message ??
         "The viewer hit an unexpected error. You can retry, or check that the backend API is running."
       }
       icon={<span className="text-base font-bold" aria-hidden>!</span>}
-      action={
+      actions={
         <button
           type="button"
           onClick={onRetry}
@@ -24,6 +24,7 @@ export function FullPageError({
           Try again
         </button>
       }
+      layout="page"
     />
   );
 }

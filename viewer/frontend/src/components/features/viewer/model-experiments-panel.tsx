@@ -2,17 +2,16 @@ import { CheckCircle2, FileText, FlaskConical, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EdgeCard } from "@/components/ui/edge-card";
 import { Select } from "@/components/ui/select";
-import { type LogRun } from "@/lib/api";
+import { formatRunTimestamp } from "@/lib/format";
 import { groupModelLogRunsByExperiment } from "@/lib/historical-monitor-runs";
 import { cn, errorMessage } from "@/lib/utils";
 import { useHistoricalRuns } from "@/components/features/viewer/providers/viewer-providers";
+import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
+import { LabeledField } from "@/components/features/viewer/shared/labeled-field";
+import { SectionHeading } from "@/components/features/viewer/shared/section-heading";
 
 function pluralize(count: number, singular: string, plural: string) {
   return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function runTimestamp(run: LogRun) {
-  return run.timestamp ?? run.version;
 }
 
 export function ModelExperimentsPanel() {
@@ -36,16 +35,17 @@ export function ModelExperimentsPanel() {
   return (
     <EdgeCard className="rounded-card p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <FlaskConical className="h-4 w-4 shrink-0 text-violet" aria-hidden />
-          <h2 className="truncate text-sm font-bold text-ink">Experiments</h2>
-        </div>
+        <SectionHeading
+          as="h2"
+          className="min-w-0 normal-case tracking-normal text-ink"
+          icon={<FlaskConical className="h-4 w-4 shrink-0 text-violet" aria-hidden />}
+          title={<span className="min-w-0 truncate text-sm font-bold text-ink">Experiments</span>}
+        />
         <Badge>{runs.length}</Badge>
       </div>
 
       <div className="mt-3 grid gap-2 rounded-[10px] border border-line-soft bg-black/18 p-2">
-        <label className="grid gap-1 text-[11px] font-bold uppercase text-ink-dim">
-          Experiment
+        <LabeledField label="Experiment">
           <Select
             value={selectedExperiment}
             onChange={(event) => onSelectExperiment(event.target.value)}
@@ -62,9 +62,8 @@ export function ModelExperimentsPanel() {
               ))
             )}
           </Select>
-        </label>
-        <label className="grid gap-1 text-[11px] font-bold uppercase text-ink-dim">
-          Dataset
+        </LabeledField>
+        <LabeledField label="Dataset">
           <Select
             value={selectedDataset}
             onChange={(event) => onSelectDataset(event.target.value)}
@@ -81,7 +80,7 @@ export function ModelExperimentsPanel() {
               ))
             )}
           </Select>
-        </label>
+        </LabeledField>
       </div>
 
       <div className="mt-3 grid gap-2">
@@ -99,28 +98,30 @@ export function ModelExperimentsPanel() {
         )}
 
         {!isLoading && !isError && runs.length === 0 && (
-          <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+          <InlineStatus compact>
             {experimentOptions.length === 0 ? "No runs for this model" : "No matching runs"}
-          </div>
+          </InlineStatus>
         )}
 
         {!isLoading &&
           !isError &&
           groups.map((group) => (
             <section key={group.experiment} className="grid gap-1.5">
-              <div className="flex items-center justify-between gap-2 px-1 text-[11px] font-bold uppercase text-ink-dim">
-                <span className="truncate">{group.experiment}</span>
-                <span className="font-mono">{group.runs.length}</span>
-              </div>
+              <SectionHeading
+                className="justify-between px-1 text-[11px] font-bold uppercase tracking-normal text-ink-dim"
+                title={<span className="truncate">{group.experiment}</span>}
+                count={<span className="font-mono">{group.runs.length}</span>}
+              />
               <div className="grid gap-1.5">
                 {group.runs.map((run) => {
                   const selected = run.id === selectedRunId;
+                  const timestamp = formatRunTimestamp(run.timestamp ?? run.version);
                   return (
                     <button
                       key={run.id}
                       type="button"
                       aria-pressed={selected}
-                      aria-label={`Select experiment run ${run.experiment} ${run.preset} ${run.dataset} ${runTimestamp(run)}`}
+                      aria-label={`Select experiment run ${run.experiment} ${run.preset} ${run.dataset} ${timestamp}`}
                       onClick={() => onSelectRun(run.id)}
                       className={cn(
                         "grid min-h-[72px] gap-1 rounded-[10px] border px-3 py-2 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
@@ -147,7 +148,7 @@ export function ModelExperimentsPanel() {
                       </div>
                       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-dim">
                         <span className="truncate font-mono">{run.dataset}</span>
-                        <span className="font-mono">{runTimestamp(run)}</span>
+                        <span className="font-mono">{timestamp}</span>
                       </div>
                       <div className="flex min-w-0 items-center gap-1 text-[11px] text-ink-faint">
                         <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />

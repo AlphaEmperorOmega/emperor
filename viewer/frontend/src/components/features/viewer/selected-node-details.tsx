@@ -1,6 +1,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { SelectedNodeDetailsView } from "@/components/features/viewer/selected-node-details-view";
+import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
 import { type GraphNode, type LogRun, type TrainingJob } from "@/lib/api";
 import { type LinearMonitorComparisonCandidateGroups } from "@/lib/graph/monitor-targets";
 import { type MonitorChartsSource } from "@/types/monitor";
@@ -40,9 +41,9 @@ export function SelectedNodeDetails({
 
   if (!node) {
     return (
-      <div className="rounded-card border border-dashed border-faint bg-white/[0.018] p-4 text-sm text-ink-faint">
+      <InlineStatus className="rounded-[16px]">
         No node selected
-      </div>
+      </InlineStatus>
     );
   }
 

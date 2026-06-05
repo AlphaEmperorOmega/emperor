@@ -40,7 +40,7 @@ const LogsGraphPreviewPanel = dynamic(
 );
 const LogRunDetailsPanel = dynamic(
   () =>
-    import("@/components/features/viewer/logs-workspace").then(
+    import("@/components/features/viewer/logs/log-run-details-panel").then(
       (module) => module.LogRunDetailsPanel,
     ),
   { ssr: false },
@@ -103,7 +103,7 @@ export function ViewerScreen({
         ) : (
           <>
             <LogsGraphPreviewPanel state={logsState} />
-            <LogRunDetailsPanel state={logsState} />
+            <LogRunDetailsPanel selectedRun={logsState.selectedRun} />
           </>
         )}
       </section>

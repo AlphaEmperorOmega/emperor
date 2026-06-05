@@ -2,6 +2,7 @@ import { LineChart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EdgeCard } from "@/components/ui/edge-card";
+import { KeyValueRow } from "@/components/features/viewer/shared/key-value-row";
 import { type GraphNode } from "@/lib/api";
 import {
   type TerminalReachGrid,
@@ -127,32 +128,23 @@ export function SelectedNodeDetailsView({
       {(hasParameters || entries.length > 0) && (
         <div className="grid gap-0">
           {hasParameters && (
-            <div className="grid grid-cols-[104px_minmax(0,1fr)] gap-3 border-b border-line-soft py-3 text-xs">
-              <span className="truncate font-mono text-ink-dim">Params</span>
-              <span className="break-words text-right font-mono font-semibold text-[#d7c9ff]">
-                {formatExactCount(node.parameterCount)}
-              </span>
-            </div>
+            <KeyValueRow
+              label={<span className="font-mono">Params</span>}
+              value={formatExactCount(node.parameterCount)}
+              valueClassName="text-[#d7c9ff]"
+            />
           )}
           {entries.map((entry) => {
             const value = nodeDetailEntryText(entry);
             const isNumeric = typeof entry.value === "number";
             return (
-              <div
+              <KeyValueRow
                 key={entry.key}
-                className="grid grid-cols-[104px_minmax(0,1fr)] gap-3 border-b border-line-soft py-3 text-xs last:border-b-0"
-              >
-                <span className="truncate font-mono text-ink-dim">{entry.key}</span>
-                <span
-                  className={
-                    isNumeric
-                      ? "break-words text-right font-mono font-semibold text-[#d7c9ff]"
-                      : "break-words text-right font-mono font-semibold text-ink"
-                  }
-                >
-                  {value}
-                </span>
-              </div>
+                label={<span className="font-mono">{entry.key}</span>}
+                value={value}
+                className="last:border-b-0"
+                valueClassName={isNumeric ? "text-[#d7c9ff]" : undefined}
+              />
             );
           })}
         </div>

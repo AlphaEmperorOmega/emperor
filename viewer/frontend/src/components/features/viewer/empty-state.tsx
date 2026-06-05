@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { StatusCard } from "@/components/features/viewer/shared/status-card";
 
 export function EmptyState({
   title,
@@ -10,16 +11,6 @@ export function EmptyState({
   icon: ReactNode;
 }) {
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-6">
-      <div className="edge grid max-w-[360px] justify-items-center gap-3 rounded-card p-6 text-center shadow-panel">
-        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-line bg-white/[0.04] text-violet">
-          {icon}
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-ink">{title}</div>
-          {detail && <div className="mt-1 text-xs leading-5 text-ink-faint">{detail}</div>}
-        </div>
-      </div>
-    </div>
+    <StatusCard title={title} detail={detail} icon={icon} layout="overlay" />
   );
 }
