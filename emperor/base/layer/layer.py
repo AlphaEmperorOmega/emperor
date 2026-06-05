@@ -254,6 +254,7 @@ class Layer(Module):
         hidden, loss = self.halting_model.finalize_weighted_accumulation(
             state.halting_state, input
         )
+        loss = loss if loss.dim() == 0 else loss.mean()
         loss = loss if state.loss is None else state.loss + loss
         state.hidden = hidden
         state.loss = loss
