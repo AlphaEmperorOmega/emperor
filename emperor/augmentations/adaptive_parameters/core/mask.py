@@ -146,7 +146,7 @@ class AxisMaskAbstract(Module):
         return -2 if self.mask_dimension_option == MaskDimensionOptions.COLUMN else -1
 
     def _compute_generator_soft_values(self, logits: Tensor) -> Tensor:
-        mask_logits = Layer.forward_with_state(self.model, logits)
+        mask_logits = Layer.run_model_returning_hidden(self.model, logits)
         return torch.sigmoid(mask_logits)
 
     def _compute_masked_weight_scores(
@@ -282,8 +282,8 @@ class OuterProductMask(AxisMaskAbstract):
         weight_params: Tensor,
         logits: Tensor,
     ) -> Tensor:
-        input_vectors = Layer.forward_with_state(self.input_model, logits)
-        output_vectors = Layer.forward_with_state(self.output_model, logits)
+        input_vectors = Layer.run_model_returning_hidden(self.input_model, logits)
+        output_vectors = Layer.run_model_returning_hidden(self.output_model, logits)
         outer_product = torch.einsum("bi,bj->bij", input_vectors, output_vectors)
         scores = torch.sigmoid(outer_product)
         hard_mask = self._compute_hard_mask(scores)

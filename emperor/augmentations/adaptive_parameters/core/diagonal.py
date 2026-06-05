@@ -93,7 +93,7 @@ class DynamicDiagonalAbstract(Module):
         return diagonal_matrix
 
     def _compute_diagonal_matrix(self, logits: Tensor) -> Tensor:
-        vectors = Layer.forward_with_state(self.model, logits)
+        vectors = Layer.run_model_returning_hidden(self.model, logits)
         return self.__convert_to_diagonal_matrix(vectors)
 
 

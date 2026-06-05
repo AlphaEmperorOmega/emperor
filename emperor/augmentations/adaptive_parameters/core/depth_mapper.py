@@ -132,4 +132,4 @@ class DepthMappingLayerStack(Module):
 
         X = X.unsqueeze(1)
         X = X.repeat(1, self.depth_value, 1)
-        return Layer.forward_with_state(self.model, X)
+        return Layer.run_model_returning_hidden(self.model, X)

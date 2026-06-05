@@ -156,7 +156,7 @@ class AffineTransformDynamicBias(DynamicBiasAbstract):
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         DynamicBiasValidator.ensure_parameters_exist(bias_params)
-        affine_parameters = Layer.forward_with_state(self.model, logits)
+        affine_parameters = Layer.run_model_returning_hidden(self.model, logits)
         bias_scale, bias_offset = affine_parameters.chunk(2, dim=-1)
         return bias_scale * bias_params + bias_offset
 
@@ -173,7 +173,7 @@ class AdditiveDynamicBias(DynamicBiasAbstract):
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         DynamicBiasValidator.ensure_parameters_exist(bias_params)
         bias_params = self._maybe_apply_bias_decay(bias_params)
-        generated_bias_offset = Layer.forward_with_state(self.model, logits)
+        generated_bias_offset = Layer.run_model_returning_hidden(self.model, logits)
         return bias_params + generated_bias_offset
 
 
@@ -188,7 +188,7 @@ class MultiplicativeDynamicBias(DynamicBiasAbstract):
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         DynamicBiasValidator.ensure_parameters_exist(bias_params)
-        bias_scale = Layer.forward_with_state(self.model, logits)
+        bias_scale = Layer.run_model_returning_hidden(self.model, logits)
         return bias_params * bias_scale
 
 
@@ -203,7 +203,7 @@ class SigmoidGatedDynamicBias(DynamicBiasAbstract):
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         DynamicBiasValidator.ensure_parameters_exist(bias_params)
-        gate = torch.sigmoid(Layer.forward_with_state(self.model, logits))
+        gate = torch.sigmoid(Layer.run_model_returning_hidden(self.model, logits))
         return bias_params * gate
 
 
@@ -218,7 +218,7 @@ class TanhGatedDynamicBias(DynamicBiasAbstract):
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         DynamicBiasValidator.ensure_parameters_exist(bias_params)
-        gate = torch.tanh(Layer.forward_with_state(self.model, logits))
+        gate = torch.tanh(Layer.run_model_returning_hidden(self.model, logits))
         return bias_params * gate
 
 
@@ -232,7 +232,7 @@ class GeneratorDynamicBias(DynamicBiasAbstract):
         self.model = self._init_model(self.output_dim)
 
     def forward(self, _bias_params: Tensor, logits: Tensor) -> Tensor:
-        return Layer.forward_with_state(self.model, logits)
+        return Layer.run_model_returning_hidden(self.model, logits)
 
 
 class WeightedBankDynamicBias(DynamicBiasAbstract):
@@ -250,6 +250,6 @@ class WeightedBankDynamicBias(DynamicBiasAbstract):
         self.model = self._init_model(self.bank_expansion_factor)
 
     def forward(self, _bias_params: Tensor, logits: Tensor) -> Tensor:
-        bank_logits = Layer.forward_with_state(self.model, logits)
+        bank_logits = Layer.run_model_returning_hidden(self.model, logits)
         bank_distribution = torch.softmax(bank_logits, dim=-1)
         return torch.matmul(bank_distribution, self.weight_bank)
