@@ -4430,6 +4430,113 @@ describe("ViewerApp", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps completed job progress visible after the draft config changes", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsWithConfig(user);
+    await setTrainingHiddenDimOverride(user, details, "128");
+    await setTrainingMultiSelectOption(
+      user,
+      details,
+      "Training datasets",
+      /Mnist/i,
+    );
+    await selectNewTrainingLogFolder(user, "completed_plan");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", {
+          name: /2\s*\/\s*2 runs.*0 epochs left/i,
+        }),
+      ).toBeEnabled();
+    });
+
+    await user.click(within(details).getByRole("button", { name: /^reset$/i }));
+    await waitFor(() => {
+      expect(screen.getAllByText("0 overrides").length).toBeGreaterThan(0);
+    });
+    await setTrainingMultiSelectOption(
+      user,
+      details,
+      "Training datasets",
+      /Mnist/i,
+      false,
+    );
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^training datasets\s+1\s*\/\s*2 selected$/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    const progressButton = await screen.findByRole("button", {
+      name: /2\s*\/\s*2 runs.*0 epochs left/i,
+    });
+    await user.click(progressButton);
+
+    const progressDialog = await screen.findByRole("dialog", {
+      name: /training progress/i,
+    });
+    expect(within(progressDialog).getAllByText("Completed")).toHaveLength(2);
+    expect(within(progressDialog).getAllByText("hidden_dim=128")).toHaveLength(2);
+    expect(within(progressDialog).getByText("Cifar10")).toBeInTheDocument();
+    expect(within(progressDialog).getByText("Mnist")).toBeInTheDocument();
+    expect(within(progressDialog).getByText("2 runs")).toBeInTheDocument();
+    expect(within(progressDialog).getByText("0 epochs left")).toBeInTheDocument();
+    expect(
+      within(progressDialog).queryByRole("button", { name: /^resample$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("starts the next training run from the changed draft plan after completion", async () => {
+    const { trainingBodies } = installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsWithConfig(user);
+    await setTrainingHiddenDimOverride(user, details, "128");
+    await selectNewTrainingLogFolder(user, "first_plan");
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(trainingBodies).toHaveLength(1);
+      expect(
+        screen.getByRole("button", {
+          name: /1\s*\/\s*1 runs.*0 epochs left/i,
+        }),
+      ).toBeEnabled();
+    });
+
+    await setTrainingHiddenDimOverride(user, details, "192");
+    await selectNewTrainingLogFolder(user, "second_plan");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /start training/i }))
+        .toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(trainingBodies).toHaveLength(2);
+      expect(trainingBodies[1]).toMatchObject({
+        logFolder: "second_plan",
+        overrides: { hidden_dim: "192" },
+      });
+      expect(trainingBodies[1]).toHaveProperty(
+        "runPlan.runs.0.overrides.hidden_dim",
+        "192",
+      );
+      expect(trainingBodies[1]).toHaveProperty(
+        "runPlan.runs.0.command",
+        "source experiment.sh linear --preset baseline --datasets Cifar10 --logdir second_plan --config --hidden-dim 192",
+      );
+    });
+  });
+
   it("making a selected preset primary updates the primary target and resets setup state", async () => {
     const { inspectBodies } = installFetchMock();
     renderViewer();
