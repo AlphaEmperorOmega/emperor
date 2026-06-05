@@ -1,7 +1,6 @@
 import torch.nn as nn
 
 from torch.types import Tensor
-from torch.nn import Sequential
 from emperor.base.utils import ConfigBase, Module
 from emperor.base.options import (
     ActivationOptions,
@@ -14,6 +13,7 @@ from emperor.base.layer._validator import LayerValidator
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from emperor.base.layer.stack import LayerStack
     from emperor.halting.config import HaltingConfig
     from emperor.halting.utils.options.base import HaltingBase
     from emperor.memory.config import DynamicMemoryConfig
@@ -75,7 +75,7 @@ class Layer(Module):
             output_dim=self.output_dim,
         )
 
-    def __build_gate_model(self) -> "Layer | Sequential | None":
+    def __build_gate_model(self) -> "Layer | LayerStack | None":
         return self.__build_from_config(
             self.gate_config, input_dim=self.output_dim, output_dim=self.output_dim
         )
