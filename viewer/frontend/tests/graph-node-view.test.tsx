@@ -5,7 +5,13 @@ import { nodeTypes } from "@/components/features/viewer/graph-node-view";
 import { SelectedNodeDetails } from "@/components/features/viewer/selected-node-details";
 import type { GraphNode } from "@/lib/api";
 import type { ViewerNodeData } from "@/lib/graph";
-import { SIMPLE_NODE_HEIGHT } from "@/lib/graph/constants";
+import {
+  CLUSTER_DIAGRAM_CELL_HEIGHT,
+  CLUSTER_DIAGRAM_HEADER_HEIGHT,
+  CLUSTER_DIAGRAM_CELL_GAP,
+  SIMPLE_NODE_HEIGHT,
+} from "@/lib/graph/constants";
+import { EXPERT_DIAGRAM_SAMPLER_WIDTH } from "@/components/features/viewer/graph-node-diagram-layout";
 
 vi.mock("@xyflow/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@xyflow/react")>();
@@ -221,7 +227,9 @@ describe("GraphNodeView", () => {
       "border",
       "border-line-soft",
       "bg-white/[0.02]",
+      "px-3",
       "text-[13px]",
+      "leading-none",
     );
   });
 
@@ -253,11 +261,19 @@ describe("GraphNodeView", () => {
     expect(shapes).toHaveClass("grid-cols-2");
     expect(within(shapes).getByLabelText("W shape 128 x 128")).toHaveClass(
       "h-7",
+      "rounded-[7px]",
+      "border-violet/25",
+      "bg-violet/15",
+      "px-2",
       "text-[12px]",
+      "leading-none",
+      "shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]",
     );
     expect(within(shapes).getByLabelText("b shape 128")).toHaveClass("h-7", "text-[12px]");
     expect(within(shapes).getByText("W")).toBeInTheDocument();
+    expect(within(shapes).getByText("W")).toHaveClass("truncate");
     expect(within(shapes).getByText("128 x 128")).toBeInTheDocument();
+    expect(within(shapes).getByText("128 x 128")).toHaveClass("truncate");
     expect(within(shapes).getByText("b")).toBeInTheDocument();
     expect(within(shapes).getByText("128")).toBeInTheDocument();
   });
@@ -269,7 +285,7 @@ describe("GraphNodeView", () => {
 
     const summary = screen.getByLabelText("LinearLayer 128 -> 64");
     expect(summary).toHaveAttribute("title", "LinearLayer 128 -> 64");
-    expect(summary).toHaveClass("h-9", "gap-2");
+    expect(summary).toHaveClass("h-9", "rounded-[10px]", "gap-2", "overflow-hidden");
     expect(within(summary).getByText("LinearLayer")).toHaveClass("flex-1", "truncate");
     expect(within(summary).getByText("128 -> 64")).toHaveClass(
       "shrink-0",
@@ -566,13 +582,34 @@ describe("GraphNodeView", () => {
     });
 
     const diagram = screen.getByTestId("cluster-diagram-neuron_cluster");
+    const headerHeight =
+      CLUSTER_DIAGRAM_HEADER_HEIGHT +
+      2 * CLUSTER_DIAGRAM_CELL_HEIGHT +
+      CLUSTER_DIAGRAM_CELL_GAP;
+    const planeWidth = 2 * CLUSTER_DIAGRAM_CELL_HEIGHT + CLUSTER_DIAGRAM_CELL_GAP;
+    const plane = within(diagram).getByTitle("Z plane 1");
+    const activeCell = within(diagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i);
     expect(within(diagram).getByText("Cluster map")).toBeInTheDocument();
     expect(within(diagram).getByText("2 / 8")).toBeInTheDocument();
-    expect(within(diagram).getByText("1z")).toBeInTheDocument();
-    expect(within(diagram).getByText("clipped")).toBeInTheDocument();
-    expect(within(diagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i)).toHaveClass(
-      "border-violet/45",
+    expect(within(diagram).getByText("1z")).toHaveClass(
+      "rounded-[7px]",
+      "border-violet/25",
+      "px-1.5",
+      "py-1",
+      "text-[10px]",
+      "leading-none",
     );
+    expect(within(diagram).getByText("clipped")).toHaveClass(
+      "rounded-[7px]",
+      "border-line-soft",
+      "px-1.5",
+      "py-1",
+    );
+    expect(Number.parseFloat(diagram.style.height)).toBe(headerHeight);
+    expect(Number.parseFloat(plane.style.width)).toBe(planeWidth);
+    expect(Number.parseFloat(activeCell.style.height)).toBe(CLUSTER_DIAGRAM_CELL_HEIGHT);
+    expect(Number.parseFloat(activeCell.style.width)).toBe(CLUSTER_DIAGRAM_CELL_HEIGHT);
+    expect(activeCell).toHaveClass("border-violet/45");
     expect(within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*empty/i)).toHaveClass(
       "border-line-soft",
     );
@@ -597,12 +634,23 @@ describe("GraphNodeView", () => {
     });
 
     const diagram = screen.getByTestId("expert-diagram-main_model.0");
-    expect(within(diagram).getByTitle("Expert 0")).toHaveClass("h-8", "text-[12px]");
-    expect(within(diagram).getByTitle("Expert 0")).toHaveTextContent("E0");
+    const expert0 = within(diagram).getByTitle("Expert 0");
+    expect(expert0).toHaveClass(
+      "h-8",
+      "rounded-[8px]",
+      "text-[12px]",
+      "leading-none",
+    );
+    expect(within(expert0).getByText("E0")).toHaveClass("truncate");
+    expect(expert0).toHaveTextContent("E0");
     expect(within(diagram).getByTitle("main_model.0.sampler")).toHaveClass(
       "h-8",
+      "rounded-[8px]",
+      "px-2",
       "text-[12px]",
     );
+    expect(Number.parseFloat(within(diagram).getByTitle("main_model.0.sampler").style.width))
+      .toBe(EXPERT_DIAGRAM_SAMPLER_WIDTH);
     expect(within(diagram).getByTitle("main_model.0.sampler")).toHaveTextContent("Sampler");
     expect(within(diagram).queryByText("LinearLayer")).not.toBeInTheDocument();
   });

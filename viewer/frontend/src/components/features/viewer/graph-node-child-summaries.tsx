@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { GraphChip } from "@/components/features/viewer/graph/graph-chip";
 import { type ViewerNodeData } from "@/lib/graph";
 import { cn } from "@/lib/utils";
 
@@ -28,17 +29,18 @@ export function GraphNodeChildSummaries({
           : summaryAccessibleLabel;
 
         return (
-          <div
+          <GraphChip
             key={`${summary.kind}-${summary.label}-${index}`}
             aria-label={summaryAccessibleLabel}
             title={summaryTitle}
+            tone={summary.kind === "mechanism" ? "violet" : "default"}
             className={cn(
-              "relative flex h-9 items-center gap-2 overflow-hidden rounded-[10px] border px-3 text-[13px] font-medium leading-none",
+              "relative flex h-9 items-center gap-2 overflow-hidden rounded-[10px] px-3 text-[13px] font-medium",
               summary.kind === "mechanism"
-                ? "border-violet/30 bg-[linear-gradient(135deg,rgba(146,113,255,0.14),rgba(111,168,255,0.08))] text-[#d7c9ff] shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]"
+                ? "bg-[linear-gradient(135deg,rgba(146,113,255,0.14),rgba(111,168,255,0.08))]"
                 : summary.kind === "overflow"
-                  ? "border-line-soft bg-white/[0.035] text-ink-dim"
-                  : "border-line-soft bg-white/[0.02] text-ink-dim",
+                  ? "bg-white/[0.035]"
+                  : undefined,
             )}
           >
             {summary.kind === "overflow" ? (
@@ -68,7 +70,7 @@ export function GraphNodeChildSummaries({
                 )}
               </>
             )}
-          </div>
+          </GraphChip>
         );
       })}
     </div>

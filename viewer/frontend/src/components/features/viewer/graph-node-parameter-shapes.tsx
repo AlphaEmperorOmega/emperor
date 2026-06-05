@@ -1,3 +1,5 @@
+import { GraphChip } from "@/components/features/viewer/graph/graph-chip";
+
 type ParameterShapeEntry = {
   key: string;
   label: string;
@@ -18,17 +20,18 @@ export function GraphNodeParameterShapes({
         data-testid={`parameter-shapes-${nodeId}`}
       >
         {entries.map((entry) => (
-          <div
+          <GraphChip
             key={entry.key}
             aria-label={`${entry.label} shape ${entry.shape}`}
             title={`${entry.label} shape: ${entry.shape}`}
-            className="grid h-7 grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-[7px] border border-violet/25 bg-violet/15 px-2 text-[12px] leading-none shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]"
+            tone="violet"
+            className="grid h-7 grid-cols-[18px_minmax(0,1fr)] items-center gap-1.5 rounded-[7px] border-violet/25 bg-violet/15 px-2 text-[12px]"
           >
             <span className="truncate font-semibold uppercase text-[#cdbcff]">
               {entry.label}
             </span>
             <span className="truncate font-mono text-ink">{entry.shape}</span>
-          </div>
+          </GraphChip>
         ))}
       </div>
     </div>

@@ -9,6 +9,7 @@ import {
   clusterDiagramGridHeight,
   clusterDiagramPlaneWidth,
 } from "@/components/features/viewer/graph-node-diagram-layout";
+import { GraphChip } from "@/components/features/viewer/graph/graph-chip";
 import { cn } from "@/lib/utils";
 
 export function ClusterDiagramView({
@@ -38,13 +39,17 @@ export function ClusterDiagramView({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="rounded-[7px] border border-violet/25 bg-violet/10 px-1.5 py-1 font-mono text-[10px] font-bold leading-none text-[#d7c9ff]">
+          <GraphChip
+            compact
+            tone="violet"
+            className="border-violet/25 bg-violet/10 font-mono font-bold"
+          >
             {diagram.planes.length}z
-          </span>
+          </GraphChip>
           {isTruncated && (
-            <span className="rounded-[7px] border border-line-soft bg-white/[0.035] px-1.5 py-1 text-[10px] font-bold uppercase leading-none text-ink-dim">
+            <GraphChip compact className="bg-white/[0.035] font-bold uppercase">
               clipped
-            </span>
+            </GraphChip>
           )}
         </div>
       </div>

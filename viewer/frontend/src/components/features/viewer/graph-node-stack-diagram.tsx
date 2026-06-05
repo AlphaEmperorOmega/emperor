@@ -4,6 +4,7 @@ import {
   isDenseStackDiagram,
   stackDiagramCellMetrics,
 } from "@/components/features/viewer/graph-node-diagram-layout";
+import { GraphChip } from "@/components/features/viewer/graph/graph-chip";
 import { cn } from "@/lib/utils";
 
 export function StackDiagramView({
@@ -29,10 +30,11 @@ export function StackDiagramView({
           const metrics = cellMetrics[index];
 
           return (
-            <div
+            <GraphChip
               key={`${cell.kind}-${cell.label}`}
               title={cell.title}
               aria-label={cell.title}
+              tone={cell.kind === "layer" ? "violet" : "default"}
               style={{
                 height: metrics.height,
                 left: 0,
@@ -40,15 +42,15 @@ export function StackDiagramView({
                 width: STACK_DIAGRAM_CELL_WIDTH,
               }}
               className={cn(
-                "absolute flex min-w-0 items-center rounded-[8px] border px-2.5 text-[12px] font-semibold leading-none",
+                "absolute flex min-w-0 items-center rounded-[8px] px-2.5 text-[12px] font-semibold",
                 cell.kind === "layer" && cell.dims
                   ? "justify-between gap-2 text-left"
                   : "justify-center text-center",
                 cell.kind === "layer"
-                  ? "border-violet/30 bg-[linear-gradient(135deg,rgba(146,113,255,0.14),rgba(111,168,255,0.08))] font-mono text-[#d7c9ff] shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]"
+                  ? "bg-[linear-gradient(135deg,rgba(146,113,255,0.14),rgba(111,168,255,0.08))] font-mono"
                   : cell.kind === "overflow"
-                    ? "border-line-soft bg-white/[0.035] font-mono text-ink-dim"
-                    : "border-line-soft bg-black/25 text-ink-dim",
+                    ? "bg-white/[0.035] font-mono"
+                    : "bg-black/25",
               )}
             >
               {cell.kind === "layer" && cell.dims ? (
@@ -59,7 +61,7 @@ export function StackDiagramView({
               ) : (
                 <span className="truncate">{cell.label}</span>
               )}
-            </div>
+            </GraphChip>
           );
         })}
       </div>

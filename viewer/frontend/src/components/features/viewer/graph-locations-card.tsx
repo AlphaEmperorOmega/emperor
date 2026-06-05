@@ -1,6 +1,10 @@
 import { useMemo, type HTMLAttributes, type ReactNode } from "react";
 import { MapPin } from "lucide-react";
 import { EdgeCard } from "@/components/ui/edge-card";
+import { GraphChip } from "@/components/features/viewer/graph/graph-chip";
+import { KeyValueRow } from "@/components/features/viewer/shared/key-value-row";
+import { SectionHeading } from "@/components/features/viewer/shared/section-heading";
+import { StatChip } from "@/components/features/viewer/shared/stat-chip";
 import {
   type GraphCoordinate,
   type GraphLocationSummary,
@@ -15,12 +19,13 @@ function coordinateLabel(coordinate: GraphCoordinate) {
 }
 
 function StatText({ children }: { children: ReactNode }) {
-  return (
-    <span className="rounded-[7px] border border-line-soft bg-black/20 px-2 py-1 font-mono text-[11px] font-semibold leading-none text-ink-dim">
-      {children}
-    </span>
-  );
+  return <StatChip tone="soft">{children}</StatChip>;
 }
+
+const terminalCoordinateRowClassName =
+  "flex flex-wrap items-center gap-1.5 border-b-0 py-0 text-xs";
+const terminalCoordinateLabelClassName =
+  "w-[58px] shrink-0 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint";
 
 function CoordinateChip({
   coordinate,
@@ -83,9 +88,9 @@ function LocationSummarySection({
             {summary.nodePath}
           </span>
         </span>
-        <span className="shrink-0 rounded-[7px] border border-line-soft bg-black/20 px-1.5 py-1 text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-ink-dim">
+        <GraphChip compact className="shrink-0 bg-black/20 font-bold uppercase tracking-[0.08em]">
           {summary.kind === "cluster" ? "Cluster" : "Terminal"}
-        </span>
+        </GraphChip>
       </button>
 
       {summary.kind === "cluster" ? (
@@ -113,24 +118,26 @@ function LocationSummarySection({
             {summary.hasOverflow && <StatText>display truncated</StatText>}
           </div>
           <div className="grid gap-1.5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="w-[58px] shrink-0 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
-                Position
-              </span>
-              <CoordinateChip
-                coordinate={summary.position}
-                label={`Reveal ${summary.nodePath} terminal position ${coordinateLabel(
-                  summary.position,
-                )}`}
-                onClick={revealNode}
-              />
-            </div>
+            <KeyValueRow
+              label="Position"
+              value={
+                <CoordinateChip
+                  coordinate={summary.position}
+                  label={`Reveal ${summary.nodePath} terminal position ${coordinateLabel(
+                    summary.position,
+                  )}`}
+                  onClick={revealNode}
+                />
+              }
+              className={terminalCoordinateRowClassName}
+              labelClassName={terminalCoordinateLabelClassName}
+              valueClassName="contents text-left"
+            />
             {summary.connections.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5" aria-label="Reachable coordinates">
-                <span className="w-[58px] shrink-0 text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint">
-                  Reach
-                </span>
-                {summary.connections.map((coordinate, index) => (
+              <KeyValueRow
+                aria-label="Reachable coordinates"
+                label="Reach"
+                value={summary.connections.map((coordinate, index) => (
                   <CoordinateChip
                     key={`${coordinate.join(",")}-${index}`}
                     coordinate={coordinate}
@@ -140,7 +147,10 @@ function LocationSummarySection({
                     onClick={revealNode}
                   />
                 ))}
-              </div>
+                className={terminalCoordinateRowClassName}
+                labelClassName={terminalCoordinateLabelClassName}
+                valueClassName="contents text-left"
+              />
             )}
           </div>
         </div>
@@ -174,12 +184,12 @@ export function GraphLocationsCard({
       data-testid="graph-locations-card"
       {...props}
     >
-      <div className="mb-3 flex shrink-0 items-center gap-2">
-        <MapPin className="h-[15px] w-[15px] text-violet" aria-hidden />
-        <h2 className="text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-          Locations
-        </h2>
-      </div>
+      <SectionHeading
+        as="h2"
+        className="mb-3 shrink-0"
+        icon={<MapPin className="h-[15px] w-[15px] text-violet" aria-hidden />}
+        title="Locations"
+      />
       {summaries.length === 0 ? (
         <div className="p-3 text-sm text-ink-faint">No analysed locations found.</div>
       ) : (

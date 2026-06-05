@@ -70,8 +70,24 @@ describe("GraphLocationsCard", () => {
     );
 
     const cluster = screen.getByRole("group", { name: /neuron_cluster locations/i });
+    const kindBadge = within(cluster)
+      .getAllByText("Cluster")
+      .find((element) => element.className.includes("uppercase"));
+    if (!kindBadge) {
+      throw new Error("Expected cluster kind badge");
+    }
     expect(within(cluster).getByText("3 instantiated")).toBeInTheDocument();
     expect(within(cluster).getByText("6 capacity")).toBeInTheDocument();
+    expect(kindBadge).toHaveClass(
+      "shrink-0",
+      "rounded-[7px]",
+      "border-line-soft",
+      "bg-black/20",
+      "px-1.5",
+      "py-1",
+      "text-[10px]",
+      "leading-none",
+    );
     expect(
       within(cluster).getByRole("button", {
         name: /reveal neuron_cluster coordinate \(1, 1, 1\)/i,

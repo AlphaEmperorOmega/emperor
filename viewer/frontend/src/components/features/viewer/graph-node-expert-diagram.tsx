@@ -10,6 +10,7 @@ import {
   EXPERT_DIAGRAM_WIDTH,
   expertDiagramCellCenters,
 } from "@/components/features/viewer/graph-node-diagram-layout";
+import { GraphChip } from "@/components/features/viewer/graph/graph-chip";
 import { cn } from "@/lib/utils";
 
 export function ExpertDiagramView({
@@ -57,29 +58,30 @@ export function ExpertDiagramView({
           style={{ gridTemplateColumns }}
         >
           {diagram.cells.map((cell) => (
-            <div
+            <GraphChip
               key={`${cell.kind}-${cell.label}`}
               title={cell.title}
+              tone={cell.kind === "expert" ? "violet" : "default"}
               className={cn(
-                "flex h-8 min-w-0 items-center justify-center rounded-[8px] border px-1.5 text-center text-[12px] font-semibold leading-none",
+                "flex h-8 min-w-0 items-center justify-center rounded-[8px] px-1.5 text-center text-[12px] font-semibold",
                 cell.kind === "expert"
-                  ? "border-violet/30 bg-violet/15 font-mono text-[#d7c9ff] shadow-[inset_0_-1px_0_rgba(146,113,255,0.24)]"
+                  ? "font-mono"
                   : cell.kind === "overflow"
-                    ? "border-line-soft bg-white/[0.035] font-mono text-ink-dim"
-                    : "border-line-soft bg-black/25 text-ink-dim",
+                    ? "bg-white/[0.035] font-mono"
+                    : "bg-black/25",
               )}
             >
               <span className="truncate">{cell.label}</span>
-            </div>
+            </GraphChip>
           ))}
         </div>
-        <div
+        <GraphChip
           title={diagram.samplerTitle}
-          className="absolute bottom-0 left-1/2 flex h-8 -translate-x-1/2 items-center justify-center rounded-[8px] border border-line bg-black/25 px-2 text-[12px] font-semibold leading-none text-ink shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]"
+          className="absolute bottom-0 left-1/2 flex h-8 -translate-x-1/2 items-center justify-center rounded-[8px] border-line bg-black/25 px-2 text-[12px] font-semibold text-ink shadow-[inset_0_-1px_0_rgba(255,255,255,0.05)]"
           style={{ width: EXPERT_DIAGRAM_SAMPLER_WIDTH }}
         >
           <span className="truncate">{diagram.samplerLabel}</span>
-        </div>
+        </GraphChip>
       </div>
     </div>
   );
