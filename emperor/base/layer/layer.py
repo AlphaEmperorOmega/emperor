@@ -1,5 +1,6 @@
 import torch.nn as nn
 
+from dataclasses import replace
 from torch.types import Tensor
 from emperor.base.utils import ConfigBase, Module
 from emperor.base.options import (
@@ -132,7 +133,7 @@ class Layer(Module):
         X = self.__maybe_apply_memory_after(X)
         X = self.__maybe_apply_layer_norm_default(X)
         X = self.__maybe_apply_activation(X)
-        X = self.__maybe_apply_gates(X)
+        X = self.__maybe_apply_gates(X, state)
         X = self.__maybe_apply_dropout(X)
         X = self.__maybe_apply_residual_connection(X, residual)
         X = self.__maybe_apply_layer_norm_after(X)
@@ -197,9 +198,23 @@ class Layer(Module):
             return self.activation_function(input)
         return input
 
-    def __maybe_apply_gates(self, input: Tensor) -> Tensor:
+    def __maybe_apply_gates(
+        self,
+        input: Tensor,
+        state: LayerState | None = None,
+    ) -> Tensor:
         if self.gate_model is not None:
-            return self.run_model_returning_hidden(self.gate_model, input) * input
+            if state is None:
+                gate_state = LayerState(hidden=input)
+            else:
+                gate_state = replace(
+                    state,
+                    hidden=input,
+                    loss=None,
+                    halting_state=None,
+                )
+
+            return self.gate_model(gate_state).hidden * input
         return input
 
     def __maybe_apply_dropout(self, input: Tensor):
