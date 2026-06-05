@@ -194,7 +194,6 @@ class LayerStackValidator(ValidatorBase):
     OPTIONAL_FIELDS = {
         "layer_type",
         "override_config",
-        "last_layer_overrides",
     }
 
     @staticmethod

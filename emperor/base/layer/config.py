@@ -66,11 +66,6 @@ class LayerStackConfig(ConfigBase):
     layer_config: LayerConfig | None = optional_field(
         "Base layer config used to build each stack layer."
     )
-    last_layer_overrides: LayerConfig | None = optional_field(
-        "Optional LayerConfig overrides applied only to the final layer. "
-        "Use to vary layer_model_config kwargs (e.g. kernel_size, stride) "
-        "between intermediate and output layers."
-    )
 
     def _registry_owner(self) -> type:
         from emperor.base.layer.stack import LayerStack

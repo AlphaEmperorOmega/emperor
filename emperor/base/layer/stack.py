@@ -99,9 +99,6 @@ class LayerStack(Module):
         overrides = self.__merge_layer_override(
             overrides, self.__resolve_last_layer_bias_override()
         )
-        overrides = self.__merge_layer_override(
-            overrides, self.cfg.last_layer_overrides
-        )
         return overrides
 
     def __merge_layer_override(
