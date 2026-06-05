@@ -103,7 +103,9 @@ def write_tensorboard_run(
     if checkpoint:
         checkpoint_dir = run_dir / "checkpoints"
         checkpoint_dir.mkdir(exist_ok=True)
-        (checkpoint_dir / "epoch=0-step=1.ckpt").write_text("checkpoint", encoding="utf-8")
+        (checkpoint_dir / "epoch=0-step=1.ckpt").write_text(
+            "checkpoint", encoding="utf-8"
+        )
     if metrics is not None:
         (run_dir / "result.json").write_text(
             json.dumps({"metrics": metrics}),
@@ -122,12 +124,18 @@ def delete_filters_for_runs(
     run_ids: list[str] | None = None,
 ) -> LogRunDeleteFilters:
     return LogRunDeleteFilters(
-        experiments=experiments
-        if experiments is not None
-        else sorted({run.experiment for run in runs}),
-        datasets=datasets if datasets is not None else sorted({run.dataset for run in runs}),
+        experiments=(
+            experiments
+            if experiments is not None
+            else sorted({run.experiment for run in runs})
+        ),
+        datasets=(
+            datasets if datasets is not None else sorted({run.dataset for run in runs})
+        ),
         models=models if models is not None else sorted({run.model for run in runs}),
-        presets=presets if presets is not None else sorted({run.preset for run in runs}),
+        presets=(
+            presets if presets is not None else sorted({run.preset for run in runs})
+        ),
         runIds=run_ids if run_ids is not None else sorted({run.id for run in runs}),
     )
 
@@ -215,8 +223,7 @@ class InspectorTests(unittest.TestCase):
 
     def test_config_schema_excludes_abstract_class_choices(self) -> None:
         fields = {
-            field["key"]: field
-            for field in config_schema("linear_adaptive")["fields"]
+            field["key"]: field for field in config_schema("linear_adaptive")["fields"]
         }
 
         self.assertNotIn("DynamicWeightConfig", fields["weight_option"]["choices"])
@@ -242,8 +249,7 @@ class InspectorTests(unittest.TestCase):
 
     def test_config_schema_exposes_boundary_projector_choices(self) -> None:
         fields = {
-            field["key"]: field
-            for field in config_schema("linear_adaptive")["fields"]
+            field["key"]: field for field in config_schema("linear_adaptive")["fields"]
         }
 
         self.assertEqual(
@@ -264,7 +270,8 @@ class InspectorTests(unittest.TestCase):
 
     def test_config_schema_marks_preset_owned_fields_locked(self) -> None:
         baseline_fields = {
-            field["key"]: field for field in config_schema("linear", "baseline")["fields"]
+            field["key"]: field
+            for field in config_schema("linear", "baseline")["fields"]
         }
         gating_fields = {
             field["key"]: field for field in config_schema("linear", "gating")["fields"]
@@ -356,7 +363,9 @@ class InspectorTests(unittest.TestCase):
             any(node["details"].get("gate") is True for node in result["nodes"])
         )
 
-    def test_abstract_config_override_is_rejected_before_model_instantiation(self) -> None:
+    def test_abstract_config_override_is_rejected_before_model_instantiation(
+        self,
+    ) -> None:
         with self.assertRaises(InspectorError) as context:
             inspect_model(
                 "linear_adaptive",
@@ -457,7 +466,9 @@ class InspectorTests(unittest.TestCase):
             )
         )
 
-        nodes, _edges = serialize_graph(nn.Sequential(no_augmentation, with_augmentation))
+        nodes, _edges = serialize_graph(
+            nn.Sequential(no_augmentation, with_augmentation)
+        )
         node_by_id = {node["id"]: node for node in nodes}
 
         self.assertIsNone(
@@ -538,7 +549,6 @@ class InspectorTests(unittest.TestCase):
                     bias_flag=True,
                 ),
             ),
-            last_layer_overrides=None,
         )
 
         model = stack_config.build()
@@ -554,7 +564,6 @@ class InspectorTests(unittest.TestCase):
         self.assertEqual(config_fields(root)["last_layer_bias_option"], "DISABLED")
         self.assertTrue(config_fields(root)["apply_output_pipeline_flag"])
         self.assertEqual(config_fields(root)["layer_config"], "LayerConfig")
-        self.assertIsNone(config_fields(root)["last_layer_overrides"])
 
     def test_graph_serializer_reports_expert_metadata(self) -> None:
         result = inspect_model("experts_linear", "baseline")
@@ -609,7 +618,9 @@ class InspectorTests(unittest.TestCase):
         self.assertEqual(reach["position"], [1, 1, 1])
         self.assertEqual(reach["total"], len(reach["connections"]))
         self.assertIn([1, 1, 1], reach["connections"])
-        self.assertTrue(all(len(coordinate) == 3 for coordinate in reach["connections"]))
+        self.assertTrue(
+            all(len(coordinate) == 3 for coordinate in reach["connections"])
+        )
 
     def test_graph_serializer_skips_uninitialized_lazy_parameters(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.LazyLinear(3)))
@@ -668,15 +679,17 @@ class InspectorTests(unittest.TestCase):
                 )
                 return health, monitors, search_space, inspect_response
 
-        health_response, monitors_response, search_space_response, response = asyncio.run(
-            call_api()
+        health_response, monitors_response, search_space_response, response = (
+            asyncio.run(call_api())
         )
         self.assertEqual(health_response.json(), {"status": "ok"})
         self.assertEqual(monitors_response.status_code, 200)
         self.assertEqual(monitors_response.json()["monitors"][0]["name"], "linear")
         self.assertEqual(search_space_response.status_code, 200)
         search_space_payload = search_space_response.json()
-        self.assertIn("hidden_dim", {axis["key"] for axis in search_space_payload["axes"]})
+        self.assertIn(
+            "hidden_dim", {axis["key"] for axis in search_space_payload["axes"]}
+        )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["model"], "linear")
@@ -803,7 +816,9 @@ class InspectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             runner = FakeRunner()
             logs_root = Path(tmp) / "logs"
-            manager = TrainingJobManager(root=Path(tmp), logs_root=logs_root, runner=runner)
+            manager = TrainingJobManager(
+                root=Path(tmp), logs_root=logs_root, runner=runner
+            )
 
             payload = manager.create_job(
                 model="linear",
@@ -904,7 +919,9 @@ class InspectorTests(unittest.TestCase):
             cancelled_manager.cancel_job(cancelled_job["id"])
             self.assertEqual(cancelled_manager.active_jobs(), [])
 
-    def test_training_job_accepts_multiple_presets_and_multiplies_run_count(self) -> None:
+    def test_training_job_accepts_multiple_presets_and_multiplies_run_count(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager = TrainingJobManager(
                 root=Path(tmp) / "jobs",
@@ -941,7 +958,9 @@ class InspectorTests(unittest.TestCase):
                 log_folder="test_model",
             )
 
-    def test_training_job_accepts_grid_search_and_strips_conflicting_override(self) -> None:
+    def test_training_job_accepts_grid_search_and_strips_conflicting_override(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager = TrainingJobManager(
                 root=Path(tmp) / "jobs",
@@ -1093,7 +1112,9 @@ class InspectorTests(unittest.TestCase):
             worker_payload = json.loads(payload_path.read_text())
 
         self.assertEqual(payload["runPlan"]["summary"]["totalRuns"], 1)
-        self.assertIn("--logdir submitted_plan", payload["runPlan"]["runs"][0]["command"])
+        self.assertIn(
+            "--logdir submitted_plan", payload["runPlan"]["runs"][0]["command"]
+        )
         self.assertEqual(payload["runPlan"]["runs"][0]["snapshotId"], "snapshot-1")
         self.assertEqual(payload["runPlan"]["runs"][0]["snapshotName"], "wide hidden")
         self.assertNotIn("snapshot-1", payload["runPlan"]["runs"][0]["command"])
@@ -1107,7 +1128,9 @@ class InspectorTests(unittest.TestCase):
             "wide hidden",
         )
 
-    def test_training_run_plan_preserves_error_traceback_from_progress_events(self) -> None:
+    def test_training_run_plan_preserves_error_traceback_from_progress_events(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager = TrainingJobManager(
                 root=Path(tmp) / "jobs",
@@ -1315,12 +1338,16 @@ class InspectorTests(unittest.TestCase):
         self.assertEqual(data["jobId"], payload["id"])
         self.assertEqual(data["nodePath"], "main_model.0.model")
         self.assertEqual(data["dataset"], "Mnist")
-        self.assertEqual(data["scalarSeries"][0]["tag"], "main_model.0.model/output/mean")
+        self.assertEqual(
+            data["scalarSeries"][0]["tag"], "main_model.0.model/output/mean"
+        )
         self.assertEqual(data["scalarSeries"][0]["label"], "output/mean")
         self.assertEqual(data["scalarSeries"][0]["points"][0]["step"], 100)
         self.assertEqual(len(data["histograms"]), 1)
         self.assertEqual(len(data["images"]), 1)
-        self.assertTrue(data["images"][0]["dataUrl"].startswith("data:image/png;base64,"))
+        self.assertTrue(
+            data["images"][0]["dataUrl"].startswith("data:image/png;base64,")
+        )
         self.assertEqual(unmatched["scalarSeries"], [])
         self.assertEqual(unmatched["histograms"], [])
         self.assertEqual(unmatched["images"], [])
@@ -1419,7 +1446,9 @@ class InspectorTests(unittest.TestCase):
 
             run_id = LogRunIndex(logs_root=logs_root).list_runs()[0].id
 
-            async def call_api() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
+            async def call_api() -> (
+                tuple[httpx.Response, httpx.Response, httpx.Response]
+            ):
                 transport = httpx.ASGITransport(
                     app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
                 )
@@ -1441,19 +1470,25 @@ class InspectorTests(unittest.TestCase):
                     )
                     return data_response, unmatched_response, unknown_response
 
-            data_response, unmatched_response, unknown_response = asyncio.run(call_api())
+            data_response, unmatched_response, unknown_response = asyncio.run(
+                call_api()
+            )
 
         self.assertEqual(data_response.status_code, 200)
         data = data_response.json()
         self.assertEqual(data["jobId"], run_id)
         self.assertEqual(data["nodePath"], "main_model.0.model")
         self.assertEqual(data["dataset"], "Mnist")
-        self.assertEqual(data["scalarSeries"][0]["tag"], "main_model.0.model/output/mean")
+        self.assertEqual(
+            data["scalarSeries"][0]["tag"], "main_model.0.model/output/mean"
+        )
         self.assertEqual(data["scalarSeries"][0]["label"], "output/mean")
         self.assertEqual(data["scalarSeries"][0]["points"][0]["step"], 100)
         self.assertEqual(len(data["histograms"]), 1)
         self.assertEqual(len(data["images"]), 1)
-        self.assertTrue(data["images"][0]["dataUrl"].startswith("data:image/png;base64,"))
+        self.assertTrue(
+            data["images"][0]["dataUrl"].startswith("data:image/png;base64,")
+        )
 
         self.assertEqual(unmatched_response.status_code, 200)
         unmatched = unmatched_response.json()
@@ -1647,7 +1682,9 @@ class InspectorTests(unittest.TestCase):
                 set(result.deletedRunIds),
                 {
                     run_ids_by_path[deleted_run.relative_to(logs_root).as_posix()],
-                    run_ids_by_path[second_deleted_run.relative_to(logs_root).as_posix()],
+                    run_ids_by_path[
+                        second_deleted_run.relative_to(logs_root).as_posix()
+                    ],
                 },
             )
             self.assertFalse(logs_root.joinpath("test_model").exists())
@@ -1658,7 +1695,9 @@ class InspectorTests(unittest.TestCase):
                 {remaining_run.relative_to(logs_root).as_posix()},
             )
 
-    def test_log_run_index_deletes_filtered_version_dirs_and_prunes_empty_parents(self) -> None:
+    def test_log_run_index_deletes_filtered_version_dirs_and_prunes_empty_parents(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             mnist_run = write_tensorboard_run(
@@ -1942,7 +1981,9 @@ class InspectorTests(unittest.TestCase):
                 ],
             )
 
-            async def call_api() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
+            async def call_api() -> (
+                tuple[httpx.Response, httpx.Response, httpx.Response]
+            ):
                 transport = httpx.ASGITransport(
                     app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
                 )
@@ -2007,7 +2048,9 @@ class InspectorTests(unittest.TestCase):
             )
             self.assertFalse(logs_root.joinpath("new_empty").exists())
 
-    def test_log_api_plans_and_deletes_filtered_runs_with_active_job_guard(self) -> None:
+    def test_log_api_plans_and_deletes_filtered_runs_with_active_job_guard(
+        self,
+    ) -> None:
         import httpx
         from viewer.backend.api import ViewerApiSettings, create_app
 
@@ -2392,9 +2435,7 @@ class InspectorTests(unittest.TestCase):
 
         async def call_api() -> httpx.Response:
             transport = httpx.ASGITransport(
-                app=create_app(
-                    ViewerApiSettings(cors_origins=["http://frontend.test"])
-                )
+                app=create_app(ViewerApiSettings(cors_origins=["http://frontend.test"]))
             )
             async with httpx.AsyncClient(
                 transport=transport,
@@ -2439,7 +2480,9 @@ class InspectorTests(unittest.TestCase):
                 self.assertGreater(len(result["nodes"]), 0)
                 self.assertGreater(len(result["edges"]), 0)
 
-    def test_bert_linear_and_vit_linear_no_deleted_transformer_utils_imports(self) -> None:
+    def test_bert_linear_and_vit_linear_no_deleted_transformer_utils_imports(
+        self,
+    ) -> None:
         for module_name in ("models.bert_linear.presets", "models.vit_linear.presets"):
             with self.subTest(module=module_name):
                 module = importlib.import_module(module_name)
