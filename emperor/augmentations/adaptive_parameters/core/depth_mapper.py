@@ -27,8 +27,8 @@ class DepthMappingLayerConfig(LinearLayerConfig):
         },
     )
 
-    def build(self, overrides: "DepthMappingLayerConfig | None" = None) -> "Module":
-        return DepthMappingLayer(self, overrides)
+    def _registry_owner(self) -> type:
+        return DepthMappingLayer
 
 
 class DepthMappingLayer(Module):
@@ -85,10 +85,8 @@ class DepthMappingHandlerConfig(LinearLayerConfig):
         metadata={"help": "Internal generator network config."},
     )
 
-    def build(
-        self, overrides: "DepthMappingHandlerConfig | None" = None
-    ) -> "DepthMappingLayerStack":
-        return DepthMappingLayerStack(self, overrides)
+    def _registry_owner(self) -> type:
+        return DepthMappingLayerStack
 
 
 class DepthMappingLayerStack(Module):
