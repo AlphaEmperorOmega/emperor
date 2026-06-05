@@ -1,35 +1,25 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, RefreshCw, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { RefreshCw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  fetchLogRunMonitorData,
-  fetchMonitorData,
-  type GraphNode,
-  type MonitorData,
-} from "@/lib/api";
+import { type GraphNode, type MonitorData } from "@/lib/api";
 import {
   type LinearMonitorComparisonCandidateGroups,
   type LinearMonitorComparisonScope,
 } from "@/lib/graph/monitor-targets";
 import {
   type HistoricalMonitorRunData,
-  type MonitorGroup,
-  type MonitorQueryData,
+  type MonitorChartsSource,
   monitorGroupOrder,
 } from "@/types/monitor";
 import {
   comparisonGroupCount,
   countGroups,
-  formatGroupCount,
   groupComparisonMonitorData,
   groupMultiRunMonitorData,
   groupSingleMonitorData,
   hasHistoricalMonitorData,
-  hasMonitorData,
   histogramMaxCountFor,
-  monitorGroupPanelId,
   multiRunGroupCount,
   pairMetrics,
   scalarDomainFor,
@@ -45,8 +35,13 @@ import {
   RunVisualCard,
   ScalarChart,
 } from "@/components/features/viewer/monitor/monitor-charts";
+import {
+  MonitorGroupAccordion,
+  useMonitorGroupAccordion,
+} from "@/components/features/viewer/monitor/monitor-group-accordion";
+import { useMonitorChartQueries } from "@/components/features/viewer/monitor/use-monitor-chart-queries";
+import { LabeledField } from "@/components/features/viewer/shared/labeled-field";
 import { cn } from "@/lib/utils";
-import { type MonitorChartsSource } from "@/types/monitor";
 
 type MonitorChartsModalProps = {
   node: GraphNode;
@@ -55,7 +50,6 @@ type MonitorChartsModalProps = {
   onClose: () => void;
 };
 
-const runningStatuses = new Set(["running", "queued"]);
 const emptyComparisonCandidateGroups: LinearMonitorComparisonCandidateGroups = {
   "same-stack": [],
   "all-layers": [],
@@ -86,94 +80,6 @@ function comparisonPairCellClass(index: number) {
     "min-w-0 border-line-soft",
     index > 0 && "border-t md:border-l md:border-t-0",
   );
-}
-
-function MonitorGroupAccordion({
-  idPrefix,
-  group,
-  count,
-  countUnit,
-  isOpen,
-  onToggle,
-  children,
-}: {
-  idPrefix: string;
-  group: MonitorGroup;
-  count: number;
-  countUnit: "chart" | "pair";
-  isOpen: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
-  const panelId = monitorGroupPanelId(idPrefix, group);
-
-  return (
-    <section className="edge overflow-hidden rounded-card">
-      <h3>
-        <button
-          type="button"
-          aria-expanded={isOpen}
-          aria-controls={panelId}
-          onClick={onToggle}
-          className="flex w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 shrink-0 text-ink-faint transition-transform",
-                !isOpen && "-rotate-90",
-              )}
-              aria-hidden
-            />
-            <span className="truncate text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-              {group}
-            </span>
-          </span>
-          <Badge>{formatGroupCount(count, countUnit)}</Badge>
-        </button>
-      </h3>
-      {isOpen && (
-        <div id={panelId} className="border-t border-line-soft p-3">
-          {children}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function useMonitorGroupAccordion(groupCounts: Record<MonitorGroup, number>) {
-  const firstNonEmptyGroup = monitorGroupOrder.find((group) => groupCounts[group] > 0);
-  const [openGroups, setOpenGroups] = useState<MonitorGroup[]>(
-    firstNonEmptyGroup ? [firstNonEmptyGroup] : [],
-  );
-  const countsKey = monitorGroupOrder
-    .map((group) => `${group}:${groupCounts[group]}`)
-    .join("|");
-  const previousCountsKey = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (previousCountsKey.current === countsKey) {
-      return;
-    }
-    previousCountsKey.current = countsKey;
-    setOpenGroups((currentGroups) => {
-      const retainedGroups = currentGroups.filter((group) => groupCounts[group] > 0);
-      if (retainedGroups.length > 0 || !firstNonEmptyGroup) {
-        return retainedGroups;
-      }
-      return [firstNonEmptyGroup];
-    });
-  }, [countsKey, firstNonEmptyGroup, groupCounts]);
-
-  return {
-    isGroupOpen: (group: MonitorGroup) => openGroups.includes(group),
-    toggleGroup: (group: MonitorGroup) =>
-      setOpenGroups((currentGroups) =>
-        currentGroups.includes(group)
-          ? currentGroups.filter((currentGroup) => currentGroup !== group)
-          : [...currentGroups, group],
-      ),
-  };
 }
 
 function SingleNodeCharts({ data }: { data: MonitorData }) {
@@ -562,10 +468,6 @@ export function MonitorChartsModal({
     () => historicalRunGroup?.runs ?? (historicalRun ? [historicalRun] : []),
     [historicalRun, historicalRunGroup?.runs],
   );
-  const historicalRunIds = useMemo(
-    () => historicalRuns.map((run) => run.id),
-    [historicalRuns],
-  );
   const historicalExperiment = historicalRunGroup?.experiment ?? historicalRun?.experiment ?? "";
   const historicalDataset = historicalRunGroup?.dataset ?? historicalRun?.dataset ?? "";
   const defaultDataset = activeJob?.currentDataset ?? activeJob?.datasets[0] ?? historicalDataset;
@@ -577,7 +479,6 @@ export function MonitorChartsModal({
   const [comparisonScope, setComparisonScope] =
     useState<LinearMonitorComparisonScope>(defaultComparisonScope);
   const [comparisonPath, setComparisonPath] = useState("");
-  const isRunning = activeJob ? runningStatuses.has(activeJob.status) : false;
   const sourceDatasets = useMemo(
     () => activeJob?.datasets ?? (historicalDataset ? [historicalDataset] : []),
     [activeJob?.datasets, historicalDataset],
@@ -599,6 +500,25 @@ export function MonitorChartsModal({
     () => new Set(comparisonCandidates.map((candidate) => candidate.path)),
     [comparisonCandidates],
   );
+  const {
+    data,
+    comparisonData,
+    historicalData,
+    historicalComparisonData,
+    hasData,
+    isComparing,
+    isFetching,
+    isLoading,
+    comparisonLoading,
+    emptyMessage,
+    refetch: refreshMonitorData,
+  } = useMonitorChartQueries({
+    source,
+    nodePath: node.path,
+    dataset,
+    preset,
+    comparisonNodePath: comparisonNode?.path,
+  });
 
   useEffect(() => {
     if (dataset && sourceDatasets.includes(dataset)) {
@@ -634,174 +554,6 @@ export function MonitorChartsModal({
     }
     setComparisonPath("");
   }, [comparisonCandidatePaths, comparisonPath]);
-
-  const monitorQuery = useQuery<MonitorQueryData>({
-    queryKey: activeJob
-      ? ["monitor-data", "active-job", activeJob.id, node.path, preset, dataset]
-      : historicalRunGroup
-        ? ["monitor-data", "historical-run-group", historicalRunIds, node.path]
-        : ["monitor-data", "historical-run", historicalRun?.id, node.path],
-    queryFn: () => {
-      if (activeJob) {
-        return fetchMonitorData({
-          jobId: activeJob.id,
-          nodePath: node.path,
-          preset: preset || undefined,
-          dataset: dataset || undefined,
-        });
-      }
-      if (historicalRunGroup) {
-        return Promise.all(
-          historicalRuns.map(async (run) => ({
-            run,
-            data: await fetchLogRunMonitorData({
-              runId: run.id,
-              nodePath: node.path,
-            }),
-          })),
-        );
-      }
-      return fetchLogRunMonitorData({
-        runId: historicalRun?.id ?? "",
-        nodePath: node.path,
-      });
-    },
-    enabled: activeJob
-      ? activeJob.monitors.length > 0
-      : historicalRunGroup
-        ? historicalRuns.length > 0
-        : Boolean(historicalRun),
-    retry: false,
-    refetchInterval: isRunning ? 1500 : false,
-  });
-
-  const comparisonQuery = useQuery<MonitorQueryData>({
-    queryKey: activeJob
-      ? ["monitor-data", "active-job", activeJob.id, comparisonNode?.path, preset, dataset]
-      : historicalRunGroup
-        ? [
-            "monitor-data",
-            "historical-run-group",
-            historicalRunIds,
-            comparisonNode?.path,
-          ]
-        : ["monitor-data", "historical-run", historicalRun?.id, comparisonNode?.path],
-    queryFn: () => {
-      if (!comparisonNode) {
-        throw new Error("No comparison node selected");
-      }
-      if (activeJob) {
-        return fetchMonitorData({
-          jobId: activeJob.id,
-          nodePath: comparisonNode.path,
-          preset: preset || undefined,
-          dataset: dataset || undefined,
-        });
-      }
-      if (historicalRunGroup) {
-        return Promise.all(
-          historicalRuns.map(async (run) => ({
-            run,
-            data: await fetchLogRunMonitorData({
-              runId: run.id,
-              nodePath: comparisonNode.path,
-            }),
-          })),
-        );
-      }
-      return fetchLogRunMonitorData({
-        runId: historicalRun?.id ?? "",
-        nodePath: comparisonNode.path,
-      });
-    },
-    enabled:
-      Boolean(comparisonNode) &&
-      (activeJob
-        ? activeJob.monitors.length > 0
-        : historicalRunGroup
-          ? historicalRuns.length > 0
-          : Boolean(historicalRun)),
-    retry: false,
-    refetchInterval: isRunning ? 1500 : false,
-  });
-
-  const monitorQueryData = monitorQuery.data;
-  const comparisonQueryData = comparisonQuery.data;
-  const historicalData: HistoricalMonitorRunData[] | undefined = Array.isArray(
-    monitorQueryData,
-  )
-    ? monitorQueryData
-    : undefined;
-  const historicalComparisonData: HistoricalMonitorRunData[] | undefined =
-    Array.isArray(comparisonQueryData) ? comparisonQueryData : undefined;
-  const data: MonitorData | undefined = Array.isArray(monitorQueryData)
-    ? undefined
-    : monitorQueryData;
-  const comparisonData: MonitorData | undefined = Array.isArray(comparisonQueryData)
-    ? undefined
-    : comparisonQueryData;
-  const isComparing = Boolean(comparisonNode);
-  const hasData = historicalRunGroup
-    ? isComparing
-      ? hasHistoricalMonitorData(historicalData) ||
-        hasHistoricalMonitorData(historicalComparisonData)
-      : hasHistoricalMonitorData(historicalData)
-    : isComparing
-      ? hasMonitorData(data) || hasMonitorData(comparisonData)
-      : hasMonitorData(data);
-  const isFetching = monitorQuery.isFetching || (isComparing && comparisonQuery.isFetching);
-  const emptyMessage = useMemo(() => {
-    if (monitorCount === 0) {
-      return {
-        title: "No monitor selected",
-        detail: "Start a training job with at least one optional monitor enabled.",
-      };
-    }
-    if (monitorQuery.isLoading || (isComparing && comparisonQuery.isLoading)) {
-      return {
-        title: "Loading monitor data",
-        detail: "Reading TensorBoard event files for the selected node.",
-      };
-    }
-    if (isRunning) {
-      return {
-        title: "No data yet",
-        detail: "The job is running, but this node has not emitted matching monitor tags yet.",
-      };
-    }
-    if (historicalRunGroup) {
-      return {
-        title: "No tags for this node",
-        detail:
-          "No scalar, histogram, or image tags matched this node path in the latest filtered historical runs.",
-      };
-    }
-    if (historicalRun) {
-      return {
-        title: "No tags for this node",
-        detail: "No scalar, histogram, or image tags matched this node path in the selected historical run.",
-      };
-    }
-    return {
-      title: "No tags for this node",
-      detail: "No scalar, histogram, or image tags matched this node path in the selected run.",
-    };
-  }, [
-    comparisonQuery.isLoading,
-    historicalRunGroup,
-    historicalRun,
-    isComparing,
-    isRunning,
-    monitorCount,
-    monitorQuery.isLoading,
-  ]);
-
-  const refreshMonitorData = () => {
-    void monitorQuery.refetch();
-    if (isComparing) {
-      void comparisonQuery.refetch();
-    }
-  };
 
   return (
     <div
@@ -842,8 +594,10 @@ export function MonitorChartsModal({
           </div>
           <div className="flex shrink-0 flex-wrap items-end gap-2">
             {hasComparisonCandidates && (
-              <label className="grid gap-1 text-xs font-medium text-ink-dim">
-                Scope
+              <LabeledField
+                label="Scope"
+                className="text-xs font-medium normal-case"
+              >
                 <select
                   value={comparisonScope}
                   onChange={(event) =>
@@ -861,11 +615,13 @@ export function MonitorChartsModal({
                     </option>
                   ))}
                 </select>
-              </label>
+              </LabeledField>
             )}
             {hasComparisonCandidates && (
-              <label className="grid gap-1 text-xs font-medium text-ink-dim">
-                Compare
+              <LabeledField
+                label="Compare"
+                className="text-xs font-medium normal-case"
+              >
                 <select
                   value={comparisonPath}
                   onChange={(event) => setComparisonPath(event.target.value)}
@@ -878,11 +634,13 @@ export function MonitorChartsModal({
                     </option>
                   ))}
                 </select>
-              </label>
+              </LabeledField>
             )}
             {activeJob && sourcePresets.length > 1 && (
-              <label className="grid gap-1 text-xs font-medium text-ink-dim">
-                Preset
+              <LabeledField
+                label="Preset"
+                className="text-xs font-medium normal-case"
+              >
                 <select
                   value={preset}
                   onChange={(event) => setPreset(event.target.value)}
@@ -894,10 +652,12 @@ export function MonitorChartsModal({
                     </option>
                   ))}
                 </select>
-              </label>
+              </LabeledField>
             )}
-            <label className="grid gap-1 text-xs font-medium text-ink-dim">
-              Dataset
+            <LabeledField
+              label="Dataset"
+              className="text-xs font-medium normal-case"
+            >
               <select
                 value={dataset}
                 onChange={(event) => setDataset(event.target.value)}
@@ -909,7 +669,7 @@ export function MonitorChartsModal({
                   </option>
                 ))}
               </select>
-            </label>
+            </LabeledField>
             <Button
               variant="secondary"
               onClick={refreshMonitorData}
@@ -932,7 +692,7 @@ export function MonitorChartsModal({
             <MonitorEmptyState
               title={emptyMessage.title}
               detail={emptyMessage.detail}
-              busy={monitorQuery.isLoading || (isComparing && comparisonQuery.isLoading)}
+              busy={isLoading}
             />
           ) : historicalRunGroup && isComparing && comparisonNode && historicalData ? (
             <MultiRunComparisonCharts
@@ -940,7 +700,7 @@ export function MonitorChartsModal({
               comparisonNode={comparisonNode}
               primaryResults={historicalData}
               comparisonResults={historicalComparisonData}
-              comparisonLoading={comparisonQuery.isLoading || comparisonQuery.isFetching}
+              comparisonLoading={comparisonLoading}
             />
           ) : historicalRunGroup && historicalData ? (
             <MultiRunMonitorCharts
@@ -953,7 +713,7 @@ export function MonitorChartsModal({
               comparisonNode={comparisonNode}
               primaryData={data}
               comparisonData={comparisonData}
-              comparisonLoading={comparisonQuery.isLoading || comparisonQuery.isFetching}
+              comparisonLoading={comparisonLoading}
             />
           ) : (
             data && <SingleNodeCharts data={data} />

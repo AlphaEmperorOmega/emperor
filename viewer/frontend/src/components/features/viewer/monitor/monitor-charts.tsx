@@ -2,7 +2,10 @@ import { type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
-import { formatNumber, multiRunLineColors, runDisplayName } from "@/lib/charts";
+import { ChartFrame } from "@/components/features/viewer/monitor/chart-frame";
+import { buildChartPath, buildLinearScale, formatChartDomain } from "@/lib/chart-scale";
+import { multiRunLineColors } from "@/lib/charts";
+import { formatNumber, formatRunDisplayName } from "@/lib/format";
 import {
   type HistogramData,
   type MonitorImageData,
@@ -12,6 +15,14 @@ import {
 } from "@/types/monitor";
 import { type LogRun } from "@/lib/api";
 
+function runDisplayName(run: LogRun) {
+  return formatRunDisplayName({
+    name: run.runName,
+    id: run.id,
+    startTime: run.timestamp ?? run.version,
+  });
+}
+
 export function ScalarChart({ series, domain }: { series: ScalarSeries; domain?: ScalarDomain }) {
   const width = 320;
   const height = 92;
@@ -20,30 +31,42 @@ export function ScalarChart({ series, domain }: { series: ScalarSeries; domain?:
   const values = points.map((point) => point.value);
   const localMin = values.length ? Math.min(...values) : 0;
   const localMax = values.length ? Math.max(...values) : 1;
-  const min = domain?.minValue ?? localMin;
-  const max = domain?.maxValue ?? localMax;
-  const span = max - min || 1;
-  const firstStep = domain?.minStep ?? points[0]?.step ?? 0;
-  const lastStep = domain?.maxStep ?? points.at(-1)?.step ?? firstStep;
-  const stepSpan = lastStep - firstStep || 1;
-  const pointCoordinates = points.map((point) => {
-    const x = padding + ((point.step - firstStep) / stepSpan) * (width - padding * 2);
-    const y = height - padding - ((point.value - min) / span) * (height - padding * 2);
-    return { x, y };
+  const scale = buildLinearScale(points, {
+    width,
+    height,
+    padding,
+    domain,
+    stepDomainMode: "series",
   });
-  const path = pointCoordinates.map((point) => `${point.x},${point.y}`).join(" ");
+  const pointCoordinates = points.map(scale.coordinate);
+  const path = buildChartPath(points, scale);
   const singlePoint = pointCoordinates[0];
   const latest = points.at(-1);
+  const { minLabel, maxLabel } = formatChartDomain({
+    ...scale.domain,
+    minValue: localMin,
+    maxValue: localMax,
+  });
 
   return (
-    <div className="grid min-w-0 gap-2 p-3">
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-ink">{series.label}</div>
-          <div className="truncate font-mono text-xs text-ink-dim">{series.tag}</div>
-        </div>
-        {latest && <Badge>step {latest.step}</Badge>}
-      </div>
+    <ChartFrame
+      title={series.label}
+      subtitle={series.tag}
+      badge={latest && <Badge>step {latest.step}</Badge>}
+      footer={
+        <>
+          {points.length === 0 ? (
+            <span>0 points</span>
+          ) : (
+            <>
+              <span>min {minLabel}</span>
+              <span>max {maxLabel}</span>
+            </>
+          )}
+          {latest && <span>latest {formatNumber(latest.value)}</span>}
+        </>
+      }
+    >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
@@ -86,18 +109,7 @@ export function ScalarChart({ series, domain }: { series: ScalarSeries; domain?:
           />
         )}
       </svg>
-      <div className="flex items-center justify-between gap-2 font-mono text-xs text-ink-dim">
-        {points.length === 0 ? (
-          <span>0 points</span>
-        ) : (
-          <>
-            <span>min {formatNumber(localMin)}</span>
-            <span>max {formatNumber(localMax)}</span>
-          </>
-        )}
-        {latest && <span>latest {formatNumber(latest.value)}</span>}
-      </div>
-    </div>
+    </ChartFrame>
   );
 }
 
@@ -116,16 +128,17 @@ export function HistogramChart({
   const barWidth = (width - padding * 2) / Math.max(histogram.buckets.length, 1);
 
   return (
-    <div className="grid min-w-0 gap-2 p-3">
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-ink">
-            {histogram.tag.split("/").slice(-2).join("/")}
-          </div>
-          <div className="truncate font-mono text-xs text-ink-dim">{histogram.tag}</div>
-        </div>
-        <Badge>step {histogram.step}</Badge>
-      </div>
+    <ChartFrame
+      title={histogram.tag.split("/").slice(-2).join("/")}
+      subtitle={histogram.tag}
+      badge={<Badge>step {histogram.step}</Badge>}
+      footer={
+        <>
+          <span>{histogram.buckets.length} buckets</span>
+          <span>max count {formatNumber(localMaxCount)}</span>
+        </>
+      }
+    >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
@@ -156,26 +169,17 @@ export function HistogramChart({
           );
         })}
       </svg>
-      <div className="flex items-center justify-between gap-2 font-mono text-xs text-ink-dim">
-        <span>{histogram.buckets.length} buckets</span>
-        <span>max count {formatNumber(localMaxCount)}</span>
-      </div>
-    </div>
+    </ChartFrame>
   );
 }
 
 export function MonitorImage({ image }: { image: MonitorImageData }) {
   return (
-    <div className="grid min-w-0 gap-2 p-3">
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-ink">
-            {image.tag.split("/").slice(-2).join("/")}
-          </div>
-          <div className="truncate font-mono text-xs text-ink-dim">{image.tag}</div>
-        </div>
-        <Badge>step {image.step}</Badge>
-      </div>
+    <ChartFrame
+      title={image.tag.split("/").slice(-2).join("/")}
+      subtitle={image.tag}
+      badge={<Badge>step {image.step}</Badge>}
+    >
       <Image
         src={image.dataUrl}
         alt={`Monitor image for ${image.tag} at step ${image.step}`}
@@ -185,7 +189,7 @@ export function MonitorImage({ image }: { image: MonitorImageData }) {
         unoptimized
         className="max-h-64 w-full rounded-[10px] border border-line-soft bg-black/25 object-contain"
       />
-    </div>
+    </ChartFrame>
   );
 }
 
@@ -194,32 +198,28 @@ export function MultiRunScalarChart({ metric }: { metric: MultiRunScalarMetric }
   const height = 104;
   const padding = 10;
   const points = metric.entries.flatMap((entry) => entry.series.points);
-  const steps = points.map((point) => point.step);
-  const values = points.map((point) => point.value);
-  const minStep = steps.length ? Math.min(...steps) : 0;
-  const maxStep = steps.length ? Math.max(...steps) : 1;
-  const minValue = values.length ? Math.min(...values) : 0;
-  const maxValue = values.length ? Math.max(...values) : 1;
-  const stepSpan = maxStep - minStep || 1;
-  const valueSpan = maxValue - minValue || 1;
-  const latestStep = steps.length ? Math.max(...steps) : undefined;
-
-  const coordinate = (point: ScalarSeries["points"][number]) => ({
-    x: padding + ((point.step - minStep) / stepSpan) * (width - padding * 2),
-    y: height - padding - ((point.value - minValue) / valueSpan) * (height - padding * 2),
+  const scale = buildLinearScale(points, {
+    width,
+    height,
+    padding,
   });
+  const latestStep = points.length ? scale.domain.maxStep : undefined;
+  const { minLabel, maxLabel } = formatChartDomain(scale.domain);
 
   return (
-    <div className="grid min-w-0 gap-2 p-3">
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-ink">{metric.key}</div>
-          <div className="truncate font-mono text-xs text-ink-dim">
-            {metric.entries.length} / {metric.entries.length + metric.missingRuns.length} runs
-          </div>
-        </div>
-        {latestStep !== undefined && <Badge>step {latestStep}</Badge>}
-      </div>
+    <ChartFrame
+      title={metric.key}
+      subtitle={`${metric.entries.length} / ${
+        metric.entries.length + metric.missingRuns.length
+      } runs`}
+      badge={latestStep !== undefined && <Badge>step {latestStep}</Badge>}
+      footer={
+        <>
+          <span>min {minLabel}</span>
+          <span>max {maxLabel}</span>
+        </>
+      }
+    >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
@@ -246,8 +246,8 @@ export function MultiRunScalarChart({ metric }: { metric: MultiRunScalarMetric }
         />
         {metric.entries.map((entry, index) => {
           const color = multiRunLineColors[index % multiRunLineColors.length];
-          const coordinates = entry.series.points.map(coordinate);
-          const path = coordinates.map((point) => `${point.x},${point.y}`).join(" ");
+          const coordinates = entry.series.points.map(scale.coordinate);
+          const path = buildChartPath(entry.series.points, scale);
           const singlePoint = coordinates[0];
 
           return entry.series.points.length === 1 && singlePoint ? (
@@ -293,11 +293,7 @@ export function MultiRunScalarChart({ metric }: { metric: MultiRunScalarMetric }
           </span>
         )}
       </div>
-      <div className="flex items-center justify-between gap-2 font-mono text-xs text-ink-dim">
-        <span>min {formatNumber(minValue)}</span>
-        <span>max {formatNumber(maxValue)}</span>
-      </div>
-    </div>
+    </ChartFrame>
   );
 }
 
