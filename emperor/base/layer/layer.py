@@ -111,12 +111,13 @@ class Layer(Module):
         self.last_layer_flag = True
 
     @staticmethod
-    def forward_returning_state(model: "Module", X: Tensor) -> "LayerState":
-        return model(LayerState(hidden=X))
+    def run_model_returning_state(model: "Module", X: Tensor) -> "LayerState":
+        input_state = LayerState(hidden=X)
+        return model(input_state)
 
     @staticmethod
-    def forward_with_state(model: "Module", X: Tensor) -> Tensor:
-        return Layer.forward_returning_state(model, X).hidden
+    def run_model_returning_hidden(model: "Module", X: Tensor) -> Tensor:
+        return Layer.run_model_returning_state(model, X).hidden
 
     def forward(
         self,
@@ -198,7 +199,7 @@ class Layer(Module):
 
     def __maybe_apply_gates(self, input: Tensor) -> Tensor:
         if self.gate_model is not None:
-            return self.forward_with_state(self.gate_model, input) * input
+            return self.run_model_returning_hidden(self.gate_model, input) * input
         return input
 
     def __maybe_apply_dropout(self, input: Tensor):
