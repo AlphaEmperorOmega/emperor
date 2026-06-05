@@ -3,6 +3,7 @@ import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfigSearchResults } from "@/components/features/viewer/config/config-search-results";
+import { DropdownShell } from "@/components/features/viewer/shared/dropdown-shell";
 import {
   type ConfigSearchOption,
   type OverrideValues,
@@ -162,11 +163,11 @@ export function ConfigFieldSearch({
       </div>
 
       {isPopupOpen && (
-        <div
+        <DropdownShell
           id={popupId}
           role="dialog"
-          aria-label="Matching config fields"
-          className="absolute left-0 right-0 top-full mt-2 max-h-[min(34rem,calc(100vh-14rem))] overflow-y-auto rounded-[12px] border border-line bg-panel/95 p-2 shadow-[0_22px_50px_-30px_rgba(0,0,0,0.98)] backdrop-blur"
+          ariaLabel="Matching config fields"
+          className="max-h-[min(34rem,calc(100vh-14rem))] overflow-y-auto p-2"
         >
           <ConfigSearchResults
             popupId={popupId}
@@ -179,7 +180,7 @@ export function ConfigFieldSearch({
             onFieldChange={onFieldChange}
             onFieldReset={onFieldReset}
           />
-        </div>
+        </DropdownShell>
       )}
     </div>
   );

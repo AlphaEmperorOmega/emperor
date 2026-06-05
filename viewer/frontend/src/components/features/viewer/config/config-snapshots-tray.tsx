@@ -9,7 +9,9 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
+import { SnapshotRestoreDialog } from "@/components/features/viewer/config/config-snapshot-dialogs";
 import {
   configSnapshotOverrideEntries,
   draftMatchesConfigSnapshot,
@@ -124,14 +126,14 @@ export function AddConfigSnapshotDialog({
               {preset && <span className="font-mono">{preset}</span>}
             </div>
           </div>
-          <button
-            type="button"
-            aria-label="Close add config snapshot"
+          <IconButton
+            label="Close add config snapshot"
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-[9px] border border-line-soft bg-white/[0.025] text-ink-faint transition hover:bg-white/[0.055] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            <X className="h-4 w-4" aria-hidden />
-          </button>
+            size="sm"
+            variant="edge"
+            className="rounded-[9px] border-line-soft bg-white/[0.025] hover:bg-white/[0.055]"
+            icon={<X className="h-4 w-4" aria-hidden />}
+          />
         </div>
 
         <label className="grid gap-1.5">
@@ -234,63 +236,22 @@ function SnapshotNameEditor({
         className="h-8 text-xs"
         autoFocus
       />
-      <button
-        type="button"
-        aria-label="Save snapshot name"
+      <IconButton
+        label="Save snapshot name"
         onClick={save}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-[8px] border border-ok/30 bg-ok/10 text-ok transition hover:bg-ok/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      >
-        <Check className="h-3.5 w-3.5" aria-hidden />
-      </button>
-      <button
-        type="button"
-        aria-label="Cancel snapshot rename"
+        size="sm"
+        variant="edge"
+        className="border-ok/30 bg-ok/10 text-ok hover:bg-ok/15 hover:text-ok"
+        icon={<Check className="h-3.5 w-3.5" aria-hidden />}
+      />
+      <IconButton
+        label="Cancel snapshot rename"
         onClick={onCancel}
-        className="grid h-8 w-8 shrink-0 place-items-center rounded-[8px] border border-line bg-white/[0.025] text-ink-faint transition hover:bg-white/[0.055] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      >
-        <X className="h-3.5 w-3.5" aria-hidden />
-      </button>
-    </div>
-  );
-}
-
-function ConfirmLoadSnapshotDialog({
-  snapshot,
-  onCancel,
-  onConfirm,
-}: {
-  snapshot: ConfigSnapshot;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/65 p-4 backdrop-blur-sm">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="load-config-snapshot-title"
-        className="edge grid w-full max-w-md gap-4 rounded-card p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]"
-      >
-        <div className="grid gap-1">
-          <h2
-            id="load-config-snapshot-title"
-            className="text-base font-semibold text-ink"
-          >
-            Load Snapshot
-          </h2>
-          <p className="text-sm leading-6 text-ink-dim">
-            Loading &quot;{snapshot.name}&quot; replaces the current draft overrides.
-          </p>
-        </div>
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={onConfirm}>
-            Load
-          </Button>
-        </div>
-      </section>
+        size="sm"
+        variant="edge"
+        className="bg-white/[0.025] hover:bg-white/[0.055]"
+        icon={<X className="h-3.5 w-3.5" aria-hidden />}
+      />
     </div>
   );
 }
@@ -410,22 +371,22 @@ export function ConfigSnapshotsTray({
                             </span>
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            <button
-                              type="button"
-                              aria-label={`Rename snapshot ${snapshot.name}`}
+                            <IconButton
+                              label={`Rename snapshot ${snapshot.name}`}
                               onClick={() => setEditingId(snapshot.id)}
-                              className="grid h-8 w-8 place-items-center rounded-[8px] border border-line bg-white/[0.025] text-ink-faint transition hover:bg-white/[0.055] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                            >
-                              <Pencil className="h-3.5 w-3.5" aria-hidden />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Remove snapshot ${snapshot.name}`}
+                              size="sm"
+                              variant="edge"
+                              className="bg-white/[0.025] hover:bg-white/[0.055]"
+                              icon={<Pencil className="h-3.5 w-3.5" aria-hidden />}
+                            />
+                            <IconButton
+                              label={`Remove snapshot ${snapshot.name}`}
                               onClick={() => onRemove(snapshot.id)}
-                              className="grid h-8 w-8 place-items-center rounded-[8px] border border-danger-line bg-danger-soft text-[#fda4af] transition hover:bg-[#7f1d2d]/40 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                            </button>
+                              size="sm"
+                              variant="danger"
+                              className="border-danger-line bg-danger-soft text-[#fda4af] hover:bg-[#7f1d2d]/40 hover:text-white"
+                              icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+                            />
                           </div>
                         </div>
                       )}
@@ -447,7 +408,7 @@ export function ConfigSnapshotsTray({
         </div>
       </section>
       {pendingLoadSnapshot && (
-        <ConfirmLoadSnapshotDialog
+        <SnapshotRestoreDialog
           snapshot={pendingLoadSnapshot}
           onCancel={() => setPendingLoadSnapshot(null)}
           onConfirm={confirmLoad}

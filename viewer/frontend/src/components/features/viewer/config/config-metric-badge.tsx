@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ListChecks, PencilLine, type LucideIcon } from "lucide-react";
+import { badgeVariantClassNames } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 type ConfigMetricKind = "fields" | "overrides";
@@ -44,7 +45,7 @@ export function ConfigMetricBadge({
       onMouseLeave={() => setIsTooltipVisible(false)}
       className={cn(
         "relative inline-flex h-[23px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] border border-line bg-white/[0.04] px-2 font-mono text-xs font-semibold leading-none text-ink-dim transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
-        variant === "override" && "border-violet/30 bg-violet/15 text-violet",
+        badgeVariantClassNames[variant],
       )}
     >
       <Icon className="h-3.5 w-3.5" aria-hidden />

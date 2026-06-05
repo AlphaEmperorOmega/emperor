@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { FilePlus2, RotateCcw, Terminal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
 import {
   type ConfigSearchOption,
   filterConfigSectionsForSearch,
@@ -19,6 +20,8 @@ import {
   AddConfigSnapshotDialog,
   ConfigSnapshotsTray,
 } from "@/components/features/viewer/config/config-snapshots-tray";
+import { DialogShell } from "@/components/features/viewer/shared/dialog-shell";
+import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
 import { useConfigDialogSections } from "@/components/features/viewer/config/use-config-dialog-sections";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useTargetConfig } from "@/components/features/viewer/providers/viewer-providers";
@@ -111,13 +114,11 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6">
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="full-config-title"
-        className="edge full-config-dialog-shell flex max-h-[calc(100vh-1.5rem)] w-full max-w-[92rem] flex-col overflow-hidden rounded-card shadow-[0_24px_80px_rgba(0,0,0,0.58)] sm:max-h-[calc(100vh-3rem)]"
-      >
+    <DialogShell
+      size="fullscreen"
+      titleId="full-config-title"
+      panelClassName="full-config-dialog-shell"
+      header={
         <header className="full-config-dialog-chrome full-config-dialog-header sticky top-0 z-10 border-b border-line-soft px-4 py-3 backdrop-blur sm:px-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -147,99 +148,22 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
                 <Badge variant="preset">{presetOwnedFieldCount} preset</Badge>
               )}
               {configSnapshotCount > 0 && (
-                <Badge className="border-ok/30 bg-ok/10 text-ok">
+                <Badge variant="success">
                   {configSnapshotCount} snapshots
                 </Badge>
               )}
-              <button
-                type="button"
-                aria-label="Close full config"
+              <IconButton
+                label="Close full config"
                 onClick={onClose}
-                className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-line-soft bg-white/[0.025] text-ink-faint shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] transition hover:border-line hover:bg-white/[0.055] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
+                variant="edge"
+                className="border-line-soft bg-white/[0.025] shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] hover:border-line hover:bg-white/[0.055]"
+                icon={<X className="h-4 w-4" aria-hidden />}
+              />
             </div>
           </div>
         </header>
-
-        <div className="full-config-dialog-body min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          {isLoading ? (
-            <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-4 text-sm text-ink-faint">
-              Loading config schema...
-            </div>
-          ) : fieldCount === 0 ? (
-            <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-4 text-sm text-ink-faint">
-              No config fields
-            </div>
-          ) : (
-            <div className="grid min-h-0 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-              {configSnapshotGroups.length > 0 && (
-                <div className="lg:col-span-2">
-                  <ConfigSnapshotsTray
-                    groups={configSnapshotGroups}
-                    selectedPreset={preset}
-                    overrides={overrides}
-                    onLoad={loadConfigSnapshot}
-                    onRename={renameConfigSnapshot}
-                    onRemove={removeConfigSnapshot}
-                  />
-                </div>
-              )}
-              <div className="lg:col-span-2">
-                <ConfigFieldSearch
-                  options={searchOptions}
-                  query={searchQuery}
-                  selectedFieldKey={selectedFieldKey}
-                  overrides={overrides}
-                  onQueryChange={handleSearchQueryChange}
-                  onClear={handleSearchClear}
-                  onSelect={handleSearchSelect}
-                  onFieldChange={onFieldChange}
-                  onFieldReset={onFieldReset}
-                />
-              </div>
-              <SectionNavigation
-                sections={visibleSections}
-                overrides={overrides}
-                openSectionTitles={openSectionTitles}
-                areAllSectionsOpen={areAllSectionsOpen}
-                emptyMessage={isSearchActive ? "No matching sections" : undefined}
-                onJumpToSection={jumpToSection}
-                onToggleSection={toggleSection}
-                onToggleAllSections={toggleAllSections}
-              />
-              <div className="grid auto-rows-max items-start gap-3">
-                {visibleSections.length > 0 ? (
-                  visibleSections.map((section, index) => {
-                    const sectionId = sectionElementId(index, section.title);
-                    return (
-                      <ConfigSectionAccordion
-                        key={section.title}
-                        id={sectionId}
-                        refCallback={(element) => {
-                          sectionRefs.current[section.title] = element;
-                        }}
-                        title={section.title}
-                        fields={section.fields}
-                        overrides={overrides}
-                        isOpen={openSectionTitles.has(section.title)}
-                        onToggle={() => toggleSection(section.title)}
-                        onFieldChange={onFieldChange}
-                        onFieldReset={onFieldReset}
-                      />
-                    );
-                  })
-                ) : (
-                  <div className="rounded-[12px] border border-dashed border-line-soft bg-black/20 px-4 py-6 text-sm text-ink-dim">
-                    {`No config fields match "${searchQuery.trim()}".`}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
+      }
+      footer={
         <footer className="full-config-dialog-chrome full-config-dialog-footer sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-line-soft px-4 py-3 backdrop-blur sm:px-5">
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -272,28 +196,109 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
             </Button>
           </div>
         </footer>
-      </section>
-      {isTrainingCommandOpen && (
-        <TrainingCommandDialog
-          model={model}
-          preset={preset}
-          trainingCommand={trainingCommand}
-          copyStatus={copyStatus}
-          onCopy={copyTrainingCommand}
-          onClose={() => setIsTrainingCommandOpen(false)}
-        />
-      )}
-      {isAddSnapshotOpen && (
-        <AddConfigSnapshotDialog
-          model={model}
-          preset={preset}
-          fields={configFields}
-          overrides={overrides}
-          snapshots={configSnapshots}
-          onAdd={addConfigSnapshot}
-          onClose={() => setIsAddSnapshotOpen(false)}
-        />
-      )}
-    </div>
+      }
+      overlayChildren={
+        <>
+          {isTrainingCommandOpen && (
+            <TrainingCommandDialog
+              model={model}
+              preset={preset}
+              trainingCommand={trainingCommand}
+              copyStatus={copyStatus}
+              onCopy={copyTrainingCommand}
+              onClose={() => setIsTrainingCommandOpen(false)}
+            />
+          )}
+          {isAddSnapshotOpen && (
+            <AddConfigSnapshotDialog
+              model={model}
+              preset={preset}
+              fields={configFields}
+              overrides={overrides}
+              snapshots={configSnapshots}
+              onAdd={addConfigSnapshot}
+              onClose={() => setIsAddSnapshotOpen(false)}
+            />
+          )}
+        </>
+      }
+    >
+      <div className="full-config-dialog-body min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+        {isLoading ? (
+          <InlineStatus>
+            Loading config schema...
+          </InlineStatus>
+        ) : fieldCount === 0 ? (
+          <InlineStatus>
+            No config fields
+          </InlineStatus>
+        ) : (
+          <div className="grid min-h-0 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+            {configSnapshotGroups.length > 0 && (
+              <div className="lg:col-span-2">
+                <ConfigSnapshotsTray
+                  groups={configSnapshotGroups}
+                  selectedPreset={preset}
+                  overrides={overrides}
+                  onLoad={loadConfigSnapshot}
+                  onRename={renameConfigSnapshot}
+                  onRemove={removeConfigSnapshot}
+                />
+              </div>
+            )}
+            <div className="lg:col-span-2">
+              <ConfigFieldSearch
+                options={searchOptions}
+                query={searchQuery}
+                selectedFieldKey={selectedFieldKey}
+                overrides={overrides}
+                onQueryChange={handleSearchQueryChange}
+                onClear={handleSearchClear}
+                onSelect={handleSearchSelect}
+                onFieldChange={onFieldChange}
+                onFieldReset={onFieldReset}
+              />
+            </div>
+            <SectionNavigation
+              sections={visibleSections}
+              overrides={overrides}
+              openSectionTitles={openSectionTitles}
+              areAllSectionsOpen={areAllSectionsOpen}
+              emptyMessage={isSearchActive ? "No matching sections" : undefined}
+              onJumpToSection={jumpToSection}
+              onToggleSection={toggleSection}
+              onToggleAllSections={toggleAllSections}
+            />
+            <div className="grid auto-rows-max items-start gap-3">
+              {visibleSections.length > 0 ? (
+                visibleSections.map((section, index) => {
+                  const sectionId = sectionElementId(index, section.title);
+                  return (
+                    <ConfigSectionAccordion
+                      key={section.title}
+                      id={sectionId}
+                      refCallback={(element) => {
+                        sectionRefs.current[section.title] = element;
+                      }}
+                      title={section.title}
+                      fields={section.fields}
+                      overrides={overrides}
+                      isOpen={openSectionTitles.has(section.title)}
+                      onToggle={() => toggleSection(section.title)}
+                      onFieldChange={onFieldChange}
+                      onFieldReset={onFieldReset}
+                    />
+                  );
+                })
+              ) : (
+                <div className="rounded-[12px] border border-dashed border-line-soft bg-black/20 px-4 py-6 text-sm text-ink-dim">
+                  {`No config fields match "${searchQuery.trim()}".`}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </DialogShell>
   );
 }
