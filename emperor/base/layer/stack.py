@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from torch.nn import Sequential
+from torch.nn import ModuleList
 from emperor.base.utils import Module
 from emperor.base.options import (
     ActivationOptions,
@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from .state import LayerState
 
 
 class LayerStack(Module):
@@ -41,21 +42,31 @@ class LayerStack(Module):
         self.apply_output_pipeline_flag: bool = self.cfg.apply_output_pipeline_flag
         self.layer_config: LayerConfig = self.cfg.layer_config
 
-    def build(self) -> Layer | Sequential:
-        layers = []
+        self.layers = self.__build_layer_stack()
 
+    def __build_layer_stack(self) -> ModuleList:
+        layers = []
         layer_adjustment = self.__add_initial_layer(layers)
         self.__add_hidden_layers(layers, layer_adjustment)
         self.__add_output_layer(layers)
         self.__maybe_share_halting_model(layers)
 
-        if len(layers) == 1:
-            [model] = layers
-            self._initialize_parameters(model)
-            return model
-        model = Sequential(*layers)
-        self._initialize_parameters(model)
-        return model
+        self._initialize_parameters(*layers)
+        return ModuleList(layers)
+
+    def forward(self, state: "LayerState") -> "LayerState":
+        for layer in self.layers:
+            state = layer(state)
+        return state
+
+    def __iter__(self):
+        return iter(self.layers)
+
+    def __getitem__(self, index: int) -> Layer:
+        return self.layers[index]
+
+    def __len__(self) -> int:
+        return len(self.layers)
 
     def __add_initial_layer(self, layers: list) -> int:
         if self.input_dim != self.hidden_dim and self.num_layers > 1:

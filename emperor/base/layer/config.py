@@ -9,9 +9,6 @@ from emperor.base.options import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from torch.nn import Sequential
-    from emperor.base.layer.layer import Layer
-    from emperor.base.layer.recurrent import RecurrentLayer
     from emperor.halting.config import HaltingConfig
     from emperor.memory.config import DynamicMemoryConfig
 
@@ -75,12 +72,10 @@ class LayerStackConfig(ConfigBase):
         "between intermediate and output layers."
     )
 
-    def build(
-        self, overrides: "LayerStackConfig | None" = None
-    ) -> "Layer | Sequential":
+    def _registry_owner(self) -> type:
         from emperor.base.layer.stack import LayerStack
 
-        return LayerStack(self, overrides).build()
+        return LayerStack
 
 
 @dataclass
