@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   cancelTrainingJob,
   createTrainingJob,
@@ -15,6 +15,8 @@ import {
   LARGE_GRID_RUN_THRESHOLD,
   type TrainingSearchState,
 } from "@/lib/training-search";
+import { useLogQueryCache } from "@/hooks/use-log-query-cache";
+import { trainingQueryKeys } from "@/lib/query-keys";
 import { errorMessage } from "@/lib/utils";
 
 const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
@@ -59,27 +61,20 @@ export function useTrainingJobController({
   onJobStarted,
 }: UseTrainingJobControllerInput) {
   const [planNonce, setPlanNonce] = useState(0);
-  const [submittedPlanKey, setSubmittedPlanKey] = useState("");
   const [pendingTrainingRequest, setPendingTrainingRequest] =
     useState<TrainingJobCreateInput | null>(null);
-  const queryClient = useQueryClient();
-  const refreshLogWorkspaceQueries = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["log-experiments"] });
-    void queryClient.invalidateQueries({ queryKey: ["log-runs"] });
-    queryClient.removeQueries({ queryKey: ["log-tags"] });
-    queryClient.removeQueries({ queryKey: ["log-scalars"] });
-  }, [queryClient]);
+  const { refreshAfterMutation } = useLogQueryCache();
   const createMutation = useMutation({
     mutationFn: createTrainingJob,
     onSuccess: (job) => {
       onActiveJobIdChange(job.id);
       onJobChange(job);
       onJobStarted();
-      refreshLogWorkspaceQueries();
+      void refreshAfterMutation();
     },
   });
   const jobQuery = useQuery({
-    queryKey: ["training-job", activeJobId],
+    queryKey: trainingQueryKeys.job(activeJobId),
     queryFn: () => fetchTrainingJob(activeJobId ?? ""),
     enabled: activeJobId !== null,
     refetchInterval: (query) => {
@@ -92,7 +87,7 @@ export function useTrainingJobController({
     onSuccess: (job) => {
       onActiveJobIdChange(job.id);
       onJobChange(job);
-      refreshLogWorkspaceQueries();
+      void refreshAfterMutation();
     },
   });
   const job = jobQuery.data ?? createMutation.data;
@@ -105,9 +100,9 @@ export function useTrainingJobController({
       return;
     }
     if (job.logDir || terminalStatuses.has(job.status)) {
-      refreshLogWorkspaceQueries();
+      void refreshAfterMutation();
     }
-  }, [job, refreshLogWorkspaceQueries]);
+  }, [job, refreshAfterMutation]);
 
   const planRequest = useMemo(
     () =>
@@ -158,7 +153,7 @@ export function useTrainingJobController({
     ],
   );
   const runPlanQuery = useQuery({
-    queryKey: ["training-run-plan", planNonce, planInputKey],
+    queryKey: trainingQueryKeys.runPlan(planNonce, planInputKey),
     queryFn: () => {
       if (!planRequest) {
         throw new Error("Training run plan request is not ready.");
@@ -172,12 +167,11 @@ export function useTrainingJobController({
   });
 
   const isRunning = job?.status === "running" || job?.status === "queued";
-  const activeJobRunPlan =
-    job?.runPlan && (isRunning || submittedPlanKey === planInputKey)
-      ? job.runPlan
-      : undefined;
-  const currentRunPlan = activeJobRunPlan ?? submittedRunPlan ?? runPlanQuery.data;
-  const runPlanSummary = currentRunPlan?.summary;
+  const draftRunPlan = submittedRunPlan ?? runPlanQuery.data;
+  const jobRunPlan = job?.runPlan ?? undefined;
+  const progressRunPlan = jobRunPlan ?? draftRunPlan;
+  const draftRunPlanSummary = draftRunPlan?.summary;
+  const progressRunPlanSummary = progressRunPlan?.summary;
   const isPlanning =
     canPlan &&
     !submittedRunPlan &&
@@ -186,22 +180,24 @@ export function useTrainingJobController({
     !submittedRunPlan && runPlanQuery.isError
       ? errorMessage(runPlanQuery.error)
       : "";
+  const isProgressPlanning = jobRunPlan ? false : isPlanning;
+  const progressPlanError = jobRunPlan ? "" : planError;
   const canStart = Boolean(
     canPlan &&
       hasValidLogFolder &&
-      currentRunPlan &&
+      draftRunPlan &&
       !isPlanning &&
       !planError &&
       !isRunning &&
       !createMutation.isPending,
   );
-  const displayedRunCount = runPlanSummary?.totalRuns ?? plannedRunCount;
+  const displayedRunCount = draftRunPlanSummary?.totalRuns ?? plannedRunCount;
   const canResampleRunPlan = Boolean(
     trainingSearch.mode === "random" &&
       !submittedRunPlan &&
       !isRunning &&
-      !activeJobRunPlan &&
-      runPlanQuery.data,
+      !jobRunPlan &&
+      draftRunPlan,
   );
   const trainingError =
     createMutation.isError || jobQuery.isError || cancelMutation.isError
@@ -211,7 +207,7 @@ export function useTrainingJobController({
       : "";
 
   function trainingRequest(): TrainingJobCreateInput | null {
-    if (!currentRunPlan) {
+    if (!draftRunPlan) {
       return null;
     }
     return {
@@ -223,12 +219,11 @@ export function useTrainingJobController({
       logFolder,
       monitors: selectedMonitors,
       ...(searchPayload ? { search: searchPayload } : {}),
-      runPlan: currentRunPlan,
+      runPlan: draftRunPlan,
     };
   }
 
   function submitTrainingRequest(request: TrainingJobCreateInput) {
-    setSubmittedPlanKey(planInputKey);
     createMutation.mutate(request);
   }
 
@@ -270,11 +265,14 @@ export function useTrainingJobController({
 
   return {
     job,
-    currentRunPlan,
-    runPlanSummary,
+    draftRunPlan,
+    progressRunPlan,
+    progressRunPlanSummary,
     displayedRunCount,
     isPlanning,
     planError,
+    isProgressPlanning,
+    progressPlanError,
     isRunning,
     canStart,
     canResampleRunPlan,

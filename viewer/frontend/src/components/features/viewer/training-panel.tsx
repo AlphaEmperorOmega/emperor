@@ -26,6 +26,10 @@ import { Select } from "@/components/ui/select";
 import { TrainingSearchSetup } from "@/components/features/viewer/training-search-setup";
 import { ViewModeButton } from "@/components/features/viewer/view-mode-button";
 import { MultiSelectDropdown } from "@/components/features/viewer/screen/multi-select-dropdown";
+import { DialogShell } from "@/components/features/viewer/shared/dialog-shell";
+import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
+import { SectionHeading } from "@/components/features/viewer/shared/section-heading";
+import { StatChip } from "@/components/features/viewer/shared/stat-chip";
 import {
   type Dataset,
   type MonitorOption,
@@ -53,6 +57,7 @@ import {
 } from "@/lib/training-search";
 import { metricLabel, overrideSummary } from "@/lib/training/summary";
 import { TrainingTargetDatasetPanel } from "@/components/features/viewer/training/training-target-dataset-panel";
+import { TrainingFooterField } from "@/components/features/viewer/training/training-footer-field";
 import { TrainingProgressDialog } from "@/components/features/viewer/training/training-progress-dialog";
 import { useTrainingJobController } from "@/components/features/viewer/training/use-training-job-controller";
 
@@ -98,14 +103,8 @@ type TrainingPanelProps = {
 
 const LOG_FOLDER_RE = /^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*$/;
 type LogFolderMode = "existing" | "new";
-const footerHeadingClass =
-  "flex items-center gap-2 text-xs font-bold uppercase tracking-[0.09em] text-ink-dim";
 const footerFieldLabelClass =
   "flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-ink-faint";
-const footerFieldBoxClass =
-  "grid content-start gap-1.5 rounded-[10px] border border-line bg-white/[0.018] px-2.5 py-2";
-const footerFieldHeaderClass =
-  "flex min-h-[38px] flex-wrap items-center justify-between gap-2";
 const footerIconClass = "h-[15px] w-[15px] text-violet";
 
 export function TrainingPanel({
@@ -285,11 +284,11 @@ export function TrainingPanel({
   );
   const {
     job,
-    currentRunPlan,
-    runPlanSummary,
+    progressRunPlan,
+    progressRunPlanSummary,
     displayedRunCount,
-    isPlanning,
-    planError,
+    isProgressPlanning,
+    progressPlanError,
     isRunning,
     canStart,
     canResampleRunPlan,
@@ -346,12 +345,12 @@ export function TrainingPanel({
   const plannedRunLabel = `${displayedRunCount} planned run${
     displayedRunCount === 1 ? "" : "s"
   }`;
-  const progressButtonLabel = isPlanning
+  const progressButtonLabel = isProgressPlanning
     ? "Planning..."
-    : planError
+    : progressPlanError
       ? "Plan error"
-      : runPlanSummary
-        ? `${runPlanSummary.completedRuns} / ${runPlanSummary.totalRuns} runs · ${runPlanSummary.remainingEpochs} epochs left`
+      : progressRunPlanSummary
+        ? `${progressRunPlanSummary.completedRuns} / ${progressRunPlanSummary.totalRuns} runs · ${progressRunPlanSummary.remainingEpochs} epochs left`
         : "Progress";
   const logFolderModeControl = (
     <SegmentedControl aria-label="Log folder mode">
@@ -453,10 +452,10 @@ export function TrainingPanel({
           <Button
             variant="secondary"
             onClick={() => setIsProgressOpen(true)}
-            disabled={!currentRunPlan && !isPlanning && !planError}
+            disabled={!progressRunPlan && !isProgressPlanning && !progressPlanError}
             className="h-10 px-3 text-sm"
           >
-            {isPlanning ? (
+            {isProgressPlanning ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             ) : (
               <ListChecks className="h-4 w-4" aria-hidden />
@@ -488,14 +487,15 @@ export function TrainingPanel({
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="grid gap-2">
                 {logFolderMode === "existing" ? (
-                  <div className="grid content-start gap-1.5 rounded-[10px] border border-line bg-white/[0.018] px-2.5 py-2">
-                    <div className={footerFieldHeaderClass}>
+                  <TrainingFooterField
+                    label={
                       <span className={footerFieldLabelClass}>
                         <FolderOpen className={footerIconClass} aria-hidden />
                         Existing folder
                       </span>
-                      {logFolderModeControl}
-                    </div>
+                    }
+                    actions={logFolderModeControl}
+                  >
                     <Select
                       value={selectedExistingLogFolder}
                       onChange={(event) =>
@@ -524,16 +524,17 @@ export function TrainingPanel({
                           ? "No safe experiment folders found"
                           : "Select a top-level logs folder"}
                     </span>
-                  </div>
+                  </TrainingFooterField>
                 ) : (
-                  <div className="grid content-start gap-1.5 rounded-[10px] border border-line bg-white/[0.018] px-2.5 py-2">
-                    <div className={footerFieldHeaderClass}>
+                  <TrainingFooterField
+                    label={
                       <span className={footerFieldLabelClass}>
                         <FolderPlus className={footerIconClass} aria-hidden />
                         New folder
                       </span>
-                      {logFolderModeControl}
-                    </div>
+                    }
+                    actions={logFolderModeControl}
+                  >
                     <Input
                       value={newLogFolder}
                       onChange={(event) => setNewLogFolder(event.target.value)}
@@ -558,7 +559,7 @@ export function TrainingPanel({
                     >
                       {newLogFolderError || "Folder name is valid"}
                     </span>
-                  </div>
+                  </TrainingFooterField>
                 )}
               </div>
 
@@ -584,16 +585,11 @@ export function TrainingPanel({
                 presentation="footer"
               />
 
-              <div className={footerFieldBoxClass}>
-                <div className={footerFieldHeaderClass}>
-                  <div className={footerHeadingClass}>
-                    <Activity className={footerIconClass} aria-hidden />
-                    Monitors
-                  </div>
-                  <span className="rounded-[7px] border border-line bg-white/[0.04] px-2 py-1 font-mono text-xs text-ink-dim">
-                    {monitorCount}
-                  </span>
-                </div>
+              <TrainingFooterField
+                icon={<Activity className={footerIconClass} aria-hidden />}
+                label="Monitors"
+                detail={<StatChip>{monitorCount}</StatChip>}
+              >
                 <MultiSelectDropdown
                   label="Training monitors"
                   values={selectedMonitors}
@@ -603,24 +599,24 @@ export function TrainingPanel({
                   emptyMessage="No optional monitors for this model"
                 />
                 {monitorsLoading && (
-                  <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+                  <InlineStatus compact>
                     Loading monitor options
-                  </div>
+                  </InlineStatus>
                 )}
                 {!monitorsLoading && monitorOptions.length === 0 && (
-                  <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+                  <InlineStatus compact>
                     No optional monitors for this model
-                  </div>
+                  </InlineStatus>
                 )}
-              </div>
+              </TrainingFooterField>
 
-              <div className={footerFieldBoxClass}>
-                <div className={`min-w-0 ${footerFieldHeaderClass}`}>
-                  <div className={footerHeadingClass}>
-                    <SlidersHorizontal className={footerIconClass} aria-hidden />
-                    Overrides
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              <TrainingFooterField
+                icon={
+                  <SlidersHorizontal className={footerIconClass} aria-hidden />
+                }
+                label="Overrides"
+                detail={
+                  <>
                     <Badge>{fieldCount} fields</Badge>
                     <Badge
                       className={
@@ -636,17 +632,20 @@ export function TrainingPanel({
                         {configSnapshotCount} snapshots
                       </Badge>
                     )}
-                    <Button
-                      variant="ghost"
-                      onClick={onResetOverrides}
-                      disabled={overrideCount === 0}
-                      className="h-8 border border-line bg-white/[0.025] px-2.5 text-xs"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-                      Reset
-                    </Button>
-                  </div>
-                </div>
+                  </>
+                }
+                actions={
+                  <Button
+                    variant="ghost"
+                    onClick={onResetOverrides}
+                    disabled={overrideCount === 0}
+                    className="h-8 border border-line bg-white/[0.025] px-2.5 text-xs"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                    Reset
+                  </Button>
+                }
+              >
                 <Button
                   variant="primary"
                   aria-label="Open Full Config"
@@ -658,14 +657,14 @@ export function TrainingPanel({
                   Config
                 </Button>
                 {configSections.length === 0 && (
-                  <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+                  <InlineStatus compact>
                     Select a model and preset to load config fields
-                  </div>
+                  </InlineStatus>
                 )}
-              </div>
+              </TrainingFooterField>
             </div>
 
-            <div className={footerFieldBoxClass}>
+            <TrainingFooterField label={null}>
               <TrainingSearchSetup
                 axes={searchAxes}
                 search={effectiveTrainingSearch}
@@ -680,14 +679,12 @@ export function TrainingPanel({
                 }
                 onChange={onTrainingSearchChange}
               />
-            </div>
+            </TrainingFooterField>
           </div>
 
           <aside className="grid gap-3">
             <div className="edge grid gap-2 rounded-card p-3">
-              <div className="text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-                Request
-              </div>
+              <SectionHeading title="Request" />
               <div className="grid gap-1.5 text-xs text-ink-dim">
                 <div className="truncate font-mono">
                   {selectedModel || "No model"}
@@ -751,9 +748,7 @@ export function TrainingPanel({
 
             {clusterGrowth.length > 0 && (
               <div className="edge grid gap-2 rounded-card p-3">
-                <div className="text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-                  Cluster growth
-                </div>
+                <SectionHeading title="Cluster growth" />
                 <div className="grid gap-1.5">
                   {clusterGrowth.map((summary) => (
                     <div
@@ -800,9 +795,7 @@ export function TrainingPanel({
             )}
 
             <div className="edge grid gap-2 rounded-card p-3">
-              <div className="text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-                Log Tail
-              </div>
+              <SectionHeading title="Log Tail" />
               <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-[10px] border border-line bg-black/25 p-2 font-mono text-xs leading-5 text-ink-dim">
                 {(job?.logTail.length
                   ? job.logTail
@@ -821,9 +814,9 @@ export function TrainingPanel({
       )}
       {isProgressOpen && (
         <TrainingProgressDialog
-          plan={currentRunPlan}
-          isLoading={isPlanning}
-          error={planError}
+          plan={progressRunPlan}
+          isLoading={isProgressPlanning}
+          error={progressPlanError}
           canResample={canResampleRunPlan}
           isResampling={isResampling}
           onResample={resampleRunPlan}
@@ -833,13 +826,12 @@ export function TrainingPanel({
         />
       )}
       {showLargeGridConfirmation && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="large-grid-search-title"
-            className="edge grid w-full max-w-md gap-4 rounded-card p-4 shadow-[0_24px_80px_-30px_rgba(0,0,0,0.9)]"
-          >
+        <DialogShell
+          titleId="large-grid-search-title"
+          size="sm"
+          className="grid place-items-center bg-black/65 p-4 sm:p-4"
+          panelClassName="grid max-h-none max-w-md gap-4 overflow-visible p-4 shadow-[0_24px_80px_-30px_rgba(0,0,0,0.9)] sm:max-h-none"
+          header={
             <div className="grid gap-1">
               <h2
                 id="large-grid-search-title"
@@ -853,23 +845,24 @@ export function TrainingPanel({
                 {selectedDatasets.length} datasets.
               </p>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={cancelLargeGridSearch}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={confirmLargeGridSearch}
-                disabled={isStarting}
-              >
-                {isStarting && (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                )}
-                Start Training
-              </Button>
-            </div>
+          }
+        >
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={cancelLargeGridSearch}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={confirmLargeGridSearch}
+              disabled={isStarting}
+            >
+              {isStarting && (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              )}
+              Start Training
+            </Button>
           </div>
-        </div>
+        </DialogShell>
       )}
     </section>
   );

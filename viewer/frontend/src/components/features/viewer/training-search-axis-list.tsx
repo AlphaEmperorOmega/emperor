@@ -6,12 +6,9 @@ import {
   configValueLabel,
   type TrainingSearchState,
 } from "@/lib/training-search";
+import { valueIsSelected } from "@/lib/selection";
 import { cn } from "@/lib/utils";
-
-function valueIsSelected(values: ConfigValue[] | undefined, value: ConfigValue) {
-  const key = configValueKey(value);
-  return Boolean(values?.some((candidate) => configValueKey(candidate) === key));
-}
+import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
 
 function selectedValueCount(axis: SearchAxis, search: TrainingSearchState) {
   return search.selectedValues[axis.key]?.length ?? 0;
@@ -79,7 +76,10 @@ export function TrainingSearchAxisList({
 
             <div className="flex flex-wrap gap-1.5">
               {axis.values.map((value) => {
-                const checked = valueIsSelected(search.selectedValues[axis.key], value);
+                const checked = valueIsSelected(
+                  search.selectedValues[axis.key] ?? [],
+                  value,
+                );
                 const label = configValueLabel(value);
                 return (
                   <label
@@ -108,14 +108,14 @@ export function TrainingSearchAxisList({
         );
       })}
       {!isLoading && axes.length === 0 && (
-        <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+        <InlineStatus compact>
           No search axes for this model
-        </div>
+        </InlineStatus>
       )}
       {isLoading && (
-        <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+        <InlineStatus compact>
           Loading search axes
-        </div>
+        </InlineStatus>
       )}
     </div>
   );

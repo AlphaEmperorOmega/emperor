@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SectionHeading } from "@/components/features/viewer/shared/section-heading";
 import { TrainingSearchAxisList } from "@/components/features/viewer/training-search-axis-list";
 import { ViewModeButton } from "@/components/features/viewer/view-mode-button";
 import {
@@ -11,10 +12,10 @@ import {
   type SearchAxis,
 } from "@/lib/api";
 import { type OverrideValues } from "@/lib/config";
+import { configValueEquals, valueIsSelected } from "@/lib/selection";
 import {
   DEFAULT_RANDOM_SEARCH_SAMPLES,
   DEFAULT_TRAINING_SEARCH_STATE,
-  configValueKey,
   estimateGridCombinations,
   estimatePlannedRuns,
   searchOverrideConflictKeys,
@@ -33,11 +34,6 @@ type TrainingSearchSetupProps = {
   disabledReason?: string;
   onChange: Dispatch<SetStateAction<TrainingSearchState>>;
 };
-
-function valueIsSelected(values: ConfigValue[] | undefined, value: ConfigValue) {
-  const key = configValueKey(value);
-  return Boolean(values?.some((candidate) => configValueKey(candidate) === key));
-}
 
 function updateSelectedValues(
   current: TrainingSearchState,
@@ -114,7 +110,7 @@ export function TrainingSearchSetup({
       const values = current.selectedValues[axis.key] ?? [];
       const selected = valueIsSelected(values, value);
       const nextValues = selected
-        ? values.filter((candidate) => configValueKey(candidate) !== configValueKey(value))
+        ? values.filter((candidate) => !configValueEquals(candidate, value))
         : [...values, value];
       return updateSelectedValues(current, axis.key, nextValues);
     });
@@ -152,10 +148,10 @@ export function TrainingSearchSetup({
   return (
     <div className="grid gap-2">
       <div className="flex min-h-[38px] flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-          <Search className="h-[15px] w-[15px] text-violet" aria-hidden />
-          Grid Search
-        </div>
+        <SectionHeading
+          icon={<Search className="h-[15px] w-[15px] text-violet" aria-hidden />}
+          title="Grid Search"
+        />
         <SegmentedControl aria-label="Training search mode">
           <ViewModeButton
             active={search.mode === "off"}

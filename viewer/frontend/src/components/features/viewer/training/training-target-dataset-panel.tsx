@@ -2,20 +2,17 @@ import { Database, Layers, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MultiSelectDropdown } from "@/components/features/viewer/screen/multi-select-dropdown";
 import { SelectOnlyDropdown } from "@/components/features/viewer/screen/select-only-dropdown";
+import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
+import { SectionHeading } from "@/components/features/viewer/shared/section-heading";
+import { StatChip } from "@/components/features/viewer/shared/stat-chip";
+import { TrainingFooterField } from "@/components/features/viewer/training/training-footer-field";
 import { type Dataset } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 type SelectOption = {
   value: string;
   label: string;
 };
 
-const footerFieldBoxClass =
-  "grid content-start gap-1.5 rounded-[10px] border border-line bg-white/[0.018] px-2.5 py-2";
-const footerFieldHeaderClass =
-  "flex min-h-[38px] flex-wrap items-center justify-between gap-2";
-const footerHeadingClass =
-  "flex items-center gap-2 text-xs font-bold uppercase tracking-[0.09em] text-ink-dim";
 const footerIconClass = "h-[15px] w-[15px] text-violet";
 const defaultFieldLabelClass =
   "text-xs font-semibold tracking-[0.02em] text-ink-dim";
@@ -121,61 +118,33 @@ export function TrainingTargetDatasetPanel({
     }
   }
 
-  const modelField = (
-    <div
-      className={cn(
-        "grid min-w-0 gap-1.5",
-        isFooterPresentation && footerFieldBoxClass,
-      )}
+  const modelControl = (
+    <SelectOnlyDropdown
+      label="training model"
+      value={selectedModel}
+      options={modelOptions}
+      onChange={onSelectModel}
+      placeholder="Select model"
+    />
+  );
+
+  const modelField = isFooterPresentation ? (
+    <TrainingFooterField
+      className="min-w-0"
+      icon={<Layers className={footerIconClass} aria-hidden />}
+      label="Model"
     >
-      {isFooterPresentation ? (
-        <div className={footerFieldHeaderClass}>
-          <span className={footerHeadingClass}>
-            <Layers className={footerIconClass} aria-hidden />
-            Model
-          </span>
-        </div>
-      ) : (
-        <span className={defaultFieldLabelClass}>Model</span>
-      )}
-      <SelectOnlyDropdown
-        label="training model"
-        value={selectedModel}
-        options={modelOptions}
-        onChange={onSelectModel}
-        placeholder="Select model"
-      />
+      {modelControl}
+    </TrainingFooterField>
+  ) : (
+    <div className="grid min-w-0 gap-1.5">
+      <span className={defaultFieldLabelClass}>Model</span>
+      {modelControl}
     </div>
   );
 
-  const presetsField = (
-    <div
-      className={cn(
-        "grid min-w-0 gap-1.5",
-        isFooterPresentation && footerFieldBoxClass,
-      )}
-    >
-      <div
-        className={
-          isFooterPresentation
-            ? footerFieldHeaderClass
-            : "flex flex-wrap items-center justify-between gap-2"
-        }
-      >
-        <div
-          className={
-            isFooterPresentation ? footerHeadingClass : defaultFieldLabelClass
-          }
-        >
-          {isFooterPresentation && (
-            <SlidersHorizontal className={footerIconClass} aria-hidden />
-          )}
-          Presets
-        </div>
-        <span className="rounded-[7px] border border-line bg-white/[0.04] px-2 py-1 font-mono text-xs text-ink-dim">
-          {trainingPresetCount}
-        </span>
-      </div>
+  const presetsControls = (
+    <>
       <MultiSelectDropdown
         label="Presets"
         values={selectedTrainingPresets}
@@ -188,9 +157,9 @@ export function TrainingTargetDatasetPanel({
         emptyMessage="No presets for this model"
       />
       {presetOptions.length === 0 && (
-        <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+        <InlineStatus compact>
           No presets for this model
-        </div>
+        </InlineStatus>
       )}
       <div className="grid grid-cols-2 gap-2">
         <Button
@@ -210,31 +179,30 @@ export function TrainingTargetDatasetPanel({
           Primary only
         </Button>
       </div>
+    </>
+  );
+
+  const presetsField = isFooterPresentation ? (
+    <TrainingFooterField
+      className="min-w-0"
+      icon={<SlidersHorizontal className={footerIconClass} aria-hidden />}
+      label="Presets"
+      detail={<StatChip>{trainingPresetCount}</StatChip>}
+    >
+      {presetsControls}
+    </TrainingFooterField>
+  ) : (
+    <div className="grid min-w-0 gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className={defaultFieldLabelClass}>Presets</div>
+        <StatChip>{trainingPresetCount}</StatChip>
+      </div>
+      {presetsControls}
     </div>
   );
 
-  const datasetsField = (
-    <div
-      className={cn(
-        "xl:min-h-0",
-        isFooterPresentation ? footerFieldBoxClass : "grid gap-2",
-      )}
-    >
-      <div
-        className={
-          isFooterPresentation
-            ? footerFieldHeaderClass
-            : "flex flex-wrap items-center justify-between gap-2"
-        }
-      >
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-          <Database className="h-[15px] w-[15px] text-violet" aria-hidden />
-          Datasets
-        </div>
-        <span className="rounded-[7px] border border-line bg-white/[0.04] px-2 py-1 font-mono text-xs text-ink-dim">
-          {datasetCount}
-        </span>
-      </div>
+  const datasetsControls = (
+    <>
       <MultiSelectDropdown
         label="Training datasets"
         values={selectedDatasets}
@@ -245,9 +213,9 @@ export function TrainingTargetDatasetPanel({
         emptyMessage="No datasets for this model"
       />
       {datasetOptions.length === 0 && (
-        <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+        <InlineStatus compact>
           No datasets for this model
-        </div>
+        </InlineStatus>
       )}
       <div className="grid grid-cols-2 gap-2">
         <Button
@@ -267,6 +235,28 @@ export function TrainingTargetDatasetPanel({
           First
         </Button>
       </div>
+    </>
+  );
+
+  const datasetsField = isFooterPresentation ? (
+    <TrainingFooterField
+      className="xl:min-h-0"
+      icon={<Database className={footerIconClass} aria-hidden />}
+      label="Datasets"
+      detail={<StatChip>{datasetCount}</StatChip>}
+    >
+      {datasetsControls}
+    </TrainingFooterField>
+  ) : (
+    <div className="xl:min-h-0 grid gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionHeading
+          icon={<Database className="h-[15px] w-[15px] text-violet" aria-hidden />}
+          title="Datasets"
+        />
+        <StatChip>{datasetCount}</StatChip>
+      </div>
+      {datasetsControls}
     </div>
   );
 

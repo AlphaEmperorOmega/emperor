@@ -2,6 +2,7 @@ import { Maximize2, RotateCcw, SlidersHorizontal, Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrainingTargetDatasetPanel } from "@/components/features/viewer/training/training-target-dataset-panel";
+import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
 import { type Dataset, type Preset } from "@/lib/api";
 import {
   type ConfigSection,
@@ -129,9 +130,9 @@ export function TrainingExperimentSetup({
           </div>
 
           {configSections.length === 0 && (
-            <div className="rounded-[10px] border border-dashed border-faint bg-white/[0.018] p-3 text-sm text-ink-faint">
+            <InlineStatus compact>
               Select a model and preset to load config fields
-            </div>
+            </InlineStatus>
           )}
         </div>
       </div>
