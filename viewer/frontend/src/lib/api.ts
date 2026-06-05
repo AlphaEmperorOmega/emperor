@@ -676,74 +676,121 @@ export function fetchLogRunMonitorData(input: {
 
 const DEFAULT_LOG_PAGE_LIMIT = 500;
 
-function logPagePath(path: string, limit: number, offset: number) {
-  const params = new URLSearchParams({
-    limit: String(limit),
-    offset: String(offset),
+type PaginatedPage = {
+  total?: number;
+  limit?: number;
+  offset?: number;
+  hasMore?: boolean;
+};
+
+type PaginatedParams = Record<string, string | number | boolean | undefined>;
+
+type FetchPaginatedOptions<TPage extends PaginatedPage, TItem> = {
+  endpoint: string;
+  schema: z.ZodType<TPage, z.ZodTypeDef, unknown>;
+  params?: PaginatedParams;
+  getItems(page: TPage): TItem[];
+  getTotal?(page: TPage): number | undefined;
+};
+
+type FetchPaginatedResult<TPage, TItem> = {
+  firstPage: TPage;
+  items: TItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+function paginatedPath(
+  endpoint: string,
+  params?: PaginatedParams,
+  pagination?: { limit: number; offset: number },
+) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params ?? {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      searchParams.set(key, String(value));
+    }
   });
-  return `${path}?${params.toString()}`;
+  if (pagination) {
+    searchParams.set("limit", String(pagination.limit));
+    searchParams.set("offset", String(pagination.offset));
+  }
+  const query = searchParams.toString();
+  return query ? `${endpoint}?${query}` : endpoint;
 }
 
-export async function fetchLogRuns() {
-  const firstPage = await requestJson("/logs/runs", logRunsSchema);
-  const runs = [...firstPage.runs];
+async function fetchPaginated<TPage extends PaginatedPage, TItem>({
+  endpoint,
+  schema,
+  params,
+  getItems,
+  getTotal,
+}: FetchPaginatedOptions<TPage, TItem>): Promise<
+  FetchPaginatedResult<TPage, TItem>
+> {
+  const firstPage = await requestJson(paginatedPath(endpoint, params), schema);
+  const items = [...getItems(firstPage)];
   let limit =
     firstPage.limit && firstPage.limit > 0
       ? firstPage.limit
-      : runs.length || DEFAULT_LOG_PAGE_LIMIT;
+      : items.length || DEFAULT_LOG_PAGE_LIMIT;
   let offset = firstPage.offset ?? 0;
   let hasMore = firstPage.hasMore ?? false;
 
   while (hasMore) {
     const nextOffset = offset + limit;
     const page = await requestJson(
-      logPagePath("/logs/runs", limit, nextOffset),
-      logRunsSchema,
+      paginatedPath(endpoint, params, { limit, offset: nextOffset }),
+      schema,
     );
-    runs.push(...page.runs);
+    items.push(...getItems(page));
     limit = page.limit && page.limit > 0 ? page.limit : limit;
     offset = page.offset ?? nextOffset;
     hasMore = page.hasMore ?? false;
   }
 
   return {
-    ...firstPage,
-    runs,
-    total: firstPage.total ?? runs.length,
+    firstPage,
+    items,
+    total: getTotal?.(firstPage) ?? firstPage.total ?? items.length,
     limit,
     offset: firstPage.offset ?? 0,
+  };
+}
+
+export async function fetchLogRuns() {
+  const page = await fetchPaginated({
+    endpoint: "/logs/runs",
+    schema: logRunsSchema,
+    getItems: (logPage) => logPage.runs,
+    getTotal: (logPage) => logPage.total,
+  });
+
+  return {
+    ...page.firstPage,
+    runs: page.items,
+    total: page.total,
+    limit: page.limit,
+    offset: page.offset,
     hasMore: false,
   };
 }
 
 export async function fetchLogExperiments() {
-  const firstPage = await requestJson("/logs/experiments", logExperimentsSchema);
-  const experiments = [...firstPage.experiments];
-  let limit =
-    firstPage.limit && firstPage.limit > 0
-      ? firstPage.limit
-      : experiments.length || DEFAULT_LOG_PAGE_LIMIT;
-  let offset = firstPage.offset ?? 0;
-  let hasMore = firstPage.hasMore ?? false;
-
-  while (hasMore) {
-    const nextOffset = offset + limit;
-    const page = await requestJson(
-      logPagePath("/logs/experiments", limit, nextOffset),
-      logExperimentsSchema,
-    );
-    experiments.push(...page.experiments);
-    limit = page.limit && page.limit > 0 ? page.limit : limit;
-    offset = page.offset ?? nextOffset;
-    hasMore = page.hasMore ?? false;
-  }
+  const page = await fetchPaginated({
+    endpoint: "/logs/experiments",
+    schema: logExperimentsSchema,
+    getItems: (logPage) => logPage.experiments,
+    getTotal: (logPage) => logPage.total,
+  });
 
   return {
-    ...firstPage,
-    experiments,
-    total: firstPage.total ?? experiments.length,
-    limit,
-    offset: firstPage.offset ?? 0,
+    ...page.firstPage,
+    experiments: page.items,
+    total: page.total,
+    limit: page.limit,
+    offset: page.offset,
     hasMore: false,
   };
 }

@@ -5,11 +5,18 @@ import {
   fetchLogScalars,
   fetchLogTags,
 } from "@/lib/api";
+import {
+  LOG_EXPERIMENTS_QUERY_KEY,
+  LOG_RUNS_QUERY_KEY,
+  logQueryKeys,
+} from "@/lib/query-keys";
 
-export const LOG_RUNS_QUERY_KEY = ["log-runs"] as const;
-export const LOG_EXPERIMENTS_QUERY_KEY = ["log-experiments"] as const;
-export const LOG_TAGS_QUERY_KEY = ["log-tags"] as const;
-export const LOG_SCALARS_QUERY_KEY = ["log-scalars"] as const;
+export {
+  LOG_EXPERIMENTS_QUERY_KEY,
+  LOG_RUNS_QUERY_KEY,
+  LOG_SCALARS_QUERY_KEY,
+  LOG_TAGS_QUERY_KEY,
+} from "@/lib/query-keys";
 
 type QueryOptions = {
   enabled?: boolean;
@@ -36,7 +43,7 @@ export function useLogExperimentsQuery({ enabled = true }: QueryOptions = {}) {
 export function useLogTagsQuery({
   runIds,
   enabled = true,
-  queryKey = [...LOG_TAGS_QUERY_KEY, runIds],
+  queryKey = logQueryKeys.tagsForRuns(runIds),
 }: QueryOptions & {
   runIds: string[];
   queryKey?: readonly unknown[];
@@ -53,7 +60,7 @@ export function useLogScalarsQuery({
   runIds,
   tags,
   enabled = true,
-  queryKey = [...LOG_SCALARS_QUERY_KEY, runIds, tags],
+  queryKey = logQueryKeys.scalarsForRunsAndTags(runIds, tags),
 }: QueryOptions & {
   runIds: string[];
   tags: string[];
