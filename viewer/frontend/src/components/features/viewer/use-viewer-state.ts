@@ -1,41 +1,38 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  type ConfigField,
   type GraphNode,
   type LogRun,
   type TrainingJob,
 } from "@/lib/api";
 import { useLogRunsQuery, useLogTagsQuery } from "@/hooks/use-log-queries";
-import { presetOwnedCount, type OverrideValues } from "@/lib/config";
+import { type OverrideValues } from "@/lib/config";
 import {
   DEFAULT_TRAINING_SEARCH_STATE,
   type TrainingSearchState,
 } from "@/lib/training-search";
 import {
   createConfigSnapshot,
-  groupConfigSnapshotsByPreset,
-  selectedConfigSnapshots,
   type ConfigSnapshot,
   type ConfigSnapshotCreateResult,
 } from "@/lib/config-snapshots";
 import {
-  anyLogRunTagsMatchNodePath,
-  filterHistoricalRuns,
-  historicalDatasetOptions as buildHistoricalDatasetOptions,
-  historicalExperimentOptions as buildHistoricalExperimentOptions,
-  latestHistoricalMonitorRuns,
-  sortLogRunsNewestFirst,
-} from "@/lib/historical-monitor-runs";
+  normalizePrimarySelection,
+  normalizeSelection,
+  selectionValuesEqual,
+  uniqueValidValues,
+} from "@/lib/selection";
+import { anyLogRunTagsMatchNodePath } from "@/lib/historical-monitor-runs";
 import { useGraphViewState } from "@/components/features/viewer/state/use-graph-view-state";
 import { useLockedOverrideSync } from "@/components/features/viewer/state/use-locked-override-sync";
 import { usePreviewInspectionState } from "@/components/features/viewer/state/use-preview-inspection";
 import { useTargetOverridesState } from "@/components/features/viewer/state/use-target-overrides";
 import { useViewerQueries } from "@/components/features/viewer/state/use-viewer-queries";
 import {
-  buildLinearMonitorComparisonCandidateGroups,
-  createLinearMonitorTargetResolver,
-} from "@/lib/graph/monitor-targets";
-import { type MonitorChartsSource } from "@/types/monitor";
+  deriveDatasetSelectionState,
+  deriveMonitorSource,
+  deriveTargetSelectionState,
+} from "@/components/features/viewer/state/viewer-state-selectors";
+import { logQueryKeys } from "@/lib/query-keys";
 
 function resolveRunPresetName(
   run: LogRun,
@@ -51,60 +48,6 @@ function resolveRunPresetName(
         preset.label.toLowerCase() === normalizedRunPreset,
     )?.name ?? ""
   );
-}
-
-function uniqueValidValues(values: string[], validValues: string[]) {
-  const validValueSet = new Set(validValues);
-  const seen = new Set<string>();
-  return values.filter((value) => {
-    if (!validValueSet.has(value) || seen.has(value)) {
-      return false;
-    }
-    seen.add(value);
-    return true;
-  });
-}
-
-function normalizeTrainingPresetSelection(
-  values: string[],
-  presetNames: string[],
-  primaryPreset: string,
-) {
-  if (presetNames.length === 0) {
-    return [];
-  }
-  const validPresets = uniqueValidValues(values, presetNames);
-  const nextValues =
-    validPresets.length > 0
-      ? validPresets
-      : primaryPreset && presetNames.includes(primaryPreset)
-        ? [primaryPreset]
-        : [];
-  if (!primaryPreset || !nextValues.includes(primaryPreset)) {
-    return nextValues;
-  }
-  return [
-    primaryPreset,
-    ...nextValues.filter((preset) => preset !== primaryPreset),
-  ];
-}
-
-function normalizeDatasetSelection(
-  values: string[],
-  datasetNames: string[],
-  fallbackValues: string[] = [],
-) {
-  if (datasetNames.length === 0) {
-    return [];
-  }
-  const validDatasets = uniqueValidValues(values, datasetNames);
-  if (validDatasets.length > 0) {
-    return validDatasets;
-  }
-  const fallbackDataset = fallbackValues.find((dataset) =>
-    datasetNames.includes(dataset),
-  );
-  return [fallbackDataset ?? datasetNames[0]];
 }
 
 function createSnapshotId() {
@@ -174,65 +117,81 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   const [activeTrainingJob, setActiveTrainingJob] = useState<TrainingJob | undefined>();
   const [graphMonitorNode, setGraphMonitorNode] = useState<GraphNode | undefined>();
 
-  const datasetNames = useMemo(
-    () => (datasetsQuery.data?.datasets ?? []).map((dataset) => dataset.name),
-    [datasetsQuery.data],
-  );
-  const presetNames = useMemo(
-    () => (presetsQuery.data?.presets ?? []).map((preset) => preset.name),
-    [presetsQuery.data],
-  );
-  const modelLogRuns = useMemo(
+  const targetSelectionState = useMemo(
     () =>
-      sortLogRunsNewestFirst(
-        (logRunsQuery.data?.runs ?? []).filter((run) => run.model === selectedModel),
-      ),
-    [logRunsQuery.data, selectedModel],
+      deriveTargetSelectionState({
+        datasets: datasetsQuery.data?.datasets,
+        presets: presetsQuery.data?.presets,
+        schemaFields: schemaQuery.data?.fields,
+        configSnapshots,
+        selectedModel,
+        selectedPreset,
+        selectedTrainingPresets,
+        overrides: overrides as OverrideValues,
+      }),
+    [
+      configSnapshots,
+      datasetsQuery.data?.datasets,
+      overrides,
+      presetsQuery.data?.presets,
+      schemaQuery.data?.fields,
+      selectedModel,
+      selectedPreset,
+      selectedTrainingPresets,
+    ],
   );
-  const historicalExperimentOptions = useMemo(
-    () => buildHistoricalExperimentOptions(modelLogRuns),
-    [modelLogRuns],
-  );
-  const historicalDatasetOptions = useMemo(
+  const {
+    datasetNames,
+    presetNames,
+    selectedPresetMeta,
+    configSections,
+    configFields,
+    visibleConfigSnapshots,
+    configSnapshotGroups,
+    overrideCount,
+    presetOwnedFieldCount,
+    fieldCount,
+  } = targetSelectionState;
+
+  const datasetSelectionState = useMemo(
     () =>
-      buildHistoricalDatasetOptions(
-        modelLogRuns,
-        selectedHistoricalExperiment,
-      ),
-    [modelLogRuns, selectedHistoricalExperiment],
-  );
-  const filteredHistoricalRuns = useMemo(
-    () =>
-      filterHistoricalRuns(
-        modelLogRuns,
+      deriveDatasetSelectionState({
+        logRuns: logRunsQuery.data?.runs,
+        selectedModel,
         selectedHistoricalExperiment,
         selectedHistoricalDataset,
-      ),
-    [modelLogRuns, selectedHistoricalDataset, selectedHistoricalExperiment],
+        selectedLogRunId,
+      }),
+    [
+      logRunsQuery.data?.runs,
+      selectedHistoricalDataset,
+      selectedHistoricalExperiment,
+      selectedLogRunId,
+      selectedModel,
+    ],
   );
-  const historicalMonitorRuns = useMemo(
-    () => latestHistoricalMonitorRuns(filteredHistoricalRuns),
-    [filteredHistoricalRuns],
-  );
-  const filteredHistoricalRunIds = useMemo(
-    () => filteredHistoricalRuns.map((run) => run.id),
-    [filteredHistoricalRuns],
-  );
-  const selectedLogRun = useMemo(
-    () => filteredHistoricalRuns.find((run) => run.id === selectedLogRunId),
-    [filteredHistoricalRuns, selectedLogRunId],
-  );
+  const {
+    historicalExperimentOptions,
+    historicalDatasetOptions,
+    filteredHistoricalRuns,
+    historicalMonitorRuns,
+    filteredHistoricalRunIds,
+    selectedLogRun,
+  } = datasetSelectionState;
   const logRunTagsQuery = useLogTagsQuery({
     runIds: filteredHistoricalRunIds,
-    queryKey: ["log-tags", "filtered-historical-runs", filteredHistoricalRunIds],
+    queryKey: logQueryKeys.filteredHistoricalRunTags(filteredHistoricalRunIds),
   });
-  const linearMonitorTargetResolver = useMemo(
-    () => createLinearMonitorTargetResolver(graph),
-    [graph],
+  const monitorSourceBeforeGraph = useMemo(
+    () =>
+      deriveMonitorSource({
+        graph,
+        activeTrainingJob,
+      }),
+    [activeTrainingJob, graph],
   );
-  const activeJobHasMonitorSource = Boolean(
-    activeTrainingJob?.monitors.includes("linear"),
-  );
+  const { activeJobHasMonitorSource, linearMonitorTargetResolver } =
+    monitorSourceBeforeGraph;
   const canOpenGraphNodeMonitor = useCallback((monitorTarget: GraphNode) => {
     if (activeJobHasMonitorSource) {
       return true;
@@ -338,22 +297,30 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   useEffect(() => {
     if (!selectedPreset || presetNames.length === 0) {
-      setSelectedTrainingPresets([]);
+      setSelectedTrainingPresets((current) =>
+        current.length === 0 ? current : [],
+      );
       return;
     }
     setSelectedTrainingPresets((current) => {
-      return normalizeTrainingPresetSelection(current, presetNames, selectedPreset);
+      const next = normalizePrimarySelection(
+        current,
+        presetNames,
+        selectedPreset || undefined,
+      );
+      return selectionValuesEqual(current, next) ? current : next;
     });
   }, [presetNames, selectedPreset]);
 
   useEffect(() => {
-    setConfigSnapshots((current) =>
-      current.filter(
+    setConfigSnapshots((current) => {
+      const next = current.filter(
         (snapshot) =>
           snapshot.model === selectedModel &&
           selectedTrainingPresets.includes(snapshot.preset),
-      ),
-    );
+      );
+      return next.length === current.length ? current : next;
+    });
   }, [selectedModel, selectedTrainingPresets]);
 
   useEffect(() => {
@@ -394,55 +361,24 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   useEffect(() => {
     if (datasetNames.length === 0) {
-      setSelectedDatasets([]);
+      setSelectedDatasets((current) => (current.length === 0 ? current : []));
       return;
     }
     setSelectedDatasets((current) => {
-      return normalizeDatasetSelection(current, datasetNames);
+      const next = normalizeSelection(current, datasetNames);
+      return selectionValuesEqual(current, next) ? current : next;
     });
   }, [datasetNames]);
 
   useEffect(() => {
     const monitorNames = (monitorsQuery.data?.monitors ?? []).map((monitor) => monitor.name);
-    setSelectedMonitors((current) =>
-      current.filter((monitor) => monitorNames.includes(monitor)),
-    );
+    setSelectedMonitors((current) => {
+      const next = current.filter((monitor) => monitorNames.includes(monitor));
+      return next.length === current.length ? current : next;
+    });
   }, [monitorsQuery.data]);
 
   useLockedOverrideSync(schemaQuery.data, setOverrides);
-
-  const selectedPresetMeta = presetsQuery.data?.presets.find(
-    (preset) => preset.name === selectedPreset,
-  );
-  const configSections = useMemo(() => {
-    const groups = new Map<string, ConfigField[]>();
-    for (const field of schemaQuery.data?.fields ?? []) {
-      const section = field.section || "General";
-      groups.set(section, [...(groups.get(section) ?? []), field]);
-    }
-    return Array.from(groups, ([title, fields]) => ({ title, fields }));
-  }, [schemaQuery.data]);
-  const configFields = useMemo(
-    () => configSections.flatMap((section) => section.fields),
-    [configSections],
-  );
-  const visibleConfigSnapshots = useMemo(
-    () =>
-      selectedConfigSnapshots(
-        configSnapshots,
-        selectedModel,
-        selectedTrainingPresets,
-      ),
-    [configSnapshots, selectedModel, selectedTrainingPresets],
-  );
-  const configSnapshotGroups = useMemo(
-    () =>
-      groupConfigSnapshotsByPreset(
-        visibleConfigSnapshots,
-        selectedTrainingPresets,
-      ),
-    [selectedTrainingPresets, visibleConfigSnapshots],
-  );
 
   const selectModel = useCallback(
     (model: string) => {
@@ -504,10 +440,10 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       }
       setSelectedPreset(snapshot.preset);
       setSelectedTrainingPresets((current) =>
-        normalizeTrainingPresetSelection(
+        normalizePrimarySelection(
           [...current, snapshot.preset],
           presetNames,
-          snapshot.preset,
+          snapshot.preset || undefined,
         ),
       );
       setOverrides({ ...snapshot.overrides });
@@ -540,10 +476,10 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       }
 
       setSelectedTrainingPresets(
-        normalizeTrainingPresetSelection(
-          validPresets.length > 0 ? validPresets : fallbackPreset ? [fallbackPreset] : [],
+        normalizePrimarySelection(
+          validPresets,
           presetNames,
-          nextPrimary,
+          nextPrimary || undefined,
         ),
       );
     },
@@ -567,7 +503,11 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       }
       selectPreset(preset);
       setSelectedTrainingPresets((current) =>
-        normalizeTrainingPresetSelection([...current, preset], presetNames, preset),
+        normalizePrimarySelection(
+          [...current, preset],
+          presetNames,
+          preset || undefined,
+        ),
       );
     },
     [presetNames, selectPreset],
@@ -591,7 +531,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   const setDatasetSelection = useCallback(
     (datasets: string[]) => {
       setSelectedDatasets((current) =>
-        normalizeDatasetSelection(datasets, datasetNames, current),
+        normalizeSelection(datasets, datasetNames, current),
       );
     },
     [datasetNames],
@@ -602,7 +542,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       const next = current.includes(dataset)
         ? current.filter((item) => item !== dataset)
         : [...current, dataset];
-      return normalizeDatasetSelection(next, datasetNames, current);
+      return normalizeSelection(next, datasetNames, current);
     });
   }, [datasetNames]);
 
@@ -669,48 +609,40 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   }, []);
 
   const apiOnline = healthQuery.data?.status === "ok";
-  const overrideCount = Object.keys(overrides).length;
-  const presetOwnedFieldCount = configSections.reduce(
-    (total, section) => total + presetOwnedCount(section.fields),
-    0,
+  const monitorSourceState = useMemo(
+    () =>
+      deriveMonitorSource({
+        graph,
+        selectedNode: graphState.selectedNode,
+        graphMonitorNode,
+        activeTrainingJob,
+        historicalMonitorRuns,
+        selectedHistoricalExperiment,
+        selectedHistoricalDataset,
+        logRunTags: logRunTagsQuery.data?.runs,
+        filteredHistoricalRunIds,
+        linearMonitorTargetResolver,
+      }),
+    [
+      activeTrainingJob,
+      filteredHistoricalRunIds,
+      graph,
+      graphMonitorNode,
+      graphState.selectedNode,
+      historicalMonitorRuns,
+      linearMonitorTargetResolver,
+      logRunTagsQuery.data?.runs,
+      selectedHistoricalDataset,
+      selectedHistoricalExperiment,
+    ],
   );
-  const fieldCount = configSections.reduce((total, section) => total + section.fields.length, 0);
-  const selectedMonitorNode = linearMonitorTargetResolver(graphState.selectedNode);
-  const selectedMonitorComparisonCandidateGroups = useMemo(
-    () => buildLinearMonitorComparisonCandidateGroups(graph, selectedMonitorNode),
-    [graph, selectedMonitorNode],
-  );
-  const selectedLogRunHasMonitorTags = anyLogRunTagsMatchNodePath(
-    logRunTagsQuery.data?.runs,
-    filteredHistoricalRunIds,
-    selectedMonitorNode?.path,
-  );
-
-  const graphMonitorComparisonCandidateGroups = useMemo(
-    () => buildLinearMonitorComparisonCandidateGroups(graph, graphMonitorNode),
-    [graph, graphMonitorNode],
-  );
-  const graphMonitorSource = useMemo<MonitorChartsSource | undefined>(() => {
-    const activeLinearTrainingJob = activeTrainingJob?.monitors.includes("linear")
-      ? activeTrainingJob
-      : undefined;
-    if (activeLinearTrainingJob) {
-      return { kind: "active-job", job: activeLinearTrainingJob };
-    }
-    return historicalMonitorRuns.length > 0
-      ? {
-          kind: "historical-run-group",
-          runs: historicalMonitorRuns,
-          experiment: selectedHistoricalExperiment,
-          dataset: selectedHistoricalDataset,
-        }
-      : undefined;
-  }, [
-    activeTrainingJob,
-    historicalMonitorRuns,
-    selectedHistoricalDataset,
-    selectedHistoricalExperiment,
-  ]);
+  const {
+    selectedMonitorNode,
+    selectedMonitorComparisonCandidateGroups,
+    selectedLogRunHasMonitorTags,
+    graphMonitorComparisonCandidateGroups,
+    graphMonitorSource,
+  } = monitorSourceState;
 
   return {
     target: {

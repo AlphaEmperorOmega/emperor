@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   createLogRunDeletePlan,
   deleteLogExperiment,
@@ -11,6 +11,8 @@ import {
   useLogRunsQuery,
   useLogTagsQuery,
 } from "@/hooks/use-log-queries";
+import { useLogQueryCache } from "@/hooks/use-log-query-cache";
+import { logQueryKeys } from "@/lib/query-keys";
 import {
   COMMON_SCALAR_TAGS,
   buildCountOptions,
@@ -33,7 +35,7 @@ function sortedValues(values: Set<string>) {
  * panels as a single object so they stay presentational.
  */
 export function useLogsWorkspaceState({ enabled }: { enabled: boolean }) {
-  const queryClient = useQueryClient();
+  const { invalidateLogLists, refreshAfterMutation } = useLogQueryCache();
   const [startedExperiments, setStartedExperiments] = useState<Set<string>>(new Set());
   const [selectedExperiments, setSelectedExperiments] = useState<Set<string> | null>(null);
   const [selectedDatasets, setSelectedDatasets] = useState<Set<string> | null>(null);
@@ -226,7 +228,7 @@ export function useLogsWorkspaceState({ enabled }: { enabled: boolean }) {
   const tagsQuery = useLogTagsQuery({
     runIds: visibleRunIds,
     enabled,
-    queryKey: ["log-tags", visibleRunIds],
+    queryKey: logQueryKeys.tagsForRuns(visibleRunIds),
   });
 
   const tagOptions = useMemo(() => {
@@ -317,10 +319,7 @@ export function useLogsWorkspaceState({ enabled }: { enabled: boolean }) {
         next.delete(result.experiment);
         return next;
       });
-      void queryClient.invalidateQueries({ queryKey: ["log-experiments"] });
-      void queryClient.invalidateQueries({ queryKey: ["log-runs"] });
-      queryClient.removeQueries({ queryKey: ["log-tags"] });
-      queryClient.removeQueries({ queryKey: ["log-scalars"] });
+      void refreshAfterMutation();
     },
   });
   const runDeletePlanMutation = useMutation({
@@ -340,10 +339,7 @@ export function useLogsWorkspaceState({ enabled }: { enabled: boolean }) {
       setSelectedDetailRunId((previous) =>
         previous && deletedRunIds.has(previous) ? null : previous,
       );
-      void queryClient.invalidateQueries({ queryKey: ["log-experiments"] });
-      void queryClient.invalidateQueries({ queryKey: ["log-runs"] });
-      queryClient.removeQueries({ queryKey: ["log-tags"] });
-      queryClient.removeQueries({ queryKey: ["log-scalars"] });
+      void refreshAfterMutation();
     },
   });
 
@@ -389,6 +385,7 @@ export function useLogsWorkspaceState({ enabled }: { enabled: boolean }) {
     deleteExperimentError: deleteExperimentMutation.error,
     isDeletingExperiment: deleteExperimentMutation.isPending,
     resetDeleteExperiment: deleteExperimentMutation.reset,
+    refreshLogLists: invalidateLogLists,
     includeStartedExperiment,
     toggleExperiment: (value: string) => toggleSetValue(setSelectedExperiments, value),
     toggleDataset: (value: string) => toggleSetValue(setSelectedDatasets, value),
