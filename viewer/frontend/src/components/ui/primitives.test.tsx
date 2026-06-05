@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { EdgeCard } from "@/components/ui/edge-card";
+import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Select } from "@/components/ui/select";
@@ -29,6 +30,17 @@ describe("Badge", () => {
   it("applies the preset variant styling", () => {
     render(<Badge variant="preset">preset</Badge>);
     expect(screen.getByText("preset")).toHaveClass("text-amber");
+  });
+
+  it.each([
+    ["success", "border-ok/30", "bg-ok/10", "text-ok"],
+    ["warning", "border-amber/40", "bg-amber/[0.12]", "text-amber"],
+    ["danger", "border-danger-line", "bg-danger-soft", "text-[#fda4af]"],
+    ["info", "border-blue/30", "bg-blue/10", "text-blue"],
+    ["violet", "border-violet/30", "bg-violet/15", "text-violet"],
+  ] as const)("applies the %s variant styling", (variant, borderClass, bgClass, textClass) => {
+    render(<Badge variant={variant}>{variant}</Badge>);
+    expect(screen.getByText(variant)).toHaveClass(borderClass, bgClass, textClass);
   });
 });
 
@@ -56,6 +68,104 @@ describe("Button", () => {
   it("respects the disabled attribute", () => {
     render(<Button disabled>nope</Button>);
     expect(screen.getByRole("button", { name: "nope" })).toBeDisabled();
+  });
+});
+
+describe("IconButton", () => {
+  it("uses label as the accessible name, defaults to type=button, and renders only the icon", () => {
+    render(
+      <IconButton
+        label="Refresh preview"
+        icon={<svg data-testid="refresh-icon" aria-hidden />}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Refresh preview" });
+    expect(button).toHaveAttribute("type", "button");
+    expect(screen.getByTestId("refresh-icon")).toBeInTheDocument();
+    expect(button).not.toHaveTextContent("Refresh preview");
+  });
+
+  it("fires clicks and respects disabled state", () => {
+    const onClick = vi.fn();
+    const { rerender } = render(
+      <IconButton
+        label="Delete run"
+        icon={<span aria-hidden />}
+        onClick={onClick}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Delete run" });
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <IconButton
+        label="Delete run"
+        icon={<span aria-hidden />}
+        onClick={onClick}
+        disabled
+      />,
+    );
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes through className after base, size, and variant classes", () => {
+    render(
+      <IconButton
+        label="Custom action"
+        icon={<span aria-hidden />}
+        size="sm"
+        variant="edge"
+        className="custom-class bg-ok/10"
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Custom action" });
+    expect(button).toHaveClass(
+      "inline-flex",
+      "h-8",
+      "w-8",
+      "rounded-[8px]",
+      "border-line",
+      "text-ink-faint",
+      "custom-class",
+      "bg-ok/10",
+    );
+    expect(button.className).not.toContain("bg-white/[0.035]");
+  });
+
+  it("applies md, ghost, and danger classes", () => {
+    const { rerender } = render(
+      <IconButton
+        label="Ghost action"
+        icon={<span aria-hidden />}
+        size="md"
+        variant="ghost"
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Ghost action" });
+    expect(button).toHaveClass(
+      "h-9",
+      "w-9",
+      "rounded-[10px]",
+      "border-transparent",
+      "hover:bg-white/[0.055]",
+    );
+
+    rerender(
+      <IconButton
+        label="Danger action"
+        icon={<span aria-hidden />}
+        variant="danger"
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Danger action" })).toHaveClass(
+      "border-transparent",
+      "hover:border-danger-line",
+      "hover:bg-danger-soft",
+      "hover:text-[#fda4af]",
+    );
   });
 });
 
