@@ -10,6 +10,9 @@ import {
   useState,
 } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
+import { DropdownShell } from "@/components/features/viewer/shared/dropdown-shell";
+import { StatChip } from "@/components/features/viewer/shared/stat-chip";
+import { usePopupDismissal } from "@/components/features/viewer/shared/use-popup-dismissal";
 import { cn } from "@/lib/utils";
 
 export type MultiSelectDropdownOption = {
@@ -54,6 +57,7 @@ export function MultiSelectDropdown({
   const searchId = `${triggerId}-search`;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
   const optionRefs = useRef<Array<HTMLDivElement | null>>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -159,22 +163,12 @@ export function MultiSelectDropdown({
     setActiveIndex(filteredOptions.length > 0 ? 0 : -1);
   }, [filteredOptions.length, isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (target && rootRef.current?.contains(target)) {
-        return;
-      }
-      closeDropdown();
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [closeDropdown, isOpen]);
+  usePopupDismissal({
+    open: isOpen,
+    onClose: closeDropdown,
+    triggerRef,
+    panelRef,
+  });
 
   useEffect(() => {
     if (disabled) {
@@ -310,17 +304,19 @@ export function MultiSelectDropdown({
           {selectedOptions.length > 0 && (
             <span className="flex min-w-0 items-center gap-1.5 overflow-hidden">
               {visibleChips.map((option) => (
-                <span
+                <StatChip
                   key={option.value}
-                  className="min-w-0 max-w-[9rem] truncate rounded-[7px] border border-violet/30 bg-violet/10 px-2 py-0.5 font-mono text-[11px] text-violet"
+                  tone="violet"
+                  size="xs"
+                  className="min-w-0 max-w-[9rem] truncate px-2"
                 >
                   {option.label}
-                </span>
+                </StatChip>
               ))}
               {hiddenChipCount > 0 && (
-                <span className="shrink-0 rounded-[7px] border border-line bg-white/[0.04] px-2 py-0.5 font-mono text-[11px] text-ink-dim">
+                <StatChip size="xs" className="shrink-0 px-2">
                   +{hiddenChipCount}
-                </span>
+                </StatChip>
               )}
             </span>
           )}
@@ -335,25 +331,30 @@ export function MultiSelectDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 right-0 top-full mt-2 grid max-h-[320px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[12px] border border-line bg-panel/95 shadow-[0_22px_50px_-30px_rgba(0,0,0,0.98)] backdrop-blur">
-          <label
-            htmlFor={searchId}
-            className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-line-soft px-3 py-2"
-          >
-            <Search className="h-4 w-4 text-ink-faint" aria-hidden />
-            <input
-              ref={searchRef}
-              id={searchId}
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              placeholder={searchPlaceholder ?? `Search ${label.toLowerCase()}`}
-              aria-label={`Search ${label}`}
-              autoComplete="off"
-              className="h-8 min-w-0 bg-transparent font-sans text-sm font-semibold text-ink outline-none placeholder:text-ink-faint"
-            />
-          </label>
+        <DropdownShell
+          ref={panelRef}
+          className="grid max-h-[320px] grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
+          searchSlot={
+            <label
+              htmlFor={searchId}
+              className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-line-soft px-3 py-2"
+            >
+              <Search className="h-4 w-4 text-ink-faint" aria-hidden />
+              <input
+                ref={searchRef}
+                id={searchId}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder={searchPlaceholder ?? `Search ${label.toLowerCase()}`}
+                aria-label={`Search ${label}`}
+                autoComplete="off"
+                className="h-8 min-w-0 bg-transparent font-sans text-sm font-semibold text-ink outline-none placeholder:text-ink-faint"
+              />
+            </label>
+          }
+        >
           <div
             id={listboxId}
             role="listbox"
@@ -459,7 +460,7 @@ export function MultiSelectDropdown({
               </div>
             )}
           </div>
-        </div>
+        </DropdownShell>
       )}
     </div>
   );

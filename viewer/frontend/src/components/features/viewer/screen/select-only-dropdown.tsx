@@ -8,6 +8,8 @@ import {
   useState,
 } from "react";
 import { ChevronDown } from "lucide-react";
+import { DropdownShell } from "@/components/features/viewer/shared/dropdown-shell";
+import { usePopupDismissal } from "@/components/features/viewer/shared/use-popup-dismissal";
 import { cn } from "@/lib/utils";
 
 export type SelectOnlyDropdownOption = {
@@ -37,6 +39,7 @@ export function SelectOnlyDropdown({
   const listboxId = `${triggerId}-options`;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const selectedIndex = useMemo(
     () => options.findIndex((option) => option.value === value),
     [options, value],
@@ -96,22 +99,12 @@ export function SelectOnlyDropdown({
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : options.length > 0 ? 0 : -1);
   }, [options.length, selectedIndex, value]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (target && rootRef.current?.contains(target)) {
-        return;
-      }
-      closeDropdown();
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [closeDropdown, isOpen]);
+  usePopupDismissal({
+    open: isOpen,
+    onClose: closeDropdown,
+    triggerRef,
+    panelRef,
+  });
 
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     if (event.key === "ArrowDown") {
@@ -189,11 +182,12 @@ export function SelectOnlyDropdown({
       </button>
 
       {isOpen && (
-        <div
+        <DropdownShell
+          ref={panelRef}
           id={listboxId}
           role="listbox"
-          aria-label={`${label} options`}
-          className="absolute left-0 right-0 top-full mt-2 max-h-[260px] overflow-y-auto rounded-[12px] border border-line bg-panel/95 shadow-[0_22px_50px_-30px_rgba(0,0,0,0.98)] backdrop-blur"
+          ariaLabel={`${label} options`}
+          className="max-h-[260px] overflow-y-auto"
         >
           {options.map((option, index) => {
             const isActive = index === activeIndex;
@@ -222,7 +216,7 @@ export function SelectOnlyDropdown({
               </button>
             );
           })}
-        </div>
+        </DropdownShell>
       )}
     </div>
   );

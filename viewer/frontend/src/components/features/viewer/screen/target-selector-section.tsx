@@ -1,6 +1,7 @@
 import { type RefObject } from "react";
 import { Info, Target } from "lucide-react";
 import { SelectOnlyDropdown } from "@/components/features/viewer/screen/select-only-dropdown";
+import { SectionHeading } from "@/components/features/viewer/shared/section-heading";
 import { cn } from "@/lib/utils";
 
 type SelectOption = {
@@ -40,10 +41,10 @@ export function TargetSelectorSection({
   return (
     <section className="grid gap-3">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.09em] text-ink-dim">
-          <Target className="h-[15px] w-[15px] text-violet" aria-hidden />
-          Target
-        </div>
+        <SectionHeading
+          icon={<Target className="h-[15px] w-[15px] text-violet" aria-hidden />}
+          title="Target"
+        />
         <span className="text-xs font-medium text-ink-dim">{presetCount} presets</span>
       </div>
       <div className="grid gap-1.5">

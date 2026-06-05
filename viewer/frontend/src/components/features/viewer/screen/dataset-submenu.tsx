@@ -2,6 +2,8 @@ import { type CSSProperties, type RefObject } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { IconButton } from "@/components/ui/icon-button";
+import { StatChip } from "@/components/features/viewer/shared/stat-chip";
 import { type FixedPopupPosition } from "@/components/features/viewer/screen/fixed-popup";
 import { type Dataset } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -50,14 +52,14 @@ export function DatasetSubmenu({
             {selectedDatasets.length} / {datasets.length}
           </p>
         </div>
-        <button
-          type="button"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] border border-line bg-white/[0.025] text-ink-dim transition hover:border-white/15 hover:bg-white/[0.06] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          aria-label="Close dataset selector"
+        <IconButton
+          label="Close dataset selector"
           onClick={onClose}
-        >
-          <X className="h-4 w-4" aria-hidden />
-        </button>
+          size="sm"
+          variant="edge"
+          className="rounded-[9px] border-line bg-white/[0.025] text-ink-dim hover:border-white/15 hover:bg-white/[0.06] hover:text-ink"
+          icon={<X className="h-4 w-4" aria-hidden />}
+        />
       </div>
       <div className="grid min-h-0 gap-2 overflow-y-auto p-3">
         {datasets.map((dataset) => {
@@ -85,9 +87,9 @@ export function DatasetSubmenu({
                   {dataset.name}
                 </span>
               </span>
-              <span className="shrink-0 rounded-[7px] border border-line bg-white/[0.04] px-2 py-1 font-mono text-xs text-ink-dim">
+              <StatChip className="shrink-0">
                 {dataset.inputDim} {"->"} {dataset.outputDim}
-              </span>
+              </StatChip>
             </label>
           );
         })}

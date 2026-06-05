@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { usePopupDismissal as usePointerPopupDismissal } from "@/components/features/viewer/shared/use-popup-dismissal";
 
 export type FixedPopupPosition = {
   top: number;
@@ -117,21 +118,17 @@ export function usePopupDismissal<
   onDismiss: () => void;
   onDismissWithFocus: () => void;
 }) {
+  usePointerPopupDismissal({
+    open: isOpen,
+    onClose: onDismiss,
+    triggerRef,
+    panelRef: popupRef,
+  });
+
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (
-        target &&
-        (triggerRef.current?.contains(target) || popupRef.current?.contains(target))
-      ) {
-        return;
-      }
-      onDismiss();
-    };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -140,11 +137,7 @@ export function usePopupDismissal<
       }
     };
 
-    document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen, onDismiss, onDismissWithFocus, popupRef, triggerRef]);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onDismissWithFocus]);
 }

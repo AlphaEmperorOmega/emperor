@@ -1,5 +1,6 @@
 import { type CSSProperties, type RefObject } from "react";
 import { X } from "lucide-react";
+import { IconButton } from "@/components/ui/icon-button";
 import { type FixedPopupPosition } from "@/components/features/viewer/screen/fixed-popup";
 
 export function PresetDescriptionSubmenu({
@@ -40,14 +41,14 @@ export function PresetDescriptionSubmenu({
             Preset description
           </p>
         </div>
-        <button
-          type="button"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] border border-line bg-white/[0.025] text-ink-dim transition hover:border-white/15 hover:bg-white/[0.06] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          aria-label="Close preset description"
+        <IconButton
+          label="Close preset description"
           onClick={onClose}
-        >
-          <X className="h-4 w-4" aria-hidden />
-        </button>
+          size="sm"
+          variant="edge"
+          className="rounded-[9px] border-line bg-white/[0.025] text-ink-dim hover:border-white/15 hover:bg-white/[0.06] hover:text-ink"
+          icon={<X className="h-4 w-4" aria-hidden />}
+        />
       </div>
       <div className="min-h-0 overflow-y-auto px-3 py-3">
         <p className="break-words text-xs leading-5 text-ink-dim">{description}</p>
