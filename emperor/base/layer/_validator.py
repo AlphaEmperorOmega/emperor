@@ -213,9 +213,7 @@ class LayerStackValidator(ValidatorBase):
     @staticmethod
     def __validate_num_layers(num_layers: int) -> None:
         if num_layers < 1:
-            raise ValueError(
-                f"num_layers must be at least 1, received {num_layers}."
-            )
+            raise ValueError(f"num_layers must be at least 1, received {num_layers}.")
 
     @staticmethod
     def __validate_layer_config(layer_config: "LayerConfig | None") -> None:
