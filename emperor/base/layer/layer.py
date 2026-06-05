@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from dataclasses import replace
+from dataclasses import fields, replace
 from torch.types import Tensor
 from emperor.base.utils import ConfigBase, Module
 from emperor.base.options import (
@@ -96,6 +96,10 @@ class Layer(Module):
     ) -> "Module | None":
         if config is None:
             return None
+        declared_fields = {field.name for field in fields(config)}
+        kwargs = {
+            name: value for name, value in kwargs.items() if name in declared_fields
+        }
         return config.build(overrides=type(config)(**kwargs))
 
     def __init_dropout_module(self) -> nn.Module | None:
