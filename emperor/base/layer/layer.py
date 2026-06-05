@@ -43,10 +43,6 @@ class Layer(Module):
         self.halting_config: "HaltingConfig | None" = self.cfg.halting_config
         self.memory_config: "DynamicMemoryConfig | None" = self.cfg.memory_config
         self.shared_halting_flag: bool = self.cfg.shared_halting_flag
-        if self.shared_halting_flag and self.halting_config is None:
-            raise ValueError(
-                "halting_config must be provided when shared_halting_flag is True"
-            )
         self.layer_model_config: "ConfigBase" = self.cfg.layer_model_config
         LayerValidator.validate(self.cfg)
 
