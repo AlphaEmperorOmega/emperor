@@ -2,9 +2,8 @@ import torch
 
 from torch import Tensor
 from dataclasses import dataclass
-from torch.nn import Sequential
 from emperor.base.utils import ConfigBase, Module, optional_field
-from emperor.base.layer import Layer, LayerStackConfig
+from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.options import (
     BankExpansionFactorOptions,
     WeightDecayScheduleOptions,
@@ -100,7 +99,7 @@ class DynamicBiasAbstract(Module):
         self.register_buffer("decay_step", torch.zeros(1))
         self.register_buffer("warmup_step", torch.zeros(1))
 
-    def _init_model(self, output_dim: int) -> "Layer | Sequential":
+    def _init_model(self, output_dim: int) -> "Layer | LayerStack":
         overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=output_dim,

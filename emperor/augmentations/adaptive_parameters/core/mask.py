@@ -1,9 +1,8 @@
 import torch
 
 from torch import Tensor
-from torch.nn import Sequential
 from dataclasses import dataclass
-from emperor.base.layer import Layer, LayerStackConfig
+from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.augmentations.adaptive_parameters.core._validator import AxisMaskValidator
 from emperor.augmentations.adaptive_parameters.options import MaskDimensionOptions
@@ -100,7 +99,7 @@ class AxisMaskAbstract(Module):
         self.mask_floor: float = self.cfg.mask_floor
         self.model_config: LayerStackConfig = self.cfg.model_config
 
-    def _init_model(self, output_dim: int) -> "Layer | Sequential":
+    def _init_model(self, output_dim: int) -> "Layer | LayerStack":
         overrides = LayerStackConfig(
             input_dim=self.input_dim,
             output_dim=output_dim,

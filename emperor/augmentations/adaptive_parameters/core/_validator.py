@@ -26,17 +26,17 @@ class AdaptiveGeneratorValidatorBase:
     @staticmethod
     def validate_generator_model(generator_model) -> None:
         from torch.nn import Sequential
-        from emperor.base.layer import Layer
+        from emperor.base.layer import Layer, LayerStack
 
         if isinstance(generator_model, Layer):
             AdaptiveGeneratorValidatorBase._validate_generator_layer(generator_model)
             return
-        if isinstance(generator_model, Sequential):
+        if isinstance(generator_model, (Sequential, LayerStack)):
             AdaptiveGeneratorValidatorBase._validate_generator_sequence(generator_model)
             return
         raise TypeError(
-            "Expected model_config.build(...) to return a Layer or Sequential, "
-            f"received {type(generator_model).__name__}."
+            "Expected model_config.build(...) to return a Layer, Sequential, or "
+            f"LayerStack, received {type(generator_model).__name__}."
         )
 
     @staticmethod

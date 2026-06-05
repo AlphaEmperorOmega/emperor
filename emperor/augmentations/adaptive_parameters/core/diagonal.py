@@ -2,10 +2,9 @@ import torch
 import torch.nn.functional as F
 
 from torch import Tensor
-from torch.nn import Sequential
 from dataclasses import dataclass
 from emperor.base.utils import ConfigBase, Module, optional_field
-from emperor.base.layer import Layer, LayerStackConfig
+from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from emperor.augmentations.adaptive_parameters.core._validator import (
     DynamicDiagonalValidator,
 )
@@ -73,7 +72,7 @@ class DynamicDiagonalAbstract(Module):
 
     def _init_model(
         self,
-    ) -> "Layer | Sequential":
+    ) -> "Layer | LayerStack":
         output_dim = min(self.input_dim, self.output_dim)
         overrides = LayerStackConfig(input_dim=self.input_dim, output_dim=output_dim)
         generator_model = self.model_config.build(overrides)
