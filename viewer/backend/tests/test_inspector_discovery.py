@@ -2,19 +2,127 @@ from __future__ import annotations
 
 import os
 import unittest
+from types import SimpleNamespace
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from viewer.backend.inspector.discovery import (
+    dataset_cli_name,
+    dataset_label,
+    dataset_name,
     discover_models,
     list_model_datasets,
     list_model_monitors,
     list_model_presets,
+    normalize_dataset_name,
+    resolve_dataset,
+    resolve_datasets,
 )
+from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.service import inspect_model
 
 
+class FakeDatasetA:
+    flattened_input_dim = 4
+    num_classes = 2
+
+
+class FakeDatasetB:
+    flattened_input_dim = 8
+    num_classes = 3
+
+
+class FashionMnist:
+    pass
+
+
+class Mnist:
+    pass
+
+
+def fake_parts():
+    return SimpleNamespace(
+        name="fake_model",
+        dataset_options=[FakeDatasetA, FakeDatasetB],
+        dataset=FakeDatasetA,
+    )
+
+
+def fake_mnist_parts():
+    return SimpleNamespace(
+        name="fake_model",
+        dataset_options=[Mnist],
+        dataset=Mnist,
+    )
+
+
 class InspectorDiscoveryTests(unittest.TestCase):
+    def test_dataset_naming_helpers_characterize_current_format(self) -> None:
+        self.assertEqual(dataset_name(FakeDatasetA), "FakeDatasetA")
+        self.assertEqual(dataset_label(FakeDatasetA), "Fake Dataset A")
+        self.assertEqual(dataset_cli_name(FakeDatasetA), "fake-dataset-a")
+        self.assertEqual(dataset_name(FashionMnist), "FashionMnist")
+        self.assertEqual(dataset_label(FashionMnist), "Fashion Mnist")
+        self.assertEqual(dataset_cli_name(FashionMnist), "fashion-mnist")
+        self.assertEqual(normalize_dataset_name(" Fashion MNIST!! "), "fashion-mnist")
+        self.assertEqual(normalize_dataset_name("fake_dataset_a"), "fake-dataset-a")
+
+    def test_resolve_dataset_accepts_existing_aliases(self) -> None:
+        parts = fake_parts()
+
+        self.assertIs(resolve_dataset(parts, None), FakeDatasetA)
+        for alias in (
+            "FakeDatasetB",
+            "fakedatasetb",
+            "fake-dataset-b",
+            "Fake Dataset B",
+            " fake_dataset_b!! ",
+        ):
+            with self.subTest(alias=alias):
+                self.assertIs(resolve_dataset(parts, alias), FakeDatasetB)
+
+    def test_resolve_dataset_rejects_path_like_inputs(self) -> None:
+        parts = fake_mnist_parts()
+
+        for dataset in (
+            "./Mnist",
+            "../Mnist",
+            "/tmp/Mnist",
+            "data/Mnist",
+            "C:\\data\\Mnist",
+        ):
+            with self.subTest(dataset=dataset):
+                with self.assertRaises(InspectorError) as error:
+                    resolve_dataset(parts, dataset)
+
+                message = str(error.exception)
+                self.assertIn(dataset, message)
+                self.assertIn("filesystem path", message)
+                self.assertIn("server-known dataset name", message)
+
+    def test_resolve_datasets_preserves_order_and_removes_duplicates(self) -> None:
+        resolved = resolve_datasets(
+            fake_parts(),
+            [
+                "fake-dataset-b",
+                "FakeDatasetB",
+                "FakeDatasetA",
+                "fake-dataset-a",
+            ],
+        )
+
+        self.assertEqual(resolved, [FakeDatasetB, FakeDatasetA])
+
+    def test_resolve_dataset_unknown_error_text(self) -> None:
+        with self.assertRaises(InspectorError) as error:
+            resolve_dataset(fake_parts(), "UnknownDataset")
+
+        self.assertEqual(
+            str(error.exception),
+            "Unknown dataset 'UnknownDataset' for model 'fake_model'. "
+            "Valid datasets: FakeDatasetA, FakeDatasetB.",
+        )
+
     def test_model_discovery_lists_expected_packages(self) -> None:
         models = set(discover_models())
         self.assertGreaterEqual(
