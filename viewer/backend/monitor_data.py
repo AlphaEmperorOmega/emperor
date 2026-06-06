@@ -8,6 +8,7 @@ from viewer.backend.tensorboard_reader import (
     event_dirs,
     finite_float,
     load_event_accumulator,
+    scalar_points,
 )
 
 
@@ -97,17 +98,9 @@ class TensorBoardMonitorReader:
         series = []
         for tag in self._matching_tags(tags, prefix):
             try:
-                events = accumulator.Scalars(tag)
+                points = scalar_points(accumulator, tag, self.scalar_point_limit)
             except Exception:
                 continue
-            points = [
-                {
-                    "step": int(event.step),
-                    "wallTime": finite_float(event.wall_time),
-                    "value": finite_float(event.value),
-                }
-                for event in events[-self.scalar_point_limit :]
-            ]
             series.append({"tag": tag, "label": self._label(tag, prefix), "points": points})
         return series
 
