@@ -10,6 +10,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 EXPECTED_SCHEMA_EXPORTS = [
     "ConfigValue",
     "ApiResponseModel",
+    "CapabilitiesResponse",
     "HealthResponse",
     "ModelsResponse",
     "PresetResponse",
