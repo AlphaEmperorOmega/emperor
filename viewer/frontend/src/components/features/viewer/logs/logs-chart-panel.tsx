@@ -12,6 +12,7 @@ import { ErrorPanel } from "@/components/features/viewer/error-panel";
 import { ViewModeButton } from "@/components/features/viewer/view-mode-button";
 import { LogScalarChart } from "@/components/features/viewer/logs/log-scalar-chart";
 import { type LogRun, type LogScalarSeries } from "@/lib/api";
+import { type ScalarXMode, type ScalarYScale } from "@/lib/echarts/scalar-options";
 import { cn, errorMessage } from "@/lib/utils";
 
 export type ScalarChartGridMode = "full" | "two" | "three";
@@ -21,6 +22,11 @@ const SCALAR_CHART_GRID_CLASSES: Record<ScalarChartGridMode, string> = {
   two: "grid gap-4 xl:grid-cols-2",
   three: "grid gap-4 xl:grid-cols-2 2xl:grid-cols-3",
 };
+
+// Charts that share an ECharts group keep their tooltip, crosshair, and dataZoom
+// in sync. All logs scalar charts belong to one group so hovering a step lights
+// up every metric at once, TensorBoard-style.
+const LOGS_SCALAR_GROUP = "logs-scalars";
 
 export type LogsChartEmptyState = {
   title: string;
@@ -54,6 +60,12 @@ export function LogsChartPanel({
   selectedTagCount,
   gridMode,
   onGridModeChange,
+  smoothing,
+  onSmoothingChange,
+  xMode,
+  onXModeChange,
+  yScale,
+  onYScaleChange,
   isFetching,
   isRefreshDisabled,
   onRefresh,
@@ -70,6 +82,12 @@ export function LogsChartPanel({
   selectedTagCount: number;
   gridMode: ScalarChartGridMode;
   onGridModeChange: (mode: ScalarChartGridMode) => void;
+  smoothing: number;
+  onSmoothingChange: (weight: number) => void;
+  xMode: ScalarXMode;
+  onXModeChange: (mode: ScalarXMode) => void;
+  yScale: ScalarYScale;
+  onYScaleChange: (scale: ScalarYScale) => void;
   isFetching: boolean;
   isRefreshDisabled: boolean;
   onRefresh: () => void;
@@ -88,6 +106,44 @@ export function LogsChartPanel({
           </div>
         </div>
         <div className="flex min-w-0 items-center justify-end gap-2 overflow-x-auto">
+          <label className="flex shrink-0 items-center gap-2 text-xs text-ink-faint">
+            <span>Smooth</span>
+            <input
+              type="range"
+              min={0}
+              max={0.99}
+              step={0.01}
+              value={smoothing}
+              onChange={(event) => onSmoothingChange(Number(event.target.value))}
+              aria-label="Scalar smoothing"
+              className="h-1 w-24 cursor-pointer accent-violet"
+            />
+            <span className="w-8 font-mono tabular-nums text-ink-dim">
+              {smoothing.toFixed(2)}
+            </span>
+          </label>
+          <SegmentedControl aria-label="Scalar x axis" className="shrink-0">
+            <ViewModeButton active={xMode === "step"} onClick={() => onXModeChange("step")}>
+              Step
+            </ViewModeButton>
+            <ViewModeButton
+              active={xMode === "wallTime"}
+              onClick={() => onXModeChange("wallTime")}
+            >
+              Time
+            </ViewModeButton>
+          </SegmentedControl>
+          <SegmentedControl aria-label="Scalar y scale" className="shrink-0">
+            <ViewModeButton
+              active={yScale === "linear"}
+              onClick={() => onYScaleChange("linear")}
+            >
+              Lin
+            </ViewModeButton>
+            <ViewModeButton active={yScale === "log"} onClick={() => onYScaleChange("log")}>
+              Log
+            </ViewModeButton>
+          </SegmentedControl>
           <SegmentedControl aria-label="Scalar chart layout" className="shrink-0">
             <ViewModeButton
               active={gridMode === "full"}
@@ -150,6 +206,10 @@ export function LogsChartPanel({
                   runsById={runsById}
                   runOrder={runOrder}
                   onSelectRun={onSelectRun}
+                  group={LOGS_SCALAR_GROUP}
+                  xMode={xMode}
+                  yScale={yScale}
+                  smoothing={smoothing}
                 />
               );
             })}

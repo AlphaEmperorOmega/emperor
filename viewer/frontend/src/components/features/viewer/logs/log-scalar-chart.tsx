@@ -1,20 +1,17 @@
-import { Badge } from "@/components/ui/badge";
-import { type LogRun, type LogScalarSeries } from "@/lib/api";
-import { buildChartPath, buildLinearScale, formatChartDomain } from "@/lib/chart-scale";
-import { formatNumber, formatRunLabel } from "@/lib/logs/helpers";
+"use client";
 
-const SERIES_COLORS = [
-  "#7c6dff",
-  "#22d3ee",
-  "#f59e0b",
-  "#34d399",
-  "#f472b6",
-  "#a78bfa",
-  "#fb7185",
-  "#60a5fa",
-  "#facc15",
-  "#2dd4bf",
-];
+import { useMemo } from "react";
+import { Badge } from "@/components/ui/badge";
+import { EChart } from "@/components/features/viewer/charts/echart";
+import { type LogRun, type LogScalarSeries } from "@/lib/api";
+import { scalarSeriesColors } from "@/lib/charts";
+import {
+  buildScalarLineOption,
+  type ScalarLine,
+  type ScalarXMode,
+  type ScalarYScale,
+} from "@/lib/echarts/scalar-options";
+import { formatNumber, formatRunLabel } from "@/lib/logs/helpers";
 
 export function LogScalarChart({
   tag,
@@ -22,26 +19,46 @@ export function LogScalarChart({
   runsById,
   runOrder,
   onSelectRun,
+  xMode = "step",
+  yScale = "linear",
+  smoothing = 0,
+  group,
 }: {
   tag: string;
   series: LogScalarSeries[];
   runsById: Map<string, LogRun>;
   runOrder: string[];
   onSelectRun: (runId: string) => void;
+  xMode?: ScalarXMode;
+  yScale?: ScalarYScale;
+  smoothing?: number;
+  group?: string;
 }) {
-  const width = 760;
-  const height = 188;
-  const paddingX = 34;
-  const paddingY = 22;
+  const colorFor = (runId: string) =>
+    scalarSeriesColors[Math.max(runOrder.indexOf(runId), 0) % scalarSeriesColors.length];
+
   const allPoints = series.flatMap((entry) => entry.points);
-  const scale = buildLinearScale(allPoints, {
-    width,
-    height,
-    padding: { x: paddingX, y: paddingY },
-    pathKind: "path",
-  });
-  const { minStep, maxStep } = scale.domain;
-  const { minLabel, maxLabel } = formatChartDomain(scale.domain);
+  const steps = allPoints.map((point) => point.step);
+  const values = allPoints.map((point) => point.value);
+  const minStep = steps.length ? Math.min(...steps) : 0;
+  const maxStep = steps.length ? Math.max(...steps) : 0;
+  const minValue = values.length ? Math.min(...values) : 0;
+  const maxValue = values.length ? Math.max(...values) : 0;
+
+  const option = useMemo(() => {
+    const lines: ScalarLine[] = series.map((entry) => {
+      const run = runsById.get(entry.runId);
+      return {
+        id: entry.runId,
+        name: run ? formatRunLabel(run) : entry.runId,
+        color: colorFor(entry.runId),
+        points: entry.points,
+      };
+    });
+    return buildScalarLineOption(lines, { xMode, yScale, smoothing, dataZoom: true });
+    // colorFor depends on runOrder; runsById/series cover the rest.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series, runsById, runOrder, xMode, yScale, smoothing]);
 
   return (
     <section className="edge grid gap-3 rounded-card p-4">
@@ -52,80 +69,14 @@ export function LogScalarChart({
             {series.length} lines · step {minStep} to {maxStep}
           </div>
         </div>
-        <Badge>{minLabel} to {maxLabel}</Badge>
+        <Badge>
+          {formatNumber(minValue)} to {formatNumber(maxValue)}
+        </Badge>
       </div>
 
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-52 w-full overflow-visible text-violet"
-        role="img"
-        aria-label={`${tag} scalar chart`}
-      >
-        <line
-          x1={paddingX}
-          y1={height - paddingY}
-          x2={width - paddingX}
-          y2={height - paddingY}
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="1"
-        />
-        <line
-          x1={paddingX}
-          y1={paddingY}
-          x2={paddingX}
-          y2={height - paddingY}
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="1"
-        />
-        <text x={paddingX} y={height - 4} fill="rgba(230,232,255,0.45)" fontSize="10">
-          {minStep}
-        </text>
-        <text
-          x={width - paddingX}
-          y={height - 4}
-          fill="rgba(230,232,255,0.45)"
-          fontSize="10"
-          textAnchor="end"
-        >
-          {maxStep}
-        </text>
-        <text x="4" y={paddingY + 4} fill="rgba(230,232,255,0.45)" fontSize="10">
-          {maxLabel}
-        </text>
-        <text x="4" y={height - paddingY} fill="rgba(230,232,255,0.45)" fontSize="10">
-          {minLabel}
-        </text>
-        {series.map((entry) => {
-          const color =
-            SERIES_COLORS[Math.max(runOrder.indexOf(entry.runId), 0) % SERIES_COLORS.length];
-          if (entry.points.length === 1) {
-            const point = entry.points[0];
-            const { x, y } = scale.coordinate(point);
-            return (
-              <circle
-                key={entry.runId}
-                cx={x}
-                cy={y}
-                r="3.5"
-                fill={color}
-                aria-label={runsById.get(entry.runId)?.runName}
-              />
-            );
-          }
-          return (
-            <path
-              key={entry.runId}
-              d={buildChartPath(entry.points, scale)}
-              fill="none"
-              stroke={color}
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              opacity="0.9"
-            />
-          );
-        })}
-      </svg>
+      <div className="h-56 w-full" role="img" aria-label={`${tag} scalar chart`}>
+        <EChart option={option} group={group} />
+      </div>
 
       <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
         {series.map((entry) => {
@@ -133,8 +84,7 @@ export function LogScalarChart({
           if (!run) {
             return null;
           }
-          const color =
-            SERIES_COLORS[Math.max(runOrder.indexOf(entry.runId), 0) % SERIES_COLORS.length];
+          const color = colorFor(entry.runId);
           const latest = entry.points.at(-1);
           return (
             <button

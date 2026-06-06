@@ -6,6 +6,7 @@ import {
 } from "@/components/features/viewer/logs/logs-chart-panel";
 import { LogsSidebar } from "@/components/features/viewer/logs/logs-sidebar";
 import { type LogScalarSeries } from "@/lib/api";
+import { type ScalarXMode, type ScalarYScale } from "@/lib/echarts/scalar-options";
 import { useLogScalarsQuery } from "@/hooks/use-log-queries";
 import { logQueryKeys } from "@/lib/query-keys";
 import { type LogsWorkspaceState } from "@/components/features/viewer/state/use-logs-workspace-state";
@@ -69,6 +70,9 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
 export function LogsGraphPreviewPanel({ state }: { state: LogsWorkspaceState }) {
   const [scalarChartGridMode, setScalarChartGridMode] =
     useState<ScalarChartGridMode>("full");
+  const [scalarSmoothing, setScalarSmoothing] = useState(0);
+  const [scalarXMode, setScalarXMode] = useState<ScalarXMode>("step");
+  const [scalarYScale, setScalarYScale] = useState<ScalarYScale>("linear");
   const scalarQuery = useLogScalarsQuery({
     runIds: state.visibleRunIds,
     tags: state.selectedTagList,
@@ -145,6 +149,12 @@ export function LogsGraphPreviewPanel({ state }: { state: LogsWorkspaceState }) 
       selectedTagCount={state.selectedTagList.length}
       gridMode={scalarChartGridMode}
       onGridModeChange={setScalarChartGridMode}
+      smoothing={scalarSmoothing}
+      onSmoothingChange={setScalarSmoothing}
+      xMode={scalarXMode}
+      onXModeChange={setScalarXMode}
+      yScale={scalarYScale}
+      onYScaleChange={setScalarYScale}
       isFetching={scalarQuery.isFetching}
       isRefreshDisabled={!scalarQuery.isSuccess && !scalarQuery.isError}
       onRefresh={() => {
