@@ -507,6 +507,18 @@ const monitorsResponse = {
     },
   ],
 };
+const capabilitiesResponse = {
+  authMode: "none",
+  trainingEnabled: true,
+  logDeletionEnabled: true,
+  historicalLogsEnabled: true,
+  liveMonitorDataEnabled: true,
+  historicalMonitorDataEnabled: true,
+  uploadsEnabled: false,
+  maxUploadSize: null,
+  dataSourcesEnabled: false,
+  dataSources: [],
+};
 const logRunsResponse = {
   runs: [
     {
@@ -1949,6 +1961,7 @@ function installFetchMock(
     deleteLogExperimentError?: string;
     deleteLogRunsError?: string;
     deleteLogRunsBlockers?: Array<{ id: string; logFolder: string; status: string }>;
+    capabilitiesResponse?: typeof capabilitiesResponse;
     schemaResponse?: unknown;
     searchSpaceResponse?: typeof searchSpaceResponse;
     datasetsResponse?: typeof datasetsResponse;
@@ -2070,6 +2083,9 @@ function installFetchMock(
     const url = String(input);
     if (url.endsWith("/health")) {
       return jsonResponse({ status: "ok" });
+    }
+    if (url.endsWith("/capabilities")) {
+      return jsonResponse(options.capabilitiesResponse ?? capabilitiesResponse);
     }
     if (url.endsWith("/models")) {
       return jsonResponse(modelsResponse);
@@ -3401,6 +3417,39 @@ describe("ViewerApp", () => {
     expect(
       screen.queryByRole("button", { name: /^delete visible runs$/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("hides destructive log deletion actions when capabilities disable them", async () => {
+    const { deleteExperimentRequests, deleteRunPlanRequests, deleteRunRequests } =
+      installFetchMock({
+        capabilitiesResponse: {
+          ...capabilitiesResponse,
+          authMode: "bearer",
+          logDeletionEnabled: false,
+        },
+      });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    expect(await screen.findByLabelText("Experiments test_model")).toBeChecked();
+
+    expect(
+      screen.queryByRole("button", { name: /^delete experiment test_model$/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Experiments test_model_2"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /^delete dataset/i }))
+        .not.toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /^delete preset/i }))
+      .not.toBeInTheDocument();
+    expect(screen.getByText(/log deletion is disabled/i)).toBeInTheDocument();
+    expect(deleteExperimentRequests).toHaveLength(0);
+    expect(deleteRunPlanRequests).toHaveLength(0);
+    expect(deleteRunRequests).toHaveLength(0);
   });
 
   it("shows dataset row delete actions only for a single selected experiment", async () => {
@@ -4993,6 +5042,32 @@ describe("ViewerApp", () => {
     await waitFor(() => {
       expect(trainingBodies[0]).toMatchObject({ logFolder: "my_experiment" });
     });
+  });
+
+  it("disables training planning and submission when capabilities disable training", async () => {
+    const { fetchMock, trainingBodies } = installFetchMock({
+      capabilitiesResponse: {
+        ...capabilitiesResponse,
+        authMode: "bearer",
+        trainingEnabled: false,
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const startButton = await screen.findByRole("button", { name: /start training/i });
+    expect(startButton).toBeDisabled();
+
+    const details = await expandedTrainingDetails(user);
+    expect(within(details).getByText(/training is disabled/i)).toBeInTheDocument();
+
+    await user.click(within(details).getByRole("tab", { name: /new folder/i }));
+    await user.type(within(details).getByLabelText(/^new log folder$/i), "hosted_disabled");
+
+    expect(startButton).toBeDisabled();
+    expect(trainingBodies).toHaveLength(0);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/training/run-plan")))
+      .toBe(false);
   });
 
   it("keeps Start Training disabled when the selected model has no datasets", async () => {
