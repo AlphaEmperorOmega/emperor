@@ -13,8 +13,8 @@ from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.monitor_data import DEFAULT_SCALAR_POINT_LIMIT, TensorBoardMonitorReader
 from viewer.backend.tensorboard_reader import (
     event_dirs,
-    finite_float,
     load_event_accumulator,
+    scalar_points,
 )
 
 
@@ -35,6 +35,43 @@ def validate_log_experiment_name(name: str) -> str:
             "single underscores."
         )
     return name
+
+
+def _resolved_logs_root(logs_root: Path) -> Path:
+    return logs_root.resolve()
+
+
+def _resolve_log_path_under_root(path: Path, root: Path) -> Path | None:
+    try:
+        resolved = path.resolve()
+        resolved.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    return resolved
+
+
+def _is_log_path_under_root(path: Path, root: Path) -> bool:
+    return _resolve_log_path_under_root(path, root) is not None
+
+
+def _validate_log_experiment_delete_name(experiment: str) -> None:
+    if not experiment:
+        raise InspectorError("Log experiment name is required")
+    if "/" in experiment or "\\" in experiment or experiment in {".", ".."}:
+        raise InspectorError(f"Invalid log experiment name: {experiment}")
+    if not is_valid_log_experiment_name(experiment):
+        raise InspectorError(f"Invalid log experiment name: {experiment}")
+
+
+def _validated_log_experiment_delete_path(root: Path, experiment: str) -> Path:
+    target = root / experiment
+    if target.is_symlink():
+        raise InspectorError(
+            f"Refusing to delete symlink log experiment: {experiment}"
+        )
+    if not _is_log_path_under_root(target, root):
+        raise InspectorError(f"Invalid log experiment path: {experiment}") from None
+    return target
 
 
 def _run_id(relative_path: str) -> str:
@@ -164,6 +201,49 @@ class LogRunDeleteCandidate:
         }
 
 
+def _validated_log_run_delete_candidate_path(
+    candidate: LogRunDeleteCandidate,
+    root: Path,
+) -> Path:
+    target = root / candidate.relativePath
+    if target.is_symlink():
+        raise InspectorError(
+            f"Refusing to delete symlink log run: {candidate.relativePath}"
+        )
+    if not target.name.startswith("version_"):
+        raise InspectorError(
+            f"Refusing to delete non-version log folder: {candidate.relativePath}"
+        )
+    if not _is_log_path_under_root(target, root):
+        raise InspectorError(
+            f"Invalid log run path: {candidate.relativePath}"
+        ) from None
+    if not target.is_dir():
+        raise InspectorError(
+            f"Log run is not a directory: {candidate.relativePath}"
+        )
+    return target
+
+
+def _prune_empty_log_run_parents(
+    *,
+    start: Path,
+    experiment_dir: Path,
+    root: Path,
+) -> None:
+    current = start
+    while current != root:
+        if not _is_log_path_under_root(current, root):
+            return
+        try:
+            current.rmdir()
+        except OSError:
+            return
+        if current == experiment_dir:
+            return
+        current = current.parent
+
+
 @dataclass(frozen=True)
 class ActiveLogRunDeleteBlocker:
     id: str
@@ -188,23 +268,11 @@ class LogRunDeletePlan:
         return bool(self.candidates) and not self.blockedByActiveJobs
 
     def to_response(self) -> dict[str, Any]:
-        affected = _affected_values(self.candidates)
-        return {
-            "candidateCount": len(self.candidates),
-            "counts": {
-                "runs": len(self.candidates),
-                "experiments": len(affected["experiments"]),
-                "datasets": len(affected["datasets"]),
-                "models": len(affected["models"]),
-                "presets": len(affected["presets"]),
-            },
-            "affected": affected,
-            "candidates": [candidate.to_response() for candidate in self.candidates],
-            "blockedByActiveJobs": [
-                blocker.to_response() for blocker in self.blockedByActiveJobs
-            ],
-            "canDelete": self.canDelete,
-        }
+        return _delete_plan_response_fields(
+            self.candidates,
+            blocked_by_active_jobs=self.blockedByActiveJobs,
+            can_delete=self.canDelete,
+        )
 
 
 @dataclass(frozen=True)
@@ -214,23 +282,15 @@ class LogRunDeleteResult:
     deletedRelativePaths: list[str]
 
     def to_response(self) -> dict[str, Any]:
-        affected = _affected_values(self.candidates)
         return {
             "deletedRunIds": self.deletedRunIds,
             "deletedRunCount": len(self.deletedRunIds),
             "deletedRelativePaths": self.deletedRelativePaths,
-            "candidateCount": len(self.candidates),
-            "counts": {
-                "runs": len(self.candidates),
-                "experiments": len(affected["experiments"]),
-                "datasets": len(affected["datasets"]),
-                "models": len(affected["models"]),
-                "presets": len(affected["presets"]),
-            },
-            "affected": affected,
-            "candidates": [candidate.to_response() for candidate in self.candidates],
-            "blockedByActiveJobs": [],
-            "canDelete": True,
+            **_delete_plan_response_fields(
+                self.candidates,
+                blocked_by_active_jobs=[],
+                can_delete=True,
+            ),
         }
 
 
@@ -246,6 +306,31 @@ class LogExperiment:
             "runCount": self.runCount,
             "relativePath": self.relativePath,
         }
+
+
+def _delete_plan_response_fields(
+    candidates: list[LogRunDeleteCandidate],
+    *,
+    blocked_by_active_jobs: list[ActiveLogRunDeleteBlocker],
+    can_delete: bool,
+) -> dict[str, Any]:
+    affected = _affected_values(candidates)
+    return {
+        "candidateCount": len(candidates),
+        "counts": {
+            "runs": len(candidates),
+            "experiments": len(affected["experiments"]),
+            "datasets": len(affected["datasets"]),
+            "models": len(affected["models"]),
+            "presets": len(affected["presets"]),
+        },
+        "affected": affected,
+        "candidates": [candidate.to_response() for candidate in candidates],
+        "blockedByActiveJobs": [
+            blocker.to_response() for blocker in blocked_by_active_jobs
+        ],
+        "canDelete": can_delete,
+    }
 
 
 def _affected_values(
@@ -371,24 +456,13 @@ class LogRunIndex:
             log_dir=str(run.path),
         )
 
-    def delete_experiment(self, experiment: str) -> LogExperimentDeleteResult:
-        if not experiment:
-            raise InspectorError("Log experiment name is required")
-        if "/" in experiment or "\\" in experiment or experiment in {".", ".."}:
-            raise InspectorError(f"Invalid log experiment name: {experiment}")
-        if not is_valid_log_experiment_name(experiment):
-            raise InspectorError(f"Invalid log experiment name: {experiment}")
-
+    def delete_experiment(
+        self,
+        experiment: str,
+    ) -> LogExperimentDeleteResult:
+        _validate_log_experiment_delete_name(experiment)
         root = self._resolved_root()
-        target = root / experiment
-        if target.is_symlink():
-            raise InspectorError(f"Refusing to delete symlink log experiment: {experiment}")
-
-        try:
-            resolved_target = target.resolve()
-            resolved_target.relative_to(root)
-        except (OSError, ValueError):
-            raise InspectorError(f"Invalid log experiment path: {experiment}") from None
+        target = _validated_log_experiment_delete_path(root, experiment)
 
         runs = [run for run in self.list_runs() if run.experiment == experiment]
 
@@ -463,15 +537,10 @@ class LogRunIndex:
         )
 
     def _resolved_root(self) -> Path:
-        return self.logs_root.resolve()
+        return _resolved_logs_root(self.logs_root)
 
     def _resolve_under_root(self, path: Path, root: Path) -> Path | None:
-        try:
-            resolved = path.resolve()
-            resolved.relative_to(root)
-        except (OSError, ValueError):
-            return None
-        return resolved
+        return _resolve_log_path_under_root(path, root)
 
     def _parse_run(self, root: Path, version_dir: Path) -> LogRun | None:
         try:
@@ -546,27 +615,7 @@ class LogRunIndex:
         candidate: LogRunDeleteCandidate,
         root: Path,
     ) -> Path:
-        target = root / candidate.relativePath
-        if target.is_symlink():
-            raise InspectorError(
-                f"Refusing to delete symlink log run: {candidate.relativePath}"
-            )
-        if not target.name.startswith("version_"):
-            raise InspectorError(
-                f"Refusing to delete non-version log folder: {candidate.relativePath}"
-            )
-        try:
-            resolved_target = target.resolve()
-            resolved_target.relative_to(root)
-        except (OSError, ValueError):
-            raise InspectorError(
-                f"Invalid log run path: {candidate.relativePath}"
-            ) from None
-        if not target.is_dir():
-            raise InspectorError(
-                f"Log run is not a directory: {candidate.relativePath}"
-            )
-        return target
+        return _validated_log_run_delete_candidate_path(candidate, root)
 
     def _prune_empty_run_parents(
         self,
@@ -575,19 +624,11 @@ class LogRunIndex:
         experiment_dir: Path,
         root: Path,
     ) -> None:
-        current = start
-        while current != root:
-            try:
-                current.resolve().relative_to(root)
-            except (OSError, ValueError):
-                return
-            try:
-                current.rmdir()
-            except OSError:
-                return
-            if current == experiment_dir:
-                return
-            current = current.parent
+        _prune_empty_log_run_parents(
+            start=start,
+            experiment_dir=experiment_dir,
+            root=root,
+        )
 
     def _resolve_runs(self, run_ids: list[str]) -> list[LogRun]:
         if not run_ids:
@@ -620,17 +661,9 @@ class LogRunIndex:
             if accumulator is None:
                 continue
             try:
-                events = accumulator.Scalars(tag)
+                points.extend(scalar_points(accumulator, tag, None))
             except Exception:
                 continue
-            points.extend(
-                {
-                    "step": int(event.step),
-                    "wallTime": finite_float(event.wall_time),
-                    "value": finite_float(event.value),
-                }
-                for event in events
-            )
 
         points.sort(key=lambda point: (point["step"], point["wallTime"]))
         return points[-self.scalar_point_limit :]
