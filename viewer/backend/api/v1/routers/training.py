@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_training_job_service
 from viewer.backend.schemas import (
     MonitorDataResponse,
@@ -16,7 +17,11 @@ from viewer.backend.schemas import (
 )
 from viewer.backend.services.training import TrainingJobService
 
-router = APIRouter(prefix="/training", tags=["training"])
+router = APIRouter(
+    prefix="/training",
+    tags=["training"],
+    dependencies=[Depends(require_bearer_auth)],
+)
 
 
 @router.post(

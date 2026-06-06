@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_model_catalog_service
 from viewer.backend.schemas import (
     ConfigSchemaResponse,
@@ -17,7 +18,11 @@ from viewer.backend.schemas import (
 )
 from viewer.backend.services.models import ModelCatalogService
 
-router = APIRouter(prefix="/models", tags=["models"])
+router = APIRouter(
+    prefix="/models",
+    tags=["models"],
+    dependencies=[Depends(require_bearer_auth)],
+)
 
 
 @router.get(

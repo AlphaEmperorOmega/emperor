@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_log_run_service, get_training_job_service
 from viewer.backend.schemas import (
     LogExperimentDeleteResponse,
@@ -27,7 +28,11 @@ from viewer.backend.schemas import (
 from viewer.backend.services.logs import LogRunService
 from viewer.backend.services.training import TrainingJobService
 
-router = APIRouter(prefix="/logs", tags=["logs"])
+router = APIRouter(
+    prefix="/logs",
+    tags=["logs"],
+    dependencies=[Depends(require_bearer_auth)],
+)
 DEFAULT_LOG_PAGE_LIMIT = 500
 MAX_LOG_PAGE_LIMIT = 2000
 
