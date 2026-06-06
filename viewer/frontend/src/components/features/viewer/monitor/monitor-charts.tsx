@@ -3,7 +3,9 @@ import { Loader2 } from "lucide-react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { ChartFrame } from "@/components/features/viewer/monitor/chart-frame";
-import { buildChartPath, buildLinearScale, formatChartDomain } from "@/lib/chart-scale";
+import { EChart } from "@/components/features/viewer/charts/echart";
+import { buildScalarLineOption } from "@/lib/echarts/scalar-options";
+import { buildHistogramBarOption } from "@/lib/echarts/histogram-options";
 import { multiRunLineColors } from "@/lib/charts";
 import { formatNumber, formatRunDisplayName } from "@/lib/format";
 import {
@@ -15,6 +17,14 @@ import {
 } from "@/types/monitor";
 import { type LogRun } from "@/lib/api";
 
+// Single-run monitor scalars keep their original cyan accent.
+const SINGLE_SCALAR_COLOR = "#7fd0ff";
+
+// Scalar (line) charts in the modal share one group so the crosshair + tooltip
+// track the same step across a node's metrics. Histograms use a value x-axis and
+// are deliberately left out of the group.
+const MONITOR_SCALAR_GROUP = "monitor-scalars";
+
 function runDisplayName(run: LogRun) {
   return formatRunDisplayName({
     name: run.runName,
@@ -24,29 +34,15 @@ function runDisplayName(run: LogRun) {
 }
 
 export function ScalarChart({ series, domain }: { series: ScalarSeries; domain?: ScalarDomain }) {
-  const width = 320;
-  const height = 92;
-  const padding = 10;
   const points = series.points;
   const values = points.map((point) => point.value);
   const localMin = values.length ? Math.min(...values) : 0;
   const localMax = values.length ? Math.max(...values) : 1;
-  const scale = buildLinearScale(points, {
-    width,
-    height,
-    padding,
-    domain,
-    stepDomainMode: "series",
-  });
-  const pointCoordinates = points.map(scale.coordinate);
-  const path = buildChartPath(points, scale);
-  const singlePoint = pointCoordinates[0];
   const latest = points.at(-1);
-  const { minLabel, maxLabel } = formatChartDomain({
-    ...scale.domain,
-    minValue: localMin,
-    maxValue: localMax,
-  });
+  const option = buildScalarLineOption(
+    [{ id: series.tag, name: series.label, color: SINGLE_SCALAR_COLOR, points }],
+    { domain },
+  );
 
   return (
     <ChartFrame
@@ -59,56 +55,17 @@ export function ScalarChart({ series, domain }: { series: ScalarSeries; domain?:
             <span>0 points</span>
           ) : (
             <>
-              <span>min {minLabel}</span>
-              <span>max {maxLabel}</span>
+              <span>min {formatNumber(localMin)}</span>
+              <span>max {formatNumber(localMax)}</span>
             </>
           )}
           {latest && <span>latest {formatNumber(latest.value)}</span>}
         </>
       }
     >
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="h-24 w-full text-cyan"
-        role="img"
-      >
-        <line
-          x1={padding}
-          y1={height - padding}
-          x2={width - padding}
-          y2={height - padding}
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="1"
-          vectorEffect="non-scaling-stroke"
-        />
-        <line
-          x1={padding}
-          y1={padding}
-          x2={padding}
-          y2={height - padding}
-          stroke="rgba(255,255,255,0.12)"
-          vectorEffect="non-scaling-stroke"
-        />
-        {points.length === 0 ? null : points.length === 1 ? (
-          <circle
-            cx={domain && singlePoint ? singlePoint.x : width / 2}
-            cy={domain && singlePoint ? singlePoint.y : height / 2}
-            r="3"
-            fill="currentColor"
-          />
-        ) : (
-          <polyline
-            points={path}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        )}
-      </svg>
+      <div className="h-24 w-full" role="img" aria-label={`${series.tag} scalar chart`}>
+        <EChart option={option} group={MONITOR_SCALAR_GROUP} />
+      </div>
     </ChartFrame>
   );
 }
@@ -120,12 +77,8 @@ export function HistogramChart({
   histogram: HistogramData;
   maxCount?: number;
 }) {
-  const width = 320;
-  const height = 92;
-  const padding = 10;
   const localMaxCount = Math.max(...histogram.buckets.map((bucket) => bucket.count), 1);
-  const scaleMaxCount = maxCount ?? localMaxCount;
-  const barWidth = (width - padding * 2) / Math.max(histogram.buckets.length, 1);
+  const option = buildHistogramBarOption(histogram, { maxCount });
 
   return (
     <ChartFrame
@@ -139,36 +92,9 @@ export function HistogramChart({
         </>
       }
     >
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="h-24 w-full"
-        role="img"
-      >
-        <line
-          x1={padding}
-          y1={height - padding}
-          x2={width - padding}
-          y2={height - padding}
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="1"
-          vectorEffect="non-scaling-stroke"
-        />
-        {histogram.buckets.map((bucket, index) => {
-          const barHeight = (bucket.count / scaleMaxCount) * (height - padding * 2);
-          return (
-            <rect
-              key={`${bucket.left}-${bucket.right}-${index}`}
-              x={padding + index * barWidth}
-              y={height - padding - barHeight}
-              width={Math.max(barWidth - 1, 1)}
-              height={barHeight}
-              fill="#a78bfa"
-              opacity="0.85"
-            />
-          );
-        })}
-      </svg>
+      <div className="h-24 w-full" role="img" aria-label={`${histogram.tag} histogram`}>
+        <EChart option={option} />
+      </div>
     </ChartFrame>
   );
 }
@@ -194,17 +120,21 @@ export function MonitorImage({ image }: { image: MonitorImageData }) {
 }
 
 export function MultiRunScalarChart({ metric }: { metric: MultiRunScalarMetric }) {
-  const width = 320;
-  const height = 104;
-  const padding = 10;
-  const points = metric.entries.flatMap((entry) => entry.series.points);
-  const scale = buildLinearScale(points, {
-    width,
-    height,
-    padding,
-  });
-  const latestStep = points.length ? scale.domain.maxStep : undefined;
-  const { minLabel, maxLabel } = formatChartDomain(scale.domain);
+  const allPoints = metric.entries.flatMap((entry) => entry.series.points);
+  const values = allPoints.map((point) => point.value);
+  const minLabel = formatNumber(values.length ? Math.min(...values) : 0);
+  const maxLabel = formatNumber(values.length ? Math.max(...values) : 1);
+  const latestStep = allPoints.length
+    ? Math.max(...allPoints.map((point) => point.step))
+    : undefined;
+  const option = buildScalarLineOption(
+    metric.entries.map((entry, index) => ({
+      id: entry.run.id,
+      name: runDisplayName(entry.run),
+      color: multiRunLineColors[index % multiRunLineColors.length],
+      points: entry.series.points,
+    })),
+  );
 
   return (
     <ChartFrame
@@ -220,58 +150,13 @@ export function MultiRunScalarChart({ metric }: { metric: MultiRunScalarMetric }
         </>
       }
     >
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
+      <div
         className="h-28 w-full"
         role="img"
         aria-label={`${metric.key} multi-run scalar chart`}
       >
-        <line
-          x1={padding}
-          y1={height - padding}
-          x2={width - padding}
-          y2={height - padding}
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="1"
-          vectorEffect="non-scaling-stroke"
-        />
-        <line
-          x1={padding}
-          y1={padding}
-          x2={padding}
-          y2={height - padding}
-          stroke="rgba(255,255,255,0.12)"
-          vectorEffect="non-scaling-stroke"
-        />
-        {metric.entries.map((entry, index) => {
-          const color = multiRunLineColors[index % multiRunLineColors.length];
-          const coordinates = entry.series.points.map(scale.coordinate);
-          const path = buildChartPath(entry.series.points, scale);
-          const singlePoint = coordinates[0];
-
-          return entry.series.points.length === 1 && singlePoint ? (
-            <circle
-              key={entry.run.id}
-              cx={singlePoint.x}
-              cy={singlePoint.y}
-              r="3"
-              fill={color}
-            />
-          ) : (
-            <polyline
-              key={entry.run.id}
-              points={path}
-              fill="none"
-              stroke={color}
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-          );
-        })}
-      </svg>
+        <EChart option={option} group={MONITOR_SCALAR_GROUP} />
+      </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-dim">
         {metric.entries.map((entry, index) => (
           <span key={entry.run.id} className="inline-flex min-w-0 items-center gap-1">
