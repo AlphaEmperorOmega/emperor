@@ -61,7 +61,7 @@ export function LogScalarChart({
   }, [series, runsById, runOrder, xMode, yScale, smoothing]);
 
   return (
-    <section className="edge grid gap-3 rounded-card p-4">
+    <section className="edge grid min-w-0 gap-3 rounded-card p-4">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-bold text-ink">{tag}</h2>
@@ -74,7 +74,7 @@ export function LogScalarChart({
         </Badge>
       </div>
 
-      <div className="h-56 w-full" role="img" aria-label={`${tag} scalar chart`}>
+      <div className="h-56 w-full min-w-0" role="img" aria-label={`${tag} scalar chart`}>
         <EChart option={option} group={group} />
       </div>
 

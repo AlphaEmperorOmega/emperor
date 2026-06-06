@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type CSSProperties } from "react";
+import { type CSSProperties } from "react";
 import EChartsReactCore from "echarts-for-react/lib/core";
 import type { EChartsOption } from "echarts";
 import { echarts } from "@/lib/echarts/register";
@@ -13,9 +13,12 @@ export type EChartEventHandlers = Record<string, (params: unknown) => void>;
 
 /**
  * Thin client-only wrapper around echarts-for-react's core entry. Renders an
- * ECharts canvas with the emperor theme, resizes on container changes, and -
- * when a `group` is given - links the instance so tooltips, axis pointers, and
- * dataZoom stay synced across every chart sharing that group.
+ * ECharts canvas with the emperor theme. The core component already auto-resizes
+ * via its built-in size-sensor, so the container only needs `min-w-0` to be
+ * allowed to shrink below the canvas's intrinsic width inside flex/grid layouts
+ * (otherwise the box stays pinned to the old canvas width and never resizes).
+ * When a `group` is given, the instance is linked so tooltips, axis pointers,
+ * and dataZoom stay synced across every chart sharing that group.
  */
 export function EChart({
   option,
@@ -30,25 +33,9 @@ export function EChart({
   style?: CSSProperties;
   onEvents?: EChartEventHandlers;
 }) {
-  const chartRef = useRef<EChartsReactCore>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const node = containerRef.current;
-    if (!node) {
-      return;
-    }
-    const observer = new ResizeObserver(() => {
-      chartRef.current?.getEchartsInstance().resize();
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
   return (
-    <div ref={containerRef} className={cn("h-full w-full", className)}>
+    <div className={cn("h-full w-full min-w-0", className)}>
       <EChartsReactCore
-        ref={chartRef}
         echarts={echarts}
         option={option}
         theme={EMPEROR_THEME_NAME}

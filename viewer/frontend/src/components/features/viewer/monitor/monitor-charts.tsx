@@ -63,7 +63,7 @@ export function ScalarChart({ series, domain }: { series: ScalarSeries; domain?:
         </>
       }
     >
-      <div className="h-24 w-full" role="img" aria-label={`${series.tag} scalar chart`}>
+      <div className="h-24 w-full min-w-0" role="img" aria-label={`${series.tag} scalar chart`}>
         <EChart option={option} group={MONITOR_SCALAR_GROUP} />
       </div>
     </ChartFrame>
@@ -92,7 +92,7 @@ export function HistogramChart({
         </>
       }
     >
-      <div className="h-24 w-full" role="img" aria-label={`${histogram.tag} histogram`}>
+      <div className="h-24 w-full min-w-0" role="img" aria-label={`${histogram.tag} histogram`}>
         <EChart option={option} />
       </div>
     </ChartFrame>
@@ -151,7 +151,7 @@ export function MultiRunScalarChart({ metric }: { metric: MultiRunScalarMetric }
       }
     >
       <div
-        className="h-28 w-full"
+        className="h-28 w-full min-w-0"
         role="img"
         aria-label={`${metric.key} multi-run scalar chart`}
       >
