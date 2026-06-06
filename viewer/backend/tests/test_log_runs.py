@@ -1132,6 +1132,296 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                         job_status,
                     )
 
+    def test_log_api_restart_behavior_fresh_manager_preserves_active_delete_blocker(
+        self,
+    ) -> None:
+        import httpx
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs_root = root / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                [
+                    "test_model",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
+            )
+            original_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+            job = original_manager.create_job(
+                model="linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="test_model",
+                monitors=[],
+            )
+            job_id = str(job["id"])
+            self.assertEqual(
+                original_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "running",
+                        "logFolder": "test_model",
+                    }
+                ],
+            )
+
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+            self.assertEqual(
+                fresh_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "unknown",
+                        "logFolder": "test_model",
+                    }
+                ],
+            )
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(
+                    app=create_app(
+                        ViewerApiSettings(logs_root=str(logs_root)),
+                        training_manager=fresh_manager,
+                    )
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.delete("/logs/experiments/test_model")
+
+            response = asyncio.run(call_api())
+
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(
+                response.json(),
+                {
+                    "detail": (
+                        "A training job is still writing to this log folder."
+                    )
+                },
+            )
+            self.assertTrue(logs_root.joinpath("test_model").exists())
+            self.assertTrue(run_dir.exists())
+            self.assertEqual(
+                original_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "running",
+                        "logFolder": "test_model",
+                    }
+                ],
+            )
+
+    def test_log_api_restart_behavior_fresh_manager_preserves_unknown_run_delete_blocker(
+        self,
+    ) -> None:
+        import httpx
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs_root = root / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                [
+                    "test_model",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
+            )
+            original_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+            job = original_manager.create_job(
+                model="linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="test_model",
+                monitors=[],
+            )
+            job_id = str(job["id"])
+            self.assertEqual(
+                original_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "running",
+                        "logFolder": "test_model",
+                    }
+                ],
+            )
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+            run = LogRunIndex(logs_root=logs_root).list_runs()[0]
+            filters = {
+                "experiments": [run.experiment],
+                "datasets": [run.dataset],
+                "models": [run.model],
+                "presets": [run.preset],
+                "runIds": [run.id],
+            }
+
+            async def create_plan() -> httpx.Response:
+                transport = httpx.ASGITransport(
+                    app=create_app(
+                        ViewerApiSettings(logs_root=str(logs_root)),
+                        training_manager=fresh_manager,
+                    )
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/logs/runs/delete-plan",
+                        json=filters,
+                    )
+
+            plan_response = asyncio.run(create_plan())
+
+            self.assertEqual(plan_response.status_code, 200, plan_response.text)
+            plan_payload = plan_response.json()
+            self.assertFalse(plan_payload["canDelete"])
+            self.assertEqual(
+                plan_payload["blockedByActiveJobs"],
+                [
+                    {
+                        "id": job_id,
+                        "logFolder": "test_model",
+                        "status": "unknown",
+                    }
+                ],
+            )
+
+            async def delete_runs() -> httpx.Response:
+                transport = httpx.ASGITransport(
+                    app=create_app(
+                        ViewerApiSettings(logs_root=str(logs_root)),
+                        training_manager=fresh_manager,
+                    )
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/logs/runs/delete",
+                        json=filters,
+                    )
+
+            delete_response = asyncio.run(delete_runs())
+
+            self.assertEqual(delete_response.status_code, 400)
+            self.assertIn(
+                "A training job is still writing to this log folder.",
+                delete_response.text,
+            )
+            self.assertTrue(run_dir.exists())
+
+    def test_log_api_restart_behavior_fresh_manager_blocks_experiment_delete_for_unknown_job(
+        self,
+    ) -> None:
+        import httpx
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logs_root = root / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                [
+                    "test_model",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
+            )
+            original_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+            job = original_manager.create_job(
+                model="linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="test_model",
+                monitors=[],
+            )
+            job_id = str(job["id"])
+            self.assertEqual(
+                original_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "running",
+                        "logFolder": "test_model",
+                    }
+                ],
+            )
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(
+                    app=create_app(
+                        ViewerApiSettings(logs_root=str(logs_root)),
+                        training_manager=fresh_manager,
+                    )
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.delete("/logs/experiments/test_model")
+
+            response = asyncio.run(call_api())
+
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(
+                response.json(),
+                {
+                    "detail": (
+                        "A training job is still writing to this log folder."
+                    )
+                },
+            )
+            self.assertTrue(logs_root.joinpath("test_model").exists())
+            self.assertTrue(run_dir.exists())
+
     def test_log_api_plans_and_deletes_filtered_runs_with_active_job_guard(
         self,
     ) -> None:
