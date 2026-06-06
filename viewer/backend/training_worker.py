@@ -63,25 +63,35 @@ def _materialized_runs_from_plan(parts, payload: dict) -> list[dict] | None:
     for index, row in enumerate(rows, start=1):
         if not isinstance(row, dict):
             continue
-        preset = str(row.get("preset") or "")
-        option = parts.experiment_options.get_option(preset)
-        dataset_type = resolve_dataset(parts, str(row.get("dataset") or ""))
-        config_overrides = parse_override_mapping(
-            parts.config_module,
-            row.get("overrides") or {},
-        )
-        reject_locked_overrides(payload["model"], preset, config_overrides)
         materialized_runs.append(
-            {
-                "id": str(row.get("id") or f"run-{index:04d}"),
-                "index": int(row.get("index") or index),
-                "run_total": run_total,
-                "option": option,
-                "dataset_type": dataset_type,
-                "config_overrides": config_overrides,
-            }
+            _materialized_run_from_row(parts, payload, row, index, run_total)
         )
     return materialized_runs
+
+
+def _materialized_run_from_row(
+    parts,
+    payload: dict,
+    row: dict,
+    index: int,
+    run_total: int,
+) -> dict:
+    preset = str(row.get("preset") or "")
+    option = parts.experiment_options.get_option(preset)
+    dataset_type = resolve_dataset(parts, str(row.get("dataset") or ""))
+    config_overrides = parse_override_mapping(
+        parts.config_module,
+        row.get("overrides") or {},
+    )
+    reject_locked_overrides(payload["model"], preset, config_overrides)
+    return {
+        "id": str(row.get("id") or f"run-{index:04d}"),
+        "index": int(row.get("index") or index),
+        "run_total": run_total,
+        "option": option,
+        "dataset_type": dataset_type,
+        "config_overrides": config_overrides,
+    }
 
 
 def _parse_args() -> argparse.Namespace:
