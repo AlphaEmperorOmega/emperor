@@ -166,9 +166,8 @@ def _terminal_reach_details(module: Module) -> dict[str, Any] | None:
     }
 
 
-def module_details(module: Module) -> dict[str, Any]:
+def _parameter_shape_details(module: Module) -> dict[str, Any]:
     details: dict[str, Any] = {}
-
     direct_parameters = dict(module.named_parameters(recurse=False))
     for detail_key, parameter_names in (
         ("weightShape", ("weight", "weight_params", "weights")),
@@ -182,7 +181,11 @@ def module_details(module: Module) -> dict[str, Any]:
             if shape is not None:
                 details[detail_key] = shape
                 break
+    return details
 
+
+def _dimension_details(module: Module) -> dict[str, Any]:
+    details: dict[str, Any] = {}
     input_dim = getattr(module, "input_dim", None)
     output_dim = getattr(module, "output_dim", None)
     hidden_dim = getattr(module, "hidden_dim", None)
@@ -194,7 +197,11 @@ def module_details(module: Module) -> dict[str, Any]:
         details["outputDim"] = output_dim
     if input_dim is not None and output_dim is not None:
         details["dims"] = f"{input_dim} -> {output_dim}"
+    return details
 
+
+def _sequence_or_attention_details(module: Module) -> dict[str, Any]:
+    details: dict[str, Any] = {}
     for source_attr, detail_key in (
         ("embedding_dim", "embeddingDim"),
         ("num_heads", "numHeads"),
@@ -205,7 +212,11 @@ def module_details(module: Module) -> dict[str, Any]:
         value = getattr(module, source_attr, None)
         if value is not None:
             details[detail_key] = _display_value(value)
+    return details
 
+
+def _expert_details(module: Module) -> dict[str, Any]:
+    details: dict[str, Any] = {}
     for detail_key, attr_paths in (
         ("topK", ("top_k", "sampler_config.top_k", "cfg.top_k")),
         (
@@ -220,7 +231,11 @@ def module_details(module: Module) -> dict[str, Any]:
         value = _first_detail_value(module, attr_paths)
         if value is not None:
             details[detail_key] = _display_value(value)
+    return details
 
+
+def _layer_behavior_details(module: Module) -> dict[str, Any]:
+    details: dict[str, Any] = {}
     dropout = getattr(module, "dropout_probability", None)
     if dropout is not None:
         details["dropout"] = dropout
@@ -240,6 +255,40 @@ def module_details(module: Module) -> dict[str, Any]:
     layer_norm = getattr(module, "layer_norm_position", None)
     if layer_norm is not None:
         details["layerNorm"] = _display_value(layer_norm)
+    return details
+
+
+def _recurrent_details(
+    module: Module,
+    cluster: dict[str, Any] | None,
+) -> dict[str, Any]:
+    max_steps = getattr(module, "max_steps", None)
+    if max_steps is None or cluster is not None:
+        return {}
+    return {
+        "recurrent": {
+            "maxSteps": max_steps,
+            "gate": bool(getattr(module, "gate_model", None) is not None),
+            "halting": bool(getattr(module, "halting_model", None) is not None),
+        }
+    }
+
+
+def _causal_attention_details(module: Module) -> dict[str, Any]:
+    causal = getattr(module, "causal_attention_mask_flag", None)
+    if causal is None:
+        return {}
+    return {"causalAttention": causal}
+
+
+def module_details(module: Module) -> dict[str, Any]:
+    details: dict[str, Any] = {}
+
+    details.update(_parameter_shape_details(module))
+    details.update(_dimension_details(module))
+    details.update(_sequence_or_attention_details(module))
+    details.update(_expert_details(module))
+    details.update(_layer_behavior_details(module))
 
     cluster = _neuron_cluster_details(module)
     if cluster is not None:
@@ -249,17 +298,8 @@ def module_details(module: Module) -> dict[str, Any]:
     if terminal_reach is not None:
         details["terminalReach"] = terminal_reach
 
-    max_steps = getattr(module, "max_steps", None)
-    if max_steps is not None and cluster is None:
-        details["recurrent"] = {
-            "maxSteps": max_steps,
-            "gate": bool(getattr(module, "gate_model", None) is not None),
-            "halting": bool(getattr(module, "halting_model", None) is not None),
-        }
-
-    causal = getattr(module, "causal_attention_mask_flag", None)
-    if causal is not None:
-        details["causalAttention"] = causal
+    details.update(_recurrent_details(module, cluster))
+    details.update(_causal_attention_details(module))
 
     return details
 
