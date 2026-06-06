@@ -7,6 +7,7 @@ These shapes are validated on the frontend by the Zod schemas in
 from __future__ import annotations
 
 from viewer.backend.schemas._base import ApiResponseModel, ConfigValue
+from viewer.backend.schemas._capabilities import CapabilitiesResponse
 from viewer.backend.schemas._health import HealthResponse
 from viewer.backend.schemas._inspection import (
     GraphConfigFieldResponse,
@@ -77,6 +78,7 @@ from viewer.backend.schemas._training import (
 __all__ = [
     "ConfigValue",
     "ApiResponseModel",
+    "CapabilitiesResponse",
     "HealthResponse",
     "ModelsResponse",
     "PresetResponse",
