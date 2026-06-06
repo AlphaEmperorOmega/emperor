@@ -26,6 +26,10 @@ EXPECTED_ROOT_ROUTE_PAIRS = {
     ("POST", "/training/jobs"),
 }
 
+CORS_PREFLIGHT_METHODS = ("GET", "POST", "DELETE")
+CORS_PREFLIGHT_REQUEST_HEADERS = "authorization,content-type"
+CORS_PREFLIGHT_ALLOWED_HEADERS = {"authorization", "content-type"}
+
 
 def business_route_pairs(api: FastAPI) -> set[tuple[str, str]]:
     return {
@@ -34,6 +38,31 @@ def business_route_pairs(api: FastAPI) -> set[tuple[str, str]]:
         if isinstance(route, APIRoute)
         for method in route.methods or ()
     }
+
+
+async def cors_preflight(
+    api: FastAPI,
+    *,
+    origin: str,
+    method: str,
+) -> httpx.Response:
+    transport = httpx.ASGITransport(app=api)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        return await client.options(
+            "/health",
+            headers={
+                "origin": origin,
+                "access-control-request-method": method,
+                "access-control-request-headers": CORS_PREFLIGHT_REQUEST_HEADERS,
+            },
+        )
+
+
+def header_values(value: str) -> set[str]:
+    return {item.strip().lower() for item in value.split(",")}
 
 
 class AppFactoryTests(unittest.TestCase):
@@ -82,19 +111,7 @@ class AppFactoryTests(unittest.TestCase):
     def test_api_default_cors_settings_allow_local_dev_frontends(self) -> None:
         from viewer.backend.api import create_app
 
-        async def call_api(origin: str) -> httpx.Response:
-            transport = httpx.ASGITransport(app=create_app())
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                return await client.options(
-                    "/health",
-                    headers={
-                        "origin": origin,
-                        "access-control-request-method": "GET",
-                    },
-                )
+        test_app = create_app()
 
         for origin in (
             "http://localhost:9000",
@@ -107,42 +124,72 @@ class AppFactoryTests(unittest.TestCase):
             "http://127.0.0.1:3000",
             "http://0.0.0.0:3000",
         ):
-            with self.subTest(origin=origin):
-                response = asyncio.run(call_api(origin))
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(
-                    response.headers["access-control-allow-origin"],
-                    origin,
-                )
-                self.assertIn(
-                    "DELETE",
-                    response.headers["access-control-allow-methods"],
-                )
+            for method in CORS_PREFLIGHT_METHODS:
+                with self.subTest(origin=origin, method=method):
+                    response = asyncio.run(
+                        cors_preflight(test_app, origin=origin, method=method)
+                    )
+                    self.assert_allowed_authorization_preflight(
+                        response,
+                        origin=origin,
+                        method=method,
+                    )
 
-    def test_api_factory_applies_custom_cors_settings(self) -> None:
+    def test_api_factory_applies_hosted_cors_settings_to_preflights(self) -> None:
         from viewer.backend.api import ViewerApiSettings, create_app
 
-        async def call_api() -> httpx.Response:
-            transport = httpx.ASGITransport(
-                app=create_app(ViewerApiSettings(cors_origins=["http://frontend.test"]))
-            )
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                return await client.options(
-                    "/health",
-                    headers={
-                        "origin": "http://frontend.test",
-                        "access-control-request-method": "GET",
-                    },
+        origin = "https://viewer.example.com"
+        test_app = create_app(ViewerApiSettings(cors_origins=[origin]))
+
+        for method in CORS_PREFLIGHT_METHODS:
+            with self.subTest(method=method):
+                response = asyncio.run(
+                    cors_preflight(test_app, origin=origin, method=method)
+                )
+                self.assert_allowed_authorization_preflight(
+                    response,
+                    origin=origin,
+                    method=method,
                 )
 
-        response = asyncio.run(call_api())
+    def test_api_factory_disallowed_cors_origin_gets_no_allow_origin(self) -> None:
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        test_app = create_app(
+            ViewerApiSettings(cors_origins=["https://viewer.example.com"])
+        )
+
+        for method in CORS_PREFLIGHT_METHODS:
+            with self.subTest(method=method):
+                response = asyncio.run(
+                    cors_preflight(
+                        test_app,
+                        origin="https://evil.example.com",
+                        method=method,
+                    )
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertNotIn("access-control-allow-origin", response.headers)
+
+    def assert_allowed_authorization_preflight(
+        self,
+        response: httpx.Response,
+        *,
+        origin: str,
+        method: str,
+    ) -> None:
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.headers["access-control-allow-origin"],
-            "http://frontend.test",
+            origin,
+        )
+        self.assertIn(
+            method,
+            response.headers["access-control-allow-methods"],
+        )
+        self.assertGreaterEqual(
+            header_values(response.headers["access-control-allow-headers"]),
+            CORS_PREFLIGHT_ALLOWED_HEADERS,
         )
 
 
