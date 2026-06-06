@@ -131,6 +131,23 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertIn("--stack-num-layers 4", plan["runs"][0]["command"])
         self.assertNotIn("--logdir", plan["runs"][0]["command"])
 
+    def test_training_run_plan_rejects_path_like_dataset_input(self) -> None:
+        manager = TrainingJobManager(runner=FakeRunner())
+
+        with self.assertRaises(InspectorError) as context:
+            manager.create_run_plan(
+                model="linear",
+                preset="baseline",
+                datasets=["./Mnist"],
+                overrides={},
+                log_folder="path_like_dataset",
+            )
+
+        message = str(context.exception)
+        self.assertIn("./Mnist", message)
+        self.assertIn("filesystem path", message)
+        self.assertIn("server-known dataset name", message)
+
     def test_training_run_plan_grid_search_characterizes_order_and_payload(
         self,
     ) -> None:
