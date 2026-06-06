@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from viewer.backend.api.v1.routers import (
     capabilities,
+    config_snapshots,
     health,
     inspection,
     logs,
@@ -20,3 +21,4 @@ router.include_router(models.router)
 router.include_router(inspection.router)
 router.include_router(logs.router)
 router.include_router(training.router)
+router.include_router(config_snapshots.router)

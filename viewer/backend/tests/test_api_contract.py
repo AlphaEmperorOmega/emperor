@@ -21,8 +21,10 @@ class EndpointSchemaMapping(NamedTuple):
 
 
 EXPECTED_BUSINESS_ROUTES = [
+    (("DELETE",), "/config-snapshots/{snapshot_id}"),
     (("DELETE",), "/logs/experiments/{experiment}"),
     (("GET",), "/capabilities"),
+    (("GET",), "/config-snapshots"),
     (("GET",), "/health"),
     (("GET",), "/logs/experiments"),
     (("GET",), "/logs/runs"),
@@ -35,6 +37,8 @@ EXPECTED_BUSINESS_ROUTES = [
     (("GET",), "/models/{model}/search-space"),
     (("GET",), "/training/jobs/{job_id}"),
     (("GET",), "/training/jobs/{job_id}/monitor-data"),
+    (("PATCH",), "/config-snapshots/{snapshot_id}"),
+    (("POST",), "/config-snapshots"),
     (("POST",), "/inspect"),
     (("POST",), "/logs/runs/delete"),
     (("POST",), "/logs/runs/delete-plan"),
@@ -46,6 +50,30 @@ EXPECTED_BUSINESS_ROUTES = [
 ]
 
 ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
+    (("DELETE",), "/config-snapshots/{snapshot_id}"): EndpointSchemaMapping(
+        backend_body_request_schemas=(),
+        backend_response_schema=schemas.ConfigSnapshotsResponse,
+        frontend_api_function="deleteConfigSnapshot",
+        frontend_response_schema="configSnapshotsSchema",
+    ),
+    (("GET",), "/config-snapshots"): EndpointSchemaMapping(
+        backend_body_request_schemas=(),
+        backend_response_schema=schemas.ConfigSnapshotsResponse,
+        frontend_api_function="fetchConfigSnapshots",
+        frontend_response_schema="configSnapshotsSchema",
+    ),
+    (("PATCH",), "/config-snapshots/{snapshot_id}"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.ConfigSnapshotRenameRequest,),
+        backend_response_schema=schemas.ConfigSnapshotResponse,
+        frontend_api_function="renameConfigSnapshot",
+        frontend_response_schema="configSnapshotSchema",
+    ),
+    (("POST",), "/config-snapshots"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.ConfigSnapshotCreateRequest,),
+        backend_response_schema=schemas.ConfigSnapshotResponse,
+        frontend_api_function="createConfigSnapshot",
+        frontend_response_schema="configSnapshotSchema",
+    ),
     (("DELETE",), "/logs/experiments/{experiment}"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.LogExperimentDeleteResponse,
@@ -196,6 +224,7 @@ CAPABILITIES_FIELDS = (
     "authMode",
     "trainingEnabled",
     "logDeletionEnabled",
+    "configSnapshotsEnabled",
     "historicalLogsEnabled",
     "liveMonitorDataEnabled",
     "historicalMonitorDataEnabled",
@@ -213,6 +242,9 @@ CAPABILITIES_REQUIRED_FIELDS = (
     "historicalMonitorDataEnabled",
 )
 CAPABILITIES_FRONTEND_DEFAULT_FIELDS = {
+    "configSnapshotsEnabled": (
+        "capabilitiesSchema defaults config-snapshot support on when omitted."
+    ),
     "uploadsEnabled": "capabilitiesSchema defaults upload support off when omitted.",
     "maxUploadSize": "capabilitiesSchema defaults upload size to null when omitted.",
     "dataSourcesEnabled": (
@@ -501,6 +533,30 @@ LOG_DELETE_RESPONSE_FIELDS = (
 
 SCHEMA_PARITY_CASES = (
     SchemaParityCase(schemas.HealthResponse, "healthSchema", ("status",), ("status",)),
+    SchemaParityCase(
+        schemas.ConfigSnapshotResponse,
+        "configSnapshotSchema",
+        ("id", "model", "preset", "name", "overrides", "createdAt", "updatedAt"),
+        ("id", "model", "preset", "name", "overrides", "createdAt", "updatedAt"),
+    ),
+    SchemaParityCase(
+        schemas.ConfigSnapshotsResponse,
+        "configSnapshotsSchema",
+        ("model", "snapshots"),
+        ("model", "snapshots"),
+    ),
+    SchemaParityCase(
+        schemas.ConfigSnapshotCreateRequest,
+        "createConfigSnapshot input",
+        ("model", "preset", "name", "overrides"),
+        ("model", "preset"),
+    ),
+    SchemaParityCase(
+        schemas.ConfigSnapshotRenameRequest,
+        "renameConfigSnapshot input",
+        ("name",),
+        ("name",),
+    ),
     SchemaParityCase(
         schemas.CapabilitiesResponse,
         "capabilitiesSchema",
@@ -880,6 +936,12 @@ INTENTIONAL_FRONTEND_DEFAULT_FIELDS = {
 
 HIGH_RISK_SCHEMA_PARITY_GROUPS = {
     "capabilities": (schemas.CapabilitiesResponse,),
+    "config snapshots": (
+        schemas.ConfigSnapshotResponse,
+        schemas.ConfigSnapshotsResponse,
+        schemas.ConfigSnapshotCreateRequest,
+        schemas.ConfigSnapshotRenameRequest,
+    ),
     "model config/search": (
         schemas.ConfigFieldResponse,
         schemas.ConfigSchemaResponse,
@@ -954,6 +1016,7 @@ PATH_LIKE_DATASET_FIELDS = {
 def _business_routes_by_key() -> dict[RouteKey, APIRoute]:
     business_prefixes = (
         "/capabilities",
+        "/config-snapshots",
         "/health",
         "/models",
         "/inspect",
@@ -993,6 +1056,7 @@ class ApiRouteContractTests(unittest.TestCase):
     def test_api_route_inventory_preserves_current_contract(self) -> None:
         business_prefixes = (
             "/capabilities",
+            "/config-snapshots",
             "/health",
             "/models",
             "/inspect",
@@ -1243,6 +1307,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 "authMode": "none",
                 "trainingEnabled": True,
                 "logDeletionEnabled": True,
+                "configSnapshotsEnabled": True,
                 "historicalLogsEnabled": True,
                 "liveMonitorDataEnabled": True,
                 "historicalMonitorDataEnabled": True,

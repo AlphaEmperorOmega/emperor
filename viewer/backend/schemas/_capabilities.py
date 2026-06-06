@@ -17,6 +17,7 @@ class CapabilitiesResponse(ApiResponseModel):
     authMode: Literal["none", "bearer"]
     trainingEnabled: bool = True
     logDeletionEnabled: bool = True
+    configSnapshotsEnabled: bool = True
     historicalLogsEnabled: bool = True
     liveMonitorDataEnabled: bool = True
     historicalMonitorDataEnabled: bool = True

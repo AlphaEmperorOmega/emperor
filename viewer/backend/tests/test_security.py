@@ -62,6 +62,7 @@ PROTECTED_ROUTE_CASES = (
         },
     ),
     ("logs", "GET", "/logs/runs", None),
+    ("config_snapshots", "GET", "/config-snapshots?model=linear", None),
 )
 
 
@@ -280,6 +281,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         app = create_app(
             ViewerApiSettings(
                 logs_root=str(logs_root),
+                snapshots_root=str(root / "snapshots"),
                 auth_mode=auth_mode,
                 token=token,
             )

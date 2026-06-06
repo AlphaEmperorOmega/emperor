@@ -23,6 +23,7 @@ LOCAL_FRONTEND_ORIGINS = [
 class ViewerApiSettings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: LOCAL_FRONTEND_ORIGINS.copy())
     logs_root: str = "logs"
+    snapshots_root: str = "snapshots"
     auth_mode: Literal["none", "bearer"] = "none"
     token: str | None = Field(default=None, repr=False)
 
