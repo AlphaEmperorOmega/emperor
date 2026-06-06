@@ -39,6 +39,7 @@ export type LogsSidebarProps = {
   runsQuery: LogsWorkspaceState["runsQuery"];
   experimentsQuery: LogsWorkspaceState["experimentsQuery"];
   tagsQuery: LogsWorkspaceState["tagsQuery"];
+  logDeletionEnabled: boolean;
   experimentOptions: ChecklistOption[];
   datasetOptions: ChecklistOption[];
   modelOptions: ChecklistOption[];
@@ -301,6 +302,7 @@ export function LogsSidebar({
   runsQuery,
   experimentsQuery,
   tagsQuery,
+  logDeletionEnabled,
   experimentOptions,
   datasetOptions,
   modelOptions,
@@ -367,13 +369,32 @@ export function LogsSidebar({
     setSubsetDeleteTarget(null);
   }, [resetRunDelete, singleSelectedExperiment, subsetDeleteTarget]);
 
+  useEffect(() => {
+    if (logDeletionEnabled || (!deleteOption && !subsetDeleteTarget)) {
+      return;
+    }
+    resetDeleteExperiment();
+    resetRunDelete();
+    setDeleteOption(null);
+    setSubsetDeleteTarget(null);
+  }, [
+    deleteOption,
+    logDeletionEnabled,
+    resetDeleteExperiment,
+    resetRunDelete,
+    subsetDeleteTarget,
+  ]);
+
   function openDeleteDialog(option: ChecklistOption) {
+    if (!logDeletionEnabled) {
+      return;
+    }
     resetDeleteExperiment();
     setDeleteOption(option);
   }
 
   function openSubsetDeleteDialog(kind: SubsetDeleteKind, option: ChecklistOption) {
-    if (!singleSelectedExperiment) {
+    if (!logDeletionEnabled || !singleSelectedExperiment) {
       return;
     }
     const target = buildSubsetDeleteTarget({
@@ -401,7 +422,7 @@ export function LogsSidebar({
   }
 
   async function confirmDeleteExperiment() {
-    if (!deleteOption) {
+    if (!logDeletionEnabled || !deleteOption) {
       return;
     }
     try {
@@ -413,7 +434,7 @@ export function LogsSidebar({
   }
 
   async function confirmDeleteSubsetRuns() {
-    if (!subsetDeleteTarget) {
+    if (!logDeletionEnabled || !subsetDeleteTarget) {
       return;
     }
     try {
@@ -425,7 +446,7 @@ export function LogsSidebar({
   }
 
   function renderSubsetDeleteAction(kind: SubsetDeleteKind, option: ChecklistOption) {
-    if (!singleSelectedExperiment) {
+    if (!logDeletionEnabled || !singleSelectedExperiment) {
       return null;
     }
     return (
@@ -440,12 +461,12 @@ export function LogsSidebar({
     );
   }
 
-  const renderDatasetDeleteAction = singleSelectedExperiment
+  const renderDatasetDeleteAction = singleSelectedExperiment && logDeletionEnabled
     ? function renderDatasetDeleteAction(option: ChecklistOption) {
         return renderSubsetDeleteAction("dataset", option);
       }
     : undefined;
-  const renderPresetDeleteAction = singleSelectedExperiment
+  const renderPresetDeleteAction = singleSelectedExperiment && logDeletionEnabled
     ? function renderPresetDeleteAction(option: ChecklistOption) {
         return renderSubsetDeleteAction("preset", option);
       }
@@ -499,6 +520,11 @@ export function LogsSidebar({
           message={errorMessage(experimentsQuery.error)}
         />
       )}
+      {!logDeletionEnabled && (
+        <InlineStatus tone="warning" compact>
+          Log deletion is disabled by this backend.
+        </InlineStatus>
+      )}
 
       {isScanning ? (
         <SidebarStatus
@@ -521,16 +547,20 @@ export function LogsSidebar({
             onToggle={toggleExperiment}
             onAll={selectAllExperiments}
             onNone={selectNoExperiments}
-            renderOptionAction={(option) => (
-              <IconButton
-                label={`Delete experiment ${option.label}`}
-                size="sm"
-                variant="danger"
-                className="rounded-[10px] active:translate-y-px"
-                onClick={() => openDeleteDialog(option)}
-                icon={<Trash2 className="h-4 w-4" aria-hidden />}
-              />
-            )}
+            renderOptionAction={
+              logDeletionEnabled
+                ? (option) => (
+                    <IconButton
+                      label={`Delete experiment ${option.label}`}
+                      size="sm"
+                      variant="danger"
+                      className="rounded-[10px] active:translate-y-px"
+                      onClick={() => openDeleteDialog(option)}
+                      icon={<Trash2 className="h-4 w-4" aria-hidden />}
+                    />
+                  )
+                : undefined
+            }
           />
           {runs.length === 0 ? (
             <SidebarStatus

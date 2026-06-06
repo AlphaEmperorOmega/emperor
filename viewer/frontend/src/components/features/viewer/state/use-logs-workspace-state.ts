@@ -28,13 +28,23 @@ function sortedValues(values: Set<string>) {
   return Array.from(values).sort((a, b) => a.localeCompare(b));
 }
 
+function logDeletionDisabledError() {
+  return new Error("Log deletion is disabled by backend capabilities.");
+}
+
 /**
  * Owns all state for the logs workspace: the run/experiment/tag queries, the
  * multi-facet selection sets (experiment/dataset/model/preset/run/tag), the
  * detail-run selection, and experiment deletion. Returned to the workspace
  * panels as a single object so they stay presentational.
  */
-export function useLogsWorkspaceState({ enabled }: { enabled: boolean }) {
+export function useLogsWorkspaceState({
+  enabled,
+  logDeletionEnabled = true,
+}: {
+  enabled: boolean;
+  logDeletionEnabled?: boolean;
+}) {
   const { invalidateLogLists, refreshAfterMutation } = useLogQueryCache();
   const [startedExperiments, setStartedExperiments] = useState<Set<string>>(new Set());
   const [selectedExperiments, setSelectedExperiments] = useState<Set<string> | null>(null);
@@ -345,6 +355,7 @@ export function useLogsWorkspaceState({ enabled }: { enabled: boolean }) {
 
   return {
     enabled,
+    logDeletionEnabled,
     runs,
     runsQuery,
     experimentsQuery,
@@ -369,19 +380,32 @@ export function useLogsWorkspaceState({ enabled }: { enabled: boolean }) {
     setSelectedDetailRunId,
     runDeleteFilters,
     runDeletePlan: runDeletePlanMutation.data,
-    createRunDeletePlan: (filters: LogRunDeleteFilters = runDeleteFilters) =>
-      runDeletePlanMutation.mutateAsync(filters),
+    createRunDeletePlan: (filters: LogRunDeleteFilters = runDeleteFilters) => {
+      if (!logDeletionEnabled) {
+        return Promise.reject(logDeletionDisabledError());
+      }
+      return runDeletePlanMutation.mutateAsync(filters);
+    },
     runDeletePlanError: runDeletePlanMutation.error,
     isPlanningRunDelete: runDeletePlanMutation.isPending,
-    deleteRuns: (filters: LogRunDeleteFilters = runDeleteFilters) =>
-      deleteRunsMutation.mutateAsync(filters),
+    deleteRuns: (filters: LogRunDeleteFilters = runDeleteFilters) => {
+      if (!logDeletionEnabled) {
+        return Promise.reject(logDeletionDisabledError());
+      }
+      return deleteRunsMutation.mutateAsync(filters);
+    },
     runDeleteError: deleteRunsMutation.error,
     isDeletingRunDelete: deleteRunsMutation.isPending,
     resetRunDelete: () => {
       runDeletePlanMutation.reset();
       deleteRunsMutation.reset();
     },
-    deleteExperiment: deleteExperimentMutation.mutateAsync,
+    deleteExperiment: (experiment: string) => {
+      if (!logDeletionEnabled) {
+        return Promise.reject(logDeletionDisabledError());
+      }
+      return deleteExperimentMutation.mutateAsync(experiment);
+    },
     deleteExperimentError: deleteExperimentMutation.error,
     isDeletingExperiment: deleteExperimentMutation.isPending,
     resetDeleteExperiment: deleteExperimentMutation.reset,

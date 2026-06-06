@@ -18,6 +18,7 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
       runsQuery={state.runsQuery}
       experimentsQuery={state.experimentsQuery}
       tagsQuery={state.tagsQuery}
+      logDeletionEnabled={state.logDeletionEnabled}
       experimentOptions={state.experimentOptions}
       datasetOptions={state.datasetOptions}
       modelOptions={state.modelOptions}
