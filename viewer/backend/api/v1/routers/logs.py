@@ -86,9 +86,16 @@ async def logs_experiments(
 async def delete_log_experiment(
     experiment: str,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
+    training_service: Annotated[
+        TrainingJobService,
+        Depends(get_training_job_service),
+    ],
 ) -> LogExperimentDeleteResponse:
     return LogExperimentDeleteResponse.model_validate(
-        service.delete_experiment(experiment)
+        service.delete_experiment(
+            experiment,
+            active_jobs=training_service.active_jobs(),
+        )
     )
 
 

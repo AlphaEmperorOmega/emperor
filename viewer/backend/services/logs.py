@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import LogRunDeleteFilters
 from viewer.backend.repositories.log_runs import LogRunRepository
+
+
+ACTIVE_LOG_EXPERIMENT_DELETE_MESSAGE = (
+    "A training job is still writing to this log folder."
+)
 
 
 def _paginate(
@@ -40,6 +46,16 @@ def _delete_filters_from_fields(
     )
 
 
+def _has_active_job_for_log_folder(
+    active_jobs: list[dict[str, Any]],
+    log_folder: str,
+) -> bool:
+    return any(
+        str(job.get("logFolder") or "") == log_folder
+        for job in active_jobs
+    )
+
+
 class LogRunService:
     def __init__(self, repository: LogRunRepository) -> None:
         self._repository = repository
@@ -69,7 +85,14 @@ class LogRunService:
             "hasMore": page["hasMore"],
         }
 
-    def delete_experiment(self, experiment: str) -> dict[str, Any]:
+    def delete_experiment(
+        self,
+        experiment: str,
+        *,
+        active_jobs: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if _has_active_job_for_log_folder(active_jobs, experiment):
+            raise InspectorError(ACTIVE_LOG_EXPERIMENT_DELETE_MESSAGE)
         return self._repository.delete_experiment(experiment).to_response()
 
     def create_delete_plan(
