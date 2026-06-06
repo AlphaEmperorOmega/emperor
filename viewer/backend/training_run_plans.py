@@ -20,17 +20,8 @@ from viewer.backend.inspector.search import (
     strip_search_overrides,
 )
 from viewer.backend.inspector.service import reject_locked_overrides
+from viewer.backend.inspector.values import serialize_config_value
 from viewer.backend.log_runs import is_valid_log_experiment_name
-
-
-def _serialize_value(value: Any) -> bool | int | float | str | None:
-    if hasattr(value, "name"):
-        return str(value.name)
-    if isinstance(value, type):
-        return value.__name__
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
 
 
 def _shell_quote(value: str) -> str:
@@ -43,10 +34,55 @@ def _shell_quote(value: str) -> str:
 
 
 def _command_value(value: Any) -> str:
-    serialized = _serialize_value(value)
+    serialized = serialize_config_value(value)
     if serialized is None:
         return "None"
     return str(serialized)
+
+
+def _build_training_command(
+    *,
+    fields: list[dict[str, Any]],
+    by_key: dict[str, dict[str, Any]],
+    model: str,
+    preset: str,
+    dataset: str,
+    overrides: dict[str, Any],
+    log_folder: str,
+) -> str:
+    values_by_field_key: dict[str, Any] = {}
+    for raw_key, raw_value in overrides.items():
+        field = by_key.get(normalize_key(str(raw_key)))
+        if field is not None:
+            values_by_field_key[str(field["key"])] = raw_value
+
+    parts = [
+        "source",
+        "experiment.sh",
+        _shell_quote(model),
+        "--preset",
+        _shell_quote(preset),
+        "--datasets",
+        _shell_quote(dataset),
+    ]
+    if log_folder:
+        parts.extend(["--logdir", _shell_quote(log_folder)])
+
+    config_parts: list[str] = []
+    for field in fields:
+        field_key = str(field["key"])
+        if field_key not in values_by_field_key:
+            continue
+        config_parts.extend(
+            [
+                str(field["flag"]),
+                _shell_quote(_command_value(values_by_field_key[field_key])),
+            ]
+        )
+    if config_parts:
+        parts.append("--config")
+        parts.extend(config_parts)
+    return " ".join(parts)
 
 
 @dataclass(frozen=True)
@@ -75,6 +111,25 @@ class TrainingRunPlanBuilder:
         overrides: dict[str, Any],
         search: dict[str, Any] | None,
     ) -> SelectedTrainingInputs:
+        return self._resolve_selected_training_inputs(
+            model=model,
+            preset=preset,
+            presets=presets,
+            datasets=datasets,
+            overrides=overrides,
+            search=search,
+        )
+
+    def _resolve_selected_training_inputs(
+        self,
+        *,
+        model: str,
+        preset: str,
+        presets: list[str] | None,
+        datasets: list[str],
+        overrides: dict[str, Any],
+        search: dict[str, Any] | None,
+    ) -> SelectedTrainingInputs:
         if not datasets:
             raise InspectorError("Training requires at least one selected dataset.")
 
@@ -86,34 +141,28 @@ class TrainingRunPlanBuilder:
             presets,
         )
         selected_datasets = resolve_datasets(parts, datasets)
-        parsed_searches = [
-            parse_training_search(
-                model,
-                selected_preset,
-                search,
-                dataset_count=len(selected_datasets),
-            )
-            for selected_preset in selected_preset_names
-        ]
+        parsed_searches = self._parse_selected_searches(
+            model=model,
+            selected_preset_names=selected_preset_names,
+            search=search,
+            dataset_count=len(selected_datasets),
+        )
         parsed_search = next(
             (candidate for candidate in parsed_searches if candidate is not None),
             None,
         )
-        search_model_params: set[str] = set()
-        for parsed in parsed_searches:
-            if parsed is not None:
-                search_model_params.update(parsed.model_params)
-        effective_overrides = strip_search_overrides(
-            parts.config_module,
-            overrides,
-            search_model_params,
+        search_model_params = self._search_model_params(parsed_searches)
+        effective_overrides = self._effective_overrides_for_search(
+            parts=parts,
+            overrides=overrides,
+            search_model_params=search_model_params,
         )
-        parsed_overrides = parse_override_mapping(
-            parts.config_module,
-            effective_overrides,
+        parsed_overrides = self._parse_and_validate_overrides(
+            model=model,
+            parts=parts,
+            selected_preset_names=selected_preset_names,
+            effective_overrides=effective_overrides,
         )
-        for selected_preset in selected_preset_names:
-            reject_locked_overrides(model, selected_preset, parsed_overrides)
         return SelectedTrainingInputs(
             parts=parts,
             selected_preset_names=selected_preset_names,
@@ -124,6 +173,60 @@ class TrainingRunPlanBuilder:
             effective_overrides=effective_overrides,
             parsed_overrides=parsed_overrides,
         )
+
+    def _parse_selected_searches(
+        self,
+        *,
+        model: str,
+        selected_preset_names: list[str],
+        search: dict[str, Any] | None,
+        dataset_count: int,
+    ) -> list[Any]:
+        return [
+            parse_training_search(
+                model,
+                selected_preset,
+                search,
+                dataset_count=dataset_count,
+            )
+            for selected_preset in selected_preset_names
+        ]
+
+    def _search_model_params(self, parsed_searches: list[Any]) -> set[str]:
+        search_model_params: set[str] = set()
+        for parsed in parsed_searches:
+            if parsed is not None:
+                search_model_params.update(parsed.model_params)
+        return search_model_params
+
+    def _effective_overrides_for_search(
+        self,
+        *,
+        parts,
+        overrides: dict[str, Any],
+        search_model_params: set[str],
+    ) -> dict[str, Any]:
+        return strip_search_overrides(
+            parts.config_module,
+            overrides,
+            search_model_params,
+        )
+
+    def _parse_and_validate_overrides(
+        self,
+        *,
+        model: str,
+        parts,
+        selected_preset_names: list[str],
+        effective_overrides: dict[str, Any],
+    ) -> dict[str, Any]:
+        parsed_overrides = parse_override_mapping(
+            parts.config_module,
+            effective_overrides,
+        )
+        for selected_preset in selected_preset_names:
+            reject_locked_overrides(model, selected_preset, parsed_overrides)
+        return parsed_overrides
 
     def valid_plan_log_folder(self, log_folder: str) -> str:
         return log_folder if log_folder and is_valid_log_experiment_name(log_folder) else ""
@@ -335,7 +438,7 @@ class TrainingRunPlanBuilder:
             field = by_key.get(normalize_key(str(raw_key)))
             if field is None:
                 continue
-            values_by_field_key[str(field["key"])] = _serialize_value(raw_value)
+            values_by_field_key[str(field["key"])] = serialize_config_value(raw_value)
 
         changes = []
         ordered_overrides: dict[str, Any] = {}
@@ -405,7 +508,7 @@ class TrainingRunPlanBuilder:
             for axis_key, _model_param, serialized_value, parsed_value in combination:
                 axis = axis_maps.get(normalize_key(axis_key), {})
                 field_key = normalize_key(str(axis.get("configKey", axis_key)))
-                overrides[field_key] = _serialize_value(parsed_value)
+                overrides[field_key] = serialize_config_value(parsed_value)
                 changes.append(
                     {
                         "key": field_key,
@@ -427,39 +530,15 @@ class TrainingRunPlanBuilder:
         log_folder: str,
     ) -> str:
         fields, by_key = self._field_maps(model, preset)
-        values_by_field_key: dict[str, Any] = {}
-        for raw_key, raw_value in overrides.items():
-            field = by_key.get(normalize_key(str(raw_key)))
-            if field is not None:
-                values_by_field_key[str(field["key"])] = raw_value
-
-        parts = [
-            "source",
-            "experiment.sh",
-            _shell_quote(model),
-            "--preset",
-            _shell_quote(preset),
-            "--datasets",
-            _shell_quote(dataset),
-        ]
-        if log_folder:
-            parts.extend(["--logdir", _shell_quote(log_folder)])
-
-        config_parts: list[str] = []
-        for field in fields:
-            field_key = str(field["key"])
-            if field_key not in values_by_field_key:
-                continue
-            config_parts.extend(
-                [
-                    str(field["flag"]),
-                    _shell_quote(_command_value(values_by_field_key[field_key])),
-                ]
-            )
-        if config_parts:
-            parts.append("--config")
-            parts.extend(config_parts)
-        return " ".join(parts)
+        return _build_training_command(
+            fields=fields,
+            by_key=by_key,
+            model=model,
+            preset=preset,
+            dataset=dataset,
+            overrides=overrides,
+            log_folder=log_folder,
+        )
 
     def _total_epochs(self, parts, parsed_overrides: dict[str, Any]) -> int:
         raw_epochs = parsed_overrides.get(
