@@ -12,7 +12,6 @@ import {
 } from "@/lib/training-search";
 import {
   createConfigSnapshot,
-  type ConfigSnapshot,
   type ConfigSnapshotCreateResult,
 } from "@/lib/config-snapshots";
 import {
@@ -30,6 +29,7 @@ import {
   LOCAL_DEFAULT_CAPABILITIES,
   useViewerQueries,
 } from "@/components/features/viewer/state/use-viewer-queries";
+import { useConfigSnapshots } from "@/components/features/viewer/state/use-config-snapshots";
 import {
   deriveDatasetSelectionState,
   deriveMonitorSource,
@@ -95,7 +95,13 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   const [selectedDatasets, setSelectedDatasets] = useState<string[]>([]);
   const [selectedTrainingPresets, setSelectedTrainingPresets] = useState<string[]>([]);
   const [selectedMonitors, setSelectedMonitors] = useState<string[]>([]);
-  const [configSnapshots, setConfigSnapshots] = useState<ConfigSnapshot[]>([]);
+  const {
+    snapshots: configSnapshots,
+    createMutation: createSnapshotMutation,
+    renameMutation: renameSnapshotMutation,
+    deleteMutation: deleteSnapshotMutation,
+  } = useConfigSnapshots(selectedModel);
+  const [deselectedSnapshotIds, setDeselectedSnapshotIds] = useState<string[]>([]);
   const [trainingSearch, setTrainingSearch] = useState<TrainingSearchState>(
     DEFAULT_TRAINING_SEARCH_STATE,
   );
@@ -323,17 +329,6 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   }, [presetNames, selectedPreset]);
 
   useEffect(() => {
-    setConfigSnapshots((current) => {
-      const next = current.filter(
-        (snapshot) =>
-          snapshot.model === selectedModel &&
-          selectedTrainingPresets.includes(snapshot.preset),
-      );
-      return next.length === current.length ? current : next;
-    });
-  }, [selectedModel, selectedTrainingPresets]);
-
-  useEffect(() => {
     if (!selectedModel || !selectedLogRun) {
       return;
     }
@@ -422,7 +417,6 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       setSelectedDatasets([]);
       setSelectedTrainingPresets([]);
       setSelectedMonitors([]);
-      setConfigSnapshots([]);
       setSelectedHistoricalExperiment("");
       setSelectedHistoricalDataset("");
       setSelectedLogRunId(null);
@@ -433,6 +427,9 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   const addConfigSnapshot = useCallback(
     (name: string): ConfigSnapshotCreateResult => {
+      // Validate client-side for instant dialog feedback; the server re-validates
+      // and is the source of truth. The client-generated id is discarded — the
+      // persisted snapshot (with its server id) arrives via query invalidation.
       const result = createConfigSnapshot({
         id: createSnapshotId(),
         name,
@@ -444,27 +441,48 @@ export function useViewerState(options: ViewerStateOptions = {}) {
         createdAt: new Date().toISOString(),
       });
       if (result.ok) {
-        setConfigSnapshots((current) => [...current, result.snapshot]);
+        createSnapshotMutation.mutate({
+          model: selectedModel,
+          preset: selectedPreset,
+          name: result.snapshot.name,
+          overrides: result.snapshot.overrides,
+        });
       }
       return result;
     },
-    [configFields, configSnapshots, overrides, selectedModel, selectedPreset],
+    [
+      configFields,
+      configSnapshots,
+      createSnapshotMutation,
+      overrides,
+      selectedModel,
+      selectedPreset,
+    ],
   );
 
-  const removeConfigSnapshot = useCallback((snapshotId: string) => {
-    setConfigSnapshots((current) =>
-      current.filter((snapshot) => snapshot.id !== snapshotId),
-    );
-  }, []);
+  const removeConfigSnapshot = useCallback(
+    (snapshotId: string) => {
+      deleteSnapshotMutation.mutate(snapshotId);
+    },
+    [deleteSnapshotMutation],
+  );
 
-  const renameConfigSnapshot = useCallback((snapshotId: string, name: string) => {
-    const nextName = name.trim();
-    setConfigSnapshots((current) =>
-      current.map((snapshot) =>
-        snapshot.id === snapshotId && nextName
-          ? { ...snapshot, name: nextName }
-          : snapshot,
-      ),
+  const renameConfigSnapshot = useCallback(
+    (snapshotId: string, name: string) => {
+      const nextName = name.trim();
+      if (!nextName) {
+        return;
+      }
+      renameSnapshotMutation.mutate({ id: snapshotId, name: nextName });
+    },
+    [renameSnapshotMutation],
+  );
+
+  const toggleConfigSnapshotRunSelection = useCallback((snapshotId: string) => {
+    setDeselectedSnapshotIds((current) =>
+      current.includes(snapshotId)
+        ? current.filter((id) => id !== snapshotId)
+        : [...current, snapshotId],
     );
   }, []);
 
@@ -726,10 +744,12 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       configSnapshots: visibleConfigSnapshots,
       configSnapshotGroups,
       configSnapshotCount: visibleConfigSnapshots.length,
+      deselectedSnapshotIds,
       addConfigSnapshot,
       removeConfigSnapshot,
       renameConfigSnapshot,
       loadConfigSnapshot,
+      toggleConfigSnapshotRunSelection,
       updateOverride,
       clearOverride,
       updatePreview,
