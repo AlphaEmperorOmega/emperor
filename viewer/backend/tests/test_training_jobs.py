@@ -11,6 +11,7 @@ from pathlib import Path
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.job_store import InMemoryTrainingJobStore
 from viewer.backend.training_jobs import TrainingJobManager
 from viewer.backend.tests.helpers import FakeProcess, FakeRunner, create_progress_test_job
 
@@ -52,6 +53,29 @@ class TrainingJobTests(unittest.TestCase):
             run_plan=run_plan,
         )
         return manager, payload, manager.jobs[str(payload["id"])]
+
+    def _create_restart_limitation_job(
+        self,
+        root: Path,
+        *,
+        process: FakeProcess | None = None,
+        log_folder: str = "restart_limitation",
+    ):
+        process = process or FakeProcess()
+        manager = TrainingJobManager(
+            root=root / "jobs",
+            logs_root=root / "logs",
+            runner=FakeRunner(process),
+        )
+        payload = manager.create_job(
+            model="linear",
+            preset="baseline",
+            datasets=["Mnist"],
+            overrides={},
+            log_folder=log_folder,
+            monitors=[],
+        )
+        return manager, payload, process
 
     def test_training_api_response_does_not_expose_manager_internals(self) -> None:
         import httpx
@@ -282,6 +306,44 @@ class TrainingJobTests(unittest.TestCase):
             self.assertTrue((logs_root / "test_model").is_dir())
             self.assertTrue(runner.commands)
             self.assertIn("viewer.backend.training_worker", runner.commands[0])
+
+    def test_training_job_manager_saves_created_job_to_injected_store(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess()
+            store = InMemoryTrainingJobStore()
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+                job_store=store,
+            )
+
+            payload = manager.create_job(
+                model="linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="stored_job",
+                monitors=[],
+            )
+            record = store.get(str(payload["id"]))
+            self.assertIsNotNone(record)
+            assert record is not None
+            self.assertEqual(record.model, "linear")
+            self.assertEqual(record.preset, "baseline")
+            self.assertEqual(record.datasets, ["Mnist"])
+            self.assertEqual(record.log_folder, "stored_job")
+            self.assertEqual(record.pid, 1234)
+            self.assertFalse(hasattr(record, "process"))
+            self.assertIs(manager.jobs[str(payload["id"])], record)
+
+            cancelled = manager.cancel_job(str(payload["id"]))
+
+            self.assertTrue(process.terminated)
+            self.assertEqual(cancelled["status"], "cancelled")
+            self.assertEqual(record.status, "cancelled")
+            self.assertEqual(store.get(str(payload["id"])).status, "cancelled")
 
     def test_training_job_get_refreshes_process_completion(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -576,6 +638,293 @@ class TrainingJobTests(unittest.TestCase):
 
         self.assertEqual(str(context.exception), "Unknown training job 'missing'.")
 
+    def test_training_job_restart_behavior_fresh_manager_gets_persisted_disk_job(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _, created_payload, _ = self._create_restart_limitation_job(root)
+            job_id = str(created_payload["id"])
+            job_root = root / "jobs" / job_id
+            self.assertTrue(job_root.joinpath("payload.json").is_file())
+            self.assertTrue(job_root.joinpath("progress.jsonl").is_file())
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+
+            payload = fresh_manager.get_job(job_id)
+
+        self.assertEqual(payload["id"], job_id)
+        self.assertEqual(payload["status"], "unknown")
+        self.assertEqual(payload["model"], "linear")
+        self.assertEqual(payload["preset"], "baseline")
+        self.assertEqual(payload["presets"], ["baseline"])
+        self.assertEqual(payload["datasets"], ["Mnist"])
+        self.assertEqual(payload["logFolder"], "restart_limitation")
+        self.assertEqual(payload["pid"], 1234)
+
+    def test_training_job_restart_behavior_fresh_manager_cannot_cancel_disk_job_without_live_process(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess()
+            _, created_payload, _ = self._create_restart_limitation_job(
+                root,
+                process=process,
+                log_folder="restart_cancel_limitation",
+            )
+            job_id = str(created_payload["id"])
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+
+            with self.assertRaises(InspectorError) as context:
+                fresh_manager.cancel_job(job_id)
+
+            self.assertFalse(process.terminated)
+            self.assertIsNone(process.exit_code)
+
+        self.assertEqual(
+            str(context.exception),
+            f"Training job '{job_id}' has no live process handle.",
+        )
+
+    def test_training_job_restart_behavior_fresh_manager_preserves_unknown_disk_job_blocker(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original_manager, created_payload, _ = self._create_restart_limitation_job(
+                root,
+                log_folder="restart_active_limitation",
+            )
+            job_id = str(created_payload["id"])
+            self.assertEqual(
+                original_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "running",
+                        "logFolder": "restart_active_limitation",
+                    }
+                ],
+            )
+            self.assertTrue((root / "jobs" / job_id / "payload.json").is_file())
+            self.assertTrue((root / "jobs" / job_id / "progress.jsonl").is_file())
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+
+            self.assertEqual(
+                fresh_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "unknown",
+                        "logFolder": "restart_active_limitation",
+                    }
+                ],
+            )
+
+    def test_training_job_restart_behavior_fresh_manager_reconstructs_disk_job(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original_manager, created_payload, _ = self._create_restart_limitation_job(
+                root,
+                log_folder="restart_behavior",
+            )
+            job_id = str(created_payload["id"])
+            job = original_manager.jobs[job_id]
+            run = created_payload["runPlan"]["runs"][0]
+            log_dir = "logs/restart_behavior/linear/baseline/Mnist/version_0"
+            original_manager._write_event(
+                job,
+                {
+                    "type": "dataset_started",
+                    "status": "running",
+                    "dataset": "Mnist",
+                    "preset": "baseline",
+                    "runId": run["id"],
+                    "runIndex": 1,
+                    "logDir": log_dir,
+                },
+            )
+            original_manager._write_event(
+                job,
+                {
+                    "type": "validation",
+                    "status": "running",
+                    "dataset": "Mnist",
+                    "preset": "baseline",
+                    "runId": run["id"],
+                    "runIndex": 1,
+                    "epoch": 1,
+                    "step": 4,
+                    "metrics": {"validation/accuracy": 0.75},
+                    "logDir": log_dir,
+                },
+            )
+            job_root = root / "jobs" / job_id
+            self.assertTrue(job_root.joinpath("payload.json").is_file())
+            self.assertTrue(job_root.joinpath("progress.jsonl").is_file())
+
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+            payload = fresh_manager.get_job(job_id)
+
+        self.assertEqual(payload["id"], job_id)
+        self.assertEqual(payload["status"], "unknown")
+        self.assertEqual(payload["model"], "linear")
+        self.assertEqual(payload["preset"], "baseline")
+        self.assertEqual(payload["presets"], ["baseline"])
+        self.assertEqual(payload["datasets"], ["Mnist"])
+        self.assertEqual(payload["logFolder"], "restart_behavior")
+        self.assertEqual(payload["plannedRunCount"], 1)
+        self.assertEqual(
+            [event["type"] for event in payload["events"]],
+            ["job_started", "dataset_started", "validation"],
+        )
+        self.assertEqual(payload["currentPreset"], "baseline")
+        self.assertEqual(payload["currentDataset"], "Mnist")
+        self.assertEqual(payload["step"], 4)
+        self.assertEqual(payload["metrics"], {"validation/accuracy": 0.75})
+        self.assertEqual(payload["logDir"], log_dir)
+        self.assertEqual(payload["runPlan"]["runs"][0]["status"], "Running")
+        self.assertEqual(payload["runPlan"]["summary"]["runningRuns"], 1)
+
+    def test_training_job_restart_behavior_fresh_manager_lists_unknown_disk_job_as_active(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original_manager, created_payload, _ = self._create_restart_limitation_job(
+                root,
+                log_folder="restart_active_behavior",
+            )
+            job_id = str(created_payload["id"])
+            self.assertEqual(
+                original_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "running",
+                        "logFolder": "restart_active_behavior",
+                    }
+                ],
+            )
+
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+
+            self.assertEqual(
+                fresh_manager.active_jobs(),
+                [
+                    {
+                        "id": job_id,
+                        "status": "unknown",
+                        "logFolder": "restart_active_behavior",
+                    }
+                ],
+            )
+
+    def test_training_job_restart_behavior_reconstructed_job_is_non_cancellable(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess()
+            _, created_payload, _ = self._create_restart_limitation_job(
+                root,
+                process=process,
+                log_folder="restart_read_only_behavior",
+            )
+            job_id = str(created_payload["id"])
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+
+            recovered = fresh_manager.get_job(job_id)
+            self.assertEqual(recovered["status"], "unknown")
+            with self.assertRaisesRegex(
+                InspectorError,
+                "live process handle|after restart",
+            ):
+                fresh_manager.cancel_job(job_id)
+
+            self.assertFalse(process.terminated)
+            self.assertIsNone(process.exit_code)
+
+    def test_training_job_restart_behavior_unknown_ids_remain_current_errors(
+        self,
+    ) -> None:
+        import httpx
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            manager = TrainingJobManager(
+                root=Path(tmp) / "jobs",
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+
+            with self.assertRaises(InspectorError) as get_context:
+                manager.get_job("missing")
+            with self.assertRaises(InspectorError) as cancel_context:
+                manager.cancel_job("missing")
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(
+                    app=create_app(
+                        ViewerApiSettings(logs_root=str(logs_root)),
+                        training_manager=manager,
+                    )
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    get_response = await client.get("/training/jobs/missing")
+                    cancel_response = await client.post(
+                        "/training/jobs/missing/cancel"
+                    )
+                    return get_response, cancel_response
+
+            get_response, cancel_response = asyncio.run(call_api())
+
+        self.assertEqual(str(get_context.exception), "Unknown training job 'missing'.")
+        self.assertEqual(
+            str(cancel_context.exception),
+            "Unknown training job 'missing'.",
+        )
+        self.assertEqual(get_response.status_code, 400)
+        self.assertEqual(cancel_response.status_code, 400)
+        self.assertEqual(
+            get_response.json(),
+            {"detail": "Unknown training job 'missing'."},
+        )
+        self.assertEqual(
+            cancel_response.json(),
+            {"detail": "Unknown training job 'missing'."},
+        )
+
     def test_training_api_get_unknown_job_returns_http_400(self) -> None:
         import httpx
         from viewer.backend.api import ViewerApiSettings, create_app
@@ -720,6 +1069,38 @@ class TrainingJobTests(unittest.TestCase):
                 overrides={},
                 log_folder="test_model",
             )
+
+    def test_training_job_rejects_path_like_dataset_input_before_side_effects(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner = FakeRunner()
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=runner,
+            )
+
+            with self.assertRaises(InspectorError) as context:
+                manager.create_job(
+                    model="linear",
+                    preset="baseline",
+                    datasets=["./Mnist"],
+                    overrides={},
+                    log_folder="path_like_dataset",
+                )
+
+            self.assertEqual(manager.jobs, {})
+            self.assertEqual(manager.active_jobs(), [])
+            self.assertEqual(runner.commands, [])
+            self.assertFalse((root / "jobs").exists())
+            self.assertFalse((root / "logs" / "path_like_dataset").exists())
+
+        message = str(context.exception)
+        self.assertIn("./Mnist", message)
+        self.assertIn("filesystem path", message)
+        self.assertIn("server-known dataset name", message)
 
     def test_training_run_plan_preserves_error_traceback_from_progress_events(
         self,
