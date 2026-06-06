@@ -222,6 +222,76 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         for internal_key in ("command", "root", "process"):
             self.assertNotIn(internal_key, create_payload)
 
+    def test_training_run_plan_rejects_path_like_dataset_input(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["./Mnist"],
+                            "overrides": {},
+                            "logFolder": "path_like_dataset",
+                            "search": None,
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("./Mnist", response.json()["detail"])
+        self.assertIn("filesystem path", response.json()["detail"])
+        self.assertIn("server-known dataset name", response.json()["detail"])
+
+    def test_training_job_rejects_path_like_dataset_input_before_side_effects(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app, manager = self._create_test_app(root)
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/jobs",
+                        json={
+                            "model": "linear",
+                            "preset": "baseline",
+                            "datasets": ["./Mnist"],
+                            "overrides": {},
+                            "logFolder": "path_like_dataset",
+                            "monitors": [],
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+            self.assertEqual(manager.jobs, {})
+            self.assertEqual(manager.active_jobs(), [])
+            self.assertFalse((root / "jobs").exists())
+            self.assertFalse((root / "logs" / "path_like_dataset").exists())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("./Mnist", response.json()["detail"])
+        self.assertIn("filesystem path", response.json()["detail"])
+        self.assertIn("server-known dataset name", response.json()["detail"])
+
     def test_training_cancel_endpoint_preserves_lifecycle_behavior(self) -> None:
         import httpx
 
