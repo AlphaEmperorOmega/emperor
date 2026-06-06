@@ -51,6 +51,20 @@ Open:
 http://localhost:9000
 ```
 
+## Hosted Backend Settings
+
+Hosted deployments should configure explicit frontend origins when the backend
+is reachable outside loopback. `VIEWER_API_CORS_ORIGINS` uses JSON array
+syntax:
+
+```bash
+export VIEWER_API_CORS_ORIGINS='["https://viewer.example.com","https://admin.example.com"]'
+```
+
+When bearer auth is enabled, keep origins specific to the deployed frontend
+hosts. Do not use wildcard origins such as `["*"]` for authenticated hosted
+deployments.
+
 ## Test
 
 Backend:
