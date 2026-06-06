@@ -68,7 +68,10 @@ class TensorBoardMonitorReader:
             accumulator = load_event_accumulator(run_dir)
             if accumulator is None:
                 continue
-            tags = accumulator.Tags()
+            try:
+                tags = accumulator.Tags()
+            except Exception:
+                continue
             response["scalarSeries"].extend(
                 self._read_scalars(accumulator, tags.get("scalars", []), prefix)
             )
