@@ -14,6 +14,7 @@ export const logQueryKeys = {
 
 export const viewerQueryKeys = {
   health: () => ["health"] as const,
+  capabilities: () => ["capabilities"] as const,
   models: () => ["models"] as const,
   presets: (selectedModel: string) => ["presets", selectedModel] as const,
   datasets: (selectedModel: string) => ["datasets", selectedModel] as const,

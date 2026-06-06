@@ -26,7 +26,10 @@ import { useGraphViewState } from "@/components/features/viewer/state/use-graph-
 import { useLockedOverrideSync } from "@/components/features/viewer/state/use-locked-override-sync";
 import { usePreviewInspectionState } from "@/components/features/viewer/state/use-preview-inspection";
 import { useTargetOverridesState } from "@/components/features/viewer/state/use-target-overrides";
-import { useViewerQueries } from "@/components/features/viewer/state/use-viewer-queries";
+import {
+  LOCAL_DEFAULT_CAPABILITIES,
+  useViewerQueries,
+} from "@/components/features/viewer/state/use-viewer-queries";
 import {
   deriveDatasetSelectionState,
   deriveMonitorSource,
@@ -98,6 +101,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   );
   const {
     healthQuery,
+    capabilitiesQuery,
     modelsQuery,
     presetsQuery,
     datasetsQuery,
@@ -105,6 +109,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     schemaQuery,
     searchSpaceQuery,
   } = useViewerQueries(selectedModel, selectedPreset);
+  const capabilities = capabilitiesQuery.data ?? LOCAL_DEFAULT_CAPABILITIES;
 
   // --- Preview inspection (graph data) ----------------------------------
   const { graph, requestPreview, previewInspection } = usePreviewInspectionState();
@@ -714,6 +719,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       overrideCount,
       presetOwnedFieldCount,
       fieldCount,
+      capabilities,
       apiOnline,
       trainingSearch,
       setTrainingSearch,
@@ -729,6 +735,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       updatePreview,
       resetOverrides,
       modelsQuery,
+      capabilitiesQuery,
       presetsQuery,
       datasetsQuery,
       monitorsQuery,

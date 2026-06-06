@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  type Capabilities,
+  fetchCapabilities,
   fetchConfigSchema,
   fetchDatasets,
   fetchHealth,
@@ -10,6 +12,28 @@ import {
 } from "@/lib/api";
 import { viewerQueryKeys } from "@/lib/query-keys";
 
+export const LOCAL_DEFAULT_CAPABILITIES: Capabilities = {
+  authMode: "none",
+  trainingEnabled: true,
+  logDeletionEnabled: true,
+  historicalLogsEnabled: true,
+  liveMonitorDataEnabled: true,
+  historicalMonitorDataEnabled: true,
+  uploadsEnabled: false,
+  maxUploadSize: null,
+  dataSourcesEnabled: false,
+  dataSources: [],
+};
+
+export function useCapabilitiesQuery() {
+  return useQuery({
+    queryKey: viewerQueryKeys.capabilities(),
+    queryFn: fetchCapabilities,
+    retry: false,
+    initialData: LOCAL_DEFAULT_CAPABILITIES,
+  });
+}
+
 export function useViewerQueries(selectedModel: string, selectedPreset: string) {
   const healthQuery = useQuery({
     queryKey: viewerQueryKeys.health(),
@@ -17,6 +41,7 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
     retry: false,
     refetchInterval: 10000,
   });
+  const capabilitiesQuery = useCapabilitiesQuery();
 
   const modelsQuery = useQuery({
     queryKey: viewerQueryKeys.models(),
@@ -61,6 +86,7 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
 
   return {
     healthQuery,
+    capabilitiesQuery,
     modelsQuery,
     presetsQuery,
     datasetsQuery,
