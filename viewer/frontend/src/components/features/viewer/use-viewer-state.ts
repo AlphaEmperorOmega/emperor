@@ -50,6 +50,10 @@ function resolveRunPresetName(
   );
 }
 
+function overridesAreEmpty(overrides: OverrideValues) {
+  return Object.keys(overrides).length === 0;
+}
+
 function createSnapshotId() {
   return globalThis.crypto?.randomUUID?.() ?? `snapshot-${Date.now()}`;
 }
@@ -72,7 +76,6 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   const { onJobStarted } = options;
 
   // --- Target + overrides + queries -------------------------------------
-  const targetState = useTargetOverridesState();
   const {
     selectedModel,
     setSelectedModel,
@@ -84,7 +87,8 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     updateOverride,
     clearOverride,
     clearOverrides,
-  } = targetState;
+    selectModel: selectTargetModel,
+  } = useTargetOverridesState();
   const [selectedDatasets, setSelectedDatasets] = useState<string[]>([]);
   const [selectedTrainingPresets, setSelectedTrainingPresets] = useState<string[]>([]);
   const [selectedMonitors, setSelectedMonitors] = useState<string[]>([]);
@@ -208,6 +212,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     resolveMonitorTarget: linearMonitorTargetResolver,
   });
   const resetGraphSelectionAndExpansion = graphState.resetGraphSelectionAndExpansion;
+  const resetGraphExpansion = graphState.resetGraphExpansion;
 
   // Selection cascade: models load → first model auto-selected → presets/datasets
   // load → first preset + dataset auto-selected and the initial preview is
@@ -337,10 +342,32 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     if (!preset || !dataset) {
       return;
     }
-    setSelectedPreset(preset);
-    setSelectedTrainingPresets([preset]);
-    setSelectedDatasets([dataset]);
-    setOverrides({});
+    const desiredTrainingPresets = [preset];
+    const desiredDatasets = [dataset];
+    const overridesAlreadyEmpty = overridesAreEmpty(overrides);
+    const alreadySynced =
+      selectedPreset === preset &&
+      selectionValuesEqual(selectedTrainingPresets, desiredTrainingPresets) &&
+      selectionValuesEqual(selectedDatasets, desiredDatasets) &&
+      overridesAlreadyEmpty;
+    if (alreadySynced) {
+      return;
+    }
+
+    if (selectedPreset !== preset) {
+      setSelectedPreset(preset);
+    }
+    setSelectedTrainingPresets((current) =>
+      selectionValuesEqual(current, desiredTrainingPresets)
+        ? current
+        : desiredTrainingPresets,
+    );
+    setSelectedDatasets((current) =>
+      selectionValuesEqual(current, desiredDatasets) ? current : desiredDatasets,
+    );
+    if (!overridesAlreadyEmpty) {
+      setOverrides({});
+    }
     resetGraphSelectionAndExpansion();
     requestPreview({
       model: selectedModel,
@@ -350,11 +377,15 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     });
   }, [
     datasetNames,
+    overrides,
     presetsQuery.data,
     requestPreview,
     resetGraphSelectionAndExpansion,
+    selectedDatasets,
     selectedLogRun,
     selectedModel,
+    selectedPreset,
+    selectedTrainingPresets,
     setOverrides,
     setSelectedPreset,
   ]);
@@ -382,7 +413,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   const selectModel = useCallback(
     (model: string) => {
-      targetState.selectModel(model);
+      selectTargetModel(model);
       setSelectedDatasets([]);
       setSelectedTrainingPresets([]);
       setSelectedMonitors([]);
@@ -390,9 +421,9 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       setSelectedHistoricalExperiment("");
       setSelectedHistoricalDataset("");
       setSelectedLogRunId(null);
-      graphState.resetGraphSelectionAndExpansion();
+      resetGraphSelectionAndExpansion();
     },
-    [graphState, targetState],
+    [resetGraphSelectionAndExpansion, selectTargetModel],
   );
 
   const addConfigSnapshot = useCallback(
@@ -571,18 +602,25 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     if (!selectedModel || !selectedPreset || !previewDataset) {
       return;
     }
-    graphState.resetGraphSelectionAndExpansion();
+    resetGraphSelectionAndExpansion();
     requestPreview({
       model: selectedModel,
       preset: selectedPreset,
       dataset: previewDataset,
       overrides: { ...overrides },
     });
-  }, [graphState, overrides, requestPreview, selectedDatasets, selectedModel, selectedPreset]);
+  }, [
+    overrides,
+    requestPreview,
+    resetGraphSelectionAndExpansion,
+    selectedDatasets,
+    selectedModel,
+    selectedPreset,
+  ]);
 
   const resetOverrides = useCallback(() => {
     clearOverrides();
-    graphState.resetGraphExpansion();
+    resetGraphExpansion();
     const previewDataset = selectedDatasets[0];
     if (selectedModel && selectedPreset && previewDataset) {
       requestPreview({
@@ -592,7 +630,14 @@ export function useViewerState(options: ViewerStateOptions = {}) {
         overrides: {},
       });
     }
-  }, [clearOverrides, graphState, requestPreview, selectedDatasets, selectedModel, selectedPreset]);
+  }, [
+    clearOverrides,
+    requestPreview,
+    resetGraphExpansion,
+    selectedDatasets,
+    selectedModel,
+    selectedPreset,
+  ]);
 
   const handleTrainingJobChange = useCallback(
     (job: TrainingJob | undefined) => {
