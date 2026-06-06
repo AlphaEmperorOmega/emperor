@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getSessionAuthToken } from "@/lib/auth-token";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_VIEWER_API_URL ?? "http://127.0.0.1:9999";
@@ -357,6 +358,19 @@ export const logExperimentSchema = z.object({
 const errorBodySchema = z.object({ detail: z.unknown() }).partial();
 
 const healthSchema = z.object({ status: z.string() });
+const dataSourceCapabilityPlaceholderSchema = z.object({}).strict();
+const capabilitiesSchema = z.object({
+  authMode: z.enum(["none", "bearer"]),
+  trainingEnabled: z.boolean(),
+  logDeletionEnabled: z.boolean(),
+  historicalLogsEnabled: z.boolean(),
+  liveMonitorDataEnabled: z.boolean(),
+  historicalMonitorDataEnabled: z.boolean(),
+  uploadsEnabled: z.boolean().default(false),
+  maxUploadSize: z.number().int().nonnegative().nullable().default(null),
+  dataSourcesEnabled: z.boolean().default(false),
+  dataSources: z.array(dataSourceCapabilityPlaceholderSchema).default([]),
+});
 const modelsSchema = z.object({ models: z.array(z.string()) });
 const presetsSchema = z.object({ model: z.string(), presets: z.array(presetSchema) });
 const datasetsSchema = z.object({ model: z.string(), datasets: z.array(datasetSchema) });
@@ -390,6 +404,7 @@ export type MonitorOption = z.infer<typeof monitorOptionSchema>;
 export type ConfigField = z.infer<typeof configFieldSchema>;
 export type SearchAxis = z.infer<typeof searchAxisSchema>;
 export type SearchSpace = z.infer<typeof searchSpaceSchema>;
+export type Capabilities = z.infer<typeof capabilitiesSchema>;
 export type GraphConfig = z.infer<typeof graphConfigSchema>;
 export type GraphNode = z.infer<typeof graphNodeSchema>;
 export type GraphEdge = z.infer<typeof graphEdgeSchema>;
@@ -504,6 +519,41 @@ export type TrainingRunPlanCreateInput = {
   search?: TrainingSearchCreateInput;
 };
 
+type ApiErrorInit = {
+  status: number;
+  method: string;
+  path: string;
+  detail: string;
+};
+
+export type UnauthorizedApiError = Error & {
+  status: 401;
+  method: string;
+  path: string;
+  detail: string;
+};
+
+class ApiError extends Error {
+  readonly status: number;
+  readonly method: string;
+  readonly path: string;
+  readonly detail: string;
+
+  constructor({ status, method, path, detail }: ApiErrorInit) {
+    const messageDetail = detail || "Request failed";
+    super(`${method} ${path} from ${API_BASE_URL} failed with ${status}: ${messageDetail}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.method = method;
+    this.path = path;
+    this.detail = messageDetail;
+  }
+}
+
+export function isUnauthorizedApiError(error: unknown): error is UnauthorizedApiError {
+  return error instanceof ApiError && error.status === 401;
+}
+
 function requestMethod(init?: RequestInit) {
   return String(init?.method ?? "GET").toUpperCase();
 }
@@ -536,6 +586,20 @@ function detailText(detail: unknown) {
   }
 }
 
+function requestHeaders(initHeaders?: HeadersInit) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (initHeaders) {
+    new Headers(initHeaders).forEach((value, key) => {
+      headers.set(key, value);
+    });
+  }
+  const token = getSessionAuthToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  return headers;
+}
+
 async function requestJson<TSchema extends z.ZodTypeAny>(
   path: string,
   schema: TSchema,
@@ -544,10 +608,7 @@ async function requestJson<TSchema extends z.ZodTypeAny>(
   const method = requestMethod(init);
   const request = {
     ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {}),
-    },
+    headers: requestHeaders(init?.headers),
   };
   const response = await fetch(`${API_BASE_URL}${path}`, request);
   if (!response.ok) {
@@ -560,11 +621,12 @@ async function requestJson<TSchema extends z.ZodTypeAny>(
     } catch {
       // Response was not JSON; keep status text.
     }
-    throw new Error(
-      `${method} ${path} from ${API_BASE_URL} failed with ${response.status}: ${
-        detail || "Request failed"
-      }`,
-    );
+    throw new ApiError({
+      status: response.status,
+      method,
+      path,
+      detail,
+    });
   }
   const payload = await response.json();
   const parsed = schema.safeParse(payload);
@@ -580,6 +642,10 @@ async function requestJson<TSchema extends z.ZodTypeAny>(
 
 export function fetchHealth() {
   return requestJson("/health", healthSchema);
+}
+
+export function fetchCapabilities() {
+  return requestJson("/capabilities", capabilitiesSchema);
 }
 
 export function fetchModels() {
