@@ -31,6 +31,15 @@ class InspectorServiceTests(unittest.TestCase):
 
         self.assertEqual(node_by_id["output_model"]["details"]["dims"], "256 -> 100")
 
+    def test_inspect_rejects_path_like_dataset_input(self) -> None:
+        with self.assertRaises(InspectorError) as context:
+            inspect_model("linear", "baseline", dataset="./Mnist")
+
+        message = str(context.exception)
+        self.assertIn("./Mnist", message)
+        self.assertIn("filesystem path", message)
+        self.assertIn("server-known dataset name", message)
+
     def test_locked_preset_override_is_rejected_for_inspect(self) -> None:
         with self.assertRaises(InspectorError) as context:
             inspect_model("linear", "gating", {"gate_flag": "false"})
