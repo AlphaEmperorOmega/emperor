@@ -1,0 +1,156 @@
+import type {
+  EChartsOption,
+  LineSeriesOption,
+  TooltipComponentFormatterCallbackParams,
+} from "echarts";
+import type { ScalarDomain } from "@/types/monitor";
+import { formatNumber } from "@/lib/format";
+import { applyEmaSmoothing } from "@/lib/echarts/smoothing";
+
+export type ScalarXMode = "step" | "wallTime";
+export type ScalarYScale = "linear" | "log";
+
+export type ScalarLinePoint = { step: number; wallTime: number; value: number };
+
+/** One overlaid run line, already resolved to a stable color + display name. */
+export type ScalarLine = {
+  id: string;
+  name: string;
+  color: string;
+  points: ScalarLinePoint[];
+};
+
+export type ScalarLineOptions = {
+  xMode?: ScalarXMode;
+  yScale?: ScalarYScale;
+  /** EMA weight in [0, 1]; 0 disables smoothing. */
+  smoothing?: number;
+  /** Show inside + slider dataZoom (used by the logs panel, not the dense modal). */
+  dataZoom?: boolean;
+  /** Fix axis extents so comparison charts share a scale. */
+  domain?: Partial<ScalarDomain>;
+};
+
+function toAxisX(point: ScalarLinePoint, xMode: ScalarXMode): number {
+  // TensorBoard wall time is epoch seconds; the time axis expects milliseconds.
+  return xMode === "wallTime" ? point.wallTime * 1000 : point.step;
+}
+
+type AxisTooltipItem = {
+  seriesName?: string;
+  marker?: string;
+  axisValueLabel?: string;
+  axisValue?: number | string;
+  value?: unknown;
+};
+
+/** Axis tooltip that de-duplicates the raw/smoothed pair sharing a run name. */
+function formatAxisTooltip(params: TooltipComponentFormatterCallbackParams): string {
+  const items = (Array.isArray(params) ? params : [params]) as AxisTooltipItem[];
+  if (items.length === 0) {
+    return "";
+  }
+  const header = items[0].axisValueLabel ?? String(items[0].axisValue ?? "");
+  const seen = new Set<string>();
+  const rows: string[] = [];
+  for (const item of items) {
+    const name = item.seriesName ?? "";
+    if (seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    const raw = Array.isArray(item.value) ? item.value[1] : item.value;
+    rows.push(`${item.marker ?? ""}${name}&nbsp;&nbsp;${formatNumber(Number(raw))}`);
+  }
+  return [header, ...rows].join("<br/>");
+}
+
+/**
+ * Builds a line-chart option for one or more overlaid run series. When smoothing
+ * is active each multi-point line is drawn twice: a faint raw line behind a bold
+ * smoothed line (TensorBoard behavior). Single-point series render as a marker.
+ */
+export function buildScalarLineOption(
+  lines: readonly ScalarLine[],
+  options: ScalarLineOptions = {},
+): EChartsOption {
+  const {
+    xMode = "step",
+    yScale = "linear",
+    smoothing = 0,
+    dataZoom = false,
+    domain,
+  } = options;
+
+  const series: LineSeriesOption[] = [];
+  for (const line of lines) {
+    const isSinglePoint = line.points.length === 1;
+    const rawData = line.points.map((point) => [toAxisX(point, xMode), point.value]);
+
+    if (smoothing > 0 && !isSinglePoint) {
+      const smoothedData = applyEmaSmoothing(line.points, smoothing).map((point) => [
+        toAxisX(point, xMode),
+        point.value,
+      ]);
+      // Smoothed pushed first so the tooltip de-dupe keeps its full-color marker.
+      series.push({
+        type: "line",
+        name: line.name,
+        data: smoothedData,
+        showSymbol: false,
+        lineStyle: { color: line.color, width: 2 },
+        itemStyle: { color: line.color },
+        z: 2,
+      });
+      series.push({
+        type: "line",
+        name: line.name,
+        data: rawData,
+        showSymbol: false,
+        silent: true,
+        lineStyle: { color: line.color, width: 1, opacity: 0.25 },
+        itemStyle: { color: line.color },
+        z: 1,
+      });
+    } else {
+      series.push({
+        type: "line",
+        name: line.name,
+        data: rawData,
+        showSymbol: isSinglePoint,
+        symbolSize: 6,
+        lineStyle: { color: line.color, width: 2 },
+        itemStyle: { color: line.color },
+      });
+    }
+  }
+
+  return {
+    animation: false,
+    grid: { left: 48, right: 16, top: 16, bottom: dataZoom ? 48 : 28 },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "cross" },
+      formatter: formatAxisTooltip,
+    },
+    xAxis: {
+      type: xMode === "wallTime" ? "time" : "value",
+      scale: true,
+      min: xMode === "step" ? domain?.minStep : undefined,
+      max: xMode === "step" ? domain?.maxStep : undefined,
+    },
+    yAxis: {
+      type: yScale === "log" ? "log" : "value",
+      scale: true,
+      min: domain?.minValue,
+      max: domain?.maxValue,
+    },
+    dataZoom: dataZoom
+      ? [
+          { type: "inside" },
+          { type: "slider", height: 16, bottom: 8 },
+        ]
+      : undefined,
+    series,
+  };
+}
