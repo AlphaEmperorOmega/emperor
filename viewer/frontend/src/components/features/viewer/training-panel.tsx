@@ -79,6 +79,7 @@ type TrainingPanelProps = {
   searchAxes: SearchAxis[];
   searchLoading?: boolean;
   trainingSearch: TrainingSearchState;
+  trainingEnabled: boolean;
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
   onSetTrainingPresets: (presets: string[]) => void;
@@ -125,6 +126,7 @@ export function TrainingPanel({
   searchAxes,
   searchLoading = false,
   trainingSearch,
+  trainingEnabled,
   onSelectModel,
   onSelectPreset,
   onSetTrainingPresets,
@@ -273,14 +275,15 @@ export function TrainingPanel({
     ],
   );
   const canPlan = Boolean(
-    hasConfigSnapshots
-      ? selectedModel && selectedPreset && snapshotRunPlan
-      : selectedModel &&
-          selectedPreset &&
-          selectedTrainingPresetCount > 0 &&
-          selectedDatasets.length > 0 &&
-          trainingSearchValidation.ready &&
-          (effectiveTrainingSearch.mode === "off" || !searchLoading),
+    trainingEnabled &&
+      (hasConfigSnapshots
+        ? selectedModel && selectedPreset && snapshotRunPlan
+        : selectedModel &&
+            selectedPreset &&
+            selectedTrainingPresetCount > 0 &&
+            selectedDatasets.length > 0 &&
+            trainingSearchValidation.ready &&
+            (effectiveTrainingSearch.mode === "off" || !searchLoading)),
   );
   const {
     job,
@@ -443,7 +446,7 @@ export function TrainingPanel({
             <Button
               variant="danger"
               onClick={cancelTraining}
-              disabled={isCancelling}
+              disabled={isCancelling || !trainingEnabled}
             >
               <CircleStop className="h-4 w-4" aria-hidden />
               Cancel
@@ -452,7 +455,10 @@ export function TrainingPanel({
           <Button
             variant="secondary"
             onClick={() => setIsProgressOpen(true)}
-            disabled={!progressRunPlan && !isProgressPlanning && !progressPlanError}
+            disabled={
+              !trainingEnabled ||
+              (!progressRunPlan && !isProgressPlanning && !progressPlanError)
+            }
             className="h-10 px-3 text-sm"
           >
             {isProgressPlanning ? (
@@ -465,7 +471,7 @@ export function TrainingPanel({
           <Button
             variant="primary"
             onClick={startTraining}
-            disabled={!canStart}
+            disabled={!trainingEnabled || !canStart}
             className="h-10 px-[22px] text-sm"
           >
             {isStarting ? (
@@ -483,6 +489,11 @@ export function TrainingPanel({
           id="training-panel-details"
           className="grid max-h-[46vh] gap-3 overflow-y-auto border-t border-line bg-bg-2/90 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]"
         >
+          {!trainingEnabled && (
+            <InlineStatus tone="warning" compact className="lg:col-span-2">
+              Training is disabled by this backend.
+            </InlineStatus>
+          )}
           <div className="grid gap-3">
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="grid gap-2">

@@ -34,6 +34,7 @@ export function ConnectedTrainingPanel({
       searchAxes={target.searchSpaceQuery.data?.axes ?? []}
       searchLoading={target.searchSpaceQuery.isLoading}
       trainingSearch={target.trainingSearch}
+      trainingEnabled={target.capabilities.trainingEnabled}
       onSelectModel={target.selectModel}
       onSelectPreset={target.selectPreset}
       onSetTrainingPresets={target.setTrainingPresetSelection}
