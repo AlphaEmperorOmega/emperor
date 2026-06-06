@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 import os
 import subprocess
@@ -18,7 +17,11 @@ from viewer.backend.inspector.discovery import (
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import validate_log_experiment_name
 from viewer.backend.monitor_data import TensorBoardMonitorReader
-from viewer.backend.training_run_plans import TrainingRunPlanBuilder
+from viewer.backend.training_run_plans import (
+    SelectedTrainingInputs,
+    TrainingRunPlanBuilder,
+)
+from viewer.backend.training_run_progress import project_training_run_progress
 
 
 def _now() -> str:
@@ -156,7 +159,7 @@ class TrainingJobManager:
     ) -> dict[str, Any]:
         validated_log_folder = validate_log_experiment_name(log_folder)
 
-        selected = self.run_plan_builder.resolve_inputs(
+        selected = self._resolve_job_inputs(
             model=model,
             preset=preset,
             presets=presets,
@@ -164,25 +167,100 @@ class TrainingJobManager:
             overrides=overrides,
             search=search,
         )
-        parts = selected.parts
-        selected_preset_names = selected.selected_preset_names
-        selected_datasets = selected.selected_datasets
-        selected_monitors = resolve_model_monitors(parts, monitors)
+        selected_monitors = resolve_model_monitors(selected.parts, monitors)
+        materialized_run_plan = self._materialize_job_run_plan(
+            model=model,
+            selected=selected,
+            run_plan=run_plan,
+            validated_log_folder=validated_log_folder,
+        )
+        planned_run_count = materialized_run_plan["summary"]["totalRuns"]
+
+        self._ensure_job_log_folder(validated_log_folder)
+
+        job_id = uuid.uuid4().hex
+        job_root = self._create_job_root(job_id)
+        payload = self._build_worker_payload(
+            job_id=job_id,
+            model=model,
+            selected=selected,
+            selected_monitors=selected_monitors,
+            planned_run_count=planned_run_count,
+            materialized_run_plan=materialized_run_plan,
+            validated_log_folder=validated_log_folder,
+        )
+        payload_path = self._write_worker_payload(job_root, payload)
+        progress_path = job_root / "progress.jsonl"
+        command = self._build_worker_command(payload_path, progress_path)
+        process = self.runner.start(
+            command,
+            cwd=self.cwd,
+            env=self._worker_env(),
+            log_path=job_root / "training.log",
+        )
+        job = self._register_job(
+            job_id=job_id,
+            model=model,
+            payload=payload,
+            materialized_run_plan=materialized_run_plan,
+            validated_log_folder=validated_log_folder,
+            command=command,
+            job_root=job_root,
+            process=process,
+        )
+        self._write_event(
+            job,
+            {
+                "type": "job_started",
+                "status": "running",
+                "preset": job.preset,
+                "presets": job.presets,
+                "runTotal": planned_run_count,
+            },
+        )
+        return self.get_job(job_id)
+
+    def _resolve_job_inputs(
+        self,
+        *,
+        model: str,
+        preset: str,
+        presets: list[str] | None,
+        datasets: list[str],
+        overrides: dict[str, Any],
+        search: dict[str, Any] | None,
+    ) -> SelectedTrainingInputs:
+        return self.run_plan_builder.resolve_inputs(
+            model=model,
+            preset=preset,
+            presets=presets,
+            datasets=datasets,
+            overrides=overrides,
+            search=search,
+        )
+
+    def _materialize_job_run_plan(
+        self,
+        *,
+        model: str,
+        selected: SelectedTrainingInputs,
+        run_plan: dict[str, Any] | None,
+        validated_log_folder: str,
+    ) -> dict[str, Any]:
         if run_plan is not None:
-            materialized_run_plan = self.run_plan_builder.from_submitted(
+            return self.run_plan_builder.from_submitted(
                 model=model,
                 selected=selected,
                 run_plan=run_plan,
                 log_folder=validated_log_folder,
             )
-        else:
-            materialized_run_plan = self.run_plan_builder.create(
-                model=model,
-                selected=selected,
-                log_folder=validated_log_folder,
-            )
-        planned_run_count = materialized_run_plan["summary"]["totalRuns"]
+        return self.run_plan_builder.create(
+            model=model,
+            selected=selected,
+            log_folder=validated_log_folder,
+        )
 
+    def _ensure_job_log_folder(self, validated_log_folder: str) -> None:
         # Validate the top-level folder immediately before the worker starts.
         log_folder_path = self.logs_root / validated_log_folder
         if log_folder_path.is_symlink():
@@ -191,15 +269,30 @@ class TrainingJobManager:
             )
         log_folder_path.mkdir(parents=True, exist_ok=True)
 
-        job_id = uuid.uuid4().hex
+    def _create_job_root(self, job_id: str) -> Path:
         job_root = self.root / job_id
         job_root.mkdir(parents=True, exist_ok=True)
-        payload = {
+        return job_root
+
+    def _build_worker_payload(
+        self,
+        *,
+        job_id: str,
+        model: str,
+        selected: SelectedTrainingInputs,
+        selected_monitors: list[Any],
+        planned_run_count: int,
+        materialized_run_plan: dict[str, Any],
+        validated_log_folder: str,
+    ) -> dict[str, Any]:
+        return {
             "id": job_id,
             "model": model,
-            "preset": selected_preset_names[0],
-            "presets": selected_preset_names,
-            "datasets": [dataset_name(dataset) for dataset in selected_datasets],
+            "preset": selected.selected_preset_names[0],
+            "presets": selected.selected_preset_names,
+            "datasets": [
+                dataset_name(dataset) for dataset in selected.selected_datasets
+            ],
             "overrides": selected.effective_overrides,
             "search": (
                 selected.parsed_search.to_payload()
@@ -211,10 +304,22 @@ class TrainingJobManager:
             "monitors": [monitor.name for monitor in selected_monitors],
             "logFolder": validated_log_folder,
         }
+
+    def _write_worker_payload(
+        self,
+        job_root: Path,
+        payload: dict[str, Any],
+    ) -> Path:
         payload_path = job_root / "payload.json"
         payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        progress_path = job_root / "progress.jsonl"
-        command = [
+        return payload_path
+
+    def _build_worker_command(
+        self,
+        payload_path: Path,
+        progress_path: Path,
+    ) -> list[str]:
+        return [
             sys.executable,
             "-m",
             "viewer.backend.training_worker",
@@ -223,13 +328,25 @@ class TrainingJobManager:
             "--progress",
             str(progress_path),
         ]
-        env = {**os.environ, "MPLCONFIGDIR": os.environ.get("MPLCONFIGDIR", "/tmp/matplotlib")}
-        process = self.runner.start(
-            command,
-            cwd=self.cwd,
-            env=env,
-            log_path=job_root / "training.log",
-        )
+
+    def _worker_env(self) -> dict[str, str]:
+        return {
+            **os.environ,
+            "MPLCONFIGDIR": os.environ.get("MPLCONFIGDIR", "/tmp/matplotlib"),
+        }
+
+    def _register_job(
+        self,
+        *,
+        job_id: str,
+        model: str,
+        payload: dict[str, Any],
+        materialized_run_plan: dict[str, Any],
+        validated_log_folder: str,
+        command: list[str],
+        job_root: Path,
+        process: ProcessHandle,
+    ) -> TrainingJob:
         job = TrainingJob(
             id=job_id,
             model=model,
@@ -247,17 +364,7 @@ class TrainingJobManager:
             process=process,
         )
         self.jobs[job_id] = job
-        self._write_event(
-            job,
-            {
-                "type": "job_started",
-                "status": "running",
-                "preset": job.preset,
-                "presets": job.presets,
-                "runTotal": planned_run_count,
-            },
-        )
-        return self.get_job(job_id)
+        return job
 
     def get_job(self, job_id: str) -> dict[str, Any]:
         job = self.jobs.get(job_id)
@@ -400,140 +507,17 @@ class TrainingJobManager:
             -line_count:
         ]
 
-    def _run_for_event(
+    def _run_plan_for_job(
         self,
-        *,
-        event: dict[str, Any],
-        runs: list[dict[str, Any]],
-        run_by_id: dict[str, dict[str, Any]],
-    ) -> dict[str, Any] | None:
-        run_id = event.get("runId")
-        if isinstance(run_id, str) and run_id in run_by_id:
-            return run_by_id[run_id]
-
-        run_index = event.get("runIndex")
-        if isinstance(run_index, int):
-            if 1 <= run_index <= len(runs):
-                return runs[run_index - 1]
-            if 0 <= run_index < len(runs):
-                return runs[run_index]
-
-        dataset = event.get("dataset")
-        preset = self._event_preset_name(event)
-        if dataset is None:
-            return None
-        candidates = [
-            run
-            for run in runs
-            if run.get("dataset") == dataset
-            and (
-                preset is None
-                or self._normalize_preset_token(str(run.get("preset")))
-                == self._normalize_preset_token(preset)
-            )
-        ]
-        return next(
-            (
-                run
-                for run in candidates
-                if run.get("status") not in {"Completed", "Failed", "Cancelled"}
-            ),
-            candidates[0] if candidates else None,
+        job: TrainingJob,
+        events: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        return project_training_run_progress(
+            job.run_plan,
+            events,
+            job.status,
+            self.run_plan_builder.summarize,
         )
-
-    def _event_epoch(self, event: dict[str, Any], total_epochs: int) -> int:
-        raw_epoch = event.get("epoch")
-        if not isinstance(raw_epoch, int):
-            return 0
-        return min(total_epochs, max(0, raw_epoch + 1))
-
-    def _run_plan_for_job(self, job: TrainingJob, events: list[dict[str, Any]]) -> dict[str, Any]:
-        plan = copy.deepcopy(job.run_plan)
-        runs = plan.get("runs") or []
-        latest_failed_event = next(
-            (event for event in reversed(events) if event.get("status") == "failed"),
-            {},
-        )
-        run_by_id = {
-            str(run.get("id")): run
-            for run in runs
-            if run.get("id") is not None
-        }
-        for event in events:
-            row = self._run_for_event(
-                event=event,
-                runs=runs,
-                run_by_id=run_by_id,
-            )
-            if row is None:
-                continue
-
-            event_type = event.get("type")
-            total_epochs = int(row.get("totalEpochs") or 0)
-            if event.get("logDir"):
-                row["logDir"] = event.get("logDir")
-            if isinstance(event.get("metrics"), dict):
-                row["metrics"] = event["metrics"]
-
-            if event_type == "dataset_started":
-                row["status"] = "Running"
-                row["currentEpoch"] = max(0, int(row.get("currentEpoch") or 0))
-            elif event_type in {
-                "epoch_started",
-                "step",
-                "validation",
-                "fit_completed",
-                "test_completed",
-            }:
-                row["status"] = "Running"
-                row["currentEpoch"] = max(
-                    int(row.get("currentEpoch") or 0),
-                    self._event_epoch(event, total_epochs),
-                )
-            elif event_type == "dataset_completed":
-                row["status"] = "Completed"
-                row["currentEpoch"] = total_epochs
-            elif event_type == "error":
-                row["status"] = "Failed"
-                row["currentEpoch"] = max(
-                    int(row.get("currentEpoch") or 0),
-                    self._event_epoch(event, total_epochs),
-                )
-                row["error"] = str(event.get("error") or "Training failed")
-                if event.get("traceback"):
-                    row["errorTraceback"] = str(event.get("traceback"))
-
-        if job.status == "cancelled":
-            for row in runs:
-                if row.get("status") == "Running":
-                    row["status"] = "Cancelled"
-                elif row.get("status") == "Pending":
-                    row["status"] = "Skipped"
-        elif job.status == "failed":
-            failed_seen = any(row.get("status") == "Failed" for row in runs)
-            for row in runs:
-                if row.get("status") == "Running":
-                    row["status"] = "Failed"
-                    failed_seen = True
-                elif row.get("status") == "Pending":
-                    if not failed_seen:
-                        row["status"] = "Failed"
-                        row["error"] = "Training failed"
-                        if latest_failed_event.get("traceback"):
-                            row["errorTraceback"] = str(
-                                latest_failed_event.get("traceback")
-                            )
-                        failed_seen = True
-                    else:
-                        row["status"] = "Skipped"
-        elif job.status == "completed":
-            for row in runs:
-                if row.get("status") == "Running":
-                    row["status"] = "Completed"
-                    row["currentEpoch"] = int(row.get("totalEpochs") or 0)
-
-        plan["summary"] = self.run_plan_builder.summarize(runs)
-        return plan
 
     def _serialize(self, job: TrainingJob) -> dict[str, Any]:
         events = self._events(job)
