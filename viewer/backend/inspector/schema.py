@@ -18,6 +18,7 @@ from models.config_overrides import (
 from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.discovery import load_model_parts
 from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.inspector.values import serialize_config_value
 
 DEFAULT_SECTION = "General"
 
@@ -99,16 +100,6 @@ def _source_metadata(
         for key in assignments_by_line.get(line_number, []):
             metadata[key] = {"line": line_number, "section": current_section}
     return metadata
-
-
-def _serialize_value(value: Any) -> Any:
-    if isinstance(value, Enum):
-        return value.name
-    if inspect.isclass(value):
-        return value.__name__
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
 
 
 def _annotation_classes(annotation: Any) -> list[type]:
@@ -251,7 +242,7 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                 "label": key.lower().replace("_", " "),
                 "section": field_metadata.get("section", DEFAULT_SECTION),
                 "type": kind,
-                "default": _serialize_value(value),
+                "default": serialize_config_value(value),
                 "nullable": value is None or _annotation_is_nullable(annotation),
                 "choices": _choices_for(
                     parts.config_module,
@@ -260,7 +251,7 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                     kind,
                 ),
                 "locked": lock is not None,
-                "lockedValue": _serialize_value(locked_value) if lock is not None else None,
+                "lockedValue": serialize_config_value(locked_value) if lock is not None else None,
                 "lockedReason": locked_reason,
             }
         )
@@ -324,9 +315,9 @@ def search_space_schema(
                     else metadata.get(search_key, {}).get("section", DEFAULT_SECTION)
                 ),
                 "type": _search_axis_kind(parts.config_module, config_key, values),
-                "values": [_serialize_value(value) for value in values],
+                "values": [serialize_config_value(value) for value in values],
                 "locked": lock is not None,
-                "lockedValue": _serialize_value(locked_value) if lock is not None else None,
+                "lockedValue": serialize_config_value(locked_value) if lock is not None else None,
                 "lockedReason": locked_reason,
             }
         )

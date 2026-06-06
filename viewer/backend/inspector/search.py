@@ -14,6 +14,7 @@ from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.discovery import load_model_parts
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.schema import search_space_schema
+from viewer.backend.inspector.values import serialize_config_value
 
 
 @dataclass(frozen=True)
@@ -35,18 +36,6 @@ class ParsedTrainingSearch:
         if self.random_samples is not None:
             payload["randomSamples"] = self.random_samples
         return payload
-
-
-def _serialize_value(value: Any) -> Any:
-    # Keep this intentionally aligned with schema._serialize_value without making
-    # the parser depend on a private helper.
-    if hasattr(value, "name"):
-        return value.name
-    if isinstance(value, type):
-        return value.__name__
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
 
 
 def _axis_by_key(model_name: str, preset_name: str) -> dict[str, dict[str, Any]]:
@@ -122,12 +111,12 @@ def parse_training_search(
                 f"Search axis '{axis['key']}' requires at least one selected value."
             )
 
-        allowed_values = {_serialize_value(value) for value in axis.get("values", [])}
+        allowed_values = {serialize_config_value(value) for value in axis.get("values", [])}
         parsed_axis_values = [
             _parse_search_value(parts.config_module, axis, raw_value)
             for raw_value in raw_values
         ]
-        serialized_axis_values = [_serialize_value(value) for value in parsed_axis_values]
+        serialized_axis_values = [serialize_config_value(value) for value in parsed_axis_values]
         invalid_values = [
             value for value in serialized_axis_values if value not in allowed_values
         ]
