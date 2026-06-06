@@ -363,6 +363,7 @@ const capabilitiesSchema = z.object({
   authMode: z.enum(["none", "bearer"]),
   trainingEnabled: z.boolean(),
   logDeletionEnabled: z.boolean(),
+  configSnapshotsEnabled: z.boolean().default(true),
   historicalLogsEnabled: z.boolean(),
   liveMonitorDataEnabled: z.boolean(),
   historicalMonitorDataEnabled: z.boolean(),
@@ -383,6 +384,19 @@ const searchSpaceSchema = z.object({
   model: z.string(),
   preset: z.string().nullable().optional(),
   axes: z.array(searchAxisSchema),
+});
+const configSnapshotSchema = z.object({
+  id: z.string(),
+  model: z.string(),
+  preset: z.string(),
+  name: z.string(),
+  overrides: z.record(z.string(), z.string()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+const configSnapshotsSchema = z.object({
+  model: z.string(),
+  snapshots: z.array(configSnapshotSchema),
 });
 const paginationSchema = z.object({
   total: z.number().optional(),
@@ -405,6 +419,13 @@ export type ConfigField = z.infer<typeof configFieldSchema>;
 export type SearchAxis = z.infer<typeof searchAxisSchema>;
 export type SearchSpace = z.infer<typeof searchSpaceSchema>;
 export type Capabilities = z.infer<typeof capabilitiesSchema>;
+export type ConfigSnapshotRecord = z.infer<typeof configSnapshotSchema>;
+export type ConfigSnapshotCreateInput = {
+  model: string;
+  preset: string;
+  name: string;
+  overrides: Record<string, string>;
+};
 export type GraphConfig = z.infer<typeof graphConfigSchema>;
 export type GraphNode = z.infer<typeof graphNodeSchema>;
 export type GraphEdge = z.infer<typeof graphEdgeSchema>;
@@ -890,6 +911,41 @@ export function fetchLogTags(input: { runIds: string[] }) {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function fetchConfigSnapshots(model: string) {
+  return requestJson(
+    `/config-snapshots?model=${encodeURIComponent(model)}`,
+    configSnapshotsSchema,
+  );
+}
+
+export function createConfigSnapshot(input: ConfigSnapshotCreateInput) {
+  return requestJson("/config-snapshots", configSnapshotSchema, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function renameConfigSnapshot(snapshotId: string, name: string) {
+  return requestJson(
+    `/config-snapshots/${encodeURIComponent(snapshotId)}`,
+    configSnapshotSchema,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    },
+  );
+}
+
+export function deleteConfigSnapshot(snapshotId: string) {
+  return requestJson(
+    `/config-snapshots/${encodeURIComponent(snapshotId)}`,
+    configSnapshotsSchema,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function fetchLogScalars(input: { runIds: string[]; tags: string[] }) {

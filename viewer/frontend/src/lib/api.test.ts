@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cancelTrainingJob,
+  createConfigSnapshot,
   createLogRunDeletePlan,
   createTrainingJob,
+  deleteConfigSnapshot,
   deleteLogExperiment,
   deleteLogRuns,
   fetchCapabilities,
   fetchConfigSchema,
+  fetchConfigSnapshots,
   fetchDatasets,
   fetchHealth,
   fetchLogExperiments,
@@ -23,6 +26,7 @@ import {
   fetchTrainingRunPlan,
   inspectModel,
   isUnauthorizedApiError,
+  renameConfigSnapshot,
 } from "@/lib/api";
 import { setSessionAuthToken } from "@/lib/auth-token";
 
@@ -36,6 +40,7 @@ const capabilitiesResponse = {
   authMode: "none",
   trainingEnabled: true,
   logDeletionEnabled: true,
+  configSnapshotsEnabled: true,
   historicalLogsEnabled: true,
   liveMonitorDataEnabled: true,
   historicalMonitorDataEnabled: true,
@@ -1960,5 +1965,88 @@ describe("fetchTrainingRunPlan", () => {
     expect((init as RequestInit).method).toBe("POST");
     expect((init as RequestInit).body).toBe(JSON.stringify(input));
     expect(result.summary.remainingEpochs).toBe(30);
+  });
+});
+
+describe("config snapshots", () => {
+  const snapshot = {
+    id: "snap-1",
+    model: "linear",
+    preset: "baseline",
+    name: "tuned lr",
+    overrides: { learning_rate: "0.01" },
+    createdAt: "t",
+    updatedAt: "t",
+  };
+
+  it("fetches snapshots for a model with an encoded query", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () => Promise.resolve({ model: "linear", snapshots: [snapshot] }),
+      }),
+    );
+
+    const result = await fetchConfigSnapshots("linear");
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/config-snapshots?model=linear`);
+    expect(result.snapshots[0].id).toBe("snap-1");
+  });
+
+  it("posts the create request body as JSON", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve(snapshot) }),
+    );
+    const input = {
+      model: "linear",
+      preset: "baseline",
+      name: "tuned lr",
+      overrides: { learning_rate: "0.01" },
+    };
+
+    await createConfigSnapshot(input);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/config-snapshots`);
+    expect((init as RequestInit).method).toBe("POST");
+    expect((init as RequestInit).body).toBe(JSON.stringify(input));
+  });
+
+  it("patches the rename request with the snapshot id and name", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve(snapshot) }),
+    );
+
+    await renameConfigSnapshot("snap-1", "new name");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/config-snapshots/snap-1`);
+    expect((init as RequestInit).method).toBe("PATCH");
+    expect((init as RequestInit).body).toBe(JSON.stringify({ name: "new name" }));
+  });
+
+  it("deletes a snapshot by id and returns the remaining list", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve({ model: "linear", snapshots: [] }) }),
+    );
+
+    const result = await deleteConfigSnapshot("snap-1");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/config-snapshots/snap-1`);
+    expect((init as RequestInit).method).toBe("DELETE");
+    expect(result.snapshots).toEqual([]);
+  });
+
+  it("rejects malformed snapshot payloads with request context", async () => {
+    stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({ model: "linear", snapshots: [{ ...snapshot, id: 7 }] }),
+      }),
+    );
+
+    await expect(fetchConfigSnapshots("linear")).rejects.toThrow(
+      `Invalid API response for GET /config-snapshots?model=linear from ${BASE}: snapshots.0.id:`,
+    );
   });
 });

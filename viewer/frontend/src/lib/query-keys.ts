@@ -23,6 +23,8 @@ export const viewerQueryKeys = {
     ["config-schema", selectedModel, selectedPreset] as const,
   searchSpace: (selectedModel: string, selectedPreset: string) =>
     ["search-space", selectedModel, selectedPreset] as const,
+  configSnapshots: (selectedModel: string) =>
+    ["config-snapshots", selectedModel] as const,
 };
 
 export const trainingQueryKeys = {

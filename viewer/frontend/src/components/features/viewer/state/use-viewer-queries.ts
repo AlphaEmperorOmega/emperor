@@ -16,6 +16,7 @@ export const LOCAL_DEFAULT_CAPABILITIES: Capabilities = {
   authMode: "none",
   trainingEnabled: true,
   logDeletionEnabled: true,
+  configSnapshotsEnabled: true,
   historicalLogsEnabled: true,
   liveMonitorDataEnabled: true,
   historicalMonitorDataEnabled: true,

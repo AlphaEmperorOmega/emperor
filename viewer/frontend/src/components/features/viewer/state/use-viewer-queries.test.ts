@@ -39,6 +39,7 @@ beforeEach(() => {
     authMode: "none",
     trainingEnabled: true,
     logDeletionEnabled: true,
+    configSnapshotsEnabled: true,
     historicalLogsEnabled: true,
     liveMonitorDataEnabled: true,
     historicalMonitorDataEnabled: true,
