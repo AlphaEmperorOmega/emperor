@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   fetchHealth: vi.fn(),
+  fetchCapabilities: vi.fn(),
   fetchModels: vi.fn(),
   fetchPresets: vi.fn(),
   fetchDatasets: vi.fn(),
@@ -92,6 +93,18 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
 
 beforeEach(() => {
   mocks.fetchHealth.mockReset().mockResolvedValue({ status: "ok" });
+  mocks.fetchCapabilities.mockReset().mockResolvedValue({
+    authMode: "none",
+    trainingEnabled: true,
+    logDeletionEnabled: true,
+    historicalLogsEnabled: true,
+    liveMonitorDataEnabled: true,
+    historicalMonitorDataEnabled: true,
+    uploadsEnabled: false,
+    maxUploadSize: null,
+    dataSourcesEnabled: false,
+    dataSources: [],
+  });
   mocks.fetchModels.mockReset().mockResolvedValue({ models: ["linear", "bert_linear"] });
   mocks.fetchPresets.mockReset().mockImplementation((model: string) =>
     Promise.resolve(
@@ -194,6 +207,42 @@ beforeEach(() => {
 });
 
 describe("useViewerState", () => {
+  it("uses enabled local defaults while loading capabilities", () => {
+    mocks.fetchCapabilities.mockRejectedValueOnce(new Error("capabilities unavailable"));
+
+    const { result } = renderViewerState();
+
+    expect(result.current.target.capabilities).toMatchObject({
+      trainingEnabled: true,
+      logDeletionEnabled: true,
+    });
+  });
+
+  it("surfaces fetched hosted capability flags", async () => {
+    mocks.fetchCapabilities.mockResolvedValueOnce({
+      authMode: "bearer",
+      trainingEnabled: false,
+      logDeletionEnabled: false,
+      historicalLogsEnabled: true,
+      liveMonitorDataEnabled: true,
+      historicalMonitorDataEnabled: true,
+      uploadsEnabled: false,
+      maxUploadSize: null,
+      dataSourcesEnabled: false,
+      dataSources: [],
+    });
+
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.capabilities).toMatchObject({
+        authMode: "bearer",
+        trainingEnabled: false,
+        logDeletionEnabled: false,
+      });
+    });
+  });
+
   it("settles the auto-selected training preset without an update loop", async () => {
     const { result } = renderViewerState();
 
