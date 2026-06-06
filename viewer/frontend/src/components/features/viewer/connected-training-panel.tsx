@@ -27,6 +27,7 @@ export function ConnectedTrainingPanel({
       selectedDatasets={target.selectedDatasets}
       overrides={target.overrides}
       configSnapshots={target.configSnapshots}
+      deselectedSnapshotIds={target.deselectedSnapshotIds}
       configSnapshotCount={target.configSnapshotCount}
       monitorOptions={target.monitorsQuery.data?.monitors ?? []}
       selectedMonitors={target.selectedMonitors}

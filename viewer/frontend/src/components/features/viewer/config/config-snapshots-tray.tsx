@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SnapshotRestoreDialog } from "@/components/features/viewer/config/config-snapshot-dialogs";
@@ -260,16 +261,22 @@ export function ConfigSnapshotsTray({
   groups,
   selectedPreset,
   overrides,
+  deselectedSnapshotIds,
+  canManage,
   onLoad,
   onRename,
   onRemove,
+  onToggleSelection,
 }: {
   groups: ConfigSnapshotGroup[];
   selectedPreset: string;
   overrides: OverrideValues;
+  deselectedSnapshotIds: string[];
+  canManage: boolean;
   onLoad: (snapshotId: string) => void;
   onRename: (snapshotId: string, name: string) => void;
   onRemove: (snapshotId: string) => void;
+  onToggleSelection: (snapshotId: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingLoadSnapshot, setPendingLoadSnapshot] =
@@ -359,35 +366,45 @@ export function ConfigSnapshotsTray({
                         />
                       ) : (
                         <div className="flex min-w-0 items-start justify-between gap-2">
-                          <div className="grid min-w-0 gap-1">
-                            <span
-                              className="truncate text-sm font-semibold text-ink"
-                              title={snapshot.name}
-                            >
-                              {snapshot.name}
-                            </span>
-                            <span className="font-mono text-xs text-ink-faint">
-                              {snapshot.preset} · {overrideCountLabel(overrideCount)}
-                            </span>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1">
-                            <IconButton
-                              label={`Rename snapshot ${snapshot.name}`}
-                              onClick={() => setEditingId(snapshot.id)}
-                              size="sm"
-                              variant="edge"
-                              className="bg-white/[0.025] hover:bg-white/[0.055]"
-                              icon={<Pencil className="h-3.5 w-3.5" aria-hidden />}
+                          <div className="flex min-w-0 items-start gap-2">
+                            <Checkbox
+                              checked={!deselectedSnapshotIds.includes(snapshot.id)}
+                              onCheckedChange={() => onToggleSelection(snapshot.id)}
+                              aria-label={`Include snapshot ${snapshot.name} in training`}
+                              className="mt-0.5 shrink-0"
                             />
-                            <IconButton
-                              label={`Remove snapshot ${snapshot.name}`}
-                              onClick={() => onRemove(snapshot.id)}
-                              size="sm"
-                              variant="danger"
-                              className="border-danger-line bg-danger-soft text-[#fda4af] hover:bg-[#7f1d2d]/40 hover:text-white"
-                              icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
-                            />
+                            <div className="grid min-w-0 gap-1">
+                              <span
+                                className="truncate text-sm font-semibold text-ink"
+                                title={snapshot.name}
+                              >
+                                {snapshot.name}
+                              </span>
+                              <span className="font-mono text-xs text-ink-faint">
+                                {snapshot.preset} · {overrideCountLabel(overrideCount)}
+                              </span>
+                            </div>
                           </div>
+                          {canManage && (
+                            <div className="flex shrink-0 items-center gap-1">
+                              <IconButton
+                                label={`Rename snapshot ${snapshot.name}`}
+                                onClick={() => setEditingId(snapshot.id)}
+                                size="sm"
+                                variant="edge"
+                                className="bg-white/[0.025] hover:bg-white/[0.055]"
+                                icon={<Pencil className="h-3.5 w-3.5" aria-hidden />}
+                              />
+                              <IconButton
+                                label={`Remove snapshot ${snapshot.name}`}
+                                onClick={() => onRemove(snapshot.id)}
+                                size="sm"
+                                variant="danger"
+                                className="border-danger-line bg-danger-soft text-[#fda4af] hover:bg-[#7f1d2d]/40 hover:text-white"
+                                icon={<Trash2 className="h-3.5 w-3.5" aria-hidden />}
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
                       <SnapshotOverrideSummary overrides={snapshot.overrides} />

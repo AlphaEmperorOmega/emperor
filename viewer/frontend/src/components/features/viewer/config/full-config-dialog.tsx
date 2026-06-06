@@ -38,11 +38,14 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
     configSnapshots,
     configSnapshotGroups,
     configSnapshotCount,
+    deselectedSnapshotIds,
+    capabilities,
     schemaQuery,
     addConfigSnapshot,
     removeConfigSnapshot,
     renameConfigSnapshot,
     loadConfigSnapshot,
+    toggleConfigSnapshotRunSelection,
     updateOverride: onFieldChange,
     clearOverride: onFieldReset,
     resetOverrides: onResetOverrides,
@@ -177,7 +180,12 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
             <Button
               variant="secondary"
               onClick={() => setIsAddSnapshotOpen(true)}
-              disabled={!model || !preset || fieldCount === 0}
+              disabled={
+                !model ||
+                !preset ||
+                fieldCount === 0 ||
+                !capabilities.configSnapshotsEnabled
+              }
             >
               <FilePlus2 className="h-4 w-4" aria-hidden />
               Add Config Snapshot
@@ -240,9 +248,12 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
                   groups={configSnapshotGroups}
                   selectedPreset={preset}
                   overrides={overrides}
+                  deselectedSnapshotIds={deselectedSnapshotIds}
+                  canManage={capabilities.configSnapshotsEnabled}
                   onLoad={loadConfigSnapshot}
                   onRename={renameConfigSnapshot}
                   onRemove={removeConfigSnapshot}
+                  onToggleSelection={toggleConfigSnapshotRunSelection}
                 />
               </div>
             )}

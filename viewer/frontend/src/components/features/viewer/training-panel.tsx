@@ -73,6 +73,7 @@ type TrainingPanelProps = {
   overrides: OverrideValues;
   configSnapshots: ConfigSnapshot[];
   configSnapshotCount: number;
+  deselectedSnapshotIds: string[];
   monitorOptions: MonitorOption[];
   selectedMonitors: string[];
   monitorsLoading?: boolean;
@@ -120,6 +121,7 @@ export function TrainingPanel({
   overrides,
   configSnapshots,
   configSnapshotCount,
+  deselectedSnapshotIds,
   monitorOptions,
   selectedMonitors,
   monitorsLoading = false,
@@ -182,6 +184,14 @@ export function TrainingPanel({
   );
   const fieldCount = configFields.length;
   const overrideCount = Object.keys(overrides).length;
+  // Only snapshots the user kept checked feed the training run plan.
+  const runnableConfigSnapshots = useMemo(
+    () =>
+      configSnapshots.filter(
+        (snapshot) => !deselectedSnapshotIds.includes(snapshot.id),
+      ),
+    [configSnapshots, deselectedSnapshotIds],
+  );
   const hasConfigSnapshots = configSnapshotCount > 0;
   const effectiveTrainingSearch = hasConfigSnapshots
     ? DEFAULT_TRAINING_SEARCH_STATE
@@ -243,14 +253,14 @@ export function TrainingPanel({
             selectedPreset,
             selectedTrainingPresets,
             selectedDatasets,
-            snapshots: configSnapshots,
+            snapshots: runnableConfigSnapshots,
             fields: configFields,
             logFolder,
           })
         : undefined,
     [
       configFields,
-      configSnapshots,
+      runnableConfigSnapshots,
       hasConfigSnapshots,
       logFolder,
       selectedDatasets,
