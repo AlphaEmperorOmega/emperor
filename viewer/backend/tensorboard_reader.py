@@ -22,6 +22,25 @@ def finite_float(value: Any) -> float:
     return 0.0
 
 
+def scalar_points(
+    accumulator,
+    tag: str,
+    limit: int | None,
+) -> list[dict[str, Any]]:
+    """Read scalar events for ``tag`` as frontend-compatible point payloads."""
+    events = accumulator.Scalars(tag)
+    if limit is not None:
+        events = events[-limit:]
+    return [
+        {
+            "step": int(event.step),
+            "wallTime": finite_float(event.wall_time),
+            "value": finite_float(event.value),
+        }
+        for event in events
+    ]
+
+
 def event_dirs(root: Path) -> list[Path]:
     """Return the sorted, de-duplicated directories under ``root`` holding events."""
     event_files = list(root.rglob("events.out.tfevents.*"))
