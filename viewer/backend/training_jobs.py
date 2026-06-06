@@ -5,11 +5,16 @@ import os
 import subprocess
 import sys
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
+from viewer.backend.job_store import (
+    FileSystemTrainingJobStore,
+    InMemoryTrainingJobStore,
+    TrainingJobRecord,
+    TrainingJobStore,
+)
 from viewer.backend.inspector.discovery import (
     dataset_name,
     resolve_model_monitors,
@@ -70,34 +75,7 @@ class SubprocessRunner:
             )
 
 
-@dataclass
-class TrainingJob:
-    id: str
-    model: str
-    preset: str
-    presets: list[str]
-    datasets: list[str]
-    overrides: dict[str, Any]
-    search: dict[str, Any] | None
-    planned_run_count: int
-    run_plan: dict[str, Any]
-    monitors: list[str]
-    log_folder: str
-    command: list[str]
-    root: Path
-    process: ProcessHandle
-    status: str = "running"
-    created_at: str = field(default_factory=_now)
-    updated_at: str = field(default_factory=_now)
-    exit_code: int | None = None
-
-    @property
-    def progress_path(self) -> Path:
-        return self.root / "progress.jsonl"
-
-    @property
-    def log_path(self) -> Path:
-        return self.root / "training.log"
+TrainingJob = TrainingJobRecord
 
 
 class TrainingJobManager:
@@ -110,6 +88,7 @@ class TrainingJobManager:
         runner: ProcessRunner | None = None,
         monitor_reader: TensorBoardMonitorReader | None = None,
         run_plan_builder: TrainingRunPlanBuilder | None = None,
+        job_store: TrainingJobStore | None = None,
     ) -> None:
         self.root = root or Path("/tmp/emperor-viewer-training")
         self.cwd = cwd or Path.cwd()
@@ -117,7 +96,17 @@ class TrainingJobManager:
         self.runner = runner or SubprocessRunner()
         self.monitor_reader = monitor_reader or TensorBoardMonitorReader()
         self.run_plan_builder = run_plan_builder or TrainingRunPlanBuilder()
-        self.jobs: dict[str, TrainingJob] = {}
+        self.job_store = job_store or FileSystemTrainingJobStore(self.root)
+        self._processes: dict[str, ProcessHandle] = {}
+
+    @property
+    def jobs(self) -> dict[str, TrainingJob]:
+        if isinstance(
+            self.job_store,
+            (FileSystemTrainingJobStore, InMemoryTrainingJobStore),
+        ):
+            return self.job_store.jobs
+        return {job.id: job for job in self.job_store.list()}
 
     def create_run_plan(
         self,
@@ -361,34 +350,38 @@ class TrainingJobManager:
             log_folder=validated_log_folder,
             command=command,
             root=job_root,
-            process=process,
+            pid=process.pid,
         )
-        self.jobs[job_id] = job
+        self._processes[job_id] = process
+        self.job_store.save(job)
         return job
 
     def get_job(self, job_id: str) -> dict[str, Any]:
-        job = self.jobs.get(job_id)
-        if job is None:
-            raise InspectorError(f"Unknown training job '{job_id}'.")
+        job = self._get_job_record(job_id)
         self._refresh(job)
         return self._serialize(job)
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
-        job = self.jobs.get(job_id)
-        if job is None:
-            raise InspectorError(f"Unknown training job '{job_id}'.")
-        if job.status in {"running", "queued"} and job.process.poll() is None:
-            job.process.terminate()
+        job = self._get_job_record(job_id)
+        process = self._processes.get(job_id)
+        if process is None and job.status in {"running", "queued", "unknown"}:
+            raise InspectorError(
+                f"Training job '{job_id}' has no live process handle."
+            )
+        if job.status in {"running", "queued"}:
+            if process.poll() is None:
+                process.terminate()
         job.status = "cancelled"
         job.updated_at = _now()
+        self.job_store.save(job)
         self._write_event(job, {"type": "cancelled", "status": "cancelled"})
         return self._serialize(job)
 
     def active_jobs(self) -> list[dict[str, Any]]:
         active: list[dict[str, Any]] = []
-        for job in self.jobs.values():
+        for job in self.job_store.list():
             self._refresh(job)
-            if job.status not in {"running", "queued"}:
+            if job.status not in {"running", "queued", "unknown"}:
                 continue
             active.append(
                 {
@@ -407,9 +400,7 @@ class TrainingJobManager:
         dataset: str | None = None,
         preset: str | None = None,
     ) -> dict[str, Any]:
-        job = self.jobs.get(job_id)
-        if job is None:
-            raise InspectorError(f"Unknown training job '{job_id}'.")
+        job = self._get_job_record(job_id)
         if dataset is not None and dataset not in job.datasets:
             raise InspectorError(
                 f"Unknown dataset '{dataset}' for training job '{job_id}'."
@@ -429,8 +420,16 @@ class TrainingJobManager:
         data["preset"] = self._normalize_preset_token(preset) if preset else None
         return data
 
+    def _get_job_record(self, job_id: str) -> TrainingJob:
+        job = self.job_store.get(job_id)
+        if job is None:
+            raise InspectorError(f"Unknown training job '{job_id}'.")
+        return job
+
     def _refresh(self, job: TrainingJob) -> None:
-        exit_code = job.process.poll()
+        original_state = (job.status, job.exit_code, job.updated_at)
+        process = self._processes.get(job.id)
+        exit_code = process.poll() if process is not None else None
         events = self._events(job)
         latest_failed = next(
             (event for event in reversed(events) if event.get("status") == "failed"),
@@ -438,10 +437,22 @@ class TrainingJobManager:
         )
         if latest_failed is not None:
             job.status = "failed"
-        if exit_code is not None and job.status in {"running", "queued"}:
+        elif process is None and job.status in {"running", "queued"}:
+            job.status = "unknown"
+            job.updated_at = _now()
+        elif process is not None and exit_code is None and job.status == "unknown":
+            job.status = "running"
+            job.updated_at = _now()
+        elif process is not None and exit_code is not None and job.status in {
+            "running",
+            "queued",
+            "unknown",
+        }:
             job.exit_code = exit_code
             job.status = "completed" if exit_code == 0 else "failed"
             job.updated_at = _now()
+        if original_state != (job.status, job.exit_code, job.updated_at):
+            self.job_store.save(job)
 
     def _events(self, job: TrainingJob) -> list[dict[str, Any]]:
         if not job.progress_path.exists():
@@ -547,7 +558,7 @@ class TrainingJobManager:
             "createdAt": job.created_at,
             "updatedAt": job.updated_at,
             "exitCode": job.exit_code,
-            "pid": job.process.pid,
+            "pid": job.pid,
             "currentPreset": latest_preset,
             "currentDataset": latest_event.get("dataset"),
             "epoch": latest_event.get("epoch"),
