@@ -25,6 +25,11 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 MODEL_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
+def _is_path_like_dataset_input(dataset: str) -> bool:
+    stripped = dataset.strip()
+    return "/" in stripped or "\\" in stripped
+
+
 @dataclass(frozen=True)
 class ModelParts:
     name: str
@@ -129,7 +134,22 @@ def resolve_dataset(parts: ModelParts, dataset: str | None) -> type:
             dataset_name(dataset_type).lower(),
             dataset_cli_name(dataset_type),
         }
-        if dataset in names or dataset.lower() in names or normalized in names:
+        if dataset in names or dataset.lower() in names:
+            return dataset_type
+    if _is_path_like_dataset_input(dataset):
+        valid = ", ".join(dataset_name(item) for item in parts.dataset_options)
+        raise InspectorError(
+            f"Dataset input '{dataset}' for model '{parts.name}' looks like a "
+            "filesystem path. Use a server-known dataset name instead. "
+            f"Valid datasets: {valid}."
+        )
+    for dataset_type in parts.dataset_options:
+        names = {
+            dataset_name(dataset_type),
+            dataset_name(dataset_type).lower(),
+            dataset_cli_name(dataset_type),
+        }
+        if normalized in names:
             return dataset_type
     valid = ", ".join(dataset_name(item) for item in parts.dataset_options)
     raise InspectorError(
