@@ -8,6 +8,12 @@ from __future__ import annotations
 
 from viewer.backend.schemas._base import ApiResponseModel, ConfigValue
 from viewer.backend.schemas._capabilities import CapabilitiesResponse
+from viewer.backend.schemas._config_snapshots import (
+    ConfigSnapshotCreateRequest,
+    ConfigSnapshotRenameRequest,
+    ConfigSnapshotResponse,
+    ConfigSnapshotsResponse,
+)
 from viewer.backend.schemas._health import HealthResponse
 from viewer.backend.schemas._inspection import (
     GraphConfigFieldResponse,
@@ -79,6 +85,10 @@ __all__ = [
     "ConfigValue",
     "ApiResponseModel",
     "CapabilitiesResponse",
+    "ConfigSnapshotResponse",
+    "ConfigSnapshotsResponse",
+    "ConfigSnapshotCreateRequest",
+    "ConfigSnapshotRenameRequest",
     "HealthResponse",
     "ModelsResponse",
     "PresetResponse",
