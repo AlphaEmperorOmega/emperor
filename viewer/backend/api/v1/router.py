@@ -4,9 +4,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from viewer.backend.api.v1.routers import health, inspection, logs, models, training
+from viewer.backend.api.v1.routers import (
+    capabilities,
+    health,
+    inspection,
+    logs,
+    models,
+    training,
+)
 
 router = APIRouter()
+router.include_router(capabilities.router)
 router.include_router(health.router)
 router.include_router(models.router)
 router.include_router(inspection.router)
