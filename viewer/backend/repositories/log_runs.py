@@ -1,4 +1,8 @@
-"""Filesystem/TensorBoard data-access adapter for log-run state."""
+"""Filesystem/TensorBoard data-access adapter for log-run state.
+
+This repository is intentionally thin: it is an extension point between
+services and the concrete local ``LogRunIndex`` data-access object.
+"""
 
 from __future__ import annotations
 
@@ -25,7 +29,10 @@ class LogRunRepository:
     def list_experiments(self) -> list[LogExperiment]:
         return self._index.list_experiments()
 
-    def delete_experiment(self, experiment: str) -> LogExperimentDeleteResult:
+    def delete_experiment(
+        self,
+        experiment: str,
+    ) -> LogExperimentDeleteResult:
         return self._index.delete_experiment(experiment)
 
     def create_delete_plan(

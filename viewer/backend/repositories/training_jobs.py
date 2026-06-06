@@ -1,4 +1,8 @@
-"""In-memory training-job data-access adapter."""
+"""In-memory training-job data-access adapter.
+
+This repository is intentionally thin: it is an extension point between
+services and the concrete local ``TrainingJobManager`` job-manager object.
+"""
 
 from __future__ import annotations
 
