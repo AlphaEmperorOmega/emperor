@@ -169,7 +169,20 @@ beforeEach(() => {
   );
   mocks.fetchLogRuns.mockReset().mockResolvedValue({ runs: [] });
   mocks.fetchLogExperiments.mockReset().mockResolvedValue({ experiments: [] });
-  mocks.fetchLogTags.mockReset().mockResolvedValue({ runs: [] });
+  // Default: every requested run carries per-layer monitor data, so its
+  // experiment qualifies for the sidebar Experiments panel.
+  mocks.fetchLogTags
+    .mockReset()
+    .mockImplementation((input: { runIds: string[] }) =>
+      Promise.resolve({
+        runs: input.runIds.map((runId) => ({
+          runId,
+          scalarTags: ["main_model.0.model/weights/mean"],
+          histogramTags: [],
+          imageTags: [],
+        })),
+      }),
+    );
   mocks.inspectModel.mockReset().mockResolvedValue({
     model: "linear",
     preset: "baseline",
@@ -282,7 +295,7 @@ describe("useViewerState", () => {
     });
   });
 
-  it("syncs a newly selected historical run once when switching models", async () => {
+  it("does not auto-select a run, then syncs target config once when one is picked", async () => {
     mocks.fetchModels.mockResolvedValueOnce({ models: ["bert_linear", "linear"] });
     mocks.fetchLogRuns.mockResolvedValueOnce({
       runs: [
@@ -302,13 +315,25 @@ describe("useViewerState", () => {
       expect(result.current.target.selectedDatasets).toEqual(["ToyText"]);
     });
 
-    mocks.inspectModel.mockClear();
     act(() => {
       result.current.target.selectModel("linear");
     });
 
+    // The run becomes visible but nothing is auto-selected.
     await waitFor(() => {
       expect(result.current.target.selectedModel).toBe("linear");
+      expect(
+        result.current.history.visibleHistoricalRuns.map((run) => run.id),
+      ).toEqual(["linear-history"]);
+    });
+    expect(result.current.history.selectedLogRunId).toBeNull();
+
+    mocks.inspectModel.mockClear();
+    act(() => {
+      result.current.history.selectLogRun("linear-history");
+    });
+
+    await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("linear-history");
       expect(result.current.target.selectedPreset).toBe("fast");
       expect(result.current.target.selectedTrainingPresets).toEqual(["fast"]);

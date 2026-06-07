@@ -588,8 +588,18 @@ function logTagsPayload(tags: MockLogTags | undefined) {
 }
 
 const logTagsByRun: Record<string, MockLogTags> = {
-  "log-mnist": ["train/loss", "validation/accuracy", "test/accuracy"],
-  "log-cifar": ["train/loss", "validation/accuracy", "test/accuracy"],
+  "log-mnist": [
+    "train/loss",
+    "validation/accuracy",
+    "test/accuracy",
+    "main_model.0.model/weights/mean",
+  ],
+  "log-cifar": [
+    "train/loss",
+    "validation/accuracy",
+    "test/accuracy",
+    "main_model.0.model/weights/mean",
+  ],
 };
 const logScalarSeries = [
   {
@@ -3081,7 +3091,7 @@ describe("ViewerApp", () => {
       .toHaveFocus();
   });
 
-  it("renders model experiment filters and auto-selects the newest matching API run", async () => {
+  it("renders the experiments preset filter and selects a run on click", async () => {
     const { inspectBodies } = installFetchMock({
       logRunsResponse: {
         runs: [
@@ -3100,28 +3110,34 @@ describe("ViewerApp", () => {
       },
     });
     renderViewer();
+    const user = userEvent.setup();
 
     expect(await screen.findByRole("heading", { name: "Experiments" }))
       .toBeInTheDocument();
-    const experimentSelect = await screen.findByLabelText(/^experiment$/i);
-    const datasetSelect = await screen.findByLabelText(/^dataset$/i);
-    await waitFor(() => {
-      expect(experimentSelect).toHaveValue("test_model_2");
-      expect(datasetSelect).toHaveValue("Cifar10");
-    });
+    // The preset filter is independent of the model's build preset; it defaults to
+    // "All presets" and lists the presets present in the model's runs.
+    const presetFilter = (
+      await screen.findByRole("option", { name: "BASELINE (2)" })
+    ).closest("select") as HTMLSelectElement;
+    expect(presetFilter).toHaveValue("");
+    expect(
+      within(presetFilter).getByRole("option", { name: "All presets" }),
+    ).toBeInTheDocument();
+
+    // Both layer-data runs are listed; nothing is auto-selected.
     const newestRun = await screen.findByRole("button", {
       name: /select experiment run test_model_2 BASELINE Cifar10 2026-06-01 02:03:04/i,
     });
-    await waitFor(() => {
-      expect(newestRun).toHaveAttribute("aria-pressed", "true");
+    const olderRun = screen.getByRole("button", {
+      name: /select experiment run test_model BASELINE Mnist 2026-06-01 01:02:03/i,
     });
-    expect(
-      screen.queryByRole("button", {
-        name: /select experiment run test_model BASELINE Mnist 2026-06-01 01:02:03/i,
-      }),
-    ).not.toBeInTheDocument();
+    expect(newestRun).toHaveAttribute("aria-pressed", "false");
+    expect(olderRun).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByText("bert_experiment")).not.toBeInTheDocument();
 
+    // Selecting a run drives the preview; selecting it again clears the selection.
+    await user.click(newestRun);
+    await waitFor(() => expect(newestRun).toHaveAttribute("aria-pressed", "true"));
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
         model: "linear",
@@ -3130,95 +3146,83 @@ describe("ViewerApp", () => {
         overrides: {},
       });
     });
+
+    await user.click(newestRun);
+    await waitFor(() => expect(newestRun).toHaveAttribute("aria-pressed", "false"));
   });
 
-  it("changing historical filters updates dataset options, run list, and preview", async () => {
-    const { inspectBodies } = installFetchMock({
+  it("filtering by preset narrows the visible run list", async () => {
+    installFetchMock({
       logRunsResponse: {
         runs: [
           {
             ...logRunsResponse.runs[0],
-            id: "test-mnist",
-            experiment: "test_model",
-            group: "test_model",
+            id: "fast-mnist",
+            experiment: "exp_alpha",
+            group: "exp_alpha",
+            preset: "RECURRENT_GATING_HALTING",
             dataset: "Mnist",
             timestamp: "2026-06-01 01:00:00",
-            runName: "mnist_20260601_010000",
+            runName: "fast_20260601_010000",
             relativePath:
-              "test_model/linear/BASELINE/Mnist/mnist_20260601_010000/version_0",
+              "exp_alpha/linear/RECURRENT_GATING_HALTING/Mnist/fast_20260601_010000/version_0",
           },
           {
             ...logRunsResponse.runs[1],
-            id: "test-cifar",
-            experiment: "test_model",
-            group: "test_model",
+            id: "base-cifar",
+            experiment: "exp_beta",
+            group: "exp_beta",
+            preset: "BASELINE",
             dataset: "Cifar10",
             timestamp: "2026-06-01 03:00:00",
-            runName: "cifar_20260601_030000",
+            runName: "base_20260601_030000",
             relativePath:
-              "test_model/linear/BASELINE/Cifar10/cifar_20260601_030000/version_0",
-          },
-          {
-            ...logRunsResponse.runs[1],
-            id: "other-cifar",
-            experiment: "other_model",
-            group: "other_model",
-            dataset: "Cifar10",
-            timestamp: "2026-06-01 04:00:00",
-            runName: "other_20260601_040000",
-            relativePath:
-              "other_model/linear/BASELINE/Cifar10/other_20260601_040000/version_0",
+              "exp_beta/linear/BASELINE/Cifar10/base_20260601_030000/version_0",
           },
         ],
+      },
+      logTagsByRun: {
+        "fast-mnist": ["main_model.0.model/weights/mean"],
+        "base-cifar": ["main_model.0.model/weights/mean"],
       },
     });
     renderViewer();
     const user = userEvent.setup();
 
-    const experimentSelect = await screen.findByLabelText(/^experiment$/i);
-    const datasetSelect = await screen.findByLabelText(/^dataset$/i);
-    await waitFor(() => expect(experimentSelect).toHaveValue("other_model"));
+    const presetFilter = (
+      await screen.findByRole("option", { name: "All presets" })
+    ).closest("select") as HTMLSelectElement;
 
-    await user.selectOptions(experimentSelect, "test_model");
+    const fastRunName =
+      /select experiment run exp_alpha RECURRENT_GATING_HALTING Mnist 2026-06-01 01:00:00/i;
+    const baseRunName =
+      /select experiment run exp_beta BASELINE Cifar10 2026-06-01 03:00:00/i;
 
-    await waitFor(() => expect(datasetSelect).toHaveValue("Cifar10"));
-    expect(within(datasetSelect).getByRole("option", { name: "Cifar10 (1)" }))
-      .toBeInTheDocument();
-    expect(within(datasetSelect).getByRole("option", { name: "Mnist (1)" }))
-      .toBeInTheDocument();
-    expect(
-      await screen.findByRole("button", {
-        name: /select experiment run test_model BASELINE Cifar10 2026-06-01 03:00:00/i,
-      }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(
-      screen.queryByRole("button", {
-        name: /select experiment run test_model BASELINE Mnist 2026-06-01 01:00:00/i,
-      }),
-    ).not.toBeInTheDocument();
+    // All presets: both runs visible.
+    expect(await screen.findByRole("button", { name: fastRunName })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: baseRunName })).toBeInTheDocument();
 
-    await user.selectOptions(datasetSelect, "Mnist");
+    // Narrow to BASELINE.
+    await user.selectOptions(presetFilter, "BASELINE");
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: fastRunName })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: baseRunName })).toBeInTheDocument();
 
-    const mnistRun = await screen.findByRole("button", {
-      name: /select experiment run test_model BASELINE Mnist 2026-06-01 01:00:00/i,
-    });
-    await waitFor(() => expect(mnistRun).toHaveAttribute("aria-pressed", "true"));
-    expect(
-      screen.queryByRole("button", {
-        name: /select experiment run test_model BASELINE Cifar10 2026-06-01 03:00:00/i,
-      }),
-    ).not.toBeInTheDocument();
-    await waitFor(() => {
-      expect(inspectBodies.at(-1)).toEqual({
-        model: "linear",
-        preset: "baseline",
-        dataset: "Mnist",
-        overrides: {},
-      });
-    });
+    // Narrow to the other preset.
+    await user.selectOptions(presetFilter, "RECURRENT_GATING_HALTING");
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: baseRunName })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: fastRunName })).toBeInTheDocument();
+
+    // Back to all presets.
+    await user.selectOptions(presetFilter, "");
+    expect(await screen.findByRole("button", { name: baseRunName })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: fastRunName })).toBeInTheDocument();
   });
 
-  it("selecting a historical filter syncs preset and dataset, clears overrides, and refreshes preview", async () => {
+  it("selecting a historical run syncs preset and dataset, clears overrides, and refreshes preview", async () => {
     const { inspectBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -3228,10 +3232,10 @@ describe("ViewerApp", () => {
     await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
     expect(screen.getByText(/1 overrides?/i)).toBeInTheDocument();
 
-    await user.selectOptions(await screen.findByLabelText(/^experiment$/i), "test_model");
     const mnistRun = await screen.findByRole("button", {
       name: /select experiment run test_model BASELINE Mnist 2026-06-01 01:02:03/i,
     });
+    await user.click(mnistRun);
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
@@ -4443,7 +4447,7 @@ describe("ViewerApp", () => {
     expect(progressDialog.querySelector("footer")).not.toBeInTheDocument();
     expect(within(progressDialog).getByText("Pending")).toBeInTheDocument();
     expect(within(progressDialog).getAllByText("baseline").length).toBeGreaterThan(0);
-    expect(within(progressDialog).getByText("Cifar10")).toBeInTheDocument();
+    expect(within(progressDialog).getByText("Mnist")).toBeInTheDocument();
     expect(within(progressDialog).getByText("0 / 30")).toBeInTheDocument();
 
     await user.click(
@@ -4453,7 +4457,7 @@ describe("ViewerApp", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --datasets Cifar10",
+      "source experiment.sh linear --preset baseline --datasets Mnist",
     );
   });
 
@@ -4703,7 +4707,7 @@ describe("ViewerApp", () => {
       details,
       "Training datasets",
     );
-    const selectedDataset = within(listbox).getByRole("option", { name: /Cifar 10/i });
+    const selectedDataset = within(listbox).getByRole("option", { name: /Mnist/i });
 
     expect(selectedDataset).toHaveAttribute("aria-selected", "true");
     expect(selectedDataset).toHaveAttribute("aria-disabled", "true");
@@ -4714,7 +4718,7 @@ describe("ViewerApp", () => {
       within(details).getByRole("combobox", {
         name: /^training datasets\s+1\s*\/\s*2 selected$/i,
       }),
-    ).toHaveTextContent("Cifar 10");
+    ).toHaveTextContent("Mnist");
   });
 
   it("filters training multiselect options and selects matching results", async () => {
@@ -7245,6 +7249,12 @@ describe("ViewerApp", () => {
     renderViewer();
     const user = userEvent.setup();
 
+    // Pick a run so its experiment/dataset drives the historical monitor group.
+    await user.click(
+      await screen.findByRole("button", {
+        name: /select experiment run monitor_exp BASELINE Mnist 2026-06-01 06:00:00/i,
+      }),
+    );
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
     );
@@ -7291,6 +7301,12 @@ describe("ViewerApp", () => {
     renderViewer();
     const user = userEvent.setup();
 
+    // Pick a run so its experiment/dataset drives the historical monitor group.
+    await user.click(
+      await screen.findByRole("button", {
+        name: /select experiment run monitor_exp BASELINE Mnist 2026-06-01 02:00:00/i,
+      }),
+    );
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
     );

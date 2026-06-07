@@ -82,6 +82,24 @@ function run(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
   };
 }
 
+function layerTags(runId: string): LogRunTags {
+  return {
+    runId,
+    scalarTags: ["main_model.0.model/weights/mean"],
+    histogramTags: [],
+    imageTags: [],
+  };
+}
+
+function performanceTags(runId: string): LogRunTags {
+  return {
+    runId,
+    scalarTags: ["epoch", "train/loss", "test/accuracy"],
+    histogramTags: [],
+    imageTags: [],
+  };
+}
+
 function node(
   id: string,
   path: string,
@@ -207,38 +225,47 @@ describe("viewer state selectors", () => {
     ]);
   });
 
-  it("derives historical run options, filters, and selected run", () => {
+  it("derives preset options, visible runs, and the selected run's monitor group", () => {
     const state = deriveDatasetSelectionState({
       logRuns: [
         run({
           id: "old-mnist",
           experiment: "exp_a",
           dataset: "Mnist",
+          preset: "baseline",
           timestamp: "2026-06-01 01:00:00",
         }),
         run({
           id: "new-mnist",
           experiment: "exp_a",
           dataset: "Mnist",
+          preset: "baseline",
           timestamp: "2026-06-03 01:00:00",
         }),
         run({
           id: "fashion",
           experiment: "exp_a",
           dataset: "FashionMnist",
+          preset: "fast",
           timestamp: "2026-06-02 12:00:00",
         }),
         run({
           id: "other-experiment",
           experiment: "exp_b",
           dataset: "Cifar10",
+          preset: "baseline",
           timestamp: "2026-06-02 01:00:00",
         }),
         run({ id: "other-model", model: "bert", timestamp: "2026-06-04 01:00:00" }),
       ],
+      modelRunTags: [
+        layerTags("old-mnist"),
+        layerTags("new-mnist"),
+        layerTags("fashion"),
+        layerTags("other-experiment"),
+      ],
       selectedModel: "linear",
-      selectedHistoricalExperiment: "exp_a",
-      selectedHistoricalDataset: "Mnist",
+      selectedHistoricalPreset: "",
       selectedLogRunId: "old-mnist",
     });
 
@@ -248,14 +275,19 @@ describe("viewer state selectors", () => {
       "other-experiment",
       "old-mnist",
     ]);
-    expect(state.historicalExperimentOptions).toEqual([
-      { value: "exp_a", label: "exp_a", count: 3 },
-      { value: "exp_b", label: "exp_b", count: 1 },
+    expect(state.historicalPresetOptions).toEqual([
+      { value: "baseline", label: "baseline", count: 3 },
+      { value: "fast", label: "fast", count: 1 },
     ]);
-    expect(state.historicalDatasetOptions).toEqual([
-      { value: "Mnist", label: "Mnist", count: 2 },
-      { value: "FashionMnist", label: "FashionMnist", count: 1 },
+    expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual([
+      "new-mnist",
+      "fashion",
+      "other-experiment",
+      "old-mnist",
     ]);
+    // experiment/dataset are derived from the selected run, not separate filters.
+    expect(state.selectedHistoricalExperiment).toBe("exp_a");
+    expect(state.selectedHistoricalDataset).toBe("Mnist");
     expect(state.filteredHistoricalRuns.map((item) => item.id)).toEqual([
       "new-mnist",
       "old-mnist",
@@ -266,6 +298,61 @@ describe("viewer state selectors", () => {
     ]);
     expect(state.filteredHistoricalRunIds).toEqual(["new-mnist", "old-mnist"]);
     expect(state.selectedLogRun?.id).toBe("old-mnist");
+  });
+
+  it("narrows visible runs by preset and clears monitor data when nothing is selected", () => {
+    const state = deriveDatasetSelectionState({
+      logRuns: [
+        run({ id: "baseline-run", experiment: "exp_a", dataset: "Mnist", preset: "baseline" }),
+        run({ id: "fast-run", experiment: "exp_a", dataset: "Mnist", preset: "fast" }),
+      ],
+      modelRunTags: [layerTags("baseline-run"), layerTags("fast-run")],
+      selectedModel: "linear",
+      selectedHistoricalPreset: "fast",
+      selectedLogRunId: null,
+    });
+
+    expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual(["fast-run"]);
+    expect(state.selectedLogRun).toBeUndefined();
+    expect(state.selectedHistoricalExperiment).toBe("");
+    expect(state.selectedHistoricalDataset).toBe("");
+    expect(state.filteredHistoricalRuns).toEqual([]);
+    expect(state.historicalMonitorRuns).toEqual([]);
+    expect(state.filteredHistoricalRunIds).toEqual([]);
+  });
+
+  it("keeps only presets/runs from experiments with per-layer monitor data", () => {
+    const state = deriveDatasetSelectionState({
+      logRuns: [
+        run({ id: "layer-run", experiment: "exp_a", dataset: "Mnist", preset: "baseline" }),
+        run({ id: "perf-run", experiment: "exp_b", dataset: "Mnist", preset: "fast" }),
+      ],
+      modelRunTags: [layerTags("layer-run"), performanceTags("perf-run")],
+      selectedModel: "linear",
+      selectedHistoricalPreset: "",
+      selectedLogRunId: null,
+    });
+
+    expect(state.historicalPresetOptions).toEqual([
+      { value: "baseline", label: "baseline", count: 1 },
+    ]);
+    expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual([
+      "layer-run",
+    ]);
+  });
+
+  it("shows no presets or runs until model run tags have loaded", () => {
+    const state = deriveDatasetSelectionState({
+      logRuns: [run({ id: "layer-run", experiment: "exp_a", dataset: "Mnist" })],
+      modelRunTags: undefined,
+      selectedModel: "linear",
+      selectedHistoricalPreset: "",
+      selectedLogRunId: null,
+    });
+
+    expect(state.modelLogRuns.map((item) => item.id)).toEqual(["layer-run"]);
+    expect(state.historicalPresetOptions).toEqual([]);
+    expect(state.visibleHistoricalRuns).toEqual([]);
   });
 
   it("derives graph monitor targets, comparison groups, and tag availability", () => {

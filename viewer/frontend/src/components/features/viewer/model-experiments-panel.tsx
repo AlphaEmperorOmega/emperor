@@ -16,20 +16,18 @@ function pluralize(count: number, singular: string, plural: string) {
 
 export function ModelExperimentsPanel() {
   const {
-    filteredHistoricalRuns: runs,
-    historicalExperimentOptions: experimentOptions,
-    historicalDatasetOptions: datasetOptions,
-    selectedHistoricalExperiment: selectedExperiment,
-    selectedHistoricalDataset: selectedDataset,
+    visibleHistoricalRuns: runs,
+    historicalPresetOptions: presetOptions,
+    selectedHistoricalPreset: selectedPreset,
+    setSelectedHistoricalPreset: onSelectPreset,
     selectedLogRunId: selectedRunId,
-    setSelectedHistoricalExperiment: onSelectExperiment,
-    setSelectedHistoricalDataset: onSelectDataset,
     selectLogRun: onSelectRun,
-    logRunsQuery,
+    experimentsLoading,
+    experimentsError,
   } = useHistoricalRuns();
-  const isLoading = logRunsQuery.isLoading;
-  const isError = logRunsQuery.isError;
-  const error = logRunsQuery.error;
+  const isLoading = experimentsLoading;
+  const isError = Boolean(experimentsError);
+  const error = experimentsError;
   const groups = groupModelLogRunsByExperiment(runs);
 
   return (
@@ -45,40 +43,19 @@ export function ModelExperimentsPanel() {
       </div>
 
       <div className="mt-3 grid gap-2 rounded-[10px] border border-line-soft bg-black/18 p-2">
-        <LabeledField label="Experiment">
+        <LabeledField label="Run preset">
           <Select
-            value={selectedExperiment}
-            onChange={(event) => onSelectExperiment(event.target.value)}
-            disabled={isLoading || experimentOptions.length === 0}
+            value={selectedPreset}
+            onChange={(event) => onSelectPreset(event.target.value)}
+            disabled={isLoading || presetOptions.length === 0}
             className="h-9 text-xs"
           >
-            {experimentOptions.length === 0 ? (
-              <option value="">No experiments</option>
-            ) : (
-              experimentOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label} ({option.count})
-                </option>
-              ))
-            )}
-          </Select>
-        </LabeledField>
-        <LabeledField label="Dataset">
-          <Select
-            value={selectedDataset}
-            onChange={(event) => onSelectDataset(event.target.value)}
-            disabled={isLoading || datasetOptions.length === 0}
-            className="h-9 text-xs"
-          >
-            {datasetOptions.length === 0 ? (
-              <option value="">No datasets</option>
-            ) : (
-              datasetOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label} ({option.count})
-                </option>
-              ))
-            )}
+            <option value="">All presets</option>
+            {presetOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label} ({option.count})
+              </option>
+            ))}
           </Select>
         </LabeledField>
       </div>
@@ -99,7 +76,9 @@ export function ModelExperimentsPanel() {
 
         {!isLoading && !isError && runs.length === 0 && (
           <InlineStatus compact>
-            {experimentOptions.length === 0 ? "No runs for this model" : "No matching runs"}
+            {presetOptions.length === 0
+              ? "No experiments with layer monitor data"
+              : "No runs for this preset"}
           </InlineStatus>
         )}
 

@@ -7,6 +7,8 @@ export const logQueryKeys = {
   tagsForRuns: (runIds: StringList) => ["log-tags", runIds] as const,
   filteredHistoricalRunTags: (runIds: StringList) =>
     ["log-tags", "filtered-historical-runs", runIds] as const,
+  modelRunTags: (runIds: StringList) =>
+    ["log-tags", "model-runs", runIds] as const,
   scalars: () => ["log-scalars"] as const,
   scalarsForRunsAndTags: (runIds: StringList, tags: StringList) =>
     ["log-scalars", runIds, tags] as const,

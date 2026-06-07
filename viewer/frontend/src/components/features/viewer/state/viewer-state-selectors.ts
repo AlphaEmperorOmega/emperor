@@ -17,9 +17,9 @@ import {
 } from "@/lib/config-snapshots";
 import {
   anyLogRunTagsMatchNodePath,
+  experimentsWithLayerMonitorData,
   filterHistoricalRuns,
-  historicalDatasetOptions as buildHistoricalDatasetOptions,
-  historicalExperimentOptions as buildHistoricalExperimentOptions,
+  historicalPresetOptions as buildHistoricalPresetOptions,
   latestHistoricalMonitorRuns,
   sortLogRunsNewestFirst,
   type HistoricalRunOption,
@@ -57,16 +57,18 @@ export type TargetSelectionState = {
 
 export type DatasetSelectionInput = {
   logRuns?: LogRun[];
+  modelRunTags?: LogRunTags[];
   selectedModel: string;
-  selectedHistoricalExperiment: string;
-  selectedHistoricalDataset: string;
+  selectedHistoricalPreset: string;
   selectedLogRunId: string | null;
 };
 
 export type DatasetSelectionState = {
   modelLogRuns: LogRun[];
-  historicalExperimentOptions: HistoricalRunOption[];
-  historicalDatasetOptions: HistoricalRunOption[];
+  historicalPresetOptions: HistoricalRunOption[];
+  visibleHistoricalRuns: LogRun[];
+  selectedHistoricalExperiment: string;
+  selectedHistoricalDataset: string;
   filteredHistoricalRuns: LogRun[];
   historicalMonitorRuns: LogRun[];
   filteredHistoricalRunIds: string[];
@@ -154,27 +156,47 @@ export function deriveDatasetSelectionState(
   const modelLogRuns = sortLogRunsNewestFirst(
     (input.logRuns ?? []).filter((run) => run.model === input.selectedModel),
   );
-  const historicalExperimentOptions =
-    buildHistoricalExperimentOptions(modelLogRuns);
-  const historicalDatasetOptions = buildHistoricalDatasetOptions(
+  // Only surface experiments that carry per-layer monitor data; model-performance
+  // metrics remain available in the Logs workspace. Until tags load this set is
+  // empty, so the panel shows a loading state instead of an unfiltered list.
+  const layerMonitorExperiments = experimentsWithLayerMonitorData(
     modelLogRuns,
-    input.selectedHistoricalExperiment,
+    input.modelRunTags,
   );
-  const filteredHistoricalRuns = filterHistoricalRuns(
-    modelLogRuns,
-    input.selectedHistoricalExperiment,
-    input.selectedHistoricalDataset,
+  const eligibleRuns = modelLogRuns.filter((run) =>
+    layerMonitorExperiments.has(run.experiment),
   );
-  const historicalMonitorRuns = latestHistoricalMonitorRuns(filteredHistoricalRuns);
-  const filteredHistoricalRunIds = filteredHistoricalRuns.map((run) => run.id);
-  const selectedLogRun = filteredHistoricalRuns.find(
+  // The preset filter ("" = all presets) only controls which runs are listed; it is
+  // independent of the build/training preset selected under the model.
+  const historicalPresetOptions = buildHistoricalPresetOptions(eligibleRuns);
+  const visibleHistoricalRuns = eligibleRuns.filter(
+    (run) =>
+      !input.selectedHistoricalPreset || run.preset === input.selectedHistoricalPreset,
+  );
+  // Selection drives everything downstream: the experiment/dataset labels and the
+  // monitor run group are derived from the picked run, so with nothing selected the
+  // charts stay empty.
+  const selectedLogRun = visibleHistoricalRuns.find(
     (run) => run.id === input.selectedLogRunId,
   );
+  const selectedHistoricalExperiment = selectedLogRun?.experiment ?? "";
+  const selectedHistoricalDataset = selectedLogRun?.dataset ?? "";
+  const filteredHistoricalRuns = selectedLogRun
+    ? filterHistoricalRuns(
+        eligibleRuns,
+        selectedHistoricalExperiment,
+        selectedHistoricalDataset,
+      )
+    : [];
+  const historicalMonitorRuns = latestHistoricalMonitorRuns(filteredHistoricalRuns);
+  const filteredHistoricalRunIds = filteredHistoricalRuns.map((run) => run.id);
 
   return {
     modelLogRuns,
-    historicalExperimentOptions,
-    historicalDatasetOptions,
+    historicalPresetOptions,
+    visibleHistoricalRuns,
+    selectedHistoricalExperiment,
+    selectedHistoricalDataset,
     filteredHistoricalRuns,
     historicalMonitorRuns,
     filteredHistoricalRunIds,

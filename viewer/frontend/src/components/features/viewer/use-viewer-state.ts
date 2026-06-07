@@ -122,10 +122,22 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   // --- Historical runs ---------------------------------------------------
   const [selectedLogRunId, setSelectedLogRunId] = useState<string | null>(null);
-  const [selectedHistoricalExperiment, setSelectedHistoricalExperiment] =
-    useState("");
-  const [selectedHistoricalDataset, setSelectedHistoricalDataset] = useState("");
+  const [selectedHistoricalPreset, setSelectedHistoricalPreset] = useState("");
   const logRunsQuery = useLogRunsQuery();
+  // Tags for ALL of the selected model's runs, so the Experiments panel can keep
+  // only experiments that contain per-layer monitor data. Cached per session by
+  // React Query; the query auto-disables when there are no runs.
+  const modelLogRunIds = useMemo(
+    () =>
+      (logRunsQuery.data?.runs ?? [])
+        .filter((run) => run.model === selectedModel)
+        .map((run) => run.id),
+    [logRunsQuery.data?.runs, selectedModel],
+  );
+  const modelRunTagsQuery = useLogTagsQuery({
+    runIds: modelLogRunIds,
+    queryKey: logQueryKeys.modelRunTags(modelLogRunIds),
+  });
 
   // --- Training + monitor charts ----------------------------------------
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -172,23 +184,24 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     () =>
       deriveDatasetSelectionState({
         logRuns: logRunsQuery.data?.runs,
+        modelRunTags: modelRunTagsQuery.data?.runs,
         selectedModel,
-        selectedHistoricalExperiment,
-        selectedHistoricalDataset,
+        selectedHistoricalPreset,
         selectedLogRunId,
       }),
     [
       logRunsQuery.data?.runs,
-      selectedHistoricalDataset,
-      selectedHistoricalExperiment,
+      modelRunTagsQuery.data?.runs,
+      selectedHistoricalPreset,
       selectedLogRunId,
       selectedModel,
     ],
   );
   const {
-    historicalExperimentOptions,
-    historicalDatasetOptions,
-    filteredHistoricalRuns,
+    historicalPresetOptions,
+    visibleHistoricalRuns,
+    selectedHistoricalExperiment,
+    selectedHistoricalDataset,
     historicalMonitorRuns,
     filteredHistoricalRunIds,
     selectedLogRun,
@@ -234,48 +247,33 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     }
   }, [modelsQuery.data, selectedModel, setSelectedModel]);
 
+  // Keep the preset filter valid: clear it on model change or when the chosen preset
+  // no longer appears among the model's layer-data runs. "" means "all presets".
   useEffect(() => {
     if (!selectedModel) {
-      setSelectedHistoricalExperiment("");
-      setSelectedHistoricalDataset("");
-      setSelectedLogRunId(null);
+      setSelectedHistoricalPreset("");
       return;
     }
-    setSelectedHistoricalExperiment((current) => {
-      if (
-        current &&
-        historicalExperimentOptions.some((option) => option.value === current)
-      ) {
-        return current;
-      }
-      return historicalExperimentOptions[0]?.value ?? "";
-    });
-  }, [historicalExperimentOptions, selectedModel]);
+    setSelectedHistoricalPreset((current) =>
+      current && historicalPresetOptions.some((option) => option.value === current)
+        ? current
+        : "",
+    );
+  }, [historicalPresetOptions, selectedModel]);
 
-  useEffect(() => {
-    setSelectedHistoricalDataset((current) => {
-      if (
-        current &&
-        historicalDatasetOptions.some((option) => option.value === current)
-      ) {
-        return current;
-      }
-      return historicalDatasetOptions[0]?.value ?? "";
-    });
-  }, [historicalDatasetOptions]);
-
+  // Never auto-select a run; only clear the selection when it leaves the visible list
+  // (model switch, preset filter change, or runs reloading).
   useEffect(() => {
     if (!selectedModel) {
       setSelectedLogRunId(null);
       return;
     }
-    setSelectedLogRunId((current) => {
-      if (current && filteredHistoricalRuns.some((run) => run.id === current)) {
-        return current;
-      }
-      return filteredHistoricalRuns[0]?.id ?? null;
-    });
-  }, [filteredHistoricalRuns, selectedModel]);
+    setSelectedLogRunId((current) =>
+      current && visibleHistoricalRuns.some((run) => run.id === current)
+        ? current
+        : null,
+    );
+  }, [visibleHistoricalRuns, selectedModel]);
 
   useEffect(() => {
     const firstPreset = presetsQuery.data?.presets[0]?.name;
@@ -417,8 +415,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       setSelectedDatasets([]);
       setSelectedTrainingPresets([]);
       setSelectedMonitors([]);
-      setSelectedHistoricalExperiment("");
-      setSelectedHistoricalDataset("");
+      setSelectedHistoricalPreset("");
       setSelectedLogRunId(null);
       resetGraphSelectionAndExpansion();
     },
@@ -617,7 +614,7 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   }, []);
 
   const selectLogRun = useCallback((runId: string) => {
-    setSelectedLogRunId(runId);
+    setSelectedLogRunId((current) => (current === runId ? null : runId));
   }, []);
 
   const updatePreview = useCallback(() => {
@@ -782,18 +779,19 @@ export function useViewerState(options: ViewerStateOptions = {}) {
       previewInspection,
     },
     history: {
-      filteredHistoricalRuns,
+      visibleHistoricalRuns,
       historicalMonitorRuns,
-      historicalExperimentOptions,
-      historicalDatasetOptions,
+      historicalPresetOptions,
+      selectedHistoricalPreset,
+      setSelectedHistoricalPreset,
       selectedHistoricalExperiment,
-      setSelectedHistoricalExperiment,
       selectedHistoricalDataset,
-      setSelectedHistoricalDataset,
       selectedLogRunId,
       selectLogRun,
       logRunsQuery,
       logRunTagsQuery,
+      experimentsLoading: logRunsQuery.isLoading || modelRunTagsQuery.isLoading,
+      experimentsError: logRunsQuery.error ?? modelRunTagsQuery.error,
       selectedLogRunHasMonitorTags,
     },
     training: {
