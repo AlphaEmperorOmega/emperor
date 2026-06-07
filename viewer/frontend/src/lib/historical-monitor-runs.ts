@@ -76,6 +76,18 @@ export function historicalDatasetOptions(
   }));
 }
 
+export function historicalPresetOptions(runs: LogRun[]): HistoricalRunOption[] {
+  const counts = new Map<string, number>();
+  for (const run of sortLogRunsNewestFirst(runs)) {
+    counts.set(run.preset, (counts.get(run.preset) ?? 0) + 1);
+  }
+  return Array.from(counts, ([preset, count]) => ({
+    value: preset,
+    label: preset,
+    count,
+  }));
+}
+
 export function filterHistoricalRuns(
   runs: LogRun[],
   selectedExperiment: string,
@@ -123,4 +135,51 @@ export function anyLogRunTagsMatchNodePath(
     (runTags) =>
       allowedRunIds.has(runTags.runId) && logRunTagsMatchNodePath(runTags, nodePath),
   );
+}
+
+/**
+ * Whether a run carries per-layer monitor data (as opposed to only flat
+ * model-performance metrics such as `train/loss` or `epoch`). Shape-based and
+ * monitor-type agnostic so it survives new monitor callbacks:
+ * - any histogram or image tag implies layer monitoring (performance metrics
+ *   never emit those), or
+ * - a scalar tag with a node-path prefix, i.e. `node/group/stat` (>= 2 slashes).
+ *   Flat performance tags have at most one slash (`train/loss`) or none (`epoch`).
+ */
+export function logRunHasLayerMonitorData(
+  tags: Pick<LogRunTags, "scalarTags" | "histogramTags" | "imageTags"> | undefined,
+) {
+  if (!tags) {
+    return false;
+  }
+  if (tags.histogramTags.length > 0 || tags.imageTags.length > 0) {
+    return true;
+  }
+  return tags.scalarTags.some((tag) => tag.split("/").length >= 3);
+}
+
+/**
+ * The set of experiments that contain at least one run with per-layer monitor
+ * data. Returns an empty set when `tagsByRun` has not loaded yet so callers can
+ * surface a loading state rather than briefly showing an unfiltered list.
+ */
+export function experimentsWithLayerMonitorData(
+  runs: LogRun[],
+  tagsByRun: LogRunTags[] | undefined,
+) {
+  const experiments = new Set<string>();
+  if (!tagsByRun) {
+    return experiments;
+  }
+  const experimentByRunId = new Map(runs.map((run) => [run.id, run.experiment]));
+  for (const tags of tagsByRun) {
+    if (!logRunHasLayerMonitorData(tags)) {
+      continue;
+    }
+    const experiment = experimentByRunId.get(tags.runId);
+    if (experiment !== undefined) {
+      experiments.add(experiment);
+    }
+  }
+  return experiments;
 }

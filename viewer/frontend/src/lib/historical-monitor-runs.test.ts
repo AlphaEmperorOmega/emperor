@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   anyLogRunTagsMatchNodePath,
+  experimentsWithLayerMonitorData,
   filterHistoricalRuns,
   groupModelLogRunsByExperiment,
   historicalDatasetOptions,
   historicalExperimentOptions,
+  historicalPresetOptions,
   latestHistoricalMonitorRuns,
+  logRunHasLayerMonitorData,
   sortLogRunsNewestFirst,
 } from "@/lib/historical-monitor-runs";
 import { type LogRun } from "@/lib/api";
@@ -78,6 +81,19 @@ describe("historical monitor run helpers", () => {
     ]);
   });
 
+  it("counts distinct presets newest-run first", () => {
+    expect(
+      historicalPresetOptions([
+        run({ id: "a", preset: "baseline", timestamp: "2026-06-01 01:00:00" }),
+        run({ id: "b", preset: "fast", timestamp: "2026-06-03 01:00:00" }),
+        run({ id: "c", preset: "baseline", timestamp: "2026-06-02 01:00:00" }),
+      ]),
+    ).toEqual([
+      { value: "fast", label: "fast", count: 1 },
+      { value: "baseline", label: "baseline", count: 2 },
+    ]);
+  });
+
   it("derives dataset options from the selected experiment", () => {
     expect(historicalDatasetOptions(runs, "exp_a")).toEqual([
       { value: "Mnist", label: "Mnist", count: 2 },
@@ -130,5 +146,60 @@ describe("historical monitor run helpers", () => {
         "main_model.0.model",
       ),
     ).toBe(true);
+  });
+
+  it("detects per-layer monitor data by tag shape", () => {
+    // Layer scalar tag: node/group/stat (>= 2 slashes).
+    expect(
+      logRunHasLayerMonitorData({
+        scalarTags: ["main_model.0.model/weights/mean"],
+        histogramTags: [],
+        imageTags: [],
+      }),
+    ).toBe(true);
+    // Histogram/image tags always imply monitoring.
+    expect(
+      logRunHasLayerMonitorData({
+        scalarTags: [],
+        histogramTags: ["main_model.0.model/histogram/usage"],
+        imageTags: [],
+      }),
+    ).toBe(true);
+    // Flat model-performance metrics do not count.
+    expect(
+      logRunHasLayerMonitorData({
+        scalarTags: ["epoch", "train/loss", "test/accuracy"],
+        histogramTags: [],
+        imageTags: [],
+      }),
+    ).toBe(false);
+    expect(logRunHasLayerMonitorData(undefined)).toBe(false);
+  });
+
+  it("returns experiments that have any run with layer monitor data", () => {
+    const modelRuns = [
+      run({ id: "layer-run", experiment: "exp_a" }),
+      run({ id: "perf-run", experiment: "exp_b" }),
+    ];
+    const tags = [
+      {
+        runId: "layer-run",
+        scalarTags: ["main_model.0.model/weights/mean"],
+        histogramTags: [],
+        imageTags: [],
+      },
+      {
+        runId: "perf-run",
+        scalarTags: ["epoch", "train/loss"],
+        histogramTags: [],
+        imageTags: [],
+      },
+    ];
+
+    expect([...experimentsWithLayerMonitorData(modelRuns, tags)]).toEqual([
+      "exp_a",
+    ]);
+    // No tags loaded yet -> empty set so callers can show a loading state.
+    expect(experimentsWithLayerMonitorData(modelRuns, undefined).size).toBe(0);
   });
 });
