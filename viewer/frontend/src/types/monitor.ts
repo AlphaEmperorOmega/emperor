@@ -9,6 +9,7 @@ export type MonitorChartsSource =
       runs: LogRun[];
       experiment: string;
       dataset: string;
+      preset: string;
     };
 
 export type ScalarSeries = MonitorData["scalarSeries"][number];
@@ -40,6 +41,11 @@ export const monitorGroupOrder = [
   "Gradients",
   "Bias",
   "Weights",
+  "Attention",
+  "Recurrent",
+  "Controllers",
+  "Parametric",
+  "Routing",
   "Visual summaries",
   "Other",
 ] as const;
