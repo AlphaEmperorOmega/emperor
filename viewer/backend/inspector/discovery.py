@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import importlib
 import os
-import re
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 from torch.nn import Module
 
 from emperor.experiments.monitors import MonitorOption
+from models.catalog import (
+    discover_model_ids,
+    is_safe_model_id,
+    module_path_for_model_id,
+)
 from models.dataset_naming import (
     dataset_cli_name,
     dataset_label,
@@ -21,8 +24,6 @@ from models.dataset_naming import (
 from viewer.backend.inspector.errors import InspectorError
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
-
-MODEL_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
 def _is_path_like_dataset_input(dataset: str) -> bool:
@@ -43,42 +44,22 @@ class ModelParts:
     dataset: type
 
 
-def models_root() -> Path:
-    models_package = importlib.import_module("models")
-    package_file = getattr(models_package, "__file__", None)
-    if package_file is None:
-        raise InspectorError("Could not resolve the models package path.")
-    return Path(package_file).parent
-
-
 def discover_models() -> list[str]:
-    root = models_root()
-    model_names = []
-    for path in root.iterdir():
-        if not path.is_dir() or path.name.startswith("__"):
-            continue
-        if not (path / "__init__.py").exists():
-            continue
-        if not (path / "config.py").exists():
-            continue
-        if not (path / "presets.py").exists():
-            continue
-        if not (path / "model.py").exists():
-            continue
-        model_names.append(path.name)
-    return sorted(model_names)
+    return discover_model_ids()
 
 
 def validate_model_name(model_name: str) -> None:
-    if not MODEL_NAME_PATTERN.match(model_name):
+    if not is_safe_model_id(model_name):
         raise InspectorError(f"Invalid model name: {model_name!r}")
-    if model_name not in discover_models():
+    if module_path_for_model_id(model_name) is None:
         raise InspectorError(f"Unknown model: {model_name}")
 
 
 def load_model_parts(model_name: str) -> ModelParts:
     validate_model_name(model_name)
-    module_path = f"models.{model_name}"
+    module_path = module_path_for_model_id(model_name)
+    if module_path is None:
+        raise InspectorError(f"Unknown model: {model_name}")
     try:
         config_module = importlib.import_module(f"{module_path}.config")
         presets_module = importlib.import_module(f"{module_path}.presets")

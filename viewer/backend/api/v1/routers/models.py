@@ -38,7 +38,7 @@ async def models(
 
 
 @router.get(
-    "/{model}/presets",
+    "/{model:path}/presets",
     response_model=PresetsResponse,
     summary="List model presets",
     response_description="Available presets for the selected model.",
@@ -51,7 +51,7 @@ async def presets(
 
 
 @router.get(
-    "/{model}/datasets",
+    "/{model:path}/datasets",
     response_model=DatasetsResponse,
     summary="List model datasets",
     response_description="Supported datasets for the selected model.",
@@ -64,7 +64,7 @@ async def datasets(
 
 
 @router.get(
-    "/{model}/monitors",
+    "/{model:path}/monitors",
     response_model=MonitorsResponse,
     summary="List model monitors",
     response_description="Monitor options supported by the selected model.",
@@ -77,7 +77,7 @@ async def monitors(
 
 
 @router.get(
-    "/{model}/config-schema",
+    "/{model:path}/config-schema",
     response_model=ConfigSchemaResponse,
     summary="Get model config schema",
     response_description="Config fields for the selected model and optional preset.",
@@ -91,7 +91,7 @@ async def schema(
 
 
 @router.get(
-    "/{model}/search-space",
+    "/{model:path}/search-space",
     response_model=SearchSpaceResponse,
     summary="Get model search space",
     response_description="Search axes for the selected model and optional preset.",
