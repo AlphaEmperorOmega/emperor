@@ -7,12 +7,12 @@ from typing import cast
 
 from fastapi import HTTPException, Request
 
-from viewer.backend.settings import ViewerApiSettings
+from viewer.backend.core.config import ViewerApiSettings
 
 UNAUTHORIZED_DETAIL = "Missing or invalid bearer credentials"
 
 
-def require_bearer_auth(request: Request) -> None:
+async def require_bearer_auth(request: Request) -> None:
     """Validate the configured shared bearer token when hosted auth is enabled."""
     settings = cast(ViewerApiSettings, request.app.state.settings)
     if settings.auth_mode == "none":

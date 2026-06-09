@@ -6,9 +6,9 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, Request
 
+from viewer.backend.core.config import ViewerApiSettings
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.schemas import CapabilitiesResponse
-from viewer.backend.settings import ViewerApiSettings
 
 router = APIRouter(
     tags=["capabilities"],
