@@ -13,6 +13,7 @@ from fastapi.routing import APIRoute
 from viewer.backend.api import ViewerApiSettings, create_app
 from viewer.backend.schemas import (
     MonitorDataResponse,
+    ParameterStatusResponse,
     TrainingJobCreateRequest,
     TrainingJobResponse,
     TrainingRunPlanCreateRequest,
@@ -129,6 +130,10 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                 MonitorDataResponse,
                 (),
             ),
+            (("GET",), "/training/jobs/{job_id}/monitor-parameter-status"): (
+                ParameterStatusResponse,
+                (),
+            ),
             (("POST",), "/training/jobs/{job_id}/cancel"): (
                 TrainingJobResponse,
                 (),
@@ -161,7 +166,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     run_plan_response = await client.post(
                         "/training/run-plan",
                         json={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
@@ -173,7 +178,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     create_response = await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
@@ -194,7 +199,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             tuple(run_plan_payload),
             EXPECTED_TRAINING_RUN_PLAN_RESPONSE_FIELDS,
         )
-        self.assertEqual(run_plan_payload["model"], "linear")
+        self.assertEqual(run_plan_payload["model"], "linears/linear")
         self.assertEqual(run_plan_payload["preset"], "baseline")
         self.assertEqual(run_plan_payload["presets"], ["baseline"])
         self.assertEqual(run_plan_payload["datasets"], ["Mnist"])
@@ -209,7 +214,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         create_payload = create_response.json()
         self.assertEqual(tuple(create_payload), EXPECTED_TRAINING_JOB_RESPONSE_FIELDS)
         self.assertEqual(create_payload["status"], "running")
-        self.assertEqual(create_payload["model"], "linear")
+        self.assertEqual(create_payload["model"], "linears/linear")
         self.assertEqual(create_payload["preset"], "baseline")
         self.assertEqual(create_payload["presets"], ["baseline"])
         self.assertEqual(create_payload["datasets"], ["Mnist"])
@@ -237,7 +242,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     return await client.post(
                         "/training/run-plan",
                         json={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "baseline",
                             "datasets": ["./Mnist"],
                             "overrides": {},
@@ -271,7 +276,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     return await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "baseline",
                             "datasets": ["./Mnist"],
                             "overrides": {},
@@ -308,7 +313,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     create_response = await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "baseline",
                             "datasets": ["Mnist"],
                             "overrides": {},

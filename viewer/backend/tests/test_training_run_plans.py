@@ -31,7 +31,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             )
 
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],
@@ -54,7 +54,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
     def test_parse_training_search_serializes_values_payload(self) -> None:
         parsed = parse_training_search(
-            "linear_adaptive",
+            "linears/linear_adaptive",
             "baseline",
             {
                 "mode": "grid",
@@ -102,7 +102,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         manager = TrainingJobManager(runner=FakeRunner())
 
         plan = manager.create_run_plan(
-            model="linear",
+            model="linears/linear",
             preset="baseline",
             presets=["baseline", "gating"],
             datasets=["Mnist"],
@@ -136,7 +136,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
         with self.assertRaises(InspectorError) as context:
             manager.create_run_plan(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["./Mnist"],
                 overrides={},
@@ -154,7 +154,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         manager = TrainingJobManager(runner=FakeRunner())
 
         plan = manager.create_run_plan(
-            model="linear",
+            model="linears/linear",
             preset="baseline",
             presets=["baseline", "gating"],
             datasets=["Mnist", "Cifar10"],
@@ -292,13 +292,13 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
         self.assertEqual(
             plan["runs"][0]["command"],
-            "source experiment.sh linear --preset baseline --datasets Mnist "
+            "source experiment.sh linears/linear --preset baseline --datasets Mnist "
             "--logdir grid_plan --config --hidden-dim 64 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
         self.assertEqual(
             plan["runs"][-1]["command"],
-            "source experiment.sh linear --preset gating --datasets Cifar10 "
+            "source experiment.sh linears/linear --preset gating --datasets Cifar10 "
             "--logdir grid_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation GELU",
         )
@@ -309,7 +309,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         manager = TrainingJobManager(runner=FakeRunner())
 
         plan = manager.create_run_plan(
-            model="linear_adaptive",
+            model="linears/linear_adaptive",
             preset="baseline",
             datasets=["Mnist"],
             overrides={},
@@ -382,7 +382,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             )
 
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist", "Cifar10"],
                 overrides={},
@@ -405,7 +405,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         manager = TrainingJobManager(runner=FakeRunner())
 
         plan = manager.create_run_plan(
-            model="linear",
+            model="linears/linear",
             preset="baseline",
             datasets=["Mnist", "Cifar10"],
             overrides={},
@@ -447,7 +447,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             )
 
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist", "Cifar10"],
@@ -566,13 +566,13 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
         self.assertEqual(
             plan["runs"][0]["command"],
-            "source experiment.sh linear --preset baseline --datasets Mnist "
+            "source experiment.sh linears/linear --preset baseline --datasets Mnist "
             "--logdir random_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
         self.assertEqual(
             plan["runs"][-1]["command"],
-            "source experiment.sh linear --preset gating --datasets Cifar10 "
+            "source experiment.sh linears/linear --preset gating --datasets Cifar10 "
             "--logdir random_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
@@ -585,7 +585,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             plan = manager.create_run_plan(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],
@@ -613,7 +613,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             )
 
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],
@@ -646,9 +646,9 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(
             [run["command"] for run in normalized_plan["runs"]],
             [
-                "source experiment.sh linear --preset baseline --datasets Mnist "
+                "source experiment.sh linears/linear --preset baseline --datasets Mnist "
                 "--logdir submitted_plan --config --hidden-dim 128",
-                "source experiment.sh linear --preset gating --datasets Mnist "
+                "source experiment.sh linears/linear --preset gating --datasets Mnist "
                 "--logdir submitted_plan --config --hidden-dim 128",
             ],
         )
@@ -692,7 +692,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             for name, mutate, expected_message in invalid_cases:
                 with self.subTest(name=name):
                     plan = manager.create_run_plan(
-                        model="linear",
+                        model="linears/linear",
                         preset="baseline",
                         datasets=["Mnist"],
                         overrides={},
@@ -702,7 +702,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
                     with self.assertRaises(InspectorError) as context:
                         manager.create_job(
-                            model="linear",
+                            model="linears/linear",
                             preset="baseline",
                             datasets=["Mnist"],
                             overrides={},
@@ -720,7 +720,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             plan = manager.create_run_plan(
-                model="linear",
+                model="linears/linear",
                 preset="gating",
                 presets=["gating"],
                 datasets=["Mnist"],
@@ -731,7 +731,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
             with self.assertRaises(InspectorError) as context:
                 manager.create_job(
-                    model="linear",
+                    model="linears/linear",
                     preset="gating",
                     presets=["gating"],
                     datasets=["Mnist"],

@@ -45,7 +45,7 @@ class TrainingJobTests(unittest.TestCase):
             runner=FakeRunner(process),
         )
         payload = manager.create_job(
-            model="linear",
+            model="linears/linear",
             preset="baseline",
             datasets=datasets,
             overrides={},
@@ -68,7 +68,7 @@ class TrainingJobTests(unittest.TestCase):
             runner=FakeRunner(process),
         )
         payload = manager.create_job(
-            model="linear",
+            model="linears/linear",
             preset="baseline",
             datasets=["Mnist"],
             overrides={},
@@ -103,7 +103,7 @@ class TrainingJobTests(unittest.TestCase):
                     return await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "baseline",
                             "presets": ["baseline", "gating"],
                             "datasets": ["Mnist"],
@@ -153,7 +153,7 @@ class TrainingJobTests(unittest.TestCase):
                     create_response = await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "baseline",
                             "datasets": ["Mnist"],
                             "overrides": {},
@@ -226,7 +226,7 @@ class TrainingJobTests(unittest.TestCase):
                     return await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
@@ -282,7 +282,7 @@ class TrainingJobTests(unittest.TestCase):
             )
 
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={"hidden_dim": "128"},
@@ -320,7 +320,7 @@ class TrainingJobTests(unittest.TestCase):
             )
 
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -330,7 +330,7 @@ class TrainingJobTests(unittest.TestCase):
             record = store.get(str(payload["id"]))
             self.assertIsNotNone(record)
             assert record is not None
-            self.assertEqual(record.model, "linear")
+            self.assertEqual(record.model, "linears/linear")
             self.assertEqual(record.preset, "baseline")
             self.assertEqual(record.datasets, ["Mnist"])
             self.assertEqual(record.log_folder, "stored_job")
@@ -355,7 +355,7 @@ class TrainingJobTests(unittest.TestCase):
                 runner=FakeRunner(process),
             )
             created_payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -394,7 +394,7 @@ class TrainingJobTests(unittest.TestCase):
                 runner=FakeRunner(process),
             )
             created_payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -614,7 +614,7 @@ class TrainingJobTests(unittest.TestCase):
 
             with self.assertRaises(InspectorError) as context:
                 manager.create_job(
-                    model="linear",
+                    model="linears/linear",
                     preset="baseline",
                     datasets=["Mnist"],
                     overrides={},
@@ -658,7 +658,7 @@ class TrainingJobTests(unittest.TestCase):
 
         self.assertEqual(payload["id"], job_id)
         self.assertEqual(payload["status"], "unknown")
-        self.assertEqual(payload["model"], "linear")
+        self.assertEqual(payload["model"], "linears/linear")
         self.assertEqual(payload["preset"], "baseline")
         self.assertEqual(payload["presets"], ["baseline"])
         self.assertEqual(payload["datasets"], ["Mnist"])
@@ -786,7 +786,7 @@ class TrainingJobTests(unittest.TestCase):
 
         self.assertEqual(payload["id"], job_id)
         self.assertEqual(payload["status"], "unknown")
-        self.assertEqual(payload["model"], "linear")
+        self.assertEqual(payload["model"], "linears/linear")
         self.assertEqual(payload["preset"], "baseline")
         self.assertEqual(payload["presets"], ["baseline"])
         self.assertEqual(payload["datasets"], ["Mnist"])
@@ -967,7 +967,7 @@ class TrainingJobTests(unittest.TestCase):
                 runner=FakeRunner(FakeProcess()),
             )
             running_job = running_manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -991,7 +991,7 @@ class TrainingJobTests(unittest.TestCase):
                 runner=FakeRunner(FakeProcess(exit_code=0)),
             )
             completed_manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -1006,7 +1006,7 @@ class TrainingJobTests(unittest.TestCase):
                 runner=FakeRunner(FakeProcess(exit_code=1)),
             )
             failed_manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -1021,7 +1021,7 @@ class TrainingJobTests(unittest.TestCase):
                 runner=FakeRunner(FakeProcess()),
             )
             cancelled_job = cancelled_manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -1042,7 +1042,7 @@ class TrainingJobTests(unittest.TestCase):
             )
 
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating", "baseline"],
                 datasets=["Mnist", "Cifar10"],
@@ -1062,7 +1062,7 @@ class TrainingJobTests(unittest.TestCase):
 
         with self.assertRaises(InspectorError):
             manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "missing-preset"],
                 datasets=["Mnist"],
@@ -1084,7 +1084,7 @@ class TrainingJobTests(unittest.TestCase):
 
             with self.assertRaises(InspectorError) as context:
                 manager.create_job(
-                    model="linear",
+                    model="linears/linear",
                     preset="baseline",
                     datasets=["./Mnist"],
                     overrides={},
@@ -1112,7 +1112,7 @@ class TrainingJobTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -1559,7 +1559,7 @@ class TrainingJobTests(unittest.TestCase):
             with self.subTest(search=search):
                 with self.assertRaises(InspectorError):
                     manager.create_job(
-                        model="linear",
+                        model="linears/linear",
                         preset="baseline",
                         datasets=["Mnist"],
                         overrides={},
@@ -1572,7 +1572,7 @@ class TrainingJobTests(unittest.TestCase):
 
         with self.assertRaises(InspectorError) as context:
             manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "post-norm"],
                 datasets=["Mnist"],
@@ -1602,7 +1602,7 @@ class TrainingJobTests(unittest.TestCase):
             with self.subTest(log_folder=log_folder):
                 with self.assertRaises(InspectorError):
                     manager.create_job(
-                        model="linear",
+                        model="linears/linear",
                         preset="baseline",
                         datasets=["Mnist"],
                         overrides={},
@@ -1614,7 +1614,7 @@ class TrainingJobTests(unittest.TestCase):
 
         with self.assertRaises(InspectorError):
             manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -1627,7 +1627,7 @@ class TrainingJobTests(unittest.TestCase):
 
         with self.assertRaises(InspectorError):
             manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],

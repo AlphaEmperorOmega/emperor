@@ -148,13 +148,13 @@ class TrainingWorkerSearchModeTests(unittest.TestCase):
 
     def test_worker_search_mode_conversion_uses_experiment_search_types(self) -> None:
         grid_search = parse_training_search(
-            "linear",
+            "linears/linear",
             "baseline",
             {"mode": "grid", "values": {"hidden_dim": [64]}},
             dataset_count=1,
         )
         random_search = parse_training_search(
-            "linear",
+            "linears/linear",
             "baseline",
             {
                 "mode": "random",
