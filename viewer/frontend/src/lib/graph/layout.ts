@@ -14,6 +14,7 @@ import {
   type ExpertDiagram,
   type GraphDetailMode,
   type GraphNavigation,
+  type GraphParameterActivity,
   type StackDiagram,
   type ViewerNodeData,
 } from "@/lib/graph/types";
@@ -32,6 +33,7 @@ export function layoutGraph(
     enableExpansion: boolean;
     selectedNodeId: string | null;
     canOpenMonitor?: (node: GraphNode) => boolean;
+    parameterActivityForNode?: (node: GraphNode) => GraphParameterActivity | undefined;
     onActivateNode: (nodeId: string) => void;
     onToggleExpansion: (nodeId: string) => void;
     onOpenMonitor?: (node: GraphNode) => void;
@@ -139,6 +141,7 @@ export function layoutGraph(
         isExpanded,
         canToggleExpansion,
         canOpenMonitor,
+        parameterActivity: options.parameterActivityForNode?.(node),
         isDetailsExpanded,
         onActivateNode: () => options.onActivateNode(node.id),
         onToggleExpansion: () => options.onToggleExpansion(node.id),

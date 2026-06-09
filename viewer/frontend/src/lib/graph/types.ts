@@ -3,6 +3,33 @@ import { type GraphNode } from "@/lib/api";
 export type GraphDetailMode = "simple" | "basic" | "full";
 export type GraphScope = "opened" | "entire";
 export type GraphCoordinate = [number, number, number];
+export type GraphParameterActivityStatus =
+  | "updated"
+  | "unchanged"
+  | "missing"
+  | "unknown"
+  | "mixed";
+export type GraphParameterActivitySource = "active-job" | "historical";
+
+export type GraphParameterActivityChannel = {
+  status: GraphParameterActivityStatus;
+  source: GraphParameterActivitySource;
+  sourceLabel: string;
+  metric?: string | null;
+  lastStep?: number | null;
+  observedPoints: number;
+  updatedRuns?: number;
+  unchangedRuns?: number;
+  missingRuns?: number;
+  unknownRuns?: number;
+  totalRuns?: number;
+};
+
+export type GraphParameterActivity = {
+  targetPath: string;
+  weights: GraphParameterActivityChannel;
+  bias?: GraphParameterActivityChannel;
+};
 
 export type ViewerNodeData = {
   nodeId: string;
@@ -22,6 +49,7 @@ export type ViewerNodeData = {
   isExpanded: boolean;
   canToggleExpansion: boolean;
   canOpenMonitor?: boolean;
+  parameterActivity?: GraphParameterActivity;
   isDetailsExpanded: boolean;
   onActivateNode: () => void;
   onToggleExpansion: () => void;

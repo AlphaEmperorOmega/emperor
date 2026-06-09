@@ -1,18 +1,43 @@
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 
-const LINEAR_MONITOR_TYPES = new Set(["LinearLayer", "AdaptiveLinearLayer"]);
+const MONITOR_TARGET_TYPES = {
+  linear: new Set(["LinearLayer", "AdaptiveLinearLayer"]),
+  attention: new Set([
+    "SelfAttention",
+    "IndependentAttention",
+    "MixtureOfAttentionHeads",
+  ]),
+  "recurrent-layer": new Set(["RecurrentLayer"]),
+  "layer-controller": new Set(["Layer"]),
+  parametric: new Set(["ParametricLayer"]),
+} as const;
+
 const NUMERIC_STACK_ENTRY = /^\d+$/;
 
-export type LinearMonitorComparisonScope = "same-stack" | "all-layers";
+export type MonitorName = keyof typeof MONITOR_TARGET_TYPES;
+export type MonitorComparisonScope = "same-stack" | "all-layers";
+export type LinearMonitorComparisonScope = MonitorComparisonScope;
 
-export type LinearMonitorComparisonCandidateGroups = Record<
-  LinearMonitorComparisonScope,
+export type ResolvedMonitorTarget = {
+  monitorName: MonitorName;
+  node: GraphNode;
+};
+
+export type MonitorComparisonCandidateGroups = Record<
+  MonitorComparisonScope,
   GraphNode[]
 >;
+export type LinearMonitorComparisonCandidateGroups =
+  MonitorComparisonCandidateGroups;
 
-function isEligibleLinearMonitorNode(node: GraphNode) {
-  return node.graphRole === "architecture" && LINEAR_MONITOR_TYPES.has(node.typeName);
-}
+export type MonitorTargetResolver = (
+  node: GraphNode | undefined,
+) => ResolvedMonitorTarget | undefined;
+export type LinearMonitorTargetResolver = (
+  node: GraphNode | undefined,
+) => GraphNode | undefined;
+
+type MonitorAvailabilityPredicate = (target: ResolvedMonitorTarget) => boolean;
 
 function stackIndex(node: GraphNode) {
   const segment = node.path.split(".").at(-1) ?? "";
@@ -52,9 +77,68 @@ function hasRuntimeOrInternalAncestor(
   return false;
 }
 
-export function createLinearMonitorTargetResolver(
+function isDirectMonitorType(node: GraphNode, monitorName: MonitorName) {
+  return (MONITOR_TARGET_TYPES[monitorName] as ReadonlySet<string>).has(
+    node.typeName,
+  );
+}
+
+function directChildByPath(
+  node: GraphNode,
+  childPath: string,
+  nodesByPath: Map<string, GraphNode>,
+  childIdsBySourceId: Map<string, Set<string>>,
+) {
+  const child = nodesByPath.get(childPath);
+  if (!child || !childIdsBySourceId.get(node.id)?.has(child.id)) {
+    return undefined;
+  }
+  return child;
+}
+
+function candidateTargetsForNode(
+  node: GraphNode,
+  nodesByPath: Map<string, GraphNode>,
+  childIdsBySourceId: Map<string, Set<string>>,
+): ResolvedMonitorTarget[] {
+  const targets: ResolvedMonitorTarget[] = [];
+
+  if (isDirectMonitorType(node, "linear")) {
+    targets.push({ monitorName: "linear", node });
+  }
+  if (isDirectMonitorType(node, "attention")) {
+    targets.push({ monitorName: "attention", node });
+  }
+  if (isDirectMonitorType(node, "recurrent-layer")) {
+    targets.push({ monitorName: "recurrent-layer", node });
+  }
+  if (isDirectMonitorType(node, "parametric")) {
+    targets.push({ monitorName: "parametric", node });
+  }
+
+  if (node.typeName === "Layer") {
+    const modelChild = directChildByPath(
+      node,
+      `${node.path}.model`,
+      nodesByPath,
+      childIdsBySourceId,
+    );
+    if (modelChild && isDirectMonitorType(modelChild, "linear")) {
+      targets.push({ monitorName: "linear", node: modelChild });
+    }
+    if (modelChild && isDirectMonitorType(modelChild, "parametric")) {
+      targets.push({ monitorName: "parametric", node: modelChild });
+    }
+    targets.push({ monitorName: "layer-controller", node });
+  }
+
+  return targets;
+}
+
+export function createMonitorTargetResolver(
   graph: InspectResponse | undefined,
-): (node: GraphNode | undefined) => GraphNode | undefined {
+  isAvailable?: MonitorAvailabilityPredicate,
+): MonitorTargetResolver {
   if (!graph) {
     return () => undefined;
   }
@@ -63,12 +147,16 @@ export function createLinearMonitorTargetResolver(
   const nodesByPath = new Map(graph.nodes.map((node) => [node.path, node]));
   const rootIds = new Set(graph.nodes.map((node) => node.id));
   const childIdsBySourceId = new Map<string, Set<string>>();
+  const parentIdByChildId = new Map<string, string>();
 
   for (const edge of graph.edges) {
     rootIds.delete(edge.target);
     const childIds = childIdsBySourceId.get(edge.source) ?? new Set<string>();
     childIds.add(edge.target);
     childIdsBySourceId.set(edge.source, childIds);
+    if (!parentIdByChildId.has(edge.target)) {
+      parentIdByChildId.set(edge.target, edge.source);
+    }
   }
 
   return (candidate: GraphNode | undefined) => {
@@ -77,25 +165,60 @@ export function createLinearMonitorTargetResolver(
     }
 
     const node = nodesById.get(candidate.id) ?? nodesByPath.get(candidate.path);
-    if (!node || rootIds.has(node.id) || node.graphRole !== "architecture") {
+    if (
+      !node ||
+      rootIds.has(node.id) ||
+      node.graphRole !== "architecture" ||
+      hasRuntimeOrInternalAncestor(node, nodesById, parentIdByChildId)
+    ) {
       return undefined;
     }
 
-    if (isEligibleLinearMonitorNode(node)) {
-      return node;
-    }
+    const targets = candidateTargetsForNode(
+      node,
+      nodesByPath,
+      childIdsBySourceId,
+    ).filter(
+      (target) =>
+        target.node.graphRole === "architecture" &&
+        !hasRuntimeOrInternalAncestor(
+          target.node,
+          nodesById,
+          parentIdByChildId,
+        ),
+    );
 
-    if (node.typeName !== "Layer") {
-      return undefined;
-    }
-
-    const child = nodesByPath.get(`${node.path}.model`);
-    if (!child || !childIdsBySourceId.get(node.id)?.has(child.id)) {
-      return undefined;
-    }
-
-    return isEligibleLinearMonitorNode(child) ? child : undefined;
+    return isAvailable ? targets.find(isAvailable) : targets[0];
   };
+}
+
+export function createMonitorTargetNodeResolver(
+  graph: InspectResponse | undefined,
+  isAvailable?: MonitorAvailabilityPredicate,
+): LinearMonitorTargetResolver {
+  const resolveTarget = createMonitorTargetResolver(graph, isAvailable);
+  return (node) => resolveTarget(node)?.node;
+}
+
+export function createLinearMonitorTargetResolver(
+  graph: InspectResponse | undefined,
+): LinearMonitorTargetResolver {
+  const resolveTarget = createMonitorTargetResolver(
+    graph,
+    (target) => target.monitorName === "linear",
+  );
+  return (node) => resolveTarget(node)?.node;
+}
+
+export function resolveMonitorTarget(
+  graph: InspectResponse | undefined,
+  node: GraphNode | undefined,
+  monitorName?: MonitorName,
+) {
+  return createMonitorTargetResolver(
+    graph,
+    monitorName ? (target) => target.monitorName === monitorName : undefined,
+  )(node);
 }
 
 export function resolveLinearMonitorTarget(
@@ -105,9 +228,10 @@ export function resolveLinearMonitorTarget(
   return createLinearMonitorTargetResolver(graph)(node);
 }
 
-export function buildLinearMonitorComparisonCandidates(
+export function buildMonitorComparisonCandidates(
   graph: InspectResponse | undefined,
   node: GraphNode | undefined,
+  monitorName?: MonitorName,
 ) {
   if (!graph) {
     return [];
@@ -127,11 +251,15 @@ export function buildLinearMonitorComparisonCandidates(
     }
   }
 
-  const resolveTarget = createLinearMonitorTargetResolver(graph);
-  const primaryTarget = resolveTarget(node);
-  if (!primaryTarget) {
+  const primary = resolveMonitorTarget(graph, node, monitorName);
+  if (!primary) {
     return [];
   }
+  const resolveTarget = createMonitorTargetResolver(
+    graph,
+    (target) => target.monitorName === primary.monitorName,
+  );
+  const primaryTarget = primary.node;
 
   const targetParent = parentIdByChildId.get(primaryTarget.id);
   const targetParentNode = targetParent ? nodesById.get(targetParent) : undefined;
@@ -159,10 +287,14 @@ export function buildLinearMonitorComparisonCandidates(
     }
 
     const target = resolveTarget(sibling);
-    if (!target || target.id === primaryTarget.id || target.path === primaryTarget.path) {
+    if (
+      !target ||
+      target.node.id === primaryTarget.id ||
+      target.node.path === primaryTarget.path
+    ) {
       continue;
     }
-    candidates.set(target.path, target);
+    candidates.set(target.node.path, target.node);
   }
 
   return [...candidates.values()].sort((left, right) => {
@@ -172,9 +304,17 @@ export function buildLinearMonitorComparisonCandidates(
   });
 }
 
-function buildAllLinearMonitorComparisonCandidates(
+export function buildLinearMonitorComparisonCandidates(
   graph: InspectResponse | undefined,
   node: GraphNode | undefined,
+) {
+  return buildMonitorComparisonCandidates(graph, node, "linear");
+}
+
+function buildAllMonitorComparisonCandidates(
+  graph: InspectResponse | undefined,
+  node: GraphNode | undefined,
+  monitorName?: MonitorName,
 ) {
   if (!graph) {
     return [];
@@ -188,37 +328,58 @@ function buildAllLinearMonitorComparisonCandidates(
     }
   }
 
-  const resolveTarget = createLinearMonitorTargetResolver(graph);
-  const primaryTarget = resolveTarget(node);
-  if (!primaryTarget) {
+  const primary = resolveMonitorTarget(graph, node, monitorName);
+  if (!primary) {
     return [];
   }
+  const resolveTarget = createMonitorTargetResolver(
+    graph,
+    (target) => target.monitorName === primary.monitorName,
+  );
+  const primaryTarget = primary.node;
 
   const candidates = new Map<string, GraphNode>();
   for (const candidate of graph.nodes) {
     const target = resolveTarget(candidate);
     if (
       !target ||
-      target.id === primaryTarget.id ||
-      target.path === primaryTarget.path ||
-      hasRuntimeOrInternalAncestor(target, nodesById, parentIdByChildId)
+      target.node.id === primaryTarget.id ||
+      target.node.path === primaryTarget.path ||
+      hasRuntimeOrInternalAncestor(target.node, nodesById, parentIdByChildId)
     ) {
       continue;
     }
-    if (!candidates.has(target.path)) {
-      candidates.set(target.path, target);
+    if (!candidates.has(target.node.path)) {
+      candidates.set(target.node.path, target.node);
     }
   }
 
   return [...candidates.values()];
 }
 
+export function buildMonitorComparisonCandidateGroups(
+  graph: InspectResponse | undefined,
+  node: GraphNode | undefined,
+  monitorName?: MonitorName,
+): MonitorComparisonCandidateGroups {
+  const primary = resolveMonitorTarget(graph, node, monitorName);
+  return {
+    "same-stack": buildMonitorComparisonCandidates(
+      graph,
+      primary?.node ?? node,
+      primary?.monitorName ?? monitorName,
+    ),
+    "all-layers": buildAllMonitorComparisonCandidates(
+      graph,
+      primary?.node ?? node,
+      primary?.monitorName ?? monitorName,
+    ),
+  };
+}
+
 export function buildLinearMonitorComparisonCandidateGroups(
   graph: InspectResponse | undefined,
   node: GraphNode | undefined,
 ): LinearMonitorComparisonCandidateGroups {
-  return {
-    "same-stack": buildLinearMonitorComparisonCandidates(graph, node),
-    "all-layers": buildAllLinearMonitorComparisonCandidates(graph, node),
-  };
+  return buildMonitorComparisonCandidateGroups(graph, node, "linear");
 }

@@ -28,8 +28,11 @@ import { buildGraphLocationSummaries } from "@/lib/graph/locations";
 import { filterGraphByDetail, filterGraphByExpansion } from "@/lib/graph/filtering";
 import { layoutGraph } from "@/lib/graph/layout";
 import {
+  buildMonitorComparisonCandidateGroups,
   buildLinearMonitorComparisonCandidateGroups,
   buildLinearMonitorComparisonCandidates,
+  createMonitorTargetResolver,
+  resolveMonitorTarget,
   resolveLinearMonitorTarget,
 } from "@/lib/graph";
 import { SIMPLE_NODE_HEIGHT } from "@/lib/graph/constants";
@@ -352,6 +355,93 @@ describe("resolveLinearMonitorTarget", () => {
     expect(resolveLinearMonitorTarget(g, byId.get("main_model.0.processor"))).toBeUndefined();
     expect(resolveLinearMonitorTarget(rootLinearGraph, rootLinearGraph.nodes[0]))
       .toBeUndefined();
+  });
+});
+
+describe("resolveMonitorTarget", () => {
+  const g = graph(
+    [
+      node("model", { typeName: "Model", path: "model" }),
+      node("attention.0", {
+        typeName: "SelfAttention",
+        path: "attention.0",
+      }),
+      node("attention.1", {
+        typeName: "IndependentAttention",
+        path: "attention.1",
+      }),
+      node("recurrent.0", {
+        typeName: "RecurrentLayer",
+        path: "recurrent.0",
+      }),
+      node("main_model.0", { typeName: "Layer", path: "main_model.0" }),
+      node("main_model.0.model", {
+        typeName: "ParametricLayer",
+        path: "main_model.0.model",
+      }),
+      node("main_model.1", { typeName: "Layer", path: "main_model.1" }),
+      node("main_model.1.model", {
+        typeName: "LinearLayer",
+        path: "main_model.1.model",
+      }),
+    ],
+    [
+      ["model", "attention.0"],
+      ["model", "attention.1"],
+      ["model", "recurrent.0"],
+      ["model", "main_model.0"],
+      ["main_model.0", "main_model.0.model"],
+      ["model", "main_model.1"],
+      ["main_model.1", "main_model.1.model"],
+    ],
+  );
+  const byId = new Map(g.nodes.map((graphNode) => [graphNode.id, graphNode]));
+
+  it("resolves non-linear monitor target families", () => {
+    expect(resolveMonitorTarget(g, byId.get("attention.0"))).toMatchObject({
+      monitorName: "attention",
+      node: byId.get("attention.0"),
+    });
+    expect(resolveMonitorTarget(g, byId.get("recurrent.0"))).toMatchObject({
+      monitorName: "recurrent-layer",
+      node: byId.get("recurrent.0"),
+    });
+    expect(resolveMonitorTarget(g, byId.get("main_model.0"))).toMatchObject({
+      monitorName: "parametric",
+      node: byId.get("main_model.0.model"),
+    });
+  });
+
+  it("selects the first available monitor target for multi-monitor Layer nodes", () => {
+    const linearOnlyResolver = createMonitorTargetResolver(
+      g,
+      (target) => target.monitorName === "linear",
+    );
+    const controllerOnlyResolver = createMonitorTargetResolver(
+      g,
+      (target) => target.monitorName === "layer-controller",
+    );
+
+    expect(linearOnlyResolver(byId.get("main_model.1"))).toMatchObject({
+      monitorName: "linear",
+      node: byId.get("main_model.1.model"),
+    });
+    expect(controllerOnlyResolver(byId.get("main_model.1"))).toMatchObject({
+      monitorName: "layer-controller",
+      node: byId.get("main_model.1"),
+    });
+  });
+
+  it("builds same-kind comparison candidates for attention targets", () => {
+    const groups = buildMonitorComparisonCandidateGroups(
+      g,
+      byId.get("attention.0"),
+      "attention",
+    );
+
+    expect(groups["all-layers"].map((candidate) => candidate.path)).toEqual([
+      "attention.1",
+    ]);
   });
 });
 

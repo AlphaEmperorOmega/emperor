@@ -7,6 +7,10 @@ export type {
   ExpertDiagramCell,
   GraphDetailMode,
   GraphNavigation,
+  GraphParameterActivity,
+  GraphParameterActivityChannel,
+  GraphParameterActivitySource,
+  GraphParameterActivityStatus,
   GraphScope,
   HierarchyNode,
   StackDiagram,
@@ -23,6 +27,12 @@ export type {
 export type {
   LinearMonitorComparisonCandidateGroups,
   LinearMonitorComparisonScope,
+  LinearMonitorTargetResolver,
+  MonitorComparisonCandidateGroups,
+  MonitorComparisonScope,
+  MonitorName,
+  MonitorTargetResolver,
+  ResolvedMonitorTarget,
 } from "@/lib/graph/monitor-targets";
 export {
   configDetailText,
@@ -55,8 +65,13 @@ export { buildTerminalReachGrid } from "@/lib/graph/terminal-reach";
 export { buildGraphLocationSummaries } from "@/lib/graph/locations";
 export { layoutGraph } from "@/lib/graph/layout";
 export {
+  buildMonitorComparisonCandidateGroups,
+  buildMonitorComparisonCandidates,
   buildLinearMonitorComparisonCandidateGroups,
   buildLinearMonitorComparisonCandidates,
+  createMonitorTargetNodeResolver,
+  createMonitorTargetResolver,
   createLinearMonitorTargetResolver,
+  resolveMonitorTarget,
   resolveLinearMonitorTarget,
 } from "@/lib/graph/monitor-targets";
