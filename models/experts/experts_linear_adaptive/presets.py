@@ -1,10 +1,10 @@
-import models.experts_linear_adaptive.config as config
+import models.experts.experts_linear_adaptive.config as config
 
-from models.experts_linear_adaptive.config_builder import ExpertsLinearAdaptiveConfigBuilder
-from models.experts_linear_adaptive.model import Model
+from models.experts.experts_linear_adaptive.config_builder import ExpertsLinearAdaptiveConfigBuilder
+from models.experts.experts_linear_adaptive.model import Model
 from emperor.experiments.base import SearchMode
 from emperor.datasets.image.classification.mnist import Mnist
-from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, PresetLock
 from emperor.base.options import BaseOptions
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -67,7 +67,205 @@ class ExperimentOptions(BaseOptions):
     )
 
 
+def _lock(option, value, behavior: str) -> PresetLock:
+    return PresetLock(
+        value=value,
+        reason=(
+            f"Locked by the {option.name} preset because this preset enables "
+            f"{behavior}."
+        ),
+    )
+
+
 class ExperimentPresets(ExperimentPresetsBase):
+    PRESET_LOCKS = {
+        ExperimentOptions.GATING: {
+            "stack_gate_flag": _lock(ExperimentOptions.GATING, True, "stack gating"),
+        },
+        ExperimentOptions.HALTING: {
+            "stack_halting_flag": _lock(ExperimentOptions.HALTING, True, "adaptive stack halting"),
+        },
+        ExperimentOptions.GATING_HALTING: {
+            "stack_gate_flag": _lock(ExperimentOptions.GATING_HALTING, True, "stack gating"),
+            "stack_halting_flag": _lock(
+                ExperimentOptions.GATING_HALTING,
+                True,
+                "adaptive stack halting",
+            ),
+        },
+        ExperimentOptions.RECURRENT: {
+            "recurrent_flag": _lock(ExperimentOptions.RECURRENT, True, "recurrent execution"),
+        },
+        ExperimentOptions.RECURRENT_GATING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_gate_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING,
+                True,
+                "recurrent gating",
+            ),
+        },
+        ExperimentOptions.RECURRENT_HALTING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_HALTING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_halting_flag": _lock(
+                ExperimentOptions.RECURRENT_HALTING,
+                True,
+                "adaptive recurrent halting",
+            ),
+        },
+        ExperimentOptions.RECURRENT_GATING_HALTING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_gate_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "recurrent gating",
+            ),
+            "recurrent_halting_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "adaptive recurrent halting",
+            ),
+        },
+        ExperimentOptions.ADAPTIVE_SHARED_ROUTER: {
+            "weight_option": _lock(
+                ExperimentOptions.ADAPTIVE_SHARED_ROUTER,
+                DualModelDynamicWeightConfig,
+                "dual-model dynamic weights",
+            ),
+            "routing_initialization_mode": _lock(
+                ExperimentOptions.ADAPTIVE_SHARED_ROUTER,
+                RoutingInitializationMode.SHARED,
+                "shared expert routing",
+            ),
+        },
+        ExperimentOptions.ADAPTIVE_AFTER_WEIGHT: {
+            "weight_option": _lock(
+                ExperimentOptions.ADAPTIVE_AFTER_WEIGHT,
+                DualModelDynamicWeightConfig,
+                "dual-model dynamic weights",
+            ),
+            "weighting_position_option": _lock(
+                ExperimentOptions.ADAPTIVE_AFTER_WEIGHT,
+                ExpertWeightingPositionOptions.AFTER_EXPERTS,
+                "expert weighting after experts",
+            ),
+        },
+        ExperimentOptions.ADAPTIVE_TOP1_SWITCH: {
+            "weight_option": _lock(
+                ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
+                DualModelDynamicWeightConfig,
+                "dual-model dynamic weights",
+            ),
+            "top_k": _lock(
+                ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
+                1,
+                "top-1 expert routing",
+            ),
+            "sampler_normalize_probabilities_flag": _lock(
+                ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
+                False,
+                "switch-style routing probabilities",
+            ),
+            "sampler_switch_loss_weight": _lock(
+                ExperimentOptions.ADAPTIVE_TOP1_SWITCH,
+                0.1,
+                "switch auxiliary loss",
+            ),
+        },
+        ExperimentOptions.ADAPTIVE_FULL_SHARED: {
+            "weight_option": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_SHARED,
+                DualModelDynamicWeightConfig,
+                "dual-model dynamic weights",
+            ),
+            "bias_option": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_SHARED,
+                AdditiveDynamicBiasConfig,
+                "additive dynamic bias",
+            ),
+            "diagonal_option": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_SHARED,
+                CombinedDynamicDiagonalConfig,
+                "combined dynamic diagonal",
+            ),
+            "row_mask_option": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_SHARED,
+                WeightInformedScoreAxisMaskConfig,
+                "weight-informed row masking",
+            ),
+            "routing_initialization_mode": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_SHARED,
+                RoutingInitializationMode.SHARED,
+                "shared expert routing",
+            ),
+        },
+        ExperimentOptions.ADAPTIVE_FULL_CAPACITY: {
+            "weight_option": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
+                DualModelDynamicWeightConfig,
+                "dual-model dynamic weights",
+            ),
+            "bias_option": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
+                AdditiveDynamicBiasConfig,
+                "additive dynamic bias",
+            ),
+            "diagonal_option": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
+                CombinedDynamicDiagonalConfig,
+                "combined dynamic diagonal",
+            ),
+            "row_mask_option": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
+                WeightInformedScoreAxisMaskConfig,
+                "weight-informed row masking",
+            ),
+            "top_k": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
+                1,
+                "top-1 capacity routing",
+            ),
+            "capacity_factor": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
+                1.0,
+                "expert capacity limiting",
+            ),
+            "dropped_token_behavior": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
+                DroppedTokenOptions.ZEROS,
+                "zeroed dropped tokens",
+            ),
+            "sampler_normalize_probabilities_flag": _lock(
+                ExperimentOptions.ADAPTIVE_FULL_CAPACITY,
+                False,
+                "switch-style routing probabilities",
+            ),
+        },
+        ExperimentOptions.ADAPTIVE_BANK_ROUTER: {
+            "weight_option": _lock(
+                ExperimentOptions.ADAPTIVE_BANK_ROUTER,
+                LayeredWeightedBankDynamicWeightConfig,
+                "layered weighted-bank dynamic weights",
+            ),
+            "routing_initialization_mode": _lock(
+                ExperimentOptions.ADAPTIVE_BANK_ROUTER,
+                RoutingInitializationMode.SHARED,
+                "shared expert routing",
+            ),
+        },
+    }
+
     def __init__(self) -> None:
         super().__init__()
 

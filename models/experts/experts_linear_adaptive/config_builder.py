@@ -1,4 +1,4 @@
-import models.experts_linear_adaptive.config as config
+import models.experts.experts_linear_adaptive.config as config
 
 from emperor.base.options import (
     ActivationOptions,
@@ -55,7 +55,7 @@ from emperor.augmentations.adaptive_parameters.options import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from models.experts_linear_adaptive.experiment_config import ExperimentConfig
+from models.experts.experts_linear_adaptive.experiment_config import ExperimentConfig
 
 from typing import Any, TYPE_CHECKING
 

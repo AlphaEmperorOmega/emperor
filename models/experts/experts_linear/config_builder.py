@@ -1,4 +1,4 @@
-import models.experts_linear.config as config
+import models.experts.experts_linear.config as config
 
 from emperor.base.options import (
     ActivationOptions,
@@ -21,7 +21,7 @@ from emperor.experts.core.options import (
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
-from models.experts_linear.experiment_config import ExperimentConfig
+from models.experts.experts_linear.experiment_config import ExperimentConfig
 
 from typing import TYPE_CHECKING
 

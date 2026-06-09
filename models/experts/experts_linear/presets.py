@@ -1,10 +1,10 @@
-import models.experts_linear.config as config
+import models.experts.experts_linear.config as config
 
-from models.experts_linear.config_builder import ExpertsLinearConfigBuilder
-from models.experts_linear.model import Model
+from models.experts.experts_linear.config_builder import ExpertsLinearConfigBuilder
+from models.experts.experts_linear.model import Model
 from emperor.experiments.base import SearchMode
 from emperor.datasets.image.classification.mnist import Mnist
-from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, PresetLock
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -58,7 +58,188 @@ class ExperimentOptions(BaseOptions):
     )
 
 
+def _lock(option, value, behavior: str) -> PresetLock:
+    return PresetLock(
+        value=value,
+        reason=(
+            f"Locked by the {option.name} preset because this preset enables "
+            f"{behavior}."
+        ),
+    )
+
+
 class ExperimentPresets(ExperimentPresetsBase):
+    PRESET_LOCKS = {
+        ExperimentOptions.GATING: {
+            "stack_gate_flag": _lock(ExperimentOptions.GATING, True, "stack gating"),
+        },
+        ExperimentOptions.HALTING: {
+            "stack_halting_flag": _lock(ExperimentOptions.HALTING, True, "adaptive stack halting"),
+        },
+        ExperimentOptions.GATING_HALTING: {
+            "stack_gate_flag": _lock(ExperimentOptions.GATING_HALTING, True, "stack gating"),
+            "stack_halting_flag": _lock(
+                ExperimentOptions.GATING_HALTING,
+                True,
+                "adaptive stack halting",
+            ),
+        },
+        ExperimentOptions.RECURRENT: {
+            "recurrent_flag": _lock(ExperimentOptions.RECURRENT, True, "recurrent execution"),
+        },
+        ExperimentOptions.RECURRENT_GATING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_gate_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING,
+                True,
+                "recurrent gating",
+            ),
+        },
+        ExperimentOptions.RECURRENT_HALTING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_HALTING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_halting_flag": _lock(
+                ExperimentOptions.RECURRENT_HALTING,
+                True,
+                "adaptive recurrent halting",
+            ),
+        },
+        ExperimentOptions.RECURRENT_GATING_HALTING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_gate_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "recurrent gating",
+            ),
+            "recurrent_halting_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "adaptive recurrent halting",
+            ),
+        },
+        ExperimentOptions.SHARED_ROUTER_AFTER_WEIGHT: {
+            "routing_initialization_mode": _lock(
+                ExperimentOptions.SHARED_ROUTER_AFTER_WEIGHT,
+                RoutingInitializationMode.SHARED,
+                "shared expert routing",
+            ),
+            "weighting_position_option": _lock(
+                ExperimentOptions.SHARED_ROUTER_AFTER_WEIGHT,
+                ExpertWeightingPositionOptions.AFTER_EXPERTS,
+                "expert weighting after experts",
+            ),
+        },
+        ExperimentOptions.TOP1_SWITCH_AUX: {
+            "top_k": _lock(ExperimentOptions.TOP1_SWITCH_AUX, 1, "top-1 expert routing"),
+            "sampler_normalize_probabilities_flag": _lock(
+                ExperimentOptions.TOP1_SWITCH_AUX,
+                False,
+                "switch-style routing probabilities",
+            ),
+            "sampler_switch_loss_weight": _lock(
+                ExperimentOptions.TOP1_SWITCH_AUX,
+                0.1,
+                "switch auxiliary loss",
+            ),
+        },
+        ExperimentOptions.TOP2_BALANCED_AUX: {
+            "top_k": _lock(ExperimentOptions.TOP2_BALANCED_AUX, 2, "top-2 expert routing"),
+            "sampler_coefficient_of_variation_loss_weight": _lock(
+                ExperimentOptions.TOP2_BALANCED_AUX,
+                0.1,
+                "balance auxiliary loss",
+            ),
+        },
+        ExperimentOptions.CAPACITY_TOP1_ZERO: {
+            "top_k": _lock(ExperimentOptions.CAPACITY_TOP1_ZERO, 1, "top-1 capacity routing"),
+            "capacity_factor": _lock(
+                ExperimentOptions.CAPACITY_TOP1_ZERO,
+                1.0,
+                "expert capacity limiting",
+            ),
+            "dropped_token_behavior": _lock(
+                ExperimentOptions.CAPACITY_TOP1_ZERO,
+                DroppedTokenOptions.ZEROS,
+                "zeroed dropped tokens",
+            ),
+            "sampler_normalize_probabilities_flag": _lock(
+                ExperimentOptions.CAPACITY_TOP1_ZERO,
+                False,
+                "switch-style routing probabilities",
+            ),
+        },
+        ExperimentOptions.CAPACITY_TOP1_IDENTITY: {
+            "top_k": _lock(ExperimentOptions.CAPACITY_TOP1_IDENTITY, 1, "top-1 capacity routing"),
+            "capacity_factor": _lock(
+                ExperimentOptions.CAPACITY_TOP1_IDENTITY,
+                1.0,
+                "expert capacity limiting",
+            ),
+            "dropped_token_behavior": _lock(
+                ExperimentOptions.CAPACITY_TOP1_IDENTITY,
+                DroppedTokenOptions.IDENTITY,
+                "identity dropped tokens",
+            ),
+            "sampler_normalize_probabilities_flag": _lock(
+                ExperimentOptions.CAPACITY_TOP1_IDENTITY,
+                False,
+                "switch-style routing probabilities",
+            ),
+        },
+        ExperimentOptions.NOISY_SHARED_ROUTER: {
+            "routing_initialization_mode": _lock(
+                ExperimentOptions.NOISY_SHARED_ROUTER,
+                RoutingInitializationMode.SHARED,
+                "shared expert routing",
+            ),
+            "sampler_noisy_topk_flag": _lock(
+                ExperimentOptions.NOISY_SHARED_ROUTER,
+                True,
+                "noisy sampler top-k routing",
+            ),
+            "router_noisy_topk_flag": _lock(
+                ExperimentOptions.NOISY_SHARED_ROUTER,
+                True,
+                "noisy router top-k routing",
+            ),
+        },
+        ExperimentOptions.RESIDUAL_SHARED_ROUTER: {
+            "routing_initialization_mode": _lock(
+                ExperimentOptions.RESIDUAL_SHARED_ROUTER,
+                RoutingInitializationMode.SHARED,
+                "shared expert routing",
+            ),
+            "stack_residual_flag": _lock(
+                ExperimentOptions.RESIDUAL_SHARED_ROUTER,
+                True,
+                "stack residuals",
+            ),
+        },
+        ExperimentOptions.POST_NORM_AFTER_WEIGHT: {
+            "layer_norm_position": _lock(
+                ExperimentOptions.POST_NORM_AFTER_WEIGHT,
+                LayerNormPositionOptions.AFTER,
+                "post-layer normalization",
+            ),
+            "weighting_position_option": _lock(
+                ExperimentOptions.POST_NORM_AFTER_WEIGHT,
+                ExpertWeightingPositionOptions.AFTER_EXPERTS,
+                "expert weighting after experts",
+            ),
+        },
+    }
+
     def __init__(self) -> None:
         super().__init__()
 

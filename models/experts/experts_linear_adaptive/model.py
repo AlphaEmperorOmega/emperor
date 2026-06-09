@@ -6,7 +6,7 @@ from emperor.base.layer.layer import Layer
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.model import MixtureOfExpertsModel
 from emperor.experiments.classifier import ClassifierExperiment
-from models.experts_linear_adaptive.experiment_config import ExperimentConfig
+from models.experts.experts_linear_adaptive.experiment_config import ExperimentConfig
 
 from typing import TYPE_CHECKING
 
@@ -73,9 +73,9 @@ class Model(ClassifierExperiment):
     ) -> Tensor | tuple[Tensor, Tensor]:
         X = X.to(self.device)
         X = torch.flatten(X, start_dim=1)
-        X = Layer.forward_with_state(self.input_model, X)
-        state = Layer.forward_returning_state(self.main_model, X)
-        logits = Layer.forward_with_state(self.output_model, state.hidden)
+        X = Layer.run_model_returning_hidden(self.input_model, X)
+        state = Layer.run_model_returning_state(self.main_model, X)
+        logits = Layer.run_model_returning_hidden(self.output_model, state.hidden)
         if state.loss is not None:
             return logits, state.loss
         return logits

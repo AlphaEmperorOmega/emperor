@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-import models.experts_linear_adaptive.config as config
+import models.experts.experts_linear_adaptive.config as config
 
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBiasConfig,
@@ -26,8 +26,12 @@ from emperor.experts.core.options import (
 )
 from emperor.experiments.base import RandomSearch
 from models.config_overrides import parse_config_value
-from models.experts_linear_adaptive.model import Model
-from models.experts_linear_adaptive.presets import ExperimentOptions, ExperimentPresets
+from models.experts.experts_linear_adaptive.model import Model
+from models.experts.experts_linear_adaptive.presets import ExperimentOptions, ExperimentPresets
+from models.training_test_utils import (
+    RandomImageClassificationDataModule,
+    tiny_cpu_trainer,
+)
 
 
 class TestExpertsLinearAdaptiveModel(unittest.TestCase):
@@ -61,6 +65,18 @@ class TestExpertsLinearAdaptiveModel(unittest.TestCase):
                 logits = output[0] if isinstance(output, tuple) else output
 
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
+
+    def test_all_presets_train_one_epoch(self):
+        presets = ExperimentPresets()
+        dataset = config.DATASET_OPTIONS[0]
+
+        for option in ExperimentOptions:
+            with self.subTest(option=option.name):
+                cfg = presets.get_config(option, dataset)[0]
+                model = Model(cfg)
+                datamodule = RandomImageClassificationDataModule(dataset)
+
+                tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(

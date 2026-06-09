@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-import models.experts_linear.config as config
+import models.experts.experts_linear.config as config
 
 from emperor.base.layer import RecurrentLayerConfig
 from emperor.experts.config import MixtureOfExpertsModelConfig
@@ -12,8 +12,12 @@ from emperor.experts.core.options import (
     RoutingInitializationMode,
 )
 from emperor.experiments.base import RandomSearch
-from models.experts_linear.model import Model
-from models.experts_linear.presets import ExperimentOptions, ExperimentPresets
+from models.experts.experts_linear.model import Model
+from models.experts.experts_linear.presets import ExperimentOptions, ExperimentPresets
+from models.training_test_utils import (
+    RandomImageClassificationDataModule,
+    tiny_cpu_trainer,
+)
 
 
 class TestExpertsLinearModel(unittest.TestCase):
@@ -47,6 +51,18 @@ class TestExpertsLinearModel(unittest.TestCase):
                 logits = output[0] if isinstance(output, tuple) else output
 
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
+
+    def test_all_presets_train_one_epoch(self):
+        presets = ExperimentPresets()
+        dataset = config.DATASET_OPTIONS[0]
+
+        for option in ExperimentOptions:
+            with self.subTest(option=option.name):
+                cfg = presets.get_config(option, dataset)[0]
+                model = Model(cfg)
+                datamodule = RandomImageClassificationDataModule(dataset)
+
+                tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(
