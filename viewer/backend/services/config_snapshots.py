@@ -12,7 +12,7 @@ client input.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from viewer.backend.config_snapshots import ConfigSnapshotRecord
@@ -31,7 +31,7 @@ class ConfigSnapshotService:
     def list_snapshots(self, model: str) -> list[dict[str, Any]]:
         return [
             _snapshot_to_api(snapshot)
-            for snapshot in self._repository.list_snapshots(model)
+            for snapshot in self._list_snapshot_records(model)
         ]
 
     def create_snapshot(
@@ -60,7 +60,7 @@ class ConfigSnapshotService:
             )
 
         identity = _identity(model, preset, entries)
-        for existing in self._repository.list_snapshots(model):
+        for existing in self._list_snapshot_records(model):
             if existing.preset != preset:
                 continue
             existing_entries, _ = _override_entries(fields, existing.overrides)
@@ -76,7 +76,7 @@ class ConfigSnapshotService:
             name=name.strip() or _default_name(preset, entries),
             overrides={entry["key"]: entry["value"] for entry in entries},
         )
-        self._repository.save_snapshot(snapshot)
+        self._save_snapshot_record(snapshot)
         return _snapshot_to_api(snapshot)
 
     def rename_snapshot(self, snapshot_id: str, name: str) -> dict[str, Any]:
@@ -86,26 +86,53 @@ class ConfigSnapshotService:
             raise InspectorError("Config snapshot name cannot be empty.")
         snapshot.name = new_name
         snapshot.updated_at = _now()
-        self._repository.save_snapshot(snapshot)
+        self._save_snapshot_record(snapshot)
         return _snapshot_to_api(snapshot)
 
     def delete_snapshot(self, snapshot_id: str) -> dict[str, Any]:
         snapshot = self._require_snapshot(snapshot_id)
-        self._repository.delete_snapshot(snapshot_id)
+        self._delete_snapshot_record(snapshot_id)
         return {
             "model": snapshot.model,
             "snapshots": self.list_snapshots(snapshot.model),
         }
 
     def _require_snapshot(self, snapshot_id: str) -> ConfigSnapshotRecord:
-        snapshot = self._repository.get_snapshot(snapshot_id)
+        snapshot = self._get_snapshot_record(snapshot_id)
         if snapshot is None:
             raise InspectorError(f"Unknown config snapshot '{snapshot_id}'.")
         return snapshot
 
+    def _list_snapshot_records(self, model: str) -> list[ConfigSnapshotRecord]:
+        try:
+            return self._repository.list_snapshots(model)
+        except ValueError as exc:
+            raise InspectorError("Invalid config snapshot storage path.") from exc
+
+    def _get_snapshot_record(
+        self,
+        snapshot_id: str,
+    ) -> ConfigSnapshotRecord | None:
+        try:
+            return self._repository.get_snapshot(snapshot_id)
+        except ValueError as exc:
+            raise InspectorError("Invalid config snapshot storage path.") from exc
+
+    def _save_snapshot_record(self, snapshot: ConfigSnapshotRecord) -> None:
+        try:
+            self._repository.save_snapshot(snapshot)
+        except ValueError as exc:
+            raise InspectorError("Invalid config snapshot storage path.") from exc
+
+    def _delete_snapshot_record(self, snapshot_id: str) -> bool:
+        try:
+            return self._repository.delete_snapshot(snapshot_id)
+        except ValueError as exc:
+            raise InspectorError("Invalid config snapshot storage path.") from exc
+
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _snapshot_to_api(snapshot: ConfigSnapshotRecord) -> dict[str, Any]:

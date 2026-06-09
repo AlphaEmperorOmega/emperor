@@ -61,7 +61,9 @@ class LogMigrationTests(unittest.TestCase):
             write_flat_run(logs_root, "linear")
             (logs_root / "linears" / "linear").mkdir(parents=True)
 
-            with self.assertRaisesRegex(LogMigrationError, "Destination already exists"):
+            with self.assertRaisesRegex(
+                LogMigrationError, "Destination already exists"
+            ):
                 plan_log_migration(logs_root)
 
     def test_symlinked_source_raises_without_moving_target(self) -> None:

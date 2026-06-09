@@ -3,23 +3,31 @@
 A config snapshot captures a named set of config overrides for a given
 ``model + preset`` so it can be reused and trained later. The Viewer backend has
 no database, so persistence mirrors :mod:`viewer.backend.job_store`: records are
-serialized to JSON on disk, one file per snapshot under ``<root>/<model>/<id>``.
+serialized to JSON on disk, one file per snapshot under
+``<root>/<model>/<id>.json``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
-from viewer.backend.storage.local_files import read_json_object, write_json_atomic
+from viewer.backend.storage.local_files import (
+    read_json_object,
+    require_safe_name,
+    resolve_root,
+    resolve_under_root,
+    safe_child_path,
+    write_json_atomic,
+)
 
 SNAPSHOT_FILENAME_SUFFIX = ".json"
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass
@@ -88,12 +96,15 @@ class FileSystemConfigSnapshotStore:
         return self._read_metadata(snapshot_path)
 
     def list(self, model: str) -> list[ConfigSnapshotRecord]:
-        model_root = self.root / model
+        model_root = self._model_root(model)
         if not model_root.exists():
             return []
         snapshots: list[ConfigSnapshotRecord] = []
         for snapshot_path in sorted(model_root.glob(f"*{SNAPSHOT_FILENAME_SUFFIX}")):
-            snapshot = self._read_metadata(snapshot_path)
+            resolved_path = self._resolve_existing_snapshot_path(snapshot_path)
+            if resolved_path is None:
+                continue
+            snapshot = self._read_metadata(resolved_path)
             if snapshot is not None and snapshot.model == model:
                 snapshots.append(snapshot)
         return sorted(snapshots, key=lambda snapshot: snapshot.created_at)
@@ -106,22 +117,67 @@ class FileSystemConfigSnapshotStore:
         return True
 
     def _snapshot_path(self, model: str, snapshot_id: str) -> Path:
-        return self.root / model / f"{snapshot_id}{SNAPSHOT_FILENAME_SUFFIX}"
+        model_root = self._model_root(model)
+        return resolve_under_root(
+            self._root(),
+            model_root / self._snapshot_filename(snapshot_id),
+        )
 
     def _find_snapshot_path(self, snapshot_id: str) -> Path | None:
+        filename = self._snapshot_filename(snapshot_id)
         if not self.root.exists():
             return None
-        matches = sorted(self.root.rglob(f"{snapshot_id}{SNAPSHOT_FILENAME_SUFFIX}"))
-        return matches[0] if matches else None
+        for candidate in sorted(self._root().rglob(f"*{SNAPSHOT_FILENAME_SUFFIX}")):
+            if candidate.name != filename:
+                continue
+            snapshot_path = self._resolve_existing_snapshot_path(candidate)
+            if snapshot_path is None:
+                continue
+            snapshot = self._read_metadata(snapshot_path)
+            if snapshot is None or snapshot.id != snapshot_id:
+                continue
+            if snapshot_path != self._snapshot_path(snapshot.model, snapshot.id):
+                continue
+            return snapshot_path
+        return None
 
     def _read_metadata(self, snapshot_path: Path) -> ConfigSnapshotRecord | None:
-        payload = read_json_object(snapshot_path)
+        resolved_path = self._resolve_existing_snapshot_path(snapshot_path)
+        if resolved_path is None:
+            return None
+        payload = read_json_object(resolved_path)
         if payload is None:
             return None
         try:
-            return _record_from_metadata(payload)
+            snapshot = _record_from_metadata(payload)
+            self._model_root(snapshot.model)
+            self._snapshot_filename(snapshot.id)
+            return snapshot
         except (KeyError, TypeError, ValueError):
             return None
+
+    def _root(self) -> Path:
+        return resolve_root(self.root)
+
+    def _model_root(self, model: str) -> Path:
+        return safe_child_path(self._root(), model)
+
+    def _snapshot_filename(self, snapshot_id: str) -> str:
+        safe_id = require_safe_name(snapshot_id, "config snapshot id")
+        if safe_id.endswith(SNAPSHOT_FILENAME_SUFFIX):
+            raise ValueError("config snapshot id must be a filename stem")
+        return f"{safe_id}{SNAPSHOT_FILENAME_SUFFIX}"
+
+    def _resolve_existing_snapshot_path(self, snapshot_path: Path) -> Path | None:
+        if Path(snapshot_path).is_symlink():
+            return None
+        try:
+            resolved = resolve_under_root(self._root(), snapshot_path)
+        except ValueError:
+            return None
+        if not resolved.is_file():
+            return None
+        return resolved
 
 
 def _record_to_metadata(snapshot: ConfigSnapshotRecord) -> dict[str, object]:

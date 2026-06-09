@@ -7,8 +7,8 @@ from pathlib import Path
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import (
-    ActiveLogRunDeleteBlocker,
     LOG_EXPERIMENT_NAME_RE,
+    ActiveLogRunDeleteBlocker,
     LogRunDeleteCandidate,
     LogRunDeleteFilters,
     LogRunDeletePlan,
@@ -87,8 +87,7 @@ class LogRunDeleteResponseTests(unittest.TestCase):
             runName="aaa_20260601_010203",
             version="version_0",
             relativePath=(
-                "test_model/linear/BASELINE/Mnist/"
-                "aaa_20260601_010203/version_0"
+                "test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
             ),
         )
         blocker = ActiveLogRunDeleteBlocker(
@@ -122,8 +121,7 @@ class LogRunDeleteResponseTests(unittest.TestCase):
                     "runName": "aaa_20260601_010203",
                     "version": "version_0",
                     "relativePath": (
-                        "test_model/linear/BASELINE/Mnist/"
-                        "aaa_20260601_010203/version_0"
+                        "test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
                     ),
                 }
             ],
@@ -477,10 +475,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
             self.assertEqual(
                 result.deletedRelativePaths,
-                [
-                    "test_model/linear/BASELINE/Mnist/"
-                    "aaa_20260601_010203/version_0"
-                ],
+                ["test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"],
             )
             self.assertFalse(run_dir.exists())
 
@@ -493,8 +488,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 ),
                 (
                     "escaped_relative_path",
-                    "../outside/linear/BASELINE/Mnist/"
-                    "aaa_20260601_010203/version_0",
+                    "../outside/linear/BASELINE/Mnist/aaa_20260601_010203/version_0",
                     "Invalid log run path",
                     (escaped_version, escaped_marker),
                 ),
@@ -926,6 +920,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
     def test_log_api_deletes_experiment_and_refreshes_runs(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -953,9 +948,9 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 ],
             )
 
-            async def call_api() -> (
-                tuple[httpx.Response, httpx.Response, httpx.Response]
-            ):
+            async def call_api() -> tuple[
+                httpx.Response, httpx.Response, httpx.Response
+            ]:
                 transport = httpx.ASGITransport(
                     app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
                 )
@@ -989,6 +984,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
     def test_log_api_deletes_valid_empty_experiment_folder(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1022,6 +1018,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
     def test_log_api_blocks_experiment_delete_with_matching_active_job(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         cases = (
@@ -1097,7 +1094,10 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     elif job_status != "running":
                         manager.jobs[job_id].status = job_status
 
-                    async def call_api() -> httpx.Response:
+                    async def call_api(
+                        logs_root: Path = logs_root,
+                        manager: TrainingJobManager = manager,
+                    ) -> httpx.Response:
                         transport = httpx.ASGITransport(
                             app=create_app(
                                 ViewerApiSettings(logs_root=str(logs_root)),
@@ -1108,9 +1108,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                             transport=transport,
                             base_url="http://testserver",
                         ) as client:
-                            return await client.delete(
-                                "/logs/experiments/test_model"
-                            )
+                            return await client.delete("/logs/experiments/test_model")
 
                     response = asyncio.run(call_api())
 
@@ -1133,9 +1131,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                         self.assertFalse(logs_root.joinpath("test_model").exists())
                         self.assertFalse(run_dir.exists())
                         if job_log_folder != "test_model":
-                            self.assertTrue(
-                                logs_root.joinpath(job_log_folder).exists()
-                            )
+                            self.assertTrue(logs_root.joinpath(job_log_folder).exists())
                         self.assertEqual(
                             payload,
                             {
@@ -1156,6 +1152,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self,
     ) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1231,11 +1228,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             self.assertEqual(response.status_code, 400)
             self.assertEqual(
                 response.json(),
-                {
-                    "detail": (
-                        "A training job is still writing to this log folder."
-                    )
-                },
+                {"detail": ("A training job is still writing to this log folder.")},
             )
             self.assertTrue(logs_root.joinpath("test_model").exists())
             self.assertTrue(run_dir.exists())
@@ -1250,10 +1243,11 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 ],
             )
 
-    def test_log_api_restart_behavior_fresh_manager_preserves_unknown_run_delete_blocker(
+    def test_restart_fresh_manager_preserves_unknown_run_delete_blocker(
         self,
     ) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1365,10 +1359,11 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             )
             self.assertTrue(run_dir.exists())
 
-    def test_log_api_restart_behavior_fresh_manager_blocks_experiment_delete_for_unknown_job(
+    def test_restart_fresh_manager_blocks_experiment_delete_for_unknown_job(
         self,
     ) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1433,11 +1428,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             self.assertEqual(response.status_code, 400)
             self.assertEqual(
                 response.json(),
-                {
-                    "detail": (
-                        "A training job is still writing to this log folder."
-                    )
-                },
+                {"detail": ("A training job is still writing to this log folder.")},
             )
             self.assertTrue(logs_root.joinpath("test_model").exists())
             self.assertTrue(run_dir.exists())
@@ -1446,6 +1437,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self,
     ) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1524,6 +1516,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
     def test_log_api_lists_experiments_including_empty_folders(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1574,6 +1567,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
     def test_log_api_paginates_unbounded_list_endpoints(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1640,6 +1634,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
     def test_log_api_reads_tags_scalars_and_rejects_unknown_run_ids(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1792,6 +1787,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertIn("Unknown log run id", unknown_response.json()["detail"])
         self.assertEqual(raw_path_response.status_code, 400)
         self.assertIn("Unknown log run id", raw_path_response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

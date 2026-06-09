@@ -8,7 +8,6 @@ from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import LogRunDeleteFilters
 from viewer.backend.repositories.log_runs import LogRunRepository
 
-
 ACTIVE_LOG_EXPERIMENT_DELETE_MESSAGE = (
     "A training job is still writing to this log folder."
 )

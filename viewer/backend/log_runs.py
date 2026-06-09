@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from models.catalog import MODEL_CATALOG, public_id_for_flat_name
+
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.monitor_data import (
     DEFAULT_SCALAR_POINT_LIMIT,
@@ -21,7 +22,6 @@ from viewer.backend.tensorboard_reader import (
     load_event_accumulator,
     scalar_points,
 )
-
 
 RUN_TIMESTAMP_RE = re.compile(r"(?P<timestamp>\d{8}_\d{6})$")
 LOG_EXPERIMENT_NAME_RE = re.compile(r"^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*$")
@@ -194,7 +194,7 @@ class LogRunDeleteCandidate:
     path: Path = field(repr=False, compare=False, default=Path())
 
     @classmethod
-    def from_run(cls, run: LogRun) -> "LogRunDeleteCandidate":
+    def from_run(cls, run: LogRun) -> LogRunDeleteCandidate:
         return cls(
             id=run.id,
             experiment=run.experiment,
@@ -364,26 +364,16 @@ def _affected_values(
     }
 
 
-class LogRunIndex:
+class LogRunScanner:
     def __init__(
         self,
         *,
         logs_root: Path | str = "logs",
-        scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
-        monitor_reader: TensorBoardMonitorReader | None = None,
-        parameter_status_reader: TensorBoardParameterStatusReader | None = None,
     ) -> None:
         self.logs_root = Path(logs_root)
-        self.scalar_point_limit = scalar_point_limit
-        self.monitor_reader = monitor_reader or TensorBoardMonitorReader(
-            scalar_point_limit=scalar_point_limit,
-        )
-        self.parameter_status_reader = (
-            parameter_status_reader or TensorBoardParameterStatusReader()
-        )
 
     def list_runs(self) -> list[LogRun]:
-        root = self._resolved_root()
+        root = self.resolved_root()
         if not root.exists():
             return []
 
@@ -391,10 +381,10 @@ class LogRunIndex:
         for version_dir in sorted(root.rglob("version_*")):
             if not version_dir.is_dir():
                 continue
-            resolved = self._resolve_under_root(version_dir, root)
+            resolved = self.resolve_under_root(version_dir, root)
             if resolved is None:
                 continue
-            run = self._parse_run(root, resolved)
+            run = self.parse_run(root, resolved)
             if run is not None:
                 runs.append(run)
         return sorted(
@@ -412,7 +402,7 @@ class LogRunIndex:
         )
 
     def list_experiments(self) -> list[LogExperiment]:
-        root = self._resolved_root()
+        root = self.resolved_root()
         if not root.exists():
             return []
 
@@ -423,7 +413,7 @@ class LogRunIndex:
                 continue
             if not is_valid_log_experiment_name(child.name):
                 continue
-            resolved = self._resolve_under_root(child, root)
+            resolved = self.resolve_under_root(child, root)
             if resolved is None:
                 continue
             experiments.append(
@@ -435,149 +425,13 @@ class LogRunIndex:
             )
         return experiments
 
-    def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
-        runs = self._resolve_runs(run_ids)
-        return [
-            {
-                "runId": run.id,
-                "scalarTags": tags["scalars"],
-                "histogramTags": tags["histograms"],
-                "imageTags": tags["images"],
-            }
-            for run in runs
-            for tags in [self._read_tags(run.path)]
-        ]
-
-    def scalars_for_runs(
-        self,
-        *,
-        run_ids: list[str],
-        tags: list[str],
-    ) -> list[dict[str, Any]]:
-        runs = self._resolve_runs(run_ids)
-        requested_tags = list(dict.fromkeys(tags))
-        if not requested_tags:
-            return []
-
-        series: list[dict[str, Any]] = []
-        for run in runs:
-            run_tags = set(self._read_tags(run.path)["scalars"])
-            for tag in requested_tags:
-                if tag not in run_tags:
-                    continue
-                points = self._read_scalar_points(run.path, tag)
-                if points:
-                    series.append({"runId": run.id, "tag": tag, "points": points})
-        return series
-
-    def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
-        run = self._resolve_runs([run_id])[0]
-        return self.monitor_reader.read(
-            job_id=run.id,
-            node_path=node_path,
-            dataset=run.dataset,
-            log_dir=str(run.path),
-        )
-
-    def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
-        runs = self._resolve_runs(run_ids)
-        return [
-            self.parameter_status_reader.read(
-                source_id=run.id,
-                preset=run.preset,
-                dataset=run.dataset,
-                log_dir=str(run.path),
-            )
-            for run in runs
-        ]
-
-    def delete_experiment(
-        self,
-        experiment: str,
-    ) -> LogExperimentDeleteResult:
-        _validate_log_experiment_delete_name(experiment)
-        root = self._resolved_root()
-        target = _validated_log_experiment_delete_path(root, experiment)
-
-        runs = [run for run in self.list_runs() if run.experiment == experiment]
-
-        if not target.is_dir():
-            if not runs:
-                raise InspectorError(f"Unknown log experiment: {experiment}")
-            raise InspectorError(f"Log experiment is not a directory: {experiment}")
-
-        deleted_run_ids = [run.id for run in runs]
-        shutil.rmtree(target)
-        return LogExperimentDeleteResult(
-            experiment=experiment,
-            deletedRunIds=deleted_run_ids,
-            deletedRunCount=len(deleted_run_ids),
-            deletedRelativePath=experiment,
-        )
-
-    def create_delete_plan(
-        self,
-        filters: LogRunDeleteFilters,
-        *,
-        active_jobs: list[dict[str, Any]],
-    ) -> LogRunDeletePlan:
-        candidates = [
-            LogRunDeleteCandidate.from_run(run)
-            for run in self._filtered_runs(filters)
-        ]
-        candidate_experiments = {candidate.experiment for candidate in candidates}
-        blockers = [
-            ActiveLogRunDeleteBlocker(
-                id=str(job.get("id") or ""),
-                logFolder=str(job.get("logFolder") or ""),
-                status=str(job.get("status") or ""),
-            )
-            for job in active_jobs
-            if str(job.get("logFolder") or "") in candidate_experiments
-        ]
-        return LogRunDeletePlan(candidates=candidates, blockedByActiveJobs=blockers)
-
-    def delete_runs(
-        self,
-        filters: LogRunDeleteFilters,
-        *,
-        active_jobs: list[dict[str, Any]],
-    ) -> LogRunDeleteResult:
-        plan = self.create_delete_plan(filters, active_jobs=active_jobs)
-        if not plan.candidates:
-            raise InspectorError("No log runs match the selected filters.")
-        if plan.blockedByActiveJobs:
-            raise InspectorError(
-                "A training job is still writing to this log folder."
-            )
-
-        deleted_run_ids: list[str] = []
-        deleted_relative_paths: list[str] = []
-        root = self._resolved_root()
-        for candidate in plan.candidates:
-            delete_dir = self._validated_delete_candidate_path(candidate, root)
-            shutil.rmtree(delete_dir)
-            deleted_run_ids.append(candidate.id)
-            deleted_relative_paths.append(candidate.relativePath)
-            self._prune_empty_run_parents(
-                start=delete_dir.parent,
-                experiment_dir=root / candidate.experiment,
-                root=root,
-            )
-
-        return LogRunDeleteResult(
-            candidates=plan.candidates,
-            deletedRunIds=deleted_run_ids,
-            deletedRelativePaths=deleted_relative_paths,
-        )
-
-    def _resolved_root(self) -> Path:
+    def resolved_root(self) -> Path:
         return _resolved_logs_root(self.logs_root)
 
-    def _resolve_under_root(self, path: Path, root: Path) -> Path | None:
+    def resolve_under_root(self, path: Path, root: Path) -> Path | None:
         return _resolve_log_path_under_root(path, root)
 
-    def _parse_run(self, root: Path, version_dir: Path) -> LogRun | None:
+    def parse_run(self, root: Path, version_dir: Path) -> LogRun | None:
         try:
             relative = version_dir.relative_to(root)
         except ValueError:
@@ -621,7 +475,147 @@ class LogRunIndex:
             path=version_dir,
         )
 
-    def _filtered_runs(self, filters: LogRunDeleteFilters) -> list[LogRun]:
+    def resolve_runs(self, run_ids: list[str]) -> list[LogRun]:
+        if not run_ids:
+            return []
+        runs_by_id = {run.id: run for run in self.list_runs()}
+        unknown = [run_id for run_id in run_ids if run_id not in runs_by_id]
+        if unknown:
+            raise InspectorError(f"Unknown log run id: {unknown[0]}")
+        return [runs_by_id[run_id] for run_id in dict.fromkeys(run_ids)]
+
+
+class LogRunQueryService:
+    def __init__(
+        self,
+        *,
+        scanner: LogRunScanner,
+        scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
+        monitor_reader: TensorBoardMonitorReader | None = None,
+        parameter_status_reader: TensorBoardParameterStatusReader | None = None,
+    ) -> None:
+        self.scanner = scanner
+        self.scalar_point_limit = scalar_point_limit
+        self.monitor_reader = monitor_reader or TensorBoardMonitorReader(
+            scalar_point_limit=scalar_point_limit,
+        )
+        self.parameter_status_reader = (
+            parameter_status_reader or TensorBoardParameterStatusReader()
+        )
+
+    def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        runs = self.scanner.resolve_runs(run_ids)
+        return [
+            {
+                "runId": run.id,
+                "scalarTags": tags["scalars"],
+                "histogramTags": tags["histograms"],
+                "imageTags": tags["images"],
+            }
+            for run in runs
+            for tags in [self.read_tags(run.path)]
+        ]
+
+    def scalars_for_runs(
+        self,
+        *,
+        run_ids: list[str],
+        tags: list[str],
+    ) -> list[dict[str, Any]]:
+        runs = self.scanner.resolve_runs(run_ids)
+        requested_tags = list(dict.fromkeys(tags))
+        if not requested_tags:
+            return []
+
+        series: list[dict[str, Any]] = []
+        for run in runs:
+            run_tags = set(self.read_tags(run.path)["scalars"])
+            for tag in requested_tags:
+                if tag not in run_tags:
+                    continue
+                points = self.read_scalar_points(run.path, tag)
+                if points:
+                    series.append({"runId": run.id, "tag": tag, "points": points})
+        return series
+
+    def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
+        run = self.scanner.resolve_runs([run_id])[0]
+        return self.monitor_reader.read(
+            job_id=run.id,
+            node_path=node_path,
+            dataset=run.dataset,
+            log_dir=str(run.path),
+        )
+
+    def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        runs = self.scanner.resolve_runs(run_ids)
+        return [
+            self.parameter_status_reader.read(
+                source_id=run.id,
+                preset=run.preset,
+                dataset=run.dataset,
+                log_dir=str(run.path),
+            )
+            for run in runs
+        ]
+
+    def read_tags(self, run_dir: Path) -> dict[str, list[str]]:
+        tags = {"scalars": set(), "histograms": set(), "images": set()}
+        for event_dir in event_dirs(run_dir):
+            accumulator = load_event_accumulator(event_dir)
+            if accumulator is None:
+                continue
+            try:
+                accumulator_tags = accumulator.Tags()
+            except Exception:
+                continue
+            tags["scalars"].update(accumulator_tags.get("scalars", []))
+            tags["histograms"].update(accumulator_tags.get("histograms", []))
+            tags["images"].update(accumulator_tags.get("images", []))
+        return {key: sorted(value) for key, value in tags.items()}
+
+    def read_scalar_points(self, run_dir: Path, tag: str) -> list[dict[str, Any]]:
+        points: list[dict[str, Any]] = []
+        for event_dir in event_dirs(run_dir):
+            accumulator = load_event_accumulator(event_dir)
+            if accumulator is None:
+                continue
+            try:
+                points.extend(scalar_points(accumulator, tag, None))
+            except Exception:
+                continue
+
+        points.sort(key=lambda point: (point["step"], point["wallTime"]))
+        return points[-self.scalar_point_limit :]
+
+
+class LogRunDeletionPlanner:
+    def __init__(self, *, scanner: LogRunScanner) -> None:
+        self.scanner = scanner
+
+    def create_delete_plan(
+        self,
+        filters: LogRunDeleteFilters,
+        *,
+        active_jobs: list[dict[str, Any]],
+    ) -> LogRunDeletePlan:
+        candidates = [
+            LogRunDeleteCandidate.from_run(run)
+            for run in self.filtered_runs(filters)
+        ]
+        candidate_experiments = {candidate.experiment for candidate in candidates}
+        blockers = [
+            ActiveLogRunDeleteBlocker(
+                id=str(job.get("id") or ""),
+                logFolder=str(job.get("logFolder") or ""),
+                status=str(job.get("status") or ""),
+            )
+            for job in active_jobs
+            if str(job.get("logFolder") or "") in candidate_experiments
+        ]
+        return LogRunDeletePlan(candidates=candidates, blockedByActiveJobs=blockers)
+
+    def filtered_runs(self, filters: LogRunDeleteFilters) -> list[LogRun]:
         experiment_set = set(filters.experiments)
         dataset_set = set(filters.datasets)
         model_set = set(filters.models)
@@ -639,7 +633,7 @@ class LogRunIndex:
             return []
         return [
             run
-            for run in self.list_runs()
+            for run in self.scanner.list_runs()
             if run.experiment in experiment_set
             and run.dataset in dataset_set
             and run.model in model_set
@@ -647,14 +641,75 @@ class LogRunIndex:
             and run.id in run_id_set
         ]
 
-    def _validated_delete_candidate_path(
+
+class LogRunDeletionExecutor:
+    def __init__(self, *, scanner: LogRunScanner) -> None:
+        self.scanner = scanner
+
+    def delete_experiment(
+        self,
+        experiment: str,
+    ) -> LogExperimentDeleteResult:
+        _validate_log_experiment_delete_name(experiment)
+        root = self.scanner.resolved_root()
+        target = _validated_log_experiment_delete_path(root, experiment)
+        runs = [
+            run for run in self.scanner.list_runs() if run.experiment == experiment
+        ]
+
+        if not target.is_dir():
+            if not runs:
+                raise InspectorError(f"Unknown log experiment: {experiment}")
+            raise InspectorError(f"Log experiment is not a directory: {experiment}")
+
+        deleted_run_ids = [run.id for run in runs]
+        shutil.rmtree(target)
+        return LogExperimentDeleteResult(
+            experiment=experiment,
+            deletedRunIds=deleted_run_ids,
+            deletedRunCount=len(deleted_run_ids),
+            deletedRelativePath=experiment,
+        )
+
+    def delete_runs(
+        self,
+        plan: LogRunDeletePlan,
+    ) -> LogRunDeleteResult:
+        if not plan.candidates:
+            raise InspectorError("No log runs match the selected filters.")
+        if plan.blockedByActiveJobs:
+            raise InspectorError(
+                "A training job is still writing to this log folder."
+            )
+
+        deleted_run_ids: list[str] = []
+        deleted_relative_paths: list[str] = []
+        root = self.scanner.resolved_root()
+        for candidate in plan.candidates:
+            delete_dir = self.validated_delete_candidate_path(candidate, root)
+            shutil.rmtree(delete_dir)
+            deleted_run_ids.append(candidate.id)
+            deleted_relative_paths.append(candidate.relativePath)
+            self.prune_empty_run_parents(
+                start=delete_dir.parent,
+                experiment_dir=root / candidate.experiment,
+                root=root,
+            )
+
+        return LogRunDeleteResult(
+            candidates=plan.candidates,
+            deletedRunIds=deleted_run_ids,
+            deletedRelativePaths=deleted_relative_paths,
+        )
+
+    def validated_delete_candidate_path(
         self,
         candidate: LogRunDeleteCandidate,
         root: Path,
     ) -> Path:
         return _validated_log_run_delete_candidate_path(candidate, root)
 
-    def _prune_empty_run_parents(
+    def prune_empty_run_parents(
         self,
         *,
         start: Path,
@@ -667,40 +722,134 @@ class LogRunIndex:
             root=root,
         )
 
+
+class LogRunIndex:
+    def __init__(
+        self,
+        *,
+        logs_root: Path | str = "logs",
+        scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
+        monitor_reader: TensorBoardMonitorReader | None = None,
+        parameter_status_reader: TensorBoardParameterStatusReader | None = None,
+        scanner: LogRunScanner | None = None,
+        query_service: LogRunQueryService | None = None,
+        deletion_planner: LogRunDeletionPlanner | None = None,
+        deletion_executor: LogRunDeletionExecutor | None = None,
+    ) -> None:
+        self.logs_root = Path(logs_root)
+        self.scalar_point_limit = scalar_point_limit
+        self.scanner = scanner or LogRunScanner(logs_root=self.logs_root)
+        self.monitor_reader = monitor_reader or TensorBoardMonitorReader(
+            scalar_point_limit=scalar_point_limit,
+        )
+        self.parameter_status_reader = (
+            parameter_status_reader or TensorBoardParameterStatusReader()
+        )
+        self.query_service = query_service or LogRunQueryService(
+            scanner=self.scanner,
+            scalar_point_limit=scalar_point_limit,
+            monitor_reader=self.monitor_reader,
+            parameter_status_reader=self.parameter_status_reader,
+        )
+        self.deletion_planner = deletion_planner or LogRunDeletionPlanner(
+            scanner=self.scanner,
+        )
+        self.deletion_executor = deletion_executor or LogRunDeletionExecutor(
+            scanner=self.scanner,
+        )
+
+    def list_runs(self) -> list[LogRun]:
+        return self.scanner.list_runs()
+
+    def list_experiments(self) -> list[LogExperiment]:
+        return self.scanner.list_experiments()
+
+    def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        return self.query_service.tags_for_runs(run_ids)
+
+    def scalars_for_runs(
+        self,
+        *,
+        run_ids: list[str],
+        tags: list[str],
+    ) -> list[dict[str, Any]]:
+        return self.query_service.scalars_for_runs(run_ids=run_ids, tags=tags)
+
+    def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
+        return self.query_service.monitor_data_for_run(
+            run_id,
+            node_path=node_path,
+        )
+
+    def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        return self.query_service.parameter_status_for_runs(run_ids)
+
+    def delete_experiment(
+        self,
+        experiment: str,
+    ) -> LogExperimentDeleteResult:
+        return self.deletion_executor.delete_experiment(experiment)
+
+    def create_delete_plan(
+        self,
+        filters: LogRunDeleteFilters,
+        *,
+        active_jobs: list[dict[str, Any]],
+    ) -> LogRunDeletePlan:
+        return self.deletion_planner.create_delete_plan(
+            filters,
+            active_jobs=active_jobs,
+        )
+
+    def delete_runs(
+        self,
+        filters: LogRunDeleteFilters,
+        *,
+        active_jobs: list[dict[str, Any]],
+    ) -> LogRunDeleteResult:
+        plan = self.create_delete_plan(filters, active_jobs=active_jobs)
+        return self.deletion_executor.delete_runs(plan)
+
+    def _resolved_root(self) -> Path:
+        return self.scanner.resolved_root()
+
+    def _resolve_under_root(self, path: Path, root: Path) -> Path | None:
+        return self.scanner.resolve_under_root(path, root)
+
+    def _parse_run(self, root: Path, version_dir: Path) -> LogRun | None:
+        return self.scanner.parse_run(root, version_dir)
+
+    def _filtered_runs(self, filters: LogRunDeleteFilters) -> list[LogRun]:
+        return self.deletion_planner.filtered_runs(filters)
+
+    def _validated_delete_candidate_path(
+        self,
+        candidate: LogRunDeleteCandidate,
+        root: Path,
+    ) -> Path:
+        return self.deletion_executor.validated_delete_candidate_path(
+            candidate,
+            root,
+        )
+
+    def _prune_empty_run_parents(
+        self,
+        *,
+        start: Path,
+        experiment_dir: Path,
+        root: Path,
+    ) -> None:
+        self.deletion_executor.prune_empty_run_parents(
+            start=start,
+            experiment_dir=experiment_dir,
+            root=root,
+        )
+
     def _resolve_runs(self, run_ids: list[str]) -> list[LogRun]:
-        if not run_ids:
-            return []
-        runs_by_id = {run.id: run for run in self.list_runs()}
-        unknown = [run_id for run_id in run_ids if run_id not in runs_by_id]
-        if unknown:
-            raise InspectorError(f"Unknown log run id: {unknown[0]}")
-        return [runs_by_id[run_id] for run_id in dict.fromkeys(run_ids)]
+        return self.scanner.resolve_runs(run_ids)
 
     def _read_tags(self, run_dir: Path) -> dict[str, list[str]]:
-        tags = {"scalars": set(), "histograms": set(), "images": set()}
-        for event_dir in event_dirs(run_dir):
-            accumulator = load_event_accumulator(event_dir)
-            if accumulator is None:
-                continue
-            try:
-                accumulator_tags = accumulator.Tags()
-            except Exception:
-                continue
-            tags["scalars"].update(accumulator_tags.get("scalars", []))
-            tags["histograms"].update(accumulator_tags.get("histograms", []))
-            tags["images"].update(accumulator_tags.get("images", []))
-        return {key: sorted(value) for key, value in tags.items()}
+        return self.query_service.read_tags(run_dir)
 
     def _read_scalar_points(self, run_dir: Path, tag: str) -> list[dict[str, Any]]:
-        points: list[dict[str, Any]] = []
-        for event_dir in event_dirs(run_dir):
-            accumulator = load_event_accumulator(event_dir)
-            if accumulator is None:
-                continue
-            try:
-                points.extend(scalar_points(accumulator, tag, None))
-            except Exception:
-                continue
-
-        points.sort(key=lambda point: (point["step"], point["wallTime"]))
-        return points[-self.scalar_point_limit :]
+        return self.query_service.read_scalar_points(run_dir, tag)

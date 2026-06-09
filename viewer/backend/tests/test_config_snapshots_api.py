@@ -94,7 +94,9 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         response = self._create(learning_rate="0.01", batch_size="128")
         self.assertEqual(response.status_code, 200, response.text)
         snapshot = response.json()
-        self.assertEqual(snapshot["overrides"], {"learning_rate": "0.01", "batch_size": "128"})
+        self.assertEqual(
+            snapshot["overrides"], {"learning_rate": "0.01", "batch_size": "128"}
+        )
         self.assertTrue(snapshot["name"])
 
         listed = self._request(
@@ -106,6 +108,28 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         body = listed.json()
         self.assertEqual(body["model"], "linears/linear")
         self.assertEqual([s["id"] for s in body["snapshots"]], [snapshot["id"]])
+
+    def test_rejects_unsafe_storage_paths(self) -> None:
+        listed = self._request(
+            "GET",
+            "/config-snapshots",
+            params={"model": "../outside"},
+        )
+        created = self._request(
+            "POST",
+            "/config-snapshots",
+            json={
+                "model": "../outside",
+                "preset": "baseline",
+                "name": "",
+                "overrides": {"learning_rate": "0.01"},
+            },
+        )
+
+        self.assertEqual(listed.status_code, 400)
+        self.assertIn("Invalid config snapshot", listed.json()["detail"])
+        self.assertEqual(created.status_code, 400)
+        self.assertIn("Invalid config snapshot", created.json()["detail"])
 
     def test_create_rejects_default_only_override(self) -> None:
         response = self._create(learning_rate="0.001")
@@ -126,8 +150,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
     def test_rename_updates_name(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]
         renamed = self._request(
-            "PATCH",
-            f"/config-snapshots/{snapshot_id}", json={"name": "tuned lr"}
+            "PATCH", f"/config-snapshots/{snapshot_id}", json={"name": "tuned lr"}
         )
         self.assertEqual(renamed.status_code, 200)
         self.assertEqual(renamed.json()["name"], "tuned lr")
@@ -135,8 +158,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
     def test_rename_rejects_empty_name(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]
         renamed = self._request(
-            "PATCH",
-            f"/config-snapshots/{snapshot_id}", json={"name": "   "}
+            "PATCH", f"/config-snapshots/{snapshot_id}", json={"name": "   "}
         )
         self.assertEqual(renamed.status_code, 400)
 

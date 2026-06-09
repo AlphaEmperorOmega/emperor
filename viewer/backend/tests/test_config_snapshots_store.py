@@ -95,6 +95,10 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             store.save(make_record(snapshot_id="a", model="linears/linear"))
 
             self.assertTrue((Path(tmp) / "linears" / "linear" / "a.json").exists())
+            self.assertEqual(
+                [snapshot.id for snapshot in store.list("linears/linear")],
+                ["a"],
+            )
             self.assertTrue(store.delete("a"))
             self.assertFalse((Path(tmp) / "linears" / "linear" / "a.json").exists())
 
@@ -112,6 +116,101 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             (model_dir / "broken.json").write_text("{not json", encoding="utf-8")
 
             self.assertEqual(store.list("m1"), [])
+
+    def test_rejects_unsafe_model_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = FileSystemConfigSnapshotStore(root / "snapshots")
+            outside = root / "outside"
+
+            cases = (
+                "../outside",
+                str(outside),
+                "linears\\linear",
+                "linears//linear",
+                "",
+            )
+            for model in cases:
+                with self.subTest(model=model):
+                    with self.assertRaises(ValueError):
+                        store.save(make_record(snapshot_id="a", model=model))
+                    with self.assertRaises(ValueError):
+                        store.list(model)
+            self.assertFalse(outside.exists())
+
+    def test_rejects_unsafe_snapshot_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = FileSystemConfigSnapshotStore(root / "snapshots")
+            outside = root / "outside"
+            outside.mkdir()
+
+            cases = (
+                "../snap",
+                str(outside / "snap"),
+                "snap/id",
+                "snap\\id",
+                "snap.json",
+                "",
+            )
+            for snapshot_id in cases:
+                with self.subTest(snapshot_id=snapshot_id):
+                    with self.assertRaises(ValueError):
+                        store.save(make_record(snapshot_id=snapshot_id, model="m1"))
+                    with self.assertRaises(ValueError):
+                        store.get(snapshot_id)
+                    with self.assertRaises(ValueError):
+                        store.delete(snapshot_id)
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_rejects_symlink_escape_for_model_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            snapshots_root = root / "snapshots"
+            outside = root / "outside"
+            snapshots_root.mkdir()
+            outside.mkdir()
+            link = snapshots_root / "linked"
+            try:
+                link.symlink_to(outside, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+
+            store = FileSystemConfigSnapshotStore(snapshots_root)
+
+            with self.assertRaises(ValueError):
+                store.save(make_record(snapshot_id="a", model="linked/linear"))
+            with self.assertRaises(ValueError):
+                store.list("linked/linear")
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_ignores_symlink_snapshot_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            snapshots_root = root / "snapshots"
+            outside = root / "outside"
+            model_dir = snapshots_root / "m1"
+            model_dir.mkdir(parents=True)
+            outside.mkdir()
+            outside_snapshot = outside / "a.json"
+            outside_snapshot.write_text(
+                '{"id": "a", "model": "m1", "preset": "base", "name": "x", '
+                '"overrides": {}, "created_at": "2026", "updated_at": "2026"}',
+                encoding="utf-8",
+            )
+            link = model_dir / "a.json"
+            try:
+                link.symlink_to(outside_snapshot)
+            except OSError as exc:
+                self.skipTest(f"symlinks unavailable: {exc}")
+
+            store = FileSystemConfigSnapshotStore(snapshots_root)
+
+            self.assertIsNone(store.get("a"))
+            self.assertEqual(store.list("m1"), [])
+            self.assertFalse(store.delete("a"))
+            self.assertTrue(link.is_symlink())
+            self.assertTrue(outside_snapshot.exists())
 
 
 if __name__ == "__main__":
