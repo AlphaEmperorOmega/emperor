@@ -6,9 +6,11 @@ import {
   groupModelLogRunsByExperiment,
   historicalDatasetOptions,
   historicalExperimentOptions,
+  historicalMonitorRunGroups,
   historicalPresetOptions,
   latestHistoricalMonitorRuns,
   logRunHasLayerMonitorData,
+  resolveRunPresetName,
   sortLogRunsNewestFirst,
 } from "@/lib/historical-monitor-runs";
 import { type LogRun } from "@/lib/api";
@@ -94,6 +96,20 @@ describe("historical monitor run helpers", () => {
     ]);
   });
 
+  it("resolves a logged preset to the configured preset name", () => {
+    expect(
+      resolveRunPresetName(run({ id: "fast", preset: "Fast" }), [
+        { name: "baseline", label: "Baseline" },
+        { name: "fast", label: "Fast" },
+      ]),
+    ).toBe("fast");
+    expect(
+      resolveRunPresetName(run({ id: "missing", preset: "Unknown" }), [
+        { name: "baseline", label: "Baseline" },
+      ]),
+    ).toBe("");
+  });
+
   it("derives dataset options from the selected experiment", () => {
     expect(historicalDatasetOptions(runs, "exp_a")).toEqual([
       { value: "Mnist", label: "Mnist", count: 2 },
@@ -101,11 +117,25 @@ describe("historical monitor run helpers", () => {
     ]);
   });
 
-  it("filters runs by experiment and dataset", () => {
-    expect(filterHistoricalRuns(runs, "exp_a", "Mnist").map((item) => item.id)).toEqual([
-      "new-mnist",
-      "old-mnist",
-    ]);
+  it("filters runs by experiment, dataset, and preset", () => {
+    const mixedPresetRuns = [
+      ...runs,
+      run({
+        id: "fast-mnist",
+        experiment: "exp_a",
+        dataset: "Mnist",
+        preset: "fast",
+        timestamp: "2026-06-04 01:00:00",
+      }),
+    ];
+
+    expect(
+      filterHistoricalRuns(mixedPresetRuns, "exp_a", "Mnist", "BASELINE").map(
+        (item) => item.id,
+      ),
+    ).toEqual(["new-mnist", "old-mnist"]);
+    expect(filterHistoricalRuns(mixedPresetRuns, "exp_a", "Mnist").map((item) => item.id))
+      .toEqual(["fast-mnist", "new-mnist", "old-mnist"]);
   });
 
   it("caps grouped monitor runs to the latest five", () => {
@@ -122,6 +152,54 @@ describe("historical monitor run helpers", () => {
       "run-5",
       "run-4",
       "run-3",
+    ]);
+  });
+
+  it("builds latest monitor groups by experiment, dataset, and preset", () => {
+    const groups = historicalMonitorRunGroups([
+      run({
+        id: "baseline-old",
+        experiment: "exp_a",
+        dataset: "Mnist",
+        preset: "baseline",
+        timestamp: "2026-06-01 01:00:00",
+      }),
+      run({
+        id: "baseline-new",
+        experiment: "exp_a",
+        dataset: "Mnist",
+        preset: "baseline",
+        timestamp: "2026-06-03 01:00:00",
+      }),
+      run({
+        id: "fast",
+        experiment: "exp_a",
+        dataset: "Mnist",
+        preset: "fast",
+        timestamp: "2026-06-02 01:00:00",
+      }),
+    ]);
+
+    expect(
+      groups.map((group) => ({
+        experiment: group.experiment,
+        dataset: group.dataset,
+        preset: group.preset,
+        runIds: group.runs.map((item) => item.id),
+      })),
+    ).toEqual([
+      {
+        experiment: "exp_a",
+        dataset: "Mnist",
+        preset: "baseline",
+        runIds: ["baseline-new", "baseline-old"],
+      },
+      {
+        experiment: "exp_a",
+        dataset: "Mnist",
+        preset: "fast",
+        runIds: ["fast"],
+      },
     ]);
   });
 

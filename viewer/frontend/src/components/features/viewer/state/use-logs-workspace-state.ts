@@ -17,6 +17,7 @@ import {
   COMMON_SCALAR_TAGS,
   buildCountOptions,
   buildExperimentOptions,
+  type LogMetricGroupKey,
   runOption,
   selectedOptionsSet,
   setAllValues,
@@ -54,6 +55,9 @@ export function useLogsWorkspaceState({
   const [selectedRunIds, setSelectedRunIds] = useState<Set<string> | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<string> | null>(null);
   const [selectedDetailRunId, setSelectedDetailRunId] = useState<string | null>(null);
+  const [collapsedMetricGroups, setCollapsedMetricGroups] = useState<
+    Set<LogMetricGroupKey>
+  >(new Set());
 
   const runsQuery = useLogRunsQuery({ enabled });
   const experimentsQuery = useLogExperimentsQuery({ enabled });
@@ -289,6 +293,17 @@ export function useLogsWorkspaceState({
       ),
     [selectedTagsSet, tagOptions],
   );
+  const toggleMetricGroup = useCallback((group: LogMetricGroupKey) => {
+    setCollapsedMetricGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
+      }
+      return next;
+    });
+  }, []);
   const selectedRun = visibleRuns.find((run) => run.id === selectedDetailRunId);
   const runDeleteFilters: LogRunDeleteFilters = useMemo(
     () => ({
@@ -375,6 +390,8 @@ export function useLogsWorkspaceState({
     selectedRunIds: runIdSet,
     selectedTags: selectedTagsSet,
     selectedTagList,
+    collapsedMetricGroups,
+    toggleMetricGroup,
     selectedRun,
     selectedDetailRunId,
     setSelectedDetailRunId,

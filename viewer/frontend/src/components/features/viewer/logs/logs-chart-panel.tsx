@@ -1,4 +1,5 @@
 import {
+  ChevronDown,
   Columns2,
   Columns3,
   LineChart,
@@ -6,13 +7,21 @@ import {
   RefreshCw,
   RectangleHorizontal,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ErrorPanel } from "@/components/features/viewer/error-panel";
 import { ViewModeButton } from "@/components/features/viewer/view-mode-button";
 import { LogScalarChart } from "@/components/features/viewer/logs/log-scalar-chart";
+import { LogTestLeaderboardTable } from "@/components/features/viewer/logs/log-test-leaderboard-table";
 import { type LogRun, type LogScalarSeries } from "@/lib/api";
 import { type ScalarXMode, type ScalarYScale } from "@/lib/echarts/scalar-options";
+import {
+  LOG_METRIC_GROUPS,
+  type LogMetricGroupKey,
+  isTestMetricTag,
+  metricGroupForTag,
+} from "@/lib/logs/helpers";
 import { cn, errorMessage } from "@/lib/utils";
 
 export type ScalarChartGridMode = "full" | "two" | "three";
@@ -28,11 +37,83 @@ const SCALAR_CHART_GRID_CLASSES: Record<ScalarChartGridMode, string> = {
 // up every metric at once, TensorBoard-style.
 const LOGS_SCALAR_GROUP = "logs-scalars";
 
+type RenderableMetric = {
+  tag: string;
+  series: LogScalarSeries[];
+};
+
+type MetricsByGroup = Record<LogMetricGroupKey, RenderableMetric[]>;
+
+function groupRenderableMetrics({
+  selectedTagList,
+  seriesByTag,
+}: {
+  selectedTagList: string[];
+  seriesByTag: Map<string, LogScalarSeries[]>;
+}): MetricsByGroup {
+  const groups: MetricsByGroup = {
+    train: [],
+    validation: [],
+    test: [],
+    other: [],
+  };
+
+  for (const tag of selectedTagList) {
+    const series = seriesByTag.get(tag) ?? [];
+    if (series.length === 0) {
+      continue;
+    }
+    groups[metricGroupForTag(tag)].push({ tag, series });
+  }
+
+  return groups;
+}
+
 export type LogsChartEmptyState = {
   title: string;
   detail: string;
   busy?: boolean;
 };
+
+function metricCountLabel(count: number) {
+  return `${count} ${count === 1 ? "metric" : "metrics"}`;
+}
+
+function LogsMetricGroupHeader({
+  group,
+  metricCount,
+  isCollapsed,
+  controlsId,
+  onToggle,
+}: {
+  group: (typeof LOG_METRIC_GROUPS)[number];
+  metricCount: number;
+  isCollapsed: boolean;
+  controlsId: string;
+  onToggle: (group: LogMetricGroupKey) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full min-w-0 items-center justify-between gap-3 rounded-[10px] border border-line bg-white/[0.025] px-3 py-2.5 text-left transition hover:border-white/15 hover:bg-white/[0.055] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      aria-expanded={!isCollapsed}
+      aria-controls={controlsId}
+      onClick={() => onToggle(group.key)}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-ink-faint transition-transform",
+            isCollapsed && "-rotate-90",
+          )}
+          aria-hidden
+        />
+        <span className="truncate text-sm font-bold text-ink">{group.label}</span>
+      </span>
+      <Badge>{metricCountLabel(metricCount)}</Badge>
+    </button>
+  );
+}
 
 function ChartEmptyState({ title, detail, busy }: LogsChartEmptyState) {
   return (
@@ -58,6 +139,8 @@ export function LogsChartPanel({
   runOrder,
   visibleRunCount,
   selectedTagCount,
+  collapsedMetricGroups,
+  onToggleMetricGroup,
   gridMode,
   onGridModeChange,
   smoothing,
@@ -80,6 +163,8 @@ export function LogsChartPanel({
   runOrder: string[];
   visibleRunCount: number;
   selectedTagCount: number;
+  collapsedMetricGroups: Set<LogMetricGroupKey>;
+  onToggleMetricGroup: (group: LogMetricGroupKey) => void;
   gridMode: ScalarChartGridMode;
   onGridModeChange: (mode: ScalarChartGridMode) => void;
   smoothing: number;
@@ -96,6 +181,8 @@ export function LogsChartPanel({
   emptyState: LogsChartEmptyState | null;
   onSelectRun: (runId: string) => void;
 }) {
+  const metricsByGroup = groupRenderableMetrics({ selectedTagList, seriesByTag });
+
   return (
     <div className="grid min-h-0 grid-rows-[56px_minmax(0,1fr)]">
       <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line bg-panel/45 px-4">
@@ -192,25 +279,57 @@ export function LogsChartPanel({
         {emptyState ? (
           <ChartEmptyState {...emptyState} />
         ) : (
-          <div className={SCALAR_CHART_GRID_CLASSES[gridMode]}>
-            {selectedTagList.map((tag) => {
-              const series = seriesByTag.get(tag) ?? [];
-              if (series.length === 0) {
+          <div className="grid gap-5">
+            {LOG_METRIC_GROUPS.map((group) => {
+              const metrics = metricsByGroup[group.key];
+              if (metrics.length === 0) {
                 return null;
               }
+              const isCollapsed = collapsedMetricGroups.has(group.key);
+              const bodyId = `logs-metric-group-${group.key}`;
+
               return (
-                <LogScalarChart
-                  key={tag}
-                  tag={tag}
-                  series={series}
-                  runsById={runsById}
-                  runOrder={runOrder}
-                  onSelectRun={onSelectRun}
-                  group={LOGS_SCALAR_GROUP}
-                  xMode={xMode}
-                  yScale={yScale}
-                  smoothing={smoothing}
-                />
+                <section key={group.key} className="grid gap-3">
+                  <LogsMetricGroupHeader
+                    group={group}
+                    metricCount={metrics.length}
+                    isCollapsed={isCollapsed}
+                    controlsId={bodyId}
+                    onToggle={onToggleMetricGroup}
+                  />
+                  {!isCollapsed && (
+                    <div id={bodyId} className={SCALAR_CHART_GRID_CLASSES[gridMode]}>
+                      {metrics.map(({ tag, series }) => {
+                        if (isTestMetricTag(tag)) {
+                          return (
+                            <LogTestLeaderboardTable
+                              key={tag}
+                              tag={tag}
+                              series={series}
+                              runsById={runsById}
+                              runOrder={runOrder}
+                              onSelectRun={onSelectRun}
+                            />
+                          );
+                        }
+                        return (
+                          <LogScalarChart
+                            key={tag}
+                            tag={tag}
+                            series={series}
+                            runsById={runsById}
+                            runOrder={runOrder}
+                            onSelectRun={onSelectRun}
+                            group={LOGS_SCALAR_GROUP}
+                            xMode={xMode}
+                            yScale={yScale}
+                            smoothing={smoothing}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
               );
             })}
           </div>

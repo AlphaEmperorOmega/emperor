@@ -147,6 +147,8 @@ export function LogsGraphPreviewPanel({ state }: { state: LogsWorkspaceState }) 
       runOrder={state.visibleRunIds}
       visibleRunCount={state.visibleRuns.length}
       selectedTagCount={state.selectedTagList.length}
+      collapsedMetricGroups={state.collapsedMetricGroups}
+      onToggleMetricGroup={state.toggleMetricGroup}
       gridMode={scalarChartGridMode}
       onGridModeChange={setScalarChartGridMode}
       smoothing={scalarSmoothing}

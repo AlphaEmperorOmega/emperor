@@ -13,6 +13,16 @@ export type HistoricalExperimentRunGroup = {
   runs: LogRun[];
 };
 
+export type HistoricalMonitorRunGroup = {
+  key: string;
+  experiment: string;
+  dataset: string;
+  preset: string;
+  model: string;
+  runs: LogRun[];
+  cardRunIds: string[];
+};
+
 function numericVersion(run: LogRun) {
   const match = /^version_(\d+)$/.exec(run.version);
   return match ? Number(match[1]) : -1;
@@ -88,16 +98,34 @@ export function historicalPresetOptions(runs: LogRun[]): HistoricalRunOption[] {
   }));
 }
 
+export function resolveRunPresetName(
+  run: LogRun,
+  presets: Array<{ name: string; label: string }>,
+) {
+  const normalizedRunPreset = run.preset.toLowerCase();
+  return (
+    presets.find(
+      (preset) =>
+        preset.name === run.preset ||
+        preset.label === run.preset ||
+        preset.name.toLowerCase() === normalizedRunPreset ||
+        preset.label.toLowerCase() === normalizedRunPreset,
+    )?.name ?? ""
+  );
+}
+
 export function filterHistoricalRuns(
   runs: LogRun[],
   selectedExperiment: string,
   selectedDataset: string,
+  selectedPreset = "",
 ) {
   return sortLogRunsNewestFirst(
     runs.filter(
       (run) =>
         (!selectedExperiment || run.experiment === selectedExperiment) &&
-        (!selectedDataset || run.dataset === selectedDataset),
+        (!selectedDataset || run.dataset === selectedDataset) &&
+        (!selectedPreset || run.preset === selectedPreset),
     ),
   );
 }
@@ -107,6 +135,36 @@ export function latestHistoricalMonitorRuns(
   limit = HISTORICAL_MONITOR_RUN_LIMIT,
 ) {
   return sortLogRunsNewestFirst(runs).slice(0, limit);
+}
+
+export function historicalMonitorRunGroupKey(
+  run: Pick<LogRun, "experiment" | "dataset" | "preset">,
+) {
+  return `${run.experiment.length}:${run.experiment}|${run.dataset.length}:${run.dataset}|${run.preset.length}:${run.preset}`;
+}
+
+export function historicalMonitorRunGroups(
+  runs: LogRun[],
+  limit = HISTORICAL_MONITOR_RUN_LIMIT,
+): HistoricalMonitorRunGroup[] {
+  const groups = new Map<string, LogRun[]>();
+  for (const run of sortLogRunsNewestFirst(runs)) {
+    const key = historicalMonitorRunGroupKey(run);
+    groups.set(key, [...(groups.get(key) ?? []), run]);
+  }
+
+  return Array.from(groups, ([key, groupRuns]) => {
+    const firstRun = groupRuns[0];
+    return {
+      key,
+      experiment: firstRun.experiment,
+      dataset: firstRun.dataset,
+      preset: firstRun.preset,
+      model: firstRun.model,
+      runs: latestHistoricalMonitorRuns(groupRuns, limit),
+      cardRunIds: groupRuns.map((run) => run.id),
+    };
+  });
 }
 
 export function logRunTagsMatchNodePath(
