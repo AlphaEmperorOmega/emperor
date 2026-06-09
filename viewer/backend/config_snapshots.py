@@ -8,11 +8,12 @@ serialized to JSON on disk, one file per snapshot under ``<root>/<model>/<id>``.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
+
+from viewer.backend.storage.local_files import read_json_object, write_json_atomic
 
 SNAPSHOT_FILENAME_SUFFIX = ".json"
 
@@ -78,13 +79,7 @@ class FileSystemConfigSnapshotStore:
 
     def save(self, snapshot: ConfigSnapshotRecord) -> None:
         snapshot_path = self._snapshot_path(snapshot.model, snapshot.id)
-        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = snapshot_path.with_name(f"{snapshot.id}.tmp")
-        temporary_path.write_text(
-            json.dumps(_record_to_metadata(snapshot), indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        temporary_path.replace(snapshot_path)
+        write_json_atomic(snapshot_path, _record_to_metadata(snapshot))
 
     def get(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
         snapshot_path = self._find_snapshot_path(snapshot_id)
@@ -116,14 +111,16 @@ class FileSystemConfigSnapshotStore:
     def _find_snapshot_path(self, snapshot_id: str) -> Path | None:
         if not self.root.exists():
             return None
-        matches = sorted(self.root.glob(f"*/{snapshot_id}{SNAPSHOT_FILENAME_SUFFIX}"))
+        matches = sorted(self.root.rglob(f"{snapshot_id}{SNAPSHOT_FILENAME_SUFFIX}"))
         return matches[0] if matches else None
 
     def _read_metadata(self, snapshot_path: Path) -> ConfigSnapshotRecord | None:
+        payload = read_json_object(snapshot_path)
+        if payload is None:
+            return None
         try:
-            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
             return _record_from_metadata(payload)
-        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError):
             return None
 
 

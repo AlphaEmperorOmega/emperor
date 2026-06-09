@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
+
+from viewer.backend.storage.local_files import read_json_object, write_json_atomic
 
 METADATA_FILENAME = "metadata.json"
 
@@ -91,13 +92,7 @@ class FileSystemTrainingJobStore:
     def save(self, job: TrainingJobRecord) -> None:
         self._jobs[job.id] = job
         metadata_path = self._metadata_path(job.root)
-        metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = metadata_path.with_name(f"{METADATA_FILENAME}.tmp")
-        temporary_path.write_text(
-            json.dumps(_record_to_metadata(job), indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
-        temporary_path.replace(metadata_path)
+        write_json_atomic(metadata_path, _record_to_metadata(job))
 
     def get(self, job_id: str) -> TrainingJobRecord | None:
         if job_id in self._jobs:
@@ -122,10 +117,12 @@ class FileSystemTrainingJobStore:
         return Path(job_root) / METADATA_FILENAME
 
     def _read_metadata(self, metadata_path: Path) -> TrainingJobRecord | None:
+        payload = read_json_object(metadata_path)
+        if payload is None:
+            return None
         try:
-            payload = json.loads(metadata_path.read_text(encoding="utf-8"))
             return _record_from_metadata(payload, metadata_path)
-        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError):
             return None
 
 
