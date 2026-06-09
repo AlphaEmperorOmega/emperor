@@ -1,4 +1,4 @@
-# Generated from models.linear.config by scaffold_wrapper_model.py.
+# Generated from models.linears.linear.config by scaffold_wrapper_model.py.
 from models.trainer_config import *
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
@@ -6,8 +6,11 @@ from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.experiments.monitors import MonitorOption
 from emperor.linears.core.monitor import LinearMonitorCallback
+from emperor.base.layer.monitor import LayerControllerMonitorCallback
 from emperor.neuron.core.monitor import NeuronClusterMonitorCallback
+from emperor.neuron.core.optimizer_sync import NeuronClusterOptimizerSyncCallback
 from emperor.halting.core.monitor import HaltingMonitorCallback
+from emperor.memory.core.monitor import MemoryMonitorCallback
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.base.options import (
     ActivationOptions,
@@ -25,18 +28,32 @@ MONITOR_OPTIONS: list[MonitorOption] = [
         name="linear",
         label="Linear layers",
         description=(
-            "Logs activation, parameter, and gradient stats for Emperor linear layers."
+            "Logs activation, parameter, gradient, weight-conditioning "
+            "(spectral norm / condition number / effective rank), and dead-feature "
+            "stats for Emperor linear layers."
         ),
         kinds=["scalar"],
         callback_factory=lambda: LinearMonitorCallback(log_every_n_steps=100),
     ),
     MonitorOption(
+        name="layer-controller",
+        label="Layer controllers",
+        description=(
+            "Logs Layer gate, residual, dropout, layer-norm, and activation "
+            "controller statistics without duplicating memory metrics."
+        ),
+        kinds=["scalar"],
+        callback_factory=lambda: LayerControllerMonitorCallback(log_every_n_steps=100),
+    ),
+    MonitorOption(
         name="neuron_cluster",
         label="Neuron cluster growth",
         description=(
-            "Logs neuron count, capacity, and fill fraction as the cluster grows."
+            "Logs cluster growth (count, capacity, fill, growth pressure) plus "
+            "routing dynamics: route depth, escape/halt fractions, entry-routing "
+            "entropy, survival curve, and per-neuron utilization heatmap."
         ),
-        kinds=["scalar"],
+        kinds=["scalar", "histogram", "image"],
         callback_factory=lambda: NeuronClusterMonitorCallback(log_every_n_steps=100),
         default_enabled=True,
     ),
@@ -44,8 +61,9 @@ MONITOR_OPTIONS: list[MonitorOption] = [
         name="halting",
         label="Halting (adaptive compute)",
         description=(
-            "Logs recurrence depth, halting fraction, ponder loss, and a survival "
-            "heatmap for stick-breaking / soft halting modules."
+            "Logs recurrence depth, halting fraction, max-steps saturation, ponder "
+            "loss, plus survival heatmap and ponder-cost histogram for "
+            "stick-breaking / soft halting modules."
         ),
         kinds=["scalar", "histogram", "image"],
         callback_factory=lambda: HaltingMonitorCallback(log_every_n_steps=100),
@@ -60,6 +78,7 @@ CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 # Callback
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
+CALLBACK_NEURON_CLUSTER_OPTIMIZER_SYNC = NeuronClusterOptimizerSyncCallback()
 
 # Model
 INPUT_DIM: int = 28**2
@@ -68,7 +87,7 @@ BIAS_FLAG: bool = True
 
 #########################################################################
 # LAYER STACK OPTIONS
-HIDDEN_DIM: int = 256
+HIDDEN_DIM: int = 64
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
@@ -95,7 +114,7 @@ GATE_BIAS_FLAG: bool = True
 # Halting options
 # HALTING OPTIONS
 # If `HALTING_FLAG` is False, the halting-specific parameters below are ignored.
-HALTING_FLAG: bool = False
+HALTING_FLAG: bool = True
 HALTING_THRESHOLD: float = 0.99
 HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -154,13 +173,13 @@ from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffse
 CLUSTER_X_AXIS_TOTAL_NEURONS: int = 10
 CLUSTER_Y_AXIS_TOTAL_NEURONS: int = 10
 CLUSTER_Z_AXIS_TOTAL_NEURONS: int = 1
-CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS: int = 4
+CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS: int = 2
 CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS: int = 2
 CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS: int = 1
 CLUSTER_MAX_STEPS: int = 1
 CLUSTER_GROWTH_THRESHOLD: int | None = None
 
-TERMINAL_XY_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
+TERMINAL_XY_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.TWO
 TERMINAL_Z_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
 TERMINAL_Z_AXIS_OFFSET: TerminalZAxisOffsetOptions = TerminalZAxisOffsetOptions.ZERO
 TERMINAL_TOP_K: int = 1
