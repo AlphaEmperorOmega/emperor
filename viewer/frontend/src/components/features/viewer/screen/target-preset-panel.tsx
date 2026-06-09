@@ -9,13 +9,20 @@ import {
 import { PresetDescriptionSubmenu } from "@/components/features/viewer/screen/preset-description-submenu";
 import { TargetSelectorSection } from "@/components/features/viewer/screen/target-selector-section";
 import { useTargetConfig } from "@/components/features/viewer/providers/viewer-providers";
+import {
+  modelNameForId,
+  modelsForType,
+  modelTypeOptions as createModelTypeOptions,
+} from "@/lib/selection";
 
 export function TargetPresetPanel() {
   const {
+    selectedModelType,
     selectedModel,
     selectedPreset,
     selectedPresetMeta,
     selectedDatasets,
+    selectModelType: onSelectModelType,
     selectModel: onSelectModel,
     selectPreset: onSelectPreset,
     toggleDataset: onToggleDataset,
@@ -40,7 +47,11 @@ export function TargetPresetPanel() {
   const [isDatasetSelectorOpen, setIsDatasetSelectorOpen] = useState(false);
   const hasPresetDescription = Boolean(selectedPresetDescription?.trim());
   const datasetCount = `${selectedDatasets.length} / ${datasets.length}`;
-  const modelOptions = models.map((model) => ({ value: model, label: model }));
+  const modelTypeOptions = createModelTypeOptions(models);
+  const modelOptions = modelsForType(models, selectedModelType).map((model) => ({
+    value: model,
+    label: modelNameForId(model),
+  }));
   const presetOptions = presets.map((preset) => ({
     value: preset.name,
     label: preset.name,
@@ -141,8 +152,10 @@ export function TargetPresetPanel() {
     <>
       <TargetSelectorSection
         presetCount={presets.length}
+        selectedModelType={selectedModelType}
         selectedModel={selectedModel}
         selectedPreset={selectedPreset}
+        modelTypeOptions={modelTypeOptions}
         modelOptions={modelOptions}
         presetOptions={presetOptions}
         presetSelectId={presetSelectId}
@@ -150,6 +163,7 @@ export function TargetPresetPanel() {
         presetDescriptionTriggerRef={presetDescriptionTriggerRef}
         isPresetDescriptionOpen={isPresetDescriptionOpen}
         hasPresetDescription={hasPresetDescription}
+        onSelectModelType={onSelectModelType}
         onSelectModel={onSelectModel}
         onSelectPreset={onSelectPreset}
         onTogglePresetDescription={togglePresetDescription}

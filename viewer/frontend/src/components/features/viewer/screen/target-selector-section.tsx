@@ -11,8 +11,10 @@ type SelectOption = {
 
 export function TargetSelectorSection({
   presetCount,
+  selectedModelType,
   selectedModel,
   selectedPreset,
+  modelTypeOptions,
   modelOptions,
   presetOptions,
   presetSelectId,
@@ -20,13 +22,16 @@ export function TargetSelectorSection({
   presetDescriptionTriggerRef,
   isPresetDescriptionOpen,
   hasPresetDescription,
+  onSelectModelType,
   onSelectModel,
   onSelectPreset,
   onTogglePresetDescription,
 }: {
   presetCount: number;
+  selectedModelType: string;
   selectedModel: string;
   selectedPreset: string;
+  modelTypeOptions: SelectOption[];
   modelOptions: SelectOption[];
   presetOptions: SelectOption[];
   presetSelectId: string;
@@ -34,6 +39,7 @@ export function TargetSelectorSection({
   presetDescriptionTriggerRef: RefObject<HTMLButtonElement | null>;
   isPresetDescriptionOpen: boolean;
   hasPresetDescription: boolean;
+  onSelectModelType: (modelType: string) => void;
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
   onTogglePresetDescription: () => void;
@@ -46,6 +52,18 @@ export function TargetSelectorSection({
           title="Target"
         />
         <span className="text-xs font-medium text-ink-dim">{presetCount} presets</span>
+      </div>
+      <div className="grid gap-1.5">
+        <span className="text-xs font-semibold tracking-[0.02em] text-ink-dim">
+          Model type
+        </span>
+        <SelectOnlyDropdown
+          label="model type"
+          value={selectedModelType}
+          options={modelTypeOptions}
+          onChange={onSelectModelType}
+          placeholder="Select type"
+        />
       </div>
       <div className="grid gap-1.5">
         <span className="text-xs font-semibold tracking-[0.02em] text-ink-dim">
