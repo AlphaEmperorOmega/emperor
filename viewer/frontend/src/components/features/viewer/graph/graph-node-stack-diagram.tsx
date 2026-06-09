@@ -3,7 +3,7 @@ import {
   STACK_DIAGRAM_CELL_WIDTH,
   isDenseStackDiagram,
   stackDiagramCellMetrics,
-} from "@/components/features/viewer/graph-node-diagram-layout";
+} from "@/components/features/viewer/graph/graph-node-diagram-layout";
 import { GraphChip } from "@/components/features/viewer/graph/graph-chip";
 import { cn } from "@/lib/utils";
 

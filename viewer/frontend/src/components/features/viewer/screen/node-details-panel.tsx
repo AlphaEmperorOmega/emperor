@@ -1,4 +1,4 @@
-import { SelectedNodeDetails } from "@/components/features/viewer/selected-node-details";
+import { SelectedNodeDetails } from "@/components/features/viewer/graph/selected-node-details";
 import { MetricCard } from "@/components/features/viewer/shared/metric-card";
 import { SidePanel } from "@/components/features/viewer/shared/side-panel";
 import {
@@ -16,6 +16,7 @@ export function NodeDetailsPanel() {
     historicalMonitorRuns: historicalRuns,
     selectedHistoricalExperiment: historicalExperiment,
     selectedHistoricalDataset: historicalDataset,
+    selectedHistoricalRunPreset: historicalPreset,
     selectedLogRunHasMonitorTags: historicalRunHasMonitorTags,
     logRunTagsQuery,
   } = useHistoricalRuns();
@@ -44,6 +45,7 @@ export function NodeDetailsPanel() {
         historicalRuns={historicalRuns}
         historicalExperiment={historicalExperiment}
         historicalDataset={historicalDataset}
+        historicalPreset={historicalPreset}
         historicalRunHasMonitorTags={historicalRunHasMonitorTags}
         historicalRunTagsLoading={historicalRunTagsLoading}
       />

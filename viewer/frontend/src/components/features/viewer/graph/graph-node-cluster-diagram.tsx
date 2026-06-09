@@ -8,7 +8,7 @@ import {
   CLUSTER_DIAGRAM_WIDTH,
   clusterDiagramGridHeight,
   clusterDiagramPlaneWidth,
-} from "@/components/features/viewer/graph-node-diagram-layout";
+} from "@/components/features/viewer/graph/graph-node-diagram-layout";
 import { GraphChip } from "@/components/features/viewer/graph/graph-chip";
 import { cn } from "@/lib/utils";
 

@@ -2,8 +2,8 @@ import { GitBranch, RefreshCw } from "lucide-react";
 import { Background, Controls, Panel, ReactFlow } from "@xyflow/react";
 import { EmptyState } from "@/components/features/viewer/empty-state";
 import { ErrorPanel } from "@/components/features/viewer/error-panel";
-import { GraphLocationsCard } from "@/components/features/viewer/graph-locations-card";
-import { nodeTypes } from "@/components/features/viewer/graph-node-view";
+import { GraphLocationsCard } from "@/components/features/viewer/graph/graph-locations-card";
+import { nodeTypes } from "@/components/features/viewer/graph/graph-node-view";
 import { StatusPill } from "@/components/features/viewer/status-pill";
 import { useGraphView } from "@/components/features/viewer/providers/viewer-providers";
 import { errorMessage } from "@/lib/utils";
@@ -22,6 +22,13 @@ export function PreviewPanel() {
   const isPreviewBuilding = previewInspection.isBuilding;
   const isPreviewError = previewInspection.isError;
   const previewError = previewInspection.error;
+  const hasSelectedClusterNode = Boolean(
+    selectedNodeId &&
+      graphForDetail?.nodes.some(
+        (node) => node.id === selectedNodeId && node.typeName === "NeuronCluster",
+      ),
+  );
+
   return (
     <div className="relative h-full min-h-0 overflow-hidden bg-transparent">
       {isPreviewError && (
@@ -57,18 +64,21 @@ export function PreviewPanel() {
         >
           <Background gap={26} color="rgba(255,255,255,0.05)" />
           <Controls showInteractive={false} position="bottom-left" />
-          <Panel
-            position="bottom-right"
-            className="nodrag nopan hidden w-[312px] xl:block"
-            style={{ right: 28, bottom: 24 }}
-          >
-            <GraphLocationsCard
-              graph={graphForDetail}
-              selectedNodeId={selectedNodeId}
-              onRevealNode={onRevealNode}
-              className="max-h-[42vh]"
-            />
-          </Panel>
+          {hasSelectedClusterNode && (
+            <Panel
+              position="bottom-right"
+              className="nodrag nopan hidden xl:block"
+              style={{ right: 28, bottom: 24 }}
+            >
+              <GraphLocationsCard
+                key={selectedNodeId}
+                graph={graphForDetail}
+                selectedNodeId={selectedNodeId}
+                onRevealNode={onRevealNode}
+                className="max-h-[42vh]"
+              />
+            </Panel>
+          )}
         </ReactFlow>
         {!graph && !isPreviewBuilding && !isPreviewError && (
           <EmptyState

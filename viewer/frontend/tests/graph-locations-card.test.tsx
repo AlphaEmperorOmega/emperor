@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { GraphLocationsCard } from "@/components/features/viewer/graph-locations-card";
+import { GraphLocationsCard } from "@/components/features/viewer/graph/graph-locations-card";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 
 function graphNode(id: string, overrides: Partial<GraphNode> = {}): GraphNode {
@@ -60,14 +60,34 @@ function locationGraph(): InspectResponse {
 }
 
 describe("GraphLocationsCard", () => {
-  it("renders cluster coordinates and counts", () => {
+  it("renders a collapsed icon button by default for a selected cluster", () => {
     render(
       <GraphLocationsCard
         graph={locationGraph()}
-        selectedNodeId={null}
+        selectedNodeId="neuron_cluster"
         onRevealNode={() => {}}
       />,
     );
+
+    expect(
+      screen.getByRole("button", { name: /show cluster locations/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: /neuron_cluster locations/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the selected cluster locations card when the icon is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <GraphLocationsCard
+        graph={locationGraph()}
+        selectedNodeId="neuron_cluster"
+        onRevealNode={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /show cluster locations/i }));
 
     const cluster = screen.getByRole("group", { name: /neuron_cluster locations/i });
     const kindBadge = within(cluster)
@@ -94,10 +114,48 @@ describe("GraphLocationsCard", () => {
       }),
     ).toBeInTheDocument();
     expect(within(cluster).getByText("(2, 1, 1)")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", {
+        name: /neuron_cluster\.terminal locations/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
-  it("renders terminal reach position and reachable coordinates", () => {
+  it("collapses the selected cluster locations card from the header control", async () => {
+    const user = userEvent.setup();
     render(
+      <GraphLocationsCard
+        graph={locationGraph()}
+        selectedNodeId="neuron_cluster"
+        onRevealNode={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /show cluster locations/i }));
+    await user.click(screen.getByRole("button", { name: /hide cluster locations/i }));
+
+    expect(
+      screen.getByRole("button", { name: /show cluster locations/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: /neuron_cluster locations/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders nothing for a selected non-cluster node", () => {
+    const { container } = render(
+      <GraphLocationsCard
+        graph={locationGraph()}
+        selectedNodeId="terminal"
+        onRevealNode={() => {}}
+      />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing without a selected node", () => {
+    const { container } = render(
       <GraphLocationsCard
         graph={locationGraph()}
         selectedNodeId={null}
@@ -105,38 +163,38 @@ describe("GraphLocationsCard", () => {
       />,
     );
 
-    const terminal = screen.getByRole("group", {
-      name: /neuron_cluster\.terminal locations/i,
-    });
-    expect(within(terminal).getByText("2 connections")).toBeInTheDocument();
-    expect(
-      within(terminal).getByRole("button", {
-        name: /terminal position \(2, 2, 1\)/i,
-      }),
-    ).toBeInTheDocument();
-    expect(
-      within(terminal).getByRole("button", {
-        name: /reachable coordinate \(3, 2, 1\)/i,
-      }),
-    ).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows an empty state when no locations exist", () => {
-    render(
+  it("renders nothing for terminal-reach-only data", () => {
+    const { container } = render(
       <GraphLocationsCard
         graph={{
           model: "linear",
           preset: "baseline",
           parameterCount: 0,
-          nodes: [graphNode("main_model", { typeName: "Sequential" })],
+          nodes: [
+            graphNode("terminal", {
+              label: "Terminal",
+              typeName: "Terminal",
+              path: "terminal",
+              details: {
+                terminalReach: {
+                  position: [2, 2, 1],
+                  connections: [[3, 2, 1]],
+                  total: 1,
+                },
+              },
+            }),
+          ],
           edges: [],
         }}
-        selectedNodeId={null}
+        selectedNodeId="terminal"
         onRevealNode={() => {}}
       />,
     );
 
-    expect(screen.getByText("No analysed locations found.")).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("reveals the owning node when a coordinate is clicked", async () => {
@@ -145,11 +203,12 @@ describe("GraphLocationsCard", () => {
     render(
       <GraphLocationsCard
         graph={locationGraph()}
-        selectedNodeId={null}
+        selectedNodeId="neuron_cluster"
         onRevealNode={onRevealNode}
       />,
     );
 
+    await user.click(screen.getByRole("button", { name: /show cluster locations/i }));
     await user.click(
       screen.getByRole("button", {
         name: /reveal neuron_cluster coordinate \(1, 2, 1\)/i,

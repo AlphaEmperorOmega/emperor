@@ -19,6 +19,12 @@ export const IMPLEMENTED_FEATURES: ImplementedFeature[] = [
     description: "Lists inspectable model packages for the target selector.",
   },
   {
+    id: "model-type-filtering",
+    category: "Backend API and discovery",
+    title: "Model type filtering",
+    description: "Groups public model IDs by family and filters target model choices.",
+  },
+  {
     id: "preset-discovery",
     category: "Backend API and discovery",
     title: "Preset discovery",
@@ -83,6 +89,12 @@ export const IMPLEMENTED_FEATURES: ImplementedFeature[] = [
     category: "Frontend state and config",
     title: "Config summary and full config dialog",
     description: "Shows config sections, editable fields, override state, and training commands.",
+  },
+  {
+    id: "model-preset-comparison",
+    category: "Frontend state and config",
+    title: "Model and preset comparison",
+    description: "Compares selected model/preset targets across graph metrics, config values, datasets, and monitors.",
   },
   {
     id: "graph-canvas-modes-scopes-layout",

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { SelectedNodeDetailsView } from "@/components/features/viewer/selected-node-details-view";
+import { SelectedNodeDetailsView } from "@/components/features/viewer/graph/selected-node-details-view";
 import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
 import { type GraphNode, type LogRun, type TrainingJob } from "@/lib/api";
 import { type LinearMonitorComparisonCandidateGroups } from "@/lib/graph/monitor-targets";
@@ -24,6 +24,7 @@ export function SelectedNodeDetails({
   historicalRuns = [],
   historicalExperiment = "",
   historicalDataset = "",
+  historicalPreset = "",
   historicalRunHasMonitorTags = false,
   historicalRunTagsLoading = false,
 }: {
@@ -34,6 +35,7 @@ export function SelectedNodeDetails({
   historicalRuns?: LogRun[];
   historicalExperiment?: string;
   historicalDataset?: string;
+  historicalPreset?: string;
   historicalRunHasMonitorTags?: boolean;
   historicalRunTagsLoading?: boolean;
 }) {
@@ -58,6 +60,7 @@ export function SelectedNodeDetails({
           runs: historicalRuns,
           experiment: historicalExperiment,
           dataset: historicalDataset,
+          preset: historicalPreset,
         }
       : undefined;
   const monitorButtonTitle = !monitorNode

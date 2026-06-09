@@ -16,6 +16,7 @@ export function GraphNodeHeader({
   simpleParameterText,
   simpleDimsText,
   expansionButton,
+  parameterIndicators,
   monitorButton,
 }: {
   nodeId: string;
@@ -27,6 +28,7 @@ export function GraphNodeHeader({
   simpleParameterText?: string;
   simpleDimsText?: string;
   expansionButton: ReactNode;
+  parameterIndicators: ReactNode;
   monitorButton: ReactNode;
 }) {
   const isSimpleMode = graphDetailMode === "simple";
@@ -49,6 +51,7 @@ export function GraphNodeHeader({
             />
           </div>
         </div>
+        {parameterIndicators}
         {monitorButton}
       </div>
     );
@@ -72,6 +75,7 @@ export function GraphNodeHeader({
             />
           )}
         </div>
+        {parameterIndicators}
         {monitorButton}
       </div>
       {!isBasicMode && hasGraphBadges && (

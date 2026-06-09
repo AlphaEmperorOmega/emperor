@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { nodeTypes } from "@/components/features/viewer/graph-node-view";
-import { SelectedNodeDetails } from "@/components/features/viewer/selected-node-details";
+import { nodeTypes } from "@/components/features/viewer/graph/graph-node-view";
+import { SelectedNodeDetails } from "@/components/features/viewer/graph/selected-node-details";
 import type { GraphNode } from "@/lib/api";
 import type { ViewerNodeData } from "@/lib/graph";
 import {
@@ -11,7 +11,7 @@ import {
   CLUSTER_DIAGRAM_CELL_GAP,
   SIMPLE_NODE_HEIGHT,
 } from "@/lib/graph/constants";
-import { EXPERT_DIAGRAM_SAMPLER_WIDTH } from "@/components/features/viewer/graph-node-diagram-layout";
+import { EXPERT_DIAGRAM_SAMPLER_WIDTH } from "@/components/features/viewer/graph/graph-node-diagram-layout";
 
 vi.mock("@xyflow/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@xyflow/react")>();
@@ -160,6 +160,23 @@ describe("GraphNodeView", () => {
     renderGraphNode({
       canOpenMonitor: true,
       onOpenMonitor: vi.fn(),
+      parameterActivity: {
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "updated",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          metric: "main_model.0.model/weights/relative_delta_norm",
+          lastStep: 8,
+          observedPoints: 2,
+        },
+        bias: {
+          status: "missing",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          observedPoints: 0,
+        },
+      },
     });
 
     const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
@@ -169,9 +186,101 @@ describe("GraphNodeView", () => {
     const monitorButton = within(titleRow).getByRole("button", {
       name: /^open monitor charts for main_model\.0$/i,
     });
+    const indicators = within(titleRow).getByTestId("graph-parameter-indicators");
 
     expect(titleRow.firstElementChild).toBe(expandButton);
+    expect(indicators.compareDocumentPosition(monitorButton) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
     expect(titleRow.lastElementChild).toBe(monitorButton);
+  });
+
+  it("renders weight and bias activity indicators with hover pills", () => {
+    const { container } = renderGraphNode({
+      parameterActivity: {
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "updated",
+          source: "historical",
+          sourceLabel: "2 historical runs",
+          metric: "main_model.0.model/weights/relative_delta_norm",
+          lastStep: 8,
+          observedPoints: 3,
+          updatedRuns: 2,
+          unchangedRuns: 0,
+          missingRuns: 0,
+          unknownRuns: 0,
+          totalRuns: 2,
+        },
+        bias: {
+          status: "mixed",
+          source: "historical",
+          sourceLabel: "2 historical runs",
+          metric: "main_model.0.model/bias/delta_norm",
+          lastStep: 7,
+          observedPoints: 2,
+          updatedRuns: 1,
+          unchangedRuns: 1,
+          missingRuns: 0,
+          unknownRuns: 0,
+          totalRuns: 2,
+        },
+      },
+    });
+
+    const weights = screen.getByLabelText("Weights parameter activity: updated");
+    const bias = screen.getByLabelText("Bias parameter activity: mixed");
+    expect(weights).toHaveClass("border-ok/35", "bg-ok/10", "text-ok");
+    expect(bias).toHaveClass("border-amber/40", "bg-amber/[0.12]", "text-amber");
+
+    fireEvent.focus(weights);
+
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "This parameter was logged and at least one sampled point showed update or value-change evidence.",
+    );
+
+    fireEvent.blur(weights);
+    fireEvent.focus(bias);
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(container).not.toContainElement(tooltip);
+    expect(tooltip).toHaveClass("fixed");
+    expect(tooltip).toHaveTextContent("Bias");
+    expect(tooltip).toHaveTextContent(
+      "At least one historical run showed update evidence, but at least one other run did not.",
+    );
+    expect(tooltip).toHaveTextContent("2 historical runs");
+    expect(tooltip).not.toHaveTextContent("main_model.0.model/bias/delta_norm");
+    expect(tooltip).toHaveTextContent(
+      "1 updated / 1 unchanged / 0 missing / 0 unknown",
+    );
+  });
+
+  it("does not activate the node when activity indicators are clicked", () => {
+    const onActivateNode = vi.fn();
+    renderGraphNode({
+      onActivateNode,
+      parameterActivity: {
+        targetPath: "main_model.0.model",
+        weights: {
+          status: "unchanged",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          metric: "main_model.0.model/weights/delta_norm",
+          lastStep: 4,
+          observedPoints: 1,
+        },
+        bias: {
+          status: "unknown",
+          source: "active-job",
+          sourceLabel: "active job job-1",
+          observedPoints: 0,
+        },
+      },
+    });
+
+    fireEvent.click(screen.getByLabelText("Weights parameter activity: unchanged"));
+
+    expect(onActivateNode).not.toHaveBeenCalled();
   });
 
   it("opens monitor charts without activating or expanding the node", () => {

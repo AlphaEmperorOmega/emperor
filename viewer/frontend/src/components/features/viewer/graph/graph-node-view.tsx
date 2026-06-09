@@ -4,13 +4,14 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { GraphIconButton } from "@/components/features/viewer/graph/graph-icon-button";
 import { GraphNodeDetails } from "@/components/features/viewer/graph/graph-node-details";
 import { GraphNodeHeader } from "@/components/features/viewer/graph/graph-node-header";
-import { GraphNodeChildSummaries } from "@/components/features/viewer/graph-node-child-summaries";
+import { GraphParameterIndicators } from "@/components/features/viewer/graph/graph-parameter-indicators";
+import { GraphNodeChildSummaries } from "@/components/features/viewer/graph/graph-node-child-summaries";
 import {
   ClusterDiagramView,
   ExpertDiagramView,
   StackDiagramView,
-} from "@/components/features/viewer/graph-node-diagrams";
-import { GraphNodeParameterShapes } from "@/components/features/viewer/graph-node-parameter-shapes";
+} from "@/components/features/viewer/graph/graph-node-diagrams";
+import { GraphNodeParameterShapes } from "@/components/features/viewer/graph/graph-node-parameter-shapes";
 import {
   type ViewerNodeData,
   nodeDimsText,
@@ -61,6 +62,9 @@ const GraphNodeView = memo(function GraphNodeView({
       icon={<LineChart className="h-3.5 w-3.5" aria-hidden />}
     />
   ) : null;
+  const parameterIndicators = (
+    <GraphParameterIndicators activity={data.parameterActivity} />
+  );
 
   return (
     <div
@@ -93,6 +97,7 @@ const GraphNodeView = memo(function GraphNodeView({
         simpleParameterText={simpleParamText}
         simpleDimsText={simpleDimsText}
         expansionButton={expansionButton}
+        parameterIndicators={parameterIndicators}
         monitorButton={monitorButton}
       />
       {!isSimpleMode && parameterShapes.length > 0 && (
