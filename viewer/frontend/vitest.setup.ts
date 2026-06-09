@@ -7,11 +7,17 @@ class ResizeObserverMock {
   disconnect() {}
 }
 
-Object.defineProperty(window, "ResizeObserver", {
-  writable: true,
-  configurable: true,
-  value: ResizeObserverMock,
-});
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "ResizeObserver", {
+    configurable: true,
+    writable: true,
+    value: ResizeObserverMock,
+  });
+}
+
+vi.mock("@/features/viewer/components/charts/echart", () => ({
+  EChart: () => null,
+}));
 
 // jsdom has no canvas implementation; ECharts needs a 2D context to initialise.
 // Component tests mock the <EChart> wrapper, so this stub only guards against a
@@ -57,6 +63,8 @@ const canvasContextStub = {
   createImageData: () => ({ data: [] }),
 };
 
-HTMLCanvasElement.prototype.getContext = vi.fn(
-  () => canvasContextStub,
-) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+if (typeof HTMLCanvasElement !== "undefined") {
+  HTMLCanvasElement.prototype.getContext = vi.fn(
+    () => canvasContextStub,
+  ) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+}

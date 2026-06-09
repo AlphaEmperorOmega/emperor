@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { type ReactNode } from "react";
-import { StatusCard } from "@/components/features/viewer/shared/status-card";
+import { StatusCard } from "@/features/viewer/components/shared/status-card";
+import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
 
 type FullPageStatusProps = {
   title: string;
@@ -18,7 +19,7 @@ export function FullPageStatus({ title, detail, icon, action }: FullPageStatusPr
 export function FullPageLoading() {
   return (
     <FullPageStatus
-      title="Loading viewer"
+      title={viewerStatusCopy.loading.viewer}
       icon={<Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
     />
   );

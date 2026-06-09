@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { GraphLocationsCard } from "@/components/features/viewer/graph/graph-locations-card";
+import { GraphLocationsCard } from "@/features/viewer/components/graph/graph-locations-card";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 
 function graphNode(id: string, overrides: Partial<GraphNode> = {}): GraphNode {
@@ -139,6 +139,56 @@ describe("GraphLocationsCard", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("group", { name: /neuron_cluster locations/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("collapses when the selected cluster node changes", async () => {
+    const user = userEvent.setup();
+    const graph = locationGraph();
+    const graphWithTwoClusters: InspectResponse = {
+      ...graph,
+      nodes: [
+        ...graph.nodes,
+        graphNode("other_cluster", {
+          label: "Other Cluster",
+          typeName: "NeuronCluster",
+          path: "other_cluster",
+          details: {
+            cluster: {
+              capacity: [2, 1, 1],
+              instantiated: 1,
+              coordinates: [[1, 1, 1]],
+            },
+          },
+        }),
+      ],
+    };
+    const { rerender } = render(
+      <GraphLocationsCard
+        graph={graphWithTwoClusters}
+        selectedNodeId="neuron_cluster"
+        onRevealNode={() => {}}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /show cluster locations/i }));
+    expect(
+      screen.getByRole("group", { name: /neuron_cluster locations/i }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <GraphLocationsCard
+        graph={graphWithTwoClusters}
+        selectedNodeId="other_cluster"
+        onRevealNode={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /show cluster locations/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: /other_cluster locations/i }),
     ).not.toBeInTheDocument();
   });
 

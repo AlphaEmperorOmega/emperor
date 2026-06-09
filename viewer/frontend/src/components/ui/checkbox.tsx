@@ -1,5 +1,10 @@
 import { type InputHTMLAttributes, forwardRef } from "react";
 import { Check } from "lucide-react";
+import {
+  checkboxCheckedClassName,
+  checkboxIndicatorClassName,
+  checkboxUncheckedClassName,
+} from "@/components/ui/control-styles";
 import { cn } from "@/lib/utils";
 
 type CheckboxProps = Omit<
@@ -27,10 +32,10 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
       />
       <span
         className={cn(
-          "grid h-[19px] w-[19px] place-items-center rounded-md border-[1.6px] transition",
+          checkboxIndicatorClassName,
           checked
-            ? "border-transparent bg-grad shadow-[0_3px_10px_-3px_rgba(124,109,255,0.8)]"
-            : "border-white/20 bg-transparent",
+            ? checkboxCheckedClassName
+            : checkboxUncheckedClassName,
           className,
         )}
         aria-hidden

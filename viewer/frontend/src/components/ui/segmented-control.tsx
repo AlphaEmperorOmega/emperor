@@ -9,7 +9,7 @@ export function SegmentedControl({ className, ...props }: HTMLAttributes<HTMLDiv
     <div
       role="tablist"
       className={cn(
-        "inline-flex rounded-[10px] border border-line bg-white/[0.03] p-[3px]",
+        "inline-flex rounded-control border border-line bg-control-subtle p-[3px]",
         className,
       )}
       {...props}

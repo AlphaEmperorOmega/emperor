@@ -3,6 +3,7 @@ import {
   type ReactNode,
   forwardRef,
 } from "react";
+import { iconButtonClassName } from "@/components/ui/control-styles";
 import { cn } from "@/lib/utils";
 
 type IconButtonSize = "sm" | "md";
@@ -19,16 +20,17 @@ export type IconButtonProps = Omit<
 };
 
 const sizes: Record<IconButtonSize, string> = {
-  sm: "h-8 w-8 rounded-[8px]",
-  md: "h-9 w-9 rounded-[10px]",
+  sm: "h-8 w-8 rounded-control-md",
+  md: "h-9 w-9 rounded-control",
 };
 
 const variants: Record<IconButtonVariant, string> = {
-  ghost: "border-transparent text-ink-faint hover:bg-white/[0.055] hover:text-ink",
+  ghost:
+    "border-transparent text-ink-faint hover:bg-control-active hover:text-ink disabled:hover:bg-transparent disabled:hover:text-ink-faint",
   edge:
-    "border-line bg-white/[0.035] text-ink-faint hover:bg-white/[0.07] hover:text-ink",
+    "border-line bg-control text-ink-faint hover:bg-control-hover hover:text-ink disabled:hover:border-line disabled:hover:bg-control disabled:hover:text-ink-faint",
   danger:
-    "border-transparent text-ink-faint hover:border-danger-line hover:bg-danger-soft hover:text-[#fda4af]",
+    "border-transparent text-ink-faint hover:border-danger-line hover:bg-danger-soft hover:text-danger-text disabled:hover:border-transparent disabled:hover:bg-transparent disabled:hover:text-ink-faint",
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
@@ -50,7 +52,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       type={type}
       aria-label={label}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50",
+        iconButtonClassName,
         sizes[size],
         variants[variant],
         className,

@@ -1,17 +1,103 @@
+import {
+  type TrainingRunPlan,
+  type TrainingSearchCreateInput,
+} from "@/lib/api";
+import { type OverrideValues } from "@/lib/config";
+
 type StringList = readonly string[];
+type NormalizedQueryObject = {
+  readonly [key: string]: NormalizedQueryValue;
+};
+type NormalizedQueryValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly NormalizedQueryValue[]
+  | NormalizedQueryObject;
+
+export type TrainingRunPlanQueryKeyInput = {
+  model: string;
+  preset: string;
+  presets: StringList;
+  datasets: StringList;
+  overrides: OverrideValues;
+  logFolder: string;
+  search?: TrainingSearchCreateInput;
+  submittedRunPlan?: TrainingRunPlan;
+};
+
+function normalizedStringSet(values: StringList) {
+  return Array.from(new Set(values)).sort();
+}
+
+function normalizedQueryValue(value: unknown): NormalizedQueryValue {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizedQueryValue(item));
+  }
+  if (typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+        .map(([entryKey, entryValue]) => [
+          entryKey,
+          normalizedQueryValue(entryValue),
+        ]),
+    );
+  }
+  return null;
+}
+
+function trainingRunPlanInputKey({
+  model,
+  preset,
+  presets,
+  datasets,
+  overrides,
+  logFolder,
+  search,
+  submittedRunPlan,
+}: TrainingRunPlanQueryKeyInput): NormalizedQueryObject {
+  return {
+    datasets: [...datasets],
+    logFolder,
+    model,
+    overrides: normalizedQueryValue(overrides),
+    preset,
+    presets: [...presets],
+    search: normalizedQueryValue(search ?? null),
+    submittedRunPlan: normalizedQueryValue(submittedRunPlan ?? null),
+  };
+}
 
 export const logQueryKeys = {
   runs: () => ["log-runs"] as const,
   experiments: () => ["log-experiments"] as const,
   tags: () => ["log-tags"] as const,
-  tagsForRuns: (runIds: StringList) => ["log-tags", runIds] as const,
+  tagsForRuns: (runIds: StringList) =>
+    ["log-tags", normalizedStringSet(runIds)] as const,
   filteredHistoricalRunTags: (runIds: StringList) =>
-    ["log-tags", "filtered-historical-runs", runIds] as const,
+    ["log-tags", "filtered-historical-runs", normalizedStringSet(runIds)] as const,
   modelRunTags: (runIds: StringList) =>
-    ["log-tags", "model-runs", runIds] as const,
+    ["log-tags", "model-runs", normalizedStringSet(runIds)] as const,
   scalars: () => ["log-scalars"] as const,
   scalarsForRunsAndTags: (runIds: StringList, tags: StringList) =>
-    ["log-scalars", runIds, tags] as const,
+    [
+      "log-scalars",
+      normalizedStringSet(runIds),
+      normalizedStringSet(tags),
+    ] as const,
 };
 
 export const viewerQueryKeys = {
@@ -38,8 +124,8 @@ export const viewerQueryKeys = {
 
 export const trainingQueryKeys = {
   job: (activeJobId: string | null) => ["training-job", activeJobId] as const,
-  runPlan: (planNonce: number, planInputKey: string) =>
-    ["training-run-plan", planNonce, planInputKey] as const,
+  runPlan: (planNonce: number, input: TrainingRunPlanQueryKeyInput) =>
+    ["training-run-plan", planNonce, trainingRunPlanInputKey(input)] as const,
 };
 
 export const monitorQueryKeys = {
@@ -52,14 +138,23 @@ export const monitorQueryKeys = {
   historicalRun: (runId: string | undefined, nodePath: string | undefined) =>
     ["monitor-data", "historical-run", runId, nodePath] as const,
   historicalRunGroup: (runIds: StringList, nodePath: string | undefined) =>
-    ["monitor-data", "historical-run-group", runIds, nodePath] as const,
+    [
+      "monitor-data",
+      "historical-run-group",
+      normalizedStringSet(runIds),
+      nodePath,
+    ] as const,
   activeJobParameterStatus: (
     jobId: string,
     preset: string | undefined,
     dataset: string | undefined,
   ) => ["monitor-parameter-status", "active-job", jobId, preset, dataset] as const,
   historicalParameterStatus: (runIds: StringList) =>
-    ["monitor-parameter-status", "historical-run-group", runIds] as const,
+    [
+      "monitor-parameter-status",
+      "historical-run-group",
+      normalizedStringSet(runIds),
+    ] as const,
   historicalParameterSummary: (
     model: string,
     preset: string,
@@ -72,7 +167,7 @@ export const monitorQueryKeys = {
       model,
       preset,
       dataset,
-      runIds,
+      normalizedStringSet(runIds),
     ] as const,
 };
 

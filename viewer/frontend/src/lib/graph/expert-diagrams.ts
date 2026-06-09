@@ -30,7 +30,10 @@ function descendantExpertCount(
 ) {
   const queue = [...(navigation.childrenById.get(nodeId) ?? [])];
   while (queue.length > 0) {
-    const childId = queue.shift()!;
+    const childId = queue.shift();
+    if (!childId) {
+      continue;
+    }
     const child = nodesById.get(childId);
     if (!child) {
       continue;

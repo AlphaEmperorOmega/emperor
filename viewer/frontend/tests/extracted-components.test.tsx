@@ -1,17 +1,19 @@
-import { render, screen, within } from "@testing-library/react";
+import { useState } from "react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { FullPageError } from "@/components/layout/page-error-status";
 import { FullPageLoading, FullPageStatus } from "@/components/layout/page-status";
-import { FeatureListDialog } from "@/components/features/viewer/feature-list-dialog";
-import { createViewerContext } from "@/components/features/viewer/providers/create-context";
-import { InlineStatus } from "@/components/features/viewer/shared/inline-status";
-import { KeyValueRow } from "@/components/features/viewer/shared/key-value-row";
-import { MetricCard } from "@/components/features/viewer/shared/metric-card";
-import { SectionHeading } from "@/components/features/viewer/shared/section-heading";
-import { StatChip } from "@/components/features/viewer/shared/stat-chip";
-import { TrainingProgressDialog } from "@/components/features/viewer/training/training-progress-dialog";
-import { ViewerWorkspaceNav } from "@/components/features/viewer/viewer-workspace-nav";
+import { FeatureListDialog } from "@/features/viewer/components/feature-list-dialog";
+import { createViewerContext } from "@/features/viewer/providers/create-context";
+import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
+import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
+import { KeyValueRow } from "@/features/viewer/components/shared/key-value-row";
+import { MetricCard } from "@/features/viewer/components/shared/metric-card";
+import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
+import { StatChip } from "@/features/viewer/components/shared/stat-chip";
+import { TrainingProgressDialog } from "@/features/viewer/components/training/training-progress-dialog";
+import { ViewerWorkspaceNav } from "@/features/viewer/components/viewer-workspace-nav";
 import { type TrainingRunPlan } from "@/lib/api";
 import { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
@@ -100,6 +102,144 @@ describe("FeatureListDialog", () => {
   });
 });
 
+describe("DialogShell", () => {
+  it("moves focus into the dialog and traps tab navigation", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Before dialog</button>
+        <DialogShell
+          titleId="test-dialog-title"
+          onClose={() => {}}
+          header={<h2 id="test-dialog-title">Test Dialog</h2>}
+        >
+          <button type="button">First action</button>
+          <button type="button">Second action</button>
+        </DialogShell>
+        <button type="button">After dialog</button>
+      </>,
+    );
+
+    const firstAction = screen.getByRole("button", { name: "First action" });
+    const secondAction = screen.getByRole("button", { name: "Second action" });
+
+    await waitFor(() => expect(firstAction).toHaveFocus());
+    await user.tab();
+    expect(secondAction).toHaveFocus();
+    await user.tab();
+    expect(firstAction).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(secondAction).toHaveFocus();
+  });
+
+  it("closes on Escape when allowed", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <DialogShell
+        titleId="esc-dialog-title"
+        onClose={onClose}
+        header={<h2 id="esc-dialog-title">Esc Dialog</h2>}
+      >
+        <button type="button">Inside</button>
+      </DialogShell>,
+    );
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Inside" })).toHaveFocus());
+    await user.keyboard("{Escape}");
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores Escape when close on Escape is disabled", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(
+      <DialogShell
+        titleId="busy-dialog-title"
+        onClose={onClose}
+        closeOnEscape={false}
+        header={<h2 id="busy-dialog-title">Busy Dialog</h2>}
+      >
+        <button type="button">Inside</button>
+      </DialogShell>,
+    );
+
+    await user.keyboard("{Escape}");
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("restores focus to the opener after close", async () => {
+    const user = userEvent.setup();
+
+    function Harness() {
+      const [open, setOpen] = useState(false);
+
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Open dialog
+          </button>
+          {open && (
+            <DialogShell
+              titleId="restore-dialog-title"
+              onClose={() => setOpen(false)}
+              header={<h2 id="restore-dialog-title">Restore Dialog</h2>}
+            >
+              <button type="button" onClick={() => setOpen(false)}>
+                Close inside
+              </button>
+            </DialogShell>
+          )}
+        </>
+      );
+    }
+
+    render(<Harness />);
+
+    const opener = screen.getByRole("button", { name: "Open dialog" });
+    await user.click(opener);
+    await user.click(await screen.findByRole("button", { name: "Close inside" }));
+
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+
+  it("lets only the topmost nested dialog handle Escape", async () => {
+    const user = userEvent.setup();
+    const onParentClose = vi.fn();
+    const onChildClose = vi.fn();
+
+    render(
+      <DialogShell
+        titleId="parent-dialog-title"
+        onClose={onParentClose}
+        header={<h2 id="parent-dialog-title">Parent Dialog</h2>}
+        overlayChildren={
+          <DialogShell
+            titleId="child-dialog-title"
+            onClose={onChildClose}
+            header={<h2 id="child-dialog-title">Child Dialog</h2>}
+            className="z-[60]"
+          >
+            <button type="button">Child action</button>
+          </DialogShell>
+        }
+      >
+        <button type="button">Parent action</button>
+      </DialogShell>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Child action" })).toHaveFocus(),
+    );
+    await user.keyboard("{Escape}");
+
+    expect(onChildClose).toHaveBeenCalledTimes(1);
+    expect(onParentClose).not.toHaveBeenCalled();
+  });
+});
+
 describe("InlineStatus", () => {
   it("renders children with default spacing and tone", () => {
     render(<InlineStatus>Waiting for config</InlineStatus>);
@@ -129,7 +269,7 @@ describe("InlineStatus", () => {
     expect(screen.getByText("Danger")).toHaveClass(
       "border-danger-line",
       "bg-danger-soft",
-      "text-[#fda4af]",
+      "text-danger-text",
     );
 
     rerender(<InlineStatus tone="warning">Warning</InlineStatus>);
@@ -272,7 +412,7 @@ describe("StatChip", () => {
     expect(screen.getByText("Danger")).toHaveClass(
       "border-danger-line",
       "bg-danger-soft",
-      "text-[#fda4af]",
+      "text-danger-text",
     );
   });
 });
@@ -319,7 +459,7 @@ describe("KeyValueRow", () => {
         label="Params"
         value="1,024"
         className="custom-row last:border-b-0"
-        valueClassName="text-[#d7c9ff]"
+        valueClassName="text-violet-text"
       />,
     );
 
@@ -340,7 +480,7 @@ describe("KeyValueRow", () => {
       "text-right",
       "font-mono",
       "font-semibold",
-      "text-[#d7c9ff]",
+      "text-violet-text",
     );
   });
 

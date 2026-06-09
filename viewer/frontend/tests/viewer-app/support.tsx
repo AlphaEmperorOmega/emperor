@@ -1,0 +1,2928 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { expect, vi } from "vitest";
+import { ViewerApp } from "@/features/viewer/components/viewer-app";
+export { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
+
+export type MockNodeData = {
+  nodeId: string;
+  label: string;
+  subtitle: string;
+  path: string;
+  parameterCount: number;
+  details: Record<string, unknown>;
+  config: {
+    typeName: string;
+    fields: Array<{ key: string; value: unknown }>;
+  } | null;
+  childCount: number;
+  childSummaries: Array<{
+    label: string;
+    nestedLabel?: string;
+    dims?: string;
+    count?: number;
+    kind: "child" | "mechanism" | "overflow";
+    title?: string;
+  }>;
+  clusterDiagram?: {
+    instantiated: number;
+    capacityTotal: number;
+    planes: Array<{
+      z: number;
+      cells: Array<{ filled: boolean; title: string }>;
+    }>;
+  };
+  stackDiagram?: {
+    cells: Array<{
+      label: string;
+      title: string;
+      dims?: string;
+      kind: "layer" | "overflow" | "total";
+    }>;
+    dims?: string;
+    totalLayers: number;
+    hasOverflow: boolean;
+  };
+  graphDetailMode: "simple" | "basic" | "full";
+  height: number;
+  isExpanded: boolean;
+  canToggleExpansion: boolean;
+  canOpenMonitor?: boolean;
+  isDetailsExpanded: boolean;
+  onActivateNode: () => void;
+  onToggleExpansion: () => void;
+  onOpenMonitor?: () => void;
+  onToggleDetails: () => void;
+};
+
+export function detailText(value: unknown) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+export function configDetailText(value: unknown) {
+  if (value === null || value === undefined) {
+    return "None";
+  }
+  return detailText(value);
+}
+
+export function nodeDetailRows(
+  details: Record<string, unknown>,
+  config: MockNodeData["config"],
+) {
+  if (config) {
+    return config.fields.map((field) => ({
+      key: field.key,
+      value: field.value,
+      text: configDetailText(field.value),
+    }));
+  }
+
+  const previewOnlyKeys = new Set([
+    "weightShape",
+    "biasShape",
+    "dims",
+    "inputDim",
+    "inputShape",
+    "hiddenDim",
+    "outputDim",
+    "outputShape",
+    "shapeTransition",
+    "cluster",
+    "terminalReach",
+  ]);
+  return Object.entries(details)
+    .filter(([key]) => !previewOnlyKeys.has(key))
+    .map(([key, value]) => ({ key, value, text: detailText(value) }));
+}
+
+export function formatExactCount(count: number) {
+  return new Intl.NumberFormat("en-US").format(count);
+}
+
+export function formatCompactCount(count: number) {
+  const absoluteCount = Math.abs(count);
+  if (absoluteCount < 1000) {
+    return formatExactCount(count);
+  }
+  const units = [
+    { suffix: "B", value: 1_000_000_000 },
+    { suffix: "M", value: 1_000_000 },
+    { suffix: "K", value: 1_000 },
+  ];
+  const unit = units.find((candidate) => absoluteCount >= candidate.value);
+  if (!unit) {
+    return formatExactCount(count);
+  }
+  const value = count / unit.value;
+  const formatted = value >= 100 ? value.toFixed(0) : value.toFixed(1);
+  return `${formatted.replace(/\.0$/, "")}${unit.suffix}`;
+}
+
+export function simpleGraphParamText(parameterCount: number) {
+  return parameterCount > 0 ? `${formatCompactCount(parameterCount)} params` : undefined;
+}
+
+export function dimensionValueText(value: unknown) {
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (text.length === 0) {
+      return undefined;
+    }
+    const numericValue = Number(text);
+    return Number.isFinite(numericValue) && numericValue > 0 ? text : undefined;
+  }
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return String(value);
+  }
+  return undefined;
+}
+
+export function dimRange(inputDim: string | undefined, outputDim: string | undefined) {
+  return inputDim && outputDim ? `${inputDim} -> ${outputDim}` : undefined;
+}
+
+export function dimsFromText(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const parts = value.trim().split(/\s*->\s*/);
+  if (parts.length !== 2) {
+    return undefined;
+  }
+
+  return dimRange(dimensionValueText(parts[0]), dimensionValueText(parts[1]));
+}
+
+export function configFieldValue(config: MockNodeData["config"], key: string) {
+  return config?.fields.find((field) => field.key === key)?.value;
+}
+
+export function nodeDimsText(details: Record<string, unknown>, config: MockNodeData["config"]) {
+  const dims = dimsFromText(details.dims);
+  if (dims) {
+    return dims;
+  }
+
+  return (
+    dimRange(dimensionValueText(details.inputDim), dimensionValueText(details.outputDim)) ??
+    dimRange(
+      dimensionValueText(configFieldValue(config, "input_dim")),
+      dimensionValueText(configFieldValue(config, "output_dim")),
+    )
+  );
+}
+
+export function parameterShapeRows(details: Record<string, unknown>) {
+  return [
+    ["weightShape", "W"],
+    ["biasShape", "b"],
+  ].flatMap(([key, label]) => {
+    const value = details[key];
+    return typeof value === "string" && value.length > 0
+      ? [{ key, label, shape: value }]
+      : [];
+  });
+}
+
+vi.mock("@xyflow/react", () => ({
+  ReactFlow: ({
+    nodes,
+    edges,
+    onNodeClick,
+    nodesDraggable,
+    nodesConnectable,
+    elementsSelectable,
+    nodesFocusable,
+    nodeClickDistance,
+    children,
+  }: {
+    nodes: Array<{
+      id: string;
+      position: { x: number; y: number };
+      style?: { height?: number };
+      data: MockNodeData;
+    }>;
+    edges: Array<{ id: string; source: string; target: string }>;
+    onNodeClick?: (event: unknown, node: { id: string }) => void;
+    nodesDraggable?: boolean;
+    nodesConnectable?: boolean;
+    elementsSelectable?: boolean;
+    nodesFocusable?: boolean;
+    nodeClickDistance?: number;
+    children: React.ReactNode;
+  }) => {
+    expect(nodesDraggable).toBe(false);
+    expect(nodesConnectable).toBe(false);
+    expect(elementsSelectable).toBe(false);
+    expect(nodesFocusable).toBe(false);
+    expect(nodeClickDistance).toBe(4);
+
+    return (
+      <div data-testid="flow">
+        {nodes.map((node) => (
+          <div
+            key={node.id}
+            data-testid={`node-${node.id}`}
+            data-x={node.position.x}
+            data-y={node.position.y}
+            data-height={node.style?.height ?? node.data.height}
+          >
+            {(() => {
+              const isSimpleMode = node.data.graphDetailMode === "simple";
+              const parameterShapes = parameterShapeRows(node.data.details);
+              const detailRows = nodeDetailRows(node.data.details, node.data.config);
+              const simpleParamText = isSimpleMode
+                ? simpleGraphParamText(node.data.parameterCount)
+                : undefined;
+              const simpleDimsText = isSimpleMode
+                ? nodeDimsText(node.data.details, node.data.config) ?? node.data.stackDiagram?.dims
+                : undefined;
+              const detailToggleLabel = node.data.config ? "Config options" : "Details";
+              const cardLabel = node.data.canToggleExpansion
+                ? `Select and ${node.data.isExpanded ? "collapse" : "expand"} ${node.data.path}`
+                : `Select ${node.data.path}`;
+
+              return (
+                <>
+                  {!isSimpleMode && parameterShapes.length > 0 && (
+                    <div data-testid={`parameter-shapes-${node.id}`}>
+                      {parameterShapes.map((entry) => (
+                        <div
+                          key={entry.key}
+                          aria-label={`${entry.label} shape ${entry.shape}`}
+                        >
+                          <span>{entry.label}</span>
+                          <span>{entry.shape}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={cardLabel}
+                    aria-expanded={node.data.canToggleExpansion ? node.data.isExpanded : undefined}
+                    onClick={() => {
+                      node.data.onActivateNode();
+                      onNodeClick?.({}, node);
+                    }}
+                  >
+                    <div>
+                      <span>{node.data.label}</span>
+                      {isSimpleMode && simpleParamText && (
+                        <span title={`${formatExactCount(node.data.parameterCount)} parameters`}>
+                          {simpleParamText}
+                        </span>
+                      )}
+                      {isSimpleMode && simpleDimsText && (
+                        <span title={`input/output: ${simpleDimsText}`}>{simpleDimsText}</span>
+                      )}
+                      {!isSimpleMode && node.data.childCount > 0 && (
+                        <span>
+                          {node.data.childCount}{" "}
+                          {node.data.childCount === 1 ? "child" : "children"}
+                        </span>
+                      )}
+                      {!isSimpleMode && node.data.parameterCount > 0 && (
+                        <span title={`${formatExactCount(node.data.parameterCount)} parameters`}>
+                          {formatCompactCount(node.data.parameterCount)}
+                        </span>
+                      )}
+                    </div>
+                    {!isSimpleMode && <span>{node.data.subtitle}</span>}
+                    {!isSimpleMode && node.data.clusterDiagram ? (
+                      <div data-testid={`cluster-diagram-${node.id}`}>
+                        <span>Cluster map</span>
+                        <span>
+                          {node.data.clusterDiagram.instantiated} / {node.data.clusterDiagram.capacityTotal}
+                        </span>
+                        {node.data.clusterDiagram.planes.flatMap((plane) =>
+                          plane.cells.map((cell, index) => (
+                            <span
+                              key={`${plane.z}-${cell.title}-${index}`}
+                              aria-label={cell.title}
+                            >
+                              {cell.filled ? "filled" : "empty"}
+                            </span>
+                          )),
+                        )}
+                      </div>
+                    ) : !isSimpleMode && node.data.stackDiagram ? (
+                      <div data-testid={`stack-diagram-${node.id}`}>
+                        {node.data.stackDiagram.cells.map((cell, index) => (
+                          <div
+                            key={`${cell.kind}-${cell.label}-${index}`}
+                            aria-label={cell.title}
+                            title={cell.title}
+                          >
+                            <span>{cell.label}</span>
+                            {cell.dims && <span>{cell.dims}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : !isSimpleMode && (
+                      <div data-testid={`child-summaries-${node.id}`}>
+                        {node.data.childSummaries.map((summary, index) => {
+                          const summaryLabel = summary.nestedLabel
+                            ? `${summary.label} ${summary.nestedLabel}`
+                            : summary.label;
+                          const summaryAccessibleLabel = summary.dims
+                            ? `${summaryLabel} ${summary.dims}`
+                            : summaryLabel;
+                          const summaryTitle = summary.title
+                            ? summary.dims
+                              ? `${summary.title} ${summary.dims}`
+                              : summary.title
+                            : summaryAccessibleLabel;
+
+                          return (
+                            <div
+                              key={`${summary.kind}-${summary.label}-${index}`}
+                              aria-label={summaryAccessibleLabel}
+                              title={summaryTitle}
+                            >
+                              {summary.kind === "overflow" ? (
+                                <span>{summary.label}</span>
+                              ) : summary.nestedLabel ? (
+                                <>
+                                  <span>{summary.label}</span>
+                                  <span aria-hidden>›</span>
+                                  <span>{summary.nestedLabel}</span>
+                                  {summary.dims && <span>{summary.dims}</span>}
+                                </>
+                              ) : (
+                                <>
+                                  <span>
+                                    {summary.count ? `${summary.label} x${summary.count}` : summary.label}
+                                  </span>
+                                  {summary.dims && <span>{summary.dims}</span>}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {node.data.canToggleExpansion && (
+                      <button
+                        type="button"
+                        aria-label={`${node.data.isExpanded ? "Collapse" : "Expand"} tree ${node.data.path}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          node.data.onToggleExpansion();
+                        }}
+                      >
+                        toggle
+                      </button>
+                    )}
+                    {!isSimpleMode && node.data.canOpenMonitor && node.data.onOpenMonitor && (
+                      <button
+                        type="button"
+                        aria-label={`Open monitor charts for ${node.data.path}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          node.data.onOpenMonitor?.();
+                        }}
+                      >
+                        monitor
+                      </button>
+                    )}
+                    {!isSimpleMode && detailRows.length > 0 && (
+                      <button
+                        type="button"
+                        aria-label={`${detailToggleLabel} for ${node.data.path}`}
+                        aria-expanded={node.data.isDetailsExpanded}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          node.data.onToggleDetails();
+                        }}
+                      >
+                        {detailToggleLabel}
+                      </button>
+                    )}
+                    {!isSimpleMode && node.data.isDetailsExpanded && detailRows.length > 0 && (
+                      <div>
+                        {detailRows.map((entry) => (
+                          <div key={entry.key}>
+                            <span>{entry.key}</span>
+                            <span>{entry.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        ))}
+        {edges.map((edge) => (
+          <div key={edge.id} data-testid={`edge-${edge.id}`}>
+            {edge.source} to {edge.target}
+          </div>
+        ))}
+        {children}
+      </div>
+    );
+  },
+  Background: () => null,
+  Controls: () => null,
+  Panel: ({
+    position,
+    className,
+    style,
+    children,
+  }: {
+    position?: string;
+    className?: string;
+    style?: React.CSSProperties;
+    children: React.ReactNode;
+  }) => (
+    <div
+      data-testid={`flow-panel-${position ?? "default"}`}
+      data-position={position}
+      className={className}
+      style={style}
+    >
+      {children}
+    </div>
+  ),
+  Handle: () => null,
+  MarkerType: { ArrowClosed: "arrowclosed" },
+  Position: { Left: "left", Right: "right" },
+}));
+
+export const modelsResponse = { models: ["linear", "bert_linear"] };
+export const presetsResponse = {
+  model: "linear",
+  presets: [
+    { name: "baseline", label: "BASELINE", description: "Baseline" },
+    {
+      name: "recurrent-gating-halting",
+      label: "RECURRENT_GATING_HALTING",
+      description: "Recurrent",
+    },
+  ],
+};
+export const bertPresetsResponse = {
+  model: "bert_linear",
+  presets: [{ name: "bert-baseline", label: "BERT_BASELINE", description: "Bert baseline" }],
+};
+export const datasetsResponse = {
+  model: "linear",
+  datasets: [
+    { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
+    { name: "Cifar10", label: "Cifar 10", inputDim: 3072, outputDim: 10 },
+  ],
+};
+export const bertDatasetsResponse = {
+  model: "bert_linear",
+  datasets: [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+};
+export const monitorsResponse = {
+  model: "linear",
+  monitors: [
+    {
+      name: "linear",
+      label: "Linear layers",
+      description: "Logs activation, parameter, and gradient stats.",
+      kinds: ["scalar"],
+      defaultEnabled: false,
+    },
+    {
+      name: "sampler",
+      label: "Sampler usage",
+      description: "Logs routing histograms and heatmaps.",
+      kinds: ["scalar", "histogram", "image"],
+      defaultEnabled: false,
+    },
+  ],
+};
+export const capabilitiesResponse = {
+  authMode: "none",
+  trainingEnabled: true,
+  logDeletionEnabled: true,
+  historicalLogsEnabled: true,
+  liveMonitorDataEnabled: true,
+  historicalMonitorDataEnabled: true,
+  uploadsEnabled: false,
+  maxUploadSize: null,
+  dataSourcesEnabled: false,
+  dataSources: [],
+};
+export const logRunsResponse = {
+  runs: [
+    {
+      id: "log-mnist",
+      group: "test_model",
+      experiment: "test_model",
+      model: "linear",
+      preset: "BASELINE",
+      dataset: "Mnist",
+      runName: "aaa_20260601_010203",
+      timestamp: "2026-06-01 01:02:03",
+      version: "version_0",
+      relativePath: "test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0",
+      hasResult: true,
+      eventFileCount: 1,
+      checkpointCount: 1,
+      hasHparams: true,
+      metrics: { "test/accuracy": 0.9 },
+    },
+    {
+      id: "log-cifar",
+      group: "test_model_2",
+      experiment: "test_model_2",
+      model: "linear",
+      preset: "BASELINE",
+      dataset: "Cifar10",
+      runName: "bbb_20260601_020304",
+      timestamp: "2026-06-01 02:03:04",
+      version: "version_0",
+      relativePath:
+        "test_model_2/linear/BASELINE/Cifar10/bbb_20260601_020304/version_0",
+      hasResult: false,
+      eventFileCount: 1,
+      checkpointCount: 0,
+      hasHparams: true,
+      metrics: {},
+    },
+  ],
+};
+export const logExperimentsResponse = {
+  experiments: [
+    { experiment: "test_model", runCount: 1, relativePath: "test_model" },
+    { experiment: "test_model_2", runCount: 1, relativePath: "test_model_2" },
+  ],
+};
+export type MockLogTags =
+  | string[]
+  | {
+      scalarTags?: string[];
+      histogramTags?: string[];
+      imageTags?: string[];
+    };
+
+export function logTagsPayload(tags: MockLogTags | undefined) {
+  if (Array.isArray(tags)) {
+    return {
+      scalarTags: tags,
+      histogramTags: [],
+      imageTags: [],
+    };
+  }
+  return {
+    scalarTags: tags?.scalarTags ?? [],
+    histogramTags: tags?.histogramTags ?? [],
+    imageTags: tags?.imageTags ?? [],
+  };
+}
+
+export const logTagsByRun: Record<string, MockLogTags> = {
+  "log-mnist": [
+    "train/loss",
+    "validation/accuracy",
+    "test/accuracy",
+    "main_model.0.model/weights/mean",
+  ],
+  "log-cifar": [
+    "train/loss",
+    "validation/accuracy",
+    "test/accuracy",
+    "main_model.0.model/weights/mean",
+  ],
+};
+export const logScalarSeries = [
+  {
+    runId: "log-mnist",
+    tag: "train/loss",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.7 },
+      { step: 2, wallTime: 1780000001, value: 0.3 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "train/loss",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.9 },
+      { step: 2, wallTime: 1780000001, value: 0.5 },
+    ],
+  },
+  {
+    runId: "log-mnist",
+    tag: "validation/accuracy",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.6 },
+      { step: 2, wallTime: 1780000001, value: 0.8 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "validation/accuracy",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.4 },
+      { step: 2, wallTime: 1780000001, value: 0.55 },
+    ],
+  },
+  {
+    runId: "log-mnist",
+    tag: "test/accuracy",
+    points: [{ step: 2, wallTime: 1780000001, value: 0.9 }],
+  },
+  {
+    runId: "log-cifar",
+    tag: "test/accuracy",
+    points: [{ step: 2, wallTime: 1780000001, value: 0.62 }],
+  },
+  {
+    runId: "log-mnist",
+    tag: "main_model.0.model/weights/mean",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.12 },
+      { step: 2, wallTime: 1780000001, value: 0.18 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "main_model.0.model/weights/mean",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.16 },
+      { step: 2, wallTime: 1780000001, value: 0.2 },
+    ],
+  },
+];
+
+export function buildLargeLogFixture(count = 64) {
+  const runs = Array.from({ length: count }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    const experiment = `experiment_${number}`;
+    const dataset = index % 2 === 0 ? "Mnist" : "Cifar10";
+    const runName = `run_${number}_20260601_010203`;
+
+    return {
+      ...logRunsResponse.runs[0],
+      id: `log-${number}`,
+      group: experiment,
+      experiment,
+      dataset,
+      runName,
+      timestamp: `2026-06-01 01:${number}:03`,
+      relativePath: `${experiment}/linear/BASELINE/${dataset}/${runName}/version_0`,
+      metrics: { "test/accuracy": 0.8 + index / 100 },
+    };
+  });
+
+  return {
+    logRunsResponse: { runs },
+    logExperimentsResponse: {
+      experiments: runs.map((run) => ({
+        experiment: run.experiment,
+        runCount: 1,
+        relativePath: run.experiment,
+      })),
+    },
+    logTagsByRun: Object.fromEntries(
+      runs.map((run, index) => {
+        const number = String(index + 1).padStart(2, "0");
+        return [run.id, [`custom/tag-${number}`]];
+      }),
+    ) as Record<string, MockLogTags>,
+    logScalarSeries: runs.map((run, index) => {
+      const number = String(index + 1).padStart(2, "0");
+      return {
+        runId: run.id,
+        tag: `custom/tag-${number}`,
+        points: [
+          { step: 1, wallTime: 1780000000 + index, value: index / 100 },
+        ],
+      };
+    }),
+  };
+}
+
+export function buildSubsetDeleteFixture() {
+  const runs = [
+    {
+      ...logRunsResponse.runs[0],
+      id: "log-mnist-baseline",
+      group: "test_model",
+      experiment: "test_model",
+      preset: "BASELINE",
+      dataset: "Mnist",
+      runName: "mnist_baseline_20260601_010203",
+      timestamp: "2026-06-01 01:02:03",
+      relativePath:
+        "test_model/linear/BASELINE/Mnist/mnist_baseline_20260601_010203/version_0",
+    },
+    {
+      ...logRunsResponse.runs[0],
+      id: "log-mnist-alt",
+      group: "test_model",
+      experiment: "test_model",
+      preset: "ALT",
+      dataset: "Mnist",
+      runName: "mnist_alt_20260601_011203",
+      timestamp: "2026-06-01 01:12:03",
+      relativePath: "test_model/linear/ALT/Mnist/mnist_alt_20260601_011203/version_0",
+    },
+    {
+      ...logRunsResponse.runs[0],
+      id: "log-cifar-baseline",
+      group: "test_model",
+      experiment: "test_model",
+      preset: "BASELINE",
+      dataset: "Cifar10",
+      runName: "cifar_baseline_20260601_020304",
+      timestamp: "2026-06-01 02:03:04",
+      relativePath:
+        "test_model/linear/BASELINE/Cifar10/cifar_baseline_20260601_020304/version_0",
+    },
+    {
+      ...logRunsResponse.runs[1],
+      id: "log-other-mnist",
+      group: "test_model_2",
+      experiment: "test_model_2",
+      preset: "BASELINE",
+      dataset: "Mnist",
+      runName: "other_mnist_20260601_030405",
+      timestamp: "2026-06-01 03:04:05",
+      relativePath:
+        "test_model_2/linear/BASELINE/Mnist/other_mnist_20260601_030405/version_0",
+    },
+  ];
+
+  return {
+    logRunsResponse: { runs },
+    logExperimentsResponse: {
+      experiments: [
+        { experiment: "test_model", runCount: 3, relativePath: "test_model" },
+        { experiment: "test_model_2", runCount: 1, relativePath: "test_model_2" },
+      ],
+    },
+    logTagsByRun: Object.fromEntries(runs.map((run) => [run.id, []])) as Record<
+      string,
+      MockLogTags
+    >,
+  };
+}
+
+export function buildHistoricalMonitorFixture(count = 6) {
+  const runs = Array.from({ length: count }, (_, index) => {
+    const number = String(index + 1).padStart(2, "0");
+    const runName = `monitor_run_${number}_20260601_${number}0000`;
+
+    return {
+      ...logRunsResponse.runs[0],
+      id: `historical-${number}`,
+      group: "monitor_exp",
+      experiment: "monitor_exp",
+      dataset: "Mnist",
+      runName,
+      timestamp: `2026-06-01 ${number}:00:00`,
+      relativePath: `monitor_exp/linear/BASELINE/Mnist/${runName}/version_0`,
+      metrics: { "test/accuracy": 0.8 + index / 100 },
+    };
+  });
+
+  return {
+    logRunsResponse: { runs },
+    logTagsByRun: Object.fromEntries(
+      runs.map((run) => [
+        run.id,
+        {
+          scalarTags: [
+            "main_model.0.model/output/mean",
+            "main_model.1.model/output/mean",
+          ],
+          histogramTags: [],
+          imageTags: [],
+        },
+      ]),
+    ) as Record<string, MockLogTags>,
+  };
+}
+
+export const schemaResponse = {
+  model: "linear",
+  fields: [
+    {
+      key: "hidden_dim",
+      configKey: "HIDDEN_DIM",
+      flag: "--hidden-dim",
+      label: "hidden dim",
+      section: "Layer Stack Options",
+      type: "int",
+      default: 256,
+      nullable: false,
+      choices: [],
+    },
+    {
+      key: "stack_num_layers",
+      configKey: "STACK_NUM_LAYERS",
+      flag: "--stack-num-layers",
+      label: "stack num layers",
+      section: "Layer Stack Options",
+      type: "int",
+      default: 5,
+      nullable: false,
+      choices: [],
+    },
+    {
+      key: "gate_flag",
+      configKey: "GATE_FLAG",
+      flag: "--gate-flag",
+      label: "gate flag",
+      section: "Gate Stack Options",
+      type: "bool",
+      default: false,
+      nullable: false,
+      choices: [true, false],
+    },
+    {
+      key: "stack_activation",
+      configKey: "STACK_ACTIVATION",
+      flag: "--stack-activation",
+      label: "stack activation",
+      section: "Layer Stack Options",
+      type: "enum",
+      default: "GELU",
+      nullable: false,
+      choices: ["RELU", "GELU"],
+    },
+  ],
+};
+export const searchSpaceResponse = {
+  model: "linear",
+  preset: "baseline",
+  axes: [
+    {
+      key: "hidden_dim",
+      configKey: "HIDDEN_DIM",
+      searchKey: "SEARCH_SPACE_HIDDEN_DIM",
+      label: "hidden dim",
+      section: "Layer Stack Options",
+      type: "int",
+      values: [64, 128],
+      locked: false,
+      lockedValue: null,
+      lockedReason: "",
+    },
+    {
+      key: "stack_num_layers",
+      configKey: "STACK_NUM_LAYERS",
+      searchKey: "SEARCH_SPACE_STACK_NUM_LAYERS",
+      label: "stack num layers",
+      section: "Layer Stack Options",
+      type: "int",
+      values: [2, 4],
+      locked: false,
+      lockedValue: null,
+      lockedReason: "",
+    },
+    {
+      key: "stack_activation",
+      configKey: "STACK_ACTIVATION",
+      searchKey: "SEARCH_SPACE_STACK_ACTIVATION",
+      label: "stack activation",
+      section: "Layer Stack Options",
+      type: "enum",
+      values: ["RELU", "GELU"],
+      locked: false,
+      lockedValue: null,
+      lockedReason: "",
+    },
+  ],
+};
+export const inspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  parameterCount: 65792,
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      parameterCount: 65792,
+      details: {},
+    },
+    {
+      id: "loss_fn",
+      label: "CrossEntropyLoss",
+      typeName: "CrossEntropyLoss",
+      path: "loss_fn",
+      graphRole: "runtime",
+      parameterCount: 0,
+      details: {},
+    },
+    {
+      id: "metrics",
+      label: "ClassifierMetricsLogger",
+      typeName: "ClassifierMetricsLogger",
+      path: "metrics",
+      graphRole: "runtime",
+      parameterCount: 0,
+      details: {},
+    },
+    {
+      id: "main_model.0",
+      label: "Layer",
+      typeName: "Layer",
+      path: "main_model.0",
+      graphRole: "architecture",
+      parameterCount: 33024,
+      details: {
+        dims: "128 -> 128",
+        activation: "GELU",
+        layerNorm: "BEFORE",
+        dropout: 0.2,
+      },
+    },
+    {
+      id: "main_model.0.model",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.0.model",
+      graphRole: "architecture",
+      parameterCount: 16512,
+      details: {
+        dims: "128 -> 128",
+      },
+    },
+    {
+      id: "main_model.0.gate_model",
+      label: "Sequential",
+      typeName: "Sequential",
+      path: "main_model.0.gate_model",
+      graphRole: "architecture",
+      parameterCount: 0,
+      details: {},
+    },
+    {
+      id: "main_model.0.layer_norm_module",
+      label: "LayerNorm",
+      typeName: "LayerNorm",
+      path: "main_model.0.layer_norm_module",
+      graphRole: "internal",
+      parameterCount: 256,
+      details: {},
+    },
+    {
+      id: "main_model.0.dropout_module",
+      label: "Dropout",
+      typeName: "Dropout",
+      path: "main_model.0.dropout_module",
+      graphRole: "internal",
+      parameterCount: 0,
+      details: {},
+    },
+    {
+      id: "main_model.0.processor",
+      label: "SelfAttentionProcessor",
+      typeName: "SelfAttentionProcessor",
+      path: "main_model.0.processor",
+      graphRole: "internal",
+      parameterCount: 16512,
+      details: {},
+    },
+    {
+      id: "main_model.0.processor.projection",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.0.processor.projection",
+      graphRole: "architecture",
+      parameterCount: 16512,
+      details: {
+        dims: "128 -> 128",
+      },
+    },
+  ],
+  edges: [
+    {
+      id: "model-loss_fn",
+      source: "model",
+      target: "loss_fn",
+    },
+    {
+      id: "model-metrics",
+      source: "model",
+      target: "metrics",
+    },
+    {
+      id: "model-main_model.0",
+      source: "model",
+      target: "main_model.0",
+    },
+    {
+      id: "main_model.0-main_model.0.model",
+      source: "main_model.0",
+      target: "main_model.0.model",
+    },
+    {
+      id: "main_model.0-main_model.0.gate_model",
+      source: "main_model.0",
+      target: "main_model.0.gate_model",
+    },
+    {
+      id: "main_model.0-main_model.0.layer_norm_module",
+      source: "main_model.0",
+      target: "main_model.0.layer_norm_module",
+    },
+    {
+      id: "main_model.0-main_model.0.dropout_module",
+      source: "main_model.0",
+      target: "main_model.0.dropout_module",
+    },
+    {
+      id: "main_model.0-main_model.0.processor",
+      source: "main_model.0",
+      target: "main_model.0.processor",
+    },
+    {
+      id: "main_model.0.processor-main_model.0.processor.projection",
+      source: "main_model.0.processor",
+      target: "main_model.0.processor.projection",
+    },
+  ],
+};
+
+export const parameterShapeInspectResponse = {
+  ...inspectResponse,
+  nodes: inspectResponse.nodes.map((node) =>
+    node.id === "main_model.0.model"
+      ? {
+          ...node,
+          details: {
+            ...node.details,
+            weightShape: "128 x 128",
+            biasShape: "128",
+          },
+        }
+      : node,
+  ),
+};
+
+export const repeatedLayersInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.0",
+      label: "Layer",
+      typeName: "Layer",
+      path: "main_model.0",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.0.model",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.0.model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.1",
+      label: "Layer",
+      typeName: "Layer",
+      path: "main_model.1",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.1.model",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.1.model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.2",
+      label: "Layer",
+      typeName: "Layer",
+      path: "main_model.2",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.2.model",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.2.model",
+      graphRole: "architecture",
+      details: {},
+    },
+  ],
+  edges: [
+    {
+      id: "model-main_model.0",
+      source: "model",
+      target: "main_model.0",
+    },
+    {
+      id: "main_model.0-main_model.0.model",
+      source: "main_model.0",
+      target: "main_model.0.model",
+    },
+    {
+      id: "model-main_model.1",
+      source: "model",
+      target: "main_model.1",
+    },
+    {
+      id: "main_model.1-main_model.1.model",
+      source: "main_model.1",
+      target: "main_model.1.model",
+    },
+    {
+      id: "model-main_model.2",
+      source: "model",
+      target: "main_model.2",
+    },
+    {
+      id: "main_model.2-main_model.2.model",
+      source: "main_model.2",
+      target: "main_model.2.model",
+    },
+  ],
+};
+
+export const monitorScopeInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "input_model",
+      label: "Layer",
+      typeName: "Layer",
+      path: "input_model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "input_model.model",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "input_model.model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.0",
+      label: "Layer",
+      typeName: "Layer",
+      path: "main_model.0",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.0.model",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.0.model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.1",
+      label: "Layer",
+      typeName: "Layer",
+      path: "main_model.1",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "main_model.1.model",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "main_model.1.model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "output_model",
+      label: "Layer",
+      typeName: "Layer",
+      path: "output_model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "output_model.model",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "output_model.model",
+      graphRole: "architecture",
+      details: {},
+    },
+  ],
+  edges: [
+    {
+      id: "model-input_model",
+      source: "model",
+      target: "input_model",
+    },
+    {
+      id: "input_model-input_model.model",
+      source: "input_model",
+      target: "input_model.model",
+    },
+    {
+      id: "model-main_model.0",
+      source: "model",
+      target: "main_model.0",
+    },
+    {
+      id: "main_model.0-main_model.0.model",
+      source: "main_model.0",
+      target: "main_model.0.model",
+    },
+    {
+      id: "model-main_model.1",
+      source: "model",
+      target: "main_model.1",
+    },
+    {
+      id: "main_model.1-main_model.1.model",
+      source: "main_model.1",
+      target: "main_model.1.model",
+    },
+    {
+      id: "model-output_model",
+      source: "model",
+      target: "output_model",
+    },
+    {
+      id: "output_model-output_model.model",
+      source: "output_model",
+      target: "output_model.model",
+    },
+  ],
+};
+
+export const stackContainerInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  parameterCount: 65792,
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      parameterCount: 65792,
+      details: {},
+    },
+    {
+      id: "main_model",
+      label: "Sequential",
+      typeName: "Sequential",
+      path: "main_model",
+      graphRole: "architecture",
+      parameterCount: 65792,
+      details: {},
+    },
+    {
+      id: "main_model.0",
+      label: "Layer",
+      typeName: "Layer",
+      path: "main_model.0",
+      graphRole: "architecture",
+      parameterCount: 33024,
+      details: { inputDim: 256, outputDim: 256 },
+    },
+    {
+      id: "main_model.1",
+      label: "Layer",
+      typeName: "Layer",
+      path: "main_model.1",
+      graphRole: "architecture",
+      parameterCount: 32768,
+      details: { inputDim: 256, outputDim: 10 },
+    },
+  ],
+  edges: [
+    {
+      id: "model-main_model",
+      source: "model",
+      target: "main_model",
+    },
+    {
+      id: "main_model-main_model.0",
+      source: "main_model",
+      target: "main_model.0",
+    },
+    {
+      id: "main_model-main_model.1",
+      source: "main_model",
+      target: "main_model.1",
+    },
+  ],
+};
+
+export const manyRepeatedLayersInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      details: {},
+    },
+    ...Array.from({ length: 9 }, (_, index) => [
+      {
+        id: `main_model.${index}`,
+        label: "Layer",
+        typeName: "Layer",
+        path: `main_model.${index}`,
+        graphRole: "architecture",
+        details: {},
+      },
+      {
+        id: `main_model.${index}.model`,
+        label: "LinearLayer",
+        typeName: "LinearLayer",
+        path: `main_model.${index}.model`,
+        graphRole: "architecture",
+        details: {},
+      },
+    ]).flat(),
+  ],
+  edges: Array.from({ length: 9 }, (_, index) => [
+    {
+      id: `model-main_model.${index}`,
+      source: "model",
+      target: `main_model.${index}`,
+    },
+    {
+      id: `main_model.${index}-main_model.${index}.model`,
+      source: `main_model.${index}`,
+      target: `main_model.${index}.model`,
+    },
+  ]).flat(),
+};
+
+export const mechanismMetadataInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "controller",
+      label: "Controller",
+      typeName: "Controller",
+      path: "controller",
+      graphRole: "architecture",
+      details: {
+        gate: true,
+        recurrent: {
+          maxSteps: 4,
+          halting: true,
+        },
+      },
+    },
+  ],
+  edges: [
+    {
+      id: "model-controller",
+      source: "model",
+      target: "controller",
+    },
+  ],
+};
+
+export const mechanismChildrenInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "controller",
+      label: "Controller",
+      typeName: "Controller",
+      path: "controller",
+      graphRole: "architecture",
+      details: {
+        gate: true,
+        halting: true,
+      },
+    },
+    {
+      id: "controller.gate_model",
+      label: "Sequential",
+      typeName: "Sequential",
+      path: "controller.gate_model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "controller.halting_model",
+      label: "StickBreaking",
+      typeName: "StickBreaking",
+      path: "controller.halting_model",
+      graphRole: "architecture",
+      details: {},
+    },
+  ],
+  edges: [
+    {
+      id: "model-controller",
+      source: "model",
+      target: "controller",
+    },
+    {
+      id: "controller-controller.gate_model",
+      source: "controller",
+      target: "controller.gate_model",
+    },
+    {
+      id: "controller-controller.halting_model",
+      source: "controller",
+      target: "controller.halting_model",
+    },
+  ],
+};
+
+export const tallSummaryInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "block",
+      label: "Block",
+      typeName: "Block",
+      path: "block",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "block.linear",
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: "block.linear",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "block.attention",
+      label: "AttentionLayer",
+      typeName: "AttentionLayer",
+      path: "block.attention",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "block.embedding",
+      label: "Embedding",
+      typeName: "Embedding",
+      path: "block.embedding",
+      graphRole: "architecture",
+      details: {},
+    },
+    {
+      id: "block.output",
+      label: "OutputHead",
+      typeName: "OutputHead",
+      path: "block.output",
+      graphRole: "architecture",
+      details: {},
+    },
+  ],
+  edges: [
+    {
+      id: "model-block",
+      source: "model",
+      target: "block",
+    },
+    {
+      id: "block-block.linear",
+      source: "block",
+      target: "block.linear",
+    },
+    {
+      id: "block-block.attention",
+      source: "block",
+      target: "block.attention",
+    },
+    {
+      id: "block-block.embedding",
+      source: "block",
+      target: "block.embedding",
+    },
+    {
+      id: "block-block.output",
+      source: "block",
+      target: "block.output",
+    },
+  ],
+};
+
+export const longSelectedNodeId = "model.0.model.adaptive_behaviour.mask_model.model.1";
+export const longSelectedNodeInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  nodes: [
+    {
+      id: longSelectedNodeId,
+      label: "LinearLayer",
+      typeName: "LinearLayer",
+      path: longSelectedNodeId,
+      graphRole: "architecture",
+      details: {
+        dims: "256 -> 256",
+      },
+    },
+  ],
+  edges: [],
+};
+
+export const locationInspectResponse = {
+  model: "linear",
+  preset: "baseline",
+  parameterCount: 0,
+  nodes: [
+    {
+      id: "model",
+      label: "Model",
+      typeName: "Model",
+      path: "model",
+      graphRole: "architecture",
+      parameterCount: 0,
+      details: {},
+    },
+    {
+      id: "model.cluster",
+      label: "Cluster",
+      typeName: "NeuronCluster",
+      path: "model.cluster",
+      graphRole: "architecture",
+      parameterCount: 0,
+      details: {
+        cluster: {
+          capacity: [2, 2, 1],
+          instantiated: 1,
+          coordinates: [[1, 1, 1]],
+        },
+      },
+    },
+    {
+      id: "model.cluster.terminal",
+      label: "Terminal",
+      typeName: "Terminal",
+      path: "model.cluster.terminal",
+      graphRole: "internal",
+      parameterCount: 0,
+      details: {
+        terminalReach: {
+          position: [4, 4, 2],
+          connections: [
+            [5, 4, 2],
+            [4, 5, 2],
+          ],
+          total: 2,
+        },
+      },
+    },
+  ],
+  edges: [
+    {
+      id: "model-model.cluster",
+      source: "model",
+      target: "model.cluster",
+    },
+    {
+      id: "model.cluster-model.cluster.terminal",
+      source: "model.cluster",
+      target: "model.cluster.terminal",
+    },
+  ],
+};
+
+export function jsonResponse(body: unknown, status = 200) {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    }),
+  );
+}
+
+export type MockTrainingPlanRequest = {
+  model?: string;
+  preset?: string;
+  presets?: string[];
+  datasets?: string[];
+  overrides?: Record<string, unknown>;
+  logFolder?: string;
+  search?: {
+    mode: "grid" | "random";
+    values: Record<string, unknown[]>;
+    randomSamples?: number;
+  };
+};
+
+export function mockTrainingSearchCombinations(request: MockTrainingPlanRequest) {
+  const search = request.search;
+  if (!search) {
+    return [{ changes: [] as unknown[], overrides: {} as Record<string, unknown> }];
+  }
+  const entries = Object.entries(search.values).filter(
+    ([, values]) => values.length > 0,
+  );
+  if (entries.length === 0) {
+    return [{ changes: [] as unknown[], overrides: {} as Record<string, unknown> }];
+  }
+  let combinations = [{ changes: [] as unknown[], overrides: {} as Record<string, unknown> }];
+  for (const [key, values] of entries) {
+    combinations = combinations.flatMap((combination) =>
+      values.map((value) => ({
+        changes: [
+          ...combination.changes,
+          { key, label: key.replaceAll("_", " "), value, source: "search" },
+        ],
+        overrides: { ...combination.overrides, [key]: value },
+      })),
+    );
+  }
+  if (search.mode === "random") {
+    return combinations.slice(0, Math.min(search.randomSamples ?? 10, combinations.length));
+  }
+  return combinations;
+}
+
+export function mockTrainingCommand(input: {
+  model: string;
+  preset: string;
+  dataset: string;
+  logFolder: string;
+  overrides: Record<string, unknown>;
+}) {
+  const parts = [
+    "source",
+    "experiment.sh",
+    input.model,
+    "--preset",
+    input.preset,
+    "--datasets",
+    input.dataset,
+  ];
+  if (input.logFolder) {
+    parts.push("--logdir", input.logFolder);
+  }
+  const entries = Object.entries(input.overrides);
+  if (entries.length > 0) {
+    parts.push("--config");
+    for (const [key, value] of entries) {
+      parts.push(`--${key.replaceAll("_", "-")}`, String(value ?? "None"));
+    }
+  }
+  return parts.join(" ");
+}
+
+export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
+  const model = request.model ?? "linear";
+  const preset = request.preset ?? "baseline";
+  const presets = request.presets?.length ? request.presets : [preset];
+  const datasets = request.datasets?.length ? request.datasets : ["Cifar10"];
+  const overrides = request.overrides ?? {};
+  const fixedChanges = Object.entries(overrides).map(([key, value]) => ({
+    key,
+    label: key.replaceAll("_", " "),
+    value,
+    source: "override",
+  }));
+  const combinations = mockTrainingSearchCombinations(request);
+  const runs = presets.flatMap((runPreset) =>
+    datasets.flatMap((dataset) =>
+      combinations.map((combination) => {
+        const rowOverrides = { ...overrides, ...combination.overrides };
+        const index = 0;
+        return {
+          id: "",
+          index,
+          status: "Pending",
+          preset: runPreset,
+          dataset,
+          changes: [...fixedChanges, ...combination.changes],
+          overrides: rowOverrides,
+          command: mockTrainingCommand({
+            model,
+            preset: runPreset,
+            dataset,
+            logFolder: request.logFolder ?? "",
+            overrides: rowOverrides,
+          }),
+          totalEpochs: Number(overrides.num_epochs ?? 30),
+          currentEpoch: 0,
+          metrics: {},
+          logDir: null,
+          error: null,
+        };
+      }),
+    ),
+  ).map((run, index) => ({
+    ...run,
+    id: `run-${String(index + 1).padStart(4, "0")}`,
+    index: index + 1,
+  }));
+  const totalEpochs = runs.reduce((total, run) => total + run.totalEpochs, 0);
+  return {
+    model,
+    preset: presets[0],
+    presets,
+    datasets,
+    overrides,
+    search: request.search ?? null,
+    logFolder: request.logFolder ?? "",
+    isRandomSearch: request.search?.mode === "random",
+    runs,
+    summary: {
+      totalRuns: runs.length,
+      completedRuns: 0,
+      runningRuns: 0,
+      pendingRuns: runs.length,
+      failedRuns: 0,
+      cancelledRuns: 0,
+      skippedRuns: 0,
+      totalEpochs,
+      completedEpochs: 0,
+      remainingEpochs: totalEpochs,
+    },
+  };
+}
+
+export function completedMockTrainingRunPlan(request: MockTrainingPlanRequest) {
+  const plan = mockTrainingRunPlan(request);
+  const runs = plan.runs.map((run) => ({
+    ...run,
+    status: "Completed",
+    currentEpoch: run.totalEpochs,
+    metrics: { validation_accuracy: 0.9 },
+    logDir: `logs/${request.logFolder ?? "test_model"}`,
+  }));
+  return {
+    ...plan,
+    runs,
+    summary: {
+      ...plan.summary,
+      completedRuns: runs.length,
+      pendingRuns: 0,
+      completedEpochs: plan.summary.totalEpochs,
+      remainingEpochs: 0,
+    },
+  };
+}
+
+export type MockMonitorScalarSeries = {
+  tag: string;
+  label: string;
+  points: Array<{ step: number; wallTime: number; value: number }>;
+};
+
+export type MockMonitorHistogram = {
+  tag: string;
+  step: number;
+  wallTime: number;
+  buckets: Array<{ left: number; right: number; count: number }>;
+};
+
+export type MockMonitorImage = {
+  tag: string;
+  step: number;
+  wallTime: number;
+  mimeType: string;
+  dataUrl: string;
+};
+
+export type MockMonitorPayload = {
+  scalarSeries: MockMonitorScalarSeries[];
+  histograms: MockMonitorHistogram[];
+  images: MockMonitorImage[];
+};
+
+export type MockMonitorRequestContext = {
+  jobId: string;
+  nodePath: string;
+  preset: string | null;
+  dataset: string | null;
+  logDir: string | null;
+};
+
+export const tinyPngDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+export function mockScalarSeries(
+  nodePath: string,
+  suffix: string,
+  values: [number, number] = [0.1, 0.2],
+): MockMonitorScalarSeries {
+  return {
+    tag: `${nodePath}/${suffix}`,
+    label: suffix,
+    points: [
+      { step: 1, wallTime: 1780000000, value: values[0] },
+      { step: 2, wallTime: 1780000001, value: values[1] },
+    ],
+  };
+}
+
+export function mockHistogram(nodePath: string, suffix = "histogram/usage_fraction") {
+  return {
+    tag: `${nodePath}/${suffix}`,
+    step: 2,
+    wallTime: 1780000001,
+    buckets: [
+      { left: 0, right: 0.5, count: 2 },
+      { left: 0.5, right: 1, count: 1 },
+    ],
+  };
+}
+
+export function mockMonitorImage(nodePath: string, suffix = "heatmap/usage_fraction") {
+  return {
+    tag: `${nodePath}/${suffix}`,
+    step: 2,
+    wallTime: 1780000001,
+    mimeType: "image/png",
+    dataUrl: tinyPngDataUrl,
+  };
+}
+
+export function defaultMonitorPayload(nodePath: string): MockMonitorPayload {
+  return {
+    scalarSeries: [mockScalarSeries(nodePath, "output/mean")],
+    histograms: [mockHistogram(nodePath)],
+    images: [mockMonitorImage(nodePath)],
+  };
+}
+
+export function defaultLogRunMonitorPayload(nodePath: string): MockMonitorPayload {
+  return {
+    scalarSeries: [mockScalarSeries(nodePath, "output/mean", [0.11, 0.22])],
+    histograms: [],
+    images: [],
+  };
+}
+
+export function semanticMonitorPayload(nodePath: string): MockMonitorPayload {
+  return {
+    scalarSeries: [
+      mockScalarSeries(nodePath, "input/mean", [0.1, 0.15]),
+      mockScalarSeries(nodePath, "bias/grad_mean", [0.01, 0.02]),
+      mockScalarSeries(nodePath, "bias/mean", [0.03, 0.04]),
+      mockScalarSeries(nodePath, "weights/l2_norm", [1.2, 1.4]),
+      mockScalarSeries(nodePath, "attention/entropy_mean", [0.8, 0.7]),
+      mockScalarSeries(nodePath, "recurrent/actual_steps", [2, 3]),
+      mockScalarSeries(nodePath, "gate/output_mean", [0.2, 0.25]),
+      mockScalarSeries(nodePath, "parametric/generated_weight_norm", [1.1, 1.3]),
+      mockScalarSeries(nodePath, "router/weight_entropy", [0.5, 0.6]),
+    ],
+    histograms: [mockHistogram(nodePath)],
+    images: [mockMonitorImage(nodePath)],
+  };
+}
+
+export function withParameterCounts(body: unknown) {
+  if (typeof body !== "object" || body === null) {
+    return body;
+  }
+
+  const payload = body as {
+    parameterCount?: unknown;
+    nodes?: unknown[];
+    [key: string]: unknown;
+  };
+  if (!Array.isArray(payload.nodes)) {
+    return body;
+  }
+
+  const nodes = payload.nodes.map((node) => {
+    if (typeof node !== "object" || node === null) {
+      return node;
+    }
+    const graphNode = node as { parameterCount?: unknown; [key: string]: unknown };
+    return {
+      ...graphNode,
+      config:
+        graphNode.config && typeof graphNode.config === "object"
+          ? graphNode.config
+          : null,
+      parameterCount:
+        typeof graphNode.parameterCount === "number" ? graphNode.parameterCount : 0,
+    };
+  });
+  const firstNode = nodes[0] as { parameterCount?: unknown } | undefined;
+
+  return {
+    ...payload,
+    parameterCount:
+      typeof payload.parameterCount === "number"
+        ? payload.parameterCount
+        : typeof firstNode?.parameterCount === "number"
+          ? firstNode.parameterCount
+          : 0,
+    nodes,
+  };
+}
+
+export function installFetchMock(
+  options: {
+    inspectError?: boolean;
+    inspectResponse?: unknown;
+    inspectResponseFactory?: (requestIndex: number) => unknown | Promise<unknown>;
+    logRunsResponse?: typeof logRunsResponse;
+    logExperimentsResponse?: typeof logExperimentsResponse;
+    logScalarSeries?: typeof logScalarSeries;
+    logTagsByRun?: Record<string, MockLogTags>;
+    deleteLogExperimentError?: string;
+    deleteLogRunsError?: string;
+    deleteLogRunsBlockers?: Array<{ id: string; logFolder: string; status: string }>;
+    capabilitiesResponse?: typeof capabilitiesResponse;
+    schemaResponse?: unknown;
+    searchSpaceResponse?: typeof searchSpaceResponse;
+    datasetsResponse?: typeof datasetsResponse;
+    monitorDataResponse?: (context: MockMonitorRequestContext) => MockMonitorPayload;
+    logRunMonitorDataResponse?: (context: MockMonitorRequestContext) => MockMonitorPayload;
+    parameterStatusResponse?: (context: {
+      jobId: string;
+      preset: string | null;
+      dataset: string | null;
+      logDir: string | null;
+    }) => unknown;
+    logParameterStatusResponse?: (context: { runIds: string[] }) => unknown;
+  } = {},
+) {
+  const inspectBodies: unknown[] = [];
+  const trainingBodies: unknown[] = [];
+  const logScalarRequests: Array<{ runIds: string[]; tags: string[] }> = [];
+  const deleteExperimentRequests: string[] = [];
+  const deleteRunPlanRequests: Array<{
+    experiments: string[];
+    datasets: string[];
+    models: string[];
+    presets: string[];
+    runIds: string[];
+  }> = [];
+  const deleteRunRequests: Array<{
+    experiments: string[];
+    datasets: string[];
+    models: string[];
+    presets: string[];
+    runIds: string[];
+  }> = [];
+  const monitorDataRequests: Array<{
+    jobId: string;
+    nodePath: string | null;
+    preset: string | null;
+    dataset: string | null;
+  }> = [];
+  const logRunMonitorDataRequests: Array<{ runId: string; nodePath: string | null }> = [];
+  let latestTrainingRequest: Record<string, unknown> | undefined;
+  let logResponse = { runs: [...(options.logRunsResponse ?? logRunsResponse).runs] };
+  let experimentResponse = {
+    experiments: [
+      ...(options.logExperimentsResponse ?? logExperimentsResponse).experiments,
+    ],
+  };
+  const tagsByRun = options.logTagsByRun ?? logTagsByRun;
+  const scalarSeries = options.logScalarSeries ?? logScalarSeries;
+
+  function uniqueSorted(values: string[]) {
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+  }
+
+  function matchingDeleteRuns(filters: {
+    experiments: string[];
+    datasets: string[];
+    models: string[];
+    presets: string[];
+    runIds: string[];
+  }) {
+    if (
+      filters.experiments.length === 0 ||
+      filters.datasets.length === 0 ||
+      filters.models.length === 0 ||
+      filters.presets.length === 0 ||
+      filters.runIds.length === 0
+    ) {
+      return [];
+    }
+    const experiments = new Set(filters.experiments);
+    const datasets = new Set(filters.datasets);
+    const models = new Set(filters.models);
+    const presets = new Set(filters.presets);
+    const runIds = new Set(filters.runIds);
+    return logResponse.runs.filter(
+      (run) =>
+        experiments.has(run.experiment) &&
+        datasets.has(run.dataset) &&
+        models.has(run.model) &&
+        presets.has(run.preset) &&
+        runIds.has(run.id),
+    );
+  }
+
+  function deletePlanPayload(filters: {
+    experiments: string[];
+    datasets: string[];
+    models: string[];
+    presets: string[];
+    runIds: string[];
+  }) {
+    const candidates = matchingDeleteRuns(filters);
+    const blockers = options.deleteLogRunsBlockers ?? [];
+    return {
+      candidateCount: candidates.length,
+      counts: {
+        runs: candidates.length,
+        experiments: uniqueSorted(candidates.map((run) => run.experiment)).length,
+        datasets: uniqueSorted(candidates.map((run) => run.dataset)).length,
+        models: uniqueSorted(candidates.map((run) => run.model)).length,
+        presets: uniqueSorted(candidates.map((run) => run.preset)).length,
+      },
+      affected: {
+        experiments: uniqueSorted(candidates.map((run) => run.experiment)),
+        datasets: uniqueSorted(candidates.map((run) => run.dataset)),
+        models: uniqueSorted(candidates.map((run) => run.model)),
+        presets: uniqueSorted(candidates.map((run) => run.preset)),
+        runIds: uniqueSorted(candidates.map((run) => run.id)),
+      },
+      candidates: candidates.map((run) => ({
+        id: run.id,
+        experiment: run.experiment,
+        model: run.model,
+        preset: run.preset,
+        dataset: run.dataset,
+        runName: run.runName,
+        version: run.version,
+        relativePath: run.relativePath,
+      })),
+      blockedByActiveJobs: blockers,
+      canDelete: candidates.length > 0 && blockers.length === 0,
+    };
+  }
+
+  const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const endsWithAny = (suffixes: string[]) =>
+      suffixes.some((suffix) => url.endsWith(suffix));
+    const includesAny = (fragments: string[]) =>
+      fragments.some((fragment) => url.includes(fragment));
+    if (url.endsWith("/health")) {
+      return jsonResponse({ status: "ok" });
+    }
+    if (url.endsWith("/capabilities")) {
+      return jsonResponse(options.capabilitiesResponse ?? capabilitiesResponse);
+    }
+    if (url.endsWith("/models")) {
+      return jsonResponse(modelsResponse);
+    }
+    if (endsWithAny(["/models/linear/presets", "/models/linears/linear/presets"])) {
+      return jsonResponse(presetsResponse);
+    }
+    if (
+      endsWithAny(["/models/linear/datasets", "/models/linears/linear/datasets"])
+    ) {
+      return jsonResponse(options.datasetsResponse ?? datasetsResponse);
+    }
+    if (
+      endsWithAny(["/models/linear/monitors", "/models/linears/linear/monitors"])
+    ) {
+      return jsonResponse(monitorsResponse);
+    }
+    if (
+      includesAny([
+        "/models/linear/config-schema",
+        "/models/linears/linear/config-schema",
+      ])
+    ) {
+      return jsonResponse(options.schemaResponse ?? schemaResponse);
+    }
+    if (
+      includesAny([
+        "/models/linear/search-space",
+        "/models/linears/linear/search-space",
+      ])
+    ) {
+      return jsonResponse(options.searchSpaceResponse ?? searchSpaceResponse);
+    }
+    if (
+      endsWithAny([
+        "/models/bert_linear/presets",
+        "/models/transformer_encoder/bert_linear/presets",
+      ])
+    ) {
+      return jsonResponse(bertPresetsResponse);
+    }
+    if (
+      endsWithAny([
+        "/models/bert_linear/datasets",
+        "/models/transformer_encoder/bert_linear/datasets",
+      ])
+    ) {
+      return jsonResponse(bertDatasetsResponse);
+    }
+    if (
+      endsWithAny([
+        "/models/bert_linear/monitors",
+        "/models/transformer_encoder/bert_linear/monitors",
+      ])
+    ) {
+      return jsonResponse({ model: "bert_linear", monitors: [] });
+    }
+    if (
+      includesAny([
+        "/models/bert_linear/config-schema",
+        "/models/transformer_encoder/bert_linear/config-schema",
+      ])
+    ) {
+      const schemaPayload = options.schemaResponse ?? schemaResponse;
+      return jsonResponse(
+        typeof schemaPayload === "object" && schemaPayload !== null
+          ? { ...schemaPayload, model: "bert_linear" }
+          : schemaPayload,
+      );
+    }
+    if (
+      includesAny([
+        "/models/bert_linear/search-space",
+        "/models/transformer_encoder/bert_linear/search-space",
+      ])
+    ) {
+      return jsonResponse({ model: "bert_linear", preset: "bert-baseline", axes: [] });
+    }
+    if (url.endsWith("/training/run-plan")) {
+      const request = JSON.parse(String(init?.body)) as MockTrainingPlanRequest;
+      return jsonResponse(mockTrainingRunPlan(request));
+    }
+    if (url.endsWith("/inspect")) {
+      inspectBodies.push(JSON.parse(String(init?.body)));
+      if (options.inspectError) {
+        return jsonResponse({ detail: "invalid override value" }, 400);
+      }
+      const inspectRequestIndex = inspectBodies.length - 1;
+      const responseBody = options.inspectResponseFactory
+        ? options.inspectResponseFactory(inspectRequestIndex)
+        : options.inspectResponse;
+      return Promise.resolve(responseBody ?? inspectResponse).then((body) =>
+        jsonResponse(withParameterCounts(body)),
+      );
+    }
+    if (url.endsWith("/training/jobs")) {
+      latestTrainingRequest = JSON.parse(String(init?.body));
+      trainingBodies.push(latestTrainingRequest);
+      const runPlan =
+        (latestTrainingRequest?.runPlan as
+          | ReturnType<typeof mockTrainingRunPlan>
+          | undefined) ??
+        mockTrainingRunPlan(latestTrainingRequest as MockTrainingPlanRequest);
+      const logFolder = String(latestTrainingRequest?.logFolder ?? "test_model");
+      if (!experimentResponse.experiments.some((entry) => entry.experiment === logFolder)) {
+        experimentResponse = {
+          experiments: [
+            ...experimentResponse.experiments,
+            { experiment: logFolder, runCount: 0, relativePath: logFolder },
+          ],
+        };
+      }
+      return jsonResponse({
+        id: "job-1",
+        status: "running",
+        model: "linear",
+        preset: "baseline",
+        presets: latestTrainingRequest?.presets ?? ["baseline"],
+        datasets: ["Mnist"],
+        overrides: {},
+        runPlan,
+        monitors: latestTrainingRequest?.monitors ?? [],
+        logFolder,
+        createdAt: "2026-06-01T00:00:00Z",
+        updatedAt: "2026-06-01T00:00:00Z",
+        exitCode: null,
+        pid: 123,
+        currentPreset: "baseline",
+        currentDataset: "Mnist",
+        epoch: 0,
+        step: 0,
+        metrics: {},
+        logDir: null,
+        events: [],
+        logTail: [],
+        resultLinks: [],
+      });
+    }
+    if (url.endsWith("/training/jobs/job-1")) {
+      const logFolder = String(latestTrainingRequest?.logFolder ?? "test_model");
+      const runPlan = completedMockTrainingRunPlan(
+        (latestTrainingRequest ?? { logFolder }) as MockTrainingPlanRequest,
+      );
+      return jsonResponse({
+        id: "job-1",
+        status: "completed",
+        model: "linear",
+        preset: "baseline",
+        presets: latestTrainingRequest?.presets ?? ["baseline"],
+        datasets: ["Mnist"],
+        overrides: {},
+        runPlan,
+        monitors: latestTrainingRequest?.monitors ?? [],
+        logFolder,
+        createdAt: "2026-06-01T00:00:00Z",
+        updatedAt: "2026-06-01T00:00:01Z",
+        exitCode: 0,
+        pid: 123,
+        currentPreset: "baseline",
+        currentDataset: "Mnist",
+        epoch: 1,
+        step: 4,
+        metrics: { validation_accuracy: 0.9 },
+        logDir: `logs/${logFolder}`,
+        events: [],
+        logTail: ["done"],
+        resultLinks: [{ preset: "baseline", dataset: "Mnist", logDir: `logs/${logFolder}` }],
+      });
+    }
+    if (url.includes("/training/jobs/job-1/monitor-data")) {
+      const parsedUrl = new URL(url);
+      const logFolder = String(latestTrainingRequest?.logFolder ?? "test_model");
+      const nodePath = parsedUrl.searchParams.get("nodePath") ?? "";
+      const preset = parsedUrl.searchParams.get("preset");
+      const dataset = parsedUrl.searchParams.get("dataset");
+      const logDir = `logs/${logFolder}`;
+      monitorDataRequests.push({
+        jobId: "job-1",
+        nodePath,
+        preset,
+        dataset,
+      });
+      const monitorPayload =
+        options.monitorDataResponse?.({
+          jobId: "job-1",
+          nodePath,
+          preset,
+          dataset,
+          logDir,
+        }) ?? defaultMonitorPayload(nodePath);
+      return jsonResponse({
+        jobId: "job-1",
+        nodePath,
+        preset,
+        dataset,
+        logDir,
+        ...monitorPayload,
+      });
+    }
+    if (url.includes("/training/jobs/job-1/monitor-parameter-status")) {
+      const parsedUrl = new URL(url);
+      const logFolder = String(latestTrainingRequest?.logFolder ?? "test_model");
+      const preset = parsedUrl.searchParams.get("preset");
+      const dataset = parsedUrl.searchParams.get("dataset");
+      const logDir = `logs/${logFolder}`;
+      return jsonResponse(
+        options.parameterStatusResponse?.({
+          jobId: "job-1",
+          preset,
+          dataset,
+          logDir,
+        }) ?? {
+          sourceId: "job-1",
+          preset,
+          dataset,
+          logDir,
+          nodes: [],
+        },
+      );
+    }
+    if (url.endsWith("/logs/runs/delete-plan")) {
+      const body = JSON.parse(String(init?.body)) as {
+        experiments: string[];
+        datasets: string[];
+        models: string[];
+        presets: string[];
+        runIds: string[];
+      };
+      deleteRunPlanRequests.push(body);
+      return jsonResponse(deletePlanPayload(body));
+    }
+    if (url.endsWith("/logs/runs/delete")) {
+      const body = JSON.parse(String(init?.body)) as {
+        experiments: string[];
+        datasets: string[];
+        models: string[];
+        presets: string[];
+        runIds: string[];
+      };
+      deleteRunRequests.push(body);
+      if (options.deleteLogRunsError) {
+        return jsonResponse({ detail: options.deleteLogRunsError }, 400);
+      }
+      const plan = deletePlanPayload(body);
+      if (!plan.canDelete) {
+        return jsonResponse(
+          { detail: "A training job is still writing to this log folder." },
+          400,
+        );
+      }
+      const deletedRunIds = new Set(plan.candidates.map((run) => run.id));
+      logResponse = {
+        runs: logResponse.runs.filter((run) => !deletedRunIds.has(run.id)),
+      };
+      const runCounts = new Map<string, number>();
+      for (const run of logResponse.runs) {
+        runCounts.set(run.experiment, (runCounts.get(run.experiment) ?? 0) + 1);
+      }
+      experimentResponse = {
+        experiments: experimentResponse.experiments
+          .map((entry) => ({
+            ...entry,
+            runCount: runCounts.get(entry.experiment) ?? 0,
+          }))
+          .filter((entry) => entry.runCount > 0),
+      };
+      return jsonResponse({
+        ...plan,
+        deletedRunIds: plan.candidates.map((run) => run.id),
+        deletedRunCount: plan.candidates.length,
+        deletedRelativePaths: plan.candidates.map((run) => run.relativePath),
+      });
+    }
+    if (url.endsWith("/logs/runs")) {
+      return jsonResponse(logResponse);
+    }
+    if (url.includes("/logs/runs/") && url.includes("/monitor-data")) {
+      const parsedUrl = new URL(url);
+      const runId = decodeURIComponent(
+        url.split("/logs/runs/")[1]?.split("/monitor-data")[0] ?? "",
+      );
+      const run = logResponse.runs.find((candidate) => candidate.id === runId);
+      const nodePath = parsedUrl.searchParams.get("nodePath") ?? "";
+      logRunMonitorDataRequests.push({
+        runId,
+        nodePath,
+      });
+      const logDir = run?.relativePath ?? null;
+      const monitorPayload =
+        options.logRunMonitorDataResponse?.({
+          jobId: runId,
+          nodePath,
+          preset: null,
+          dataset: run?.dataset ?? null,
+          logDir,
+        }) ?? defaultLogRunMonitorPayload(nodePath);
+      return jsonResponse({
+        jobId: runId,
+        nodePath,
+        dataset: run?.dataset ?? null,
+        logDir,
+        ...monitorPayload,
+      });
+    }
+    if (url.endsWith("/logs/experiments")) {
+      return jsonResponse(experimentResponse);
+    }
+    if (url.includes("/logs/experiments/")) {
+      const experiment = decodeURIComponent(url.split("/logs/experiments/")[1] ?? "");
+      deleteExperimentRequests.push(experiment);
+      if (options.deleteLogExperimentError) {
+        return jsonResponse({ detail: options.deleteLogExperimentError }, 400);
+      }
+      const deletedRuns = logResponse.runs.filter(
+        (run) => run.experiment === experiment,
+      );
+      logResponse = {
+        runs: logResponse.runs.filter((run) => run.experiment !== experiment),
+      };
+      experimentResponse = {
+        experiments: experimentResponse.experiments.filter(
+          (entry) => entry.experiment !== experiment,
+        ),
+      };
+      return jsonResponse({
+        experiment,
+        deletedRunIds: deletedRuns.map((run) => run.id),
+        deletedRunCount: deletedRuns.length,
+        deletedRelativePath: experiment,
+      });
+    }
+    if (url.endsWith("/logs/tags")) {
+      const body = JSON.parse(String(init?.body)) as { runIds: string[] };
+      return jsonResponse({
+        runs: body.runIds.map((runId) => ({
+          runId,
+          ...logTagsPayload(tagsByRun[runId]),
+        })),
+      });
+    }
+    if (url.endsWith("/logs/scalars")) {
+      const body = JSON.parse(String(init?.body)) as {
+        runIds: string[];
+        tags: string[];
+      };
+      logScalarRequests.push(body);
+      return jsonResponse({
+        series: scalarSeries.filter(
+          (series) => body.runIds.includes(series.runId) && body.tags.includes(series.tag),
+        ),
+      });
+    }
+    if (url.endsWith("/logs/parameter-status")) {
+      const body = JSON.parse(String(init?.body)) as { runIds: string[] };
+      return jsonResponse(
+        options.logParameterStatusResponse?.({ runIds: body.runIds }) ?? {
+          runs: body.runIds.map((runId) => {
+            const run = logResponse.runs.find((candidate) => candidate.id === runId);
+            return {
+              sourceId: runId,
+              preset: run?.preset ?? null,
+              dataset: run?.dataset ?? null,
+              logDir: run?.relativePath ?? null,
+              nodes: [],
+            };
+          }),
+        },
+      );
+    }
+    return jsonResponse({ detail: `Unhandled ${url}` }, 404);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return {
+    fetchMock,
+    inspectBodies,
+    trainingBodies,
+    logScalarRequests,
+    deleteExperimentRequests,
+    deleteRunPlanRequests,
+    deleteRunRequests,
+    monitorDataRequests,
+    logRunMonitorDataRequests,
+  };
+}
+
+export function renderViewer() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ViewerApp />
+    </QueryClientProvider>,
+  );
+}
+
+export async function waitForOpenFullConfigButton() {
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: /open full config/i })).toBeEnabled(),
+  );
+  return screen.getByRole("button", { name: /open full config/i });
+}
+
+export async function openDatasetSelector(user: ReturnType<typeof userEvent.setup>) {
+  const trigger = await screen.findByRole("button", {
+    name: /datasets\s+\d+\s*\/\s*\d+/i,
+  });
+  await user.click(trigger);
+  return screen.findByRole("dialog", { name: /dataset selector/i });
+}
+
+export async function findTargetCombobox(label: "model" | "preset") {
+  return screen.findByRole("combobox", {
+    name: new RegExp(`^${label}$`, "i"),
+  });
+}
+
+export async function waitForTargetValue(label: "model" | "preset", value: string) {
+  const control = await findTargetCombobox(label);
+  await waitFor(() => expect(control).toHaveTextContent(value));
+  return control;
+}
+
+export function targetListboxName(label: "model" | "preset") {
+  return new RegExp(`^${label} options$`, "i");
+}
+
+export async function openTargetDropdown(
+  user: ReturnType<typeof userEvent.setup>,
+  label: "model" | "preset",
+) {
+  const control = await findTargetCombobox(label);
+  await user.click(control);
+  const listbox = await screen.findByRole("listbox", {
+    name: targetListboxName(label),
+  });
+  return { control, listbox };
+}
+
+export async function selectTargetOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: "model" | "preset",
+  optionName: string,
+) {
+  const { control, listbox } = await openTargetDropdown(user, label);
+  await user.click(within(listbox).getByRole("option", { name: optionName }));
+  await waitFor(() => {
+    expect(screen.queryByRole("listbox", { name: targetListboxName(label) }))
+      .not.toBeInTheDocument();
+  });
+  return control;
+}
+
+export async function openFullConfig(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await waitForOpenFullConfigButton());
+  return screen.findByRole("dialog", { name: /full configuration/i });
+}
+
+export async function typeConfigFieldValue(
+  user: ReturnType<typeof userEvent.setup>,
+  dialog: HTMLElement,
+  label: RegExp,
+  value: string,
+) {
+  const input = within(dialog).getByLabelText(label);
+  await user.clear(input);
+  await user.type(input, value);
+  return input;
+}
+
+export function fullConfigSearchPopup(dialog: HTMLElement) {
+  return within(dialog).getByRole("dialog", {
+    name: /matching config fields/i,
+  });
+}
+
+export function fullConfigSearchResultRow(popup: HTMLElement, name: RegExp) {
+  const row = within(popup)
+    .getAllByRole("group", { name: /config search result/i })
+    .find((candidate) =>
+      within(candidate).queryByRole("button", { name }),
+    );
+
+  if (!(row instanceof HTMLElement)) {
+    throw new Error(`Expected a full config search result matching ${name}`);
+  }
+
+  return row;
+}
+
+export function configFieldRowFor(control: HTMLElement) {
+  const controlGrid = control.closest(".grid");
+  const row = controlGrid?.parentElement;
+
+  if (!(row instanceof HTMLElement)) {
+    throw new Error("Expected config field control to render inside a field row");
+  }
+
+  return row;
+}
+
+export function configFieldGridFor(control: HTMLElement) {
+  const row = configFieldRowFor(control);
+  const grid = row.parentElement;
+
+  if (!(grid instanceof HTMLElement)) {
+    throw new Error("Expected config field row to render inside a field grid");
+  }
+
+  return grid;
+}
+
+export function expectResponsiveConfigFieldGrid(grid: HTMLElement) {
+  expect(Array.from(grid.classList)).toEqual(
+    expect.arrayContaining([
+      "grid",
+      "gap-x-3",
+      "gap-y-3",
+      "md:grid-cols-2",
+      "2xl:grid-cols-3",
+    ]),
+  );
+  expect(grid.classList).not.toContain("grid-cols-1");
+}
+
+export function fullConfigSectionFor(accordion: HTMLElement) {
+  const section = accordion.closest("section");
+
+  if (!(section instanceof HTMLElement)) {
+    throw new Error("Expected full config accordion to render inside a section");
+  }
+
+  return section;
+}
+
+export function fullConfigSectionNavRowFor(sectionNav: HTMLElement, name: RegExp) {
+  const jump = within(sectionNav).getByRole("button", { name });
+  const row = jump.parentElement?.parentElement;
+
+  if (!(row instanceof HTMLElement)) {
+    throw new Error("Expected full config section jump to render inside a row");
+  }
+
+  return row;
+}
+
+export async function expandTrainingPanel(user: ReturnType<typeof userEvent.setup>) {
+  if (!screen.queryByRole("tab", { name: /new folder/i })) {
+    await user.click(await screen.findByRole("button", { name: /^training/i }));
+  }
+}
+
+export async function expandedTrainingDetails(user: ReturnType<typeof userEvent.setup>) {
+  await expandTrainingPanel(user);
+  const details = document.getElementById("training-panel-details");
+  if (!(details instanceof HTMLElement)) {
+    throw new Error("Expected expanded training panel details to render");
+  }
+  return details;
+}
+
+export async function expandedTrainingDetailsWithConfig(user: ReturnType<typeof userEvent.setup>) {
+  const details = await expandedTrainingDetails(user);
+  await waitFor(() =>
+    expect(trainingFullConfigButton(details)).toBeEnabled(),
+  );
+  return details;
+}
+
+export function trainingFullConfigButton(details: HTMLElement) {
+  return within(details).getByRole("button", { name: /open full config/i });
+}
+
+export async function openTrainingFullConfig(
+  user: ReturnType<typeof userEvent.setup>,
+  details: HTMLElement,
+) {
+  await user.click(trainingFullConfigButton(details));
+  return screen.findByRole("dialog", { name: /full configuration/i });
+}
+
+export async function setTrainingHiddenDimOverride(
+  user: ReturnType<typeof userEvent.setup>,
+  details: HTMLElement,
+  value: string,
+) {
+  const dialog = await openTrainingFullConfig(user, details);
+  await typeConfigFieldValue(user, dialog, /hidden dim/i, value);
+  await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+}
+
+export async function selectTrainingTargetOption(
+  user: ReturnType<typeof userEvent.setup>,
+  label: "model" | "preset",
+  optionName: string,
+) {
+  const details = await expandedTrainingDetails(user);
+  const control = within(details).getByRole("combobox", {
+    name: new RegExp(`^training ${label}$`, "i"),
+  });
+  await user.click(control);
+  const listbox = await within(details).findByRole("listbox", {
+    name: new RegExp(`^training ${label} options$`, "i"),
+  });
+  await user.click(within(listbox).getByRole("option", { name: optionName }));
+  await waitFor(() => {
+    expect(
+      within(details).queryByRole("listbox", {
+        name: new RegExp(`^training ${label} options$`, "i"),
+      }),
+    ).not.toBeInTheDocument();
+  });
+  return control;
+}
+
+export type TrainingMultiSelectLabel =
+  | "Presets"
+  | "Training datasets"
+  | "Training monitors";
+
+export function trainingMultiSelectName(label: TrainingMultiSelectLabel) {
+  return new RegExp(`^${label}\\b`, "i");
+}
+
+export function trainingMultiSelectOptionsName(label: TrainingMultiSelectLabel) {
+  return new RegExp(`^${label} options$`, "i");
+}
+
+export async function openTrainingMultiSelect(
+  user: ReturnType<typeof userEvent.setup>,
+  details: HTMLElement,
+  label: TrainingMultiSelectLabel,
+) {
+  const control = within(details).getByRole("combobox", {
+    name: trainingMultiSelectName(label),
+  });
+  let listbox = within(details).queryByRole("listbox", {
+    name: trainingMultiSelectOptionsName(label),
+  });
+  if (!listbox) {
+    await user.click(control);
+    listbox = await within(details).findByRole("listbox", {
+      name: trainingMultiSelectOptionsName(label),
+    });
+  }
+  return { control, listbox };
+}
+
+export async function setTrainingMultiSelectOption(
+  user: ReturnType<typeof userEvent.setup>,
+  details: HTMLElement,
+  label: TrainingMultiSelectLabel,
+  optionName: RegExp,
+  selected = true,
+) {
+  const { listbox } = await openTrainingMultiSelect(user, details, label);
+  const option = within(listbox).getByRole("option", { name: optionName });
+  if ((option.getAttribute("aria-selected") === "true") !== selected) {
+    await user.click(option);
+  }
+  return option;
+}
+
+export async function selectTrainingMonitorOption(
+  user: ReturnType<typeof userEvent.setup>,
+  optionName: RegExp,
+) {
+  const details = await expandedTrainingDetails(user);
+  await setTrainingMultiSelectOption(
+    user,
+    details,
+    "Training monitors",
+    optionName,
+  );
+  return details;
+}
+
+export async function selectNewTrainingLogFolder(
+  user: ReturnType<typeof userEvent.setup>,
+  name = "my_experiment",
+) {
+  await expandTrainingPanel(user);
+  await user.click(screen.getByRole("tab", { name: /new folder/i }));
+  const input = screen.getByLabelText(/^new log folder$/i);
+  await user.clear(input);
+  await user.type(input, name);
+}
+
+export async function selectExistingTrainingLogFolder(
+  user: ReturnType<typeof userEvent.setup>,
+  name = "test_model",
+) {
+  await expandTrainingPanel(user);
+  await user.selectOptions(screen.getByLabelText(/^log experiment folder$/i), name);
+}
+
+export function fullConfigSectionGridFor(accordion: HTMLElement) {
+  const section = fullConfigSectionFor(accordion);
+  if (!section.parentElement) {
+    throw new Error("Expected full config accordion to render inside the section grid");
+  }
+  return section.parentElement;
+}
+
+export function expectFullConfigSectionGrid(grid: HTMLElement) {
+  expect(Array.from(grid.classList)).toEqual(
+    expect.arrayContaining([
+      "grid",
+      "auto-rows-max",
+      "items-start",
+      "gap-3",
+    ]),
+  );
+  expect(grid.className).not.toMatch(/auto-(fit|fill)/);
+  expect(grid.classList).not.toContain("grid-cols-1");
+  expect(grid.classList).not.toContain("md:grid-cols-2");
+  expect(grid.classList).not.toContain("2xl:grid-cols-3");
+}
+
+export async function openTrainingCommand(
+  user: ReturnType<typeof userEvent.setup>,
+  dialog: HTMLElement,
+) {
+  await user.click(within(dialog).getByRole("button", { name: /training command/i }));
+  return screen.findByRole("dialog", { name: /training command/i });
+}
+
+export function commandField(dialog: HTMLElement) {
+  return within(dialog).getByRole("textbox", { name: /^training command$/i });
+}
+
+export function expectLogsChecklistRowSizing(control: HTMLElement) {
+  const label = control.closest("label");
+  const row = label?.parentElement;
+  const optionList = row?.parentElement;
+
+  if (
+    !(label instanceof HTMLElement) ||
+    !(row instanceof HTMLElement) ||
+    !(optionList instanceof HTMLElement)
+  ) {
+    throw new Error("Expected the logs checklist option to render in a grid row");
+  }
+
+  expect(Array.from(optionList.classList)).toEqual(
+    expect.arrayContaining([
+      "grid",
+      "max-h-64",
+      "auto-rows-max",
+      "content-start",
+      "overflow-y-auto",
+    ]),
+  );
+  expect(row).toHaveClass("min-h-[44px]");
+  expect(label).toHaveClass("min-h-[44px]");
+}
+
+export function scalarChartGridFor(chart: HTMLElement) {
+  const chartSection = chart.closest("section");
+  const grid = chartSection?.parentElement;
+
+  if (!(grid instanceof HTMLElement)) {
+    throw new Error("Expected scalar chart to render inside the scalar chart grid");
+  }
+
+  return grid;
+}
+
+export function logMetricGroupToggle(label: string) {
+  return screen.getByRole("button", {
+    name: new RegExp(`^${label}\\s+\\d+\\s+metrics?$`, "i"),
+  });
+}
+
+export function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolver) => {
+    resolve = resolver;
+  });
+  return { promise, resolve };
+}
+
+export let scrollIntoViewMock: ReturnType<typeof vi.fn>;
+
+
+export function resetViewerAppTestState() {
+  vi.restoreAllMocks();
+  scrollIntoViewMock = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    writable: true,
+    value: scrollIntoViewMock,
+  });
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: undefined,
+  });
+}

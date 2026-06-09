@@ -1,4 +1,5 @@
-import { StatusCard } from "@/components/features/viewer/shared/status-card";
+import { Button } from "@/components/ui/button";
+import { StatusCard } from "@/features/viewer/components/shared/status-card";
 
 export function FullPageError({
   message,
@@ -16,13 +17,9 @@ export function FullPageError({
       }
       icon={<span className="text-base font-bold" aria-hidden>!</span>}
       actions={
-        <button
-          type="button"
-          onClick={onRetry}
-          className="inline-flex h-9 items-center justify-center rounded-ctl bg-grad px-4 text-sm font-bold text-white shadow-primary"
-        >
+        <Button variant="primary" onClick={onRetry} className="px-4 font-bold">
           Try again
-        </button>
+        </Button>
       }
       layout="page"
     />

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildClusterGrowth } from "@/lib/cluster-growth";
-import { type TrainingJob } from "@/lib/api";
+import { type TrainingJob, type TrainingProgressEvent } from "@/lib/api";
 
-function job(events: Array<Record<string, unknown>>): TrainingJob {
+function job(events: TrainingProgressEvent[]): TrainingJob {
   return {
     id: "job-1",
     status: "running",
@@ -36,6 +36,7 @@ describe("buildClusterGrowth", () => {
           node: "neuron_cluster",
           count: 1,
           capacity: [3, 1, 1],
+          coordinates: [[1, 1, 1]],
         },
         { type: "step", metrics: { loss: 0.5 } },
         {

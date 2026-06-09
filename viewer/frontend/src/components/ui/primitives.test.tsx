@@ -35,7 +35,7 @@ describe("Badge", () => {
   it.each([
     ["success", "border-ok/30", "bg-ok/10", "text-ok"],
     ["warning", "border-amber/40", "bg-amber/[0.12]", "text-amber"],
-    ["danger", "border-danger-line", "bg-danger-soft", "text-[#fda4af]"],
+    ["danger", "border-danger-line", "bg-danger-soft", "text-danger-text"],
     ["info", "border-blue/30", "bg-blue/10", "text-blue"],
     ["violet", "border-violet/30", "bg-violet/15", "text-violet"],
   ] as const)("applies the %s variant styling", (variant, borderClass, bgClass, textClass) => {
@@ -49,7 +49,7 @@ describe("Button", () => {
     render(<Button>go</Button>);
     const button = screen.getByRole("button", { name: "go" });
     expect(button).toHaveAttribute("type", "button");
-    expect(button.className).toContain("bg-white/[0.035]");
+    expect(button.className).toContain("bg-control");
   });
 
   it("applies the primary variant and fires onClick", () => {
@@ -126,13 +126,13 @@ describe("IconButton", () => {
       "inline-flex",
       "h-8",
       "w-8",
-      "rounded-[8px]",
+      "rounded-control-md",
       "border-line",
       "text-ink-faint",
       "custom-class",
       "bg-ok/10",
     );
-    expect(button.className).not.toContain("bg-white/[0.035]");
+    expect(button).not.toHaveClass("bg-control");
   });
 
   it("applies md, ghost, and danger classes", () => {
@@ -148,9 +148,9 @@ describe("IconButton", () => {
     expect(button).toHaveClass(
       "h-9",
       "w-9",
-      "rounded-[10px]",
+      "rounded-control",
       "border-transparent",
-      "hover:bg-white/[0.055]",
+      "hover:bg-control-active",
     );
 
     rerender(
@@ -164,7 +164,7 @@ describe("IconButton", () => {
       "border-transparent",
       "hover:border-danger-line",
       "hover:bg-danger-soft",
-      "hover:text-[#fda4af]",
+      "hover:text-danger-text",
     );
   });
 });
@@ -244,7 +244,7 @@ describe("StatusDot", () => {
     expect(container.firstChild).toHaveClass("bg-ok");
 
     rerender(<StatusDot online={false} />);
-    expect(container.firstChild).toHaveClass("bg-[#fb7185]");
+    expect(container.firstChild).toHaveClass("bg-danger");
   });
 });
 

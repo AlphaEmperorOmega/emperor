@@ -7,32 +7,71 @@ import {
   logQueryKeys,
   monitorQueryKeys,
   trainingQueryKeys,
+  type TrainingRunPlanQueryKeyInput,
   viewerQueryKeys,
 } from "@/lib/query-keys";
 
+function trainingRunPlanInput(
+  overrides: Partial<TrainingRunPlanQueryKeyInput> = {},
+): TrainingRunPlanQueryKeyInput {
+  return {
+    model: "linear",
+    preset: "baseline",
+    presets: ["baseline"],
+    datasets: ["Mnist"],
+    overrides: { hidden_size: "128" },
+    logFolder: "runs",
+    ...overrides,
+  };
+}
+
 describe("query key factories", () => {
   it("preserves log query key shapes", () => {
-    const runIds = ["run-1", "run-2"];
+    const runIds = ["run-2", "run-1"];
     const tags = ["loss", "accuracy"];
 
     expect(logQueryKeys.runs()).toEqual(["log-runs"]);
     expect(logQueryKeys.experiments()).toEqual(["log-experiments"]);
     expect(logQueryKeys.tags()).toEqual(["log-tags"]);
-    expect(logQueryKeys.tagsForRuns(runIds)).toEqual(["log-tags", runIds]);
+    expect(logQueryKeys.tagsForRuns(runIds)).toEqual([
+      "log-tags",
+      ["run-1", "run-2"],
+    ]);
     expect(logQueryKeys.filteredHistoricalRunTags(runIds)).toEqual([
       "log-tags",
       "filtered-historical-runs",
-      runIds,
+      ["run-1", "run-2"],
+    ]);
+    expect(logQueryKeys.modelRunTags(runIds)).toEqual([
+      "log-tags",
+      "model-runs",
+      ["run-1", "run-2"],
     ]);
     expect(logQueryKeys.scalars()).toEqual(["log-scalars"]);
     expect(logQueryKeys.scalarsForRunsAndTags(runIds, tags)).toEqual([
       "log-scalars",
-      runIds,
-      tags,
+      ["run-1", "run-2"],
+      ["accuracy", "loss"],
     ]);
-    expect(logQueryKeys.tagsForRuns(runIds)[1]).toBe(runIds);
-    expect(logQueryKeys.scalarsForRunsAndTags(runIds, tags)[1]).toBe(runIds);
-    expect(logQueryKeys.scalarsForRunsAndTags(runIds, tags)[2]).toBe(tags);
+    expect(runIds).toEqual(["run-2", "run-1"]);
+    expect(tags).toEqual(["loss", "accuracy"]);
+  });
+
+  it("normalizes set-like log query key values", () => {
+    expect(logQueryKeys.tagsForRuns(["run-2", "run-1", "run-2"])).toEqual(
+      logQueryKeys.tagsForRuns(["run-1", "run-2"]),
+    );
+    expect(
+      logQueryKeys.scalarsForRunsAndTags(
+        ["run-2", "run-1", "run-2"],
+        ["loss", "accuracy", "loss"],
+      ),
+    ).toEqual(
+      logQueryKeys.scalarsForRunsAndTags(
+        ["run-1", "run-2"],
+        ["accuracy", "loss"],
+      ),
+    );
   });
 
   it("keeps legacy log query constants on the base family keys", () => {
@@ -69,15 +108,76 @@ describe("query key factories", () => {
   it("preserves training query key shapes", () => {
     expect(trainingQueryKeys.job("job-1")).toEqual(["training-job", "job-1"]);
     expect(trainingQueryKeys.job(null)).toEqual(["training-job", null]);
-    expect(trainingQueryKeys.runPlan(2, "input-key")).toEqual([
+    expect(trainingQueryKeys.runPlan(2, trainingRunPlanInput())).toEqual([
       "training-run-plan",
       2,
-      "input-key",
+      {
+        datasets: ["Mnist"],
+        logFolder: "runs",
+        model: "linear",
+        overrides: { hidden_size: "128" },
+        preset: "baseline",
+        presets: ["baseline"],
+        search: null,
+        submittedRunPlan: null,
+      },
     ]);
   });
 
+  it("normalizes object-like training run-plan query key values", () => {
+    const firstKey = trainingQueryKeys.runPlan(
+      0,
+      trainingRunPlanInput({
+        overrides: { z_field: "2", a_field: "1" },
+        search: {
+          mode: "grid",
+          values: {
+            z_axis: [2],
+            a_axis: ["one"],
+          },
+        },
+      }),
+    );
+    const secondKey = trainingQueryKeys.runPlan(
+      0,
+      trainingRunPlanInput({
+        overrides: { a_field: "1", z_field: "2" },
+        search: {
+          mode: "grid",
+          values: {
+            a_axis: ["one"],
+            z_axis: [2],
+          },
+        },
+      }),
+    );
+
+    expect(firstKey).toEqual(secondKey);
+    expect(JSON.stringify(firstKey)).toBe(JSON.stringify(secondKey));
+  });
+
+  it("keeps training run-plan array order visible in the query key", () => {
+    expect(
+      trainingQueryKeys.runPlan(
+        0,
+        trainingRunPlanInput({
+          presets: ["wide", "baseline"],
+          datasets: ["Cifar10", "Mnist"],
+        }),
+      ),
+    ).not.toEqual(
+      trainingQueryKeys.runPlan(
+        0,
+        trainingRunPlanInput({
+          presets: ["baseline", "wide"],
+          datasets: ["Mnist", "Cifar10"],
+        }),
+      ),
+    );
+  });
+
   it("preserves monitor query key shapes and undefined entries", () => {
-    const runIds = ["run-1", "run-2"];
+    const runIds = ["run-2", "run-1"];
 
     expect(
       monitorQueryKeys.activeJob("job-1", "root.layer", "baseline", "mnist"),
@@ -112,10 +212,14 @@ describe("query key factories", () => {
     expect(monitorQueryKeys.historicalRunGroup(runIds, undefined)).toEqual([
       "monitor-data",
       "historical-run-group",
-      runIds,
+      ["run-1", "run-2"],
       undefined,
     ]);
-    expect(monitorQueryKeys.historicalRunGroup(runIds, undefined)[2]).toBe(runIds);
+    expect(monitorQueryKeys.historicalParameterStatus(runIds)).toEqual([
+      "monitor-parameter-status",
+      "historical-run-group",
+      ["run-1", "run-2"],
+    ]);
     expect(
       monitorQueryKeys.historicalParameterSummary(
         "linear",
@@ -129,7 +233,34 @@ describe("query key factories", () => {
       "linear",
       "baseline",
       "Mnist",
-      runIds,
+      ["run-1", "run-2"],
     ]);
+    expect(runIds).toEqual(["run-2", "run-1"]);
+  });
+
+  it("normalizes set-like monitor run-id query key values", () => {
+    expect(
+      monitorQueryKeys.historicalRunGroup(
+        ["run-2", "run-1", "run-2"],
+        "root.layer",
+      ),
+    ).toEqual(
+      monitorQueryKeys.historicalRunGroup(["run-1", "run-2"], "root.layer"),
+    );
+    expect(
+      monitorQueryKeys.historicalParameterSummary(
+        "linear",
+        "baseline",
+        "Mnist",
+        ["run-2", "run-1", "run-2"],
+      ),
+    ).toEqual(
+      monitorQueryKeys.historicalParameterSummary(
+        "linear",
+        "baseline",
+        "Mnist",
+        ["run-1", "run-2"],
+      ),
+    );
   });
 });

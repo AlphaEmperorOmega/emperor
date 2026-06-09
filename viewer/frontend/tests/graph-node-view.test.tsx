@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { nodeTypes } from "@/components/features/viewer/graph/graph-node-view";
-import { SelectedNodeDetails } from "@/components/features/viewer/graph/selected-node-details";
+import { nodeTypes } from "@/features/viewer/components/graph/graph-node-view";
+import { SelectedNodeDetails } from "@/features/viewer/components/graph/selected-node-details";
 import type { GraphNode } from "@/lib/api";
 import type { ViewerNodeData } from "@/lib/graph";
 import {
@@ -11,7 +11,7 @@ import {
   CLUSTER_DIAGRAM_CELL_GAP,
   SIMPLE_NODE_HEIGHT,
 } from "@/lib/graph/constants";
-import { EXPERT_DIAGRAM_SAMPLER_WIDTH } from "@/components/features/viewer/graph/graph-node-diagram-layout";
+import { EXPERT_DIAGRAM_SAMPLER_WIDTH } from "@/features/viewer/components/graph/graph-node-diagram-layout";
 
 vi.mock("@xyflow/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@xyflow/react")>();

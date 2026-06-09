@@ -1,5 +1,5 @@
 import { Providers } from "./providers";
-import { ViewerApp } from "@/components/features/viewer/viewer-app";
+import { ViewerApp } from "@/features/viewer/components/viewer-app";
 
 export default function Page() {
   return (
