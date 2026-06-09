@@ -5,8 +5,6 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
-from emperor.base.options import ActivationOptions
 from viewer.backend.inspector.schema import config_schema, search_space_schema
 
 
@@ -31,7 +29,8 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
         vit_fields = {
-            field["key"]: field for field in config_schema("transformer_encoder/vit_linear")["fields"]
+            field["key"]: field
+            for field in config_schema("transformer_encoder/vit_linear")["fields"]
         }
         self.assertEqual(vit_fields["positional_embedding_option"]["type"], "class")
         self.assertIn(
@@ -48,10 +47,12 @@ class InspectorSchemaTests(unittest.TestCase):
             field["key"]: field for field in config_schema("linears/linear")["fields"]
         }
         adaptive_fields = {
-            field["key"]: field for field in config_schema("linears/linear_adaptive")["fields"]
+            field["key"]: field
+            for field in config_schema("linears/linear_adaptive")["fields"]
         }
         vit_fields = {
-            field["key"]: field for field in config_schema("transformer_encoder/vit_linear")["fields"]
+            field["key"]: field
+            for field in config_schema("transformer_encoder/vit_linear")["fields"]
         }
 
         self.assertEqual(linear_fields["hidden_dim"]["default"], 256)
@@ -64,7 +65,8 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_config_schema_excludes_abstract_class_choices(self) -> None:
         fields = {
-            field["key"]: field for field in config_schema("linears/linear_adaptive")["fields"]
+            field["key"]: field
+            for field in config_schema("linears/linear_adaptive")["fields"]
         }
 
         self.assertNotIn("DynamicWeightConfig", fields["weight_option"]["choices"])
@@ -90,7 +92,8 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_config_schema_exposes_boundary_projector_choices(self) -> None:
         fields = {
-            field["key"]: field for field in config_schema("linears/linear_adaptive")["fields"]
+            field["key"]: field
+            for field in config_schema("linears/linear_adaptive")["fields"]
         }
 
         self.assertEqual(
@@ -115,7 +118,8 @@ class InspectorSchemaTests(unittest.TestCase):
             for field in config_schema("linears/linear", "baseline")["fields"]
         }
         gating_fields = {
-            field["key"]: field for field in config_schema("linears/linear", "gating")["fields"]
+            field["key"]: field
+            for field in config_schema("linears/linear", "gating")["fields"]
         }
 
         self.assertFalse(baseline_fields["gate_flag"]["locked"])
@@ -146,7 +150,9 @@ class InspectorSchemaTests(unittest.TestCase):
         }
         adaptive_axes = {
             axis["key"]: axis
-            for axis in search_space_schema("linears/linear_adaptive", "baseline")["axes"]
+            for axis in search_space_schema("linears/linear_adaptive", "baseline")[
+                "axes"
+            ]
         }
 
         self.assertEqual(

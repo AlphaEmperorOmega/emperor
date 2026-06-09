@@ -7,8 +7,6 @@ from enum import Enum
 from types import ModuleType
 from typing import Any
 
-from torch.nn import Module
-
 from emperor.experiments.monitors import MonitorOption
 from models.catalog import (
     discover_model_ids,
@@ -21,6 +19,8 @@ from models.dataset_naming import (
     dataset_name,
     normalize_dataset_name,
 )
+from torch.nn import Module
+
 from viewer.backend.inspector.errors import InspectorError
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -65,7 +65,9 @@ def load_model_parts(model_name: str) -> ModelParts:
         presets_module = importlib.import_module(f"{module_path}.presets")
         model_module = importlib.import_module(f"{module_path}.model")
     except Exception as exc:
-        raise InspectorError(f"Failed to import model package '{model_name}': {exc}") from exc
+        raise InspectorError(
+            f"Failed to import model package '{model_name}': {exc}"
+        ) from exc
 
     try:
         experiment_options = presets_module.ExperimentOptions
@@ -79,7 +81,9 @@ def load_model_parts(model_name: str) -> ModelParts:
 
     dataset_options = getattr(config_module, "DATASET_OPTIONS", None)
     if not dataset_options:
-        raise InspectorError(f"Model package '{model_name}' does not define DATASET_OPTIONS.")
+        raise InspectorError(
+            f"Model package '{model_name}' does not define DATASET_OPTIONS."
+        )
 
     return ModelParts(
         name=model_name,
@@ -134,7 +138,8 @@ def resolve_dataset(parts: ModelParts, dataset: str | None) -> type:
             return dataset_type
     valid = ", ".join(dataset_name(item) for item in parts.dataset_options)
     raise InspectorError(
-        f"Unknown dataset '{dataset}' for model '{parts.name}'. Valid datasets: {valid}."
+        f"Unknown dataset '{dataset}' for model '{parts.name}'. "
+        f"Valid datasets: {valid}."
     )
 
 
@@ -168,7 +173,9 @@ def model_monitor_options(parts: ModelParts) -> list[MonitorOption]:
         return []
     options = list(raw_options)
     invalid_options = [
-        type(option).__name__ for option in options if not isinstance(option, MonitorOption)
+        type(option).__name__
+        for option in options
+        if not isinstance(option, MonitorOption)
     ]
     if invalid_options:
         raise InspectorError(

@@ -34,6 +34,11 @@ dependencies = [
   "httpx>=0.28,<0.29",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.8,<0.14",
+]
+
 [project.urls]
 Homepage = "https://github.com/yourusername/emperor"
 Repository = "https://github.com/yourusername/emperor"
@@ -41,3 +46,11 @@ Issues = "https://github.com/yourusername/emperor/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+src = ["viewer/backend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

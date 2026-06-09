@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
-from viewer.backend.inspector.config_classes import abstract_config_class_error
 from models.config_overrides import (
     config_key_to_model_param,
     iter_supported_config_keys,
@@ -10,10 +10,13 @@ from models.config_overrides import (
     parse_config_value,
 )
 
+from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.errors import InspectorError
 
 
-def parse_override_mapping(config_module, overrides: Mapping[str, Any] | None) -> dict[str, Any]:
+def parse_override_mapping(
+    config_module, overrides: Mapping[str, Any] | None
+) -> dict[str, Any]:
     if not overrides:
         return {}
 

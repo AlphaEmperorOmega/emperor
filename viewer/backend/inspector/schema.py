@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import inspect
 import ast
+import inspect
 from enum import Enum
 from pathlib import Path
 from types import ModuleType, NoneType, UnionType
@@ -162,7 +162,9 @@ def _enum_choices(value: Any, annotation: Any) -> list[str]:
     return list(enum_type.__members__)
 
 
-def _class_choices(config_module: ModuleType, annotation: Any, current_value: Any) -> list[str]:
+def _class_choices(
+    config_module: ModuleType, annotation: Any, current_value: Any
+) -> list[str]:
     expected_classes = [
         cls for cls in _annotation_classes(annotation) if not issubclass(cls, Enum)
     ]
@@ -208,7 +210,9 @@ def preset_locks(model_name: str, preset_name: str | None) -> dict[str, Any]:
     try:
         option = parts.experiment_options.get_option(preset_name)
     except Exception as exc:
-        raise InspectorError(f"Unknown preset '{preset_name}' for model '{model_name}'.") from exc
+        raise InspectorError(
+            f"Unknown preset '{preset_name}' for model '{model_name}'."
+        ) from exc
     locked_fields = getattr(parts.presets, "locked_fields", None)
     if not callable(locked_fields):
         return {}
@@ -251,14 +255,18 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                     kind,
                 ),
                 "locked": lock is not None,
-                "lockedValue": serialize_config_value(locked_value) if lock is not None else None,
+                "lockedValue": serialize_config_value(locked_value)
+                if lock is not None
+                else None,
                 "lockedReason": locked_reason,
             }
         )
     return {"model": model_name, "fields": fields}
 
 
-def _search_axis_kind(config_module: ModuleType, config_key: str, values: list[Any]) -> str:
+def _search_axis_kind(
+    config_module: ModuleType, config_key: str, values: list[Any]
+) -> str:
     annotations = getattr(config_module, "__annotations__", {})
     if hasattr(config_module, config_key):
         return _value_kind(
@@ -317,7 +325,9 @@ def search_space_schema(
                 "type": _search_axis_kind(parts.config_module, config_key, values),
                 "values": [serialize_config_value(value) for value in values],
                 "locked": lock is not None,
-                "lockedValue": serialize_config_value(locked_value) if lock is not None else None,
+                "lockedValue": serialize_config_value(locked_value)
+                if lock is not None
+                else None,
                 "lockedReason": locked_reason,
             }
         )

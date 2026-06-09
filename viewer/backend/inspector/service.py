@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from viewer.backend.inspector.discovery import (
     load_model_parts,
@@ -22,10 +23,7 @@ def reject_locked_overrides(
     locked_keys = sorted(set(config_overrides or {}) & set(locks))
     if not locked_keys:
         return
-    details = ", ".join(
-        f"{key} ({locks[key].reason})"
-        for key in locked_keys
-    )
+    details = ", ".join(f"{key} ({locks[key].reason})" for key in locked_keys)
     raise InspectorError(
         f"Preset '{preset_name}' does not allow overriding locked fields: {details}"
     )
@@ -41,7 +39,9 @@ def build_config(
     try:
         option = parts.experiment_options.get_option(preset_name)
     except Exception as exc:
-        raise InspectorError(f"Unknown preset '{preset_name}' for model '{model_name}'.") from exc
+        raise InspectorError(
+            f"Unknown preset '{preset_name}' for model '{model_name}'."
+        ) from exc
 
     try:
         dataset = resolve_dataset(parts, dataset_name)

@@ -143,7 +143,9 @@ def main() -> None:
         results.append((option, result))
 
     if args.format == "json":
-        payload = [result for _, result in results] if args.all_options else results[0][1]
+        payload = (
+            [result for _, result in results] if args.all_options else results[0][1]
+        )
         print(json.dumps(payload, indent=2))
         return
 

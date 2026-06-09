@@ -4,7 +4,6 @@ import importlib
 import sys
 import unittest
 
-
 FAST_SMOKE_MODULES = (
     "viewer.backend.storage.local_files",
     "viewer.backend.runtime.job_status",

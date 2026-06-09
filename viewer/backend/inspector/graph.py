@@ -338,7 +338,9 @@ def _node(node_id: str, path: str, module: Module) -> dict[str, Any]:
     }
 
 
-def serialize_graph(module: Module) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+def serialize_graph(
+    module: Module,
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     nodes = [_node(ROOT_NODE_ID, ROOT_NODE_PATH, module)]
     edges: list[dict[str, str]] = []
 

@@ -8,6 +8,7 @@ VIEWER_BACKEND_PID="$VIEWER_RUNTIME_PATH/backend.pid"
 VIEWER_FRONTEND_PID="$VIEWER_RUNTIME_PATH/frontend.pid"
 VIEWER_BACKEND_LOG="$VIEWER_RUNTIME_PATH/backend.log"
 VIEWER_FRONTEND_LOG="$VIEWER_RUNTIME_PATH/frontend.log"
+VIEWER_DEPENDENCY_MARKER="$VENV_PATH/.emperor-pyproject.cksum"
 VIEWER_BACKEND_PORT="${VIEWER_BACKEND_PORT:-9999}"
 VIEWER_FRONTEND_PORT="${VIEWER_FRONTEND_PORT:-9000}"
 VIEWER_API_URL="${NEXT_PUBLIC_VIEWER_API_URL:-http://127.0.0.1:$VIEWER_BACKEND_PORT}"
@@ -92,6 +93,70 @@ install_frontend_dependencies() {
   )
 }
 
+pyproject_dependency_signature() {
+  cksum < "$PROJECT_ROOT/pyproject.toml"
+}
+
+backend_python_dependencies_available() {
+  "$VENV_PATH/bin/python" - torch fastapi uvicorn tensorboard pydantic pydantic_settings httpx lightning.pytorch ruff <<'PY'
+import importlib.util
+import sys
+
+missing = [
+    module
+    for module in sys.argv[1:]
+    if importlib.util.find_spec(module) is None
+]
+
+if missing:
+    print(
+        "Missing viewer backend Python dependencies: "
+        + ", ".join(missing)
+    )
+    raise SystemExit(1)
+PY
+}
+
+project_dependencies_current() {
+  local current_signature
+  local installed_signature
+
+  if [ ! -f "$VIEWER_DEPENDENCY_MARKER" ]; then
+    return 1
+  fi
+
+  current_signature="$(pyproject_dependency_signature)" || return 1
+  installed_signature="$(cat "$VIEWER_DEPENDENCY_MARKER" 2>/dev/null)"
+
+  if [ "$current_signature" != "$installed_signature" ]; then
+    return 1
+  fi
+
+  backend_python_dependencies_available
+}
+
+install_project_dependencies() {
+  echo "Upgrading pip..."
+  "$VENV_PATH/bin/python" -m pip install --upgrade pip || return 1
+
+  echo "Installing project dependencies from pyproject.toml..."
+  (
+    cd "$PROJECT_ROOT" || exit 1
+    "$VENV_PATH/bin/python" -m pip install -e ".[dev]"
+  ) || return 1
+
+  pyproject_dependency_signature > "$VIEWER_DEPENDENCY_MARKER" || return 1
+  backend_python_dependencies_available || return 1
+}
+
+ensure_project_dependencies() {
+  if project_dependencies_current; then
+    return 0
+  fi
+
+  install_project_dependencies
+}
+
 activate_venv() {
   source "$VENV_PATH/bin/activate"
   echo "Activated virtual environment at $VENV_PATH"
@@ -123,6 +188,37 @@ port_listening() {
   esac
 
   (: < "/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
+}
+
+wait_for_port() {
+  local port="$1"
+  local attempts="${2:-40}"
+  local delay="${3:-0.25}"
+  local attempt=1
+
+  while [ "$attempt" -le "$attempts" ]; do
+    if port_listening "$port"; then
+      return 0
+    fi
+
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
+print_log_tail() {
+  local log_path="$1"
+  local line_count="${2:-40}"
+
+  if [ ! -f "$log_path" ]; then
+    echo "No backend log was written at $log_path" >&2
+    return 0
+  fi
+
+  echo "Last $line_count lines from $log_path:" >&2
+  tail -n "$line_count" "$log_path" >&2
 }
 
 viewer_status() {
@@ -172,8 +268,15 @@ stop_viewer() {
 
 start_viewer_backend() {
   if pid_running "$VIEWER_BACKEND_PID"; then
-    echo "Viewer backend already started; reusing existing server (pid $(cat "$VIEWER_BACKEND_PID"), port $VIEWER_BACKEND_PORT)"
-    return 0
+    if port_listening "$VIEWER_BACKEND_PORT"; then
+      echo "Viewer backend already started; reusing existing server (pid $(cat "$VIEWER_BACKEND_PID"), port $VIEWER_BACKEND_PORT)"
+      return 0
+    fi
+
+    echo "Viewer backend pid file exists, but port $VIEWER_BACKEND_PORT is not listening."
+    print_log_tail "$VIEWER_BACKEND_LOG"
+    rm -f "$VIEWER_BACKEND_PID"
+    return 1
   fi
 
   rm -f "$VIEWER_BACKEND_PID"
@@ -197,7 +300,16 @@ start_viewer_backend() {
           </dev/null > "$VIEWER_BACKEND_LOG" 2>&1 &
     fi
     echo "$!" > "$VIEWER_BACKEND_PID"
-  )
+  ) || return 1
+
+  if wait_for_port "$VIEWER_BACKEND_PORT"; then
+    return 0
+  fi
+
+  echo "Viewer backend did not start listening on port $VIEWER_BACKEND_PORT." >&2
+  print_log_tail "$VIEWER_BACKEND_LOG"
+  rm -f "$VIEWER_BACKEND_PID"
+  return 1
 }
 
 start_viewer_frontend() {
@@ -231,6 +343,7 @@ start_viewer_frontend() {
 start_viewer() {
   ensure_mise || return 1
   mise install || return 1
+  ensure_project_dependencies || return 1
   install_frontend_dependencies || return 1
   mkdir -p "$VIEWER_RUNTIME_PATH"
 
@@ -278,11 +391,7 @@ fi
 source "$VENV_PATH/bin/activate"
 echo "Activated virtual environment at $VENV_PATH"
 
-echo "Upgrading pip..."
-pip install --upgrade pip || return 1
-
-echo "Installing project dependencies from pyproject.toml..."
-pip install -e . || return 1
+ensure_project_dependencies || return 1
 
 install_frontend_dependencies || return 1
 

@@ -101,4 +101,6 @@ async def search_space(
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
     preset: str | None = None,
 ) -> SearchSpaceResponse:
-    return SearchSpaceResponse.model_validate(service.search_space_schema(model, preset))
+    return SearchSpaceResponse.model_validate(
+        service.search_space_schema(model, preset)
+    )

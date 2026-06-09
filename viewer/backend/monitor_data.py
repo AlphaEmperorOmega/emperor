@@ -11,7 +11,6 @@ from viewer.backend.tensorboard_reader import (
     scalar_points,
 )
 
-
 DEFAULT_SCALAR_POINT_LIMIT = 500
 DEFAULT_BUCKET_LIMIT = 128
 RELATIVE_DELTA_EPSILON = 1e-12
@@ -115,14 +114,18 @@ class TensorBoardMonitorReader:
     def _label(self, tag: str, prefix: str) -> str:
         return tag[len(prefix) :]
 
-    def _read_scalars(self, accumulator, tags: list[str], prefix: str) -> list[dict[str, Any]]:
+    def _read_scalars(
+        self, accumulator, tags: list[str], prefix: str
+    ) -> list[dict[str, Any]]:
         series = []
         for tag in self._matching_tags(tags, prefix):
             try:
                 points = scalar_points(accumulator, tag, self.scalar_point_limit)
             except Exception:
                 continue
-            series.append({"tag": tag, "label": self._label(tag, prefix), "points": points})
+            series.append(
+                {"tag": tag, "label": self._label(tag, prefix), "points": points}
+            )
         return series
 
     def _read_histograms(
@@ -153,7 +156,11 @@ class TensorBoardMonitorReader:
     def _histogram_buckets(self, histogram_value) -> list[dict[str, float]]:
         buckets = []
         left = finite_float(getattr(histogram_value, "min", 0.0))
-        for count, right in zip(histogram_value.bucket, histogram_value.bucket_limit):
+        for count, right in zip(
+            histogram_value.bucket,
+            histogram_value.bucket_limit,
+            strict=True,
+        ):
             bucket = {
                 "left": left,
                 "right": finite_float(right),
@@ -166,7 +173,9 @@ class TensorBoardMonitorReader:
                 break
         return buckets
 
-    def _read_images(self, accumulator, tags: list[str], prefix: str) -> list[dict[str, Any]]:
+    def _read_images(
+        self, accumulator, tags: list[str], prefix: str
+    ) -> list[dict[str, Any]]:
         images = []
         for tag in self._matching_tags(tags, prefix):
             try:
@@ -250,9 +259,8 @@ class TensorBoardParameterStatusReader:
                 if parsed is None:
                     continue
                 node_path, channel, metric = parsed
-                channel_data = (
-                    scalars_by_node.setdefault(node_path, {})
-                    .setdefault(channel, self._empty_channel_data())
+                channel_data = scalars_by_node.setdefault(node_path, {}).setdefault(
+                    channel, self._empty_channel_data()
                 )
                 channel_data["seen"].add(metric)
                 try:
@@ -265,7 +273,9 @@ class TensorBoardParameterStatusReader:
         for channel_data_by_node in scalars_by_node.values():
             for channel_data in channel_data_by_node.values():
                 for metric_points in channel_data["points"].values():
-                    metric_points.sort(key=lambda point: (point["step"], point["wallTime"]))
+                    metric_points.sort(
+                        key=lambda point: (point["step"], point["wallTime"])
+                    )
         return scalars_by_node
 
     def _parameter_tag(self, tag: str) -> tuple[str, str, str] | None:

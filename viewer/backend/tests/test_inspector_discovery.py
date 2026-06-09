@@ -162,7 +162,9 @@ class InspectorDiscoveryTests(unittest.TestCase):
 
     def test_monitor_discovery_for_model_packages(self) -> None:
         linear_monitors = list_model_monitors("linears/linear")
-        linear_monitor_by_name = {monitor["name"]: monitor for monitor in linear_monitors}
+        linear_monitor_by_name = {
+            monitor["name"]: monitor for monitor in linear_monitors
+        }
         adaptive_monitor_by_name = {
             monitor["name"]: monitor
             for monitor in list_model_monitors("experts/experts_linear_adaptive")

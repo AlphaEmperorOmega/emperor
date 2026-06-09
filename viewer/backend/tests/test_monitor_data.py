@@ -197,7 +197,9 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
         node = data["nodes"][0]
         self.assertEqual(node["nodePath"], "main_model.0.model")
         self.assertEqual(node["weights"]["status"], "updated")
-        self.assertEqual(node["weights"]["metric"], "main_model.0.model/weights/l2_norm")
+        self.assertEqual(
+            node["weights"]["metric"], "main_model.0.model/weights/l2_norm"
+        )
         self.assertEqual(node["bias"]["status"], "unchanged")
         self.assertEqual(node["bias"]["metric"], "main_model.0.model/bias/mean")
 
@@ -259,6 +261,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
 
     def test_broken_historical_tags_return_empty_monitor_response_shape(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         async def call_api(logs_root: Path, run_id: str) -> httpx.Response:
@@ -668,6 +671,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self,
     ) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         async def call_api(app, job_id: str) -> httpx.Response:
@@ -757,6 +761,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
     def test_log_run_monitor_data_filters_tensorboard_tags(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -788,9 +793,9 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
             run_id = LogRunIndex(logs_root=logs_root).list_runs()[0].id
 
-            async def call_api() -> (
-                tuple[httpx.Response, httpx.Response, httpx.Response]
-            ):
+            async def call_api() -> tuple[
+                httpx.Response, httpx.Response, httpx.Response
+            ]:
                 transport = httpx.ASGITransport(
                     app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
                 )
@@ -847,6 +852,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self,
     ) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -927,6 +933,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
         )
         self.assertEqual(unknown_response.status_code, 400)
         self.assertIn("Unknown log run id", unknown_response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

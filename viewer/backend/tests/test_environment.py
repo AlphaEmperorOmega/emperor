@@ -23,6 +23,7 @@ REQUIRED_BACKEND_TEST_MODULES = (
     ("pydantic-settings", "pydantic_settings"),
     ("httpx", "httpx"),
     ("lightning", "lightning.pytorch"),
+    ("ruff", "ruff"),
 )
 
 
@@ -59,7 +60,7 @@ class EnvScriptTests(unittest.TestCase):
             calls_path = project_path / "python-calls.log"
             venv_bin.mkdir(parents=True)
             (project_path / "pyproject.toml").write_text(
-                "[project]\nname = \"fake-emperor\"\n",
+                '[project]\nname = "fake-emperor"\n',
                 encoding="utf-8",
             )
             python_path = venv_bin / "python"
@@ -102,16 +103,16 @@ class EnvScriptTests(unittest.TestCase):
             dependency_checks,
             [
                 "- torch fastapi uvicorn tensorboard pydantic "
-                "pydantic_settings httpx lightning.pytorch",
+                "pydantic_settings httpx lightning.pytorch ruff",
                 "- torch fastapi uvicorn tensorboard pydantic "
-                "pydantic_settings httpx lightning.pytorch",
+                "pydantic_settings httpx lightning.pytorch ruff",
             ],
         )
         self.assertEqual(
             pip_calls,
             [
                 "-m pip install --upgrade pip",
-                "-m pip install -e .",
+                "-m pip install -e .[dev]",
             ],
         )
 
@@ -125,7 +126,9 @@ class EnvScriptTests(unittest.TestCase):
                 ensure_mise() {{ echo ensure_mise; }}
                 mise() {{ echo mise "$@"; }}
                 ensure_project_dependencies() {{ echo ensure_project_dependencies; }}
-                install_frontend_dependencies() {{ echo install_frontend_dependencies; }}
+                install_frontend_dependencies() {{
+                    echo install_frontend_dependencies;
+                }}
                 start_viewer_backend() {{ echo start_viewer_backend; }}
                 start_viewer_frontend() {{ echo start_viewer_frontend; }}
                 start_viewer
@@ -155,9 +158,7 @@ class EnvScriptTests(unittest.TestCase):
             runtime_path.mkdir(parents=True)
             python_path = venv_bin / "python"
             python_path.write_text(
-                "#!/usr/bin/env bash\n"
-                "echo 'fake uvicorn failure' >&2\n"
-                "exit 1\n",
+                "#!/usr/bin/env bash\necho 'fake uvicorn failure' >&2\nexit 1\n",
                 encoding="utf-8",
             )
             python_path.chmod(0o755)

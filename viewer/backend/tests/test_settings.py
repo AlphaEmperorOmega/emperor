@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 import os
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from pydantic import ValidationError
 
@@ -12,7 +12,6 @@ from viewer.backend.core.config import (
     ViewerApiSettings,
     get_viewer_api_settings,
 )
-
 
 SETTINGS_ENV_NAMES = (
     "VIEWER_API_AUTH_MODE",

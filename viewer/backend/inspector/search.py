@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from math import prod
-from typing import Any, Mapping
+from typing import Any
 
 from models.config_overrides import (
     config_key_to_model_param,
@@ -10,6 +11,7 @@ from models.config_overrides import (
     normalize_key,
     parse_config_value,
 )
+
 from viewer.backend.inspector.config_classes import abstract_config_class_error
 from viewer.backend.inspector.discovery import load_model_parts
 from viewer.backend.inspector.errors import InspectorError
@@ -111,18 +113,23 @@ def parse_training_search(
                 f"Search axis '{axis['key']}' requires at least one selected value."
             )
 
-        allowed_values = {serialize_config_value(value) for value in axis.get("values", [])}
+        allowed_values = {
+            serialize_config_value(value) for value in axis.get("values", [])
+        }
         parsed_axis_values = [
             _parse_search_value(parts.config_module, axis, raw_value)
             for raw_value in raw_values
         ]
-        serialized_axis_values = [serialize_config_value(value) for value in parsed_axis_values]
+        serialized_axis_values = [
+            serialize_config_value(value) for value in parsed_axis_values
+        ]
         invalid_values = [
             value for value in serialized_axis_values if value not in allowed_values
         ]
         if invalid_values:
             raise InspectorError(
-                f"Search axis '{axis['key']}' received values outside its search space: "
+                f"Search axis '{axis['key']}' received values outside its "
+                "search space: "
                 f"{invalid_values}."
             )
 
