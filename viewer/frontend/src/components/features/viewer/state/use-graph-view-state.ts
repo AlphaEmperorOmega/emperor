@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 import {
   type GraphDetailMode,
+  type GraphParameterActivity,
   type GraphScope,
   ancestorNodeIds,
   buildChildSummaries,
@@ -19,13 +20,19 @@ type GraphViewStateOptions = {
   canOpenMonitor?: (node: GraphNode) => boolean;
   onOpenMonitor?: (node: GraphNode) => void;
   resolveMonitorTarget?: (node: GraphNode) => GraphNode | undefined;
+  parameterActivityByNodePath?: Map<string, GraphParameterActivity>;
 };
 
 export function useGraphViewState(
   graph: InspectResponse | undefined,
   options: GraphViewStateOptions = {},
 ) {
-  const { canOpenMonitor, onOpenMonitor, resolveMonitorTarget } = options;
+  const {
+    canOpenMonitor,
+    onOpenMonitor,
+    resolveMonitorTarget,
+    parameterActivityByNodePath,
+  } = options;
   const [graphDetailMode, setGraphDetailMode] = useState<GraphDetailMode>("basic");
   const [graphScope, setGraphScope] = useState<GraphScope>("opened");
   const [expandedGraphNodeIds, setExpandedGraphNodeIds] = useState<Set<string>>(new Set());
@@ -135,6 +142,13 @@ export function useGraphViewState(
     onOpenMonitor?.(monitorTarget);
   }, [monitorTargetForNode, onOpenMonitor]);
 
+  const parameterActivityForNode = useCallback((node: GraphNode) => {
+    const monitorTarget = monitorTargetForNode(node);
+    return monitorTarget
+      ? parameterActivityByNodePath?.get(monitorTarget.path)
+      : undefined;
+  }, [monitorTargetForNode, parameterActivityByNodePath]);
+
   const revealGraphNode = useCallback((nodeId: string) => {
     if (!detailNodeIds.has(nodeId)) {
       return;
@@ -182,6 +196,7 @@ export function useGraphViewState(
         enableExpansion: graphScope === "opened",
         selectedNodeId: null,
         canOpenMonitor: canOpenMonitor ? canOpenGraphNodeMonitor : undefined,
+        parameterActivityForNode,
         onActivateNode: activateGraphNode,
         onToggleExpansion: toggleGraphNodeExpansion,
         onOpenMonitor: onOpenMonitor ? openGraphNodeMonitor : undefined,
@@ -197,6 +212,7 @@ export function useGraphViewState(
       graphScope,
       canOpenMonitor,
       canOpenGraphNodeMonitor,
+      parameterActivityForNode,
       openGraphNodeMonitor,
       onOpenMonitor,
       childSummariesById,

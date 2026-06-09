@@ -21,14 +21,22 @@ const mocks = vi.hoisted(() => ({
   createTrainingJob: vi.fn(),
   fetchTrainingJob: vi.fn(),
   cancelTrainingJob: vi.fn(),
+  fetchMonitorParameterStatus: vi.fn(),
+  fetchLogParameterStatus: vi.fn(),
 }));
 vi.mock("@/lib/api", () => mocks);
 
 import { useViewerState } from "@/components/features/viewer/use-viewer-state";
 import { ConnectedTrainingPanel } from "@/components/features/viewer/connected-training-panel";
+import { ModelExperimentsPanel } from "@/components/features/viewer/model-experiments-panel";
 import { ViewerProviders } from "@/components/features/viewer/providers/viewer-providers";
 import { TargetPresetPanel } from "@/components/features/viewer/screen/target-preset-panel";
-import { type LogRun } from "@/lib/api";
+import {
+  type GraphNode,
+  type InspectResponse,
+  type LogRun,
+  type TrainingJob,
+} from "@/lib/api";
 
 function renderViewerState() {
   const client = new QueryClient({
@@ -69,6 +77,21 @@ function renderTrainingPanel() {
   );
 }
 
+function renderTrainingPanelWithExperiments() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  return render(
+    <QueryClientProvider client={client}>
+      <ViewerProviders>
+        <ModelExperimentsPanel />
+        <ConnectedTrainingPanel onOpenFullConfig={vi.fn()} />
+      </ViewerProviders>
+    </QueryClientProvider>,
+  );
+}
+
 function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
   return {
     id: overrides.id,
@@ -89,6 +112,162 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     hasHparams: overrides.hasHparams ?? true,
     metrics: overrides.metrics ?? {},
   };
+}
+
+function graphNode(
+  id: string,
+  path: string,
+  typeName: string,
+  overrides: Partial<GraphNode> = {},
+): GraphNode {
+  return {
+    id,
+    label: overrides.label ?? id,
+    typeName,
+    path,
+    graphRole: overrides.graphRole ?? "architecture",
+    parameterCount: overrides.parameterCount ?? 0,
+    details: overrides.details ?? {},
+    config: overrides.config ?? null,
+  };
+}
+
+function monitorGraph(): InspectResponse {
+  const root = graphNode("root", "main_model", "LayerStack");
+  const wrapper = graphNode("layer-0", "main_model.0", "Layer");
+  const linear = graphNode("linear-0", "main_model.0.model", "LinearLayer");
+
+  return {
+    model: "linear",
+    preset: "baseline",
+    parameterCount: 0,
+    nodes: [root, wrapper, linear],
+    edges: [
+      { id: "root-layer-0", source: root.id, target: wrapper.id },
+      { id: "layer-0-linear-0", source: wrapper.id, target: linear.id },
+    ],
+  };
+}
+
+function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
+  return {
+    id: overrides.id ?? "job-1",
+    status: overrides.status ?? "running",
+    model: overrides.model ?? "linear",
+    preset: overrides.preset ?? "baseline",
+    presets: overrides.presets ?? ["baseline"],
+    datasets: overrides.datasets ?? ["Mnist"],
+    overrides: overrides.overrides ?? {},
+    search: overrides.search ?? null,
+    plannedRunCount: overrides.plannedRunCount ?? 1,
+    runPlan: overrides.runPlan ?? null,
+    monitors: overrides.monitors ?? ["linear"],
+    logFolder: overrides.logFolder ?? "runs",
+    createdAt: overrides.createdAt ?? "2026-06-01T00:00:00.000Z",
+    updatedAt: overrides.updatedAt ?? "2026-06-01T00:00:00.000Z",
+    exitCode: overrides.exitCode ?? null,
+    pid: overrides.pid ?? 1,
+    currentPreset: overrides.currentPreset ?? "baseline",
+    currentDataset: overrides.currentDataset ?? "Mnist",
+    epoch: overrides.epoch ?? 1,
+    step: overrides.step ?? 10,
+    metrics: overrides.metrics ?? {},
+    logDir: overrides.logDir ?? "runs/job-1",
+    events: overrides.events ?? [],
+    logTail: overrides.logTail ?? [],
+    resultLinks: overrides.resultLinks ?? [],
+  };
+}
+
+function mockPublicModelCatalog() {
+  const presetsByModel = new Map([
+    [
+      "linears/linear",
+      [
+        { name: "baseline", label: "Baseline", description: "" },
+        { name: "fast", label: "Fast", description: "" },
+      ],
+    ],
+    [
+      "linears/linear_adaptive",
+      [{ name: "adaptive", label: "Adaptive", description: "" }],
+    ],
+    [
+      "experts/experts_linear",
+      [{ name: "expert-baseline", label: "Expert baseline", description: "" }],
+    ],
+    [
+      "transformer_encoder/bert_linear",
+      [{ name: "bert-baseline", label: "BERT baseline", description: "" }],
+    ],
+  ]);
+  const datasetsByModel = new Map([
+    [
+      "linears/linear",
+      [
+        { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
+        {
+          name: "FashionMnist",
+          label: "Fashion MNIST",
+          inputDim: 784,
+          outputDim: 10,
+        },
+      ],
+    ],
+    [
+      "linears/linear_adaptive",
+      [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
+    ],
+    [
+      "experts/experts_linear",
+      [
+        {
+          name: "ExpertToy",
+          label: "Expert Toy",
+          inputDim: 64,
+          outputDim: 4,
+        },
+      ],
+    ],
+    [
+      "transformer_encoder/bert_linear",
+      [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+    ],
+  ]);
+
+  mocks.fetchModels.mockResolvedValue({
+    models: [
+      "linears/linear",
+      "linears/linear_adaptive",
+      "experts/experts_linear",
+      "transformer_encoder/bert_linear",
+    ],
+  });
+  mocks.fetchPresets.mockImplementation((model: string) =>
+    Promise.resolve({ model, presets: presetsByModel.get(model) ?? [] }),
+  );
+  mocks.fetchDatasets.mockImplementation((model: string) =>
+    Promise.resolve({ model, datasets: datasetsByModel.get(model) ?? [] }),
+  );
+  mocks.fetchMonitors.mockImplementation((model: string) =>
+    Promise.resolve({ model, monitors: [] }),
+  );
+  mocks.fetchConfigSchema.mockImplementation((model: string) =>
+    Promise.resolve({ model, fields: [] }),
+  );
+  mocks.fetchSearchSpace.mockImplementation((model: string, preset: string) =>
+    Promise.resolve({ model, preset, axes: [] }),
+  );
+  mocks.inspectModel.mockImplementation(
+    (request: { model: string; preset: string }) =>
+      Promise.resolve({
+        model: request.model,
+        preset: request.preset,
+        parameterCount: 0,
+        nodes: [],
+        edges: [],
+      }),
+  );
 }
 
 beforeEach(() => {
@@ -218,6 +397,14 @@ beforeEach(() => {
   mocks.createTrainingJob.mockReset();
   mocks.fetchTrainingJob.mockReset();
   mocks.cancelTrainingJob.mockReset();
+  mocks.fetchMonitorParameterStatus.mockReset().mockResolvedValue({
+    sourceId: "job-1",
+    preset: null,
+    dataset: null,
+    logDir: null,
+    nodes: [],
+  });
+  mocks.fetchLogParameterStatus.mockReset().mockResolvedValue({ runs: [] });
 });
 
 describe("useViewerState", () => {
@@ -268,6 +455,117 @@ describe("useViewerState", () => {
     });
   });
 
+  it("auto-selects the first public model type and keeps API calls on full IDs", async () => {
+    mockPublicModelCatalog();
+
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModelType).toBe("linears");
+      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+    });
+    await waitFor(() => {
+      expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
+        "linears/linear",
+        "baseline",
+      );
+    });
+    expect(mocks.fetchPresets).toHaveBeenCalledWith("linears/linear");
+    expect(mocks.fetchDatasets).toHaveBeenCalledWith("linears/linear");
+    expect(mocks.fetchMonitors).toHaveBeenCalledWith("linears/linear");
+    expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
+      "linears/linear",
+      "baseline",
+    );
+    expect(mocks.inspectModel.mock.calls.map(([request]) => request))
+      .toContainEqual({
+        model: "linears/linear",
+        preset: "baseline",
+        dataset: "Mnist",
+        overrides: {},
+      });
+  });
+
+  it("selects the first model in a new type through the model reset cascade", async () => {
+    mockPublicModelCatalog();
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linears/linear");
+    });
+
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "128");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.overrides).toEqual({ hidden_size: "128" });
+    });
+
+    act(() => {
+      result.current.target.selectModelType("experts");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModelType).toBe("experts");
+      expect(result.current.target.selectedModel).toBe("experts/experts_linear");
+      expect(result.current.target.selectedPreset).toBe("expert-baseline");
+      expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
+      expect(result.current.target.overrides).toEqual({});
+    });
+    expect(mocks.fetchPresets).toHaveBeenCalledWith("experts/experts_linear");
+    expect(mocks.fetchDatasets).toHaveBeenCalledWith("experts/experts_linear");
+    expect(mocks.fetchMonitors).toHaveBeenCalledWith("experts/experts_linear");
+    expect(mocks.inspectModel.mock.calls.map(([request]) => request))
+      .toContainEqual({
+        model: "experts/experts_linear",
+        preset: "expert-baseline",
+        dataset: "ExpertToy",
+        overrides: {},
+      });
+  });
+
+  it("clears historical run selection when switching model type", async () => {
+    mockPublicModelCatalog();
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "linears-history",
+          model: "linears/linear",
+          preset: "Fast",
+          dataset: "FashionMnist",
+        }),
+      ],
+    });
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["linears-history"]);
+    });
+
+    act(() => {
+      result.current.history.selectLogRun("linears-history");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.selectedLogRunId).toBe("linears-history");
+      expect(result.current.target.selectedPreset).toBe("fast");
+    });
+
+    act(() => {
+      result.current.target.selectModelType("experts");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("experts/experts_linear");
+      expect(result.current.history.selectedLogRunId).toBeNull();
+      expect(result.current.history.selectedHistoricalPreset).toBe("");
+    });
+  });
+
   it("settles model changes on the new model defaults", async () => {
     const { result } = renderViewerState();
 
@@ -292,6 +590,36 @@ describe("useViewerState", () => {
       preset: "bert-baseline",
       dataset: "ToyText",
       overrides: {},
+    });
+  });
+
+  it("resets graph selection and expansion when selecting another model", async () => {
+    mocks.inspectModel.mockResolvedValue(monitorGraph());
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.graph.graph?.nodes.map((node) => node.id)).toContain(
+        "linear-0",
+      );
+    });
+
+    act(() => {
+      result.current.graph.revealGraphNode("linear-0");
+    });
+
+    await waitFor(() => {
+      expect(result.current.graph.selectedNodeId).toBe("linear-0");
+      expect(result.current.graph.expandedGraphNodeIds.size).toBeGreaterThan(0);
+    });
+
+    act(() => {
+      result.current.target.selectModel("bert_linear");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("bert_linear");
+      expect(result.current.graph.selectedNodeId).toBeNull();
+      expect(result.current.graph.expandedGraphNodeIds.size).toBe(0);
     });
   });
 
@@ -350,6 +678,108 @@ describe("useViewerState", () => {
     expect(finalHistoricalRequests).toHaveLength(1);
   });
 
+  it("requests parameter status for the active linear training job", async () => {
+    mocks.inspectModel.mockResolvedValue(monitorGraph());
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.target.selectedPreset).toBe("baseline");
+    });
+
+    act(() => {
+      result.current.training.onJobChange(trainingJob());
+    });
+
+    await waitFor(() => {
+      expect(mocks.fetchMonitorParameterStatus).toHaveBeenCalledWith({
+        jobId: "job-1",
+        preset: "baseline",
+        dataset: "Mnist",
+      });
+    });
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
+  });
+
+  it("opens graph monitor charts from the active training job source", async () => {
+    mocks.inspectModel.mockResolvedValue(monitorGraph());
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.graph.graph?.nodes.map((node) => node.id)).toContain(
+        "linear-0",
+      );
+    });
+    const linearNode = result.current.graph.graph?.nodes.find(
+      (node) => node.id === "linear-0",
+    );
+    expect(linearNode).toBeDefined();
+    const job = trainingJob();
+
+    act(() => {
+      result.current.training.onJobChange(job);
+    });
+    act(() => {
+      result.current.training.openGraphNodeMonitor(linearNode as GraphNode);
+    });
+
+    await waitFor(() => {
+      expect(result.current.training.graphMonitorNode?.id).toBe("linear-0");
+      expect(result.current.training.graphMonitorSource).toEqual({
+        kind: "active-job",
+        job,
+      });
+    });
+  });
+
+  it("requests historical parameter status for the selected monitor run group", async () => {
+    mocks.inspectModel.mockResolvedValue(monitorGraph());
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "run-new",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+        logRun({
+          id: "run-old",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-01 01:02:03",
+        }),
+        logRun({
+          id: "run-fast",
+          preset: "fast",
+          dataset: "Mnist",
+          timestamp: "2026-06-01 12:02:03",
+        }),
+      ],
+    });
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["run-new", "run-fast", "run-old"]);
+    });
+
+    act(() => {
+      result.current.history.selectLogRun("run-new");
+    });
+
+    await waitFor(() => {
+      expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
+        .toEqual(["run-new", "run-old"]);
+      expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith({
+        runIds: ["run-new", "run-old"],
+      });
+    });
+    expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith({
+      runIds: ["run-new", "run-fast", "run-old"],
+    });
+    expect(mocks.fetchMonitorParameterStatus).not.toHaveBeenCalled();
+  });
+
   it("switches the sidebar model dropdown without an update loop", async () => {
     renderTargetPresetPanel();
     const user = userEvent.setup();
@@ -365,6 +795,57 @@ describe("useViewerState", () => {
       expect(modelControl).toHaveTextContent("bert_linear");
       expect(screen.getByRole("combobox", { name: /^preset$/i }))
         .toHaveTextContent("bert-baseline");
+    });
+  });
+
+  it("filters the sidebar model dropdown by model type", async () => {
+    mockPublicModelCatalog();
+    renderTargetPresetPanel();
+    const user = userEvent.setup();
+
+    const modelTypeControl = await screen.findByRole("combobox", {
+      name: /^model type$/i,
+    });
+    const modelControl = await screen.findByRole("combobox", { name: /^model$/i });
+
+    await waitFor(() => {
+      expect(modelTypeControl).toHaveTextContent("Linears");
+      expect(modelControl).toHaveTextContent("linear");
+      expect(modelControl).not.toHaveTextContent("linears/linear");
+    });
+
+    await user.click(modelControl);
+    const modelListbox = await screen.findByRole("listbox", {
+      name: /^model options$/i,
+    });
+    expect(
+      within(modelListbox).getByRole("option", { name: "linear" }),
+    ).toBeInTheDocument();
+    expect(
+      within(modelListbox).getByRole("option", { name: "linear_adaptive" }),
+    ).toBeInTheDocument();
+    expect(
+      within(modelListbox).queryByRole("option", { name: "linears/linear" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(modelListbox).queryByRole("option", {
+        name: "experts_linear",
+      }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(modelTypeControl);
+    const typeListbox = await screen.findByRole("listbox", {
+      name: /^model type options$/i,
+    });
+    await user.click(within(typeListbox).getByRole("option", { name: "Experts" }));
+
+    await waitFor(() => {
+      expect(modelTypeControl).toHaveTextContent("Experts");
+      expect(modelControl).toHaveTextContent("experts_linear");
+      expect(modelControl).not.toHaveTextContent("experts/experts_linear");
+      expect(screen.getByRole("combobox", { name: /^preset$/i }))
+        .toHaveTextContent("expert-baseline");
     });
   });
 
@@ -395,5 +876,57 @@ describe("useViewerState", () => {
         }),
       ).toHaveTextContent("bert-baseline");
     });
+  });
+
+  it("blocks training while a historical experiment run is selected", async () => {
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "historical-run",
+          experiment: "exp_locked",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    mocks.fetchLogExperiments.mockResolvedValueOnce({
+      experiments: [
+        {
+          experiment: "scratch",
+          runCount: 0,
+          relativePath: "scratch",
+        },
+      ],
+    });
+    renderTrainingPanelWithExperiments();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^training/i }));
+    await user.click(screen.getByRole("tab", { name: /new folder/i }));
+    await user.type(screen.getByLabelText(/^new log folder$/i), "scratch_run");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^start training$/i }))
+        .toBeEnabled();
+    });
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /select experiment run exp_locked baseline mnist/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(
+          "Cannot perform training while experiment exp_locked is selected.",
+        ).length,
+      ).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: /^start training$/i }))
+        .toBeDisabled();
+    });
+    await user.click(screen.getByRole("button", { name: /^start training$/i }));
+    expect(mocks.createTrainingJob).not.toHaveBeenCalled();
   });
 });

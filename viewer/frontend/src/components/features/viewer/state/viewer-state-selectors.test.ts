@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveDatasetSelectionState,
   deriveMonitorSource,
+  deriveParameterActivityByNodePath,
   deriveTargetSelectionState,
 } from "@/components/features/viewer/state/viewer-state-selectors";
 import {
@@ -11,6 +12,7 @@ import {
   type InspectResponse,
   type LogRun,
   type LogRunTags,
+  type ParameterStatus,
   type Preset,
   type TrainingJob,
 } from "@/lib/api";
@@ -121,9 +123,13 @@ function node(
 function monitorGraph(): InspectResponse {
   const root = node("root", "main_model", "LayerStack");
   const layer0 = node("layer-0", "main_model.0", "Layer");
-  const linear0 = node("linear-0", "main_model.0.model", "LinearLayer");
+  const linear0 = node("linear-0", "main_model.0.model", "LinearLayer", {
+    details: { weightShape: "2 x 2", biasShape: "2" },
+  });
   const layer1 = node("layer-1", "main_model.1", "Layer");
-  const linear1 = node("linear-1", "main_model.1.model", "LinearLayer");
+  const linear1 = node("linear-1", "main_model.1.model", "LinearLayer", {
+    details: { weightShape: "2 x 2", biasShape: "2" },
+  });
 
   return {
     model: "linear",
@@ -136,6 +142,18 @@ function monitorGraph(): InspectResponse {
       { id: "root-layer-1", source: root.id, target: layer1.id },
       { id: "layer-1-linear-1", source: layer1.id, target: linear1.id },
     ],
+  };
+}
+
+function monitorGraphWithoutBias(): InspectResponse {
+  const graph = monitorGraph();
+  return {
+    ...graph,
+    nodes: graph.nodes.map((graphNode) =>
+      graphNode.typeName === "LinearLayer"
+        ? { ...graphNode, details: { weightShape: "2 x 2" } }
+        : graphNode,
+    ),
   };
 }
 
@@ -166,6 +184,35 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
     events: overrides.events ?? [],
     logTail: overrides.logTail ?? [],
     resultLinks: overrides.resultLinks ?? [],
+  };
+}
+
+function parameterStatus(
+  overrides: Partial<ParameterStatus> & Pick<ParameterStatus, "sourceId">,
+): ParameterStatus {
+  return {
+    sourceId: overrides.sourceId,
+    preset: overrides.preset ?? "baseline",
+    dataset: overrides.dataset ?? "Mnist",
+    logDir: overrides.logDir ?? "logs/run",
+    nodes:
+      overrides.nodes ?? [
+        {
+          nodePath: "main_model.0.model",
+          weights: {
+            status: "updated",
+            metric: "main_model.0.model/weights/relative_delta_norm",
+            lastStep: 12,
+            observedPoints: 2,
+          },
+          bias: {
+            status: "unchanged",
+            metric: "main_model.0.model/bias/delta_norm",
+            lastStep: 12,
+            observedPoints: 1,
+          },
+        },
+      ],
   };
 }
 
@@ -250,6 +297,13 @@ describe("viewer state selectors", () => {
           timestamp: "2026-06-02 12:00:00",
         }),
         run({
+          id: "fast-mnist",
+          experiment: "exp_a",
+          dataset: "Mnist",
+          preset: "fast",
+          timestamp: "2026-06-02 06:00:00",
+        }),
+        run({
           id: "other-experiment",
           experiment: "exp_b",
           dataset: "Cifar10",
@@ -262,6 +316,7 @@ describe("viewer state selectors", () => {
         layerTags("old-mnist"),
         layerTags("new-mnist"),
         layerTags("fashion"),
+        layerTags("fast-mnist"),
         layerTags("other-experiment"),
       ],
       selectedModel: "linear",
@@ -272,22 +327,25 @@ describe("viewer state selectors", () => {
     expect(state.modelLogRuns.map((item) => item.id)).toEqual([
       "new-mnist",
       "fashion",
+      "fast-mnist",
       "other-experiment",
       "old-mnist",
     ]);
     expect(state.historicalPresetOptions).toEqual([
       { value: "baseline", label: "baseline", count: 3 },
-      { value: "fast", label: "fast", count: 1 },
+      { value: "fast", label: "fast", count: 2 },
     ]);
     expect(state.visibleHistoricalRuns.map((item) => item.id)).toEqual([
       "new-mnist",
       "fashion",
+      "fast-mnist",
       "other-experiment",
       "old-mnist",
     ]);
     // experiment/dataset are derived from the selected run, not separate filters.
     expect(state.selectedHistoricalExperiment).toBe("exp_a");
     expect(state.selectedHistoricalDataset).toBe("Mnist");
+    expect(state.selectedHistoricalRunPreset).toBe("baseline");
     expect(state.filteredHistoricalRuns.map((item) => item.id)).toEqual([
       "new-mnist",
       "old-mnist",
@@ -316,6 +374,7 @@ describe("viewer state selectors", () => {
     expect(state.selectedLogRun).toBeUndefined();
     expect(state.selectedHistoricalExperiment).toBe("");
     expect(state.selectedHistoricalDataset).toBe("");
+    expect(state.selectedHistoricalRunPreset).toBe("");
     expect(state.filteredHistoricalRuns).toEqual([]);
     expect(state.historicalMonitorRuns).toEqual([]);
     expect(state.filteredHistoricalRunIds).toEqual([]);
@@ -377,6 +436,7 @@ describe("viewer state selectors", () => {
       historicalMonitorRuns: [run({ id: "new-mnist" })],
       selectedHistoricalExperiment: "exp_a",
       selectedHistoricalDataset: "Mnist",
+      selectedHistoricalPreset: "baseline",
       logRunTags,
       filteredHistoricalRunIds: ["new-mnist"],
     });
@@ -401,6 +461,7 @@ describe("viewer state selectors", () => {
       historicalMonitorRuns: [historicalRun],
       selectedHistoricalExperiment: "exp_a",
       selectedHistoricalDataset: "Mnist",
+      selectedHistoricalPreset: "baseline",
     });
 
     expect(activeState.graphMonitorSource).toEqual({
@@ -413,6 +474,7 @@ describe("viewer state selectors", () => {
       historicalMonitorRuns: [historicalRun],
       selectedHistoricalExperiment: "exp_a",
       selectedHistoricalDataset: "Mnist",
+      selectedHistoricalPreset: "baseline",
     });
 
     expect(historicalState.graphMonitorSource).toEqual({
@@ -420,6 +482,148 @@ describe("viewer state selectors", () => {
       runs: [historicalRun],
       experiment: "exp_a",
       dataset: "Mnist",
+      preset: "baseline",
     });
+  });
+
+  it("uses the resolved monitor name for active-job chart source selection", () => {
+    const attention = node("attention-0", "encoder.0.attention", "SelfAttention");
+    const graph: InspectResponse = {
+      model: "bert",
+      preset: "baseline",
+      parameterCount: 0,
+      nodes: [node("root", "encoder", "LayerStack"), attention],
+      edges: [{ id: "root-attention", source: "root", target: attention.id }],
+    };
+    const activeJob = trainingJob({ monitors: ["attention"] });
+
+    const state = deriveMonitorSource({
+      graph,
+      selectedNode: attention,
+      graphMonitorNode: attention,
+      activeTrainingJob: activeJob,
+      historicalMonitorRuns: [run({ id: "historical" })],
+    });
+
+    expect(state.selectedMonitorNode).toBe(attention);
+    expect(state.activeJobHasMonitorSource).toBe(true);
+    expect(state.graphMonitorSource).toEqual({
+      kind: "active-job",
+      job: activeJob,
+    });
+
+    const fallbackState = deriveMonitorSource({
+      graph,
+      graphMonitorNode: attention,
+      activeTrainingJob: trainingJob({ monitors: ["linear"] }),
+      historicalMonitorRuns: [run({ id: "historical" })],
+      selectedHistoricalExperiment: "exp_a",
+      selectedHistoricalDataset: "Mnist",
+      selectedHistoricalPreset: "baseline",
+    });
+
+    expect(fallbackState.graphMonitorSource).toEqual({
+      kind: "historical-run-group",
+      runs: [run({ id: "historical" })],
+      experiment: "exp_a",
+      dataset: "Mnist",
+      preset: "baseline",
+    });
+  });
+
+  it("maps active-job parameter status through linear monitor targets", () => {
+    const graph = monitorGraph();
+    const activeJob = trainingJob({ monitors: ["linear"] });
+    const source = deriveMonitorSource({
+      graph,
+      activeTrainingJob: activeJob,
+      historicalMonitorRuns: [run({ id: "historical" })],
+    }).graphMonitorSource;
+
+    const activityByPath = deriveParameterActivityByNodePath({
+      graph,
+      source,
+      status: parameterStatus({ sourceId: activeJob.id }),
+    });
+
+    const activity = activityByPath?.get("main_model.0.model");
+    expect(activity?.weights.status).toBe("updated");
+    expect(activity?.weights.source).toBe("active-job");
+    expect(activity?.weights.sourceLabel).toBe("active job job-1");
+    expect(activity?.weights.metric).toBe(
+      "main_model.0.model/weights/relative_delta_norm",
+    );
+    expect(activity?.bias?.status).toBe("unchanged");
+  });
+
+  it("aggregates historical parameter status with mixed amber states", () => {
+    const graph = monitorGraph();
+    const historicalRuns = [run({ id: "run-updated" }), run({ id: "run-static" })];
+    const source = deriveMonitorSource({
+      graph,
+      activeTrainingJob: undefined,
+      historicalMonitorRuns: historicalRuns,
+      selectedHistoricalExperiment: "exp_a",
+      selectedHistoricalDataset: "Mnist",
+      selectedHistoricalPreset: "baseline",
+    }).graphMonitorSource;
+
+    const activityByPath = deriveParameterActivityByNodePath({
+      graph,
+      source,
+      status: {
+        runs: [
+          parameterStatus({ sourceId: "run-updated" }),
+          parameterStatus({
+            sourceId: "run-static",
+            nodes: [
+              {
+                nodePath: "main_model.0.model",
+                weights: {
+                  status: "unchanged",
+                  metric: "main_model.0.model/weights/delta_norm",
+                  lastStep: 10,
+                  observedPoints: 1,
+                },
+                bias: {
+                  status: "missing",
+                  metric: null,
+                  lastStep: null,
+                  observedPoints: 0,
+                },
+              },
+            ],
+          }),
+        ],
+      },
+    });
+
+    const activity = activityByPath?.get("main_model.0.model");
+    expect(activity?.weights.status).toBe("mixed");
+    expect(activity?.weights.source).toBe("historical");
+    expect(activity?.weights.updatedRuns).toBe(1);
+    expect(activity?.weights.unchangedRuns).toBe(1);
+    expect(activity?.weights.totalRuns).toBe(2);
+    expect(activity?.bias?.status).toBe("unchanged");
+    expect(activity?.bias?.missingRuns).toBe(1);
+  });
+
+  it("does not create graph bias activity when the inspected target has no bias shape", () => {
+    const graph = monitorGraphWithoutBias();
+    const activeJob = trainingJob({ monitors: ["linear"] });
+    const source = deriveMonitorSource({
+      graph,
+      activeTrainingJob: activeJob,
+    }).graphMonitorSource;
+
+    const activityByPath = deriveParameterActivityByNodePath({
+      graph,
+      source,
+      status: parameterStatus({ sourceId: activeJob.id }),
+    });
+
+    const activity = activityByPath?.get("main_model.0.model");
+    expect(activity?.weights.status).toBe("updated");
+    expect(activity?.bias).toBeUndefined();
   });
 });

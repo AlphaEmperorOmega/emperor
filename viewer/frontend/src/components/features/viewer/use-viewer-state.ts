@@ -1,811 +1,137 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  type GraphNode,
-  type LogRun,
-  type TrainingJob,
-} from "@/lib/api";
-import { useLogRunsQuery, useLogTagsQuery } from "@/hooks/use-log-queries";
-import { type OverrideValues } from "@/lib/config";
+  useGraphPreviewController,
+  useGraphPreviewOrchestration,
+} from "@/components/features/viewer/state/use-graph-preview-orchestration";
 import {
-  DEFAULT_TRAINING_SEARCH_STATE,
-  type TrainingSearchState,
-} from "@/lib/training-search";
+  useTargetConfigState,
+} from "@/components/features/viewer/state/use-target-config-state";
 import {
-  createConfigSnapshot,
-  type ConfigSnapshotCreateResult,
-} from "@/lib/config-snapshots";
+  useHistoricalRunsState,
+  useHistoricalRunSelectionState,
+} from "@/components/features/viewer/state/use-historical-runs-state";
 import {
-  normalizePrimarySelection,
-  normalizeSelection,
-  selectionValuesEqual,
-  uniqueValidValues,
-} from "@/lib/selection";
-import { anyLogRunTagsMatchNodePath } from "@/lib/historical-monitor-runs";
-import { useGraphViewState } from "@/components/features/viewer/state/use-graph-view-state";
-import { useLockedOverrideSync } from "@/components/features/viewer/state/use-locked-override-sync";
-import { usePreviewInspectionState } from "@/components/features/viewer/state/use-preview-inspection";
-import { useTargetOverridesState } from "@/components/features/viewer/state/use-target-overrides";
-import {
-  LOCAL_DEFAULT_CAPABILITIES,
-  useViewerQueries,
-} from "@/components/features/viewer/state/use-viewer-queries";
-import { useConfigSnapshots } from "@/components/features/viewer/state/use-config-snapshots";
-import {
-  deriveDatasetSelectionState,
-  deriveMonitorSource,
-  deriveTargetSelectionState,
-} from "@/components/features/viewer/state/viewer-state-selectors";
-import { logQueryKeys } from "@/lib/query-keys";
+  useActiveTrainingJobState,
+} from "@/components/features/viewer/state/use-active-training-job-state";
 
-function resolveRunPresetName(
-  run: LogRun,
-  presets: Array<{ name: string; label: string }>,
-) {
-  const normalizedRunPreset = run.preset.toLowerCase();
-  return (
-    presets.find(
-      (preset) =>
-        preset.name === run.preset ||
-        preset.label === run.preset ||
-        preset.name.toLowerCase() === normalizedRunPreset ||
-        preset.label.toLowerCase() === normalizedRunPreset,
-    )?.name ?? ""
-  );
-}
-
-function overridesAreEmpty(overrides: OverrideValues) {
-  return Object.keys(overrides).length === 0;
-}
-
-function createSnapshotId() {
-  return globalThis.crypto?.randomUUID?.() ?? `snapshot-${Date.now()}`;
-}
+type GraphPreviewControllerState = ReturnType<typeof useGraphPreviewController>;
+type GraphPreviewState = ReturnType<typeof useGraphPreviewOrchestration>;
+type TargetConfigState = ReturnType<typeof useTargetConfigState>;
+type HistoricalRunSelectionState = ReturnType<
+  typeof useHistoricalRunSelectionState
+>;
+type HistoricalRunsState = ReturnType<typeof useHistoricalRunsState>;
+type ActiveTrainingJobState = ReturnType<typeof useActiveTrainingJobState>;
 
 export type ViewerStateOptions = {
   /** Notifies the logs workspace when a training job starts writing to a folder. */
   onJobStarted?: (logFolder: string) => void;
 };
 
+function targetConfigCascadeRules(
+  graphPreview: GraphPreviewControllerState,
+  historicalRunSelection: HistoricalRunSelectionState,
+): Parameters<typeof useTargetConfigState>[0] {
+  return {
+    requestPreview: graphPreview.requestPreview,
+    resetGraphSelectionAndExpansion: graphPreview.resetGraphSelectionAndExpansion,
+    resetGraphExpansion: graphPreview.resetGraphExpansion,
+    onModelSelected: historicalRunSelection.clearHistoricalSelectionForTarget,
+  };
+}
+
+function graphPreviewCompositionInput({
+  graphPreview,
+  targetConfig,
+  historicalRuns,
+  activeTrainingJobState,
+}: {
+  graphPreview: GraphPreviewControllerState;
+  targetConfig: TargetConfigState;
+  historicalRuns: HistoricalRunsState;
+  activeTrainingJobState: ActiveTrainingJobState;
+}): Parameters<typeof useGraphPreviewOrchestration>[0] {
+  const { selectedPreset, selectedDatasets } = targetConfig.selection;
+  const historicalGraphPreview = historicalRuns.graphPreview;
+
+  return {
+    controller: graphPreview,
+    activeTrainingJob: activeTrainingJobState.activeTrainingJob,
+    historicalMonitorRuns: historicalGraphPreview.historicalMonitorRuns,
+    selectedHistoricalExperiment:
+      historicalGraphPreview.selectedHistoricalExperiment,
+    selectedHistoricalDataset: historicalGraphPreview.selectedHistoricalDataset,
+    selectedHistoricalPreset: historicalGraphPreview.selectedHistoricalRunPreset,
+    logRunTags: historicalGraphPreview.logRunTags,
+    filteredHistoricalRunIds: historicalGraphPreview.filteredHistoricalRunIds,
+    targetPreset: selectedPreset,
+    targetDatasets: selectedDatasets,
+  };
+}
+
+function composeProviderSlices({
+  targetConfig,
+  historicalRuns,
+  activeTrainingJobState,
+  graphPreviewState,
+}: {
+  targetConfig: TargetConfigState;
+  historicalRuns: HistoricalRunsState;
+  activeTrainingJobState: ActiveTrainingJobState;
+  graphPreviewState: GraphPreviewState;
+}) {
+  return {
+    target: targetConfig.target,
+    graph: graphPreviewState.graph,
+    history: {
+      ...historicalRuns.history,
+      selectedLogRunHasMonitorTags:
+        graphPreviewState.history.selectedLogRunHasMonitorTags,
+    },
+    training: {
+      ...activeTrainingJobState,
+      ...graphPreviewState.training,
+    },
+  };
+}
+
 /**
- * Single orchestration engine behind the viewer context providers.
- *
- * The four domains it returns (target/config, graph view, historical runs,
- * training) are genuinely coupled — selecting a model resets the graph, picking
- * a historical run re-runs the preview, opening a monitor reads the active job —
- * so the cascade effects and composite actions live here in one place and the
- * result is split into per-domain slices that the providers distribute.
+ * Composition module behind the viewer context providers.
+ * Cross-slice cascade rules are named here; domain state stays in extracted hooks.
  */
 export function useViewerState(options: ViewerStateOptions = {}) {
   const { onJobStarted } = options;
 
-  // --- Target + overrides + queries -------------------------------------
-  const {
+  const graphPreview = useGraphPreviewController();
+  const historicalRunSelection = useHistoricalRunSelectionState();
+
+  const targetConfig = useTargetConfigState(
+    targetConfigCascadeRules(graphPreview, historicalRunSelection),
+  );
+  const { selectedModel } = targetConfig.selection;
+  const { presetsQuery } = targetConfig.queries;
+
+  const activeTrainingJobState = useActiveTrainingJobState({ onJobStarted });
+  const historicalRuns = useHistoricalRunsState({
     selectedModel,
-    setSelectedModel,
-    selectedPreset,
-    setSelectedPreset,
-    overrides,
-    setOverrides,
-    selectPreset,
-    updateOverride,
-    clearOverride,
-    clearOverrides,
-    selectModel: selectTargetModel,
-  } = useTargetOverridesState();
-  const [selectedDatasets, setSelectedDatasets] = useState<string[]>([]);
-  const [selectedTrainingPresets, setSelectedTrainingPresets] = useState<string[]>([]);
-  const [selectedMonitors, setSelectedMonitors] = useState<string[]>([]);
-  const {
-    snapshots: configSnapshots,
-    createMutation: createSnapshotMutation,
-    renameMutation: renameSnapshotMutation,
-    deleteMutation: deleteSnapshotMutation,
-  } = useConfigSnapshots(selectedModel);
-  const [deselectedSnapshotIds, setDeselectedSnapshotIds] = useState<string[]>([]);
-  const [trainingSearch, setTrainingSearch] = useState<TrainingSearchState>(
-    DEFAULT_TRAINING_SEARCH_STATE,
-  );
-  const {
-    healthQuery,
-    capabilitiesQuery,
-    modelsQuery,
-    presetsQuery,
-    datasetsQuery,
-    monitorsQuery,
-    schemaQuery,
-    searchSpaceQuery,
-  } = useViewerQueries(selectedModel, selectedPreset);
-  const capabilities = capabilitiesQuery.data ?? LOCAL_DEFAULT_CAPABILITIES;
-
-  // --- Preview inspection (graph data) ----------------------------------
-  const { graph, requestPreview, previewInspection } = usePreviewInspectionState();
-
-  // --- Historical runs ---------------------------------------------------
-  const [selectedLogRunId, setSelectedLogRunId] = useState<string | null>(null);
-  const [selectedHistoricalPreset, setSelectedHistoricalPreset] = useState("");
-  const logRunsQuery = useLogRunsQuery();
-  // Tags for ALL of the selected model's runs, so the Experiments panel can keep
-  // only experiments that contain per-layer monitor data. Cached per session by
-  // React Query; the query auto-disables when there are no runs.
-  const modelLogRunIds = useMemo(
-    () =>
-      (logRunsQuery.data?.runs ?? [])
-        .filter((run) => run.model === selectedModel)
-        .map((run) => run.id),
-    [logRunsQuery.data?.runs, selectedModel],
-  );
-  const modelRunTagsQuery = useLogTagsQuery({
-    runIds: modelLogRunIds,
-    queryKey: logQueryKeys.modelRunTags(modelLogRunIds),
+    presetOptions: presetsQuery.data?.presets,
+    syncSelectedLogRun: targetConfig.syncSelectedLogRun,
+    selection: historicalRunSelection,
   });
-
-  // --- Training + monitor charts ----------------------------------------
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [activeTrainingJob, setActiveTrainingJob] = useState<TrainingJob | undefined>();
-  const [graphMonitorNode, setGraphMonitorNode] = useState<GraphNode | undefined>();
-
-  const targetSelectionState = useMemo(
-    () =>
-      deriveTargetSelectionState({
-        datasets: datasetsQuery.data?.datasets,
-        presets: presetsQuery.data?.presets,
-        schemaFields: schemaQuery.data?.fields,
-        configSnapshots,
-        selectedModel,
-        selectedPreset,
-        selectedTrainingPresets,
-        overrides: overrides as OverrideValues,
-      }),
-    [
-      configSnapshots,
-      datasetsQuery.data?.datasets,
-      overrides,
-      presetsQuery.data?.presets,
-      schemaQuery.data?.fields,
-      selectedModel,
-      selectedPreset,
-      selectedTrainingPresets,
-    ],
+  const graphPreviewState = useGraphPreviewOrchestration(
+    graphPreviewCompositionInput({
+      graphPreview,
+      targetConfig,
+      historicalRuns,
+      activeTrainingJobState,
+    }),
   );
-  const {
-    datasetNames,
-    presetNames,
-    selectedPresetMeta,
-    configSections,
-    configFields,
-    visibleConfigSnapshots,
-    configSnapshotGroups,
-    overrideCount,
-    presetOwnedFieldCount,
-    fieldCount,
-  } = targetSelectionState;
 
-  const datasetSelectionState = useMemo(
-    () =>
-      deriveDatasetSelectionState({
-        logRuns: logRunsQuery.data?.runs,
-        modelRunTags: modelRunTagsQuery.data?.runs,
-        selectedModel,
-        selectedHistoricalPreset,
-        selectedLogRunId,
-      }),
-    [
-      logRunsQuery.data?.runs,
-      modelRunTagsQuery.data?.runs,
-      selectedHistoricalPreset,
-      selectedLogRunId,
-      selectedModel,
-    ],
-  );
-  const {
-    historicalPresetOptions,
-    visibleHistoricalRuns,
-    selectedHistoricalExperiment,
-    selectedHistoricalDataset,
-    historicalMonitorRuns,
-    filteredHistoricalRunIds,
-    selectedLogRun,
-  } = datasetSelectionState;
-  const logRunTagsQuery = useLogTagsQuery({
-    runIds: filteredHistoricalRunIds,
-    queryKey: logQueryKeys.filteredHistoricalRunTags(filteredHistoricalRunIds),
+  return composeProviderSlices({
+    targetConfig,
+    historicalRuns,
+    activeTrainingJobState,
+    graphPreviewState,
   });
-  const monitorSourceBeforeGraph = useMemo(
-    () =>
-      deriveMonitorSource({
-        graph,
-        activeTrainingJob,
-      }),
-    [activeTrainingJob, graph],
-  );
-  const { activeJobHasMonitorSource, linearMonitorTargetResolver } =
-    monitorSourceBeforeGraph;
-  const canOpenGraphNodeMonitor = useCallback((monitorTarget: GraphNode) => {
-    if (activeJobHasMonitorSource) {
-      return true;
-    }
-    return anyLogRunTagsMatchNodePath(
-      logRunTagsQuery.data?.runs,
-      filteredHistoricalRunIds,
-      monitorTarget.path,
-    );
-  }, [activeJobHasMonitorSource, filteredHistoricalRunIds, logRunTagsQuery.data]);
-  const graphState = useGraphViewState(graph, {
-    canOpenMonitor: canOpenGraphNodeMonitor,
-    onOpenMonitor: setGraphMonitorNode,
-    resolveMonitorTarget: linearMonitorTargetResolver,
-  });
-  const resetGraphSelectionAndExpansion = graphState.resetGraphSelectionAndExpansion;
-  const resetGraphExpansion = graphState.resetGraphExpansion;
-
-  // Selection cascade: models load → first model auto-selected → presets/datasets
-  // load → first preset + dataset auto-selected and the initial preview is
-  // requested → dataset/monitor lists are pruned to what the model supports.
-  useEffect(() => {
-    if (!selectedModel && modelsQuery.data?.models.length) {
-      setSelectedModel(modelsQuery.data.models[0]);
-    }
-  }, [modelsQuery.data, selectedModel, setSelectedModel]);
-
-  // Keep the preset filter valid: clear it on model change or when the chosen preset
-  // no longer appears among the model's layer-data runs. "" means "all presets".
-  useEffect(() => {
-    if (!selectedModel) {
-      setSelectedHistoricalPreset("");
-      return;
-    }
-    setSelectedHistoricalPreset((current) =>
-      current && historicalPresetOptions.some((option) => option.value === current)
-        ? current
-        : "",
-    );
-  }, [historicalPresetOptions, selectedModel]);
-
-  // Never auto-select a run; only clear the selection when it leaves the visible list
-  // (model switch, preset filter change, or runs reloading).
-  useEffect(() => {
-    if (!selectedModel) {
-      setSelectedLogRunId(null);
-      return;
-    }
-    setSelectedLogRunId((current) =>
-      current && visibleHistoricalRuns.some((run) => run.id === current)
-        ? current
-        : null,
-    );
-  }, [visibleHistoricalRuns, selectedModel]);
-
-  useEffect(() => {
-    const firstPreset = presetsQuery.data?.presets[0]?.name;
-    const firstDataset = datasetNames[0];
-    if (firstPreset && firstDataset && !selectedPreset) {
-      setSelectedPreset(firstPreset);
-      setSelectedTrainingPresets([firstPreset]);
-      setOverrides({});
-      requestPreview({
-        model: selectedModel,
-        preset: firstPreset,
-        dataset: firstDataset,
-        overrides: {},
-      });
-    }
-  }, [
-    datasetNames,
-    presetsQuery.data,
-    requestPreview,
-    selectedModel,
-    selectedPreset,
-    setOverrides,
-    setSelectedPreset,
-  ]);
-
-  useEffect(() => {
-    setTrainingSearch(DEFAULT_TRAINING_SEARCH_STATE);
-  }, [selectedModel, selectedPreset]);
-
-  useEffect(() => {
-    if (configSnapshots.length > 0) {
-      setTrainingSearch(DEFAULT_TRAINING_SEARCH_STATE);
-    }
-  }, [configSnapshots.length]);
-
-  useEffect(() => {
-    if (!selectedPreset || presetNames.length === 0) {
-      setSelectedTrainingPresets((current) =>
-        current.length === 0 ? current : [],
-      );
-      return;
-    }
-    setSelectedTrainingPresets((current) => {
-      const next = normalizePrimarySelection(
-        current,
-        presetNames,
-        selectedPreset || undefined,
-      );
-      return selectionValuesEqual(current, next) ? current : next;
-    });
-  }, [presetNames, selectedPreset]);
-
-  useEffect(() => {
-    if (!selectedModel || !selectedLogRun) {
-      return;
-    }
-    const preset = resolveRunPresetName(
-      selectedLogRun,
-      presetsQuery.data?.presets ?? [],
-    );
-    const dataset = datasetNames.includes(selectedLogRun.dataset)
-      ? selectedLogRun.dataset
-      : "";
-    if (!preset || !dataset) {
-      return;
-    }
-    const desiredTrainingPresets = [preset];
-    const desiredDatasets = [dataset];
-    const overridesAlreadyEmpty = overridesAreEmpty(overrides);
-    const alreadySynced =
-      selectedPreset === preset &&
-      selectionValuesEqual(selectedTrainingPresets, desiredTrainingPresets) &&
-      selectionValuesEqual(selectedDatasets, desiredDatasets) &&
-      overridesAlreadyEmpty;
-    if (alreadySynced) {
-      return;
-    }
-
-    if (selectedPreset !== preset) {
-      setSelectedPreset(preset);
-    }
-    setSelectedTrainingPresets((current) =>
-      selectionValuesEqual(current, desiredTrainingPresets)
-        ? current
-        : desiredTrainingPresets,
-    );
-    setSelectedDatasets((current) =>
-      selectionValuesEqual(current, desiredDatasets) ? current : desiredDatasets,
-    );
-    if (!overridesAlreadyEmpty) {
-      setOverrides({});
-    }
-    resetGraphSelectionAndExpansion();
-    requestPreview({
-      model: selectedModel,
-      preset,
-      dataset,
-      overrides: {},
-    });
-  }, [
-    datasetNames,
-    overrides,
-    presetsQuery.data,
-    requestPreview,
-    resetGraphSelectionAndExpansion,
-    selectedDatasets,
-    selectedLogRun,
-    selectedModel,
-    selectedPreset,
-    selectedTrainingPresets,
-    setOverrides,
-    setSelectedPreset,
-  ]);
-
-  useEffect(() => {
-    if (datasetNames.length === 0) {
-      setSelectedDatasets((current) => (current.length === 0 ? current : []));
-      return;
-    }
-    setSelectedDatasets((current) => {
-      const next = normalizeSelection(current, datasetNames);
-      return selectionValuesEqual(current, next) ? current : next;
-    });
-  }, [datasetNames]);
-
-  useEffect(() => {
-    const monitorNames = (monitorsQuery.data?.monitors ?? []).map((monitor) => monitor.name);
-    setSelectedMonitors((current) => {
-      const next = current.filter((monitor) => monitorNames.includes(monitor));
-      return next.length === current.length ? current : next;
-    });
-  }, [monitorsQuery.data]);
-
-  useLockedOverrideSync(schemaQuery.data, setOverrides);
-
-  const selectModel = useCallback(
-    (model: string) => {
-      selectTargetModel(model);
-      setSelectedDatasets([]);
-      setSelectedTrainingPresets([]);
-      setSelectedMonitors([]);
-      setSelectedHistoricalPreset("");
-      setSelectedLogRunId(null);
-      resetGraphSelectionAndExpansion();
-    },
-    [resetGraphSelectionAndExpansion, selectTargetModel],
-  );
-
-  const addConfigSnapshot = useCallback(
-    (name: string): ConfigSnapshotCreateResult => {
-      // Validate client-side for instant dialog feedback; the server re-validates
-      // and is the source of truth. The client-generated id is discarded — the
-      // persisted snapshot (with its server id) arrives via query invalidation.
-      const result = createConfigSnapshot({
-        id: createSnapshotId(),
-        name,
-        model: selectedModel,
-        preset: selectedPreset,
-        fields: configFields,
-        overrides,
-        snapshots: configSnapshots,
-        createdAt: new Date().toISOString(),
-      });
-      if (result.ok) {
-        createSnapshotMutation.mutate({
-          model: selectedModel,
-          preset: selectedPreset,
-          name: result.snapshot.name,
-          overrides: result.snapshot.overrides,
-        });
-      }
-      return result;
-    },
-    [
-      configFields,
-      configSnapshots,
-      createSnapshotMutation,
-      overrides,
-      selectedModel,
-      selectedPreset,
-    ],
-  );
-
-  const removeConfigSnapshot = useCallback(
-    (snapshotId: string) => {
-      deleteSnapshotMutation.mutate(snapshotId);
-    },
-    [deleteSnapshotMutation],
-  );
-
-  const renameConfigSnapshot = useCallback(
-    (snapshotId: string, name: string) => {
-      const nextName = name.trim();
-      if (!nextName) {
-        return;
-      }
-      renameSnapshotMutation.mutate({ id: snapshotId, name: nextName });
-    },
-    [renameSnapshotMutation],
-  );
-
-  const toggleConfigSnapshotRunSelection = useCallback((snapshotId: string) => {
-    setDeselectedSnapshotIds((current) =>
-      current.includes(snapshotId)
-        ? current.filter((id) => id !== snapshotId)
-        : [...current, snapshotId],
-    );
-  }, []);
-
-  const loadConfigSnapshot = useCallback(
-    (snapshotId: string) => {
-      const snapshot = configSnapshots.find((candidate) => candidate.id === snapshotId);
-      if (!snapshot || snapshot.model !== selectedModel) {
-        return false;
-      }
-      setSelectedPreset(snapshot.preset);
-      setSelectedTrainingPresets((current) =>
-        normalizePrimarySelection(
-          [...current, snapshot.preset],
-          presetNames,
-          snapshot.preset || undefined,
-        ),
-      );
-      setOverrides({ ...snapshot.overrides });
-      return true;
-    },
-    [configSnapshots, presetNames, selectedModel, setOverrides, setSelectedPreset],
-  );
-
-  const selectTrainingPrimaryPreset = useCallback(
-    (preset: string) => {
-      selectPreset(preset);
-      setSelectedTrainingPresets([preset]);
-    },
-    [selectPreset],
-  );
-
-  const setTrainingPresetSelection = useCallback(
-    (presets: string[]) => {
-      const validPresets = uniqueValidValues(presets, presetNames);
-      const fallbackPreset =
-        selectedPreset && presetNames.includes(selectedPreset)
-          ? selectedPreset
-          : presetNames[0] ?? "";
-      const nextPrimary = validPresets.includes(selectedPreset)
-        ? selectedPreset
-        : validPresets[0] ?? fallbackPreset;
-
-      if (nextPrimary && nextPrimary !== selectedPreset) {
-        selectPreset(nextPrimary);
-      }
-
-      setSelectedTrainingPresets(
-        normalizePrimarySelection(
-          validPresets,
-          presetNames,
-          nextPrimary || undefined,
-        ),
-      );
-    },
-    [presetNames, selectPreset, selectedPreset],
-  );
-
-  const toggleTrainingPreset = useCallback(
-    (preset: string) => {
-      const next = selectedTrainingPresets.includes(preset)
-        ? selectedTrainingPresets.filter((item) => item !== preset)
-        : [...selectedTrainingPresets, preset];
-      setTrainingPresetSelection(next);
-    },
-    [selectedTrainingPresets, setTrainingPresetSelection],
-  );
-
-  const makeTrainingPresetPrimary = useCallback(
-    (preset: string) => {
-      if (!presetNames.includes(preset)) {
-        return;
-      }
-      selectPreset(preset);
-      setSelectedTrainingPresets((current) =>
-        normalizePrimarySelection(
-          [...current, preset],
-          presetNames,
-          preset || undefined,
-        ),
-      );
-    },
-    [presetNames, selectPreset],
-  );
-
-  const selectAllTrainingPresets = useCallback(() => {
-    if (!selectedPreset) {
-      setSelectedTrainingPresets([]);
-      return;
-    }
-    setSelectedTrainingPresets([
-      selectedPreset,
-      ...presetNames.filter((preset) => preset !== selectedPreset),
-    ]);
-  }, [presetNames, selectedPreset]);
-
-  const selectPrimaryTrainingPreset = useCallback(() => {
-    setSelectedTrainingPresets(selectedPreset ? [selectedPreset] : []);
-  }, [selectedPreset]);
-
-  const setDatasetSelection = useCallback(
-    (datasets: string[]) => {
-      setSelectedDatasets((current) =>
-        normalizeSelection(datasets, datasetNames, current),
-      );
-    },
-    [datasetNames],
-  );
-
-  const toggleDataset = useCallback((dataset: string) => {
-    setSelectedDatasets((current) => {
-      const next = current.includes(dataset)
-        ? current.filter((item) => item !== dataset)
-        : [...current, dataset];
-      return normalizeSelection(next, datasetNames, current);
-    });
-  }, [datasetNames]);
-
-  const selectAllDatasets = useCallback(() => {
-    setSelectedDatasets(datasetNames);
-  }, [datasetNames]);
-
-  const selectFirstDataset = useCallback(() => {
-    setSelectedDatasets(datasetNames[0] ? [datasetNames[0]] : []);
-  }, [datasetNames]);
-
-  const toggleMonitor = useCallback((monitor: string) => {
-    setSelectedMonitors((current) =>
-      current.includes(monitor)
-        ? current.filter((item) => item !== monitor)
-        : [...current, monitor],
-    );
-  }, []);
-
-  const selectLogRun = useCallback((runId: string) => {
-    setSelectedLogRunId((current) => (current === runId ? null : runId));
-  }, []);
-
-  const updatePreview = useCallback(() => {
-    const previewDataset = selectedDatasets[0];
-    if (!selectedModel || !selectedPreset || !previewDataset) {
-      return;
-    }
-    resetGraphSelectionAndExpansion();
-    requestPreview({
-      model: selectedModel,
-      preset: selectedPreset,
-      dataset: previewDataset,
-      overrides: { ...overrides },
-    });
-  }, [
-    overrides,
-    requestPreview,
-    resetGraphSelectionAndExpansion,
-    selectedDatasets,
-    selectedModel,
-    selectedPreset,
-  ]);
-
-  const resetOverrides = useCallback(() => {
-    clearOverrides();
-    resetGraphExpansion();
-    const previewDataset = selectedDatasets[0];
-    if (selectedModel && selectedPreset && previewDataset) {
-      requestPreview({
-        model: selectedModel,
-        preset: selectedPreset,
-        dataset: previewDataset,
-        overrides: {},
-      });
-    }
-  }, [
-    clearOverrides,
-    requestPreview,
-    resetGraphExpansion,
-    selectedDatasets,
-    selectedModel,
-    selectedPreset,
-  ]);
-
-  const handleTrainingJobChange = useCallback(
-    (job: TrainingJob | undefined) => {
-      setActiveTrainingJob(job);
-      if (job?.logFolder) {
-        onJobStarted?.(job.logFolder);
-      }
-    },
-    [onJobStarted],
-  );
-
-  const closeGraphNodeMonitor = useCallback(() => {
-    setGraphMonitorNode(undefined);
-  }, []);
-
-  const apiOnline = healthQuery.data?.status === "ok";
-  const monitorSourceState = useMemo(
-    () =>
-      deriveMonitorSource({
-        graph,
-        selectedNode: graphState.selectedNode,
-        graphMonitorNode,
-        activeTrainingJob,
-        historicalMonitorRuns,
-        selectedHistoricalExperiment,
-        selectedHistoricalDataset,
-        logRunTags: logRunTagsQuery.data?.runs,
-        filteredHistoricalRunIds,
-        linearMonitorTargetResolver,
-      }),
-    [
-      activeTrainingJob,
-      filteredHistoricalRunIds,
-      graph,
-      graphMonitorNode,
-      graphState.selectedNode,
-      historicalMonitorRuns,
-      linearMonitorTargetResolver,
-      logRunTagsQuery.data?.runs,
-      selectedHistoricalDataset,
-      selectedHistoricalExperiment,
-    ],
-  );
-  const {
-    selectedMonitorNode,
-    selectedMonitorComparisonCandidateGroups,
-    selectedLogRunHasMonitorTags,
-    graphMonitorComparisonCandidateGroups,
-    graphMonitorSource,
-  } = monitorSourceState;
-
-  return {
-    target: {
-      selectedModel,
-      selectModel,
-      selectedPreset,
-      selectPreset: selectTrainingPrimaryPreset,
-      selectedPresetMeta,
-      selectedTrainingPresets,
-      setTrainingPresetSelection,
-      toggleTrainingPreset,
-      makeTrainingPresetPrimary,
-      selectAllTrainingPresets,
-      selectPrimaryTrainingPreset,
-      selectedDatasets,
-      setDatasetSelection,
-      toggleDataset,
-      selectAllDatasets,
-      selectFirstDataset,
-      selectedMonitors,
-      toggleMonitor,
-      overrides: overrides as OverrideValues,
-      configSections,
-      overrideCount,
-      presetOwnedFieldCount,
-      fieldCount,
-      capabilities,
-      apiOnline,
-      trainingSearch,
-      setTrainingSearch,
-      configSnapshots: visibleConfigSnapshots,
-      configSnapshotGroups,
-      configSnapshotCount: visibleConfigSnapshots.length,
-      deselectedSnapshotIds,
-      addConfigSnapshot,
-      removeConfigSnapshot,
-      renameConfigSnapshot,
-      loadConfigSnapshot,
-      toggleConfigSnapshotRunSelection,
-      updateOverride,
-      clearOverride,
-      updatePreview,
-      resetOverrides,
-      modelsQuery,
-      capabilitiesQuery,
-      presetsQuery,
-      datasetsQuery,
-      monitorsQuery,
-      schemaQuery,
-      searchSpaceQuery,
-    },
-    graph: {
-      graph,
-      graphForDetail: graphState.graphForDetail,
-      nodes: graphState.nodes,
-      edges: graphState.edges,
-      graphDetailMode: graphState.graphDetailMode,
-      setGraphDetailMode: graphState.setGraphDetailMode,
-      graphScope: graphState.graphScope,
-      setGraphScope: graphState.setGraphScope,
-      expandedGraphNodeIds: graphState.expandedGraphNodeIds,
-      selectedNodeId: graphState.selectedNodeId,
-      setSelectedNodeId: graphState.setSelectedNodeId,
-      selectedNode: graphState.selectedNode,
-      selectedMonitorNode,
-      selectedMonitorComparisonCandidateGroups,
-      collapseGraphNodes: graphState.collapseGraphNodes,
-      revealGraphNode: graphState.revealGraphNode,
-      previewInspection,
-    },
-    history: {
-      visibleHistoricalRuns,
-      historicalMonitorRuns,
-      historicalPresetOptions,
-      selectedHistoricalPreset,
-      setSelectedHistoricalPreset,
-      selectedHistoricalExperiment,
-      selectedHistoricalDataset,
-      selectedLogRunId,
-      selectLogRun,
-      logRunsQuery,
-      logRunTagsQuery,
-      experimentsLoading: logRunsQuery.isLoading || modelRunTagsQuery.isLoading,
-      experimentsError: logRunsQuery.error ?? modelRunTagsQuery.error,
-      selectedLogRunHasMonitorTags,
-    },
-    training: {
-      activeJobId,
-      setActiveJobId,
-      activeTrainingJob,
-      onJobChange: handleTrainingJobChange,
-      graphMonitorNode,
-      openGraphNodeMonitor: setGraphMonitorNode,
-      closeGraphNodeMonitor,
-      graphMonitorSource,
-      graphMonitorComparisonCandidateGroups,
-    },
-  };
 }
 
 export type ViewerState = ReturnType<typeof useViewerState>;
