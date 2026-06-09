@@ -81,7 +81,7 @@ class LogRunDeleteResponseTests(unittest.TestCase):
         candidate = LogRunDeleteCandidate(
             id="run-1",
             experiment="test_model",
-            model="linear",
+            model="linears/linear",
             preset="BASELINE",
             dataset="Mnist",
             runName="aaa_20260601_010203",
@@ -108,7 +108,7 @@ class LogRunDeleteResponseTests(unittest.TestCase):
             "affected": {
                 "experiments": ["test_model"],
                 "datasets": ["Mnist"],
-                "models": ["linear"],
+                "models": ["linears/linear"],
                 "presets": ["BASELINE"],
                 "runIds": ["run-1"],
             },
@@ -116,7 +116,7 @@ class LogRunDeleteResponseTests(unittest.TestCase):
                 {
                     "id": "run-1",
                     "experiment": "test_model",
-                    "model": "linear",
+                    "model": "linears/linear",
                     "preset": "BASELINE",
                     "dataset": "Mnist",
                     "runName": "aaa_20260601_010203",
@@ -173,7 +173,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         *,
         candidate_id: str = "candidate-id",
         experiment: str = "test_model",
-        model: str = "linear",
+        model: str = "linears/linear",
         preset: str = "BASELINE",
         dataset: str = "Mnist",
         run_name: str = "aaa_20260601_010203",
@@ -196,6 +196,18 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 logs_root,
                 ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
                 metrics={"test/accuracy": 0.9},
+            )
+            categorized_run = write_tensorboard_run(
+                logs_root,
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "categorized_20260601_010204",
+                    "version_0",
+                ],
+                metrics={"test/accuracy": 0.91},
             )
             custom_run = write_tensorboard_run(
                 logs_root,
@@ -272,6 +284,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
         by_path = {run.relativePath: run for run in runs}
         default_summary = by_path[default_run.relative_to(logs_root).as_posix()]
+        categorized_summary = by_path[categorized_run.relative_to(logs_root).as_posix()]
         custom_summary = by_path[custom_run.relative_to(logs_root).as_posix()]
         viewer_summary = by_path[viewer_run.relative_to(logs_root).as_posix()]
         no_event_summary = by_path[no_event_run.relative_to(logs_root).as_posix()]
@@ -281,7 +294,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
 
         self.assertIsNone(default_summary.group)
         self.assertEqual(default_summary.experiment, "linear")
-        self.assertEqual(default_summary.model, "linear")
+        self.assertEqual(default_summary.model, "linears/linear")
         self.assertEqual(default_summary.preset, "BASELINE")
         self.assertEqual(default_summary.dataset, "Mnist")
         self.assertEqual(default_summary.timestamp, "2026-06-01 01:02:03")
@@ -291,16 +304,23 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertTrue(default_summary.hasHparams)
         self.assertEqual(default_summary.metrics["test/accuracy"], 0.9)
 
+        self.assertIsNone(categorized_summary.group)
+        self.assertEqual(categorized_summary.experiment, "linears")
+        self.assertEqual(categorized_summary.model, "linears/linear")
+        self.assertEqual(categorized_summary.preset, "BASELINE")
+        self.assertEqual(categorized_summary.dataset, "Mnist")
+        self.assertEqual(categorized_summary.metrics["test/accuracy"], 0.91)
+
         self.assertEqual(custom_summary.group, "test_model")
         self.assertEqual(custom_summary.experiment, "test_model")
-        self.assertEqual(custom_summary.model, "linear_adaptive")
+        self.assertEqual(custom_summary.model, "linears/linear_adaptive")
         self.assertFalse(custom_summary.hasResult)
         self.assertFalse(custom_summary.hasHparams)
         self.assertEqual(custom_summary.checkpointCount, 0)
 
         self.assertEqual(viewer_summary.group, "viewer-training/job-123")
         self.assertEqual(viewer_summary.experiment, "viewer-training")
-        self.assertEqual(viewer_summary.model, "linear")
+        self.assertEqual(viewer_summary.model, "linears/linear")
         self.assertEqual(viewer_summary.dataset, "FashionMNIST")
 
         self.assertFalse(no_event_summary.hasResult)
@@ -715,7 +735,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             filters = LogRunDeleteFilters(
                 experiments=["test_model"],
                 datasets=[],
-                models=["linear"],
+                models=["linears/linear"],
                 presets=["BASELINE"],
                 runIds=[index.list_runs()[0].id],
             )
@@ -1064,7 +1084,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                         runner=FakeRunner(),
                     )
                     job = manager.create_job(
-                        model="linear",
+                        model="linears/linear",
                         preset="baseline",
                         datasets=["Mnist"],
                         overrides={},
@@ -1158,7 +1178,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             job = original_manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -1256,7 +1276,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             job = original_manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -1371,7 +1391,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             job = original_manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -1447,7 +1467,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
