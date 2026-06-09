@@ -10,6 +10,7 @@ from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_training_job_service
 from viewer.backend.schemas import (
     MonitorDataResponse,
+    ParameterStatusResponse,
     TrainingJobCreateRequest,
     TrainingJobResponse,
     TrainingRunPlanCreateRequest,
@@ -102,6 +103,27 @@ async def training_job_monitor_data(
         service.get_monitor_data(
             job_id,
             node_path=node_path,
+            dataset=dataset,
+            preset=preset,
+        )
+    )
+
+
+@router.get(
+    "/jobs/{job_id}/monitor-parameter-status",
+    response_model=ParameterStatusResponse,
+    summary="Read training monitor parameter status",
+    response_description="Weight and bias update status for a training job.",
+)
+async def training_job_monitor_parameter_status(
+    job_id: str,
+    service: Annotated[TrainingJobService, Depends(get_training_job_service)],
+    dataset: str | None = None,
+    preset: str | None = None,
+) -> ParameterStatusResponse:
+    return ParameterStatusResponse.model_validate(
+        service.get_parameter_status(
+            job_id,
             dataset=dataset,
             preset=preset,
         )

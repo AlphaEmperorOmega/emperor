@@ -21,7 +21,14 @@ from viewer.backend.inspector.discovery import (
 )
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import validate_log_experiment_name
-from viewer.backend.monitor_data import TensorBoardMonitorReader
+from viewer.backend.monitor_data import (
+    TensorBoardMonitorReader,
+    TensorBoardParameterStatusReader,
+)
+from viewer.backend.runtime.job_status import (
+    is_active_job_status,
+    is_live_process_job_status,
+)
 from viewer.backend.training_run_plans import (
     SelectedTrainingInputs,
     TrainingRunPlanBuilder,
@@ -87,6 +94,7 @@ class TrainingJobManager:
         logs_root: Path | str = "logs",
         runner: ProcessRunner | None = None,
         monitor_reader: TensorBoardMonitorReader | None = None,
+        parameter_status_reader: TensorBoardParameterStatusReader | None = None,
         run_plan_builder: TrainingRunPlanBuilder | None = None,
         job_store: TrainingJobStore | None = None,
     ) -> None:
@@ -95,6 +103,9 @@ class TrainingJobManager:
         self.logs_root = Path(logs_root)
         self.runner = runner or SubprocessRunner()
         self.monitor_reader = monitor_reader or TensorBoardMonitorReader()
+        self.parameter_status_reader = (
+            parameter_status_reader or TensorBoardParameterStatusReader()
+        )
         self.run_plan_builder = run_plan_builder or TrainingRunPlanBuilder()
         self.job_store = job_store or FileSystemTrainingJobStore(self.root)
         self._processes: dict[str, ProcessHandle] = {}
@@ -364,11 +375,11 @@ class TrainingJobManager:
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         job = self._get_job_record(job_id)
         process = self._processes.get(job_id)
-        if process is None and job.status in {"running", "queued", "unknown"}:
+        if process is None and is_active_job_status(job.status):
             raise InspectorError(
                 f"Training job '{job_id}' has no live process handle."
             )
-        if job.status in {"running", "queued"}:
+        if is_live_process_job_status(job.status):
             if process.poll() is None:
                 process.terminate()
         job.status = "cancelled"
@@ -381,7 +392,7 @@ class TrainingJobManager:
         active: list[dict[str, Any]] = []
         for job in self.job_store.list():
             self._refresh(job)
-            if job.status not in {"running", "queued", "unknown"}:
+            if not is_active_job_status(job.status):
                 continue
             active.append(
                 {
@@ -420,6 +431,31 @@ class TrainingJobManager:
         data["preset"] = self._normalize_preset_token(preset) if preset else None
         return data
 
+    def get_parameter_status(
+        self,
+        job_id: str,
+        *,
+        dataset: str | None = None,
+        preset: str | None = None,
+    ) -> dict[str, Any]:
+        job = self._get_job_record(job_id)
+        if dataset is not None and dataset not in job.datasets:
+            raise InspectorError(
+                f"Unknown dataset '{dataset}' for training job '{job_id}'."
+            )
+        if preset is not None and not self._preset_in_job(job, preset):
+            raise InspectorError(
+                f"Unknown preset '{preset}' for training job '{job_id}'."
+            )
+        self._refresh(job)
+        log_dir = self._log_dir_for_monitor_data(job, dataset, preset)
+        return self.parameter_status_reader.read(
+            source_id=job.id,
+            preset=self._normalize_preset_token(preset) if preset else None,
+            dataset=dataset,
+            log_dir=log_dir,
+        )
+
     def _get_job_record(self, job_id: str) -> TrainingJob:
         job = self.job_store.get(job_id)
         if job is None:
@@ -437,17 +473,17 @@ class TrainingJobManager:
         )
         if latest_failed is not None:
             job.status = "failed"
-        elif process is None and job.status in {"running", "queued"}:
+        elif process is None and is_live_process_job_status(job.status):
             job.status = "unknown"
             job.updated_at = _now()
         elif process is not None and exit_code is None and job.status == "unknown":
             job.status = "running"
             job.updated_at = _now()
-        elif process is not None and exit_code is not None and job.status in {
-            "running",
-            "queued",
-            "unknown",
-        }:
+        elif (
+            process is not None
+            and exit_code is not None
+            and is_active_job_status(job.status)
+        ):
             job.exit_code = exit_code
             job.status = "completed" if exit_code == 0 else "failed"
             job.updated_at = _now()

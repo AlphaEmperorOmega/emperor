@@ -64,3 +64,6 @@ class LogRunRepository:
 
     def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
         return self._index.monitor_data_for_run(run_id, node_path=node_path)
+
+    def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        return self._index.parameter_status_for_runs(run_ids)

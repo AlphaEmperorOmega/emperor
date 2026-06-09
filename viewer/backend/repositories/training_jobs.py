@@ -79,6 +79,19 @@ class TrainingJobRepository:
             preset=preset,
         )
 
+    def get_parameter_status(
+        self,
+        job_id: str,
+        *,
+        dataset: str | None,
+        preset: str | None,
+    ) -> dict[str, Any]:
+        return self._manager.get_parameter_status(
+            job_id,
+            dataset=dataset,
+            preset=preset,
+        )
+
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         return self._manager.cancel_job(job_id)
 

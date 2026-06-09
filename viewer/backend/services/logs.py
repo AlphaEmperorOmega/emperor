@@ -29,6 +29,23 @@ def _paginate(
     }
 
 
+def _paginated_response(
+    items: list[dict[str, Any]],
+    *,
+    collection_key: str,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    page = _paginate(items, limit=limit, offset=offset)
+    return {
+        collection_key: page["items"],
+        "total": page["total"],
+        "limit": page["limit"],
+        "offset": page["offset"],
+        "hasMore": page["hasMore"],
+    }
+
+
 def _delete_filters_from_fields(
     *,
     experiments: list[str],
@@ -62,28 +79,24 @@ class LogRunService:
 
     def list_runs(self, *, limit: int, offset: int) -> dict[str, Any]:
         runs = [run.to_response() for run in self._repository.list_runs()]
-        page = _paginate(runs, limit=limit, offset=offset)
-        return {
-            "runs": page["items"],
-            "total": page["total"],
-            "limit": page["limit"],
-            "offset": page["offset"],
-            "hasMore": page["hasMore"],
-        }
+        return _paginated_response(
+            runs,
+            collection_key="runs",
+            limit=limit,
+            offset=offset,
+        )
 
     def list_experiments(self, *, limit: int, offset: int) -> dict[str, Any]:
         experiments = [
             experiment.to_response()
             for experiment in self._repository.list_experiments()
         ]
-        page = _paginate(experiments, limit=limit, offset=offset)
-        return {
-            "experiments": page["items"],
-            "total": page["total"],
-            "limit": page["limit"],
-            "offset": page["offset"],
-            "hasMore": page["hasMore"],
-        }
+        return _paginated_response(
+            experiments,
+            collection_key="experiments",
+            limit=limit,
+            offset=offset,
+        )
 
     def delete_experiment(
         self,
@@ -152,3 +165,6 @@ class LogRunService:
 
     def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
         return self._repository.monitor_data_for_run(run_id, node_path=node_path)
+
+    def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        return self._repository.parameter_status_for_runs(run_ids)

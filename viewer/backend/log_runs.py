@@ -9,8 +9,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from models.catalog import MODEL_CATALOG, public_id_for_flat_name
 from viewer.backend.inspector.errors import InspectorError
-from viewer.backend.monitor_data import DEFAULT_SCALAR_POINT_LIMIT, TensorBoardMonitorReader
+from viewer.backend.monitor_data import (
+    DEFAULT_SCALAR_POINT_LIMIT,
+    TensorBoardMonitorReader,
+    TensorBoardParameterStatusReader,
+)
 from viewer.backend.tensorboard_reader import (
     event_dirs,
     load_event_accumulator,
@@ -96,6 +101,20 @@ def _read_result_metrics(result_path: Path) -> dict[str, Any]:
         return {}
     metrics = payload.get("metrics") if isinstance(payload, dict) else None
     return metrics if isinstance(metrics, dict) else {}
+
+
+def _split_log_model_prefix(
+    prefix_parts: tuple[str, ...],
+) -> tuple[tuple[str, ...], str] | None:
+    for index in range(len(prefix_parts)):
+        candidate = "/".join(prefix_parts[index:])
+        if candidate in MODEL_CATALOG:
+            return prefix_parts[:index], candidate
+        if "/" not in candidate:
+            public_id = public_id_for_flat_name(candidate)
+            if public_id is not None:
+                return prefix_parts[:index], public_id
+    return None
 
 
 @dataclass(frozen=True)
@@ -352,11 +371,15 @@ class LogRunIndex:
         logs_root: Path | str = "logs",
         scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
         monitor_reader: TensorBoardMonitorReader | None = None,
+        parameter_status_reader: TensorBoardParameterStatusReader | None = None,
     ) -> None:
         self.logs_root = Path(logs_root)
         self.scalar_point_limit = scalar_point_limit
         self.monitor_reader = monitor_reader or TensorBoardMonitorReader(
             scalar_point_limit=scalar_point_limit,
+        )
+        self.parameter_status_reader = (
+            parameter_status_reader or TensorBoardParameterStatusReader()
         )
 
     def list_runs(self) -> list[LogRun]:
@@ -455,6 +478,18 @@ class LogRunIndex:
             dataset=run.dataset,
             log_dir=str(run.path),
         )
+
+    def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        runs = self._resolve_runs(run_ids)
+        return [
+            self.parameter_status_reader.read(
+                source_id=run.id,
+                preset=run.preset,
+                dataset=run.dataset,
+                log_dir=str(run.path),
+            )
+            for run in runs
+        ]
 
     def delete_experiment(
         self,
@@ -556,8 +591,10 @@ class LogRunIndex:
         run_name = parts[-2]
         dataset = parts[-3]
         preset = parts[-4]
-        model = parts[-5]
-        group_parts = parts[:-5]
+        model_prefix = _split_log_model_prefix(parts[:-4])
+        if model_prefix is None:
+            return None
+        group_parts, model = model_prefix
         group = "/".join(group_parts) if group_parts else None
         experiment = parts[0]
         relative_path = relative.as_posix()

@@ -10,20 +10,21 @@ from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_log_run_service, get_training_job_service
 from viewer.backend.schemas import (
     LogExperimentDeleteResponse,
-    LogExperimentResponse,
     LogExperimentsResponse,
     LogRunDeleteFiltersRequest,
     LogRunDeletePlanResponse,
     LogRunDeleteResponse,
-    LogRunResponse,
     LogRunsResponse,
     LogRunTagsResponse,
+    LogParameterStatusRequest,
+    LogParameterStatusResponse,
     LogScalarSeriesResponse,
     LogScalarsRequest,
     LogScalarsResponse,
     LogTagsRequest,
     LogTagsResponse,
     MonitorDataResponse,
+    ParameterStatusResponse,
 )
 from viewer.backend.services.logs import LogRunService
 from viewer.backend.services.training import TrainingJobService
@@ -48,13 +49,8 @@ async def logs_runs(
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
 ) -> LogRunsResponse:
-    page = service.list_runs(limit=limit, offset=offset)
-    return LogRunsResponse(
-        total=page["total"],
-        limit=page["limit"],
-        offset=page["offset"],
-        hasMore=page["hasMore"],
-        runs=[LogRunResponse.model_validate(run) for run in page["runs"]],
+    return LogRunsResponse.model_validate(
+        service.list_runs(limit=limit, offset=offset)
     )
 
 
@@ -69,16 +65,8 @@ async def logs_experiments(
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
 ) -> LogExperimentsResponse:
-    page = service.list_experiments(limit=limit, offset=offset)
-    return LogExperimentsResponse(
-        total=page["total"],
-        limit=page["limit"],
-        offset=page["offset"],
-        hasMore=page["hasMore"],
-        experiments=[
-            LogExperimentResponse.model_validate(experiment)
-            for experiment in page["experiments"]
-        ]
+    return LogExperimentsResponse.model_validate(
+        service.list_experiments(limit=limit, offset=offset)
     )
 
 
@@ -191,6 +179,24 @@ async def logs_scalars(
                 run_ids=request.runIds,
                 tags=request.tags,
             )
+        ]
+    )
+
+
+@router.post(
+    "/parameter-status",
+    response_model=LogParameterStatusResponse,
+    summary="Read log-run parameter status",
+    response_description="Weight and bias update status for requested historical runs.",
+)
+async def logs_parameter_status(
+    request: LogParameterStatusRequest,
+    service: Annotated[LogRunService, Depends(get_log_run_service)],
+) -> LogParameterStatusResponse:
+    return LogParameterStatusResponse(
+        runs=[
+            ParameterStatusResponse.model_validate(status)
+            for status in service.parameter_status_for_runs(request.runIds)
         ]
     )
 
