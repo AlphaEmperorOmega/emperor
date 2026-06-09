@@ -10,8 +10,27 @@ The selected target preset remains the source of truth for preview, config schem
 - `viewer/frontend` owns the browser UI, React Flow graph layout, config controls, training controls, monitor charts, and API error states.
 - The viewer may import `emperor/` and `models/`.
 - `emperor/` and `models/` must not import `viewer/`.
+- This dependency direction is enforced by `viewer/backend/tests/test_dependency_direction.py`; add shared contracts in `emperor/` or `models/` instead of importing viewer APIs into core packages.
 
 See [`FEATURE_ANALYSIS.md`](FEATURE_ANALYSIS.md) for the implemented feature matrix, endpoint contracts, workflow map, coverage map, and known limitations.
+
+## Backend API Compatibility
+
+The public ASGI import target is stable at `viewer.backend.api:app`. Code that
+needs a configured app should import `create_app` and `ViewerApiSettings` from
+`viewer.backend.api`; `viewer.backend.settings` remains a stable settings
+compatibility import backed by `viewer.backend.core.config`.
+
+HTTP routes are mounted at root paths such as `/health`, `/models`, and
+`/training/jobs`. The `viewer.backend.api.v1` package is an internal FastAPI
+organization namespace, not a public `/v1` URL prefix. Do not add `/v1` routes
+without updating the frontend contract and backend API contract tests in the
+same change.
+
+Legacy `viewer.backend.routes.*` imports are deprecated compatibility shims.
+New code should import routers from `viewer.backend.api.v1.routers.*`. Remove
+those shims only after a repository import audit confirms no non-test imports
+remain and the migration is documented.
 
 ## Setup
 
@@ -73,6 +92,7 @@ Backend:
 
 ```bash
 python -m unittest discover -s viewer/backend/tests
+python -m ruff check viewer/backend
 ```
 
 Frontend:
