@@ -1,5 +1,6 @@
 import { TrainingPanel } from "@/components/features/viewer/training-panel";
 import {
+  useHistoricalRuns,
   useTargetConfig,
   useTraining,
 } from "@/components/features/viewer/providers/viewer-providers";
@@ -11,6 +12,7 @@ export function ConnectedTrainingPanel({
 }) {
   const target = useTargetConfig();
   const training = useTraining();
+  const history = useHistoricalRuns();
   const canOpenFullConfig = Boolean(
     target.selectedModel && target.selectedPreset && target.schemaQuery.isSuccess,
   );
@@ -36,6 +38,8 @@ export function ConnectedTrainingPanel({
       searchLoading={target.searchSpaceQuery.isLoading}
       trainingSearch={target.trainingSearch}
       trainingEnabled={target.capabilities.trainingEnabled}
+      trainingLockedByHistoricalSelection={history.selectedLogRunId !== null}
+      historicalTrainingLockExperiment={history.selectedHistoricalExperiment}
       onSelectModel={target.selectModel}
       onSelectPreset={target.selectPreset}
       onSetTrainingPresets={target.setTrainingPresetSelection}

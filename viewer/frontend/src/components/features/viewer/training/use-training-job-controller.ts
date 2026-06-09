@@ -228,6 +228,9 @@ export function useTrainingJobController({
   }
 
   function startTraining() {
+    if (!canStart) {
+      return;
+    }
     const request = trainingRequest();
     if (!request) {
       return;
@@ -243,7 +246,7 @@ export function useTrainingJobController({
   }
 
   function confirmLargeGridSearch() {
-    if (pendingTrainingRequest) {
+    if (pendingTrainingRequest && canStart) {
       submitTrainingRequest(pendingTrainingRequest);
       setPendingTrainingRequest(null);
     }

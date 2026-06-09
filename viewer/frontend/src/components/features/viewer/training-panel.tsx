@@ -1,8 +1,6 @@
 import {
   type Dispatch,
   type SetStateAction,
-  useMemo,
-  useState,
 } from "react";
 import {
   Activity,
@@ -37,29 +35,13 @@ import {
   type SearchAxis,
   type TrainingJob,
 } from "@/lib/api";
-import { useLogExperimentsQuery } from "@/hooks/use-log-queries";
 import { type ConfigSection, type OverrideValues } from "@/lib/config";
-import {
-  buildConfigSnapshotRunPlan,
-  type ConfigSnapshot,
-} from "@/lib/config-snapshots";
-import { buildClusterGrowth } from "@/lib/cluster-growth";
-import {
-  DEFAULT_TRAINING_SEARCH_STATE,
-  buildEffectiveOverrides,
-  buildTrainingSearchPayload,
-  estimatePlannedRuns,
-  searchOverrideConflictKeys,
-  selectedSearchAxisCount,
-  trainingSearchModeLabel,
-  validateTrainingSearch,
-  type TrainingSearchState,
-} from "@/lib/training-search";
-import { metricLabel, overrideSummary } from "@/lib/training/summary";
+import { type ConfigSnapshot } from "@/lib/config-snapshots";
+import { type TrainingSearchState } from "@/lib/training-search";
 import { TrainingTargetDatasetPanel } from "@/components/features/viewer/training/training-target-dataset-panel";
 import { TrainingFooterField } from "@/components/features/viewer/training/training-footer-field";
 import { TrainingProgressDialog } from "@/components/features/viewer/training/training-progress-dialog";
-import { useTrainingJobController } from "@/components/features/viewer/training/use-training-job-controller";
+import { useTrainingPanelState } from "@/components/features/viewer/training/use-training-panel-state";
 
 type TrainingPanelProps = {
   models: string[];
@@ -81,6 +63,8 @@ type TrainingPanelProps = {
   searchLoading?: boolean;
   trainingSearch: TrainingSearchState;
   trainingEnabled: boolean;
+  trainingLockedByHistoricalSelection?: boolean;
+  historicalTrainingLockExperiment?: string;
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
   onSetTrainingPresets: (presets: string[]) => void;
@@ -103,8 +87,6 @@ type TrainingPanelProps = {
   onJobChange: (job: TrainingJob | undefined) => void;
 };
 
-const LOG_FOLDER_RE = /^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*$/;
-type LogFolderMode = "existing" | "new";
 const footerFieldLabelClass =
   "flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-ink-faint";
 const footerIconClass = "h-[15px] w-[15px] text-violet";
@@ -129,6 +111,8 @@ export function TrainingPanel({
   searchLoading = false,
   trainingSearch,
   trainingEnabled,
+  trainingLockedByHistoricalSelection = false,
+  historicalTrainingLockExperiment = "",
   onSelectModel,
   onSelectPreset,
   onSetTrainingPresets,
@@ -150,155 +134,62 @@ export function TrainingPanel({
   onActiveJobIdChange,
   onJobChange,
 }: TrainingPanelProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [logFolderMode, setLogFolderMode] = useState<LogFolderMode>("existing");
-  const [selectedExistingLogFolder, setSelectedExistingLogFolder] =
-    useState("");
-  const [newLogFolder, setNewLogFolder] = useState("");
-  const [isProgressOpen, setIsProgressOpen] = useState(false);
-  const logExperimentsQuery = useLogExperimentsQuery();
-  const configFields = useMemo(
-    () => configSections.flatMap((section) => section.fields),
-    [configSections],
-  );
-  const modelOptions = useMemo(
-    () => models.map((model) => ({ value: model, label: model })),
-    [models],
-  );
-  const presetOptions = useMemo(
-    () => presets.map((preset) => ({ value: preset.name, label: preset.name })),
-    [presets],
-  );
-  const trainingMonitorOptions = useMemo(
-    () =>
-      monitorOptions.map((monitor) => ({
-        value: monitor.name,
-        label: monitor.label,
-        description: monitor.description,
-        meta:
-          monitor.kinds.length > 0 ? (
-            <span>{monitor.kinds.join(" / ")}</span>
-          ) : undefined,
-      })),
-    [monitorOptions],
-  );
-  const fieldCount = configFields.length;
-  const overrideCount = Object.keys(overrides).length;
-  // Only snapshots the user kept checked feed the training run plan.
-  const runnableConfigSnapshots = useMemo(
-    () =>
-      configSnapshots.filter(
-        (snapshot) => !deselectedSnapshotIds.includes(snapshot.id),
-      ),
-    [configSnapshots, deselectedSnapshotIds],
-  );
-  const hasConfigSnapshots = configSnapshotCount > 0;
-  const effectiveTrainingSearch = hasConfigSnapshots
-    ? DEFAULT_TRAINING_SEARCH_STATE
-    : trainingSearch;
-  const effectiveOverrides = useMemo<OverrideValues>(
-    () =>
-      hasConfigSnapshots
-        ? {}
-        : buildEffectiveOverrides(overrides, effectiveTrainingSearch),
-    [effectiveTrainingSearch, hasConfigSnapshots, overrides],
-  );
-  const selectedFieldSummary = useMemo(
-    () => overrideSummary(configFields, effectiveOverrides),
-    [configFields, effectiveOverrides],
-  );
-  const searchConflictKeys = useMemo(
-    () => searchOverrideConflictKeys(overrides, effectiveTrainingSearch),
-    [effectiveTrainingSearch, overrides],
-  );
-  const trainingSearchValidation = useMemo(
-    () => validateTrainingSearch(effectiveTrainingSearch, searchAxes),
-    [effectiveTrainingSearch, searchAxes],
-  );
-  const selectedTrainingPresetCount = selectedTrainingPresets.length;
-  const activeSearchAxisCount = selectedSearchAxisCount(effectiveTrainingSearch);
-  const logFolderOptions = logExperimentsQuery.data?.experiments ?? [];
-  const existingLogFolderValid = Boolean(
-    selectedExistingLogFolder &&
-    logFolderOptions.some(
-      (option) => option.experiment === selectedExistingLogFolder,
-    ),
-  );
-  const newLogFolderValid = LOG_FOLDER_RE.test(newLogFolder);
-  const newLogFolderError =
-    newLogFolder.length === 0
-      ? "Enter a folder name."
-      : newLogFolderValid
-        ? ""
-        : "Use letters and numbers separated by single underscores.";
-  const logFolder =
-    logFolderMode === "existing" ? selectedExistingLogFolder : newLogFolder;
-  const hasValidLogFolder =
-    logFolderMode === "existing" ? existingLogFolderValid : newLogFolderValid;
-  const logFolderLabel = hasValidLogFolder
-    ? `logs/${logFolder}`
-    : "Choose log folder";
-  const searchPayload = useMemo(
-    () =>
-      hasConfigSnapshots
-        ? undefined
-        : buildTrainingSearchPayload(effectiveTrainingSearch),
-    [effectiveTrainingSearch, hasConfigSnapshots],
-  );
-  const snapshotRunPlan = useMemo(
-    () =>
-      hasConfigSnapshots
-        ? buildConfigSnapshotRunPlan({
-            model: selectedModel,
-            selectedPreset,
-            selectedTrainingPresets,
-            selectedDatasets,
-            snapshots: runnableConfigSnapshots,
-            fields: configFields,
-            logFolder,
-          })
-        : undefined,
-    [
-      configFields,
-      runnableConfigSnapshots,
-      hasConfigSnapshots,
-      logFolder,
-      selectedDatasets,
-      selectedModel,
-      selectedPreset,
-      selectedTrainingPresets,
-    ],
-  );
-  const plannedRunCount = useMemo(
-    () =>
-      snapshotRunPlan?.summary.totalRuns ??
-      estimatePlannedRuns(
-        effectiveTrainingSearch,
-        selectedDatasets.length,
-        selectedTrainingPresetCount,
-      ),
-    [
-      effectiveTrainingSearch,
-      selectedDatasets.length,
-      selectedTrainingPresetCount,
-      snapshotRunPlan,
-    ],
-  );
-  const canPlan = Boolean(
-    trainingEnabled &&
-      (hasConfigSnapshots
-        ? selectedModel && selectedPreset && snapshotRunPlan
-        : selectedModel &&
-            selectedPreset &&
-            selectedTrainingPresetCount > 0 &&
-            selectedDatasets.length > 0 &&
-            trainingSearchValidation.ready &&
-            (effectiveTrainingSearch.mode === "off" || !searchLoading)),
-  );
+  const panel = useTrainingPanelState({
+    models,
+    presets,
+    configSections,
+    selectedModel,
+    selectedPreset,
+    selectedTrainingPresets,
+    selectedDatasets,
+    overrides,
+    configSnapshots,
+    configSnapshotCount,
+    deselectedSnapshotIds,
+    monitorOptions,
+    selectedMonitors,
+    searchAxes,
+    searchLoading,
+    trainingSearch,
+    trainingEnabled,
+    trainingLockedByHistoricalSelection,
+    historicalTrainingLockExperiment,
+    onToggleMonitor,
+    activeJobId,
+    onActiveJobIdChange,
+    onJobChange,
+  });
+  const { actions, logFolder, options, request, status, training, ui } = panel;
+  const { changeMonitors } = actions;
+  const {
+    existingHelp,
+    existingValue: selectedExistingLogFolder,
+    isLoading: logFoldersLoading,
+    mode: logFolderMode,
+    newError: newLogFolderError,
+    newValid: newLogFolderValid,
+    newValue: newLogFolder,
+    options: logFolderOptions,
+    setExistingValue: setSelectedExistingLogFolder,
+    setNewValue: setNewLogFolder,
+  } = logFolder;
+  const { modelOptions, presetOptions, trainingMonitorOptions } = options;
+  const {
+    activeSearchAxisCount,
+    canRequestTraining,
+    effectiveTrainingSearch,
+    fieldCount,
+    hasConfigSnapshots,
+    overrideCount,
+    searchConflictKeys,
+    searchModeLabel,
+    selectedFieldSummary,
+    selectedTrainingPresetCount,
+    trainingSearchValidation,
+  } = request;
   const {
     job,
     progressRunPlan,
-    progressRunPlanSummary,
     displayedRunCount,
     isProgressPlanning,
     progressPlanError,
@@ -315,68 +206,35 @@ export function TrainingPanel({
     cancelLargeGridSearch,
     cancelTraining,
     resampleRunPlan,
-  } = useTrainingJobController({
-    selectedModel,
-    selectedPreset,
-    selectedTrainingPresets,
-    selectedDatasets,
-    effectiveOverrides,
-    logFolder,
-    selectedMonitors,
-    trainingSearch: effectiveTrainingSearch,
-    searchPayload,
-    submittedRunPlan: snapshotRunPlan,
-    canPlan,
-    hasValidLogFolder,
-    plannedRunCount,
-    activeJobId,
-    onActiveJobIdChange,
-    onJobChange,
-    onJobStarted: () => setIsExpanded(true),
-  });
-  const clusterGrowth = useMemo(() => buildClusterGrowth(job), [job]);
-  const status = job?.status ?? "idle";
-  const currentPreset =
-    job?.currentPreset ?? job?.preset ?? selectedTrainingPresets[0] ?? "";
-  const currentDataset =
-    job?.currentDataset ?? selectedDatasets[0] ?? "No dataset";
-  const epochStep =
-    job?.epoch !== null && job?.epoch !== undefined
-      ? `epoch ${job.epoch}${job.step !== null && job.step !== undefined ? ` / step ${job.step}` : ""}`
-      : "waiting";
-  const activeSearchLabel =
-    effectiveTrainingSearch.mode === "off"
-      ? ""
-      : `${trainingSearchModeLabel(effectiveTrainingSearch.mode)} search`;
-  const presetCountLabel = `${selectedTrainingPresetCount} preset${
-    selectedTrainingPresetCount === 1 ? "" : "s"
-  }`;
-  const monitorCount = `${selectedMonitors.length} / ${monitorOptions.length}`;
-  const datasetCountLabel = `${selectedDatasets.length} dataset${
-    selectedDatasets.length === 1 ? "" : "s"
-  }`;
-  const plannedRunLabel = `${displayedRunCount} planned run${
-    displayedRunCount === 1 ? "" : "s"
-  }`;
-  const progressButtonLabel = isProgressPlanning
-    ? "Planning..."
-    : progressPlanError
-      ? "Plan error"
-      : progressRunPlanSummary
-        ? `${progressRunPlanSummary.completedRuns} / ${progressRunPlanSummary.totalRuns} runs · ${progressRunPlanSummary.remainingEpochs} epochs left`
-        : "Progress";
+  } = training;
+  const {
+    activeSearchLabel,
+    clusterGrowth,
+    currentDataset,
+    currentPreset,
+    datasetCountLabel,
+    epochStep,
+    historicalTrainingLockMessage,
+    jobStatus,
+    logFolderLabel,
+    metricLabel: jobMetricLabel,
+    monitorCount,
+    plannedRunLabel,
+    presetCountLabel,
+    progressButtonLabel,
+  } = status;
   const logFolderModeControl = (
     <SegmentedControl aria-label="Log folder mode">
       <ViewModeButton
-        active={logFolderMode === "existing"}
-        onClick={() => setLogFolderMode("existing")}
+        active={logFolder.mode === "existing"}
+        onClick={() => logFolder.setMode("existing")}
       >
         <FolderOpen className="h-3.5 w-3.5" aria-hidden />
         Existing folder
       </ViewModeButton>
       <ViewModeButton
-        active={logFolderMode === "new"}
-        onClick={() => setLogFolderMode("new")}
+        active={logFolder.mode === "new"}
+        onClick={() => logFolder.setMode("new")}
       >
         <FolderPlus className="h-3.5 w-3.5" aria-hidden />
         New folder
@@ -384,32 +242,21 @@ export function TrainingPanel({
     </SegmentedControl>
   );
 
-  function changeMonitors(nextMonitors: string[]) {
-    const changedMonitor = monitorOptions.find(
-      (monitor) =>
-        selectedMonitors.includes(monitor.name) !==
-        nextMonitors.includes(monitor.name),
-    );
-    if (changedMonitor) {
-      onToggleMonitor(changedMonitor.name);
-    }
-  }
-
   return (
     <section className="border-t border-line bg-[linear-gradient(0deg,rgba(14,12,24,0.7),rgba(8,8,14,0.4))] backdrop-blur-xl">
       <div className="grid h-16 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-[22px]">
         <button
           type="button"
-          onClick={() => setIsExpanded((current) => !current)}
+          onClick={ui.toggleExpanded}
           className="flex min-w-0 items-center gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          aria-expanded={isExpanded}
+          aria-expanded={ui.isExpanded}
           aria-controls="training-panel-details"
-          aria-label={`Training ${status} ${currentDataset} ${epochStep} · ${metricLabel(job)}`}
+          aria-label={`Training ${jobStatus} ${currentDataset} ${epochStep} · ${jobMetricLabel}`}
         >
           <span className="relative grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[11px] border border-violet/35 bg-[linear-gradient(135deg,#2a2740,#16142a)] text-[15px] font-extrabold text-white">
             N
             <span className="absolute -bottom-1 -right-1 grid h-4 w-4 place-items-center rounded-full border border-line bg-panel text-ink-faint">
-              {isExpanded ? (
+              {ui.isExpanded ? (
                 <ChevronDown className="h-3 w-3" aria-hidden />
               ) : (
                 <ChevronUp className="h-3 w-3" aria-hidden />
@@ -419,16 +266,24 @@ export function TrainingPanel({
           <span className="grid min-w-0 gap-1">
             <span className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="text-sm font-bold text-ink">Training</span>
+              {historicalTrainingLockMessage && (
+                <span
+                  className="rounded-full border border-danger-line bg-danger-soft px-2 py-0.5 text-[11px] font-bold text-[#fda4af]"
+                  role="status"
+                >
+                  {historicalTrainingLockMessage}
+                </span>
+              )}
               <Badge
                 className={
-                  status === "failed"
+                  jobStatus === "failed"
                     ? "border-danger-line bg-danger-soft text-[#fda4af]"
-                    : status === "completed"
+                    : jobStatus === "completed"
                       ? "border-ok/30 bg-ok/10 text-ok"
                       : "border-line bg-white/[0.05] text-ink-faint"
                 }
               >
-                {status}
+                {jobStatus}
               </Badge>
               <span className="truncate font-mono text-xs text-ink-dim">
                 {currentPreset
@@ -437,7 +292,7 @@ export function TrainingPanel({
               </span>
             </span>
             <span className="truncate text-xs text-ink-faint">
-              {epochStep} · {metricLabel(job)}
+              {epochStep} · {jobMetricLabel}
               {` · ${presetCountLabel} · ${datasetCountLabel} · ${plannedRunLabel}`}
               {configSnapshotCount > 0
                 ? ` · ${configSnapshotCount} snapshots`
@@ -464,7 +319,7 @@ export function TrainingPanel({
           )}
           <Button
             variant="secondary"
-            onClick={() => setIsProgressOpen(true)}
+            onClick={ui.openProgress}
             disabled={
               !trainingEnabled ||
               (!progressRunPlan && !isProgressPlanning && !progressPlanError)
@@ -481,7 +336,7 @@ export function TrainingPanel({
           <Button
             variant="primary"
             onClick={startTraining}
-            disabled={!trainingEnabled || !canStart}
+            disabled={!canRequestTraining || !canStart}
             className="h-10 px-[22px] text-sm"
           >
             {isStarting ? (
@@ -494,7 +349,7 @@ export function TrainingPanel({
         </div>
       </div>
 
-      {isExpanded && (
+      {ui.isExpanded && (
         <div
           id="training-panel-details"
           className="grid max-h-[46vh] gap-3 overflow-y-auto border-t border-line bg-bg-2/90 px-4 py-3 sm:px-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]"
@@ -502,6 +357,11 @@ export function TrainingPanel({
           {!trainingEnabled && (
             <InlineStatus tone="warning" compact className="lg:col-span-2">
               Training is disabled by this backend.
+            </InlineStatus>
+          )}
+          {historicalTrainingLockMessage && (
+            <InlineStatus tone="danger" compact className="lg:col-span-2">
+              {historicalTrainingLockMessage}
             </InlineStatus>
           )}
           <div className="grid gap-3">
@@ -523,8 +383,7 @@ export function TrainingPanel({
                         setSelectedExistingLogFolder(event.target.value)
                       }
                       disabled={
-                        logExperimentsQuery.isLoading ||
-                        logFolderOptions.length === 0
+                        logFoldersLoading || logFolderOptions.length === 0
                       }
                       aria-label="Log experiment folder"
                     >
@@ -539,11 +398,7 @@ export function TrainingPanel({
                       ))}
                     </Select>
                     <span className="text-xs text-ink-faint">
-                      {logExperimentsQuery.isLoading
-                        ? "Loading folders"
-                        : logFolderOptions.length === 0
-                          ? "No safe experiment folders found"
-                          : "Select a top-level logs folder"}
+                      {existingHelp}
                     </span>
                   </TrainingFooterField>
                 ) : (
@@ -724,7 +579,7 @@ export function TrainingPanel({
                 {effectiveTrainingSearch.mode !== "off" && (
                   <>
                     <div>
-                      {trainingSearchModeLabel(effectiveTrainingSearch.mode)} search
+                      {searchModeLabel} search
                     </div>
                     <div>
                       {activeSearchAxisCount} axes · {displayedRunCount} planned
@@ -833,7 +688,7 @@ export function TrainingPanel({
           </aside>
         </div>
       )}
-      {isProgressOpen && (
+      {ui.isProgressOpen && (
         <TrainingProgressDialog
           plan={progressRunPlan}
           isLoading={isProgressPlanning}
@@ -843,7 +698,7 @@ export function TrainingPanel({
           onResample={resampleRunPlan}
           canRemoveSnapshots={hasConfigSnapshots && !job}
           onRemoveSnapshot={onRemoveConfigSnapshot}
-          onClose={() => setIsProgressOpen(false)}
+          onClose={ui.closeProgress}
         />
       )}
       {showLargeGridConfirmation && (
