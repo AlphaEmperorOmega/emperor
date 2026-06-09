@@ -14,7 +14,10 @@ from torch.utils.tensorboard import SummaryWriter
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import LogRunIndex
-from viewer.backend.monitor_data import TensorBoardMonitorReader
+from viewer.backend.monitor_data import (
+    TensorBoardMonitorReader,
+    TensorBoardParameterStatusReader,
+)
 from viewer.backend.tests.helpers import FakeRunner
 from viewer.backend.training_jobs import TrainingJobManager
 
@@ -121,6 +124,124 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
         self.assert_empty_monitor_payload(data, log_dir)
 
 
+class TensorBoardParameterStatusReaderTests(unittest.TestCase):
+    def write_scalars(
+        self,
+        log_dir: Path,
+        scalars: dict[str, list[tuple[int, float]]],
+    ) -> None:
+        writer = SummaryWriter(log_dir=str(log_dir))
+        for tag, points in scalars.items():
+            for step, value in points:
+                writer.add_scalar(tag, value, step)
+        writer.flush()
+        writer.close()
+
+    def test_classifies_delta_statuses_and_missing_channels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp) / "run"
+            self.write_scalars(
+                log_dir,
+                {
+                    "main_model.0.model/weights/relative_delta_norm": [
+                        (2, 0.0),
+                        (3, 1e-6),
+                    ],
+                    "main_model.0.model/bias/delta_norm": [(2, 0.0)],
+                    "main_model.1.model/weights/delta_norm": [(2, 0.0)],
+                    "main_model.2.model/weights/l2_norm": [(1, 4.0)],
+                },
+            )
+
+            data = TensorBoardParameterStatusReader().read(
+                source_id="run-1",
+                preset="baseline",
+                dataset="Mnist",
+                log_dir=str(log_dir),
+            )
+
+        nodes = {node["nodePath"]: node for node in data["nodes"]}
+        self.assertEqual(data["sourceId"], "run-1")
+        self.assertEqual(data["preset"], "baseline")
+        self.assertEqual(data["dataset"], "Mnist")
+        self.assertEqual(nodes["main_model.0.model"]["weights"]["status"], "updated")
+        self.assertEqual(
+            nodes["main_model.0.model"]["weights"]["metric"],
+            "main_model.0.model/weights/relative_delta_norm",
+        )
+        self.assertEqual(nodes["main_model.0.model"]["weights"]["lastStep"], 3)
+        self.assertEqual(nodes["main_model.0.model"]["weights"]["observedPoints"], 2)
+        self.assertEqual(nodes["main_model.0.model"]["bias"]["status"], "unchanged")
+        self.assertEqual(nodes["main_model.1.model"]["weights"]["status"], "unchanged")
+        self.assertEqual(nodes["main_model.1.model"]["bias"]["status"], "missing")
+        self.assertEqual(nodes["main_model.2.model"]["weights"]["status"], "unknown")
+
+    def test_old_logs_without_delta_metrics_use_value_stat_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp) / "run"
+            self.write_scalars(
+                log_dir,
+                {
+                    "main_model.0.model/weights/l2_norm": [(1, 4.0), (2, 4.25)],
+                    "main_model.0.model/bias/mean": [(1, 0.5), (2, 0.5)],
+                },
+            )
+
+            data = TensorBoardParameterStatusReader().read(
+                source_id="run-1",
+                preset="baseline",
+                dataset="Mnist",
+                log_dir=str(log_dir),
+            )
+
+        node = data["nodes"][0]
+        self.assertEqual(node["nodePath"], "main_model.0.model")
+        self.assertEqual(node["weights"]["status"], "updated")
+        self.assertEqual(node["weights"]["metric"], "main_model.0.model/weights/l2_norm")
+        self.assertEqual(node["bias"]["status"], "unchanged")
+        self.assertEqual(node["bias"]["metric"], "main_model.0.model/bias/mean")
+
+    def test_missing_or_nonexistent_log_dir_returns_empty_status_payload(self) -> None:
+        reader = TensorBoardParameterStatusReader()
+
+        missing_data = reader.read(
+            source_id="job-1",
+            preset=None,
+            dataset="Mnist",
+            log_dir=None,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            nonexistent_log_dir = Path(tmp) / "missing-run"
+            nonexistent_data = reader.read(
+                source_id="job-1",
+                preset=None,
+                dataset="Mnist",
+                log_dir=str(nonexistent_log_dir),
+            )
+
+        self.assertEqual(
+            missing_data,
+            {
+                "sourceId": "job-1",
+                "preset": None,
+                "dataset": "Mnist",
+                "logDir": None,
+                "nodes": [],
+            },
+        )
+        self.assertEqual(
+            nonexistent_data,
+            {
+                "sourceId": "job-1",
+                "preset": None,
+                "dataset": "Mnist",
+                "logDir": str(nonexistent_log_dir),
+                "nodes": [],
+            },
+        )
+
+
 class HistoricalMonitorDataFailureTests(unittest.TestCase):
     def write_historical_run(self, logs_root: Path) -> tuple[str, Path]:
         run_dir = logs_root.joinpath(
@@ -214,7 +335,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -254,7 +375,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -282,7 +403,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline"],
                 datasets=["Mnist"],
@@ -314,7 +435,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist", "Cifar10"],
@@ -374,7 +495,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -436,7 +557,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 datasets=["Mnist"],
                 overrides={},
@@ -502,7 +623,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 runner=FakeRunner(),
             )
             payload = manager.create_job(
-                model="linear",
+                model="linears/linear",
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],
@@ -542,6 +663,97 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self.assertEqual(data["preset"], "gating")
         self.assertEqual(data["dataset"], "Mnist")
         self.assertAlmostEqual(data["scalarSeries"][0]["points"][0]["value"], 0.88)
+
+    def test_training_job_parameter_status_endpoint_filters_by_preset_and_dataset(
+        self,
+    ) -> None:
+        import httpx
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        async def call_api(app, job_id: str) -> httpx.Response:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.get(
+                    f"/training/jobs/{job_id}/monitor-parameter-status",
+                    params={"preset": "gating", "dataset": "Mnist"},
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "jobs"
+            logs_root = Path(tmp) / "logs"
+            baseline_dir = logs_root / "baseline"
+            gating_dir = logs_root / "gating"
+
+            baseline_writer = SummaryWriter(log_dir=str(baseline_dir))
+            baseline_writer.add_scalar(
+                "main_model.0.model/weights/relative_delta_norm",
+                0.0,
+                10,
+            )
+            baseline_writer.flush()
+            baseline_writer.close()
+            gating_writer = SummaryWriter(log_dir=str(gating_dir))
+            gating_writer.add_scalar(
+                "main_model.0.model/weights/relative_delta_norm",
+                1e-6,
+                20,
+            )
+            gating_writer.flush()
+            gating_writer.close()
+
+            manager = TrainingJobManager(
+                root=root,
+                logs_root=logs_root,
+                runner=FakeRunner(),
+            )
+            payload = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                presets=["baseline", "gating"],
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="test_model",
+                monitors=["linear"],
+            )
+            job = manager.jobs[payload["id"]]
+            manager._write_event(
+                job,
+                {
+                    "type": "dataset_started",
+                    "status": "running",
+                    "preset": "baseline",
+                    "dataset": "Mnist",
+                    "logDir": str(baseline_dir),
+                },
+            )
+            manager._write_event(
+                job,
+                {
+                    "type": "dataset_started",
+                    "status": "running",
+                    "preset": "gating",
+                    "dataset": "Mnist",
+                    "logDir": str(gating_dir),
+                },
+            )
+            app = create_app(
+                ViewerApiSettings(logs_root=str(logs_root)),
+                training_manager=manager,
+            )
+
+            response = asyncio.run(call_api(app, payload["id"]))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data["sourceId"], payload["id"])
+        self.assertEqual(data["preset"], "gating")
+        self.assertEqual(data["dataset"], "Mnist")
+        self.assertEqual(data["logDir"], str(gating_dir))
+        self.assertEqual(data["nodes"][0]["weights"]["status"], "updated")
+        self.assertEqual(data["nodes"][0]["weights"]["lastStep"], 20)
 
     def test_log_run_monitor_data_filters_tensorboard_tags(self) -> None:
         import httpx
@@ -628,6 +840,91 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self.assertEqual(unmatched["histograms"], [])
         self.assertEqual(unmatched["images"], [])
 
+        self.assertEqual(unknown_response.status_code, 400)
+        self.assertIn("Unknown log run id", unknown_response.json()["detail"])
+
+    def test_log_parameter_status_endpoint_resolves_runs_and_rejects_unknown_ids(
+        self,
+    ) -> None:
+        import httpx
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            first_dir = logs_root.joinpath(
+                "test_model",
+                "linear",
+                "baseline",
+                "Mnist",
+                "historical_20260601_010203",
+                "version_0",
+            )
+            second_dir = logs_root.joinpath(
+                "test_model",
+                "linear",
+                "gating",
+                "Mnist",
+                "historical_20260601_020304",
+                "version_0",
+            )
+            first_writer = SummaryWriter(log_dir=str(first_dir))
+            first_writer.add_scalar(
+                "main_model.0.model/weights/relative_delta_norm",
+                0.0,
+                10,
+            )
+            first_writer.flush()
+            first_writer.close()
+            second_writer = SummaryWriter(log_dir=str(second_dir))
+            second_writer.add_scalar(
+                "main_model.0.model/weights/relative_delta_norm",
+                1e-6,
+                20,
+            )
+            second_writer.flush()
+            second_writer.close()
+
+            runs_by_preset = {
+                run.preset: run for run in LogRunIndex(logs_root=logs_root).list_runs()
+            }
+            run_ids = [
+                runs_by_preset["baseline"].id,
+                runs_by_preset["gating"].id,
+            ]
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(
+                    app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    status_response = await client.post(
+                        "/logs/parameter-status",
+                        json={"runIds": run_ids},
+                    )
+                    unknown_response = await client.post(
+                        "/logs/parameter-status",
+                        json={"runIds": ["not-a-run"]},
+                    )
+                    return status_response, unknown_response
+
+            status_response, unknown_response = asyncio.run(call_api())
+
+        self.assertEqual(status_response.status_code, 200, status_response.text)
+        payload = status_response.json()
+        self.assertEqual([run["sourceId"] for run in payload["runs"]], run_ids)
+        self.assertEqual(payload["runs"][0]["preset"], "baseline")
+        self.assertEqual(
+            payload["runs"][0]["nodes"][0]["weights"]["status"],
+            "unchanged",
+        )
+        self.assertEqual(payload["runs"][1]["preset"], "gating")
+        self.assertEqual(
+            payload["runs"][1]["nodes"][0]["weights"]["status"],
+            "updated",
+        )
         self.assertEqual(unknown_response.status_code, 400)
         self.assertIn("Unknown log run id", unknown_response.json()["detail"])
 

@@ -52,6 +52,9 @@ class RecordingLogRunIndex(RecordingDelegate):
     def monitor_data_for_run(self, run_id: object, *, node_path: object) -> object:
         return self._record("monitor_data_for_run", run_id, node_path=node_path)
 
+    def parameter_status_for_runs(self, run_ids: object) -> object:
+        return self._record("parameter_status_for_runs", run_ids)
+
 
 class RecordingTrainingJobManager(RecordingDelegate):
     def create_job(
@@ -117,6 +120,20 @@ class RecordingTrainingJobManager(RecordingDelegate):
             "get_monitor_data",
             job_id,
             node_path=node_path,
+            dataset=dataset,
+            preset=preset,
+        )
+
+    def get_parameter_status(
+        self,
+        job_id: object,
+        *,
+        dataset: object,
+        preset: object,
+    ) -> object:
+        return self._record(
+            "get_parameter_status",
+            job_id,
             dataset=dataset,
             preset=preset,
         )
@@ -223,6 +240,14 @@ class LogRunRepositoryTests(unittest.TestCase):
                 (run_id,),
                 {"node_path": node_path},
             ),
+            (
+                "parameter_status_for_runs",
+                lambda repository: repository.parameter_status_for_runs(  # type: ignore[arg-type]
+                    run_ids,
+                ),
+                (run_ids,),
+                {},
+            ),
         )
 
         for method_name, invoke, expected_args, expected_kwargs in cases:
@@ -322,6 +347,19 @@ class TrainingJobRepositoryTests(unittest.TestCase):
                 ),
                 (monitor_job_id,),
                 monitor_kwargs,
+            ),
+            (
+                "get_parameter_status",
+                lambda repository: repository.get_parameter_status(  # type: ignore[arg-type]
+                    monitor_job_id,
+                    dataset=monitor_kwargs["dataset"],
+                    preset=monitor_kwargs["preset"],
+                ),
+                (monitor_job_id,),
+                {
+                    "dataset": monitor_kwargs["dataset"],
+                    "preset": monitor_kwargs["preset"],
+                },
             ),
             (
                 "cancel_job",

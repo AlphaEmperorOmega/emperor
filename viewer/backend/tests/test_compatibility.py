@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -53,6 +54,11 @@ EXPECTED_SCHEMA_EXPORTS = [
     "HistogramResponse",
     "ImageResponse",
     "MonitorDataResponse",
+    "ParameterChannelStatusResponse",
+    "ParameterNodeStatusResponse",
+    "ParameterStatusResponse",
+    "LogParameterStatusRequest",
+    "LogParameterStatusResponse",
     "LogRunResponse",
     "LogRunsResponse",
     "LogExperimentResponse",
@@ -85,6 +91,7 @@ class ApiCompatibilityImportTests(unittest.TestCase):
 
     def test_legacy_route_shims_reexport_canonical_routers(self) -> None:
         route_modules = {
+            "config_snapshots": "config_snapshots",
             "inspect": "inspection",
             "logs": "logs",
             "models": "models",
@@ -148,6 +155,37 @@ class ExtensionPointImportTests(unittest.TestCase):
 
                 self.assertEqual(module.__name__, module_name)
 
+    def test_database_session_extension_point_remains_noop(self) -> None:
+        session = importlib.import_module("viewer.backend.db.session")
+        public_names = [
+            name
+            for name in vars(session)
+            if not name.startswith("_")
+        ]
+        forbidden_database_names = {
+            "Session",
+            "SessionLocal",
+            "engine",
+            "get_db",
+            "get_session",
+            "sessionmaker",
+        }
+        forbidden_database_imports = (
+            "asyncpg",
+            "databases",
+            "psycopg",
+            "psycopg2",
+            "sqlalchemy",
+            "sqlmodel",
+        )
+        session_source = Path(str(session.__file__)).read_text(encoding="utf-8")
+
+        self.assertEqual(public_names, [])
+        self.assertTrue(forbidden_database_names.isdisjoint(vars(session)))
+        for import_name in forbidden_database_imports:
+            with self.subTest(import_name=import_name):
+                self.assertNotIn(import_name, session_source)
+
 
 class CliCompatibilityImportTests(unittest.TestCase):
     def test_cli_module_exposes_callable_main(self) -> None:
@@ -175,7 +213,7 @@ class ModelPackageCompatibilityTests(unittest.TestCase):
     def test_bert_linear_and_vit_linear_no_deleted_transformer_utils_imports(
         self,
     ) -> None:
-        for module_name in ("models.bert_linear.presets", "models.vit_linear.presets"):
+        for module_name in ("models.transformer_encoder.bert_linear.presets", "models.transformer_encoder.vit_linear.presets"):
             with self.subTest(module=module_name):
                 module = importlib.import_module(module_name)
                 self.assertTrue(hasattr(module, "ExperimentPresets"))

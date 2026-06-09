@@ -6,6 +6,7 @@ import unittest
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.schemas import LogExperimentsResponse, LogRunsResponse
 from viewer.backend.services.logs import LogRunService
 
 
@@ -15,6 +16,34 @@ class _DeleteResult:
 
     def to_response(self) -> dict[str, object]:
         return dict(self._payload)
+
+
+class _ResponseItem:
+    def __init__(self, payload: dict[str, object]) -> None:
+        self._payload = payload
+
+    def to_response(self) -> dict[str, object]:
+        return dict(self._payload)
+
+
+class ListingLogRunRepository:
+    def __init__(
+        self,
+        *,
+        runs: list[dict[str, object]] | None = None,
+        experiments: list[dict[str, object]] | None = None,
+    ) -> None:
+        self._runs = runs or []
+        self._experiments = experiments or []
+
+    def list_runs(self) -> list[_ResponseItem]:
+        return [_ResponseItem(run) for run in self._runs]
+
+    def list_experiments(self) -> list[_ResponseItem]:
+        return [
+            _ResponseItem(experiment)
+            for experiment in self._experiments
+        ]
 
 
 class RecordingLogRunRepository:
@@ -30,6 +59,76 @@ class RecordingLogRunRepository:
     def delete_experiment(self, experiment: str) -> _DeleteResult:
         self.calls.append(("delete_experiment", (experiment,), {}))
         return _DeleteResult(self.delete_payload)
+
+
+def _run_payload(run_id: str, index: int) -> dict[str, object]:
+    return {
+        "id": run_id,
+        "group": None,
+        "experiment": "exp",
+        "model": "model",
+        "preset": "preset",
+        "dataset": "dataset",
+        "runName": f"run-{index}",
+        "timestamp": None,
+        "version": f"version_{index}",
+        "relativePath": f"exp/version_{index}",
+        "hasResult": False,
+        "eventFileCount": 0,
+        "checkpointCount": 0,
+        "hasHparams": False,
+        "metrics": {},
+    }
+
+
+class LogRunServiceListResponseTests(unittest.TestCase):
+    def test_list_runs_returns_response_ready_page(self) -> None:
+        repository = ListingLogRunRepository(
+            runs=[
+                _run_payload("run-1", 0),
+                _run_payload("run-2", 1),
+                _run_payload("run-3", 2),
+            ],
+        )
+        service = LogRunService(repository)  # type: ignore[arg-type]
+
+        result = service.list_runs(limit=1, offset=1)
+        response = LogRunsResponse.model_validate(result)
+
+        self.assertEqual(result["total"], 3)
+        self.assertEqual(result["limit"], 1)
+        self.assertEqual(result["offset"], 1)
+        self.assertTrue(result["hasMore"])
+        self.assertEqual([run.id for run in response.runs], ["run-2"])
+
+    def test_list_experiments_returns_response_ready_page(self) -> None:
+        repository = ListingLogRunRepository(
+            experiments=[
+                {
+                    "experiment": "exp-a",
+                    "runCount": 2,
+                    "relativePath": "exp-a",
+                },
+                {
+                    "experiment": "exp-b",
+                    "runCount": 1,
+                    "relativePath": "exp-b",
+                },
+            ],
+        )
+        service = LogRunService(repository)  # type: ignore[arg-type]
+
+        result = service.list_experiments(limit=1, offset=0)
+        response = LogExperimentsResponse.model_validate(result)
+
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(result["limit"], 1)
+        self.assertEqual(result["offset"], 0)
+        self.assertTrue(result["hasMore"])
+        self.assertEqual(
+            [experiment.experiment for experiment in response.experiments],
+            ["exp-a"],
+        )
 
 
 class LogRunServiceDeleteExperimentTests(unittest.TestCase):
