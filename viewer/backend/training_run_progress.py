@@ -4,7 +4,6 @@ import copy
 from collections.abc import Callable
 from typing import Any
 
-
 SummaryCallback = Callable[[list[dict[str, Any]]], dict[str, int]]
 
 

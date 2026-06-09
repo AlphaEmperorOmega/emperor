@@ -12,8 +12,12 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.job_store import InMemoryTrainingJobStore
+from viewer.backend.tests.helpers import (
+    FakeProcess,
+    FakeRunner,
+    create_progress_test_job,
+)
 from viewer.backend.training_jobs import TrainingJobManager
-from viewer.backend.tests.helpers import FakeProcess, FakeRunner, create_progress_test_job
 
 
 class TrainingJobTests(unittest.TestCase):
@@ -79,6 +83,7 @@ class TrainingJobTests(unittest.TestCase):
 
     def test_training_api_response_does_not_expose_manager_internals(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -126,6 +131,7 @@ class TrainingJobTests(unittest.TestCase):
 
     def test_training_api_cancel_job_terminates_process(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -200,6 +206,7 @@ class TrainingJobTests(unittest.TestCase):
 
     def test_training_api_created_job_uses_safe_worker_command_paths(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -665,7 +672,7 @@ class TrainingJobTests(unittest.TestCase):
         self.assertEqual(payload["logFolder"], "restart_limitation")
         self.assertEqual(payload["pid"], 1234)
 
-    def test_training_job_restart_behavior_fresh_manager_cannot_cancel_disk_job_without_live_process(
+    def test_restart_fresh_manager_cannot_cancel_disk_job_without_live_process(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -694,7 +701,7 @@ class TrainingJobTests(unittest.TestCase):
             f"Training job '{job_id}' has no live process handle.",
         )
 
-    def test_training_job_restart_behavior_fresh_manager_preserves_unknown_disk_job_blocker(
+    def test_restart_fresh_manager_preserves_unknown_disk_job_blocker(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -804,7 +811,7 @@ class TrainingJobTests(unittest.TestCase):
         self.assertEqual(payload["runPlan"]["runs"][0]["status"], "Running")
         self.assertEqual(payload["runPlan"]["summary"]["runningRuns"], 1)
 
-    def test_training_job_restart_behavior_fresh_manager_lists_unknown_disk_job_as_active(
+    def test_restart_fresh_manager_lists_unknown_disk_job_as_active(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -875,6 +882,7 @@ class TrainingJobTests(unittest.TestCase):
         self,
     ) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -902,9 +910,7 @@ class TrainingJobTests(unittest.TestCase):
                     base_url="http://testserver",
                 ) as client:
                     get_response = await client.get("/training/jobs/missing")
-                    cancel_response = await client.post(
-                        "/training/jobs/missing/cancel"
-                    )
+                    cancel_response = await client.post("/training/jobs/missing/cancel")
                     return get_response, cancel_response
 
             get_response, cancel_response = asyncio.run(call_api())
@@ -927,6 +933,7 @@ class TrainingJobTests(unittest.TestCase):
 
     def test_training_api_get_unknown_job_returns_http_400(self) -> None:
         import httpx
+
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1128,7 +1135,10 @@ class TrainingJobTests(unittest.TestCase):
                     "preset": "baseline",
                     "runId": payload["runPlan"]["runs"][0]["id"],
                     "error": "scalar conversion failed",
-                    "traceback": "Traceback (most recent call last):\nRuntimeError: scalar conversion failed",
+                    "traceback": (
+                        "Traceback (most recent call last):\n"
+                        "RuntimeError: scalar conversion failed"
+                    ),
                 },
             )
 
@@ -1303,7 +1313,7 @@ class TrainingJobTests(unittest.TestCase):
             ],
         )
 
-    def test_training_run_progress_projection_failed_event_preserves_traceback_and_summary(
+    def test_failed_event_preserves_traceback_and_summary(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1390,7 +1400,7 @@ class TrainingJobTests(unittest.TestCase):
             },
         )
 
-    def test_training_run_progress_projection_failed_process_marks_running_and_pending_rows(
+    def test_failed_process_marks_running_and_pending_rows(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1411,8 +1421,7 @@ class TrainingJobTests(unittest.TestCase):
                     "runIndex": 1,
                     "metrics": {"validation/accuracy": 0.82},
                     "logDir": (
-                        "logs/progress_projection/linear/baseline/"
-                        "Mnist/version_0"
+                        "logs/progress_projection/linear/baseline/Mnist/version_0"
                     ),
                 },
             )
@@ -1426,8 +1435,7 @@ class TrainingJobTests(unittest.TestCase):
                     "runId": runs[1]["id"],
                     "runIndex": 2,
                     "logDir": (
-                        "logs/progress_projection/linear/baseline/"
-                        "Cifar10/version_0"
+                        "logs/progress_projection/linear/baseline/Cifar10/version_0"
                     ),
                 },
             )
@@ -1475,7 +1483,7 @@ class TrainingJobTests(unittest.TestCase):
             },
         )
 
-    def test_training_run_progress_projection_cancelled_job_marks_running_and_pending_rows(
+    def test_cancelled_job_marks_running_and_pending_rows(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:

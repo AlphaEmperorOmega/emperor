@@ -5,59 +5,29 @@ from __future__ import annotations
 from typing import Any
 
 from viewer.backend.repositories.training_jobs import TrainingJobRepository
+from viewer.backend.training_contracts import (
+    ActiveTrainingJob,
+    CreateTrainingJobCommand,
+    CreateTrainingRunPlanCommand,
+    TrainingJobView,
+    TrainingRunPlanView,
+)
 
 
 class TrainingJobService:
     def __init__(self, repository: TrainingJobRepository) -> None:
         self._repository = repository
 
-    def create_job(
-        self,
-        *,
-        model: str,
-        preset: str,
-        presets: list[str] | None,
-        datasets: list[str],
-        overrides: dict[str, Any],
-        log_folder: str,
-        monitors: list[str],
-        search: dict[str, Any] | None,
-        run_plan: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        return self._repository.create_job(
-            model=model,
-            preset=preset,
-            presets=presets,
-            datasets=datasets,
-            overrides=overrides,
-            log_folder=log_folder,
-            monitors=monitors,
-            search=search,
-            run_plan=run_plan,
-        )
+    def create_job(self, command: CreateTrainingJobCommand) -> TrainingJobView:
+        return self._repository.create_job(command)
 
     def create_run_plan(
         self,
-        *,
-        model: str,
-        preset: str,
-        presets: list[str] | None,
-        datasets: list[str],
-        overrides: dict[str, Any],
-        log_folder: str,
-        search: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        return self._repository.create_run_plan(
-            model=model,
-            preset=preset,
-            presets=presets,
-            datasets=datasets,
-            overrides=overrides,
-            log_folder=log_folder,
-            search=search,
-        )
+        command: CreateTrainingRunPlanCommand,
+    ) -> TrainingRunPlanView:
+        return self._repository.create_run_plan(command)
 
-    def get_job(self, job_id: str) -> dict[str, Any]:
+    def get_job(self, job_id: str) -> TrainingJobView:
         return self._repository.get_job(job_id)
 
     def get_monitor_data(
@@ -88,8 +58,8 @@ class TrainingJobService:
             preset=preset,
         )
 
-    def cancel_job(self, job_id: str) -> dict[str, Any]:
+    def cancel_job(self, job_id: str) -> TrainingJobView:
         return self._repository.cancel_job(job_id)
 
-    def active_jobs(self) -> list[dict[str, Any]]:
+    def active_jobs(self) -> list[ActiveTrainingJob]:
         return self._repository.active_jobs()

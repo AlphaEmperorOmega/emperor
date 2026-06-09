@@ -17,6 +17,12 @@ from viewer.backend.schemas import (
     TrainingRunPlanResponse,
 )
 from viewer.backend.services.training import TrainingJobService
+from viewer.backend.training_contracts import (
+    CreateTrainingJobCommand,
+    CreateTrainingRunPlanCommand,
+    TrainingRunPlanView,
+    TrainingSearch,
+)
 
 router = APIRouter(
     prefix="/training",
@@ -35,18 +41,27 @@ async def create_training_job(
     request: TrainingJobCreateRequest,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingJobResponse:
+    command = CreateTrainingJobCommand(
+        model=request.model,
+        preset=request.preset,
+        presets=request.presets,
+        datasets=request.datasets,
+        overrides=request.overrides,
+        log_folder=request.logFolder,
+        monitors=request.monitors,
+        search=(
+            TrainingSearch.from_payload(request.search.model_dump())
+            if request.search is not None
+            else None
+        ),
+        run_plan=(
+            TrainingRunPlanView.from_payload(request.runPlan.model_dump())
+            if request.runPlan is not None
+            else None
+        ),
+    )
     return TrainingJobResponse.model_validate(
-        service.create_job(
-            model=request.model,
-            preset=request.preset,
-            presets=request.presets,
-            datasets=request.datasets,
-            overrides=request.overrides,
-            log_folder=request.logFolder,
-            monitors=request.monitors,
-            search=request.search,
-            run_plan=request.runPlan.model_dump() if request.runPlan is not None else None,
-        )
+        service.create_job(command).to_api_payload()
     )
 
 
@@ -60,16 +75,21 @@ async def create_training_run_plan(
     request: TrainingRunPlanCreateRequest,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingRunPlanResponse:
+    command = CreateTrainingRunPlanCommand(
+        model=request.model,
+        preset=request.preset,
+        presets=request.presets,
+        datasets=request.datasets,
+        overrides=request.overrides,
+        log_folder=request.logFolder,
+        search=(
+            TrainingSearch.from_payload(request.search.model_dump())
+            if request.search is not None
+            else None
+        ),
+    )
     return TrainingRunPlanResponse.model_validate(
-        service.create_run_plan(
-            model=request.model,
-            preset=request.preset,
-            presets=request.presets,
-            datasets=request.datasets,
-            overrides=request.overrides,
-            log_folder=request.logFolder,
-            search=request.search,
-        )
+        service.create_run_plan(command).to_api_payload()
     )
 
 
@@ -83,7 +103,9 @@ async def training_job(
     job_id: str,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingJobResponse:
-    return TrainingJobResponse.model_validate(service.get_job(job_id))
+    return TrainingJobResponse.model_validate(
+        service.get_job(job_id).to_api_payload()
+    )
 
 
 @router.get(
@@ -140,4 +162,6 @@ async def cancel_training_job(
     job_id: str,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingJobResponse:
-    return TrainingJobResponse.model_validate(service.cancel_job(job_id))
+    return TrainingJobResponse.model_validate(
+        service.cancel_job(job_id).to_api_payload()
+    )

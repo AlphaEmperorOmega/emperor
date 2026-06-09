@@ -160,7 +160,10 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         frontend_api_function="fetchMonitorData",
         frontend_response_schema="monitorDataSchema",
     ),
-    (("GET",), "/training/jobs/{job_id}/monitor-parameter-status"): EndpointSchemaMapping(
+    (
+        ("GET",),
+        "/training/jobs/{job_id}/monitor-parameter-status",
+    ): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.ParameterStatusResponse,
         frontend_api_function="fetchMonitorParameterStatus",
@@ -221,6 +224,7 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         frontend_response_schema="trainingRunPlanSchema",
     ),
 }
+
 
 @dataclass(frozen=True)
 class SchemaParityCase:
@@ -317,7 +321,7 @@ GRAPH_CONFIG_FIELD_FIELDS = ("key", "value")
 GRAPH_CONFIG_FIELD_REQUIRED_FIELDS = ("key",)
 GRAPH_CONFIG_FIELD_LOOSENESS = {
     "value": (
-        "graphConfigSchema stores opaque config values as z.unknown(); the frontend "
+        "graphConfigSchema stores opaque config values as JSON; the frontend "
         "accepts omitted values while backend graph config fields require value "
         "presence."
     ),
@@ -986,7 +990,10 @@ INTENTIONAL_FRONTEND_REQUIRED_FIELD_LOOSENESS = {
     if case.intentional_frontend_required_looseness
 }
 INTENTIONAL_FRONTEND_DEFAULT_FIELDS = {
-    (case.backend_schema, case.frontend_contract): case.intentional_frontend_default_fields
+    (
+        case.backend_schema,
+        case.frontend_contract,
+    ): case.intentional_frontend_default_fields
     for case in SCHEMA_PARITY_CASES
     if case.intentional_frontend_default_fields
 }
@@ -1088,21 +1095,26 @@ def _business_routes_by_key() -> dict[RouteKey, APIRoute]:
     return {
         (tuple(sorted(route.methods or ())), route.path): route
         for route in app.routes
-        if isinstance(route, APIRoute)
-        and route.path.startswith(business_prefixes)
+        if isinstance(route, APIRoute) and route.path.startswith(business_prefixes)
     }
 
 
-def _body_request_schemas(route: APIRoute) -> tuple[type[schemas.ApiResponseModel], ...]:
+def _body_request_schemas(
+    route: APIRoute,
+) -> tuple[type[schemas.ApiResponseModel], ...]:
     return tuple(
-        getattr(body_param, "type_", None)
-        for body_param in route.dependant.body_params
+        getattr(body_param, "type_", None) for body_param in route.dependant.body_params
     )
 
 
 def _openapi_required_fields(schema_name: str) -> tuple[str, ...]:
     component_schema = app.openapi()["components"]["schemas"][schema_name]
     return tuple(component_schema.get("required", ()))
+
+
+def _openapi_property_schema(schema_name: str, field_name: str) -> dict[str, object]:
+    component_schema = app.openapi()["components"]["schemas"][schema_name]
+    return component_schema["properties"][field_name]
 
 
 class ApiRouteContractTests(unittest.TestCase):
@@ -1128,8 +1140,7 @@ class ApiRouteContractTests(unittest.TestCase):
         routes = sorted(
             (tuple(sorted(route.methods or ())), route.path)
             for route in app.routes
-            if isinstance(route, APIRoute)
-            and route.path.startswith(business_prefixes)
+            if isinstance(route, APIRoute) and route.path.startswith(business_prefixes)
         )
 
         self.assertEqual(routes, EXPECTED_BUSINESS_ROUTES)
@@ -1230,6 +1241,22 @@ class ApiSchemaContractTests(unittest.TestCase):
                     "forbid",
                 )
 
+    def test_opaque_json_fields_use_named_json_openapi_schemas(self) -> None:
+        expected_refs = {
+            ("GraphConfigFieldResponse", "value"): "JsonValue-Output",
+            ("GraphNodeResponse", "details"): "JsonObject-Output",
+            ("LogRunResponse", "metrics"): "JsonObject-Output",
+            ("TrainingRunResponse", "metrics"): "JsonObject-Output",
+            ("TrainingJobResponse", "metrics"): "JsonObject-Output",
+        }
+
+        for (schema_name, field_name), ref_name in expected_refs.items():
+            with self.subTest(schema=schema_name, field=field_name):
+                self.assertEqual(
+                    _openapi_property_schema(schema_name, field_name),
+                    {"$ref": f"#/components/schemas/{ref_name}"},
+                )
+
     def test_high_risk_nested_schema_parity_groups_are_covered(self) -> None:
         for group, group_schemas in HIGH_RISK_SCHEMA_PARITY_GROUPS.items():
             with self.subTest(group=group):
@@ -1243,17 +1270,20 @@ class ApiSchemaContractTests(unittest.TestCase):
 
     def test_openapi_required_fields_have_frontend_required_parity(self) -> None:
         for (
-            backend_schema,
-            frontend_contract,
-        ), frontend_required_fields in (
-            OPENAPI_REQUIRED_FIELD_PARITY_BY_FRONTEND_SCHEMA.items()
-        ):
+            (
+                backend_schema,
+                frontend_contract,
+            ),
+            frontend_required_fields,
+        ) in OPENAPI_REQUIRED_FIELD_PARITY_BY_FRONTEND_SCHEMA.items():
             with self.subTest(
                 backend_schema=backend_schema.__name__,
                 frontend_contract=frontend_contract,
             ):
                 frontend_required = set(frontend_required_fields)
-                openapi_required = set(_openapi_required_fields(backend_schema.__name__))
+                openapi_required = set(
+                    _openapi_required_fields(backend_schema.__name__)
+                )
                 allowed_loose_fields = set(
                     INTENTIONAL_FRONTEND_REQUIRED_FIELD_LOOSENESS.get(
                         (backend_schema, frontend_contract),
@@ -1268,9 +1298,7 @@ class ApiSchemaContractTests(unittest.TestCase):
                 self.assertEqual(
                     tuple(
                         sorted(
-                            openapi_required
-                            - frontend_required
-                            - allowed_loose_fields
+                            openapi_required - frontend_required - allowed_loose_fields
                         )
                     ),
                     (),
@@ -1278,9 +1306,12 @@ class ApiSchemaContractTests(unittest.TestCase):
 
     def test_frontend_required_field_looseness_annotations_are_current(self) -> None:
         for (
-            backend_schema,
-            frontend_contract,
-        ), annotations in INTENTIONAL_FRONTEND_REQUIRED_FIELD_LOOSENESS.items():
+            (
+                backend_schema,
+                frontend_contract,
+            ),
+            looseness_annotations,
+        ) in INTENTIONAL_FRONTEND_REQUIRED_FIELD_LOOSENESS.items():
             with self.subTest(
                 backend_schema=backend_schema.__name__,
                 frontend_contract=frontend_contract,
@@ -1294,8 +1325,10 @@ class ApiSchemaContractTests(unittest.TestCase):
                         (backend_schema, frontend_contract)
                     ]
                 )
-                openapi_required = set(_openapi_required_fields(backend_schema.__name__))
-                annotated_fields = set(annotations)
+                openapi_required = set(
+                    _openapi_required_fields(backend_schema.__name__)
+                )
+                annotated_fields = set(looseness_annotations)
 
                 self.assertEqual(
                     tuple(sorted(annotated_fields - openapi_required)),
@@ -1305,13 +1338,15 @@ class ApiSchemaContractTests(unittest.TestCase):
                     tuple(sorted(annotated_fields & frontend_required)),
                     (),
                 )
-                self.assertTrue(all(reason for reason in annotations.values()))
+                self.assertTrue(
+                    all(reason for reason in looseness_annotations.values())
+                )
 
     def test_frontend_default_field_annotations_are_current(self) -> None:
         for (
             backend_schema,
             frontend_contract,
-        ), annotations in INTENTIONAL_FRONTEND_DEFAULT_FIELDS.items():
+        ), default_annotations in INTENTIONAL_FRONTEND_DEFAULT_FIELDS.items():
             with self.subTest(
                 backend_schema=backend_schema.__name__,
                 frontend_contract=frontend_contract,
@@ -1326,7 +1361,7 @@ class ApiSchemaContractTests(unittest.TestCase):
                     ]
                 )
 
-                for field_name, reason in annotations.items():
+                for field_name, reason in default_annotations.items():
                     with self.subTest(field=field_name):
                         self.assertTrue(reason)
                         self.assertIn(field_name, backend_schema.model_fields)
@@ -1349,6 +1384,7 @@ class ApiSchemaContractTests(unittest.TestCase):
 class ApiIntegrationContractTests(unittest.TestCase):
     def test_capabilities_endpoint_exposes_local_defaults(self) -> None:
         import httpx
+
         from viewer.backend.api import app
 
         async def call_api() -> httpx.Response:
@@ -1382,6 +1418,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
     def test_model_dataset_endpoint_exposes_path_free_dataset_metadata(self) -> None:
         import httpx
+
         from viewer.backend.api import app
 
         async def call_api() -> httpx.Response:
@@ -1420,6 +1457,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
     def test_api_health_and_inspect(self) -> None:
         import httpx
+
         from viewer.backend.api import app
 
         async def call_api() -> tuple[
@@ -1470,6 +1508,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
     def test_inspect_rejects_path_like_dataset_input(self) -> None:
         import httpx
+
         from viewer.backend.api import app
 
         async def call_api() -> httpx.Response:
@@ -1497,6 +1536,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
     def test_api_dependency_overrides_can_replace_route_services(self) -> None:
         import httpx
+
         from viewer.backend.api import create_app
         from viewer.backend.dependencies import get_model_catalog_service
 
@@ -1527,6 +1567,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
 
     def test_api_inspector_errors_use_shared_handler(self) -> None:
         import httpx
+
         from viewer.backend.api import app
 
         async def call_api() -> httpx.Response:
@@ -1540,6 +1581,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         response = asyncio.run(call_api())
         self.assertEqual(response.status_code, 400)
         self.assertIn("Unknown model", response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

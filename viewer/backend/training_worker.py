@@ -10,15 +10,19 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from emperor.experiments.base import GridSearch, RandomSearch
 from emperor.experiments.progress import JsonlTrainingProgressCallback
+
 from viewer.backend.inspector.discovery import (
     load_model_parts,
     option_cli_name,
     resolve_dataset,
-    resolve_model_monitors,
     resolve_datasets,
+    resolve_model_monitors,
 )
 from viewer.backend.inspector.overrides import parse_override_mapping
-from viewer.backend.inspector.search import parse_training_search, strip_search_overrides
+from viewer.backend.inspector.search import (
+    parse_training_search,
+    strip_search_overrides,
+)
 from viewer.backend.inspector.service import reject_locked_overrides
 from viewer.backend.training_events import NeuronClusterGrowthCallback
 
@@ -122,7 +126,9 @@ def main() -> None:
             }
         )
         parts = load_model_parts(payload["model"])
-        selected_preset_names, selected_options = _resolve_payload_presets(parts, payload)
+        selected_preset_names, selected_options = _resolve_payload_presets(
+            parts, payload
+        )
         selected_datasets = resolve_datasets(parts, payload["datasets"])
         monitor_callbacks = [
             monitor.build_callback()
@@ -157,8 +163,12 @@ def main() -> None:
         for selected_preset in selected_preset_names:
             reject_locked_overrides(payload["model"], selected_preset, config_overrides)
         materialized_runs = _materialized_runs_from_plan(parts, payload)
-        search_mode = None if materialized_runs is not None else search_mode_from_parsed_search(parsed_search)
-        experiment_type = getattr(parts.presets_module, "Experiment")
+        search_mode = (
+            None
+            if materialized_runs is not None
+            else search_mode_from_parsed_search(parsed_search)
+        )
+        experiment_type = parts.presets_module.Experiment
         experiment = experiment_type(selected_options[0])
         experiment.train_model(
             search_mode=search_mode,

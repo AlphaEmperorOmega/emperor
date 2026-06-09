@@ -6,7 +6,13 @@ These shapes are validated on the frontend by the Zod schemas in
 
 from __future__ import annotations
 
-from viewer.backend.schemas._base import ApiResponseModel, ConfigValue
+from viewer.backend.schemas._base import (
+    ApiResponseModel,
+    ConfigOverrides,
+    ConfigValue,
+    JsonObject,
+    JsonValue,
+)
 from viewer.backend.schemas._capabilities import CapabilitiesResponse
 from viewer.backend.schemas._config_snapshots import (
     ConfigSnapshotCreateRequest,
@@ -37,8 +43,8 @@ from viewer.backend.schemas._logs import (
     LogRunResponse,
     LogRunsResponse,
     LogRunTagsResponse,
-    LogScalarsRequest,
     LogScalarSeriesResponse,
+    LogScalarsRequest,
     LogScalarsResponse,
     LogTagsRequest,
     LogTagsResponse,
@@ -88,6 +94,9 @@ from viewer.backend.schemas._training import (
 
 __all__ = [
     "ConfigValue",
+    "ConfigOverrides",
+    "JsonValue",
+    "JsonObject",
     "ApiResponseModel",
     "CapabilitiesResponse",
     "ConfigSnapshotResponse",

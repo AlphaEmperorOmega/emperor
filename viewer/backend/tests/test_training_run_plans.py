@@ -10,13 +10,14 @@ from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
 from emperor.base.options import ActivationOptions
+from emperor.linears.core.config import AdaptiveLinearLayerConfig
+
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.search import parse_training_search
+from viewer.backend.tests.helpers import FakeRunner
 from viewer.backend.training_jobs import TrainingJobManager
 from viewer.backend.training_run_plans import TrainingRunPlanBuilder
-from viewer.backend.tests.helpers import FakeRunner
 
 
 class TrainingRunPlanTests(unittest.TestCase):
@@ -338,8 +339,7 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(plan["summary"]["totalRuns"], 2)
 
         runs_by_input_layer = {
-            run["overrides"]["input_layer_model_option"]: run
-            for run in plan["runs"]
+            run["overrides"]["input_layer_model_option"]: run for run in plan["runs"]
         }
         none_run = runs_by_input_layer[None]
         class_run = runs_by_input_layer["AdaptiveLinearLayerConfig"]
@@ -646,7 +646,8 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(
             [run["command"] for run in normalized_plan["runs"]],
             [
-                "source experiment.sh linears/linear --preset baseline --datasets Mnist "
+                "source experiment.sh linears/linear --preset baseline "
+                "--datasets Mnist "
                 "--logdir submitted_plan --config --hidden-dim 128",
                 "source experiment.sh linears/linear --preset gating --datasets Mnist "
                 "--logdir submitted_plan --config --hidden-dim 128",

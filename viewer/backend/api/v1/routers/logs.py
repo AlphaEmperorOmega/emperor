@@ -11,13 +11,13 @@ from viewer.backend.dependencies import get_log_run_service, get_training_job_se
 from viewer.backend.schemas import (
     LogExperimentDeleteResponse,
     LogExperimentsResponse,
+    LogParameterStatusRequest,
+    LogParameterStatusResponse,
     LogRunDeleteFiltersRequest,
     LogRunDeletePlanResponse,
     LogRunDeleteResponse,
     LogRunsResponse,
     LogRunTagsResponse,
-    LogParameterStatusRequest,
-    LogParameterStatusResponse,
     LogScalarSeriesResponse,
     LogScalarsRequest,
     LogScalarsResponse,
@@ -36,6 +36,10 @@ router = APIRouter(
 )
 DEFAULT_LOG_PAGE_LIMIT = 500
 MAX_LOG_PAGE_LIMIT = 2000
+
+
+def active_job_payloads(service: TrainingJobService) -> list[dict[str, str]]:
+    return [job.to_api_payload() for job in service.active_jobs()]
 
 
 @router.get(
@@ -87,7 +91,7 @@ async def delete_log_experiment(
     return LogExperimentDeleteResponse.model_validate(
         service.delete_experiment(
             experiment,
-            active_jobs=training_service.active_jobs(),
+            active_jobs=active_job_payloads(training_service),
         )
     )
 
@@ -113,7 +117,7 @@ async def log_run_delete_plan(
             models=request.models,
             presets=request.presets,
             run_ids=request.runIds,
-            active_jobs=training_service.active_jobs(),
+            active_jobs=active_job_payloads(training_service),
         )
     )
 
@@ -139,7 +143,7 @@ async def delete_log_runs(
             models=request.models,
             presets=request.presets,
             run_ids=request.runIds,
-            active_jobs=training_service.active_jobs(),
+            active_jobs=active_job_payloads(training_service),
         )
     )
 

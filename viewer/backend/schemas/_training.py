@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal, TypeAlias
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
-from viewer.backend.schemas._base import ApiResponseModel, ConfigValue
+from viewer.backend.schemas._base import (
+    ApiResponseModel,
+    ConfigOverrides,
+    ConfigValue,
+    JsonObject,
+)
 
 
 class TrainingJobCreateRequest(ApiResponseModel):
@@ -14,11 +19,11 @@ class TrainingJobCreateRequest(ApiResponseModel):
     preset: str
     presets: list[str] | None = None
     datasets: list[str] = Field(default_factory=list)
-    overrides: dict[str, Any] = Field(default_factory=dict)
+    overrides: ConfigOverrides = Field(default_factory=dict)
     logFolder: str
     monitors: list[str] = Field(default_factory=list)
-    search: dict[str, Any] | None = None
-    runPlan: "SubmittedTrainingRunPlanRequest | None" = None
+    search: TrainingSearchRequest | None = None
+    runPlan: SubmittedTrainingRunPlanRequest | None = None
 
 
 class TrainingRunPlanCreateRequest(ApiResponseModel):
@@ -26,9 +31,9 @@ class TrainingRunPlanCreateRequest(ApiResponseModel):
     preset: str
     presets: list[str] | None = None
     datasets: list[str] = Field(default_factory=list)
-    overrides: dict[str, Any] = Field(default_factory=dict)
+    overrides: ConfigOverrides = Field(default_factory=dict)
     logFolder: str = ""
-    search: dict[str, Any] | None = None
+    search: TrainingSearchRequest | None = None
 
 
 class TrainingSearchResponse(ApiResponseModel):
@@ -73,11 +78,11 @@ class TrainingRunResponse(ApiResponseModel):
     snapshotName: str | None = None
     dataset: str
     changes: list[TrainingRunChangeResponse] = Field(default_factory=list)
-    overrides: dict[str, ConfigValue] = Field(default_factory=dict)
+    overrides: ConfigOverrides = Field(default_factory=dict)
     command: str
     totalEpochs: int
     currentEpoch: int = 0
-    metrics: dict[str, Any] = Field(default_factory=dict)
+    metrics: JsonObject = Field(default_factory=dict)
     logDir: str | None = None
     error: str | None = None
     errorTraceback: str | None = None
@@ -99,11 +104,11 @@ class SubmittedTrainingRunRequest(ApiResponseModel):
     snapshotName: str | None = None
     dataset: str
     changes: list[SubmittedTrainingRunChangeRequest] = Field(default_factory=list)
-    overrides: dict[str, ConfigValue] = Field(default_factory=dict)
+    overrides: ConfigOverrides = Field(default_factory=dict)
     command: str
     totalEpochs: int
     currentEpoch: int = 0
-    metrics: dict[str, Any] = Field(default_factory=dict)
+    metrics: JsonObject = Field(default_factory=dict)
     logDir: str | None = None
     error: str | None = None
     errorTraceback: str | None = None
@@ -140,7 +145,7 @@ class TrainingRunPlanResponse(ApiResponseModel):
     preset: str
     presets: list[str] = Field(default_factory=list)
     datasets: list[str] = Field(default_factory=list)
-    overrides: dict[str, Any] = Field(default_factory=dict)
+    overrides: ConfigOverrides = Field(default_factory=dict)
     search: TrainingSearchResponse | None = None
     logFolder: str = ""
     isRandomSearch: bool = False
@@ -153,7 +158,7 @@ class SubmittedTrainingRunPlanRequest(ApiResponseModel):
     preset: str
     presets: list[str] = Field(default_factory=list)
     datasets: list[str] = Field(default_factory=list)
-    overrides: dict[str, Any] = Field(default_factory=dict)
+    overrides: ConfigOverrides = Field(default_factory=dict)
     search: TrainingSearchRequest | None = None
     logFolder: str = ""
     isRandomSearch: bool = False
@@ -167,6 +172,126 @@ class TrainingResultLinkResponse(ApiResponseModel):
     logDir: str | None = None
 
 
+TrainingProgressStatus = Literal["running", "completed", "failed", "cancelled"]
+TrainingProgressMetricMap = JsonObject
+TrainingProgressParams = JsonObject
+
+
+class TrainingProgressEventBaseResponse(ApiResponseModel):
+    model_config = ConfigDict(extra="allow")
+
+    type: str
+    timestamp: str | None = None
+    status: TrainingProgressStatus | None = None
+    jobId: str | None = None
+    dataset: str | None = None
+    preset: str | None = None
+    option: str | None = None
+    logDir: str | None = None
+    runId: str | None = None
+    runIndex: int | None = None
+    runTotal: int | None = None
+    totalEpochs: int | None = None
+
+
+class TrainingJobStartedProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["job_started"]
+    status: Literal["running"] | None = None
+
+
+class TrainingWorkerStartedProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["started"]
+    status: Literal["running"] | None = None
+    model: str | None = None
+    presets: list[str] | None = None
+    datasets: list[str] | None = None
+    monitors: list[str] | None = None
+
+
+class TrainingWorkerCompletedProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["completed"]
+    status: Literal["completed"] | None = None
+    presets: list[str] | None = None
+
+
+class TrainingCancelledProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["cancelled"]
+    status: Literal["cancelled"] | None = None
+
+
+class TrainingErrorProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["error"]
+    status: Literal["failed"] | None = None
+    error: str | None = None
+    traceback: str | None = None
+
+
+class TrainingDatasetStartedProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["dataset_started"]
+    status: Literal["running"] | None = None
+    params: TrainingProgressParams | None = None
+
+
+class TrainingDatasetCompletedProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["dataset_completed"]
+    status: Literal["running"] | None = None
+    metrics: TrainingProgressMetricMap | None = None
+
+
+class TrainingRunProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal[
+        "epoch_started",
+        "step",
+        "validation",
+        "fit_completed",
+        "test_completed",
+    ]
+    status: Literal["running"] | None = None
+    epoch: int | None = None
+    step: int | None = None
+    batch: int | None = None
+    metrics: TrainingProgressMetricMap | None = None
+
+
+class TrainingClusterInitializedProgressEventResponse(
+    TrainingProgressEventBaseResponse
+):
+    type: Literal["cluster_initialized"]
+    node: str
+    count: int
+    capacity: list[int]
+    coordinates: list[list[int]]
+
+
+class TrainingNeuronAddedProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["neuron_added"]
+    node: str
+    coord: list[int]
+    count: int
+    capacity: list[int]
+    epoch: int | None = None
+    step: int | None = None
+
+
+class UnknownTrainingProgressEventResponse(TrainingProgressEventBaseResponse):
+    pass
+
+
+TrainingProgressEventResponse: TypeAlias = (
+    TrainingJobStartedProgressEventResponse
+    | TrainingWorkerStartedProgressEventResponse
+    | TrainingWorkerCompletedProgressEventResponse
+    | TrainingCancelledProgressEventResponse
+    | TrainingErrorProgressEventResponse
+    | TrainingDatasetStartedProgressEventResponse
+    | TrainingDatasetCompletedProgressEventResponse
+    | TrainingRunProgressEventResponse
+    | TrainingClusterInitializedProgressEventResponse
+    | TrainingNeuronAddedProgressEventResponse
+    | UnknownTrainingProgressEventResponse
+)
+
+
 class TrainingJobResponse(ApiResponseModel):
     id: str
     status: str
@@ -174,7 +299,7 @@ class TrainingJobResponse(ApiResponseModel):
     preset: str
     presets: list[str] = Field(default_factory=list)
     datasets: list[str]
-    overrides: dict[str, Any]
+    overrides: ConfigOverrides
     search: TrainingSearchResponse | None = None
     plannedRunCount: int = 0
     runPlan: TrainingRunPlanResponse | None = None
@@ -188,8 +313,8 @@ class TrainingJobResponse(ApiResponseModel):
     currentDataset: str | None = None
     epoch: int | None = None
     step: int | None = None
-    metrics: dict[str, Any]
+    metrics: JsonObject
     logDir: str | None = None
-    events: list[dict[str, Any]]
+    events: list[TrainingProgressEventResponse]
     logTail: list[str]
     resultLinks: list[TrainingResultLinkResponse]

@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import Field
 
-from viewer.backend.schemas._base import ApiResponseModel
+from viewer.backend.schemas._base import (
+    ApiResponseModel,
+    ConfigOverrides,
+    JsonObject,
+    JsonValue,
+)
 
 
 class GraphConfigFieldResponse(ApiResponseModel):
     key: str
-    value: Any
+    value: JsonValue
 
 
 class GraphConfigResponse(ApiResponseModel):
@@ -26,7 +31,7 @@ class GraphNodeResponse(ApiResponseModel):
     path: str
     graphRole: Literal["architecture", "internal", "runtime"]
     parameterCount: int
-    details: dict[str, Any]
+    details: JsonObject
     config: GraphConfigResponse | None
 
 
@@ -39,7 +44,7 @@ class GraphEdgeResponse(ApiResponseModel):
 class InspectRequest(ApiResponseModel):
     model: str
     preset: str
-    overrides: dict[str, Any] = Field(default_factory=dict)
+    overrides: ConfigOverrides = Field(default_factory=dict)
     dataset: str | None = None
 
 

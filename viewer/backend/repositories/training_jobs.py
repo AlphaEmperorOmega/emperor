@@ -8,6 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from viewer.backend.training_contracts import (
+    ActiveTrainingJob,
+    CreateTrainingJobCommand,
+    CreateTrainingRunPlanCommand,
+    TrainingJobView,
+    TrainingRunPlanView,
+)
 from viewer.backend.training_jobs import TrainingJobManager
 
 
@@ -15,54 +22,51 @@ class TrainingJobRepository:
     def __init__(self, manager: TrainingJobManager) -> None:
         self._manager = manager
 
-    def create_job(
-        self,
-        *,
-        model: str,
-        preset: str,
-        presets: list[str] | None,
-        datasets: list[str],
-        overrides: dict[str, Any],
-        log_folder: str,
-        monitors: list[str],
-        search: dict[str, Any] | None,
-        run_plan: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        return self._manager.create_job(
-            model=model,
-            preset=preset,
-            presets=presets,
-            datasets=datasets,
-            overrides=overrides,
-            log_folder=log_folder,
-            monitors=monitors,
-            search=search,
-            run_plan=run_plan,
+    def create_job(self, command: CreateTrainingJobCommand) -> TrainingJobView:
+        return TrainingJobView.from_payload(
+            self._manager.create_job(
+                model=command.model,
+                preset=command.preset,
+                presets=command.presets,
+                datasets=command.datasets,
+                overrides=command.overrides,
+                log_folder=command.log_folder,
+                monitors=command.monitors,
+                search=(
+                    command.search.to_api_payload()
+                    if command.search is not None
+                    else None
+                ),
+                run_plan=(
+                    command.run_plan.to_api_payload()
+                    if command.run_plan is not None
+                    else None
+                ),
+            )
         )
 
     def create_run_plan(
         self,
-        *,
-        model: str,
-        preset: str,
-        presets: list[str] | None,
-        datasets: list[str],
-        overrides: dict[str, Any],
-        log_folder: str,
-        search: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        return self._manager.create_run_plan(
-            model=model,
-            preset=preset,
-            presets=presets,
-            datasets=datasets,
-            overrides=overrides,
-            log_folder=log_folder,
-            search=search,
+        command: CreateTrainingRunPlanCommand,
+    ) -> TrainingRunPlanView:
+        return TrainingRunPlanView.from_payload(
+            self._manager.create_run_plan(
+                model=command.model,
+                preset=command.preset,
+                presets=command.presets,
+                datasets=command.datasets,
+                overrides=command.overrides,
+                log_folder=command.log_folder,
+                search=(
+                    command.search.to_api_payload()
+                    if command.search is not None
+                    else None
+                ),
+            )
         )
 
-    def get_job(self, job_id: str) -> dict[str, Any]:
-        return self._manager.get_job(job_id)
+    def get_job(self, job_id: str) -> TrainingJobView:
+        return TrainingJobView.from_payload(self._manager.get_job(job_id))
 
     def get_monitor_data(
         self,
@@ -92,8 +96,11 @@ class TrainingJobRepository:
             preset=preset,
         )
 
-    def cancel_job(self, job_id: str) -> dict[str, Any]:
-        return self._manager.cancel_job(job_id)
+    def cancel_job(self, job_id: str) -> TrainingJobView:
+        return TrainingJobView.from_payload(self._manager.cancel_job(job_id))
 
-    def active_jobs(self) -> list[dict[str, Any]]:
-        return self._manager.active_jobs()
+    def active_jobs(self) -> list[ActiveTrainingJob]:
+        return [
+            ActiveTrainingJob.from_payload(job)
+            for job in self._manager.active_jobs()
+        ]

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
+import { jsonObjectSchema } from "@/lib/api/schemas";
 
 function experimentFromRelativePath(relativePath: string) {
   return relativePath.split("/").find(Boolean) ?? "unknown";
@@ -20,7 +21,7 @@ const logRunFields = {
   eventFileCount: z.number(),
   checkpointCount: z.number(),
   hasHparams: z.boolean(),
-  metrics: z.record(z.unknown()),
+  metrics: jsonObjectSchema,
 };
 
 const logRunPayloadSchema = z.object({

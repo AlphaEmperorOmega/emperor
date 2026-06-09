@@ -1,7 +1,14 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
-import { configValueSchema, type ConfigValue } from "@/lib/api/schemas";
+import {
+  configOverridesSchema,
+  configValueSchema,
+  jsonObjectSchema,
+  type ConfigOverrides,
+  type ConfigValue,
+  type JsonObject,
+} from "@/lib/api/schemas";
 
 export const trainingRunChangeSchema = z.object({
   key: z.string(),
@@ -26,11 +33,11 @@ export const trainingRunSchema = z.object({
   snapshotName: z.string().nullable().optional(),
   dataset: z.string(),
   changes: z.array(trainingRunChangeSchema),
-  overrides: z.record(configValueSchema),
+  overrides: configOverridesSchema,
   command: z.string(),
   totalEpochs: z.number(),
   currentEpoch: z.number(),
-  metrics: z.record(z.unknown()),
+  metrics: jsonObjectSchema,
   logDir: z.string().nullable(),
   error: z.string().nullable(),
   errorTraceback: z.string().nullable().optional(),
@@ -54,7 +61,7 @@ export const trainingRunPlanSchema = z.object({
   preset: z.string(),
   presets: z.array(z.string()),
   datasets: z.array(z.string()),
-  overrides: z.record(z.unknown()),
+  overrides: configOverridesSchema,
   search: z
     .object({
       mode: z.enum(["grid", "random"]),
@@ -68,6 +75,122 @@ export const trainingRunPlanSchema = z.object({
   summary: trainingRunPlanSummarySchema,
 });
 
+const trainingProgressStatusSchema = z.enum([
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+const trainingProgressEventBaseSchema = z
+  .object({
+    type: z.string(),
+    timestamp: z.string().nullable().optional(),
+    status: trainingProgressStatusSchema.nullable().optional(),
+    jobId: z.string().nullable().optional(),
+    dataset: z.string().nullable().optional(),
+    preset: z.string().nullable().optional(),
+    option: z.string().nullable().optional(),
+    logDir: z.string().nullable().optional(),
+    runId: z.string().nullable().optional(),
+    runIndex: z.number().nullable().optional(),
+    runTotal: z.number().nullable().optional(),
+    totalEpochs: z.number().nullable().optional(),
+  })
+  .passthrough();
+
+const trainingJobStartedEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("job_started"),
+  status: z.literal("running").nullable().optional(),
+});
+
+const trainingWorkerStartedEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("started"),
+  status: z.literal("running").nullable().optional(),
+  model: z.string().nullable().optional(),
+  presets: z.array(z.string()).nullable().optional(),
+  datasets: z.array(z.string()).nullable().optional(),
+  monitors: z.array(z.string()).nullable().optional(),
+});
+
+const trainingWorkerCompletedEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("completed"),
+  status: z.literal("completed").nullable().optional(),
+  presets: z.array(z.string()).nullable().optional(),
+});
+
+const trainingCancelledEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("cancelled"),
+  status: z.literal("cancelled").nullable().optional(),
+});
+
+const trainingErrorEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("error"),
+  status: z.literal("failed").nullable().optional(),
+  error: z.string().nullable().optional(),
+  traceback: z.string().nullable().optional(),
+});
+
+const trainingDatasetStartedEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("dataset_started"),
+  status: z.literal("running").nullable().optional(),
+  params: jsonObjectSchema.nullable().optional(),
+});
+
+const trainingDatasetCompletedEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("dataset_completed"),
+  status: z.literal("running").nullable().optional(),
+  metrics: jsonObjectSchema.nullable().optional(),
+});
+
+const trainingRunProgressEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.enum([
+    "epoch_started",
+    "step",
+    "validation",
+    "fit_completed",
+    "test_completed",
+  ]),
+  status: z.literal("running").nullable().optional(),
+  epoch: z.number().nullable().optional(),
+  step: z.number().nullable().optional(),
+  batch: z.number().nullable().optional(),
+  metrics: jsonObjectSchema.nullable().optional(),
+});
+
+const trainingClusterInitializedEventSchema =
+  trainingProgressEventBaseSchema.extend({
+    type: z.literal("cluster_initialized"),
+    node: z.string(),
+    count: z.number(),
+    capacity: z.array(z.number()),
+    coordinates: z.array(z.array(z.number())),
+  });
+
+const trainingNeuronAddedEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("neuron_added"),
+  node: z.string(),
+  coord: z.array(z.number()),
+  count: z.number(),
+  capacity: z.array(z.number()),
+  epoch: z.number().nullable().optional(),
+  step: z.number().nullable().optional(),
+});
+
+export const trainingProgressEventSchema = z.union([
+  trainingJobStartedEventSchema,
+  trainingWorkerStartedEventSchema,
+  trainingWorkerCompletedEventSchema,
+  trainingCancelledEventSchema,
+  trainingErrorEventSchema,
+  trainingDatasetStartedEventSchema,
+  trainingDatasetCompletedEventSchema,
+  trainingRunProgressEventSchema,
+  trainingClusterInitializedEventSchema,
+  trainingNeuronAddedEventSchema,
+  trainingProgressEventBaseSchema,
+]);
+
 export const trainingJobSchema = z.object({
   id: z.string(),
   status: z.string(),
@@ -75,7 +198,7 @@ export const trainingJobSchema = z.object({
   preset: z.string(),
   presets: z.array(z.string()).optional(),
   datasets: z.array(z.string()),
-  overrides: z.record(z.unknown()),
+  overrides: configOverridesSchema,
   search: z
     .object({
       mode: z.enum(["grid", "random"]),
@@ -96,9 +219,9 @@ export const trainingJobSchema = z.object({
   currentDataset: z.string().nullable(),
   epoch: z.number().nullable(),
   step: z.number().nullable(),
-  metrics: z.record(z.unknown()),
+  metrics: jsonObjectSchema,
   logDir: z.string().nullable(),
-  events: z.array(z.record(z.unknown())),
+  events: z.array(trainingProgressEventSchema),
   logTail: z.array(z.string()),
   resultLinks: z.array(
     z.object({
@@ -113,6 +236,7 @@ export type TrainingRunChange = z.infer<typeof trainingRunChangeSchema>;
 export type TrainingRun = z.infer<typeof trainingRunSchema>;
 export type TrainingRunPlanSummary = z.infer<typeof trainingRunPlanSummarySchema>;
 export type TrainingRunPlan = z.infer<typeof trainingRunPlanSchema>;
+export type TrainingProgressEvent = z.infer<typeof trainingProgressEventSchema>;
 export type TrainingJob = z.infer<typeof trainingJobSchema>;
 
 export type TrainingSearchCreateInput = {
@@ -143,11 +267,11 @@ export type TrainingRunSubmitInput = {
   snapshotName?: string | null;
   dataset: string;
   changes: TrainingRunSubmitChangeInput[];
-  overrides: Record<string, ConfigValue>;
+  overrides: ConfigOverrides;
   command: string;
   totalEpochs: number;
   currentEpoch: number;
-  metrics: Record<string, unknown>;
+  metrics: JsonObject;
   logDir: string | null;
   error: string | null;
   errorTraceback?: string | null;
@@ -171,7 +295,7 @@ export type TrainingRunPlanSubmitInput = {
   preset: string;
   presets: string[];
   datasets: string[];
-  overrides: Record<string, unknown>;
+  overrides: ConfigOverrides;
   search: TrainingSearchSubmitInput | null;
   logFolder: string;
   isRandomSearch: boolean;
@@ -184,7 +308,7 @@ export type TrainingJobCreateInput = {
   preset: string;
   presets?: string[];
   datasets: string[];
-  overrides: Record<string, string>;
+  overrides: ConfigOverrides;
   logFolder: string;
   monitors: string[];
   search?: TrainingSearchCreateInput;
@@ -196,7 +320,7 @@ export type TrainingRunPlanCreateInput = {
   preset: string;
   presets?: string[];
   datasets: string[];
-  overrides: Record<string, string>;
+  overrides: ConfigOverrides;
   logFolder?: string;
   search?: TrainingSearchCreateInput;
 };

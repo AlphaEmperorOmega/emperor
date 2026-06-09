@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from models.config_overrides import config_key_to_model_param, normalize_key
+
 from viewer.backend.inspector.discovery import (
     dataset_name,
     load_model_parts,
@@ -27,7 +28,9 @@ from viewer.backend.log_runs import is_valid_log_experiment_name
 def _shell_quote(value: str) -> str:
     if value == "":
         return "''"
-    safe = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_@%+=:,./-")
+    safe = set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_@%+=:,./-"
+    )
     if all(character in safe for character in value):
         return value
     return "'" + value.replace("'", "'\"'\"'") + "'"
@@ -229,7 +232,11 @@ class TrainingRunPlanBuilder:
         return parsed_overrides
 
     def valid_plan_log_folder(self, log_folder: str) -> str:
-        return log_folder if log_folder and is_valid_log_experiment_name(log_folder) else ""
+        return (
+            log_folder
+            if log_folder and is_valid_log_experiment_name(log_folder)
+            else ""
+        )
 
     def summarize(self, runs: list[dict[str, Any]]) -> dict[str, int]:
         statuses = [str(run.get("status", "Pending")) for run in runs]
@@ -276,6 +283,7 @@ class TrainingRunPlanBuilder:
         for selected_preset, selected_search in zip(
             selected.selected_preset_names,
             selected.parsed_searches,
+            strict=True,
         ):
             fixed_changes, fixed_overrides = self._ordered_override_changes(
                 model=model,
@@ -348,7 +356,9 @@ class TrainingRunPlanBuilder:
                     "status": "Pending",
                     "preset": preset,
                     "snapshotId": str(snapshot_id) if snapshot_id is not None else None,
-                    "snapshotName": str(snapshot_name) if snapshot_name is not None else None,
+                    "snapshotName": str(snapshot_name)
+                    if snapshot_name is not None
+                    else None,
                     "dataset": dataset,
                     "overrides": row_overrides,
                     "command": self._training_command(
@@ -405,12 +415,12 @@ class TrainingRunPlanBuilder:
                 )
             )
         if unknown:
-            raise InspectorError(
-                f"Unknown preset '{unknown[0]}' for model '{model}'."
-            )
+            raise InspectorError(f"Unknown preset '{unknown[0]}' for model '{model}'.")
         if not selected:
             raise InspectorError("Training requires at least one selected preset.")
-        return [name for name, _option in selected], [option for _name, option in selected]
+        return [name for name, _option in selected], [
+            option for _name, option in selected
+        ]
 
     def _field_maps(
         self,
@@ -422,7 +432,9 @@ class TrainingRunPlanBuilder:
         for field in fields:
             by_key[normalize_key(str(field["key"]))] = field
             by_key[normalize_key(str(field["configKey"]))] = field
-            by_key[normalize_key(config_key_to_model_param(str(field["configKey"])))] = field
+            by_key[
+                normalize_key(config_key_to_model_param(str(field["configKey"])))
+            ] = field
         return fields, by_key
 
     def _ordered_override_changes(
@@ -481,7 +493,7 @@ class TrainingRunPlanBuilder:
         model_param_order = list(parsed_search.search_overrides)
         axis_maps = self._search_axis_maps(model=model, preset=preset)
         indexed_values = []
-        for axis_key, model_param in zip(axis_order, model_param_order):
+        for axis_key, model_param in zip(axis_order, model_param_order, strict=True):
             serialized_values = parsed_search.values[axis_key]
             parsed_values = parsed_search.search_overrides[model_param]
             indexed_values.append(
@@ -490,6 +502,7 @@ class TrainingRunPlanBuilder:
                     for serialized_value, parsed_value in zip(
                         serialized_values,
                         parsed_values,
+                        strict=True,
                     )
                 ]
             )

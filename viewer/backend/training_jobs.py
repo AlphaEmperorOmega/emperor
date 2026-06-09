@@ -1,25 +1,21 @@
 from __future__ import annotations
 
-import json
-import os
-import subprocess
-import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
+from viewer.backend.inspector.discovery import (
+    dataset_name,
+    resolve_model_monitors,
+)
+from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.job_store import (
     FileSystemTrainingJobStore,
     InMemoryTrainingJobStore,
     TrainingJobRecord,
     TrainingJobStore,
 )
-from viewer.backend.inspector.discovery import (
-    dataset_name,
-    resolve_model_monitors,
-)
-from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import validate_log_experiment_name
 from viewer.backend.monitor_data import (
     TensorBoardMonitorReader,
@@ -29,60 +25,37 @@ from viewer.backend.runtime.job_status import (
     is_active_job_status,
     is_live_process_job_status,
 )
+from viewer.backend.training_job_projector import TrainingJobProjector
+from viewer.backend.training_monitor_locator import (
+    TrainingMonitorLocator,
+    normalize_preset_token,
+)
+from viewer.backend.training_progress_store import TrainingProgressStore
 from viewer.backend.training_run_plans import (
     SelectedTrainingInputs,
     TrainingRunPlanBuilder,
 )
-from viewer.backend.training_run_progress import project_training_run_progress
+from viewer.backend.training_worker_launcher import (
+    ProcessHandle,
+    ProcessRunner,
+    SubprocessRunner,
+    TrainingWorkerLauncher,
+)
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-class ProcessHandle(Protocol):
-    pid: int
-
-    def poll(self) -> int | None:
-        ...
-
-    def terminate(self) -> None:
-        ...
-
-
-class ProcessRunner(Protocol):
-    def start(
-        self,
-        command: list[str],
-        *,
-        cwd: Path,
-        env: dict[str, str],
-        log_path: Path,
-    ) -> ProcessHandle:
-        ...
-
-
-class SubprocessRunner:
-    def start(
-        self,
-        command: list[str],
-        *,
-        cwd: Path,
-        env: dict[str, str],
-        log_path: Path,
-    ) -> subprocess.Popen:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("ab") as log_file:
-            return subprocess.Popen(
-                command,
-                cwd=cwd,
-                env=env,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-            )
+    return datetime.now(UTC).isoformat()
 
 
 TrainingJob = TrainingJobRecord
+
+__all__ = [
+    "ProcessHandle",
+    "ProcessRunner",
+    "SubprocessRunner",
+    "TrainingJob",
+    "TrainingJobManager",
+]
 
 
 class TrainingJobManager:
@@ -97,17 +70,30 @@ class TrainingJobManager:
         parameter_status_reader: TensorBoardParameterStatusReader | None = None,
         run_plan_builder: TrainingRunPlanBuilder | None = None,
         job_store: TrainingJobStore | None = None,
+        progress_store: TrainingProgressStore | None = None,
+        worker_launcher: TrainingWorkerLauncher | None = None,
+        job_projector: TrainingJobProjector | None = None,
+        monitor_locator: TrainingMonitorLocator | None = None,
     ) -> None:
         self.root = root or Path("/tmp/emperor-viewer-training")
         self.cwd = cwd or Path.cwd()
         self.logs_root = Path(logs_root)
-        self.runner = runner or SubprocessRunner()
+        self.worker_launcher = worker_launcher or TrainingWorkerLauncher(
+            cwd=self.cwd,
+            runner=runner,
+        )
+        self.runner = self.worker_launcher.runner
         self.monitor_reader = monitor_reader or TensorBoardMonitorReader()
         self.parameter_status_reader = (
             parameter_status_reader or TensorBoardParameterStatusReader()
         )
         self.run_plan_builder = run_plan_builder or TrainingRunPlanBuilder()
         self.job_store = job_store or FileSystemTrainingJobStore(self.root)
+        self.progress_store = progress_store or TrainingProgressStore()
+        self.monitor_locator = monitor_locator or TrainingMonitorLocator()
+        self.job_projector = job_projector or TrainingJobProjector(
+            self.monitor_locator
+        )
         self._processes: dict[str, ProcessHandle] = {}
 
     @property
@@ -189,14 +175,9 @@ class TrainingJobManager:
             materialized_run_plan=materialized_run_plan,
             validated_log_folder=validated_log_folder,
         )
-        payload_path = self._write_worker_payload(job_root, payload)
-        progress_path = job_root / "progress.jsonl"
-        command = self._build_worker_command(payload_path, progress_path)
-        process = self.runner.start(
-            command,
-            cwd=self.cwd,
-            env=self._worker_env(),
-            log_path=job_root / "training.log",
+        launch = self.worker_launcher.launch(
+            job_root=job_root,
+            payload=payload,
         )
         job = self._register_job(
             job_id=job_id,
@@ -204,9 +185,9 @@ class TrainingJobManager:
             payload=payload,
             materialized_run_plan=materialized_run_plan,
             validated_log_folder=validated_log_folder,
-            command=command,
+            command=launch.command,
             job_root=job_root,
-            process=process,
+            process=launch.process,
         )
         self._write_event(
             job,
@@ -310,30 +291,17 @@ class TrainingJobManager:
         job_root: Path,
         payload: dict[str, Any],
     ) -> Path:
-        payload_path = job_root / "payload.json"
-        payload_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        return payload_path
+        return self.worker_launcher.write_payload(job_root, payload)
 
     def _build_worker_command(
         self,
         payload_path: Path,
         progress_path: Path,
     ) -> list[str]:
-        return [
-            sys.executable,
-            "-m",
-            "viewer.backend.training_worker",
-            "--payload",
-            str(payload_path),
-            "--progress",
-            str(progress_path),
-        ]
+        return self.worker_launcher.build_command(payload_path, progress_path)
 
     def _worker_env(self) -> dict[str, str]:
-        return {
-            **os.environ,
-            "MPLCONFIGDIR": os.environ.get("MPLCONFIGDIR", "/tmp/matplotlib"),
-        }
+        return self.worker_launcher.worker_env()
 
     def _register_job(
         self,
@@ -416,19 +384,23 @@ class TrainingJobManager:
             raise InspectorError(
                 f"Unknown dataset '{dataset}' for training job '{job_id}'."
             )
-        if preset is not None and not self._preset_in_job(job, preset):
+        if preset is not None and not self.monitor_locator.preset_in_job(job, preset):
             raise InspectorError(
                 f"Unknown preset '{preset}' for training job '{job_id}'."
             )
         self._refresh(job)
-        log_dir = self._log_dir_for_monitor_data(job, dataset, preset)
+        log_dir = self.monitor_locator.log_dir_for_monitor_data(
+            events=self._events(job),
+            dataset=dataset,
+            preset=preset,
+        )
         data = self.monitor_reader.read(
             job_id=job.id,
             node_path=node_path,
             dataset=dataset,
             log_dir=log_dir,
         )
-        data["preset"] = self._normalize_preset_token(preset) if preset else None
+        data["preset"] = normalize_preset_token(preset) if preset else None
         return data
 
     def get_parameter_status(
@@ -443,15 +415,19 @@ class TrainingJobManager:
             raise InspectorError(
                 f"Unknown dataset '{dataset}' for training job '{job_id}'."
             )
-        if preset is not None and not self._preset_in_job(job, preset):
+        if preset is not None and not self.monitor_locator.preset_in_job(job, preset):
             raise InspectorError(
                 f"Unknown preset '{preset}' for training job '{job_id}'."
             )
         self._refresh(job)
-        log_dir = self._log_dir_for_monitor_data(job, dataset, preset)
+        log_dir = self.monitor_locator.log_dir_for_monitor_data(
+            events=self._events(job),
+            dataset=dataset,
+            preset=preset,
+        )
         return self.parameter_status_reader.read(
             source_id=job.id,
-            preset=self._normalize_preset_token(preset) if preset else None,
+            preset=normalize_preset_token(preset) if preset else None,
             dataset=dataset,
             log_dir=log_dir,
         )
@@ -491,46 +467,26 @@ class TrainingJobManager:
             self.job_store.save(job)
 
     def _events(self, job: TrainingJob) -> list[dict[str, Any]]:
-        if not job.progress_path.exists():
-            return []
-        events = []
-        for line in job.progress_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                events.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-        return events
+        return self.progress_store.read_events(job)
 
     def _write_event(self, job: TrainingJob, event: dict[str, Any]) -> None:
-        payload = {"timestamp": _now(), "jobId": job.id, **event}
-        job.progress_path.parent.mkdir(parents=True, exist_ok=True)
-        with job.progress_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, default=str) + "\n")
+        self.progress_store.append_event(job, event)
 
     def _normalize_preset_token(self, preset: str | None) -> str | None:
-        if preset is None:
-            return None
-        return str(preset).lower().replace("_", "-")
+        return normalize_preset_token(preset)
 
     def _preset_in_job(self, job: TrainingJob, preset: str) -> bool:
-        normalized = self._normalize_preset_token(preset)
-        return normalized in {self._normalize_preset_token(item) for item in job.presets}
+        return self.monitor_locator.preset_in_job(job, preset)
 
     def _event_preset_name(self, event: dict[str, Any]) -> str | None:
-        return self._normalize_preset_token(
-            event.get("preset") or event.get("option")
-        )
+        return self.monitor_locator.event_preset_name(event)
 
     def _event_matches_preset(
         self,
         event: dict[str, Any],
         preset: str | None,
     ) -> bool:
-        if preset is None:
-            return True
-        return self._event_preset_name(event) == self._normalize_preset_token(preset)
+        return self.monitor_locator.event_matches_preset(event, preset)
 
     def _log_dir_for_monitor_data(
         self,
@@ -538,77 +494,29 @@ class TrainingJobManager:
         dataset: str | None,
         preset: str | None,
     ) -> str | None:
-        for event in reversed(self._events(job)):
-            log_dir = event.get("logDir")
-            if not log_dir:
-                continue
-            if dataset is None or event.get("dataset") == dataset:
-                if self._event_matches_preset(event, preset):
-                    return str(log_dir)
-        return None
+        return self.monitor_locator.log_dir_for_monitor_data(
+            events=self._events(job),
+            dataset=dataset,
+            preset=preset,
+        )
 
     def _log_tail(self, job: TrainingJob, line_count: int = 80) -> list[str]:
-        if not job.log_path.exists():
-            return []
-        return job.log_path.read_text(encoding="utf-8", errors="replace").splitlines()[
-            -line_count:
-        ]
+        return self.job_projector.log_tail(job, line_count=line_count)
 
     def _run_plan_for_job(
         self,
         job: TrainingJob,
         events: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        return project_training_run_progress(
-            job.run_plan,
-            events,
-            job.status,
-            self.run_plan_builder.summarize,
-        )
+        return self.job_projector.project(
+            job,
+            events=events,
+            summarize=self.run_plan_builder.summarize,
+        )["runPlan"]
 
     def _serialize(self, job: TrainingJob) -> dict[str, Any]:
-        events = self._events(job)
-        latest_event = events[-1] if events else {}
-        metrics_event = next(
-            (event for event in reversed(events) if isinstance(event.get("metrics"), dict)),
-            {},
+        return self.job_projector.project(
+            job,
+            events=self._events(job),
+            summarize=self.run_plan_builder.summarize,
         )
-        result_events = [
-            event for event in events if event.get("type") == "dataset_completed"
-        ]
-        latest_preset = self._event_preset_name(latest_event)
-        run_plan = self._run_plan_for_job(job, events)
-        return {
-            "id": job.id,
-            "status": job.status,
-            "model": job.model,
-            "preset": job.preset,
-            "presets": job.presets,
-            "datasets": job.datasets,
-            "overrides": job.overrides,
-            "search": job.search,
-            "plannedRunCount": job.planned_run_count,
-            "runPlan": run_plan,
-            "monitors": job.monitors,
-            "logFolder": job.log_folder,
-            "createdAt": job.created_at,
-            "updatedAt": job.updated_at,
-            "exitCode": job.exit_code,
-            "pid": job.pid,
-            "currentPreset": latest_preset,
-            "currentDataset": latest_event.get("dataset"),
-            "epoch": latest_event.get("epoch"),
-            "step": latest_event.get("step"),
-            "metrics": metrics_event.get("metrics") or {},
-            "logDir": latest_event.get("logDir"),
-            "events": events,
-            "logTail": self._log_tail(job),
-            "resultLinks": [
-                {
-                    "preset": self._event_preset_name(event),
-                    "dataset": event.get("dataset"),
-                    "logDir": event.get("logDir"),
-                }
-                for event in result_events
-            ],
-        }

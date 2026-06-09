@@ -4,6 +4,7 @@ import {
   createConfigSnapshot,
   createLogRunDeletePlan,
   createTrainingJob,
+  configOverridesSchema,
   deleteConfigSnapshot,
   deleteLogExperiment,
   deleteLogRuns,
@@ -28,7 +29,12 @@ import {
   fetchTrainingRunPlan,
   inspectModel,
   isUnauthorizedApiError,
+  jsonObjectSchema,
+  jsonValueSchema,
   renameConfigSnapshot,
+  trainingJobSchema,
+  trainingProgressEventSchema,
+  trainingRunPlanSchema,
 } from "@/lib/api";
 import { setSessionAuthToken } from "@/lib/auth-token";
 
@@ -80,6 +86,88 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   window.sessionStorage.clear();
+});
+
+describe("shared API value schemas", () => {
+  it("accepts nested JSON values and rejects non-JSON values", () => {
+    expect(
+      jsonValueSchema.parse({
+        nested: [1, "two", true, null, { score: 0.75 }],
+      }),
+    ).toEqual({
+      nested: [1, "two", true, null, { score: 0.75 }],
+    });
+    expect(jsonObjectSchema.parse({ trainLoss: 0.42 })).toEqual({
+      trainLoss: 0.42,
+    });
+    expect(() => jsonValueSchema.parse(Symbol("not-json"))).toThrow();
+    expect(() => jsonObjectSchema.parse({ missing: undefined })).toThrow();
+  });
+
+  it("accepts only primitive config override values", () => {
+    expect(
+      configOverridesSchema.parse({
+        hidden_dim: 128,
+        learning_rate: 0.01,
+        use_bias: true,
+        activation: "RELU",
+        optional_layer: null,
+      }),
+    ).toEqual({
+      hidden_dim: 128,
+      learning_rate: 0.01,
+      use_bias: true,
+      activation: "RELU",
+      optional_layer: null,
+    });
+    expect(() =>
+      configOverridesSchema.parse({ scheduler: { name: "cosine" } }),
+    ).toThrow();
+  });
+
+  it("types known training progress events while allowing future event payloads", () => {
+    expect(
+      trainingProgressEventSchema.parse({
+        type: "validation",
+        status: "running",
+        jobId: "job-1",
+        dataset: "Mnist",
+        preset: "baseline",
+        runId: "run-1",
+        runIndex: 1,
+        epoch: 0,
+        step: 7,
+        metrics: { "validation/accuracy": 0.75 },
+      }),
+    ).toMatchObject({
+      type: "validation",
+      metrics: { "validation/accuracy": 0.75 },
+    });
+    expect(
+      trainingProgressEventSchema.parse({
+        type: "cluster_initialized",
+        node: "main.cluster",
+        count: 2,
+        capacity: [2, 2, 2],
+        coordinates: [
+          [0, 0, 0],
+          [0, 0, 1],
+        ],
+      }),
+    ).toMatchObject({ type: "cluster_initialized", capacity: [2, 2, 2] });
+    expect(
+      trainingProgressEventSchema.parse({
+        type: "future_event",
+        customField: { still: "allowed" },
+      }),
+    ).toEqual({
+      type: "future_event",
+      customField: { still: "allowed" },
+    });
+    expect(() =>
+      trainingProgressEventSchema.parse({ status: "running" }),
+    ).toThrow();
+  });
 });
 
 async function validateSuccessfulFixture<T>(
@@ -297,9 +385,7 @@ const successfulTrainingRunPlanFixture = {
   datasets: ["Mnist"],
   overrides: {
     learning_rate: 0.01,
-    scheduler: {
-      name: "cosine",
-    },
+    use_bias: true,
   },
   search: {
     mode: "grid",
@@ -699,12 +785,38 @@ describe("successful API fixtures", () => {
     expect(result.summary.remainingEpochs).toBe(7);
   });
 
+  it("rejects nested training run-plan response override objects", () => {
+    expect(() =>
+      trainingRunPlanSchema.parse({
+        ...successfulTrainingRunPlanFixture,
+        overrides: {
+          scheduler: {
+            name: "cosine",
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
   it("accepts a training job fetch response fixture", async () => {
     const result = await validateSuccessfulFixture(successfulTrainingJobFixture, () =>
       fetchTrainingJob("job-123"),
     );
 
     expect(result.metrics).toMatchObject({ trainLoss: 0.42 });
+  });
+
+  it("rejects nested training job response override objects", () => {
+    expect(() =>
+      trainingJobSchema.parse({
+        ...successfulTrainingJobFixture,
+        overrides: {
+          scheduler: {
+            name: "cosine",
+          },
+        },
+      }),
+    ).toThrow();
   });
 
   it("accepts a training job cancel response fixture", async () => {

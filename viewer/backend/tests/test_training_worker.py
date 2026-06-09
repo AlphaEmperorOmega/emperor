@@ -15,10 +15,10 @@ from unittest.mock import patch
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from emperor.experiments.base import GridSearch, RandomSearch
-from lightning.pytorch.callbacks import Callback
-
 from emperor.experiments.monitors import MonitorOption
 from emperor.experiments.progress import JsonlTrainingProgressCallback
+from lightning.pytorch.callbacks import Callback
+
 from viewer.backend import training_worker
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.search import parse_training_search
@@ -31,7 +31,7 @@ class FakeExperimentOptions(Enum):
     WIDE = "Wide"
 
     @classmethod
-    def get_option(cls, name: str) -> "FakeExperimentOptions":
+    def get_option(cls, name: str) -> FakeExperimentOptions:
         options = {
             "baseline": cls.BASELINE,
             "BASELINE": cls.BASELINE,
@@ -71,7 +71,7 @@ class FakeMonitorCallback(Callback):
 
 
 class FakeExperiment:
-    instances: list["FakeExperiment"] = []
+    instances: list[FakeExperiment] = []
     training_error: Exception | None = None
 
     def __init__(self, option: FakeExperimentOptions) -> None:
@@ -179,8 +179,12 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
     ) -> list[dict[str, object]] | None:
         parts = parts or fake_model_parts()
         with (
-            patch("viewer.backend.training_worker.load_model_parts", return_value=parts),
-            patch("viewer.backend.inspector.schema.load_model_parts", return_value=parts),
+            patch(
+                "viewer.backend.training_worker.load_model_parts", return_value=parts
+            ),
+            patch(
+                "viewer.backend.inspector.schema.load_model_parts", return_value=parts
+            ),
         ):
             return training_worker._materialized_runs_from_plan(parts, payload)
 
@@ -374,8 +378,12 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
                     str(progress_path),
                 ],
             ),
-            patch("viewer.backend.training_worker.load_model_parts", return_value=parts),
-            patch("viewer.backend.inspector.schema.load_model_parts", return_value=parts),
+            patch(
+                "viewer.backend.training_worker.load_model_parts", return_value=parts
+            ),
+            patch(
+                "viewer.backend.inspector.schema.load_model_parts", return_value=parts
+            ),
         ):
             training_worker.main()
 
@@ -419,7 +427,9 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             self.assertIsInstance(callbacks[2], FakeMonitorCallback)
 
             events = read_jsonl(progress_path)
-            self.assertEqual([event["type"] for event in events], ["started", "completed"])
+            self.assertEqual(
+                [event["type"] for event in events], ["started", "completed"]
+            )
             self.assertEqual(
                 set(events[0]),
                 COMMON_PROGRESS_EVENT_KEYS
@@ -435,8 +445,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             )
             self.assertEqual(
                 set(events[1]),
-                COMMON_PROGRESS_EVENT_KEYS
-                | {"type", "status", "jobId", "presets"},
+                COMMON_PROGRESS_EVENT_KEYS | {"type", "status", "jobId", "presets"},
             )
             self.assertEqual(events[0]["status"], "running")
             self.assertEqual(events[0]["jobId"], "job-123")
@@ -519,7 +528,9 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             )
 
             events = read_jsonl(progress_path)
-            self.assertEqual([event["type"] for event in events], ["started", "completed"])
+            self.assertEqual(
+                [event["type"] for event in events], ["started", "completed"]
+            )
             self.assertEqual(events[-1]["status"], "completed")
 
     def test_worker_writes_error_event_when_training_fails(self) -> None:
@@ -558,7 +569,9 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             self.assertEqual(error_event["jobId"], "job-error")
             self.assertEqual(error_event["error"], "training failed")
             self.assertIsInstance(error_event["traceback"], str)
-            self.assertIn("Traceback (most recent call last):", error_event["traceback"])
+            self.assertIn(
+                "Traceback (most recent call last):", error_event["traceback"]
+            )
             self.assertIn("RuntimeError: training failed", error_event["traceback"])
             self.assertIn("timestamp", error_event)
 
@@ -603,7 +616,9 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             self.assertEqual(error_event["status"], "failed")
             self.assertEqual(error_event["jobId"], "job-invalid-plan")
             self.assertIn("Unknown dataset 'MissingDataset'", error_event["error"])
-            self.assertIn("Traceback (most recent call last):", error_event["traceback"])
+            self.assertIn(
+                "Traceback (most recent call last):", error_event["traceback"]
+            )
 
 
 if __name__ == "__main__":

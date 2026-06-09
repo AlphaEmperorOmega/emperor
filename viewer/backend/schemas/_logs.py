@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import Field
 
-from viewer.backend.schemas._base import ApiResponseModel
+from viewer.backend.schemas._base import ApiResponseModel, JsonObject
 from viewer.backend.schemas._monitor_data import ScalarPointResponse
 
 
@@ -25,7 +23,7 @@ class LogRunResponse(ApiResponseModel):
     eventFileCount: int
     checkpointCount: int
     hasHparams: bool
-    metrics: dict[str, Any]
+    metrics: JsonObject
 
 
 class LogRunsResponse(ApiResponseModel):

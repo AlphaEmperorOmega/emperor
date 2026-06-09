@@ -8,6 +8,14 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from viewer.backend.repositories.log_runs import LogRunRepository
 from viewer.backend.repositories.training_jobs import TrainingJobRepository
+from viewer.backend.training_contracts import (
+    ActiveTrainingJob,
+    CreateTrainingJobCommand,
+    CreateTrainingRunPlanCommand,
+    TrainingJobView,
+    TrainingRunPlanView,
+    TrainingSearch,
+)
 
 
 class RecordingDelegate:
@@ -261,45 +269,135 @@ class LogRunRepositoryTests(unittest.TestCase):
 
 
 class TrainingJobRepositoryTests(unittest.TestCase):
-    def assert_delegates(
+    def assert_training_delegates(
         self,
         method_name: str,
         invoke: Callable[[TrainingJobRepository], object],
+        return_value: object,
         expected_args: tuple[object, ...] = (),
         expected_kwargs: dict[str, object] | None = None,
+        expected_result_type: type | None = None,
     ) -> None:
-        return_value = object()
         manager = RecordingTrainingJobManager({method_name: return_value})
         repository = TrainingJobRepository(manager)  # type: ignore[arg-type]
 
         result = invoke(repository)
 
-        self.assertIs(result, return_value)
         self.assertEqual(
             manager.calls,
             [(method_name, expected_args, expected_kwargs or {})],
         )
+        if expected_result_type is None:
+            self.assertIs(result, return_value)
+        else:
+            self.assertIsInstance(result, expected_result_type)
 
     def test_public_methods_delegate_to_injected_training_job_manager(self) -> None:
+        search = TrainingSearch(mode="grid", values={"hidden_dim": [128]})
+        run_plan_payload = {
+            "model": "linears/linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": "128"},
+            "search": search.to_api_payload(),
+            "logFolder": "repository_test",
+            "isRandomSearch": False,
+            "runs": [
+                {
+                    "id": "run-1",
+                    "index": 1,
+                    "status": "Pending",
+                    "preset": "baseline",
+                    "dataset": "Mnist",
+                    "changes": [],
+                    "overrides": {},
+                    "command": "train",
+                    "totalEpochs": 1,
+                    "currentEpoch": 0,
+                    "metrics": {},
+                    "logDir": None,
+                    "error": None,
+                    "errorTraceback": None,
+                }
+            ],
+            "summary": {
+                "totalRuns": 1,
+                "pendingRuns": 1,
+                "totalEpochs": 1,
+                "remainingEpochs": 1,
+            },
+        }
+        run_plan = TrainingRunPlanView.from_payload(run_plan_payload)
+        job_payload = {
+            "id": "job-1",
+            "status": "running",
+            "model": "linears/linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": "128"},
+            "search": search.to_api_payload(),
+            "plannedRunCount": 1,
+            "runPlan": run_plan_payload,
+            "monitors": ["linear"],
+            "logFolder": "repository_test",
+            "createdAt": "2026-06-09T00:00:00+00:00",
+            "updatedAt": "2026-06-09T00:00:00+00:00",
+            "exitCode": None,
+            "pid": 123,
+            "currentPreset": None,
+            "currentDataset": None,
+            "epoch": None,
+            "step": None,
+            "metrics": {},
+            "logDir": None,
+            "events": [],
+            "logTail": [],
+            "resultLinks": [],
+        }
+        active_jobs_payload = [
+            {"id": "job-1", "status": "running", "logFolder": "repository_test"}
+        ]
+        create_job_command = CreateTrainingJobCommand(
+            model="linears/linear",
+            preset="baseline",
+            presets=["baseline"],
+            datasets=["Mnist"],
+            overrides={"hidden_dim": "128"},
+            log_folder="repository_test",
+            search=search,
+            monitors=["linear"],
+            run_plan=run_plan,
+        )
+        create_run_plan_command = CreateTrainingRunPlanCommand(
+            model="linears/linear",
+            preset="baseline",
+            presets=["baseline"],
+            datasets=["Mnist"],
+            overrides={"hidden_dim": "128"},
+            log_folder="repository_test",
+            search=search,
+        )
         create_job_kwargs = {
-            "model": object(),
-            "preset": object(),
-            "presets": object(),
-            "datasets": object(),
-            "overrides": object(),
-            "log_folder": object(),
-            "monitors": object(),
-            "search": object(),
-            "run_plan": object(),
+            "model": "linears/linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": "128"},
+            "log_folder": "repository_test",
+            "monitors": ["linear"],
+            "search": search.to_api_payload(),
+            "run_plan": run_plan.to_api_payload(),
         }
         create_run_plan_kwargs = {
-            "model": object(),
-            "preset": object(),
-            "presets": object(),
-            "datasets": object(),
-            "overrides": object(),
-            "log_folder": object(),
-            "search": object(),
+            "model": "linears/linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": "128"},
+            "log_folder": "repository_test",
+            "search": search.to_api_payload(),
         }
         job_id = object()
         monitor_job_id = object()
@@ -316,28 +414,36 @@ class TrainingJobRepositoryTests(unittest.TestCase):
                 Callable[[TrainingJobRepository], object],
                 tuple[object, ...],
                 dict[str, object],
+                object,
+                type | None,
             ],
             ...,
         ] = (
             (
                 "create_job",
-                lambda repository: repository.create_job(**create_job_kwargs),  # type: ignore[arg-type]
+                lambda repository: repository.create_job(create_job_command),
                 (),
                 create_job_kwargs,
+                job_payload,
+                TrainingJobView,
             ),
             (
                 "create_run_plan",
-                lambda repository: repository.create_run_plan(  # type: ignore[arg-type]
-                    **create_run_plan_kwargs
+                lambda repository: repository.create_run_plan(
+                    create_run_plan_command
                 ),
                 (),
                 create_run_plan_kwargs,
+                run_plan_payload,
+                TrainingRunPlanView,
             ),
             (
                 "get_job",
                 lambda repository: repository.get_job(job_id),  # type: ignore[arg-type]
                 (job_id,),
                 {},
+                job_payload,
+                TrainingJobView,
             ),
             (
                 "get_monitor_data",
@@ -347,6 +453,8 @@ class TrainingJobRepositoryTests(unittest.TestCase):
                 ),
                 (monitor_job_id,),
                 monitor_kwargs,
+                object(),
+                None,
             ),
             (
                 "get_parameter_status",
@@ -360,24 +468,71 @@ class TrainingJobRepositoryTests(unittest.TestCase):
                     "dataset": monitor_kwargs["dataset"],
                     "preset": monitor_kwargs["preset"],
                 },
+                object(),
+                None,
             ),
             (
                 "cancel_job",
                 lambda repository: repository.cancel_job(cancel_job_id),  # type: ignore[arg-type]
                 (cancel_job_id,),
                 {},
+                job_payload,
+                TrainingJobView,
             ),
-            ("active_jobs", lambda repository: repository.active_jobs(), (), {}),
+            (
+                "active_jobs",
+                lambda repository: repository.active_jobs(),
+                (),
+                {},
+                active_jobs_payload,
+                list,
+            ),
         )
 
-        for method_name, invoke, expected_args, expected_kwargs in cases:
+        for (
+            method_name,
+            invoke,
+            expected_args,
+            expected_kwargs,
+            return_value,
+            expected_result_type,
+        ) in cases:
             with self.subTest(method=method_name):
-                self.assert_delegates(
+                self.assert_training_delegates(
                     method_name,
                     invoke,
+                    return_value,
                     expected_args,
                     expected_kwargs,
+                    expected_result_type,
                 )
+
+    def test_active_jobs_are_typed_views(self) -> None:
+        manager = RecordingTrainingJobManager(
+            {
+                "active_jobs": [
+                    {
+                        "id": "job-1",
+                        "status": "running",
+                        "logFolder": "repository_test",
+                    }
+                ]
+            }
+        )
+        repository = TrainingJobRepository(manager)  # type: ignore[arg-type]
+
+        result = repository.active_jobs()
+
+        self.assertEqual(
+            result,
+            [
+                ActiveTrainingJob(
+                    id="job-1",
+                    status="running",
+                    log_folder="repository_test",
+                )
+            ],
+        )
 
 
 if __name__ == "__main__":

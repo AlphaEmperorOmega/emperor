@@ -9,11 +9,13 @@ from pathlib import Path
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from fastapi.routing import APIRoute
+from pydantic import ValidationError
 
 from viewer.backend.api import ViewerApiSettings, create_app
 from viewer.backend.schemas import (
     MonitorDataResponse,
     ParameterStatusResponse,
+    SubmittedTrainingRunPlanRequest,
     TrainingJobCreateRequest,
     TrainingJobResponse,
     TrainingRunPlanCreateRequest,
@@ -21,7 +23,6 @@ from viewer.backend.schemas import (
 )
 from viewer.backend.tests.helpers import FakeProcess, FakeRunner
 from viewer.backend.training_jobs import TrainingJobManager
-
 
 EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
     "id",
@@ -150,6 +151,263 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     tuple(param.type_ for param in route.dependant.body_params),
                     body_models,
                 )
+
+    def test_training_create_request_overrides_are_config_values(self) -> None:
+        base_payload = {
+            "model": "linears/linear",
+            "preset": "baseline",
+            "datasets": ["Mnist"],
+            "logFolder": "api_schema",
+        }
+        overrides = {
+            "hidden_dim": 128,
+            "learning_rate": 0.01,
+            "use_bias": True,
+            "activation": "RELU",
+            "optional_layer": None,
+        }
+
+        job_request = TrainingJobCreateRequest.model_validate(
+            {
+                **base_payload,
+                "overrides": overrides,
+                "monitors": [],
+            }
+        )
+        run_plan_request = TrainingRunPlanCreateRequest.model_validate(
+            {
+                **base_payload,
+                "overrides": overrides,
+            }
+        )
+
+        self.assertEqual(job_request.overrides, overrides)
+        self.assertEqual(run_plan_request.overrides, overrides)
+        for schema in (TrainingJobCreateRequest, TrainingRunPlanCreateRequest):
+            with self.subTest(schema=schema.__name__):
+                with self.assertRaises(ValidationError):
+                    schema.model_validate(
+                        {
+                            **base_payload,
+                            "overrides": {"scheduler": {"name": "cosine"}},
+                            **(
+                                {"monitors": []}
+                                if schema is TrainingJobCreateRequest
+                                else {}
+                            ),
+                        }
+                    )
+
+    def test_submitted_run_plan_overrides_are_config_values(self) -> None:
+        base_payload = {
+            "model": "linears/linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": 128, "use_bias": True},
+            "search": None,
+            "logFolder": "api_schema",
+            "isRandomSearch": False,
+            "runs": [],
+            "summary": {
+                "totalRuns": 0,
+                "completedRuns": 0,
+                "runningRuns": 0,
+                "pendingRuns": 0,
+                "failedRuns": 0,
+                "cancelledRuns": 0,
+                "skippedRuns": 0,
+                "totalEpochs": 0,
+                "completedEpochs": 0,
+                "remainingEpochs": 0,
+            },
+        }
+
+        request = SubmittedTrainingRunPlanRequest.model_validate(base_payload)
+
+        self.assertEqual(request.overrides, {"hidden_dim": 128, "use_bias": True})
+        with self.assertRaises(ValidationError):
+            SubmittedTrainingRunPlanRequest.model_validate(
+                {
+                    **base_payload,
+                    "overrides": {"scheduler": {"name": "cosine"}},
+                }
+            )
+
+    def test_training_run_plan_rejects_nested_override_object_at_api_boundary(
+        self,
+    ) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, _manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.post(
+                        "/training/run-plan",
+                        json={
+                            "model": "linears/linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {"scheduler": {"name": "cosine"}},
+                            "logFolder": "api_schema",
+                        },
+                    )
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("overrides", response.text)
+
+    def test_training_responses_reject_nested_override_objects(self) -> None:
+        summary = {
+            "totalRuns": 0,
+            "completedRuns": 0,
+            "runningRuns": 0,
+            "pendingRuns": 0,
+            "failedRuns": 0,
+            "cancelledRuns": 0,
+            "skippedRuns": 0,
+            "totalEpochs": 0,
+            "completedEpochs": 0,
+            "remainingEpochs": 0,
+        }
+        run_plan_payload = {
+            "model": "linears/linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": 128},
+            "search": None,
+            "logFolder": "api_schema",
+            "isRandomSearch": False,
+            "runs": [],
+            "summary": summary,
+        }
+        job_payload = {
+            "id": "job-1",
+            "status": "running",
+            "model": "linears/linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {"hidden_dim": 128},
+            "search": None,
+            "plannedRunCount": 0,
+            "runPlan": run_plan_payload,
+            "monitors": [],
+            "logFolder": "api_schema",
+            "createdAt": "2026-06-09T00:00:00Z",
+            "updatedAt": "2026-06-09T00:00:00Z",
+            "exitCode": None,
+            "pid": 123,
+            "currentPreset": None,
+            "currentDataset": None,
+            "epoch": None,
+            "step": None,
+            "metrics": {},
+            "logDir": None,
+            "events": [],
+            "logTail": [],
+            "resultLinks": [],
+        }
+
+        self.assertEqual(
+            TrainingRunPlanResponse.model_validate(run_plan_payload).overrides,
+            {"hidden_dim": 128},
+        )
+        self.assertEqual(
+            TrainingJobResponse.model_validate(job_payload).overrides,
+            {"hidden_dim": 128},
+        )
+        with self.assertRaises(ValidationError):
+            TrainingRunPlanResponse.model_validate(
+                {
+                    **run_plan_payload,
+                    "overrides": {"scheduler": {"name": "cosine"}},
+                }
+            )
+        with self.assertRaises(ValidationError):
+            TrainingJobResponse.model_validate(
+                {
+                    **job_payload,
+                    "overrides": {"scheduler": {"name": "cosine"}},
+                }
+            )
+
+    def test_training_job_response_events_are_typed_progress_events(self) -> None:
+        payload = {
+            "id": "job-1",
+            "status": "running",
+            "model": "linears/linear",
+            "preset": "baseline",
+            "presets": ["baseline"],
+            "datasets": ["Mnist"],
+            "overrides": {},
+            "search": None,
+            "plannedRunCount": 0,
+            "runPlan": None,
+            "monitors": [],
+            "logFolder": "api_schema",
+            "createdAt": "2026-06-09T00:00:00Z",
+            "updatedAt": "2026-06-09T00:00:00Z",
+            "exitCode": None,
+            "pid": 123,
+            "currentPreset": None,
+            "currentDataset": None,
+            "epoch": None,
+            "step": None,
+            "metrics": {},
+            "logDir": None,
+            "events": [
+                {
+                    "type": "validation",
+                    "status": "running",
+                    "jobId": "job-1",
+                    "dataset": "Mnist",
+                    "preset": "baseline",
+                    "runId": "run-1",
+                    "runIndex": 1,
+                    "epoch": 0,
+                    "step": 7,
+                    "metrics": {"validation/accuracy": 0.75},
+                },
+                {
+                    "type": "cluster_initialized",
+                    "node": "main.cluster",
+                    "count": 2,
+                    "capacity": [2, 2, 2],
+                    "coordinates": [[0, 0, 0], [0, 0, 1]],
+                },
+                {
+                    "type": "future_event",
+                    "customField": {"still": "allowed"},
+                },
+            ],
+            "logTail": [],
+            "resultLinks": [],
+        }
+
+        response = TrainingJobResponse.model_validate(payload)
+
+        self.assertEqual(response.events[0].type, "validation")
+        self.assertEqual(response.events[0].metrics, {"validation/accuracy": 0.75})
+        self.assertEqual(response.events[1].type, "cluster_initialized")
+        self.assertEqual(response.events[1].capacity, [2, 2, 2])
+        self.assertEqual(response.events[2].type, "future_event")
+        self.assertEqual(
+            response.events[2].model_extra,
+            {"customField": {"still": "allowed"}},
+        )
+        with self.assertRaises(ValidationError):
+            TrainingJobResponse.model_validate(
+                {**payload, "events": [{"status": "running"}]}
+            )
 
     def test_training_create_and_run_plan_responses_preserve_public_shape(self) -> None:
         import httpx

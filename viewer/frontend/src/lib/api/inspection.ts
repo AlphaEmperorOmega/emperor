@@ -1,13 +1,18 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
+import {
+  jsonObjectSchema,
+  jsonValueSchema,
+  type ConfigOverrides,
+} from "@/lib/api/schemas";
 
 export const graphConfigSchema = z.object({
   typeName: z.string(),
   fields: z.array(
     z.object({
       key: z.string(),
-      value: z.unknown(),
+      value: jsonValueSchema,
     }),
   ),
 });
@@ -19,7 +24,7 @@ export const graphNodeSchema = z.object({
   path: z.string(),
   graphRole: z.enum(["architecture", "internal", "runtime"]),
   parameterCount: z.number(),
-  details: z.record(z.unknown()),
+  details: jsonObjectSchema,
   config: graphConfigSchema.nullable(),
 });
 
@@ -45,7 +50,7 @@ export type InspectResponse = z.infer<typeof inspectResponseSchema>;
 export function inspectModel(input: {
   model: string;
   preset: string;
-  overrides: Record<string, string>;
+  overrides: ConfigOverrides;
   dataset?: string;
 }) {
   return requestJson("/inspect", inspectResponseSchema, {
