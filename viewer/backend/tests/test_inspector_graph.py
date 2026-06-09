@@ -7,11 +7,10 @@ from typing import Any, TypeAlias
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from torch import nn
-
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
+from emperor.base.layer import LayerStack
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.base.options import (
     ActivationOptions,
@@ -19,6 +18,8 @@ from emperor.base.options import (
     LayerNormPositionOptions,
 )
 from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
+from torch import nn
+
 from viewer.backend.inspector.discovery import discover_models, list_model_presets
 from viewer.backend.inspector.graph import serialize_graph
 from viewer.backend.inspector.service import inspect_model
@@ -113,8 +114,9 @@ class InspectorGraphTests(unittest.TestCase):
         result = inspect_model("linears/linear", "baseline")
         node_ids = {node["id"] for node in result["nodes"]}
         edge_ids = {edge["id"] for edge in result["edges"]}
-        self.assertIn("main_model.0.model", node_ids)
-        self.assertIn("main_model-main_model.0", edge_ids)
+        self.assertIn("main_model.layers.0.model", node_ids)
+        self.assertIn("main_model-main_model.layers", edge_ids)
+        self.assertIn("main_model.layers-main_model.layers.0", edge_ids)
 
     def test_graph_serializer_marks_internal_modules(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.Dropout(), nn.LayerNorm(4)))
@@ -138,8 +140,9 @@ class InspectorGraphTests(unittest.TestCase):
 
         self.assertEqual(role_by_id["__root__"], "architecture")
         self.assertEqual(role_by_id["main_model"], "architecture")
-        self.assertEqual(role_by_id["main_model.0"], "architecture")
-        self.assertEqual(role_by_id["main_model.0.model"], "architecture")
+        self.assertEqual(role_by_id["main_model.layers"], "architecture")
+        self.assertEqual(role_by_id["main_model.layers.0"], "architecture")
+        self.assertEqual(role_by_id["main_model.layers.0.model"], "architecture")
 
     def test_graph_serializer_reports_parameter_counts(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.Linear(4, 3), nn.ReLU()))
@@ -256,7 +259,7 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertIsNone(config_fields(root)["halting_config"])
         self.assertIsNone(config_fields(root)["memory_config"])
 
-    def test_graph_serializer_preserves_layer_stack_config_on_sequential(self) -> None:
+    def test_graph_serializer_preserves_layer_stack_config_on_layer_stack(self) -> None:
         stack_config = LayerStackConfig(
             input_dim=4,
             hidden_dim=5,
@@ -287,7 +290,7 @@ class InspectorGraphTests(unittest.TestCase):
         nodes, _edges = serialize_graph(model)
         root = nodes[0]
 
-        self.assertIsInstance(model, nn.Sequential)
+        self.assertIsInstance(model, LayerStack)
         self.assertEqual(root["config"]["typeName"], "LayerStackConfig")
         self.assertEqual(config_fields(root)["input_dim"], 4)
         self.assertEqual(config_fields(root)["hidden_dim"], 5)

@@ -13,7 +13,7 @@ class InspectorServiceTests(unittest.TestCase):
     def test_override_parsing_changes_linear_hidden_dim_graph_details(self) -> None:
         result = inspect_model("linears/linear", "baseline", {"hidden_dim": "128"})
         node_by_id = {node["id"]: node for node in result["nodes"]}
-        main_layer_details = node_by_id["main_model.0"]["details"]
+        main_layer_details = node_by_id["main_model.layers.0"]["details"]
         output_layer_details = node_by_id["output_model"]["details"]
 
         self.assertEqual(main_layer_details["dims"], "128 -> 128")
@@ -57,19 +57,21 @@ class InspectorServiceTests(unittest.TestCase):
         result = inspect_model("linears/linear", "baseline")
         node_by_id = {node["id"]: node for node in result["nodes"]}
 
-        self.assertNotIn("weightShape", node_by_id["main_model.0"]["details"])
-        self.assertNotIn("biasShape", node_by_id["main_model.0"]["details"])
+        self.assertNotIn("weightShape", node_by_id["main_model.layers.0"]["details"])
+        self.assertNotIn("biasShape", node_by_id["main_model.layers.0"]["details"])
         self.assertEqual(
-            node_by_id["main_model.0.model"]["details"]["weightShape"],
+            node_by_id["main_model.layers.0.model"]["details"]["weightShape"],
             "256 x 256",
         )
         self.assertEqual(
-            node_by_id["main_model.0.model"]["details"]["biasShape"],
+            node_by_id["main_model.layers.0.model"]["details"]["biasShape"],
             "256",
         )
 
     def test_config_override_aliases_match_builder_parameter_names(self) -> None:
-        result = inspect_model("linears/linear_adaptive", "baseline", {"gate_flag": "true"})
+        result = inspect_model(
+            "linears/linear_adaptive", "baseline", {"gate_flag": "true"}
+        )
         self.assertTrue(
             any(node["details"].get("gate") is True for node in result["nodes"])
         )
