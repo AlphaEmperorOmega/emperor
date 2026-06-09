@@ -2,12 +2,15 @@
   "name": "emperor-viewer-frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "^18.18.0 || ^19.8.0 || >=20.0.0"
+  },
   "scripts": {
     "dev": "next dev -p ${PORT:-9000}",
     "build": "next build",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "VITE_CJS_IGNORE_WARNING=true vitest run"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.0",
