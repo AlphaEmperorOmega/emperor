@@ -34,7 +34,7 @@ REQUEST_BODY_ENDPOINT_CASES = (
     (
         "/inspect",
         {
-            "model": "linear",
+            "model": "linears/linear",
             "preset": "baseline",
             "overrides": {},
         },
@@ -73,9 +73,15 @@ REQUEST_BODY_ENDPOINT_CASES = (
         },
     ),
     (
+        "/logs/parameter-status",
+        {
+            "runIds": [],
+        },
+    ),
+    (
         "/training/jobs",
         {
-            "model": "linear",
+            "model": "linears/linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -87,7 +93,7 @@ REQUEST_BODY_ENDPOINT_CASES = (
     (
         "/training/run-plan",
         {
-            "model": "linear",
+            "model": "linears/linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],

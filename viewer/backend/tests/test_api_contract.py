@@ -30,16 +30,18 @@ EXPECTED_BUSINESS_ROUTES = [
     (("GET",), "/logs/runs"),
     (("GET",), "/logs/runs/{run_id}/monitor-data"),
     (("GET",), "/models"),
-    (("GET",), "/models/{model}/config-schema"),
-    (("GET",), "/models/{model}/datasets"),
-    (("GET",), "/models/{model}/monitors"),
-    (("GET",), "/models/{model}/presets"),
-    (("GET",), "/models/{model}/search-space"),
+    (("GET",), "/models/{model:path}/config-schema"),
+    (("GET",), "/models/{model:path}/datasets"),
+    (("GET",), "/models/{model:path}/monitors"),
+    (("GET",), "/models/{model:path}/presets"),
+    (("GET",), "/models/{model:path}/search-space"),
     (("GET",), "/training/jobs/{job_id}"),
     (("GET",), "/training/jobs/{job_id}/monitor-data"),
+    (("GET",), "/training/jobs/{job_id}/monitor-parameter-status"),
     (("PATCH",), "/config-snapshots/{snapshot_id}"),
     (("POST",), "/config-snapshots"),
     (("POST",), "/inspect"),
+    (("POST",), "/logs/parameter-status"),
     (("POST",), "/logs/runs/delete"),
     (("POST",), "/logs/runs/delete-plan"),
     (("POST",), "/logs/scalars"),
@@ -116,31 +118,31 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         frontend_api_function="fetchModels",
         frontend_response_schema="modelsSchema",
     ),
-    (("GET",), "/models/{model}/config-schema"): EndpointSchemaMapping(
+    (("GET",), "/models/{model:path}/config-schema"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.ConfigSchemaResponse,
         frontend_api_function="fetchConfigSchema",
         frontend_response_schema="configSchema",
     ),
-    (("GET",), "/models/{model}/datasets"): EndpointSchemaMapping(
+    (("GET",), "/models/{model:path}/datasets"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.DatasetsResponse,
         frontend_api_function="fetchDatasets",
         frontend_response_schema="datasetsSchema",
     ),
-    (("GET",), "/models/{model}/monitors"): EndpointSchemaMapping(
+    (("GET",), "/models/{model:path}/monitors"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.MonitorsResponse,
         frontend_api_function="fetchMonitors",
         frontend_response_schema="monitorsSchema",
     ),
-    (("GET",), "/models/{model}/presets"): EndpointSchemaMapping(
+    (("GET",), "/models/{model:path}/presets"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.PresetsResponse,
         frontend_api_function="fetchPresets",
         frontend_response_schema="presetsSchema",
     ),
-    (("GET",), "/models/{model}/search-space"): EndpointSchemaMapping(
+    (("GET",), "/models/{model:path}/search-space"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.SearchSpaceResponse,
         frontend_api_function="fetchSearchSpace",
@@ -157,6 +159,12 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         backend_response_schema=schemas.MonitorDataResponse,
         frontend_api_function="fetchMonitorData",
         frontend_response_schema="monitorDataSchema",
+    ),
+    (("GET",), "/training/jobs/{job_id}/monitor-parameter-status"): EndpointSchemaMapping(
+        backend_body_request_schemas=(),
+        backend_response_schema=schemas.ParameterStatusResponse,
+        frontend_api_function="fetchMonitorParameterStatus",
+        frontend_response_schema="parameterStatusSchema",
     ),
     (("POST",), "/inspect"): EndpointSchemaMapping(
         backend_body_request_schemas=(schemas.InspectRequest,),
@@ -175,6 +183,12 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         backend_response_schema=schemas.LogRunDeletePlanResponse,
         frontend_api_function="createLogRunDeletePlan",
         frontend_response_schema="logRunDeletePlanSchema",
+    ),
+    (("POST",), "/logs/parameter-status"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.LogParameterStatusRequest,),
+        backend_response_schema=schemas.LogParameterStatusResponse,
+        frontend_api_function="fetchLogParameterStatus",
+        frontend_response_schema="logParameterStatusSchema",
     ),
     (("POST",), "/logs/scalars"): EndpointSchemaMapping(
         backend_body_request_schemas=(schemas.LogScalarsRequest,),
@@ -446,6 +460,19 @@ MONITOR_DATA_REQUIRED_FIELDS = (
     "histograms",
     "images",
 )
+PARAMETER_CHANNEL_STATUS_FIELDS = (
+    "status",
+    "metric",
+    "lastStep",
+    "observedPoints",
+)
+PARAMETER_CHANNEL_STATUS_REQUIRED_FIELDS = (
+    "status",
+    "observedPoints",
+)
+PARAMETER_NODE_STATUS_FIELDS = ("nodePath", "weights", "bias")
+PARAMETER_STATUS_FIELDS = ("sourceId", "preset", "dataset", "logDir", "nodes")
+PARAMETER_STATUS_REQUIRED_FIELDS = ("sourceId", "nodes")
 LOG_RUN_FIELDS = (
     "id",
     "group",
@@ -801,6 +828,24 @@ SCHEMA_PARITY_CASES = (
         MONITOR_DATA_REQUIRED_FIELDS,
     ),
     SchemaParityCase(
+        schemas.ParameterChannelStatusResponse,
+        "parameterChannelStatusSchema",
+        PARAMETER_CHANNEL_STATUS_FIELDS,
+        PARAMETER_CHANNEL_STATUS_REQUIRED_FIELDS,
+    ),
+    SchemaParityCase(
+        schemas.ParameterNodeStatusResponse,
+        "parameterStatusSchema.nodes[]",
+        PARAMETER_NODE_STATUS_FIELDS,
+        PARAMETER_NODE_STATUS_FIELDS,
+    ),
+    SchemaParityCase(
+        schemas.ParameterStatusResponse,
+        "parameterStatusSchema",
+        PARAMETER_STATUS_FIELDS,
+        PARAMETER_STATUS_REQUIRED_FIELDS,
+    ),
+    SchemaParityCase(
         schemas.LogRunResponse,
         "logRunSchema",
         LOG_RUN_FIELDS,
@@ -898,6 +943,18 @@ SCHEMA_PARITY_CASES = (
         ("runIds", "tags"),
     ),
     SchemaParityCase(
+        schemas.LogParameterStatusRequest,
+        "fetchLogParameterStatus input",
+        ("runIds",),
+        ("runIds",),
+    ),
+    SchemaParityCase(
+        schemas.LogParameterStatusResponse,
+        "logParameterStatusSchema",
+        ("runs",),
+        ("runs",),
+    ),
+    SchemaParityCase(
         schemas.LogScalarSeriesResponse,
         "logScalarSeriesSchema",
         ("runId", "tag", "points"),
@@ -979,6 +1036,9 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.HistogramResponse,
         schemas.ImageResponse,
         schemas.MonitorDataResponse,
+        schemas.ParameterChannelStatusResponse,
+        schemas.ParameterNodeStatusResponse,
+        schemas.ParameterStatusResponse,
     ),
     "logs": (
         schemas.LogRunResponse,
@@ -999,6 +1059,8 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.LogScalarsRequest,
         schemas.LogScalarSeriesResponse,
         schemas.LogScalarsResponse,
+        schemas.LogParameterStatusRequest,
+        schemas.LogParameterStatusResponse,
     ),
 }
 
@@ -1328,16 +1390,16 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 transport=transport,
                 base_url="http://testserver",
             ) as client:
-                return await client.get("/models/linear/datasets")
+                return await client.get("/models/linears/linear/datasets")
 
         response = asyncio.run(call_api())
 
-        self.assertEqual(response.request.url.path, "/models/linear/datasets")
+        self.assertEqual(response.request.url.path, "/models/linears/linear/datasets")
         self.assertEqual(response.status_code, 200)
 
         payload = response.json()
         self.assertEqual(tuple(payload), ("model", "datasets"))
-        self.assertEqual(payload["model"], "linear")
+        self.assertEqual(payload["model"], "linears/linear")
         self.assertTrue(payload["datasets"])
 
         for dataset in payload["datasets"]:
@@ -1372,14 +1434,14 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 base_url="http://testserver",
             ) as client:
                 health = await client.get("/health")
-                monitors = await client.get("/models/linear/monitors")
+                monitors = await client.get("/models/linears/linear/monitors")
                 search_space = await client.get(
-                    "/models/linear/search-space?preset=baseline"
+                    "/models/linears/linear/search-space?preset=baseline"
                 )
                 inspect_response = await client.post(
                     "/inspect",
                     json={
-                        "model": "linear",
+                        "model": "linears/linear",
                         "preset": "baseline",
                         "dataset": "Mnist",
                         "overrides": {"hidden_dim": "128"},
@@ -1400,7 +1462,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["model"], "linear")
+        self.assertEqual(payload["model"], "linears/linear")
         self.assertTrue(payload["nodes"])
         self.assertTrue(payload["edges"])
         self.assertIn("parameterCount", payload)
@@ -1419,7 +1481,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 return await client.post(
                     "/inspect",
                     json={
-                        "model": "linear",
+                        "model": "linears/linear",
                         "preset": "baseline",
                         "dataset": "./Mnist",
                         "overrides": {},
@@ -1473,7 +1535,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 transport=transport,
                 base_url="http://testserver",
             ) as client:
-                return await client.get("/models/not_a_model/presets")
+                return await client.get("/models/unknown/model/presets")
 
         response = asyncio.run(call_api())
         self.assertEqual(response.status_code, 400)
