@@ -1,4 +1,4 @@
-"""Compatibility exports for Viewer backend settings.
+"""Stable compatibility exports for Viewer backend settings.
 
 The canonical settings interface lives in :mod:`viewer.backend.core.config`.
 """
@@ -10,6 +10,9 @@ from viewer.backend.core.config import (
     ViewerApiSettings,
     get_viewer_api_settings,
 )
+
+COMPATIBILITY_STATUS = "stable"
+REPLACEMENT_IMPORT = "viewer.backend.core.config"
 
 __all__ = [
     "LOCAL_FRONTEND_ORIGINS",

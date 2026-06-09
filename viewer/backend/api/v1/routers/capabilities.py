@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 
 from viewer.backend.core.config import ViewerApiSettings
 from viewer.backend.core.security import require_bearer_auth
+from viewer.backend.dependencies import get_viewer_settings
 from viewer.backend.schemas import CapabilitiesResponse
 
 router = APIRouter(
@@ -22,6 +23,7 @@ router = APIRouter(
     summary="Get API capabilities",
     response_description="Viewer API feature availability.",
 )
-async def capabilities(request: Request) -> CapabilitiesResponse:
-    settings = cast(ViewerApiSettings, request.app.state.settings)
+async def capabilities(
+    settings: Annotated[ViewerApiSettings, Depends(get_viewer_settings)],
+) -> CapabilitiesResponse:
     return CapabilitiesResponse(authMode=settings.auth_mode)

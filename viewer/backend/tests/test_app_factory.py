@@ -17,7 +17,6 @@ from viewer.backend.core.errors import ApiError
 from viewer.backend.exceptions import api_error_handler
 from viewer.backend.inspector.errors import InspectorError
 
-
 EXPECTED_ROOT_ROUTE_PAIRS = {
     ("GET", "/health"),
     ("GET", "/models"),
@@ -77,13 +76,19 @@ class AppFactoryTests(unittest.TestCase):
 
     def test_create_app_uses_controlled_settings_and_root_business_routes(self) -> None:
         from viewer.backend.api import ViewerApiSettings, create_app
+        from viewer.backend.api.v1.router import (
+            INTERNAL_API_VERSION_NAMESPACE,
+            PUBLIC_API_PREFIX,
+        )
+        from viewer.backend.dependencies import ViewerServices
 
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             settings = ViewerApiSettings(logs_root=str(logs_root))
             test_app = create_app(settings)
 
-            self.assertIs(test_app.state.settings, settings)
+            self.assertIsInstance(test_app.state.viewer_services, ViewerServices)
+            self.assertIs(test_app.state.viewer_services.settings, settings)
             routes = business_route_pairs(test_app)
 
         missing_routes = sorted(EXPECTED_ROOT_ROUTE_PAIRS - routes)
@@ -95,6 +100,18 @@ class AppFactoryTests(unittest.TestCase):
 
         self.assertEqual(missing_routes, [])
         self.assertEqual(unexpected_v1_routes, [])
+        self.assertEqual(INTERNAL_API_VERSION_NAMESPACE, "v1")
+        self.assertEqual(PUBLIC_API_PREFIX, "")
+
+    def test_route_modules_do_not_read_app_state_directly(self) -> None:
+        route_root = Path("viewer/backend/api/v1/routers")
+
+        for path in sorted(route_root.glob("*.py")):
+            if path.name == "__init__.py":
+                continue
+            with self.subTest(path=str(path)):
+                source = path.read_text(encoding="utf-8")
+                self.assertNotIn(".app.state", source)
 
     def test_create_app_registers_api_error_handler(self) -> None:
         from viewer.backend.api import ViewerApiSettings, create_app

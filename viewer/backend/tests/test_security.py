@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import os
-from pathlib import Path
 import tempfile
-from types import SimpleNamespace
 import unittest
+from pathlib import Path
 
 from fastapi import HTTPException
-from starlette.datastructures import Headers
+from fastapi.security import HTTPAuthorizationCredentials
 
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.settings import ViewerApiSettings
@@ -66,53 +65,40 @@ PROTECTED_ROUTE_CASES = (
 )
 
 
-def request_with_settings(
-    settings: ViewerApiSettings,
-    authorization: str | None = None,
-) -> SimpleNamespace:
-    headers = Headers(
-        {} if authorization is None else {"Authorization": authorization}
-    )
-    return SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(settings=settings)),
-        headers=headers,
-    )
+def bearer_credentials(token: str) -> HTTPAuthorizationCredentials:
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
 class SecurityDependencyTests(unittest.TestCase):
     def test_auth_mode_none_bypasses_missing_authorization_header(self) -> None:
-        request = request_with_settings(ViewerApiSettings(auth_mode="none"))
-
-        asyncio.run(require_bearer_auth(request))
+        asyncio.run(require_bearer_auth(ViewerApiSettings(auth_mode="none"), None))
 
     def test_bearer_mode_rejects_missing_malformed_and_invalid_tokens(self) -> None:
         settings = ViewerApiSettings(auth_mode="bearer", token="server-secret")
 
         cases = (
             None,
-            "",
-            "Bearer",
-            "Bearer ",
-            "Bearer server-secret extra",
-            "Token server-secret",
-            "Bearer wrong-token",
+            HTTPAuthorizationCredentials(scheme="Token", credentials="server-secret"),
+            HTTPAuthorizationCredentials(scheme="Bearer", credentials=""),
+            bearer_credentials("wrong-token"),
         )
 
-        for authorization in cases:
-            with self.subTest(authorization=authorization):
-                request = request_with_settings(settings, authorization)
-
+        for credentials in cases:
+            with self.subTest(credentials=credentials):
                 with self.assertRaises(HTTPException) as raised:
-                    asyncio.run(require_bearer_auth(request))
+                    asyncio.run(require_bearer_auth(settings, credentials))
 
                 self.assertEqual(raised.exception.status_code, 401)
+                self.assertEqual(
+                    raised.exception.headers,
+                    {"WWW-Authenticate": "Bearer"},
+                )
                 self.assertNotIn("wrong-token", str(raised.exception.detail))
 
     def test_bearer_mode_accepts_configured_token(self) -> None:
         settings = ViewerApiSettings(auth_mode="bearer", token="server-secret")
-        request = request_with_settings(settings, "Bearer server-secret")
 
-        asyncio.run(require_bearer_auth(request))
+        asyncio.run(require_bearer_auth(settings, bearer_credentials("server-secret")))
 
 
 class RouteAuthIntegrationTests(unittest.TestCase):
@@ -149,6 +135,10 @@ class RouteAuthIntegrationTests(unittest.TestCase):
             get_model_catalog_service,
             get_training_job_service,
         )
+        from viewer.backend.training_contracts import (
+            TrainingJobView,
+            TrainingRunPlanView,
+        )
 
         class FakeModelCatalogService:
             def list_models(self) -> list[str]:
@@ -183,87 +173,83 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 }
 
         class FakeTrainingJobService:
-            def create_job(
-                self,
-                *,
-                model: str,
-                preset: str,
-                presets: list[str] | None,
-                datasets: list[str],
-                overrides: dict[str, object],
-                log_folder: str,
-                monitors: list[str],
-                search: dict[str, object] | None,
-                run_plan: dict[str, object] | None,
-            ) -> dict[str, object]:
-                return {
-                    "id": "job-1",
-                    "status": "running",
-                    "model": model,
-                    "preset": preset,
-                    "presets": presets or [preset],
-                    "datasets": datasets,
-                    "overrides": overrides,
-                    "search": search,
-                    "plannedRunCount": 0,
-                    "runPlan": run_plan,
-                    "monitors": monitors,
-                    "logFolder": log_folder,
-                    "createdAt": "2026-06-06T00:00:00Z",
-                    "updatedAt": "2026-06-06T00:00:00Z",
-                    "exitCode": None,
-                    "pid": 123,
-                    "currentPreset": None,
-                    "currentDataset": None,
-                    "epoch": None,
-                    "step": None,
-                    "metrics": {},
-                    "logDir": None,
-                    "events": [],
-                    "logTail": [],
-                    "resultLinks": [],
-                }
+            def create_job(self, command) -> TrainingJobView:
+                return TrainingJobView.from_payload(
+                    {
+                        "id": "job-1",
+                        "status": "running",
+                        "model": command.model,
+                        "preset": command.preset,
+                        "presets": command.presets or [command.preset],
+                        "datasets": command.datasets,
+                        "overrides": command.overrides,
+                        "search": (
+                            command.search.to_api_payload()
+                            if command.search is not None
+                            else None
+                        ),
+                        "plannedRunCount": 0,
+                        "runPlan": (
+                            command.run_plan.to_api_payload()
+                            if command.run_plan is not None
+                            else None
+                        ),
+                        "monitors": command.monitors,
+                        "logFolder": command.log_folder,
+                        "createdAt": "2026-06-06T00:00:00Z",
+                        "updatedAt": "2026-06-06T00:00:00Z",
+                        "exitCode": None,
+                        "pid": 123,
+                        "currentPreset": None,
+                        "currentDataset": None,
+                        "epoch": None,
+                        "step": None,
+                        "metrics": {},
+                        "logDir": None,
+                        "events": [],
+                        "logTail": [],
+                        "resultLinks": [],
+                    }
+                )
 
-            def create_run_plan(
-                self,
-                *,
-                model: str,
-                preset: str,
-                presets: list[str] | None,
-                datasets: list[str],
-                overrides: dict[str, object],
-                log_folder: str,
-                search: dict[str, object] | None,
-            ) -> dict[str, object]:
-                return {
-                    "model": model,
-                    "preset": preset,
-                    "presets": presets or [preset],
-                    "datasets": datasets,
-                    "overrides": overrides,
-                    "search": search,
-                    "logFolder": log_folder,
-                    "isRandomSearch": False,
-                    "runs": [
-                        {
-                            "id": "run-1",
-                            "index": 0,
-                            "status": "Pending",
-                            "preset": preset,
-                            "dataset": datasets[0] if datasets else "",
-                            "changes": [],
-                            "overrides": {},
-                            "command": "train",
+            def create_run_plan(self, command) -> TrainingRunPlanView:
+                return TrainingRunPlanView.from_payload(
+                    {
+                        "model": command.model,
+                        "preset": command.preset,
+                        "presets": command.presets or [command.preset],
+                        "datasets": command.datasets,
+                        "overrides": command.overrides,
+                        "search": (
+                            command.search.to_api_payload()
+                            if command.search is not None
+                            else None
+                        ),
+                        "logFolder": command.log_folder,
+                        "isRandomSearch": False,
+                        "runs": [
+                            {
+                                "id": "run-1",
+                                "index": 0,
+                                "status": "Pending",
+                                "preset": command.preset,
+                                "dataset": (
+                                    command.datasets[0] if command.datasets else ""
+                                ),
+                                "changes": [],
+                                "overrides": {},
+                                "command": "train",
+                                "totalEpochs": 1,
+                            }
+                        ],
+                        "summary": {
+                            "totalRuns": 1,
+                            "pendingRuns": 1,
                             "totalEpochs": 1,
-                        }
-                    ],
-                    "summary": {
-                        "totalRuns": 1,
-                        "pendingRuns": 1,
-                        "totalEpochs": 1,
-                        "remainingEpochs": 1,
-                    },
-                }
+                            "remainingEpochs": 1,
+                        },
+                    }
+                )
 
         class FakeLogRunService:
             def list_runs(self, *, limit: int, offset: int) -> dict[str, object]:
@@ -343,6 +329,10 @@ class RouteAuthIntegrationTests(unittest.TestCase):
 
                         self.assertEqual(response.status_code, 401, response.text)
                         self.assertEqual(
+                            response.headers["www-authenticate"],
+                            "Bearer",
+                        )
+                        self.assertEqual(
                             response.json(),
                             {"detail": "Missing or invalid bearer credentials"},
                         )
@@ -365,7 +355,24 @@ class RouteAuthIntegrationTests(unittest.TestCase):
 
                     self.assertEqual(response.status_code, 200, response.text)
 
-    def test_local_default_auth_mode_allows_non_health_routes_without_token(self) -> None:
+    def test_openapi_declares_bearer_scheme_for_protected_routes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+            openapi = app.openapi()
+
+        bearer_scheme = openapi["components"]["securitySchemes"]["HTTPBearer"]
+        self.assertEqual(bearer_scheme["type"], "http")
+        self.assertEqual(bearer_scheme["scheme"], "bearer")
+        self.assertNotIn("security", openapi["paths"]["/health"]["get"])
+
+        for route_name, method, path, _payload in PROTECTED_ROUTE_CASES:
+            with self.subTest(route=route_name):
+                operation = openapi["paths"][path.split("?")[0]][method.lower()]
+                self.assertIn({"HTTPBearer": []}, operation["security"])
+
+    def test_local_default_auth_mode_allows_non_health_routes_without_token(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             app = self.create_test_app(Path(tmp), auth_mode="none")
 

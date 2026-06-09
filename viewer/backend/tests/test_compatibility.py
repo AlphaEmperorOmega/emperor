@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import importlib
 import os
-from pathlib import Path
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 EXPECTED_SCHEMA_EXPORTS = [
     "ConfigValue",
+    "ConfigOverrides",
+    "JsonValue",
+    "JsonObject",
     "ApiResponseModel",
     "CapabilitiesResponse",
     "ConfigSnapshotResponse",
@@ -85,9 +88,25 @@ class ApiCompatibilityImportTests(unittest.TestCase):
         api = importlib.import_module("viewer.backend.api")
         main = importlib.import_module("viewer.backend.main")
 
+        self.assertEqual(api.COMPATIBILITY_STATUS, "stable")
+        self.assertEqual(api.REPLACEMENT_IMPORT, "viewer.backend.main")
         for name in ("app", "create_app", "ViewerApiSettings"):
             with self.subTest(name=name):
                 self.assertIs(getattr(api, name), getattr(main, name))
+
+    def test_settings_package_reexports_stable_settings_symbols(self) -> None:
+        settings = importlib.import_module("viewer.backend.settings")
+        config = importlib.import_module("viewer.backend.core.config")
+
+        self.assertEqual(settings.COMPATIBILITY_STATUS, "stable")
+        self.assertEqual(settings.REPLACEMENT_IMPORT, "viewer.backend.core.config")
+        for name in (
+            "LOCAL_FRONTEND_ORIGINS",
+            "ViewerApiSettings",
+            "get_viewer_api_settings",
+        ):
+            with self.subTest(name=name):
+                self.assertIs(getattr(settings, name), getattr(config, name))
 
     def test_legacy_route_shims_reexport_canonical_routers(self) -> None:
         route_modules = {
@@ -105,6 +124,12 @@ class ApiCompatibilityImportTests(unittest.TestCase):
                     f"viewer.backend.api.v1.routers.{canonical_name}"
                 )
 
+                self.assertEqual(legacy.COMPATIBILITY_STATUS, "deprecated")
+                self.assertEqual(
+                    legacy.REPLACEMENT_IMPORT,
+                    f"viewer.backend.api.v1.routers.{canonical_name}",
+                )
+                self.assertTrue(legacy.REMOVAL_CONDITION)
                 self.assertIs(legacy.router, canonical.router)
 
 
@@ -157,11 +182,7 @@ class ExtensionPointImportTests(unittest.TestCase):
 
     def test_database_session_extension_point_remains_noop(self) -> None:
         session = importlib.import_module("viewer.backend.db.session")
-        public_names = [
-            name
-            for name in vars(session)
-            if not name.startswith("_")
-        ]
+        public_names = [name for name in vars(session) if not name.startswith("_")]
         forbidden_database_names = {
             "Session",
             "SessionLocal",
@@ -213,10 +234,14 @@ class ModelPackageCompatibilityTests(unittest.TestCase):
     def test_bert_linear_and_vit_linear_no_deleted_transformer_utils_imports(
         self,
     ) -> None:
-        for module_name in ("models.transformer_encoder.bert_linear.presets", "models.transformer_encoder.vit_linear.presets"):
+        for module_name in (
+            "models.transformer_encoder.bert_linear.presets",
+            "models.transformer_encoder.vit_linear.presets",
+        ):
             with self.subTest(module=module_name):
                 module = importlib.import_module(module_name)
                 self.assertTrue(hasattr(module, "ExperimentPresets"))
+
 
 if __name__ == "__main__":
     unittest.main()

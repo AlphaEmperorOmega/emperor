@@ -6,10 +6,16 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from viewer.backend.api.v1.router import router as api_v1_router
+from viewer.backend.api.v1.router import (
+    PUBLIC_API_PREFIX,
+)
+from viewer.backend.api.v1.router import (
+    router as api_v1_router,
+)
 from viewer.backend.config_snapshots import FileSystemConfigSnapshotStore
 from viewer.backend.core.config import ViewerApiSettings, get_viewer_api_settings
 from viewer.backend.core.errors import ApiError
+from viewer.backend.dependencies import ViewerServices
 from viewer.backend.exceptions import api_error_handler
 from viewer.backend.log_runs import LogRunIndex
 from viewer.backend.middleware import configure_middleware
@@ -39,16 +45,18 @@ def create_app(
     configure_middleware(api, api_settings)
     api.add_exception_handler(ApiError, api_error_handler)
 
-    api.state.settings = api_settings
-    api.state.model_catalog_service = ModelCatalogService()
-    api.state.inspection_service = InspectionService()
-    api.state.log_run_service = LogRunService(LogRunRepository(log_runs))
-    api.state.training_job_service = TrainingJobService(TrainingJobRepository(jobs))
-    api.state.config_snapshot_service = ConfigSnapshotService(
-        ConfigSnapshotRepository(snapshot_store)
+    api.state.viewer_services = ViewerServices(
+        settings=api_settings,
+        model_catalog=ModelCatalogService(),
+        config_snapshots=ConfigSnapshotService(
+            ConfigSnapshotRepository(snapshot_store)
+        ),
+        inspection=InspectionService(),
+        log_runs=LogRunService(LogRunRepository(log_runs)),
+        training_jobs=TrainingJobService(TrainingJobRepository(jobs)),
     )
 
-    api.include_router(api_v1_router)
+    api.include_router(api_v1_router, prefix=PUBLIC_API_PREFIX)
     return api
 
 
