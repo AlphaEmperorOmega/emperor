@@ -13,7 +13,8 @@ import httpx
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from viewer.backend.exceptions import inspector_error_handler
+from viewer.backend.core.errors import ApiError
+from viewer.backend.exceptions import api_error_handler
 from viewer.backend.inspector.errors import InspectorError
 
 
@@ -95,7 +96,7 @@ class AppFactoryTests(unittest.TestCase):
         self.assertEqual(missing_routes, [])
         self.assertEqual(unexpected_v1_routes, [])
 
-    def test_create_app_registers_inspector_error_handler(self) -> None:
+    def test_create_app_registers_api_error_handler(self) -> None:
         from viewer.backend.api import ViewerApiSettings, create_app
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -104,9 +105,34 @@ class AppFactoryTests(unittest.TestCase):
             )
 
         self.assertIs(
-            test_app.exception_handlers.get(InspectorError),
-            inspector_error_handler,
+            test_app.exception_handlers.get(ApiError),
+            api_error_handler,
         )
+
+    def test_inspector_error_response_shape_is_preserved(self) -> None:
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            test_app = create_app(
+                ViewerApiSettings(logs_root=str(Path(tmp) / "logs"))
+            )
+
+            @test_app.get("/raises-inspector-error")
+            async def raises_inspector_error() -> None:
+                raise InspectorError("bad model input")
+
+            async def call_api() -> httpx.Response:
+                transport = httpx.ASGITransport(app=test_app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    return await client.get("/raises-inspector-error")
+
+            response = asyncio.run(call_api())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"detail": "bad model input"})
 
     def test_api_default_cors_settings_allow_local_dev_frontends(self) -> None:
         from viewer.backend.api import create_app
