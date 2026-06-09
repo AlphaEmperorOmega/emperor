@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
+from pydantic import Field
+
 from viewer.backend.schemas._base import ApiResponseModel
 
 
@@ -47,3 +51,35 @@ class MonitorDataResponse(ApiResponseModel):
     scalarSeries: list[ScalarSeriesResponse]
     histograms: list[HistogramResponse]
     images: list[ImageResponse]
+
+
+ParameterActivityStatus = Literal["updated", "unchanged", "missing", "unknown"]
+
+
+class ParameterChannelStatusResponse(ApiResponseModel):
+    status: ParameterActivityStatus
+    metric: str | None = None
+    lastStep: int | None = None
+    observedPoints: int
+
+
+class ParameterNodeStatusResponse(ApiResponseModel):
+    nodePath: str
+    weights: ParameterChannelStatusResponse
+    bias: ParameterChannelStatusResponse
+
+
+class ParameterStatusResponse(ApiResponseModel):
+    sourceId: str
+    preset: str | None = None
+    dataset: str | None = None
+    logDir: str | None = None
+    nodes: list[ParameterNodeStatusResponse]
+
+
+class LogParameterStatusRequest(ApiResponseModel):
+    runIds: list[str] = Field(default_factory=list)
+
+
+class LogParameterStatusResponse(ApiResponseModel):
+    runs: list[ParameterStatusResponse]
