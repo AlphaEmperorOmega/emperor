@@ -75,6 +75,28 @@ export function semanticGroupForSuffix(
   if (prefix === "weights") {
     return "Weights";
   }
+  if (prefix === "attention") {
+    return "Attention";
+  }
+  if (prefix === "recurrent") {
+    return "Recurrent";
+  }
+  if (
+    prefix === "controller" ||
+    prefix === "gate" ||
+    prefix === "residual" ||
+    prefix === "dropout" ||
+    prefix === "layer_norm" ||
+    prefix === "activation"
+  ) {
+    return "Controllers";
+  }
+  if (prefix === "parametric") {
+    return "Parametric";
+  }
+  if (prefix === "router" || prefix === "mixture") {
+    return "Routing";
+  }
   return "Other";
 }
 
