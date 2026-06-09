@@ -6,6 +6,8 @@ from enum import Enum
 from types import ModuleType, UnionType
 from typing import Any, Union, get_args, get_origin
 
+from models.catalog import module_path_for_model_id
+
 SKIP_CONFIG_KEYS = {
     "DATASET_OPTIONS",
 }
@@ -307,8 +309,20 @@ def _iter_config_assignments(
     return config_options, search_options
 
 
+def _catalog_source_path(
+    experiment: str,
+    filename: str,
+    models_dir: str = "models",
+) -> Path:
+    module_path = module_path_for_model_id(experiment)
+    if module_path is None:
+        raise SystemExit(f"Unknown model: {experiment}")
+    relative_package = module_path.removeprefix("models.").replace(".", "/")
+    return Path(models_dir) / relative_package / filename
+
+
 def print_config_options(experiment: str, models_dir: str = "models") -> None:
-    config_path = Path(models_dir) / experiment / "config.py"
+    config_path = _catalog_source_path(experiment, "config.py", models_dir)
     if not config_path.exists():
         raise SystemExit(f"Config file not found: {config_path}")
 
@@ -326,7 +340,7 @@ def print_config_options(experiment: str, models_dir: str = "models") -> None:
 
 
 def print_preset_options(experiment: str, models_dir: str = "models") -> None:
-    presets_path = Path(models_dir) / experiment / "presets.py"
+    presets_path = _catalog_source_path(experiment, "presets.py", models_dir)
     if not presets_path.exists():
         raise SystemExit(f"Presets file not found: {presets_path}")
 
