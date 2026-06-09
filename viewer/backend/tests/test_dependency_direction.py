@@ -1,75 +1,76 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 import unittest
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+CORE_PACKAGE_DIRS = ("emperor", "models")
+CORE_PACKAGE_ROOTS = frozenset(CORE_PACKAGE_DIRS)
+VIEWER_BACKEND_DIR = REPO_ROOT / "viewer" / "backend"
 
 
-PROTECTED_PACKAGES = ("models", "emperor")
-FORBIDDEN_IMPORT_ROOT = "viewer"
+@dataclass(frozen=True)
+class AbsoluteImport:
+    path: Path
+    line_number: int
+    module: str
+
+    @property
+    def root(self) -> str:
+        return self.module.split(".", maxsplit=1)[0]
+
+    def format_for_failure(self) -> str:
+        relative_path = self.path.relative_to(REPO_ROOT)
+        return f"{relative_path}:{self.line_number}: {self.module}"
 
 
-def repository_root() -> Path:
-    for parent in Path(__file__).resolve().parents:
-        if all((parent / package).is_dir() for package in PROTECTED_PACKAGES):
-            return parent
-    raise RuntimeError("Could not locate repository root.")
+def _python_files(roots: Iterable[Path]) -> Iterator[Path]:
+    for root in roots:
+        for path in sorted(root.rglob("*.py")):
+            if "__pycache__" not in path.parts:
+                yield path
 
 
-def python_files(root: Path) -> list[Path]:
-    return sorted(
-        path
-        for path in root.rglob("*.py")
-        if "__pycache__" not in path.parts
-    )
-
-
-def is_forbidden_import(module_name: str) -> bool:
-    return (
-        module_name == FORBIDDEN_IMPORT_ROOT
-        or module_name.startswith(f"{FORBIDDEN_IMPORT_ROOT}.")
-    )
-
-
-def import_violations(path: Path, repo_root: Path) -> list[str]:
+def _absolute_imports(path: Path) -> Iterator[AbsoluteImport]:
     source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(path))
-    relative_path = path.relative_to(repo_root).as_posix()
-    violations = []
+    try:
+        tree = ast.parse(source, filename=str(path))
+    except SyntaxError as exc:
+        relative_path = path.relative_to(REPO_ROOT)
+        raise AssertionError(f"Could not parse {relative_path}: {exc}") from exc
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if is_forbidden_import(alias.name):
-                    violations.append(
-                        f"{relative_path}:{node.lineno} imports {alias.name}"
-                    )
-        elif isinstance(node, ast.ImportFrom):
-            if node.level != 0 or node.module is None:
-                continue
-            if is_forbidden_import(node.module):
-                violations.append(
-                    f"{relative_path}:{node.lineno} imports {node.module}"
-                )
+                yield AbsoluteImport(path, node.lineno, alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            yield AbsoluteImport(path, node.lineno, node.module)
 
-    return violations
+
+def _absolute_imports_under(roots: Iterable[Path]) -> Iterator[AbsoluteImport]:
+    for path in _python_files(roots):
+        yield from _absolute_imports(path)
 
 
 class DependencyDirectionTests(unittest.TestCase):
-    def test_models_and_emperor_do_not_import_viewer(self) -> None:
-        repo_root = repository_root()
-        violations = []
+    def test_core_packages_do_not_import_viewer(self) -> None:
+        core_roots = [REPO_ROOT / package_dir for package_dir in CORE_PACKAGE_DIRS]
+        violations = [
+            source_import.format_for_failure()
+            for source_import in _absolute_imports_under(core_roots)
+            if source_import.root == "viewer"
+        ]
 
-        for package in PROTECTED_PACKAGES:
-            for path in python_files(repo_root / package):
-                violations.extend(import_violations(path, repo_root))
+        self.assertEqual([], violations)
 
-        if violations:
-            self.fail(
-                "models/ and emperor/ must not import viewer/:\n"
-                + "\n".join(violations)
-            )
+    def test_viewer_backend_may_import_core_packages(self) -> None:
+        imported_core_roots = {
+            source_import.root
+            for source_import in _absolute_imports_under([VIEWER_BACKEND_DIR])
+            if source_import.root in CORE_PACKAGE_ROOTS
+        }
 
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(CORE_PACKAGE_ROOTS, imported_core_roots)
