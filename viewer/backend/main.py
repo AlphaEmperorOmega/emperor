@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from viewer.backend.api.v1.router import router as api_v1_router
 from viewer.backend.config_snapshots import FileSystemConfigSnapshotStore
 from viewer.backend.core.config import ViewerApiSettings, get_viewer_api_settings
-from viewer.backend.exceptions import inspector_error_handler
-from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.core.errors import ApiError
+from viewer.backend.exceptions import api_error_handler
 from viewer.backend.log_runs import LogRunIndex
 from viewer.backend.middleware import configure_middleware
 from viewer.backend.repositories.config_snapshots import ConfigSnapshotRepository
@@ -37,7 +37,7 @@ def create_app(
 
     api = FastAPI(title="Emperor Model Viewer API", version="1.0.0")
     configure_middleware(api, api_settings)
-    api.add_exception_handler(InspectorError, inspector_error_handler)
+    api.add_exception_handler(ApiError, api_error_handler)
 
     api.state.settings = api_settings
     api.state.model_catalog_service = ModelCatalogService()
