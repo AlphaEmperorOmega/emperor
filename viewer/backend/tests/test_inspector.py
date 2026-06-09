@@ -11,7 +11,7 @@ from viewer.backend.inspector.service import inspect_model
 
 class InspectorServiceTests(unittest.TestCase):
     def test_override_parsing_changes_linear_hidden_dim_graph_details(self) -> None:
-        result = inspect_model("linear", "baseline", {"hidden_dim": "128"})
+        result = inspect_model("linears/linear", "baseline", {"hidden_dim": "128"})
         node_by_id = {node["id"]: node for node in result["nodes"]}
         main_layer_details = node_by_id["main_model.0"]["details"]
         output_layer_details = node_by_id["output_model"]["details"]
@@ -26,14 +26,14 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertNotIn("shapeTransition", output_layer_details)
 
     def test_inspect_uses_selected_dataset_dimensions(self) -> None:
-        result = inspect_model("linear", "baseline", dataset="Cifar100")
+        result = inspect_model("linears/linear", "baseline", dataset="Cifar100")
         node_by_id = {node["id"]: node for node in result["nodes"]}
 
         self.assertEqual(node_by_id["output_model"]["details"]["dims"], "256 -> 100")
 
     def test_inspect_rejects_path_like_dataset_input(self) -> None:
         with self.assertRaises(InspectorError) as context:
-            inspect_model("linear", "baseline", dataset="./Mnist")
+            inspect_model("linears/linear", "baseline", dataset="./Mnist")
 
         message = str(context.exception)
         self.assertIn("./Mnist", message)
@@ -42,19 +42,19 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_locked_preset_override_is_rejected_for_inspect(self) -> None:
         with self.assertRaises(InspectorError) as context:
-            inspect_model("linear", "gating", {"gate_flag": "false"})
+            inspect_model("linears/linear", "gating", {"gate_flag": "false"})
 
         self.assertIn("locked fields", str(context.exception))
         self.assertIn("stack_gate_flag", str(context.exception))
 
     def test_inspect_response_includes_top_level_parameter_count(self) -> None:
-        result = inspect_model("linear", "baseline")
+        result = inspect_model("linears/linear", "baseline")
 
         self.assertGreater(result["parameterCount"], 0)
         self.assertEqual(result["parameterCount"], result["nodes"][0]["parameterCount"])
 
     def test_inspect_reports_local_linear_weight_and_bias_shapes_on_owner(self) -> None:
-        result = inspect_model("linear", "baseline")
+        result = inspect_model("linears/linear", "baseline")
         node_by_id = {node["id"]: node for node in result["nodes"]}
 
         self.assertNotIn("weightShape", node_by_id["main_model.0"]["details"])
@@ -69,7 +69,7 @@ class InspectorServiceTests(unittest.TestCase):
         )
 
     def test_config_override_aliases_match_builder_parameter_names(self) -> None:
-        result = inspect_model("linear_adaptive", "baseline", {"gate_flag": "true"})
+        result = inspect_model("linears/linear_adaptive", "baseline", {"gate_flag": "true"})
         self.assertTrue(
             any(node["details"].get("gate") is True for node in result["nodes"])
         )
@@ -79,7 +79,7 @@ class InspectorServiceTests(unittest.TestCase):
     ) -> None:
         with self.assertRaises(InspectorError) as context:
             inspect_model(
-                "linear_adaptive",
+                "linears/linear_adaptive",
                 "baseline",
                 {"row_mask_option": "AxisMaskConfig"},
             )

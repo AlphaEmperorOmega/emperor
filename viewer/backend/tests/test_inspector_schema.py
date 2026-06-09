@@ -13,7 +13,7 @@ from viewer.backend.inspector.schema import config_schema, search_space_schema
 class InspectorSchemaTests(unittest.TestCase):
     def test_config_schema_exposes_supported_field_types(self) -> None:
         linear_fields = {
-            field["key"]: field for field in config_schema("linear")["fields"]
+            field["key"]: field for field in config_schema("linears/linear")["fields"]
         }
         self.assertEqual(linear_fields["hidden_dim"]["type"], "int")
         self.assertEqual(linear_fields["hidden_dim"]["choices"], [])
@@ -31,7 +31,7 @@ class InspectorSchemaTests(unittest.TestCase):
         )
 
         vit_fields = {
-            field["key"]: field for field in config_schema("vit_linear")["fields"]
+            field["key"]: field for field in config_schema("transformer_encoder/vit_linear")["fields"]
         }
         self.assertEqual(vit_fields["positional_embedding_option"]["type"], "class")
         self.assertIn(
@@ -45,13 +45,13 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_config_schema_serializes_value_defaults(self) -> None:
         linear_fields = {
-            field["key"]: field for field in config_schema("linear")["fields"]
+            field["key"]: field for field in config_schema("linears/linear")["fields"]
         }
         adaptive_fields = {
-            field["key"]: field for field in config_schema("linear_adaptive")["fields"]
+            field["key"]: field for field in config_schema("linears/linear_adaptive")["fields"]
         }
         vit_fields = {
-            field["key"]: field for field in config_schema("vit_linear")["fields"]
+            field["key"]: field for field in config_schema("transformer_encoder/vit_linear")["fields"]
         }
 
         self.assertEqual(linear_fields["hidden_dim"]["default"], 256)
@@ -64,7 +64,7 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_config_schema_excludes_abstract_class_choices(self) -> None:
         fields = {
-            field["key"]: field for field in config_schema("linear_adaptive")["fields"]
+            field["key"]: field for field in config_schema("linears/linear_adaptive")["fields"]
         }
 
         self.assertNotIn("DynamicWeightConfig", fields["weight_option"]["choices"])
@@ -90,7 +90,7 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_config_schema_exposes_boundary_projector_choices(self) -> None:
         fields = {
-            field["key"]: field for field in config_schema("linear_adaptive")["fields"]
+            field["key"]: field for field in config_schema("linears/linear_adaptive")["fields"]
         }
 
         self.assertEqual(
@@ -112,10 +112,10 @@ class InspectorSchemaTests(unittest.TestCase):
     def test_config_schema_marks_preset_owned_fields_locked(self) -> None:
         baseline_fields = {
             field["key"]: field
-            for field in config_schema("linear", "baseline")["fields"]
+            for field in config_schema("linears/linear", "baseline")["fields"]
         }
         gating_fields = {
-            field["key"]: field for field in config_schema("linear", "gating")["fields"]
+            field["key"]: field for field in config_schema("linears/linear", "gating")["fields"]
         }
 
         self.assertFalse(baseline_fields["gate_flag"]["locked"])
@@ -126,7 +126,7 @@ class InspectorSchemaTests(unittest.TestCase):
     def test_search_space_schema_exposes_linear_axes(self) -> None:
         axes = {
             axis["key"]: axis
-            for axis in search_space_schema("linear", "baseline")["axes"]
+            for axis in search_space_schema("linears/linear", "baseline")["axes"]
         }
 
         self.assertIn("learning_rate", axes)
@@ -142,11 +142,11 @@ class InspectorSchemaTests(unittest.TestCase):
     def test_search_space_schema_serializes_axis_values(self) -> None:
         linear_axes = {
             axis["key"]: axis
-            for axis in search_space_schema("linear", "baseline")["axes"]
+            for axis in search_space_schema("linears/linear", "baseline")["axes"]
         }
         adaptive_axes = {
             axis["key"]: axis
-            for axis in search_space_schema("linear_adaptive", "baseline")["axes"]
+            for axis in search_space_schema("linears/linear_adaptive", "baseline")["axes"]
         }
 
         self.assertEqual(
@@ -165,7 +165,7 @@ class InspectorSchemaTests(unittest.TestCase):
     def test_search_space_schema_marks_preset_owned_axes_locked(self) -> None:
         axes = {
             axis["key"]: axis
-            for axis in search_space_schema("linear", "post-norm")["axes"]
+            for axis in search_space_schema("linears/linear", "post-norm")["axes"]
         }
 
         self.assertTrue(axes["layer_norm_position"]["locked"])

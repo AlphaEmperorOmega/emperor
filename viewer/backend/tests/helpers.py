@@ -108,7 +108,7 @@ def create_progress_test_job(
         runner=FakeRunner(),
     )
     payload = manager.create_job(
-        model="linear",
+        model="linears/linear",
         preset="baseline",
         datasets=["Mnist"],
         overrides={},

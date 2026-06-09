@@ -128,26 +128,31 @@ class InspectorDiscoveryTests(unittest.TestCase):
         self.assertGreaterEqual(
             models,
             {
-                "bert_linear",
-                "experts_linear",
-                "experts_linear_adaptive",
-                "linear",
-                "linear_adaptive",
-                "parametric_generator",
-                "parametric_matrix",
-                "parametric_vector",
-                "vit_linear",
+                "experts/experts_linear",
+                "experts/experts_linear_adaptive",
+                "linears/linear",
+                "linears/linear_adaptive",
+                "neuron/neuron_linear",
+                "parametric/parametric_generator",
+                "parametric/parametric_matrix",
+                "parametric/parametric_vector",
+                "transformer_encoder/bert_linear",
+                "transformer_encoder/vit_linear",
             },
         )
 
     def test_preset_discovery_for_linear(self) -> None:
-        presets = list_model_presets("linear")
+        presets = list_model_presets("linears/linear")
         preset_names = {preset["name"] for preset in presets}
         self.assertIn("baseline", preset_names)
         self.assertIn("recurrent-gating-halting", preset_names)
 
+    def test_flat_model_ids_are_rejected(self) -> None:
+        with self.assertRaisesRegex(InspectorError, "Invalid model name"):
+            list_model_presets("linear")
+
     def test_dataset_discovery_for_linear(self) -> None:
-        datasets = list_model_datasets("linear")
+        datasets = list_model_datasets("linears/linear")
         dataset_by_name = {dataset["name"]: dataset for dataset in datasets}
 
         self.assertIn("Mnist", dataset_by_name)
@@ -156,20 +161,60 @@ class InspectorDiscoveryTests(unittest.TestCase):
         self.assertIn("Cifar10", dataset_by_name)
 
     def test_monitor_discovery_for_model_packages(self) -> None:
-        linear_monitors = list_model_monitors("linear")
+        linear_monitors = list_model_monitors("linears/linear")
+        linear_monitor_by_name = {monitor["name"]: monitor for monitor in linear_monitors}
         adaptive_monitor_by_name = {
             monitor["name"]: monitor
-            for monitor in list_model_monitors("experts_linear_adaptive")
+            for monitor in list_model_monitors("experts/experts_linear_adaptive")
+        }
+        attention_monitor_by_name = {
+            monitor["name"]: monitor
+            for monitor in list_model_monitors("transformer_encoder/bert_linear")
+        }
+        parametric_monitor_by_name = {
+            monitor["name"]: monitor
+            for monitor in list_model_monitors("parametric/parametric_matrix")
         }
 
-        self.assertEqual([monitor["name"] for monitor in linear_monitors], ["linear"])
-        self.assertFalse(linear_monitors[0]["defaultEnabled"])
-        self.assertEqual(linear_monitors[0]["kinds"], ["scalar"])
+        self.assertEqual(
+            [monitor["name"] for monitor in linear_monitors],
+            ["linear", "recurrent-layer", "layer-controller"],
+        )
+        for monitor in linear_monitors:
+            self.assertFalse(monitor["defaultEnabled"])
+        self.assertEqual(linear_monitor_by_name["linear"]["kinds"], ["scalar"])
+        self.assertEqual(
+            linear_monitor_by_name["recurrent-layer"]["kinds"],
+            ["scalar", "histogram", "image"],
+        )
+        self.assertEqual(
+            linear_monitor_by_name["layer-controller"]["kinds"],
+            ["scalar"],
+        )
         self.assertEqual(
             set(adaptive_monitor_by_name),
-            {"linear", "adaptive", "sampler"},
+            {
+                "linear",
+                "adaptive",
+                "sampler",
+                "weight-bank",
+                "recurrent-layer",
+                "layer-controller",
+            },
         )
         self.assertIn("image", adaptive_monitor_by_name["sampler"]["kinds"])
+        self.assertEqual(
+            set(attention_monitor_by_name),
+            {"attention", "layer-controller"},
+        )
+        self.assertFalse(attention_monitor_by_name["attention"]["defaultEnabled"])
+        self.assertIn("image", attention_monitor_by_name["attention"]["kinds"])
+        self.assertEqual(
+            set(parametric_monitor_by_name),
+            {"parametric", "layer-controller"},
+        )
+        self.assertFalse(parametric_monitor_by_name["parametric"]["defaultEnabled"])
+        self.assertIn("histogram", parametric_monitor_by_name["parametric"]["kinds"])
 
     def test_one_preset_in_every_model_package_is_inspectable(self) -> None:
         for model in discover_models():

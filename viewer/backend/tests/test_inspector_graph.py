@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import unittest
 from collections import Counter
+from typing import Any, TypeAlias
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -22,6 +23,9 @@ from viewer.backend.inspector.discovery import discover_models, list_model_prese
 from viewer.backend.inspector.graph import serialize_graph
 from viewer.backend.inspector.service import inspect_model
 
+GraphNodePayload: TypeAlias = dict[str, Any]
+GraphEdgePayload: TypeAlias = dict[str, str]
+
 
 class ConfiguredModule(nn.Module):
     def __init__(self, cfg) -> None:
@@ -29,16 +33,84 @@ class ConfiguredModule(nn.Module):
         self.cfg = cfg
 
 
-def config_fields(node: dict) -> dict[str, object]:
+class TinyGraphFixture(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.encoder = nn.Sequential()
+        self.encoder.add_module("linear", nn.Linear(2, 3))
+        self.encoder.add_module("relu", nn.ReLU())
+        self.head = nn.Linear(3, 1, bias=False)
+
+
+def config_fields(node: GraphNodePayload) -> dict[str, object]:
     config = node["config"]
     if config is None:
         return {}
     return {field["key"]: field["value"] for field in config["fields"]}
 
 
+def nodes_by_id(nodes: list[GraphNodePayload]) -> dict[str, GraphNodePayload]:
+    return {str(node["id"]): node for node in nodes}
+
+
 class InspectorGraphTests(unittest.TestCase):
+    def test_graph_serializer_preserves_depth_first_named_child_order(self) -> None:
+        nodes, edges = serialize_graph(TinyGraphFixture())
+        expected_edges: list[GraphEdgePayload] = [
+            {"id": "__root__-encoder", "source": "__root__", "target": "encoder"},
+            {
+                "id": "encoder-encoder.linear",
+                "source": "encoder",
+                "target": "encoder.linear",
+            },
+            {
+                "id": "encoder-encoder.relu",
+                "source": "encoder",
+                "target": "encoder.relu",
+            },
+            {"id": "__root__-head", "source": "__root__", "target": "head"},
+        ]
+
+        self.assertEqual(
+            [node["id"] for node in nodes],
+            ["__root__", "encoder", "encoder.linear", "encoder.relu", "head"],
+        )
+        self.assertEqual(edges, expected_edges)
+
+    def test_graph_serializer_preserves_node_shape_for_small_modules(self) -> None:
+        nodes, _edges = serialize_graph(TinyGraphFixture())
+        node_by_id = nodes_by_id(nodes)
+        expected_node_keys = {
+            "id",
+            "label",
+            "typeName",
+            "path",
+            "graphRole",
+            "parameterCount",
+            "details",
+            "config",
+        }
+
+        for node in nodes:
+            with self.subTest(node=node["id"]):
+                self.assertEqual(set(node), expected_node_keys)
+                self.assertEqual(node["graphRole"], "architecture")
+
+        self.assertEqual(node_by_id["__root__"]["path"], "model")
+        self.assertEqual(node_by_id["__root__"]["parameterCount"], 12)
+        self.assertEqual(node_by_id["encoder"]["parameterCount"], 9)
+        self.assertEqual(node_by_id["encoder.linear"]["parameterCount"], 9)
+        self.assertEqual(node_by_id["encoder.relu"]["parameterCount"], 0)
+        self.assertEqual(node_by_id["head"]["parameterCount"], 3)
+        self.assertEqual(
+            node_by_id["encoder.linear"]["details"],
+            {"weightShape": "3 x 2", "biasShape": "3"},
+        )
+        self.assertEqual(node_by_id["encoder.relu"]["details"], {})
+        self.assertIsNone(node_by_id["encoder.relu"]["config"])
+
     def test_graph_serializer_uses_stable_paths_and_edges(self) -> None:
-        result = inspect_model("linear", "baseline")
+        result = inspect_model("linears/linear", "baseline")
         node_ids = {node["id"] for node in result["nodes"]}
         edge_ids = {edge["id"] for edge in result["edges"]}
         self.assertIn("main_model.0.model", node_ids)
@@ -52,7 +124,7 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertEqual(role_by_type["LayerNorm"], "internal")
 
     def test_graph_serializer_marks_runtime_modules(self) -> None:
-        result = inspect_model("linear", "baseline")
+        result = inspect_model("linears/linear", "baseline")
         role_by_id = {node["id"]: node["graphRole"] for node in result["nodes"]}
 
         self.assertEqual(role_by_id["loss_fn"], "runtime")
@@ -61,7 +133,7 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertEqual(role_by_id["metrics.train_f1_score"], "runtime")
 
     def test_graph_serializer_marks_architecture_modules(self) -> None:
-        result = inspect_model("linear", "baseline")
+        result = inspect_model("linears/linear", "baseline")
         role_by_id = {node["id"]: node["graphRole"] for node in result["nodes"]}
 
         self.assertEqual(role_by_id["__root__"], "architecture")
@@ -226,7 +298,7 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertEqual(config_fields(root)["layer_config"], "LayerConfig")
 
     def test_graph_serializer_reports_expert_metadata(self) -> None:
-        result = inspect_model("experts_linear", "baseline")
+        result = inspect_model("experts/experts_linear", "baseline")
         expert_model = next(
             node for node in result["nodes"] if node["typeName"] == "MixtureOfExperts"
         )
@@ -244,7 +316,7 @@ class InspectorGraphTests(unittest.TestCase):
 
     def test_graph_serializer_reports_neuron_cluster_grid(self) -> None:
         result = inspect_model(
-            "neuron_linear",
+            "neuron/neuron_linear",
             "baseline",
             {
                 "cluster_x_axis_total_neurons": "3",
@@ -269,7 +341,7 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertNotIn("recurrent", cluster_node["details"])
 
     def test_graph_serializer_reports_terminal_reachable_area(self) -> None:
-        result = inspect_model("neuron_linear", "baseline")
+        result = inspect_model("neuron/neuron_linear", "baseline")
         terminal_node = next(
             node for node in result["nodes"] if node["typeName"] == "Terminal"
         )
