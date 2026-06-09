@@ -24,7 +24,7 @@ export function ViewerApp() {
 
   const changeWorkspace = (workspace: ViewerWorkspace) => {
     setActiveWorkspace(workspace);
-    if (workspace === "logs") {
+    if (workspace !== "model") {
       setIsFullConfigOpen(false);
     }
   };

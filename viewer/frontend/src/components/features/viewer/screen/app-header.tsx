@@ -10,12 +10,13 @@ import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
 import { StatusPill } from "@/components/features/viewer/status-pill";
 import { useTargetConfig } from "@/components/features/viewer/providers/viewer-providers";
+import { type ViewerWorkspace } from "@/types/viewer";
 
 export function AppHeader({
   activeWorkspace,
   onOpenFeatureList,
 }: {
-  activeWorkspace: "model" | "logs";
+  activeWorkspace: ViewerWorkspace;
   onOpenFeatureList: () => void;
 }) {
   const {

@@ -1,1 +1,1 @@
-export type ViewerWorkspace = "model" | "logs";
+export type ViewerWorkspace = "model" | "compare" | "logs";

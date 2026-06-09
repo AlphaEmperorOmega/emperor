@@ -644,6 +644,22 @@ const logScalarSeries = [
     tag: "test/accuracy",
     points: [{ step: 2, wallTime: 1780000001, value: 0.62 }],
   },
+  {
+    runId: "log-mnist",
+    tag: "main_model.0.model/weights/mean",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.12 },
+      { step: 2, wallTime: 1780000001, value: 0.18 },
+    ],
+  },
+  {
+    runId: "log-cifar",
+    tag: "main_model.0.model/weights/mean",
+    points: [
+      { step: 1, wallTime: 1780000000, value: 0.16 },
+      { step: 2, wallTime: 1780000001, value: 0.2 },
+    ],
+  },
 ];
 
 function buildLargeLogFixture(count = 42) {
@@ -1910,6 +1926,11 @@ function semanticMonitorPayload(nodePath: string): MockMonitorPayload {
       mockScalarSeries(nodePath, "bias/grad_mean", [0.01, 0.02]),
       mockScalarSeries(nodePath, "bias/mean", [0.03, 0.04]),
       mockScalarSeries(nodePath, "weights/l2_norm", [1.2, 1.4]),
+      mockScalarSeries(nodePath, "attention/entropy_mean", [0.8, 0.7]),
+      mockScalarSeries(nodePath, "recurrent/actual_steps", [2, 3]),
+      mockScalarSeries(nodePath, "gate/output_mean", [0.2, 0.25]),
+      mockScalarSeries(nodePath, "parametric/generated_weight_norm", [1.1, 1.3]),
+      mockScalarSeries(nodePath, "router/weight_entropy", [0.5, 0.6]),
     ],
     histograms: [mockHistogram(nodePath)],
     images: [mockMonitorImage(nodePath)],
@@ -1977,6 +1998,13 @@ function installFetchMock(
     datasetsResponse?: typeof datasetsResponse;
     monitorDataResponse?: (context: MockMonitorRequestContext) => MockMonitorPayload;
     logRunMonitorDataResponse?: (context: MockMonitorRequestContext) => MockMonitorPayload;
+    parameterStatusResponse?: (context: {
+      jobId: string;
+      preset: string | null;
+      dataset: string | null;
+      logDir: string | null;
+    }) => unknown;
+    logParameterStatusResponse?: (context: { runIds: string[] }) => unknown;
   } = {},
 ) {
   const inspectBodies: unknown[] = [];
@@ -2091,6 +2119,10 @@ function installFetchMock(
 
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    const endsWithAny = (suffixes: string[]) =>
+      suffixes.some((suffix) => url.endsWith(suffix));
+    const includesAny = (fragments: string[]) =>
+      fragments.some((fragment) => url.includes(fragment));
     if (url.endsWith("/health")) {
       return jsonResponse({ status: "ok" });
     }
@@ -2100,31 +2132,65 @@ function installFetchMock(
     if (url.endsWith("/models")) {
       return jsonResponse(modelsResponse);
     }
-    if (url.endsWith("/models/linear/presets")) {
+    if (endsWithAny(["/models/linear/presets", "/models/linears/linear/presets"])) {
       return jsonResponse(presetsResponse);
     }
-    if (url.endsWith("/models/linear/datasets")) {
+    if (
+      endsWithAny(["/models/linear/datasets", "/models/linears/linear/datasets"])
+    ) {
       return jsonResponse(options.datasetsResponse ?? datasetsResponse);
     }
-    if (url.endsWith("/models/linear/monitors")) {
+    if (
+      endsWithAny(["/models/linear/monitors", "/models/linears/linear/monitors"])
+    ) {
       return jsonResponse(monitorsResponse);
     }
-    if (url.includes("/models/linear/config-schema")) {
+    if (
+      includesAny([
+        "/models/linear/config-schema",
+        "/models/linears/linear/config-schema",
+      ])
+    ) {
       return jsonResponse(options.schemaResponse ?? schemaResponse);
     }
-    if (url.includes("/models/linear/search-space")) {
+    if (
+      includesAny([
+        "/models/linear/search-space",
+        "/models/linears/linear/search-space",
+      ])
+    ) {
       return jsonResponse(options.searchSpaceResponse ?? searchSpaceResponse);
     }
-    if (url.endsWith("/models/bert_linear/presets")) {
+    if (
+      endsWithAny([
+        "/models/bert_linear/presets",
+        "/models/transformer_encoder/bert_linear/presets",
+      ])
+    ) {
       return jsonResponse(bertPresetsResponse);
     }
-    if (url.endsWith("/models/bert_linear/datasets")) {
+    if (
+      endsWithAny([
+        "/models/bert_linear/datasets",
+        "/models/transformer_encoder/bert_linear/datasets",
+      ])
+    ) {
       return jsonResponse(bertDatasetsResponse);
     }
-    if (url.endsWith("/models/bert_linear/monitors")) {
+    if (
+      endsWithAny([
+        "/models/bert_linear/monitors",
+        "/models/transformer_encoder/bert_linear/monitors",
+      ])
+    ) {
       return jsonResponse({ model: "bert_linear", monitors: [] });
     }
-    if (url.includes("/models/bert_linear/config-schema")) {
+    if (
+      includesAny([
+        "/models/bert_linear/config-schema",
+        "/models/transformer_encoder/bert_linear/config-schema",
+      ])
+    ) {
       const schemaPayload = options.schemaResponse ?? schemaResponse;
       return jsonResponse(
         typeof schemaPayload === "object" && schemaPayload !== null
@@ -2132,7 +2198,12 @@ function installFetchMock(
           : schemaPayload,
       );
     }
-    if (url.includes("/models/bert_linear/search-space")) {
+    if (
+      includesAny([
+        "/models/bert_linear/search-space",
+        "/models/transformer_encoder/bert_linear/search-space",
+      ])
+    ) {
       return jsonResponse({ model: "bert_linear", preset: "bert-baseline", axes: [] });
     }
     if (url.endsWith("/training/run-plan")) {
@@ -2255,6 +2326,27 @@ function installFetchMock(
         logDir,
         ...monitorPayload,
       });
+    }
+    if (url.includes("/training/jobs/job-1/monitor-parameter-status")) {
+      const parsedUrl = new URL(url);
+      const logFolder = String(latestTrainingRequest?.logFolder ?? "test_model");
+      const preset = parsedUrl.searchParams.get("preset");
+      const dataset = parsedUrl.searchParams.get("dataset");
+      const logDir = `logs/${logFolder}`;
+      return jsonResponse(
+        options.parameterStatusResponse?.({
+          jobId: "job-1",
+          preset,
+          dataset,
+          logDir,
+        }) ?? {
+          sourceId: "job-1",
+          preset,
+          dataset,
+          logDir,
+          nodes: [],
+        },
+      );
     }
     if (url.endsWith("/logs/runs/delete-plan")) {
       const body = JSON.parse(String(init?.body)) as {
@@ -2387,6 +2479,23 @@ function installFetchMock(
           (series) => body.runIds.includes(series.runId) && body.tags.includes(series.tag),
         ),
       });
+    }
+    if (url.endsWith("/logs/parameter-status")) {
+      const body = JSON.parse(String(init?.body)) as { runIds: string[] };
+      return jsonResponse(
+        options.logParameterStatusResponse?.({ runIds: body.runIds }) ?? {
+          runs: body.runIds.map((runId) => {
+            const run = logResponse.runs.find((candidate) => candidate.id === runId);
+            return {
+              sourceId: runId,
+              preset: run?.preset ?? null,
+              dataset: run?.dataset ?? null,
+              logDir: run?.relativePath ?? null,
+              nodes: [],
+            };
+          }),
+        },
+      );
     }
     return jsonResponse({ detail: `Unhandled ${url}` }, 404);
   });
@@ -2785,6 +2894,12 @@ function scalarChartGridFor(chart: HTMLElement) {
   }
 
   return grid;
+}
+
+function logMetricGroupToggle(label: string) {
+  return screen.getByRole("button", {
+    name: new RegExp(`^${label}\\s+\\d+\\s+metrics?$`, "i"),
+  });
 }
 
 function deferred<T>() {
@@ -3261,12 +3376,30 @@ describe("ViewerApp", () => {
     expect(screen.getByLabelText("Experiments test_model_2")).toBeChecked();
     expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
       .toBeInTheDocument();
+    expect(logMetricGroupToggle("Train")).toHaveAttribute("aria-expanded", "true");
+    expect(logMetricGroupToggle("Validation")).toHaveAttribute("aria-expanded", "true");
+    expect(logMetricGroupToggle("Test")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /test\/accuracy scalar chart/i }))
+      .not.toBeInTheDocument();
+    const accuracyLeaderboard = await screen.findByRole("table", {
+      name: /test\/accuracy test leaderboard/i,
+    });
+    const accuracyRows = within(accuracyLeaderboard).getAllByRole("row").slice(1);
+    expect(accuracyRows).toHaveLength(2);
+    expect(accuracyRows[0]).toHaveTextContent("0.9");
+    expect(within(accuracyRows[0]).getByText("aaa_20260601_010203"))
+      .toBeInTheDocument();
+    expect(accuracyRows[1]).toHaveTextContent("0.62");
+    expect(within(accuracyRows[1]).getByText("bbb_20260601_020304"))
+      .toBeInTheDocument();
     expect(
       screen.getAllByText(/test_model · Mnist · linear · BASELINE · 2026-06-01 01:02:03/).length,
     ).toBeGreaterThan(0);
-    const cifarLine = screen.getAllByRole("button", {
-      name: /test_model_2 · Cifar10 · linear · BASELINE · 2026-06-01 02:03:04/i,
-    })[0];
+    const cifarLine = within(accuracyLeaderboard).getByRole("button", {
+      name: /open run details for test_model_2 · Cifar10 · linear · BASELINE · 2026-06-01 02:03:04/i,
+    });
 
     await user.click(cifarLine);
 
@@ -3276,6 +3409,138 @@ describe("ViewerApp", () => {
     expect(within(detailsPanel as HTMLElement).getByText("test_model_2")).toBeInTheDocument();
     expect(screen.getAllByText("No result.json").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /start training/i })).not.toBeInTheDocument();
+  });
+
+  it("collapses logs metric groups without changing selected tags or refetching scalars", async () => {
+    const { logScalarRequests } = installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+    const trainToggle = logMetricGroupToggle("Train");
+    const testToggle = logMetricGroupToggle("Test");
+    await waitFor(() => {
+      expect(logScalarRequests).toHaveLength(1);
+    });
+
+    await user.click(trainToggle);
+
+    expect(trainToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
+      .not.toBeInTheDocument();
+    expect(screen.getByLabelText("Scalar Tags train/loss")).toBeChecked();
+    expect(logScalarRequests).toHaveLength(1);
+
+    await user.click(trainToggle);
+
+    expect(trainToggle).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+    expect(logScalarRequests).toHaveLength(1);
+
+    await user.click(testToggle);
+
+    expect(testToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("table", { name: /test\/accuracy test leaderboard/i }))
+      .not.toBeInTheDocument();
+    expect(screen.getByLabelText("Scalar Tags test/accuracy")).toBeChecked();
+    expect(logScalarRequests).toHaveLength(1);
+
+    await user.click(testToggle);
+
+    expect(testToggle).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }))
+      .toBeInTheDocument();
+    expect(logScalarRequests).toHaveLength(1);
+  });
+
+  it("renders non-standard scalar tags in the Other metric group", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+
+    const otherTag = screen.getByLabelText("Scalar Tags main_model.0.model/weights/mean");
+    expect(otherTag).not.toBeChecked();
+    await user.click(otherTag);
+
+    const otherToggle = await screen.findByRole("button", {
+      name: /^Other\s+1\s+metric$/i,
+    });
+    expect(otherToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      await screen.findByRole("img", {
+        name: /main_model\.0\.model\/weights\/mean scalar chart/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps collapsed logs metric groups collapsed after switching workspaces", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+
+    await user.click(logMetricGroupToggle("Train"));
+    expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
+      .not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+
+    const trainToggle = await screen.findByRole("button", {
+      name: /^Train\s+1\s+metric$/i,
+    });
+    expect(trainToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
+      .not.toBeInTheDocument();
+    expect(screen.getByLabelText("Scalar Tags train/loss")).toBeChecked();
+  });
+
+  it("sorts test loss leaderboards ascending", async () => {
+    installFetchMock({
+      logTagsByRun: {
+        "log-mnist": ["test/loss"],
+        "log-cifar": ["test/loss"],
+      },
+      logScalarSeries: [
+        {
+          runId: "log-mnist",
+          tag: "test/loss",
+          points: [{ step: 3, wallTime: 1780000003, value: 0.42 }],
+        },
+        {
+          runId: "log-cifar",
+          tag: "test/loss",
+          points: [{ step: 3, wallTime: 1780000003, value: 0.27 }],
+        },
+      ],
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+
+    const lossLeaderboard = await screen.findByRole("table", {
+      name: /test\/loss test leaderboard/i,
+    });
+    const lossRows = within(lossLeaderboard).getAllByRole("row").slice(1);
+    expect(lossRows).toHaveLength(2);
+    expect(lossRows[0]).toHaveTextContent("0.27");
+    expect(within(lossRows[0]).getByText("bbb_20260601_020304"))
+      .toBeInTheDocument();
+    expect(lossRows[1]).toHaveTextContent("0.42");
+    expect(within(lossRows[1]).getByText("aaa_20260601_010203"))
+      .toBeInTheDocument();
   });
 
   it("switches historical scalar chart layouts without refetching scalars", async () => {
@@ -3333,6 +3598,9 @@ describe("ViewerApp", () => {
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
     expect(
+      await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
+    ).toBeInTheDocument();
+    expect(
       screen.getAllByText(/test_model_2 · Cifar10 · linear · BASELINE · 2026-06-01 02:03:04/).length,
     ).toBeGreaterThan(0);
 
@@ -3358,6 +3626,13 @@ describe("ViewerApp", () => {
     });
     expect(screen.getByRole("img", { name: /train\/loss scalar chart/i }))
       .toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("Scalar Tags test/accuracy"));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("table", { name: /test\/accuracy test leaderboard/i }))
+        .not.toBeInTheDocument();
+    });
 
     const experimentSection = screen.getByLabelText("Experiments test_model_2").closest("section");
     expect(experimentSection).not.toBeNull();
@@ -7004,6 +7279,21 @@ describe("ViewerApp", () => {
     const weights = within(dialog).getByRole("button", {
       name: /Weights\s+1 chart/i,
     });
+    const attention = within(dialog).getByRole("button", {
+      name: /Attention\s+1 chart/i,
+    });
+    const recurrent = within(dialog).getByRole("button", {
+      name: /Recurrent\s+1 chart/i,
+    });
+    const controllers = within(dialog).getByRole("button", {
+      name: /Controllers\s+1 chart/i,
+    });
+    const parametric = within(dialog).getByRole("button", {
+      name: /Parametric\s+1 chart/i,
+    });
+    const routing = within(dialog).getByRole("button", {
+      name: /Routing\s+1 chart/i,
+    });
     const visualSummaries = within(dialog).getByRole("button", {
       name: /Visual summaries\s+2 charts/i,
     });
@@ -7012,6 +7302,11 @@ describe("ViewerApp", () => {
     expect(gradients).toHaveAttribute("aria-expanded", "false");
     expect(bias).toHaveAttribute("aria-expanded", "false");
     expect(weights).toHaveAttribute("aria-expanded", "false");
+    expect(attention).toHaveAttribute("aria-expanded", "false");
+    expect(recurrent).toHaveAttribute("aria-expanded", "false");
+    expect(controllers).toHaveAttribute("aria-expanded", "false");
+    expect(parametric).toHaveAttribute("aria-expanded", "false");
+    expect(routing).toHaveAttribute("aria-expanded", "false");
     expect(visualSummaries).toHaveAttribute("aria-expanded", "false");
     expect(within(dialog).queryByRole("button", { name: /Other/i })).not.toBeInTheDocument();
     expect(within(dialog).getByText("input/mean")).toBeInTheDocument();

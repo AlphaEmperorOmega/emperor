@@ -1,4 +1,5 @@
 import dynamic from "next/dynamic";
+import { CompareWorkspace } from "@/components/features/viewer/compare-workspace";
 import { ConnectedMonitorChartsModal } from "@/components/features/viewer/connected-monitor-charts-modal";
 import { ConnectedTrainingPanel } from "@/components/features/viewer/connected-training-panel";
 import { AppHeader } from "@/components/features/viewer/screen/app-header";
@@ -70,9 +71,10 @@ export function ViewerScreen({
   logsState,
 }: ViewerScreenProps) {
   const isModelWorkspace = activeWorkspace === "model";
+  const isLogsWorkspace = activeWorkspace === "logs";
 
   return (
-    <main className="grid h-screen min-h-[720px] grid-rows-[60px_minmax(0,1fr)_auto] overflow-hidden bg-bg text-ink">
+    <main className="grid h-dvh min-h-0 grid-rows-[60px_minmax(0,1fr)_auto] overflow-hidden bg-bg text-ink">
       <AppHeader activeWorkspace={activeWorkspace} onOpenFeatureList={onOpenFeatureList} />
 
       <section className="grid min-h-0 grid-cols-1 overflow-auto lg:grid-cols-[344px_minmax(0,1fr)_332px] lg:overflow-hidden">
@@ -85,9 +87,9 @@ export function ViewerScreen({
 
             {isModelWorkspace ? (
               <ViewerModelSidebar onOpenFullConfig={onOpenFullConfig} />
-            ) : (
+            ) : isLogsWorkspace ? (
               <LogsSidebarPanel state={logsState} />
-            )}
+            ) : null}
           </div>
         </aside>
 
@@ -100,11 +102,15 @@ export function ViewerScreen({
 
             <NodeDetailsPanel />
           </>
-        ) : (
+        ) : isLogsWorkspace ? (
           <>
             <LogsGraphPreviewPanel state={logsState} />
             <LogRunDetailsPanel selectedRun={logsState.selectedRun} />
           </>
+        ) : (
+          <div className="h-full min-h-[560px] min-w-0 overflow-hidden lg:col-span-2 lg:min-h-0">
+            <CompareWorkspace onUseTarget={() => onChangeWorkspace("model")} />
+          </div>
         )}
       </section>
 
