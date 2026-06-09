@@ -58,6 +58,12 @@ describe("query key factories", () => {
       "linear",
       "baseline",
     ]);
+    expect(
+      viewerQueryKeys.historicalSummaryInspection("linear", "baseline", "Mnist"),
+    ).toEqual(["inspect", "historical-summary", "linear", "baseline", "Mnist"]);
+    expect(
+      viewerQueryKeys.comparisonInspection("linear", "baseline", "Mnist"),
+    ).toEqual(["comparison-inspection", "linear", "baseline", "Mnist"]);
   });
 
   it("preserves training query key shapes", () => {
@@ -110,5 +116,20 @@ describe("query key factories", () => {
       undefined,
     ]);
     expect(monitorQueryKeys.historicalRunGroup(runIds, undefined)[2]).toBe(runIds);
+    expect(
+      monitorQueryKeys.historicalParameterSummary(
+        "linear",
+        "baseline",
+        "Mnist",
+        runIds,
+      ),
+    ).toEqual([
+      "monitor-parameter-summary",
+      "historical-run-group",
+      "linear",
+      "baseline",
+      "Mnist",
+      runIds,
+    ]);
   });
 });

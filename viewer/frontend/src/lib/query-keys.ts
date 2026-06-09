@@ -25,6 +25,13 @@ export const viewerQueryKeys = {
     ["config-schema", selectedModel, selectedPreset] as const,
   searchSpace: (selectedModel: string, selectedPreset: string) =>
     ["search-space", selectedModel, selectedPreset] as const,
+  historicalSummaryInspection: (
+    model: string,
+    preset: string,
+    dataset: string,
+  ) => ["inspect", "historical-summary", model, preset, dataset] as const,
+  comparisonInspection: (model: string, preset: string, dataset: string) =>
+    ["comparison-inspection", model, preset, dataset] as const,
   configSnapshots: (selectedModel: string) =>
     ["config-snapshots", selectedModel] as const,
 };
@@ -46,6 +53,27 @@ export const monitorQueryKeys = {
     ["monitor-data", "historical-run", runId, nodePath] as const,
   historicalRunGroup: (runIds: StringList, nodePath: string | undefined) =>
     ["monitor-data", "historical-run-group", runIds, nodePath] as const,
+  activeJobParameterStatus: (
+    jobId: string,
+    preset: string | undefined,
+    dataset: string | undefined,
+  ) => ["monitor-parameter-status", "active-job", jobId, preset, dataset] as const,
+  historicalParameterStatus: (runIds: StringList) =>
+    ["monitor-parameter-status", "historical-run-group", runIds] as const,
+  historicalParameterSummary: (
+    model: string,
+    preset: string,
+    dataset: string,
+    runIds: StringList,
+  ) =>
+    [
+      "monitor-parameter-summary",
+      "historical-run-group",
+      model,
+      preset,
+      dataset,
+      runIds,
+    ] as const,
 };
 
 export const LOG_RUNS_QUERY_KEY = logQueryKeys.runs();
