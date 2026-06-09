@@ -1,16 +1,26 @@
-import models.linear.config as config
+import models.linears.linear.config as config
 
-from models.linear.config_builder import LinearConfigBuilder
-from models.linear.model import Model
+from models.linears.linear.config_builder import LinearConfigBuilder
+from models.linears.linear.model import Model
 from emperor.experiments.base import SearchMode
 from emperor.datasets.image.classification.mnist import Mnist
-from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase
+from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, PresetLock
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+
+
+def _lock(option, value, behavior: str) -> PresetLock:
+    return PresetLock(
+        value=value,
+        reason=(
+            f"Locked by the {option.name} preset because this preset enables "
+            f"{behavior}."
+        ),
+    )
 
 
 class ExperimentOptions(BaseOptions):
@@ -43,6 +53,137 @@ class ExperimentOptions(BaseOptions):
 
 
 class ExperimentPresets(ExperimentPresetsBase):
+    PRESET_LOCKS = {
+        ExperimentOptions.GATING: {
+            "stack_gate_flag": _lock(ExperimentOptions.GATING, True, "stack gating"),
+        },
+        ExperimentOptions.HALTING: {
+            "stack_halting_flag": _lock(ExperimentOptions.HALTING, True, "adaptive stack halting"),
+        },
+        ExperimentOptions.GATING_HALTING: {
+            "stack_gate_flag": _lock(ExperimentOptions.GATING_HALTING, True, "stack gating"),
+            "stack_halting_flag": _lock(
+                ExperimentOptions.GATING_HALTING,
+                True,
+                "adaptive stack halting",
+            ),
+        },
+        ExperimentOptions.RESIDUAL: {
+            "stack_residual_flag": _lock(ExperimentOptions.RESIDUAL, True, "stack residuals"),
+        },
+        ExperimentOptions.POST_NORM: {
+            "layer_norm_position": _lock(
+                ExperimentOptions.POST_NORM,
+                LayerNormPositionOptions.AFTER,
+                "post-layer normalization",
+            ),
+        },
+        ExperimentOptions.RESIDUAL_POST_NORM: {
+            "stack_residual_flag": _lock(
+                ExperimentOptions.RESIDUAL_POST_NORM,
+                True,
+                "stack residuals",
+            ),
+            "layer_norm_position": _lock(
+                ExperimentOptions.RESIDUAL_POST_NORM,
+                LayerNormPositionOptions.AFTER,
+                "post-layer normalization",
+            ),
+        },
+        ExperimentOptions.RESIDUAL_GATING: {
+            "stack_residual_flag": _lock(
+                ExperimentOptions.RESIDUAL_GATING,
+                True,
+                "stack residuals",
+            ),
+            "stack_gate_flag": _lock(
+                ExperimentOptions.RESIDUAL_GATING,
+                True,
+                "stack gating",
+            ),
+        },
+        ExperimentOptions.RESIDUAL_HALTING: {
+            "stack_residual_flag": _lock(
+                ExperimentOptions.RESIDUAL_HALTING,
+                True,
+                "stack residuals",
+            ),
+            "stack_halting_flag": _lock(
+                ExperimentOptions.RESIDUAL_HALTING,
+                True,
+                "adaptive stack halting",
+            ),
+        },
+        ExperimentOptions.RECURRENT: {
+            "recurrent_flag": _lock(ExperimentOptions.RECURRENT, True, "recurrent execution"),
+        },
+        ExperimentOptions.RECURRENT_GATING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_gate_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING,
+                True,
+                "recurrent gating",
+            ),
+        },
+        ExperimentOptions.RECURRENT_HALTING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_HALTING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_halting_flag": _lock(
+                ExperimentOptions.RECURRENT_HALTING,
+                True,
+                "adaptive recurrent halting",
+            ),
+        },
+        ExperimentOptions.RECURRENT_GATING_HALTING: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "recurrent execution",
+            ),
+            "recurrent_gate_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "recurrent gating",
+            ),
+            "recurrent_halting_flag": _lock(
+                ExperimentOptions.RECURRENT_GATING_HALTING,
+                True,
+                "adaptive recurrent halting",
+            ),
+        },
+        ExperimentOptions.RECURRENT_RESIDUAL: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_RESIDUAL,
+                True,
+                "recurrent execution",
+            ),
+            "stack_residual_flag": _lock(
+                ExperimentOptions.RECURRENT_RESIDUAL,
+                True,
+                "stack residuals",
+            ),
+        },
+        ExperimentOptions.RECURRENT_POST_NORM: {
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT_POST_NORM,
+                True,
+                "recurrent execution",
+            ),
+            "layer_norm_position": _lock(
+                ExperimentOptions.RECURRENT_POST_NORM,
+                LayerNormPositionOptions.AFTER,
+                "post-layer normalization",
+            ),
+        },
+    }
+
     def __init__(self) -> None:
         super().__init__()
 

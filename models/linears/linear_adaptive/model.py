@@ -1,12 +1,11 @@
 import torch
 
 from torch import Tensor
-from torch.nn import Sequential
 from emperor.base.layer import Layer
 from emperor.base.layer.stack import LayerStack
 from emperor.base.layer.config import LayerConfig, LayerStackConfig, RecurrentLayerConfig
 from emperor.experiments.classifier import ClassifierExperiment
-from models.linear_adaptive.experiment_config import ExperimentConfig
+from models.linears.linear_adaptive.experiment_config import ExperimentConfig
 
 from typing import TYPE_CHECKING
 
@@ -72,12 +71,12 @@ class Model(ClassifierExperiment):
         model_config: LayerStackConfig,
         input_dim: int,
         output_dim: int,
-    ) -> Layer | Sequential:
+    ) -> Layer | LayerStack:
         override = LayerStackConfig(
             input_dim=input_dim,
             output_dim=output_dim,
         )
-        return LayerStack(model_config, override).build()
+        return LayerStack(model_config, override)
 
     def forward(
         self,
@@ -85,9 +84,9 @@ class Model(ClassifierExperiment):
     ) -> Tensor | tuple[Tensor, Tensor]:
         X = X.to(self.device)
         X = torch.flatten(X, start_dim=1)
-        X = Layer.forward_with_state(self.input_model, X)
-        state = Layer.forward_returning_state(self.model, X)
-        logits = Layer.forward_with_state(self.output_model, state.hidden)
+        X = Layer.run_model_returning_hidden(self.input_model, X)
+        state = Layer.run_model_returning_state(self.model, X)
+        logits = Layer.run_model_returning_hidden(self.output_model, state.hidden)
         if state.loss is not None:
             return logits, state.loss
         return logits

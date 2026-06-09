@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-import models.linear.config as config
+import models.linears.linear.config as config
 
 from emperor.base.options import (
     ActivationOptions,
@@ -11,9 +11,13 @@ from emperor.base.options import (
 )
 from emperor.base.layer import RecurrentLayerConfig
 from emperor.experiments.base import RandomSearch
-from models.linear.model import Model
-from models.linear.config_builder import LinearConfigBuilder
-from models.linear.presets import ExperimentOptions, ExperimentPresets
+from models.linears.linear.model import Model
+from models.linears.linear.config_builder import LinearConfigBuilder
+from models.linears.linear.presets import ExperimentOptions, ExperimentPresets
+from models.training_test_utils import (
+    RandomImageClassificationDataModule,
+    tiny_cpu_trainer,
+)
 
 
 class TestLinearModel(unittest.TestCase):
@@ -46,6 +50,18 @@ class TestLinearModel(unittest.TestCase):
                 logits = model(X)
 
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
+
+    def test_all_presets_train_one_epoch(self):
+        presets = ExperimentPresets()
+        dataset = config.DATASET_OPTIONS[0]
+
+        for option in ExperimentOptions:
+            with self.subTest(option=option.name):
+                cfg = presets.get_config(option, dataset)[0]
+                model = Model(cfg)
+                datamodule = RandomImageClassificationDataModule(dataset)
+
+                tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(

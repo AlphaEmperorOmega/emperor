@@ -1,4 +1,4 @@
-import models.linear.config as config
+import models.linears.linear.config as config
 
 from emperor.base.options import (
     ActivationOptions,
@@ -10,7 +10,7 @@ from emperor.base.layer.config import LayerConfig, RecurrentLayerConfig
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
-from models.linear.experiment_config import ExperimentConfig
+from models.linears.linear.experiment_config import ExperimentConfig
 
 from typing import TYPE_CHECKING
 

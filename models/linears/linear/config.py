@@ -3,7 +3,12 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
+from emperor.experiments.monitors import MonitorOption
 from emperor.linears.core.monitor import LinearMonitorCallback
+from emperor.base.layer.monitor import (
+    LayerControllerMonitorCallback,
+    RecurrentLayerMonitorCallback,
+)
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.base.options import (
     ActivationOptions,
@@ -16,6 +21,43 @@ BATCH_SIZE: int = 128
 LEARNING_RATE: float = 1e-3
 NUM_EPOCHS: int = 30
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
+MONITOR_OPTIONS: list[MonitorOption] = [
+    MonitorOption(
+        name="linear",
+        label="Linear layers",
+        description=(
+            "Logs activation, parameter, gradient, weight-conditioning "
+            "(spectral norm / condition number / effective rank), and dead-feature "
+            "stats for Emperor linear layers."
+        ),
+        kinds=["scalar"],
+        callback_factory=lambda: LinearMonitorCallback(log_every_n_steps=100),
+    ),
+    MonitorOption(
+        name="recurrent-layer",
+        label="Recurrent layers",
+        description=(
+            "Logs recurrent step count, hidden-state convergence, recurrent gate "
+            "openness, halted-state preservation, and step-delta visual summaries."
+        ),
+        kinds=["scalar", "histogram", "image"],
+        callback_factory=lambda: RecurrentLayerMonitorCallback(
+            log_every_n_steps=100
+        ),
+    ),
+    MonitorOption(
+        name="layer-controller",
+        label="Layer controllers",
+        description=(
+            "Logs Layer gate, residual, dropout, layer-norm, and activation "
+            "controller statistics without duplicating memory metrics."
+        ),
+        kinds=["scalar"],
+        callback_factory=lambda: LayerControllerMonitorCallback(
+            log_every_n_steps=100
+        ),
+    ),
+]
 
 # Trainer
 TRAINER_ACCELERATOR: str = "cpu"
@@ -25,7 +67,6 @@ CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 # Callback
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
-# CALLBACK_LINEAR_MONITOR = LinearMonitorCallback(log_every_n_steps=100)
 
 # Model
 INPUT_DIM: int = 28**2

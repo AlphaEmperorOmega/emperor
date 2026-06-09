@@ -9,9 +9,19 @@ from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
+from emperor.experiments.monitors import MonitorOption
+from emperor.base.layer.monitor import (
+    LayerControllerMonitorCallback,
+    RecurrentLayerMonitorCallback,
+)
 from emperor.augmentations.adaptive_parameters.core.monitor import (
     AdaptiveParameterMonitorCallback,
 )
+from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
+    WeightBankUtilizationMonitorCallback,
+)
+from emperor.linears.core.config import AdaptiveLinearLayerConfig
+from emperor.linears.core.monitor import LinearMonitorCallback
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     WeightNormalizationOptions,
@@ -52,6 +62,69 @@ BATCH_SIZE: int = 128
 NUM_EPOCHS: int = 10
 LEARNING_RATE: float = 1e-3
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
+MONITOR_OPTIONS: list[MonitorOption] = [
+    MonitorOption(
+        name="linear",
+        label="Linear layers",
+        description=(
+            "Logs activation, parameter, gradient, weight-conditioning "
+            "(spectral norm / condition number / effective rank), and dead-feature "
+            "stats for Emperor linear layers."
+        ),
+        kinds=["scalar"],
+        callback_factory=lambda: LinearMonitorCallback(log_every_n_steps=100),
+    ),
+    MonitorOption(
+        name="recurrent-layer",
+        label="Recurrent layers",
+        description=(
+            "Logs recurrent step count, hidden-state convergence, recurrent gate "
+            "openness, halted-state preservation, and step-delta visual summaries."
+        ),
+        kinds=["scalar", "histogram", "image"],
+        callback_factory=lambda: RecurrentLayerMonitorCallback(
+            log_every_n_steps=100
+        ),
+    ),
+    MonitorOption(
+        name="layer-controller",
+        label="Layer controllers",
+        description=(
+            "Logs Layer gate, residual, dropout, layer-norm, and activation "
+            "controller statistics without duplicating memory metrics."
+        ),
+        kinds=["scalar"],
+        callback_factory=lambda: LayerControllerMonitorCallback(
+            log_every_n_steps=100
+        ),
+    ),
+    MonitorOption(
+        name="adaptive",
+        label="Adaptive parameters",
+        description=(
+            "Logs dynamic weight, bias, diagonal, and mask parameter statistics, "
+            "plus input-adaptivity (cross-sample variation / collapse detection)."
+        ),
+        kinds=["scalar", "histogram"],
+        callback_factory=lambda: AdaptiveParameterMonitorCallback(
+            log_every_n_steps=100,
+            log_histograms=True,
+            log_internal_stats=True,
+        ),
+    ),
+    MonitorOption(
+        name="weight-bank",
+        label="Weight bank utilization",
+        description=(
+            "Logs bank-slot selection entropy, utilization, and routing heatmaps "
+            "for weighted-bank dynamic params."
+        ),
+        kinds=["scalar", "histogram", "image"],
+        callback_factory=lambda: WeightBankUtilizationMonitorCallback(
+            log_every_n_steps=100,
+        ),
+    ),
+]
 
 # Trainer
 TRAINER_ACCELERATOR: str = "cpu"
@@ -61,12 +134,6 @@ CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 
 # Callback
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
-# CALLBACK_LINEAR_MONITOR = LinearMonitorCallback(log_every_n_steps=100)
-CALLBACK_ADAPTIVE_PARAMETER_MONITOR = AdaptiveParameterMonitorCallback(
-    log_every_n_steps=100,
-    log_histograms=False,
-    log_internal_stats=True,
-)
 
 # Model
 INPUT_DIM: int = 28**2
@@ -189,6 +256,112 @@ ADAPTIVE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
 ADAPTIVE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
 #########################################################################
+# INPUT BOUNDARY PROJECTOR OPTIONS
+# Use None for the default linear input boundary projector.
+INPUT_LAYER_MODEL_OPTION: type[AdaptiveLinearLayerConfig] | None = None
+INPUT_LAYER_WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
+INPUT_LAYER_WEIGHT_GENERATOR_DEPTH: DynamicDepthOptions = WEIGHT_GENERATOR_DEPTH
+INPUT_LAYER_WEIGHT_DECAY_SCHEDULE: WeightDecayScheduleOptions = WEIGHT_DECAY_SCHEDULE
+INPUT_LAYER_WEIGHT_DECAY_RATE: float = WEIGHT_DECAY_RATE
+INPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES: int = WEIGHT_DECAY_WARMUP_BATCHES
+INPUT_LAYER_WEIGHT_NORMALIZATION_OPTION: WeightNormalizationOptions = (
+    WEIGHT_NORMALIZATION_OPTION
+)
+INPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = (
+    WEIGHT_NORMALIZATION_POSITION_OPTION
+)
+INPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
+    WEIGHT_BANK_EXPANSION_FACTOR
+)
+INPUT_LAYER_BIAS_OPTION: type[DynamicBiasConfig] | None = None
+INPUT_LAYER_BIAS_DECAY_SCHEDULE: WeightDecayScheduleOptions = BIAS_DECAY_SCHEDULE
+INPUT_LAYER_BIAS_DECAY_RATE: float = BIAS_DECAY_RATE
+INPUT_LAYER_BIAS_DECAY_WARMUP_BATCHES: int = BIAS_DECAY_WARMUP_BATCHES
+INPUT_LAYER_BIAS_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
+    BIAS_BANK_EXPANSION_FACTOR
+)
+INPUT_LAYER_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
+INPUT_LAYER_ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
+INPUT_LAYER_MASK_THRESHOLD: float = MASK_THRESHOLD
+INPUT_LAYER_MASK_FLOOR: float = MASK_FLOOR
+INPUT_LAYER_MASK_TRANSITION_WIDTH: float = MASK_TRANSITION_WIDTH
+INPUT_LAYER_MASK_SURROGATE_SCALE: float = MASK_SURROGATE_SCALE
+INPUT_LAYER_MASK_DIMENSION_OPTION: MaskDimensionOptions = MASK_DIMENSION_OPTION
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = ADAPTIVE_STACK_HIDDEN_DIM
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    ADAPTIVE_STACK_LAYER_NORM_POSITION
+)
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = ADAPTIVE_STACK_NUM_LAYERS
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = (
+    ADAPTIVE_STACK_ACTIVATION
+)
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG: bool = (
+    ADAPTIVE_STACK_RESIDUAL_FLAG
+)
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = (
+    ADAPTIVE_STACK_DROPOUT_PROBABILITY
+)
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+    ADAPTIVE_STACK_LAST_LAYER_BIAS_OPTION
+)
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = (
+    ADAPTIVE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+)
+
+#########################################################################
+# OUTPUT BOUNDARY PROJECTOR OPTIONS
+# Use None for the default linear output boundary projector.
+OUTPUT_LAYER_MODEL_OPTION: type[AdaptiveLinearLayerConfig] | None = None
+OUTPUT_LAYER_WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
+OUTPUT_LAYER_WEIGHT_GENERATOR_DEPTH: DynamicDepthOptions = WEIGHT_GENERATOR_DEPTH
+OUTPUT_LAYER_WEIGHT_DECAY_SCHEDULE: WeightDecayScheduleOptions = WEIGHT_DECAY_SCHEDULE
+OUTPUT_LAYER_WEIGHT_DECAY_RATE: float = WEIGHT_DECAY_RATE
+OUTPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES: int = WEIGHT_DECAY_WARMUP_BATCHES
+OUTPUT_LAYER_WEIGHT_NORMALIZATION_OPTION: WeightNormalizationOptions = (
+    WEIGHT_NORMALIZATION_OPTION
+)
+OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = (
+    WEIGHT_NORMALIZATION_POSITION_OPTION
+)
+OUTPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
+    WEIGHT_BANK_EXPANSION_FACTOR
+)
+OUTPUT_LAYER_BIAS_OPTION: type[DynamicBiasConfig] | None = None
+OUTPUT_LAYER_BIAS_DECAY_SCHEDULE: WeightDecayScheduleOptions = BIAS_DECAY_SCHEDULE
+OUTPUT_LAYER_BIAS_DECAY_RATE: float = BIAS_DECAY_RATE
+OUTPUT_LAYER_BIAS_DECAY_WARMUP_BATCHES: int = BIAS_DECAY_WARMUP_BATCHES
+OUTPUT_LAYER_BIAS_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
+    BIAS_BANK_EXPANSION_FACTOR
+)
+OUTPUT_LAYER_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
+OUTPUT_LAYER_ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
+OUTPUT_LAYER_MASK_THRESHOLD: float = MASK_THRESHOLD
+OUTPUT_LAYER_MASK_FLOOR: float = MASK_FLOOR
+OUTPUT_LAYER_MASK_TRANSITION_WIDTH: float = MASK_TRANSITION_WIDTH
+OUTPUT_LAYER_MASK_SURROGATE_SCALE: float = MASK_SURROGATE_SCALE
+OUTPUT_LAYER_MASK_DIMENSION_OPTION: MaskDimensionOptions = MASK_DIMENSION_OPTION
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = ADAPTIVE_STACK_HIDDEN_DIM
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    ADAPTIVE_STACK_LAYER_NORM_POSITION
+)
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = ADAPTIVE_STACK_NUM_LAYERS
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = (
+    ADAPTIVE_STACK_ACTIVATION
+)
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG: bool = (
+    ADAPTIVE_STACK_RESIDUAL_FLAG
+)
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = (
+    ADAPTIVE_STACK_DROPOUT_PROBABILITY
+)
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+    ADAPTIVE_STACK_LAST_LAYER_BIAS_OPTION
+)
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = (
+    ADAPTIVE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+)
+
+#########################################################################
 # HYPERPARAMETER SEARCH SPACE
 # These values define the parameter ranges explored when search mode is enabled.
 
@@ -211,6 +384,11 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.GELU,
     ActivationOptions.TANH,
 ]
+
+#########################################################################
+# BOUNDARY PROJECTOR HYPERPARAMETERS
+SEARCH_SPACE_INPUT_LAYER_MODEL_OPTION: list = [None, AdaptiveLinearLayerConfig]
+SEARCH_SPACE_OUTPUT_LAYER_MODEL_OPTION: list = [None, AdaptiveLinearLayerConfig]
 
 #########################################################################
 # DYNAMIC WEIGHT GENERATOR OPTION, DEPTH, DECAY, AND NORMALIZATION HYPERPARAMETERS

@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-import models.linear_adaptive.config as config
+import models.linears.linear_adaptive.config as config
 
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBiasConfig,
@@ -29,11 +29,15 @@ from emperor.base.options import (
     LayerNormPositionOptions,
 )
 from emperor.base.layer import RecurrentLayerConfig
-from emperor.experiments.base import RandomSearch
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
-from models.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
-from models.linear_adaptive.model import Model
-from models.linear_adaptive.presets import ExperimentOptions, ExperimentPresets
+from emperor.experiments.base import GridSearch
+from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
+from models.linears.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
+from models.linears.linear_adaptive.model import Model
+from models.linears.linear_adaptive.presets import ExperimentOptions, ExperimentPresets
+from models.training_test_utils import (
+    RandomImageClassificationDataModule,
+    tiny_cpu_trainer,
+)
 
 
 class TestAdaptiveLinearModel(unittest.TestCase):
@@ -67,6 +71,18 @@ class TestAdaptiveLinearModel(unittest.TestCase):
 
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
 
+    def test_all_presets_train_one_epoch(self):
+        presets = ExperimentPresets()
+        dataset = config.DATASET_OPTIONS[0]
+
+        for option in ExperimentOptions:
+            with self.subTest(option=option.name):
+                cfg = presets.get_config(option, dataset)[0]
+                model = Model(cfg)
+                datamodule = RandomImageClassificationDataModule(dataset)
+
+                tiny_cpu_trainer().fit(model, datamodule=datamodule)
+
     def test_preset_builds_adaptive_linear_layer_config(self):
         cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=16, output_dim=4)
         layer_model_config = (
@@ -89,18 +105,168 @@ class TestAdaptiveLinearModel(unittest.TestCase):
         self.assertEqual(cfg.hidden_dim, 16)
         self.assertEqual(cfg.output_dim, 4)
         self.assertIsInstance(
+            cfg.experiment_config.input_model_config.layer_model_config,
+            LinearLayerConfig,
+        )
+        self.assertIsInstance(
             cfg.experiment_config.model_config.layer_config.layer_model_config,
             AdaptiveLinearLayerConfig,
         )
+        self.assertIsInstance(
+            cfg.experiment_config.output_model_config.layer_model_config,
+            LinearLayerConfig,
+        )
 
-    def test_config_search_space_builds_configs(self):
+    def test_boundary_layer_model_options_can_differ(self):
+        cases = [
+            (
+                AdaptiveLinearLayerConfig,
+                None,
+                "input_layer_weight_option",
+            ),
+            (
+                None,
+                AdaptiveLinearLayerConfig,
+                "output_layer_weight_option",
+            ),
+        ]
+
+        for input_option, output_option, boundary_weight_key in cases:
+            with self.subTest(
+                input_option=self._option_name(input_option),
+                output_option=self._option_name(output_option),
+            ):
+                boundary_kwargs = {
+                    boundary_weight_key: DualModelDynamicWeightConfig,
+                }
+                cfg = LinearAdaptiveConfigBuilder(
+                    input_dim=8,
+                    hidden_dim=16,
+                    output_dim=4,
+                    weight_option=LowRankDynamicWeightConfig,
+                    input_layer_model_option=input_option,
+                    output_layer_model_option=output_option,
+                    **boundary_kwargs,
+                ).build()
+                input_layer_model_config = (
+                    cfg.experiment_config.input_model_config.layer_model_config
+                )
+                output_layer_model_config = (
+                    cfg.experiment_config.output_model_config.layer_model_config
+                )
+                hidden_augmentation_config = (
+                    cfg.experiment_config.model_config.layer_config.layer_model_config
+                    .adaptive_augmentation_config
+                )
+
+                expected_input_type = input_option or LinearLayerConfig
+                expected_output_type = output_option or LinearLayerConfig
+                self.assertIs(type(input_layer_model_config), expected_input_type)
+                self.assertIs(type(output_layer_model_config), expected_output_type)
+                self.assertIsInstance(
+                    hidden_augmentation_config.weight_config,
+                    LowRankDynamicWeightConfig,
+                )
+                if input_option is AdaptiveLinearLayerConfig:
+                    self.assertIsInstance(
+                        input_layer_model_config.adaptive_augmentation_config.weight_config,
+                        DualModelDynamicWeightConfig,
+                    )
+                if output_option is AdaptiveLinearLayerConfig:
+                    self.assertIsInstance(
+                        output_layer_model_config.adaptive_augmentation_config.weight_config,
+                        DualModelDynamicWeightConfig,
+                    )
+
+                output = Model(cfg)(torch.randn(2, 1, 2, 4))
+                logits = output[0] if isinstance(output, tuple) else output
+                self.assertEqual(logits.shape, (2, 4))
+
+    def test_adaptive_boundary_projectors_can_disable_augmentation(self):
+        cfg = LinearAdaptiveConfigBuilder(
+            input_dim=8,
+            hidden_dim=16,
+            output_dim=4,
+            input_layer_model_option=AdaptiveLinearLayerConfig,
+            output_layer_model_option=AdaptiveLinearLayerConfig,
+        ).build()
+
+        input_augmentation_config = (
+            cfg.experiment_config.input_model_config.layer_model_config
+            .adaptive_augmentation_config
+        )
+        output_augmentation_config = (
+            cfg.experiment_config.output_model_config.layer_model_config
+            .adaptive_augmentation_config
+        )
+
+        for augmentation_config in (
+            input_augmentation_config,
+            output_augmentation_config,
+        ):
+            self.assertIsNone(augmentation_config.weight_config)
+            self.assertIsNone(augmentation_config.bias_config)
+            self.assertIsNone(augmentation_config.diagonal_config)
+            self.assertIsNone(augmentation_config.mask_config)
+
+        output = Model(cfg)(torch.randn(2, 1, 2, 4))
+        logits = output[0] if isinstance(output, tuple) else output
+        self.assertEqual(logits.shape, (2, 4))
+
+    def test_boundary_adaptive_options_require_adaptive_boundary_projector(self):
+        cases = [
+            (
+                "input_layer_weight_option",
+                {"input_layer_weight_option": DualModelDynamicWeightConfig},
+            ),
+            (
+                "output_layer_bias_option",
+                {"output_layer_bias_option": AdditiveDynamicBiasConfig},
+            ),
+            (
+                "input_layer_row_mask_option",
+                {"input_layer_row_mask_option": WeightInformedScoreAxisMaskConfig},
+            ),
+        ]
+
+        for expected_field, kwargs in cases:
+            with self.subTest(expected_field=expected_field):
+                with self.assertRaisesRegex(ValueError, expected_field):
+                    LinearAdaptiveConfigBuilder(
+                        input_dim=8,
+                        hidden_dim=16,
+                        output_dim=4,
+                        **kwargs,
+                    ).build()
+
+    def test_boundary_layer_model_options_are_searchable(self):
         configs = ExperimentPresets().get_config(
             ExperimentOptions.BASELINE,
             config.DATASET_OPTIONS[0],
-            RandomSearch(num_samples=2),
+            GridSearch(),
+            search_keys=[
+                "input_layer_model_option",
+                "output_layer_model_option",
+            ],
         )
+        boundary_pairs = {
+            (
+                type(cfg.experiment_config.input_model_config.layer_model_config),
+                type(cfg.experiment_config.output_model_config.layer_model_config),
+            )
+            for cfg in configs
+        }
 
-        self.assertTrue(len(configs) > 1)
+        self.assertEqual(len(configs), 4)
+        self.assertEqual(
+            boundary_pairs,
+            {
+                (LinearLayerConfig, LinearLayerConfig),
+                (LinearLayerConfig, AdaptiveLinearLayerConfig),
+                (AdaptiveLinearLayerConfig, LinearLayerConfig),
+                (AdaptiveLinearLayerConfig, AdaptiveLinearLayerConfig),
+            },
+        )
         self.assertTrue(
             all(
                 isinstance(
@@ -144,44 +310,44 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             MaskDimensionOptions.ROW,
         )
 
-    def test_combo_presets_do_not_include_masks(self):
+    def test_weight_bias_diagonal_presets_do_not_include_masks(self):
         expected_configs = {
-            ExperimentOptions.COMBO_1: (
+            ExperimentOptions.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: (
                 SingleModelDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 CombinedDynamicDiagonalConfig,
             ),
-            ExperimentOptions.COMBO_2: (
+            ExperimentOptions.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: (
                 DualModelDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 CombinedDynamicDiagonalConfig,
             ),
-            ExperimentOptions.COMBO_3: (
+            ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: (
                 LayeredWeightedBankDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 CombinedDynamicDiagonalConfig,
             ),
-            ExperimentOptions.COMBO_4: (
+            ExperimentOptions.LOW_RANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: (
                 LowRankDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 CombinedDynamicDiagonalConfig,
             ),
-            ExperimentOptions.COMBO_5: (
+            ExperimentOptions.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: (
                 SingleModelDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 StandardDynamicDiagonalConfig,
             ),
-            ExperimentOptions.COMBO_6: (
+            ExperimentOptions.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: (
                 DualModelDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 StandardDynamicDiagonalConfig,
             ),
-            ExperimentOptions.COMBO_7: (
+            ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: (
                 LayeredWeightedBankDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 StandardDynamicDiagonalConfig,
             ),
-            ExperimentOptions.COMBO_8: (
+            ExperimentOptions.LOW_RANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: (
                 LowRankDynamicWeightConfig,
                 AdditiveDynamicBiasConfig,
                 StandardDynamicDiagonalConfig,
@@ -375,6 +541,11 @@ class TestAdaptiveLinearModel(unittest.TestCase):
             augmentation_config.mask_config,
             WeightInformedScoreAxisMaskConfig,
         )
+
+    def _option_name(self, option) -> str:
+        if option is None:
+            return "None"
+        return option.__name__
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(

@@ -1,4 +1,4 @@
-import models.linear_adaptive.config as config
+import models.linears.linear_adaptive.config as config
 
 from emperor.augmentations.adaptive_parameters.core.bias import (
     AdditiveDynamicBiasConfig,
@@ -39,9 +39,10 @@ from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import (
     ExperimentBase,
     ExperimentPresetsBase,
+    PresetLock,
     SearchMode,
 )
-from models.linear_adaptive.model import Model
+from models.linears.linear_adaptive.model import Model
 
 from typing import TYPE_CHECKING
 
@@ -110,20 +111,20 @@ class ExperimentOptions(BaseOptions):
         "[MASK] Adaptive linear stack with the top-slice axis row mask generator."
     )
     WEIGHT_INFORMED_SCORE_MASK = "[MASK] Adaptive linear stack with the weight-informed score axis row mask generator."
-    COMBO_1 = "[WEIGHT+BIAS+DIAGONAL] Single-model weight + additive bias + combined diagonal."
-    COMBO_2 = (
+    SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = "[WEIGHT+BIAS+DIAGONAL] Single-model weight + additive bias + combined diagonal."
+    DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = (
         "[WEIGHT+BIAS+DIAGONAL] Dual-model weight + additive bias + combined diagonal."
     )
-    COMBO_3 = "[WEIGHT+BIAS+DIAGONAL] Layered weighted bank weight + additive bias + combined diagonal."
-    COMBO_4 = (
+    LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = "[WEIGHT+BIAS+DIAGONAL] Layered weighted bank weight + additive bias + combined diagonal."
+    LOW_RANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL = (
         "[WEIGHT+BIAS+DIAGONAL] Low-rank weight + additive bias + combined diagonal."
     )
-    COMBO_5 = "[WEIGHT+BIAS+DIAGONAL] Single-model weight + additive bias + standard diagonal."
-    COMBO_6 = (
+    SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = "[WEIGHT+BIAS+DIAGONAL] Single-model weight + additive bias + standard diagonal."
+    DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = (
         "[WEIGHT+BIAS+DIAGONAL] Dual-model weight + additive bias + standard diagonal."
     )
-    COMBO_7 = "[WEIGHT+BIAS+DIAGONAL] Layered weighted bank weight + additive bias + standard diagonal."
-    COMBO_8 = (
+    LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = "[WEIGHT+BIAS+DIAGONAL] Layered weighted bank weight + additive bias + standard diagonal."
+    LOW_RANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL = (
         "[WEIGHT+BIAS+DIAGONAL] Low-rank weight + additive bias + standard diagonal."
     )
     DECAY_EXPONENTIAL_WEIGHT = "[DECAY] Dual-model weight that decays exponentially toward a static linear layer."
@@ -159,7 +160,242 @@ class ExperimentOptions(BaseOptions):
     RECURRENT_GATING_HALTING = "[RECURRENT+GATE+HALT] Adaptive linear stack applied recurrently with both learned recurrent gating and adaptive recurrent halting."
 
 
+def _lock(option, value, field: str) -> PresetLock:
+    label = field.replace("_", " ")
+    return PresetLock(
+        value=value,
+        reason=(
+            f"Locked by the {option.name} preset because this preset sets "
+            f"{label}."
+        ),
+    )
+
+
+def _locks(option, **fields) -> dict[str, PresetLock]:
+    return {key: _lock(option, value, key) for key, value in fields.items()}
+
+
 class ExperimentPresets(ExperimentPresetsBase):
+    PRESET_LOCKS = {
+        ExperimentOptions.SINGLE_MODEL_WEIGHT: _locks(
+            ExperimentOptions.SINGLE_MODEL_WEIGHT,
+            weight_option=SingleModelDynamicWeightConfig,
+        ),
+        ExperimentOptions.DUAL_MODEL_WEIGHT: _locks(
+            ExperimentOptions.DUAL_MODEL_WEIGHT,
+            weight_option=DualModelDynamicWeightConfig,
+        ),
+        ExperimentOptions.LOW_RANK_WEIGHT: _locks(
+            ExperimentOptions.LOW_RANK_WEIGHT,
+            weight_option=LowRankDynamicWeightConfig,
+        ),
+        ExperimentOptions.HYPERNETWORK_WEIGHT: _locks(
+            ExperimentOptions.HYPERNETWORK_WEIGHT,
+            weight_option=HypernetworkDynamicWeightConfig,
+        ),
+        ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT: _locks(
+            ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT,
+            weight_option=LayeredWeightedBankDynamicWeightConfig,
+        ),
+        ExperimentOptions.SOFT_WEIGHTED_BANK_WEIGHT: _locks(
+            ExperimentOptions.SOFT_WEIGHTED_BANK_WEIGHT,
+            weight_option=SoftWeightedBankDynamicWeightConfig,
+        ),
+        ExperimentOptions.AFFINE_TRANSFORM_BIAS: _locks(
+            ExperimentOptions.AFFINE_TRANSFORM_BIAS,
+            bias_option=AffineTransformDynamicBiasConfig,
+        ),
+        ExperimentOptions.ADDITIVE_BIAS: _locks(
+            ExperimentOptions.ADDITIVE_BIAS,
+            bias_option=AdditiveDynamicBiasConfig,
+        ),
+        ExperimentOptions.GENERATOR_BIAS: _locks(
+            ExperimentOptions.GENERATOR_BIAS,
+            bias_option=GeneratorDynamicBiasConfig,
+        ),
+        ExperimentOptions.MULTIPLICATIVE_BIAS: _locks(
+            ExperimentOptions.MULTIPLICATIVE_BIAS,
+            bias_option=MultiplicativeDynamicBiasConfig,
+        ),
+        ExperimentOptions.SIGMOID_GATED_BIAS: _locks(
+            ExperimentOptions.SIGMOID_GATED_BIAS,
+            bias_option=SigmoidGatedDynamicBiasConfig,
+        ),
+        ExperimentOptions.TANH_GATED_BIAS: _locks(
+            ExperimentOptions.TANH_GATED_BIAS,
+            bias_option=TanhGatedDynamicBiasConfig,
+        ),
+        ExperimentOptions.WEIGHTED_BANK_BIAS: _locks(
+            ExperimentOptions.WEIGHTED_BANK_BIAS,
+            bias_option=WeightedBankDynamicBiasConfig,
+        ),
+        ExperimentOptions.STANDARD_DIAGONAL: _locks(
+            ExperimentOptions.STANDARD_DIAGONAL,
+            diagonal_option=StandardDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.ANTI_DIAGONAL: _locks(
+            ExperimentOptions.ANTI_DIAGONAL,
+            diagonal_option=AntiDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.COMBINED_DIAGONAL: _locks(
+            ExperimentOptions.COMBINED_DIAGONAL,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.DIAGONAL_AXIS_MASK: _locks(
+            ExperimentOptions.DIAGONAL_AXIS_MASK,
+            row_mask_option=DiagonalAxisMaskConfig,
+        ),
+        ExperimentOptions.OUTER_PRODUCT_MASK: _locks(
+            ExperimentOptions.OUTER_PRODUCT_MASK,
+            row_mask_option=OuterProductMaskConfig,
+        ),
+        ExperimentOptions.PER_AXIS_SCORE_MASK: _locks(
+            ExperimentOptions.PER_AXIS_SCORE_MASK,
+            row_mask_option=PerAxisScoreMaskConfig,
+        ),
+        ExperimentOptions.TOP_SLICE_AXIS_MASK: _locks(
+            ExperimentOptions.TOP_SLICE_AXIS_MASK,
+            row_mask_option=TopSliceAxisMaskConfig,
+        ),
+        ExperimentOptions.WEIGHT_INFORMED_SCORE_MASK: _locks(
+            ExperimentOptions.WEIGHT_INFORMED_SCORE_MASK,
+            row_mask_option=WeightInformedScoreAxisMaskConfig,
+        ),
+        ExperimentOptions.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: _locks(
+            ExperimentOptions.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL,
+            weight_option=SingleModelDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: _locks(
+            ExperimentOptions.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL,
+            weight_option=DualModelDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: _locks(
+            ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL,
+            weight_option=LayeredWeightedBankDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.LOW_RANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: _locks(
+            ExperimentOptions.LOW_RANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL,
+            weight_option=LowRankDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: _locks(
+            ExperimentOptions.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL,
+            weight_option=SingleModelDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=StandardDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: _locks(
+            ExperimentOptions.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL,
+            weight_option=DualModelDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=StandardDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: _locks(
+            ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL,
+            weight_option=LayeredWeightedBankDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=StandardDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.LOW_RANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: _locks(
+            ExperimentOptions.LOW_RANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL,
+            weight_option=LowRankDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=StandardDynamicDiagonalConfig,
+        ),
+        ExperimentOptions.DECAY_EXPONENTIAL_WEIGHT: _locks(
+            ExperimentOptions.DECAY_EXPONENTIAL_WEIGHT,
+            weight_option=DualModelDynamicWeightConfig,
+            weight_decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            weight_decay_rate=1e-3,
+            weight_decay_warmup_batches=500,
+        ),
+        ExperimentOptions.NORM_L2_WEIGHT: _locks(
+            ExperimentOptions.NORM_L2_WEIGHT,
+            weight_option=DualModelDynamicWeightConfig,
+            weight_normalization_option=WeightNormalizationOptions.L2_SCALE,
+        ),
+        ExperimentOptions.DEEP_GENERATOR: _locks(
+            ExperimentOptions.DEEP_GENERATOR,
+            weight_option=DualModelDynamicWeightConfig,
+            generator_depth=DynamicDepthOptions.DEPTH_OF_EIGHT,
+        ),
+        ExperimentOptions.FULL_STACK: _locks(
+            ExperimentOptions.FULL_STACK,
+            weight_option=DualModelDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+            row_mask_option=WeightInformedScoreAxisMaskConfig,
+        ),
+        ExperimentOptions.ADAPTIVE_HALTING: _locks(
+            ExperimentOptions.ADAPTIVE_HALTING,
+            weight_option=DualModelDynamicWeightConfig,
+            stack_halting_flag=True,
+        ),
+        ExperimentOptions.DUAL_WEIGHT_GATING: _locks(
+            ExperimentOptions.DUAL_WEIGHT_GATING,
+            weight_option=DualModelDynamicWeightConfig,
+            stack_gate_flag=True,
+        ),
+        ExperimentOptions.DUAL_WEIGHT_HALTING: _locks(
+            ExperimentOptions.DUAL_WEIGHT_HALTING,
+            weight_option=DualModelDynamicWeightConfig,
+            stack_halting_flag=True,
+        ),
+        ExperimentOptions.FULL_STACK_GATING: _locks(
+            ExperimentOptions.FULL_STACK_GATING,
+            weight_option=DualModelDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+            row_mask_option=WeightInformedScoreAxisMaskConfig,
+            stack_gate_flag=True,
+        ),
+        ExperimentOptions.FULL_STACK_RECURRENT: _locks(
+            ExperimentOptions.FULL_STACK_RECURRENT,
+            weight_option=DualModelDynamicWeightConfig,
+            bias_option=AdditiveDynamicBiasConfig,
+            diagonal_option=CombinedDynamicDiagonalConfig,
+            row_mask_option=WeightInformedScoreAxisMaskConfig,
+            recurrent_flag=True,
+        ),
+        ExperimentOptions.BANK_WEIGHT_MASK: _locks(
+            ExperimentOptions.BANK_WEIGHT_MASK,
+            weight_option=LayeredWeightedBankDynamicWeightConfig,
+            row_mask_option=WeightInformedScoreAxisMaskConfig,
+        ),
+        ExperimentOptions.LOW_RANK_POST_NORM: _locks(
+            ExperimentOptions.LOW_RANK_POST_NORM,
+            weight_option=LowRankDynamicWeightConfig,
+            layer_norm_position=LayerNormPositionOptions.AFTER,
+        ),
+        ExperimentOptions.RECURRENT: _locks(
+            ExperimentOptions.RECURRENT,
+            recurrent_flag=True,
+        ),
+        ExperimentOptions.RECURRENT_GATING: _locks(
+            ExperimentOptions.RECURRENT_GATING,
+            recurrent_flag=True,
+            recurrent_gate_flag=True,
+        ),
+        ExperimentOptions.RECURRENT_HALTING: _locks(
+            ExperimentOptions.RECURRENT_HALTING,
+            recurrent_flag=True,
+            recurrent_halting_flag=True,
+        ),
+        ExperimentOptions.RECURRENT_GATING_HALTING: _locks(
+            ExperimentOptions.RECURRENT_GATING_HALTING,
+            recurrent_flag=True,
+            recurrent_gate_flag=True,
+            recurrent_halting_flag=True,
+        ),
+    }
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -207,14 +443,14 @@ class ExperimentPresets(ExperimentPresetsBase):
             ExperimentOptions.PER_AXIS_SCORE_MASK: self._per_axis_score_mask_preset,
             ExperimentOptions.TOP_SLICE_AXIS_MASK: self._top_slice_axis_mask_preset,
             ExperimentOptions.WEIGHT_INFORMED_SCORE_MASK: self._weight_informed_score_mask_preset,
-            ExperimentOptions.COMBO_1: self._single_model_weight_additive_bias_combined_diagonal_preset,
-            ExperimentOptions.COMBO_2: self._dual_model_weight_additive_bias_combined_diagonal_preset,
-            ExperimentOptions.COMBO_3: self._layered_weighted_bank_weight_additive_bias_combined_diagonal_preset,
-            ExperimentOptions.COMBO_4: self._low_rank_weight_additive_bias_combined_diagonal_preset,
-            ExperimentOptions.COMBO_5: self._single_model_weight_additive_bias_standard_diagonal_preset,
-            ExperimentOptions.COMBO_6: self._dual_model_weight_additive_bias_standard_diagonal_preset,
-            ExperimentOptions.COMBO_7: self._layered_weighted_bank_weight_additive_bias_standard_diagonal_preset,
-            ExperimentOptions.COMBO_8: self._low_rank_weight_additive_bias_standard_diagonal_preset,
+            ExperimentOptions.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: self._single_model_weight_additive_bias_combined_diagonal_preset,
+            ExperimentOptions.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: self._dual_model_weight_additive_bias_combined_diagonal_preset,
+            ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: self._layered_weighted_bank_weight_additive_bias_combined_diagonal_preset,
+            ExperimentOptions.LOW_RANK_WEIGHT_ADDITIVE_BIAS_COMBINED_DIAGONAL: self._low_rank_weight_additive_bias_combined_diagonal_preset,
+            ExperimentOptions.SINGLE_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: self._single_model_weight_additive_bias_standard_diagonal_preset,
+            ExperimentOptions.DUAL_MODEL_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: self._dual_model_weight_additive_bias_standard_diagonal_preset,
+            ExperimentOptions.LAYERED_WEIGHTED_BANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: self._layered_weighted_bank_weight_additive_bias_standard_diagonal_preset,
+            ExperimentOptions.LOW_RANK_WEIGHT_ADDITIVE_BIAS_STANDARD_DIAGONAL: self._low_rank_weight_additive_bias_standard_diagonal_preset,
             ExperimentOptions.DECAY_EXPONENTIAL_WEIGHT: self._decay_exponential_weight_preset,
             ExperimentOptions.NORM_L2_WEIGHT: self._norm_l2_weight_preset,
             ExperimentOptions.DEEP_GENERATOR: self._deep_generator_preset,
@@ -536,7 +772,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         )
 
     def _preset(self, **kwargs) -> "ModelConfig":
-        from models.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
+        from models.linears.linear_adaptive.config_builder import LinearAdaptiveConfigBuilder
 
         return LinearAdaptiveConfigBuilder(**kwargs).build()
 
