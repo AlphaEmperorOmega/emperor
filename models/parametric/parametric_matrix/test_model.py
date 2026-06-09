@@ -5,7 +5,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 import torch
 
-import models.parametric_matrix.config as config
+import models.parametric.parametric_matrix.config as config
 
 from emperor.experiments.base import RandomSearch
 from emperor.parametric import (
@@ -15,8 +15,12 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
-from models.parametric_matrix.model import Model
-from models.parametric_matrix.presets import ExperimentOptions, ExperimentPresets
+from models.parametric.parametric_matrix.model import Model
+from models.parametric.parametric_matrix.presets import ExperimentOptions, ExperimentPresets
+from models.training_test_utils import (
+    RandomImageClassificationDataModule,
+    tiny_cpu_trainer,
+)
 
 
 class TestParametricMatrixModel(unittest.TestCase):
@@ -80,6 +84,23 @@ class TestParametricMatrixModel(unittest.TestCase):
 
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
                 self.assertEqual(auxiliary_loss.shape, torch.Size([]))
+
+    def test_all_presets_train_one_epoch(self):
+        presets = ExperimentPresets()
+        dataset = config.DATASET_OPTIONS[0]
+
+        for option in ExperimentOptions:
+            with self.subTest(option=option.name):
+                search_mode = (
+                    RandomSearch(num_samples=1)
+                    if option == ExperimentOptions.CONFIG
+                    else None
+                )
+                cfg = presets.get_config(option, dataset, search_mode)[0]
+                model = Model(cfg)
+                datamodule = RandomImageClassificationDataModule(dataset)
+
+                tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def test_config_search_space_builds_configs(self):
         configs = ExperimentPresets().get_config(

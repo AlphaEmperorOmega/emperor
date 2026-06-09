@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-import models.parametric_vector.config as config
+import models.parametric.parametric_generator.config as config
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
@@ -15,17 +15,24 @@ from emperor.base.options import (
 from emperor.config import ModelConfig
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, SearchMode
+from emperor.experts.core.config import MixtureOfExpertsConfig
+from emperor.experts.core.options import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    RoutingInitializationMode,
+)
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
     ClipParameterOptions,
+    GeneratorBiasMixtureConfig,
+    GeneratorWeightsMixtureConfig,
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
-    VectorWeightsMixtureConfig,
 )
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
-from models.parametric_vector.config import ExperimentConfig
-from models.parametric_vector.model import Model
+from models.parametric.parametric_generator.config import ExperimentConfig
+from models.parametric.parametric_generator.model import Model
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig as ModelConfigType
@@ -84,6 +91,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         adaptive_mixture_weighted_parameters_flag: bool = config.ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG,
         adaptive_mixture_clip_parameter_option: ClipParameterOptions = config.ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION,
         adaptive_mixture_clip_range: float = config.ADAPTIVE_MIXTURE_CLIP_RANGE,
+        adaptive_bias_option: type[GeneratorBiasMixtureConfig] | None = config.ADAPTIVE_BIAS_OPTION,
         sampler_threshold: float = config.SAMPLER_THRESHOLD,
         sampler_filter_above_threshold: bool = config.SAMPLER_FILTER_ABOVE_THRESHOLD,
         sampler_num_topk_samples: int = config.SAMPLER_NUM_TOPK_SAMPLES,
@@ -93,7 +101,43 @@ class ExperimentPresets(ExperimentPresetsBase):
         sampler_switch_loss_weight: float = config.SAMPLER_SWITCH_LOSS_WEIGHT,
         sampler_zero_centred_loss_weight: float = config.SAMPLER_ZERO_CENTRED_LOSS_WEIGHT,
         sampler_mutual_information_loss_weight: float = config.SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT,
+        generator_stack_num_layers: int = config.GENERATOR_STACK_NUM_LAYERS,
+        generator_stack_hidden_dim: int = config.GENERATOR_STACK_HIDDEN_DIM,
+        generator_stack_activation: ActivationOptions = config.GENERATOR_STACK_ACTIVATION,
+        generator_stack_dropout_probability: float = config.GENERATOR_STACK_DROPOUT_PROBABILITY,
     ) -> "ModelConfigType":
+        generator_config = self._generator_config(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            top_k=adaptive_mixture_top_k,
+            num_experts=adaptive_mixture_num_experts,
+            stack_hidden_dim=generator_stack_hidden_dim,
+            stack_num_layers=generator_stack_num_layers,
+            stack_activation=generator_stack_activation,
+            stack_dropout_probability=generator_stack_dropout_probability,
+        )
+        weight_mixture_config = GeneratorWeightsMixtureConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            top_k=adaptive_mixture_top_k,
+            num_experts=adaptive_mixture_num_experts,
+            weighted_parameters_flag=adaptive_mixture_weighted_parameters_flag,
+            clip_parameter_option=adaptive_mixture_clip_parameter_option,
+            clip_range=adaptive_mixture_clip_range,
+            generator_config=generator_config,
+        )
+        bias_mixture_config = self._generator_bias_config(
+            adaptive_bias_option,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            top_k=adaptive_mixture_top_k,
+            num_experts=adaptive_mixture_num_experts,
+            weighted_parameters_flag=adaptive_mixture_weighted_parameters_flag,
+            clip_parameter_option=adaptive_mixture_clip_parameter_option,
+            clip_range=adaptive_mixture_clip_range,
+            generator_config=generator_config,
+        )
+
         return ModelConfig(
             batch_size=batch_size,
             input_dim=input_dim,
@@ -101,36 +145,19 @@ class ExperimentPresets(ExperimentPresetsBase):
             hidden_dim=hidden_dim,
             output_dim=output_dim,
             experiment_config=ExperimentConfig(
-                input_model_config=self._linear_stack_config(
+                model_config=self._parametric_stack_config(
                     input_dim=input_dim,
                     hidden_dim=hidden_dim,
-                    output_dim=hidden_dim,
-                    num_layers=1,
-                    activation=stack_activation,
-                    residual_flag=False,
-                    dropout_probability=0.0,
-                    apply_output_pipeline_flag=True,
-                ),
-                model_config=self._parametric_stack_config(
-                    input_dim=hidden_dim,
-                    hidden_dim=hidden_dim,
-                    output_dim=hidden_dim,
+                    output_dim=output_dim,
                     num_layers=stack_num_layers,
                     activation=stack_activation,
                     residual_flag=stack_residual_flag,
                     dropout_probability=stack_dropout_probability,
-                    weight_mixture_config=VectorWeightsMixtureConfig(
-                        input_dim=hidden_dim,
-                        output_dim=hidden_dim,
-                        top_k=adaptive_mixture_top_k,
-                        num_experts=adaptive_mixture_num_experts,
-                        weighted_parameters_flag=adaptive_mixture_weighted_parameters_flag,
-                        clip_parameter_option=adaptive_mixture_clip_parameter_option,
-                        clip_range=adaptive_mixture_clip_range,
-                    ),
-                    routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
+                    weight_mixture_config=weight_mixture_config,
+                    bias_mixture_config=bias_mixture_config,
+                    routing_initialization_mode=AdaptiveRouterOptions.SHARED_ROUTER,
                     router_config=self._router_config(
-                        input_dim=hidden_dim,
+                        input_dim=input_dim,
                         num_experts=adaptive_mixture_num_experts,
                         activation=stack_activation,
                     ),
@@ -148,16 +175,50 @@ class ExperimentPresets(ExperimentPresetsBase):
                         mutual_information_loss_weight=sampler_mutual_information_loss_weight,
                     ),
                 ),
-                output_model_config=self._linear_stack_config(
-                    input_dim=hidden_dim,
-                    hidden_dim=hidden_dim,
-                    output_dim=output_dim,
-                    num_layers=1,
-                    activation=ActivationOptions.DISABLED,
-                    residual_flag=False,
-                    dropout_probability=0.0,
-                    apply_output_pipeline_flag=False,
-                ),
+            ),
+        )
+
+    def _generator_bias_config(
+        self,
+        bias_config_cls: type[GeneratorBiasMixtureConfig] | None,
+        **mixture_kwargs,
+    ) -> GeneratorBiasMixtureConfig | None:
+        if bias_config_cls is None:
+            return None
+        return bias_config_cls(**mixture_kwargs)
+
+    def _generator_config(
+        self,
+        input_dim: int,
+        output_dim: int,
+        top_k: int,
+        num_experts: int,
+        stack_hidden_dim: int,
+        stack_num_layers: int,
+        stack_activation: ActivationOptions,
+        stack_dropout_probability: float,
+    ) -> MixtureOfExpertsConfig:
+        return MixtureOfExpertsConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            top_k=top_k,
+            num_experts=num_experts,
+            capacity_factor=0.0,
+            dropped_token_behavior=DroppedTokenOptions.ZEROS,
+            compute_expert_mixture_flag=False,
+            weighted_parameters_flag=False,
+            weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
+            routing_initialization_mode=RoutingInitializationMode.DISABLED,
+            sampler_config=None,
+            expert_model_config=self._linear_stack_config(
+                input_dim=input_dim,
+                hidden_dim=stack_hidden_dim,
+                output_dim=output_dim,
+                num_layers=stack_num_layers,
+                activation=stack_activation,
+                residual_flag=False,
+                dropout_probability=stack_dropout_probability,
+                apply_output_pipeline_flag=False,
             ),
         )
 
@@ -170,7 +231,8 @@ class ExperimentPresets(ExperimentPresetsBase):
         activation: ActivationOptions,
         residual_flag: bool,
         dropout_probability: float,
-        weight_mixture_config: VectorWeightsMixtureConfig,
+        weight_mixture_config: GeneratorWeightsMixtureConfig,
+        bias_mixture_config: GeneratorBiasMixtureConfig | None,
         routing_initialization_mode: AdaptiveRouterOptions,
         router_config: RouterConfig,
         sampler_config: SamplerConfig,
@@ -179,7 +241,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             input_dim=input_dim,
             output_dim=output_dim,
             weight_mixture_config=weight_mixture_config,
-            bias_mixture_config=None,
+            bias_mixture_config=bias_mixture_config,
             routing_initialization_mode=routing_initialization_mode,
             router_config=router_config,
             sampler_config=sampler_config,
@@ -199,7 +261,7 @@ class ExperimentPresets(ExperimentPresetsBase):
             output_dim=output_dim,
             num_layers=num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_pipeline_flag=False,
             layer_config=ParametricLayerHandlerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
@@ -212,6 +274,28 @@ class ExperimentPresets(ExperimentPresetsBase):
                 memory_config=None,
                 shared_halting_flag=False,
                 layer_model_config=parametric_layer_config,
+            ),
+        )
+
+    def _router_config(
+        self,
+        input_dim: int,
+        num_experts: int,
+        activation: ActivationOptions,
+    ) -> RouterConfig:
+        return RouterConfig(
+            input_dim=input_dim,
+            num_experts=num_experts,
+            noisy_topk_flag=False,
+            model_config=self._linear_stack_config(
+                input_dim=input_dim,
+                hidden_dim=max(4, min(input_dim, 32)),
+                output_dim=num_experts,
+                num_layers=1,
+                activation=activation,
+                residual_flag=False,
+                dropout_probability=0.0,
+                apply_output_pipeline_flag=False,
             ),
         )
 
@@ -249,28 +333,6 @@ class ExperimentPresets(ExperimentPresetsBase):
                     output_dim=output_dim,
                     bias_flag=True,
                 ),
-            ),
-        )
-
-    def _router_config(
-        self,
-        input_dim: int,
-        num_experts: int,
-        activation: ActivationOptions,
-    ) -> RouterConfig:
-        return RouterConfig(
-            input_dim=input_dim,
-            num_experts=num_experts,
-            noisy_topk_flag=False,
-            model_config=self._linear_stack_config(
-                input_dim=input_dim,
-                hidden_dim=max(4, min(input_dim, 32)),
-                output_dim=num_experts,
-                num_layers=1,
-                activation=activation,
-                residual_flag=False,
-                dropout_probability=0.0,
-                apply_output_pipeline_flag=False,
             ),
         )
 

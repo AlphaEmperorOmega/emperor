@@ -1,13 +1,17 @@
 from dataclasses import dataclass, field
 
 from emperor.base.layer import LayerStackConfig
+from emperor.base.layer.monitor import LayerControllerMonitorCallback
 from emperor.base.options import ActivationOptions
 from emperor.base.utils import ConfigBase
 from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.datasets.image.classification.mnist import Mnist
+from emperor.parametric.core.mixtures.config import MatrixBiasMixtureConfig
 from emperor.parametric.core.mixtures.options import ClipParameterOptions
+from emperor.experiments.monitors import MonitorOption
+from emperor.parametric.core.monitor import ParametricLayerMonitorCallback
 from models.trainer_config import *
 
 # Global
@@ -15,6 +19,33 @@ BATCH_SIZE: int = 64
 LEARNING_RATE: float = 1e-3
 NUM_EPOCHS: int = 2
 DATASET_OPTIONS: list = [Mnist, FashionMNIST, Cifar10, Cifar100]
+MONITOR_OPTIONS: list[MonitorOption] = [
+    MonitorOption(
+        name="parametric",
+        label="Parametric layers",
+        description=(
+            "Logs generated parameter norms, affine deltas, router entropy, "
+            "mixture utilization, skip/drop fraction, auxiliary loss, and "
+            "utilization visual summaries."
+        ),
+        kinds=["scalar", "histogram", "image"],
+        callback_factory=lambda: ParametricLayerMonitorCallback(
+            log_every_n_steps=100
+        ),
+    ),
+    MonitorOption(
+        name="layer-controller",
+        label="Layer controllers",
+        description=(
+            "Logs Layer gate, residual, dropout, layer-norm, and activation "
+            "controller statistics without duplicating memory metrics."
+        ),
+        kinds=["scalar"],
+        callback_factory=lambda: LayerControllerMonitorCallback(
+            log_every_n_steps=100
+        ),
+    ),
+]
 
 # Model
 INPUT_DIM: int = 28**2
@@ -27,7 +58,7 @@ STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.0
 
-# Parametric vector mixture
+# Parametric matrix mixture
 ADAPTIVE_MIXTURE_TOP_K: int = 1
 ADAPTIVE_MIXTURE_NUM_EXPERTS: int = 2
 ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG: bool = False
@@ -35,6 +66,7 @@ ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION: ClipParameterOptions = (
     ClipParameterOptions.DISABLED
 )
 ADAPTIVE_MIXTURE_CLIP_RANGE: float = 5.0
+ADAPTIVE_BIAS_OPTION: type[MatrixBiasMixtureConfig] | None = None
 
 # Sampler
 SAMPLER_THRESHOLD: float = 0.0
@@ -57,19 +89,12 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.GELU,
 ]
 SEARCH_SPACE_ADAPTIVE_MIXTURE_NUM_EXPERTS: list = [2, 3]
+SEARCH_SPACE_ADAPTIVE_BIAS_OPTION: list = [None, MatrixBiasMixtureConfig]
 
 
 @dataclass
 class ExperimentConfig(ConfigBase):
-    input_model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": "Feature projection stack before the vector mixture."},
-    )
     model_config: "LayerStackConfig | None" = field(
         default=None,
-        metadata={"help": "Parametric vector stack."},
-    )
-    output_model_config: "LayerStackConfig | None" = field(
-        default=None,
-        metadata={"help": "Classifier projection stack after the vector mixture."},
+        metadata={"help": "Parametric matrix classifier stack."},
     )

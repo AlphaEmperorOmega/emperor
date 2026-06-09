@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-import models.parametric_matrix.config as config
+import models.parametric.parametric_matrix.config as config
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
@@ -25,8 +25,8 @@ from emperor.parametric import (
     ParametricLayerHandlerConfig,
 )
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
-from models.parametric_matrix.config import ExperimentConfig
-from models.parametric_matrix.model import Model
+from models.parametric.parametric_matrix.config import ExperimentConfig
+from models.parametric.parametric_matrix.model import Model
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig as ModelConfigType

@@ -5,7 +5,7 @@ from torch import Tensor
 from emperor.base.layer import Layer, LayerStackConfig
 from emperor.experiments.classifier import ClassifierExperiment
 from emperor.parametric.core.state import ParametricLayerState
-from models.parametric_vector.config import ExperimentConfig
+from models.parametric.parametric_vector.config import ExperimentConfig
 
 from typing import TYPE_CHECKING
 
@@ -38,11 +38,11 @@ class Model(ClassifierExperiment):
         X: Tensor,
     ) -> tuple[Tensor, Tensor]:
         X = torch.flatten(X.to(self.device), start_dim=1)
-        X = Layer.forward_with_state(self.input_model, X)
+        X = Layer.run_model_returning_hidden(self.input_model, X)
 
         state = ParametricLayerState(hidden=X)
         state = self.model(state)
 
-        logits = Layer.forward_with_state(self.output_model, state.hidden)
+        logits = Layer.run_model_returning_hidden(self.output_model, state.hidden)
         loss = state.loss if state.loss is not None else logits.new_zeros(())
         return logits, loss
