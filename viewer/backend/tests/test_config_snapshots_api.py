@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from fastapi.testclient import TestClient
+import httpx
 
 from viewer.backend.api import create_app
 from viewer.backend.settings import ViewerApiSettings
@@ -14,7 +15,7 @@ from viewer.backend.settings import ViewerApiSettings
 # Synthetic config schema so the API tests stay fast and model-independent while
 # still exercising the real validation (non-default, locked, dedupe).
 FAKE_FIELDS: dict[str, Any] = {
-    "model": "linear",
+    "model": "linears/linear",
     "fields": [
         {
             "key": "learning_rate",
@@ -64,13 +65,25 @@ class ConfigSnapshotApiTests(unittest.TestCase):
                 auth_mode="none",
             )
         )
-        self.client = TestClient(app)
+        self.app = app
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        async def request() -> httpx.Response:
+            transport = httpx.ASGITransport(app=self.app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as client:
+                return await client.request(method, path, **kwargs)
+
+        return asyncio.run(request())
 
     def _create(self, **overrides: str):
-        return self.client.post(
+        return self._request(
+            "POST",
             "/config-snapshots",
             json={
-                "model": "linear",
+                "model": "linears/linear",
                 "preset": "baseline",
                 "name": "",
                 "overrides": overrides,
@@ -84,10 +97,14 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         self.assertEqual(snapshot["overrides"], {"learning_rate": "0.01", "batch_size": "128"})
         self.assertTrue(snapshot["name"])
 
-        listed = self.client.get("/config-snapshots", params={"model": "linear"})
+        listed = self._request(
+            "GET",
+            "/config-snapshots",
+            params={"model": "linears/linear"},
+        )
         self.assertEqual(listed.status_code, 200)
         body = listed.json()
-        self.assertEqual(body["model"], "linear")
+        self.assertEqual(body["model"], "linears/linear")
         self.assertEqual([s["id"] for s in body["snapshots"]], [snapshot["id"]])
 
     def test_create_rejects_default_only_override(self) -> None:
@@ -108,7 +125,8 @@ class ConfigSnapshotApiTests(unittest.TestCase):
 
     def test_rename_updates_name(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]
-        renamed = self.client.patch(
+        renamed = self._request(
+            "PATCH",
             f"/config-snapshots/{snapshot_id}", json={"name": "tuned lr"}
         )
         self.assertEqual(renamed.status_code, 200)
@@ -116,19 +134,20 @@ class ConfigSnapshotApiTests(unittest.TestCase):
 
     def test_rename_rejects_empty_name(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]
-        renamed = self.client.patch(
+        renamed = self._request(
+            "PATCH",
             f"/config-snapshots/{snapshot_id}", json={"name": "   "}
         )
         self.assertEqual(renamed.status_code, 400)
 
     def test_delete_returns_remaining_snapshots(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]
-        deleted = self.client.delete(f"/config-snapshots/{snapshot_id}")
+        deleted = self._request("DELETE", f"/config-snapshots/{snapshot_id}")
         self.assertEqual(deleted.status_code, 200)
-        self.assertEqual(deleted.json(), {"model": "linear", "snapshots": []})
+        self.assertEqual(deleted.json(), {"model": "linears/linear", "snapshots": []})
 
     def test_delete_unknown_snapshot_is_rejected(self) -> None:
-        response = self.client.delete("/config-snapshots/missing")
+        response = self._request("DELETE", "/config-snapshots/missing")
         self.assertEqual(response.status_code, 400)
         self.assertIn("Unknown config snapshot", response.json()["detail"])
 

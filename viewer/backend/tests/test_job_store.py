@@ -14,7 +14,7 @@ from viewer.backend.job_store import (
 def make_record(job_id: str = "job-1") -> TrainingJobRecord:
     return TrainingJobRecord(
         id=job_id,
-        model="linear",
+        model="linears/linear",
         preset="baseline",
         presets=["baseline"],
         datasets=["Mnist"],
@@ -75,7 +75,7 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
         self.assertIsNotNone(recovered)
         assert recovered is not None
         self.assertEqual(recovered.id, "job-1")
-        self.assertEqual(recovered.model, "linear")
+        self.assertEqual(recovered.model, "linears/linear")
         self.assertEqual(recovered.preset, "baseline")
         self.assertEqual(recovered.presets, ["baseline"])
         self.assertEqual(recovered.datasets, ["Mnist"])
@@ -132,6 +132,18 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
             ]
 
         self.assertEqual(recovered_ids, ["job-a", "job-b"])
+
+    def test_corrupt_metadata_records_are_ignored(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job_root = root / "job-1"
+            job_root.mkdir()
+            (job_root / "metadata.json").write_text("{not json", encoding="utf-8")
+
+            store = FileSystemTrainingJobStore(root)
+
+            self.assertIsNone(store.get("job-1"))
+            self.assertEqual(store.list(), [])
 
 
 if __name__ == "__main__":

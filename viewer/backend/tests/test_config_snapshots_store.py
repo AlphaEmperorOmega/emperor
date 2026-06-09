@@ -13,7 +13,7 @@ from viewer.backend.config_snapshots import (
 
 def make_record(
     snapshot_id: str = "snap-1",
-    model: str = "experts_linear",
+    model: str = "experts/experts_linear",
     preset: str = "base",
     name: str = "tuned",
     overrides: dict[str, str] | None = None,
@@ -88,6 +88,15 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             self.assertTrue(store.delete("a"))
             self.assertFalse((Path(tmp) / "m1" / "a.json").exists())
             self.assertFalse(store.delete("a"))
+
+    def test_nested_model_paths_can_be_found_for_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FileSystemConfigSnapshotStore(Path(tmp))
+            store.save(make_record(snapshot_id="a", model="linears/linear"))
+
+            self.assertTrue((Path(tmp) / "linears" / "linear" / "a.json").exists())
+            self.assertTrue(store.delete("a"))
+            self.assertFalse((Path(tmp) / "linears" / "linear" / "a.json").exists())
 
     def test_list_unknown_model_is_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
