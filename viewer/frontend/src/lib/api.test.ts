@@ -13,12 +13,14 @@ import {
   fetchDatasets,
   fetchHealth,
   fetchLogExperiments,
+  fetchLogParameterStatus,
   fetchLogRunMonitorData,
   fetchLogRuns,
   fetchLogScalars,
   fetchLogTags,
   fetchModels,
   fetchMonitorData,
+  fetchMonitorParameterStatus,
   fetchMonitors,
   fetchPresets,
   fetchSearchSpace,
@@ -423,6 +425,39 @@ const successfulHistoricalMonitorDataFixture = {
   jobId: "run-1",
 };
 
+const successfulParameterStatusFixture = {
+  sourceId: "job-123",
+  preset: "baseline",
+  dataset: "Mnist",
+  logDir: "runs/viewer-training/job-123/linear/baseline/Mnist/run-0001",
+  nodes: [
+    {
+      nodePath: "root.classifier",
+      weights: {
+        status: "updated",
+        metric: "root.classifier/weights/relative_delta_norm",
+        lastStep: 2,
+        observedPoints: 1,
+      },
+      bias: {
+        status: "missing",
+        metric: null,
+        lastStep: null,
+        observedPoints: 0,
+      },
+    },
+  ],
+};
+
+const successfulLogParameterStatusFixture = {
+  runs: [
+    {
+      ...successfulParameterStatusFixture,
+      sourceId: "run-1",
+    },
+  ],
+};
+
 const successfulLogRunFixture = {
   id: "run-1",
   group: "viewer-training/job-123",
@@ -710,6 +745,30 @@ describe("successful API fixtures", () => {
     );
 
     expect(result.scalarSeries[0].points).toHaveLength(2);
+  });
+
+  it("accepts an active parameter-status response fixture", async () => {
+    const result = await validateSuccessfulFixture(
+      successfulParameterStatusFixture,
+      () =>
+        fetchMonitorParameterStatus({
+          jobId: "job-123",
+          preset: "baseline",
+          dataset: "Mnist",
+        }),
+    );
+
+    expect(result.nodes[0].weights.status).toBe("updated");
+    expect(result.nodes[0].bias.status).toBe("missing");
+  });
+
+  it("accepts a historical parameter-status response fixture", async () => {
+    const result = await validateSuccessfulFixture(
+      successfulLogParameterStatusFixture,
+      () => fetchLogParameterStatus({ runIds: ["run-1"] }),
+    );
+
+    expect(result.runs[0].sourceId).toBe("run-1");
   });
 
   it("accepts a log runs response fixture", async () => {
@@ -1113,10 +1172,10 @@ describe("URL and query construction", () => {
       fakeResponse({ json: () => Promise.resolve({ model: "m", fields: [] }) }),
     );
 
-    await fetchConfigSchema("linear", "preset/one");
+    await fetchConfigSchema("linears/linear", "preset/one");
 
     expect(fetchMock.mock.calls[0][0]).toBe(
-      `${BASE}/models/linear/config-schema?preset=preset%2Fone`,
+      `${BASE}/models/linears/linear/config-schema?preset=preset%2Fone`,
     );
   });
 
@@ -1125,7 +1184,7 @@ describe("URL and query construction", () => {
       fakeResponse({
         json: () =>
           Promise.resolve({
-            model: "linear",
+            model: "linears/linear",
             preset: "baseline",
             axes: [
               {
@@ -1145,10 +1204,10 @@ describe("URL and query construction", () => {
       }),
     );
 
-    const result = await fetchSearchSpace("linear", "baseline/preset");
+    const result = await fetchSearchSpace("linears/linear", "baseline/preset");
 
     expect(fetchMock.mock.calls[0][0]).toBe(
-      `${BASE}/models/linear/search-space?preset=baseline%2Fpreset`,
+      `${BASE}/models/linears/linear/search-space?preset=baseline%2Fpreset`,
     );
     expect(result.axes[0]).toMatchObject({
       key: "hidden_dim",
@@ -1161,21 +1220,21 @@ describe("URL and query construction", () => {
       fakeResponse({ json: () => Promise.resolve({ model: "m", fields: [] }) }),
     );
 
-    await fetchConfigSchema("linear");
+    await fetchConfigSchema("linears/linear");
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/models/linear/config-schema`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/models/linears/linear/config-schema`);
   });
 
   it("interpolates the model into preset/dataset/job paths", async () => {
     const fetchMock = stubFetch(
       fakeResponse({
-        json: () => Promise.resolve({ model: "linear", presets: [] }),
+        json: () => Promise.resolve({ model: "linears/linear", presets: [] }),
       }),
     );
 
-    await fetchPresets("linear");
+    await fetchPresets("linears/linear");
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/models/linear/presets`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/models/linears/linear/presets`);
   });
 
   it("builds the monitor-data query with nodePath, preset, and dataset", async () => {
@@ -1235,6 +1294,47 @@ describe("URL and query construction", () => {
       jobId: "run/1",
       nodePath: "root.block",
       dataset: "mnist",
+    });
+  });
+
+  it("builds the active parameter-status query with preset and dataset", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            sourceId: "j1",
+            preset: "baseline",
+            dataset: "mnist",
+            logDir: null,
+            nodes: [],
+          }),
+      }),
+    );
+
+    await fetchMonitorParameterStatus({
+      jobId: "j1",
+      preset: "baseline",
+      dataset: "mnist",
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/training/jobs/j1/monitor-parameter-status?preset=baseline&dataset=mnist`,
+    );
+  });
+
+  it("posts historical parameter-status run ids", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () => Promise.resolve({ runs: [] }),
+      }),
+    );
+
+    await fetchLogParameterStatus({ runIds: ["run/1", "run-2"] });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/logs/parameter-status`);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ runIds: ["run/1", "run-2"] }),
     });
   });
 
@@ -1927,7 +2027,7 @@ describe("fetchTrainingRunPlan", () => {
           dataset: "Mnist",
           changes: [],
           overrides: {},
-          command: "source experiment.sh linear --preset baseline --datasets Mnist",
+          command: "source experiment.sh linears/linear --preset baseline --datasets Mnist",
           totalEpochs: 30,
           currentEpoch: 0,
           metrics: {},
@@ -1982,13 +2082,13 @@ describe("config snapshots", () => {
   it("fetches snapshots for a model with an encoded query", async () => {
     const fetchMock = stubFetch(
       fakeResponse({
-        json: () => Promise.resolve({ model: "linear", snapshots: [snapshot] }),
+        json: () => Promise.resolve({ model: "linears/linear", snapshots: [snapshot] }),
       }),
     );
 
-    const result = await fetchConfigSnapshots("linear");
+    const result = await fetchConfigSnapshots("linears/linear");
 
-    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/config-snapshots?model=linear`);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/config-snapshots?model=linears%2Flinear`);
     expect(result.snapshots[0].id).toBe("snap-1");
   });
 
@@ -1997,7 +2097,7 @@ describe("config snapshots", () => {
       fakeResponse({ json: () => Promise.resolve(snapshot) }),
     );
     const input = {
-      model: "linear",
+      model: "linears/linear",
       preset: "baseline",
       name: "tuned lr",
       overrides: { learning_rate: "0.01" },
@@ -2026,7 +2126,7 @@ describe("config snapshots", () => {
 
   it("deletes a snapshot by id and returns the remaining list", async () => {
     const fetchMock = stubFetch(
-      fakeResponse({ json: () => Promise.resolve({ model: "linear", snapshots: [] }) }),
+      fakeResponse({ json: () => Promise.resolve({ model: "linears/linear", snapshots: [] }) }),
     );
 
     const result = await deleteConfigSnapshot("snap-1");
@@ -2041,12 +2141,12 @@ describe("config snapshots", () => {
     stubFetch(
       fakeResponse({
         json: () =>
-          Promise.resolve({ model: "linear", snapshots: [{ ...snapshot, id: 7 }] }),
+          Promise.resolve({ model: "linears/linear", snapshots: [{ ...snapshot, id: 7 }] }),
       }),
     );
 
-    await expect(fetchConfigSnapshots("linear")).rejects.toThrow(
-      `Invalid API response for GET /config-snapshots?model=linear from ${BASE}: snapshots.0.id:`,
+    await expect(fetchConfigSnapshots("linears/linear")).rejects.toThrow(
+      `Invalid API response for GET /config-snapshots?model=linears%2Flinear from ${BASE}: snapshots.0.id:`,
     );
   });
 });

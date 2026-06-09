@@ -11,8 +11,40 @@ type BackendContactException = {
 
 const BACKEND_CONTACT_EXCEPTIONS: BackendContactException[] = [
   {
-    relativePath: "src/lib/api.ts",
-    reason: "Central API client owns fetch, base URL, and backend route paths.",
+    relativePath: "src/lib/api/client.ts",
+    reason: "Shared API client owns fetch, base URL, auth headers, and response validation.",
+  },
+  {
+    relativePath: "src/lib/api/health.ts",
+    reason: "Health and capabilities API module owns its backend route paths.",
+  },
+  {
+    relativePath: "src/lib/api/models.ts",
+    reason: "Models and config schema API module owns its backend route paths.",
+  },
+  {
+    relativePath: "src/lib/api/inspection.ts",
+    reason: "Inspection API module owns its backend route paths.",
+  },
+  {
+    relativePath: "src/lib/api/config-snapshots.ts",
+    reason: "Config snapshot API module owns its backend route paths.",
+  },
+  {
+    relativePath: "src/lib/api/training-jobs.ts",
+    reason: "Training job API module owns its backend route paths.",
+  },
+  {
+    relativePath: "src/lib/api/logs.ts",
+    reason: "Logs API module owns its backend route paths.",
+  },
+  {
+    relativePath: "src/lib/api/monitor-data.ts",
+    reason: "Monitor data API module owns its backend route paths.",
+  },
+  {
+    relativePath: "src/lib/api/deletion.ts",
+    reason: "Log deletion API module owns its backend route paths.",
   },
 ];
 
@@ -21,6 +53,7 @@ const BACKEND_ROUTE_PREFIXES = [
   "/capabilities",
   "/models",
   "/inspect",
+  "/config-snapshots",
   "/training",
   "/logs",
 ] as const;
@@ -40,6 +73,7 @@ const SKIPPED_DIR_NAMES = new Set([
 
 const testFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = path.resolve(path.dirname(testFilePath), "../..");
+const PUBLIC_API_FACADE_PATH = "src/lib/api.ts";
 const allowedBackendContactFiles = new Set(
   BACKEND_CONTACT_EXCEPTIONS.map((entry) => entry.relativePath),
 );
@@ -203,14 +237,18 @@ function formatViolation(violation: BoundaryViolation) {
 }
 
 describe("frontend API boundary", () => {
-  it("keeps production backend contact centralized in src/lib/api.ts", () => {
+  it("keeps production backend contact restricted to approved API modules", () => {
     const files = productionSourceFiles();
+    const productionFilePaths = files.map(toFrontendRelativePath);
     const violations = files
       .flatMap(scanFile)
       .filter((violation) => !isAllowedBackendContact(violation.filePath))
       .map(formatViolation);
 
-    expect(files.map(toFrontendRelativePath)).toContain("src/lib/api.ts");
+    expect(productionFilePaths).toContain(PUBLIC_API_FACADE_PATH);
+    BACKEND_CONTACT_EXCEPTIONS.forEach((exception) => {
+      expect(productionFilePaths).toContain(exception.relativePath);
+    });
     expect(violations.join("\n")).toBe("");
   });
 });
