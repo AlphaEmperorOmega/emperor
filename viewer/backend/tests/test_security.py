@@ -25,7 +25,7 @@ PROTECTED_ROUTE_CASES = (
         "POST",
         "/inspect",
         {
-            "model": "linear",
+            "model": "linears/linear",
             "preset": "baseline",
             "dataset": "Mnist",
             "overrides": {"hidden_dim": "128"},
@@ -36,7 +36,7 @@ PROTECTED_ROUTE_CASES = (
         "POST",
         "/training/run-plan",
         {
-            "model": "linear",
+            "model": "linears/linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -50,7 +50,7 @@ PROTECTED_ROUTE_CASES = (
         "POST",
         "/training/jobs",
         {
-            "model": "linear",
+            "model": "linears/linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -62,7 +62,7 @@ PROTECTED_ROUTE_CASES = (
         },
     ),
     ("logs", "GET", "/logs/runs", None),
-    ("config_snapshots", "GET", "/config-snapshots?model=linear", None),
+    ("config_snapshots", "GET", "/config-snapshots?model=linears/linear", None),
 )
 
 
@@ -83,7 +83,7 @@ class SecurityDependencyTests(unittest.TestCase):
     def test_auth_mode_none_bypasses_missing_authorization_header(self) -> None:
         request = request_with_settings(ViewerApiSettings(auth_mode="none"))
 
-        require_bearer_auth(request)
+        asyncio.run(require_bearer_auth(request))
 
     def test_bearer_mode_rejects_missing_malformed_and_invalid_tokens(self) -> None:
         settings = ViewerApiSettings(auth_mode="bearer", token="server-secret")
@@ -103,7 +103,7 @@ class SecurityDependencyTests(unittest.TestCase):
                 request = request_with_settings(settings, authorization)
 
                 with self.assertRaises(HTTPException) as raised:
-                    require_bearer_auth(request)
+                    asyncio.run(require_bearer_auth(request))
 
                 self.assertEqual(raised.exception.status_code, 401)
                 self.assertNotIn("wrong-token", str(raised.exception.detail))
@@ -112,7 +112,7 @@ class SecurityDependencyTests(unittest.TestCase):
         settings = ViewerApiSettings(auth_mode="bearer", token="server-secret")
         request = request_with_settings(settings, "Bearer server-secret")
 
-        require_bearer_auth(request)
+        asyncio.run(require_bearer_auth(request))
 
 
 class RouteAuthIntegrationTests(unittest.TestCase):
@@ -286,10 +286,31 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 token=token,
             )
         )
-        app.dependency_overrides[get_model_catalog_service] = FakeModelCatalogService
-        app.dependency_overrides[get_inspection_service] = FakeInspectionService
-        app.dependency_overrides[get_training_job_service] = FakeTrainingJobService
-        app.dependency_overrides[get_log_run_service] = FakeLogRunService
+        model_catalog_service = FakeModelCatalogService()
+        inspection_service = FakeInspectionService()
+        training_job_service = FakeTrainingJobService()
+        log_run_service = FakeLogRunService()
+
+        async def override_model_catalog_service() -> FakeModelCatalogService:
+            return model_catalog_service
+
+        async def override_inspection_service() -> FakeInspectionService:
+            return inspection_service
+
+        async def override_training_job_service() -> FakeTrainingJobService:
+            return training_job_service
+
+        async def override_log_run_service() -> FakeLogRunService:
+            return log_run_service
+
+        app.dependency_overrides[get_model_catalog_service] = (
+            override_model_catalog_service
+        )
+        app.dependency_overrides[get_inspection_service] = override_inspection_service
+        app.dependency_overrides[get_training_job_service] = (
+            override_training_job_service
+        )
+        app.dependency_overrides[get_log_run_service] = override_log_run_service
         return app
 
     def test_health_remains_open_without_token_in_bearer_mode(self) -> None:

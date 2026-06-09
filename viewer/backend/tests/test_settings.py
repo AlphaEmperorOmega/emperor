@@ -7,7 +7,11 @@ import unittest
 
 from pydantic import ValidationError
 
-from viewer.backend.settings import LOCAL_FRONTEND_ORIGINS, ViewerApiSettings
+from viewer.backend.core.config import (
+    LOCAL_FRONTEND_ORIGINS,
+    ViewerApiSettings,
+    get_viewer_api_settings,
+)
 
 
 SETTINGS_ENV_NAMES = (
@@ -34,6 +38,16 @@ def isolated_settings_env(**values: str) -> Iterator[None]:
 
 
 class ViewerApiSettingsTests(unittest.TestCase):
+    def test_legacy_settings_module_reexports_canonical_settings(self) -> None:
+        from viewer.backend import settings as legacy_settings
+
+        self.assertIs(legacy_settings.LOCAL_FRONTEND_ORIGINS, LOCAL_FRONTEND_ORIGINS)
+        self.assertIs(legacy_settings.ViewerApiSettings, ViewerApiSettings)
+        self.assertIs(
+            legacy_settings.get_viewer_api_settings,
+            get_viewer_api_settings,
+        )
+
     def test_defaults_keep_local_development_unauthenticated(self) -> None:
         with isolated_settings_env():
             settings = ViewerApiSettings()
