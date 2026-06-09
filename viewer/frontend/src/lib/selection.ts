@@ -1,5 +1,49 @@
 import { type ConfigValue } from "@/lib/api";
 
+const DEFAULT_MODEL_TYPE = "models";
+
+function modelTypeLabel(value: string) {
+  const normalized = value.replace(/[_-]+/g, " ").trim().toLowerCase();
+  return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : value;
+}
+
+export function modelTypeForId(modelId: string) {
+  const trimmed = modelId.trim();
+  const separatorIndex = trimmed.indexOf("/");
+  if (separatorIndex <= 0) {
+    return DEFAULT_MODEL_TYPE;
+  }
+  return trimmed.slice(0, separatorIndex).trim() || DEFAULT_MODEL_TYPE;
+}
+
+export function modelNameForId(modelId: string) {
+  const trimmed = modelId.trim();
+  const separatorIndex = trimmed.indexOf("/");
+  if (separatorIndex < 0 || separatorIndex === trimmed.length - 1) {
+    return trimmed;
+  }
+  return trimmed.slice(separatorIndex + 1).trim() || trimmed;
+}
+
+export function modelTypeOptions(models: readonly string[]) {
+  const seen = new Set<string>();
+  return models.reduce<Array<{ value: string; label: string }>>((options, model) => {
+    const value = modelTypeForId(model);
+    if (!seen.has(value)) {
+      seen.add(value);
+      options.push({ value, label: modelTypeLabel(value) });
+    }
+    return options;
+  }, []);
+}
+
+export function modelsForType(models: readonly string[], selectedType: string) {
+  if (!selectedType) {
+    return [...models];
+  }
+  return models.filter((model) => modelTypeForId(model) === selectedType);
+}
+
 export function uniqueValidValues<T>(
   values: readonly T[],
   validValues: readonly T[],

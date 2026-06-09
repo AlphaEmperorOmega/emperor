@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   configValueEquals,
+  modelNameForId,
+  modelsForType,
+  modelTypeForId,
+  modelTypeOptions,
   normalizePrimarySelection,
   normalizeSelection,
   selectionValuesEqual,
@@ -8,6 +12,71 @@ import {
   uniqueValidValues,
   valueIsSelected,
 } from "@/lib/selection";
+
+describe("modelTypeForId", () => {
+  it("uses the first public ID path segment as the model type", () => {
+    expect(modelTypeForId("linears/linear")).toBe("linears");
+    expect(modelTypeForId("transformer_encoder/bert_linear")).toBe(
+      "transformer_encoder",
+    );
+  });
+
+  it("falls back to a shared legacy type for flat or malformed IDs", () => {
+    expect(modelTypeForId("linear")).toBe("models");
+    expect(modelTypeForId("/linear")).toBe("models");
+    expect(modelTypeForId("")).toBe("models");
+  });
+});
+
+describe("modelNameForId", () => {
+  it("returns the public ID suffix when a type prefix is present", () => {
+    expect(modelNameForId("linears/linear")).toBe("linear");
+    expect(modelNameForId("transformer_encoder/bert_linear")).toBe(
+      "bert_linear",
+    );
+  });
+
+  it("preserves flat IDs", () => {
+    expect(modelNameForId("linear")).toBe("linear");
+  });
+});
+
+describe("modelTypeOptions", () => {
+  it("deduplicates types in catalog order and formats labels", () => {
+    expect(
+      modelTypeOptions([
+        "linears/linear",
+        "linears/linear_adaptive",
+        "experts/experts_linear",
+        "transformer_encoder/bert_linear",
+      ]),
+    ).toEqual([
+      { value: "linears", label: "Linears" },
+      { value: "experts", label: "Experts" },
+      { value: "transformer_encoder", label: "Transformer encoder" },
+    ]);
+  });
+});
+
+describe("modelsForType", () => {
+  it("filters public model IDs by type", () => {
+    expect(
+      modelsForType(
+        [
+          "linears/linear",
+          "linears/linear_adaptive",
+          "experts/experts_linear",
+        ],
+        "linears",
+      ),
+    ).toEqual(["linears/linear", "linears/linear_adaptive"]);
+  });
+
+  it("returns the full catalog when no type is selected", () => {
+    expect(modelsForType(["linears/linear", "experts/experts_linear"], ""))
+      .toEqual(["linears/linear", "experts/experts_linear"]);
+  });
+});
 
 describe("uniqueValidValues", () => {
   it("filters invalid values, removes duplicates, and preserves input order", () => {
