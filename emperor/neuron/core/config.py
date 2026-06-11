@@ -77,6 +77,12 @@ class NeuronConfig(ConfigBase):
     terminal_config: TerminalConfig | None = optional_field(
         "Terminal routing stage configuration."
     )
+    coordinate_embedding_flag: bool | None = optional_field(
+        "When True, a fixed sinusoidal encoding of the neuron's (x, y, z) "
+        "coordinate is added to the nucleus and terminal inputs so "
+        "processing and routing are position-aware. Requires "
+        "terminal_config.input_dim of at least 3. Defaults to False."
+    )
 
     def _registry_owner(self) -> type:
         from emperor.neuron.core.layers import Neuron

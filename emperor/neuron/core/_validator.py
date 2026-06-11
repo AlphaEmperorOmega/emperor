@@ -168,10 +168,33 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
 
 
 class NeuronValidator(ValidatorBase, NeuronValidationMixin):
+    OPTIONAL_FIELDS = {"coordinate_embedding_flag"}
+
     @staticmethod
     def validate(cfg: "NeuronConfig") -> None:
         NeuronValidator.validate_required_fields(cfg)
         NeuronValidator.validate_field_types(cfg)
+        NeuronValidator.validate_coordinate_embedding_options(cfg)
+
+    @staticmethod
+    def validate_coordinate_embedding_options(cfg: "NeuronConfig") -> None:
+        flag_value = cfg.coordinate_embedding_flag
+        if flag_value is None:
+            return
+        if not isinstance(flag_value, bool):
+            raise TypeError(
+                "coordinate_embedding_flag must be a bool for NeuronConfig, "
+                f"got {type(flag_value).__name__}."
+            )
+        if not flag_value:
+            return
+        input_dim = cfg.terminal_config.input_dim
+        if input_dim < 3:
+            raise ValueError(
+                "coordinate_embedding_flag requires terminal_config.input_dim "
+                "of at least 3 so every coordinate axis receives at least one "
+                f"encoding channel, received input_dim={input_dim}."
+            )
 
     @staticmethod
     def validate_forward_input(input: Tensor) -> None:
