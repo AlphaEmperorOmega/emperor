@@ -6,17 +6,14 @@ mitosis-style initialization (`mitosis_initialization_flag`), pruning / atrophy
 (`pruning_threshold` — per-neuron atrophy counters, entry plane protected, bidirectional
 state-dict reconciliation, optimizer sync removal), and growth budget / cooldown
 (`growth_cooldown_steps`, `max_total_growths` — persistent buffers, rank-deterministic
-early returns, legacy checkpoint seeding, monitor budget metrics).
+early returns, legacy checkpoint seeding, monitor budget metrics), and coordinate
+embeddings (`coordinate_embedding_flag` — fixed sinusoidal (x, y, z) encoding added to
+nucleus and terminal inputs, non-persistent per-neuron buffer, grown neurons encode
+their own coordinate).
 
 ---
 
 ## Routing expressiveness
-
-### Coordinate embeddings
-
-Neurons don't know where they are; routing input carries no position. Inject an
-(x, y, z) encoding into nucleus/terminal input so routing and processing are
-position-aware. Complexity: medium.
 
 ### Beam continuation
 
