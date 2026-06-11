@@ -249,6 +249,78 @@ class NeuronClusterPlasticityMixin:
                     )
         return grown_neuron
 
+    def _check_neuron_atrophy(self) -> None:
+        """Prunes at most one neuron per training forward.
+
+        A neuron atrophies while it receives no process_signal call; any
+        call resets its counter. The entry plane is never pruned so entry
+        routing always lands on a live neuron. Mirrors the growth collective
+        contract: under an initialized process group every rank must call
+        forward in lockstep or the atrophy all_reduce deadlocks.
+        """
+        if self.pruning_threshold is None:
+            return
+
+        self.__update_atrophy_counters()
+        synchronized_atrophy_counters = (
+            self.__synchronize_atrophy_counters_across_ranks()
+        )
+        prunable_name = self.__most_atrophied_prunable_neuron(
+            synchronized_atrophy_counters
+        )
+        if prunable_name is None:
+            return
+        del self.cluster[prunable_name]
+
+    def __update_atrophy_counters(self) -> None:
+        for name, neuron in self.cluster.items():
+            if name in self._neurons_called_this_forward:
+                neuron.atrophy_counter.zero_()
+            else:
+                neuron.atrophy_counter += 1
+
+    def __synchronize_atrophy_counters_across_ranks(self) -> dict[str, int]:
+        sorted_neuron_names = sorted(self.cluster.keys())
+        stacked_counters = torch.stack(
+            [self.cluster[name].atrophy_counter for name in sorted_neuron_names]
+        )
+        if self.__is_distributed_training_initialized():
+            torch.distributed.all_reduce(
+                stacked_counters,
+                op=torch.distributed.ReduceOp.MIN,
+            )
+        return {
+            name: int(counter)
+            for name, counter in zip(
+                sorted_neuron_names,
+                stacked_counters.tolist(),
+            )
+        }
+
+    def __most_atrophied_prunable_neuron(
+        self,
+        synchronized_atrophy_counters: dict[str, int],
+    ) -> str | None:
+        entry_plane_neuron_names = self.__entry_plane_neuron_names()
+        prunable_names = [
+            name
+            for name in self.cluster.keys()
+            if name not in entry_plane_neuron_names
+            and synchronized_atrophy_counters[name] >= self.pruning_threshold
+        ]
+        if not prunable_names:
+            return None
+        return max(
+            sorted(prunable_names),
+            key=lambda name: synchronized_atrophy_counters[name],
+        )
+
+    def __entry_plane_neuron_names(self) -> set[str]:
+        return {
+            self._neuron_name(int(x), int(y), int(z))
+            for x, y, z in self.entry_coordinates.tolist()
+        }
+
     def _reconcile_cluster_with_state_dict(
         self,
         module,

@@ -265,6 +265,7 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
 
         if self.training:
             self._check_neuron_growth()
+            self._check_neuron_atrophy()
         if return_trace:
             return output, auxiliary_loss, trace
         return output, auxiliary_loss
