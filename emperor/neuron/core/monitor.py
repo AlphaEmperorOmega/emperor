@@ -23,7 +23,9 @@ class NeuronClusterMonitorCallback(Callback):
 
     From the trace it derives route depth, escape / halt fractions, entry-routing
     entropy, per-neuron spatial utilization, and a recurrence survival curve;
-    growth pressure is read directly from each neuron's ``batch_counter``.
+    growth and pruning pressure are read directly from each neuron's
+    ``batch_counter`` and ``atrophy_counter``, and growth / pruning events
+    from cluster membership changes between logging steps.
     """
 
     def __init__(self, log_every_n_steps: int = 100, history_size: int = 128):
@@ -36,7 +38,7 @@ class NeuronClusterMonitorCallback(Callback):
         self._latest_trace: dict[str, "NeuronClusterTrace | None"] = {}
         self._latest_loss: dict[str, "Tensor | None"] = {}
         self._survival_history: dict[str, list["Tensor"]] = {}
-        self._previous_neuron_count: dict[str, int] = {}
+        self._previous_neuron_names: dict[str, set[str]] = {}
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         from emperor.neuron.core.model import NeuronCluster
@@ -50,7 +52,7 @@ class NeuronClusterMonitorCallback(Callback):
             self._latest_trace[name] = None
             self._latest_loss[name] = None
             self._survival_history[name] = []
-            self._previous_neuron_count[name] = len(cluster.cluster)
+            self._previous_neuron_names[name] = set(cluster.cluster.keys())
             self.__wrap_cluster_forward(name, cluster, pl_module)
 
     def __wrap_cluster_forward(
@@ -87,7 +89,9 @@ class NeuronClusterMonitorCallback(Callback):
             return
         for name, cluster in self._clusters:
             self.__log_cluster_size(pl_module, name, cluster)
+            self.__log_plasticity_events(pl_module, name, cluster)
             self.__log_growth_pressure(pl_module, name, cluster)
+            self.__log_pruning_pressure(pl_module, name, cluster)
             trace = self._latest_trace.get(name)
             if trace is None:
                 continue
@@ -115,31 +119,72 @@ class NeuronClusterMonitorCallback(Callback):
             neuron_count / capacity if capacity > 0 else 0.0,
         )
 
+    def __log_plasticity_events(
+        self,
+        module: "LightningModule",
+        name: str,
+        cluster: "NeuronCluster",
+    ) -> None:
+        current_names = set(cluster.cluster.keys())
+        previous_names = self._previous_neuron_names.get(name, current_names)
+        self._previous_neuron_names[name] = current_names
+        module.log(
+            f"{name}/cluster/growth/events",
+            float(len(current_names - previous_names)),
+        )
+        module.log(
+            f"{name}/cluster/pruning/events",
+            float(len(previous_names - current_names)),
+        )
+
     def __log_growth_pressure(
         self,
         module: "LightningModule",
         name: str,
         cluster: "NeuronCluster",
     ) -> None:
-        current_count = len(cluster.cluster)
-        previous_count = self._previous_neuron_count.get(name, current_count)
-        growth_events = max(0, current_count - previous_count)
-        self._previous_neuron_count[name] = current_count
-        module.log(f"{name}/cluster/growth/events", float(growth_events))
-
-        growth_threshold = cluster.growth_threshold
-        if not growth_threshold:
+        pressure = self.__counter_pressure(
+            cluster,
+            "batch_counter",
+            cluster.growth_threshold,
+        )
+        if pressure is None:
             return
-        counters = [
-            float(getattr(neuron, "batch_counter").item())
-            for neuron in cluster.cluster.values()
-            if hasattr(neuron, "batch_counter")
-        ]
-        if not counters:
-            return
-        pressure = torch.tensor(counters) / float(growth_threshold)
         module.log(f"{name}/cluster/growth/pressure_mean", pressure.mean())
         module.log(f"{name}/cluster/growth/pressure_max", pressure.max())
+
+    def __log_pruning_pressure(
+        self,
+        module: "LightningModule",
+        name: str,
+        cluster: "NeuronCluster",
+    ) -> None:
+        pressure = self.__counter_pressure(
+            cluster,
+            "atrophy_counter",
+            getattr(cluster, "pruning_threshold", None),
+        )
+        if pressure is None:
+            return
+        module.log(f"{name}/cluster/pruning/pressure_mean", pressure.mean())
+        module.log(f"{name}/cluster/pruning/pressure_max", pressure.max())
+
+    def __counter_pressure(
+        self,
+        cluster: "NeuronCluster",
+        counter_name: str,
+        threshold: int | None,
+    ) -> "Tensor | None":
+        if not threshold:
+            return None
+        counters = [
+            float(getattr(neuron, counter_name).item())
+            for neuron in cluster.cluster.values()
+            if hasattr(neuron, counter_name)
+        ]
+        if not counters:
+            return None
+        return torch.tensor(counters) / float(threshold)
 
     def __log_auxiliary_loss(self, module: "LightningModule", name: str) -> None:
         loss = self._latest_loss.get(name)
@@ -370,4 +415,4 @@ class NeuronClusterMonitorCallback(Callback):
         self._latest_trace.clear()
         self._latest_loss.clear()
         self._survival_history.clear()
-        self._previous_neuron_count.clear()
+        self._previous_neuron_names.clear()

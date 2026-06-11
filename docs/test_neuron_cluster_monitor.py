@@ -249,7 +249,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         self.assertEqual(callback._clusters, [])
         self.assertEqual(callback._survival_history, {})
         self.assertEqual(callback._latest_trace, {})
-        self.assertEqual(callback._previous_neuron_count, {})
+        self.assertEqual(callback._previous_neuron_names, {})
 
 
 if __name__ == "__main__":
