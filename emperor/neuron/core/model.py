@@ -7,9 +7,8 @@ from torch import Tensor
 from torch.nn import ModuleDict
 
 from emperor.base.utils import ConfigBase, Module
-from emperor.neuron.config import NeuronClusterConfig
 from emperor.neuron.core.base import NeuronClusterModuleBase
-from emperor.neuron.core.config import TerminalConfig
+from emperor.neuron.core.config import NeuronClusterConfig, TerminalConfig
 from emperor.neuron.core._validator import NeuronClusterValidator
 from emperor.neuron.core.state import (
     NeuronClusterRouteState,

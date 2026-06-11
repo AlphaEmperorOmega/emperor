@@ -31,7 +31,7 @@ class NeuronClusterGrowthCallback(Callback):
         self._known_names: dict[str, set[str]] = {}
 
     def on_fit_start(self, trainer, pl_module) -> None:
-        from emperor.neuron.model import NeuronCluster
+        from emperor.neuron.core.model import NeuronCluster
 
         self._clusters = [
             (name, module)

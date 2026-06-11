@@ -2,7 +2,7 @@ import unittest
 
 import torch
 from emperor.linears.core.layers import AdaptiveLinearLayer, LinearLayer
-from emperor.neuron.config import NeuronClusterConfig
+from emperor.neuron.core.config import NeuronClusterConfig
 from emperor.neuron.core import NeuronClusterOptimizerSyncCallback
 
 import models.neuron.neuron_linear.config as config

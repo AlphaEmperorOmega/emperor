@@ -83,7 +83,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         }
 
     def __find_neuron_clusters(self, module: nn.Module):
-        from emperor.neuron.model import NeuronCluster
+        from emperor.neuron.core.model import NeuronCluster
 
         return [
             cluster

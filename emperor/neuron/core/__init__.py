@@ -1,5 +1,12 @@
-from emperor.neuron.core.config import AxonsConfig, NucleusConfig, TerminalConfig
+from emperor.neuron.core.config import (
+    AxonsConfig,
+    NeuronClusterConfig,
+    NeuronConfig,
+    NucleusConfig,
+    TerminalConfig,
+)
 from emperor.neuron.core.layers import Axons, Neuron, Nucleus, Terminal
+from emperor.neuron.core.model import NeuronCluster
 from emperor.neuron.core.monitor import NeuronClusterMonitorCallback
 from emperor.neuron.core.optimizer_sync import NeuronClusterOptimizerSyncCallback
 from emperor.neuron.core.state import NeuronClusterTrace, NeuronClusterTraceStep
@@ -12,10 +19,13 @@ __all__ = [
     "Axons",
     "AxonsConfig",
     "Neuron",
+    "NeuronCluster",
+    "NeuronClusterConfig",
     "NeuronClusterMonitorCallback",
     "NeuronClusterOptimizerSyncCallback",
     "NeuronClusterTrace",
     "NeuronClusterTraceStep",
+    "NeuronConfig",
     "Nucleus",
     "NucleusConfig",
     "Terminal",

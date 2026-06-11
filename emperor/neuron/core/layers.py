@@ -13,8 +13,12 @@ from emperor.neuron.core._validator import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.neuron.config import NeuronConfig
-    from emperor.neuron.core.config import AxonsConfig, NucleusConfig, TerminalConfig
+    from emperor.neuron.core.config import (
+        AxonsConfig,
+        NeuronConfig,
+        NucleusConfig,
+        TerminalConfig,
+    )
 
 
 class Nucleus(Module):

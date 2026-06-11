@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from emperor.base.utils import ConfigBase, optional_field
-from emperor.neuron.config import NeuronClusterConfig
+from emperor.neuron.core.config import NeuronClusterConfig
 
 
 @dataclass

@@ -6,7 +6,7 @@ from emperor.base.validator import ValidatorBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.neuron.config import NeuronClusterConfig, NeuronConfig
+    from emperor.neuron.core.config import NeuronClusterConfig, NeuronConfig
     from emperor.neuron.core.layers import Axons, Nucleus, Terminal
 
 

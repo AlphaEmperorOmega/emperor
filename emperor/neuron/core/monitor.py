@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from torch import Tensor
     from lightning import LightningModule, Trainer
-    from emperor.neuron.model import NeuronCluster
+    from emperor.neuron.core.model import NeuronCluster
     from emperor.neuron.core.state import NeuronClusterTrace
 
 
@@ -39,7 +39,7 @@ class NeuronClusterMonitorCallback(Callback):
         self._previous_neuron_count: dict[str, int] = {}
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        from emperor.neuron.model import NeuronCluster
+        from emperor.neuron.core.model import NeuronCluster
 
         self._clusters = [
             (name, module)

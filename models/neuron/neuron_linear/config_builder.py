@@ -11,7 +11,7 @@ from emperor.config import ModelConfig
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.neuron.config import NeuronClusterConfig, NeuronConfig
+from emperor.neuron.core.config import NeuronClusterConfig, NeuronConfig
 from emperor.neuron.core.config import AxonsConfig, NucleusConfig, TerminalConfig
 from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
