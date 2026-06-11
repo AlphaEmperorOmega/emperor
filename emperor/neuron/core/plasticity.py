@@ -332,17 +332,61 @@ class NeuronClusterPlasticityMixin:
         unexpected_keys,
         error_msgs,
     ) -> None:
+        """Matches cluster membership to the incoming state dict.
+
+        Grown neurons missing from the cluster are rebuilt and pruned
+        neurons missing from the state dict are removed, so strict loads
+        succeed in both directions. A state dict without any cluster keys
+        (a partial or foreign load) leaves the cluster untouched.
+        """
         cluster_prefix = f"{prefix}cluster."
+        incoming_neuron_names = self.__incoming_neuron_names(
+            state_dict,
+            cluster_prefix,
+        )
+        if not incoming_neuron_names:
+            return
+        self.__rebuild_grown_neurons(incoming_neuron_names)
+        self.__remove_pruned_neurons(incoming_neuron_names)
+        self.__seed_missing_atrophy_counters(state_dict, cluster_prefix)
+
+    def __incoming_neuron_names(
+        self,
+        state_dict,
+        cluster_prefix: str,
+    ) -> set[str]:
+        incoming_neuron_names = set()
         for key in state_dict:
             if not key.startswith(cluster_prefix):
                 continue
             neuron_name = key[len(cluster_prefix):].split(".", 1)[0]
+            if self._is_neuron_name(neuron_name):
+                incoming_neuron_names.add(neuron_name)
+        return incoming_neuron_names
+
+    def __rebuild_grown_neurons(self, incoming_neuron_names: set[str]) -> None:
+        for neuron_name in sorted(incoming_neuron_names):
             if neuron_name in self.cluster:
-                continue
-            if not self._is_neuron_name(neuron_name):
                 continue
             self._add_neuron(
                 self.cluster,
                 neuron_name,
                 self._initialize_neuron(*self._parse_neuron_name(neuron_name)),
             )
+
+    def __remove_pruned_neurons(self, incoming_neuron_names: set[str]) -> None:
+        for neuron_name in list(self.cluster.keys()):
+            if neuron_name not in incoming_neuron_names:
+                del self.cluster[neuron_name]
+
+    def __seed_missing_atrophy_counters(
+        self,
+        state_dict,
+        cluster_prefix: str,
+    ) -> None:
+        """Zero-fills atrophy counters absent from legacy checkpoints so
+        they load strict with a full pruning grace period."""
+        for neuron_name in self.cluster.keys():
+            counter_key = f"{cluster_prefix}{neuron_name}.atrophy_counter"
+            if counter_key not in state_dict:
+                state_dict[counter_key] = torch.zeros((), dtype=torch.int64)
