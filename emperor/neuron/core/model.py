@@ -250,6 +250,7 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
     ) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, NeuronClusterTrace]:
         NeuronClusterValidator.validate_forward_input(input)
         self.__validate_feature_dimension(input)
+        self._neurons_called_this_forward: set[str] = set()
 
         flat_input = input.reshape(-1, input.shape[-1])
         output, auxiliary_loss, trace = (
@@ -594,6 +595,8 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
                 source_hidden.index_select(0, batch_index_tensor),
             )
             branch_outputs[batch_index_tensor, topk_index_tensor] = output
+            if self.training:
+                self._neurons_called_this_forward.add(neuron_name)
 
         return branch_outputs, valid_target_mask, escape_mask
 
