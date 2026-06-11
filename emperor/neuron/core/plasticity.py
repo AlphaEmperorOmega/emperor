@@ -15,8 +15,15 @@ class NeuronClusterPlasticityMixin:
         Under an initialized process group every rank participates in the
         collectives below on every training forward, so ranks must call
         forward in lockstep (standard DDP semantics) or growth deadlocks.
+        The budget and cooldown early returns are safe before the
+        collectives: their buffers advance identically on every rank, so
+        all ranks skip together.
         """
         if self.growth_threshold is None:
+            return
+        if self.__has_exhausted_growth_budget():
+            return
+        if self.__is_within_growth_cooldown_after_counting_forward():
             return
 
         synchronized_batch_counters = (
@@ -50,8 +57,26 @@ class NeuronClusterPlasticityMixin:
                 ),
             )
             self.__reset_escape_count(position)
+            self.__record_successful_growth()
             self._neurons_called_this_forward.add(new_name)
             return
+
+    def __has_exhausted_growth_budget(self) -> bool:
+        if self.total_growth_count is None:
+            return False
+        return int(self.total_growth_count) >= self.max_total_growths
+
+    def __is_within_growth_cooldown_after_counting_forward(self) -> bool:
+        if self.forwards_since_last_growth is None:
+            return False
+        self.forwards_since_last_growth += 1
+        return int(self.forwards_since_last_growth) < self.growth_cooldown_steps
+
+    def __record_successful_growth(self) -> None:
+        if self.forwards_since_last_growth is not None:
+            self.forwards_since_last_growth.zero_()
+        if self.total_growth_count is not None:
+            self.total_growth_count += 1
 
     def __saturated_neurons_by_descending_counter(
         self,
@@ -350,6 +375,7 @@ class NeuronClusterPlasticityMixin:
         self.__rebuild_grown_neurons(incoming_neuron_names)
         self.__remove_pruned_neurons(incoming_neuron_names)
         self.__seed_missing_atrophy_counters(state_dict, cluster_prefix)
+        self.__seed_missing_growth_budget_buffers(state_dict, prefix)
 
     def __incoming_neuron_names(
         self,
@@ -391,3 +417,17 @@ class NeuronClusterPlasticityMixin:
             counter_key = f"{cluster_prefix}{neuron_name}.atrophy_counter"
             if counter_key not in state_dict:
                 state_dict[counter_key] = torch.zeros((), dtype=torch.int64)
+
+    def __seed_missing_growth_budget_buffers(
+        self,
+        state_dict,
+        prefix: str,
+    ) -> None:
+        """Zero-fills cooldown/budget buffers absent from legacy checkpoints
+        so they load strict with a fresh cooldown and an unspent budget."""
+        for buffer_name in ("forwards_since_last_growth", "total_growth_count"):
+            if getattr(self, buffer_name) is None:
+                continue
+            buffer_key = f"{prefix}{buffer_name}"
+            if buffer_key not in state_dict:
+                state_dict[buffer_key] = torch.zeros((), dtype=torch.int64)
