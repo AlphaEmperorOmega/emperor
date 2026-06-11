@@ -45,6 +45,8 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         z_axis_total_neurons: int = 1,
         max_steps: int = 2,
         growth_threshold: int | None = None,
+        growth_cooldown_steps: int | None = None,
+        max_total_growths: int | None = None,
         pruning_threshold: int | None = None,
     ):
         return NeuronClusterConfig(
@@ -53,6 +55,8 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
             z_axis_total_neurons=z_axis_total_neurons,
             max_steps=max_steps,
             growth_threshold=growth_threshold,
+            growth_cooldown_steps=growth_cooldown_steps,
+            max_total_growths=max_total_growths,
             pruning_threshold=pruning_threshold,
             neuron_config=self.full_sampler_neuron_config(),
         ).build()
@@ -198,6 +202,44 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
 
         for name, _ in module.logged_scalars:
             self.assertNotIn("growth/pressure", name)
+
+    def test_growth_budget_logged_when_options_set(self):
+        cluster = self.build_cluster(
+            growth_threshold=2,
+            growth_cooldown_steps=3,
+            max_total_growths=4,
+        )
+        module = self.build_module(cluster)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        self.feed_cluster(module)
+
+        callback.on_train_batch_end(
+            trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
+        )
+
+        names = self.scalar_names(module)
+        self.assertIn(f"{self.CLUSTER_PATH}/cluster/growth/total_growths", names)
+        self.assertIn(
+            f"{self.CLUSTER_PATH}/cluster/growth/budget_remaining", names
+        )
+        self.assertIn(
+            f"{self.CLUSTER_PATH}/cluster/growth/cooldown_remaining", names
+        )
+
+    def test_growth_budget_skipped_when_options_disabled(self):
+        cluster = self.build_cluster(growth_threshold=2)
+        module = self.build_module(cluster)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        self.feed_cluster(module)
+
+        callback.on_train_batch_end(
+            trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
+        )
+
+        for name, _ in module.logged_scalars:
+            self.assertNotIn("growth/total_growths", name)
+            self.assertNotIn("growth/budget_remaining", name)
+            self.assertNotIn("growth/cooldown_remaining", name)
 
     def test_pruning_pressure_logged_when_threshold_set(self):
         cluster = self.build_cluster(pruning_threshold=2)

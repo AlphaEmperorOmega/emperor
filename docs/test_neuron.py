@@ -987,9 +987,15 @@ class TestNeuronCluster(NeuronTestCase):
             with self.subTest(neuron_name=neuron_name):
                 self.assertEqual(int(neuron.batch_counter.item()), 0)
 
-    def growth_cluster_config(self, growth_threshold: int | None) -> NeuronClusterConfig:
+    def growth_cluster_config(
+        self,
+        growth_threshold: int | None,
+        growth_cooldown_steps: int | None = None,
+        max_total_growths: int | None = None,
+        x_axis_total_neurons: int = 2,
+    ) -> NeuronClusterConfig:
         return NeuronClusterConfig(
-            x_axis_total_neurons=2,
+            x_axis_total_neurons=x_axis_total_neurons,
             y_axis_total_neurons=1,
             z_axis_total_neurons=1,
             initial_x_axis_total_neurons=1,
@@ -997,8 +1003,104 @@ class TestNeuronCluster(NeuronTestCase):
             initial_z_axis_total_neurons=1,
             max_steps=1,
             growth_threshold=growth_threshold,
+            growth_cooldown_steps=growth_cooldown_steps,
+            max_total_growths=max_total_growths,
             neuron_config=self.full_sampler_neuron_config(),
         )
+
+    def test_growth_cooldown_blocks_growth_until_elapsed(self):
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            growth_cooldown_steps=2,
+            x_axis_total_neurons=4,
+        ).build()
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        for forward_index, expected_size in enumerate([1, 2, 2, 3]):
+            with self.subTest(forward_index=forward_index):
+                model(input_batch)
+                self.assertEqual(len(model.cluster), expected_size)
+
+    def test_successful_growth_resets_cooldown_counter(self):
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            growth_cooldown_steps=2,
+            x_axis_total_neurons=4,
+        ).build()
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        model(input_batch)
+        self.assertEqual(int(model.forwards_since_last_growth.item()), 1)
+
+        model(input_batch)
+        self.assertEqual(int(model.forwards_since_last_growth.item()), 0)
+
+    def test_max_total_growths_caps_lifetime_growth(self):
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            max_total_growths=1,
+            x_axis_total_neurons=4,
+        ).build()
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        model(input_batch)
+        self.assertEqual(len(model.cluster), 2)
+        self.assertEqual(int(model.total_growth_count.item()), 1)
+
+        for _ in range(3):
+            model(input_batch)
+
+        self.assertEqual(len(model.cluster), 2)
+        self.assertEqual(int(model.total_growth_count.item()), 1)
+
+    def test_growth_budget_buffers_disabled_when_options_none(self):
+        model = self.growth_cluster_config(growth_threshold=1).build()
+
+        self.assertIsNone(model.forwards_since_last_growth)
+        self.assertIsNone(model.total_growth_count)
+        self.assertNotIn("forwards_since_last_growth", model.state_dict())
+        self.assertNotIn("total_growth_count", model.state_dict())
+
+    def test_load_state_dict_restores_growth_budget_buffers(self):
+        source_model = self.growth_cluster_config(
+            growth_threshold=1,
+            growth_cooldown_steps=1,
+            max_total_growths=2,
+            x_axis_total_neurons=4,
+        ).build()
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+        source_model(input_batch)
+        source_model(input_batch)
+        self.assertEqual(int(source_model.total_growth_count.item()), 2)
+
+        target_model = self.growth_cluster_config(
+            growth_threshold=1,
+            growth_cooldown_steps=1,
+            max_total_growths=2,
+            x_axis_total_neurons=4,
+        ).build()
+        target_model.load_state_dict(source_model.state_dict(), strict=True)
+
+        self.assertEqual(
+            int(target_model.forwards_since_last_growth.item()),
+            int(source_model.forwards_since_last_growth.item()),
+        )
+        self.assertEqual(int(target_model.total_growth_count.item()), 2)
+
+    def test_load_legacy_state_dict_seeds_growth_budget_buffers(self):
+        legacy_model = self.growth_cluster_config(growth_threshold=1).build()
+        target_model = self.growth_cluster_config(
+            growth_threshold=1,
+            growth_cooldown_steps=2,
+            max_total_growths=3,
+        ).build()
+        target_model.forwards_since_last_growth.fill_(7)
+        target_model.total_growth_count.fill_(7)
+
+        target_model.load_state_dict(legacy_model.state_dict(), strict=True)
+
+        self.assertEqual(int(target_model.forwards_since_last_growth.item()), 0)
+        self.assertEqual(int(target_model.total_growth_count.item()), 0)
 
     @unittest.skipUnless(
         torch.distributed.is_available() and torch.distributed.is_gloo_available(),
@@ -2256,6 +2358,40 @@ class TestNeuronValidation(NeuronTestCase):
                         growth_threshold=None,
                         neuron_config=self.neuron_config(),
                         **{flag_name: True},
+                    ).build()
+
+    def test_growth_budget_options_require_growth_threshold(self):
+        for option_name in (
+            "growth_cooldown_steps",
+            "max_total_growths",
+        ):
+            with self.subTest(option=option_name):
+                with self.assertRaises(ValueError):
+                    NeuronClusterConfig(
+                        x_axis_total_neurons=1,
+                        y_axis_total_neurons=1,
+                        z_axis_total_neurons=1,
+                        max_steps=1,
+                        growth_threshold=None,
+                        neuron_config=self.neuron_config(),
+                        **{option_name: 1},
+                    ).build()
+
+    def test_non_positive_growth_budget_options_raise(self):
+        for option_name in (
+            "growth_cooldown_steps",
+            "max_total_growths",
+        ):
+            with self.subTest(option=option_name):
+                with self.assertRaises(ValueError):
+                    NeuronClusterConfig(
+                        x_axis_total_neurons=1,
+                        y_axis_total_neurons=1,
+                        z_axis_total_neurons=1,
+                        max_steps=1,
+                        growth_threshold=1,
+                        neuron_config=self.neuron_config(),
+                        **{option_name: 0},
                     ).build()
 
     def test_nucleus_model_dimension_mismatch_raises(self):
