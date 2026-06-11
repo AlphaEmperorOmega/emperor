@@ -172,6 +172,11 @@ class Neuron(Module):
             torch.tensor(0, dtype=torch.int64),
             persistent=True,
         )
+        self.register_buffer(
+            "atrophy_counter",
+            torch.tensor(0, dtype=torch.int64),
+            persistent=True,
+        )
 
     def process_signal(self, input: Tensor) -> Tensor:
         NeuronValidator.validate_forward_input(input)
