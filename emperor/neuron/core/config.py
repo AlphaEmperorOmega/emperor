@@ -119,6 +119,16 @@ class NeuronClusterConfig(ConfigBase):
         "evaluations, so neurons in popular neighborhoods accrue pressure "
         "without being chosen. Set to None to disable."
     )
+    growth_cooldown_steps: int | None = optional_field(
+        "Minimum training forwards between two growth events. The cooldown "
+        "counter starts at zero, so the first growth also waits this many "
+        "forwards. Requires growth_threshold. Set to None to disable."
+    )
+    max_total_growths: int | None = optional_field(
+        "Lifetime budget of grown neurons; once reached, growth stops "
+        "permanently. The growth count persists in checkpoints. Requires "
+        "growth_threshold. Set to None for unlimited growth."
+    )
     pruning_threshold: int | None = optional_field(
         "Synchronized atrophy count that triggers pruning of an idle neuron. "
         "A neuron's atrophy counter resets to zero on any training forward "

@@ -182,7 +182,9 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
     OPTIONAL_FIELDS = {
         "entry_sampler_config",
         "escape_driven_growth_flag",
+        "growth_cooldown_steps",
         "growth_threshold",
+        "max_total_growths",
         "halting_config",
         "initial_x_axis_total_neurons",
         "initial_y_axis_total_neurons",
@@ -222,6 +224,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
             model.cfg.pruning_threshold,
         )
         NeuronClusterValidator.validate_growth_placement_options(model.cfg)
+        NeuronClusterValidator.validate_growth_budget_options(model.cfg)
         NeuronClusterValidator.validate_halting_config(model.cfg)
         NeuronClusterValidator.validate_nucleus_model_dimensions(model.cfg)
 
@@ -381,6 +384,26 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
             if flag_value and cfg.growth_threshold is None:
                 raise ValueError(
                     f"{flag_name} requires growth_threshold to be set for "
+                    "NeuronClusterConfig; growth options have no effect when "
+                    "growth is disabled."
+                )
+
+    @staticmethod
+    def validate_growth_budget_options(cfg: "NeuronClusterConfig") -> None:
+        budget_fields = (
+            ("growth_cooldown_steps", cfg.growth_cooldown_steps),
+            ("max_total_growths", cfg.max_total_growths),
+        )
+        for budget_name, budget_value in budget_fields:
+            if budget_value is None:
+                continue
+            NeuronClusterValidator.validate_positive_integer(
+                budget_name,
+                budget_value,
+            )
+            if cfg.growth_threshold is None:
+                raise ValueError(
+                    f"{budget_name} requires growth_threshold to be set for "
                     "NeuronClusterConfig; growth options have no effect when "
                     "growth is disabled."
                 )
