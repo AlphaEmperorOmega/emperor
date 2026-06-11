@@ -1,5 +1,4 @@
 import copy
-import re
 
 from dataclasses import fields
 import torch
@@ -9,6 +8,7 @@ from torch.nn import ModuleDict
 
 from emperor.base.utils import ConfigBase, Module
 from emperor.neuron.config import NeuronClusterConfig
+from emperor.neuron.core.base import NeuronClusterModuleBase
 from emperor.neuron.core.config import TerminalConfig
 from emperor.neuron.core._validator import NeuronClusterValidator
 from emperor.neuron.core.state import (
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
 
 
-class NeuronCluster(Module):
+class NeuronCluster(NeuronClusterModuleBase):
     """3D neuron grid with sampler-routed recurrent signal propagation.
 
     The auxiliary loss returned by ``forward`` is an unnormalized sum over
@@ -192,12 +192,12 @@ class NeuronCluster(Module):
                     self.initial_z_axis_start,
                     self.initial_z_axis_start + self.initial_z_axis_total_neurons,
                 ):
-                    name = self.__neuron_name(
+                    name = self._neuron_name(
                         x_coordinate,
                         y_coordinate,
                         z_coordinate,
                     )
-                    self.__add_neuron(
+                    self._add_neuron(
                         cluster,
                         name,
                         self.__initialize_neuron(
@@ -207,12 +207,6 @@ class NeuronCluster(Module):
                         ),
                     )
         return cluster
-
-    def __add_neuron(self, cluster: ModuleDict, name: str, instance: Module) -> None:
-        cluster[name] = instance
-
-    def __neuron_name(self, x: int, y: int, z: int) -> str:
-        return f"neuron_{x}_{y}_{z}"
 
     def __initialize_neuron(self, x: int, y: int, z: int) -> Module:
         neuron_config = copy.deepcopy(self.cfg.neuron_config)
@@ -278,8 +272,8 @@ class NeuronCluster(Module):
 
             neuron.batch_counter.zero_()
             x, y, z = position
-            new_name = self.__neuron_name(x, y, z)
-            self.__add_neuron(
+            new_name = self._neuron_name(x, y, z)
+            self._add_neuron(
                 self.cluster,
                 new_name,
                 self.__initialize_grown_neuron_with_synchronized_rng(
@@ -349,14 +343,14 @@ class NeuronCluster(Module):
     ) -> tuple[int, int, int] | None:
         neuron = self.cluster[neuron_name]
         connection_rows = neuron.terminal.neuron_connections.detach().cpu().tolist()
-        origin_x, origin_y, origin_z = self.__parse_neuron_name(neuron_name)
+        origin_x, origin_y, origin_z = self._parse_neuron_name(neuron_name)
 
         empty_positions = []
         for connection_row in connection_rows:
-            position = self.__coordinate_from_row(connection_row)
-            if not self.__is_within_grid_capacity(position):
+            position = self._coordinate_from_row(connection_row)
+            if not self._is_within_grid_capacity(position):
                 continue
-            candidate_name = self.__neuron_name(*position)
+            candidate_name = self._neuron_name(*position)
             if candidate_name not in self.cluster:
                 empty_positions.append(position)
 
@@ -488,13 +482,6 @@ class NeuronCluster(Module):
                     )
         return grown_neuron
 
-    def __parse_neuron_name(self, neuron_name: str) -> tuple[int, int, int]:
-        _, x, y, z = neuron_name.split("_")
-        return int(x), int(y), int(z)
-
-    def __is_neuron_name(self, name: str) -> bool:
-        return re.fullmatch(r"neuron_\d+_\d+_\d+", name) is not None
-
     def __rebuild_grown_neurons_from_state_dict(
         self,
         module,
@@ -513,12 +500,12 @@ class NeuronCluster(Module):
             neuron_name = key[len(cluster_prefix):].split(".", 1)[0]
             if neuron_name in self.cluster:
                 continue
-            if not self.__is_neuron_name(neuron_name):
+            if not self._is_neuron_name(neuron_name):
                 continue
-            self.__add_neuron(
+            self._add_neuron(
                 self.cluster,
                 neuron_name,
-                self.__initialize_neuron(*self.__parse_neuron_name(neuron_name)),
+                self.__initialize_neuron(*self._parse_neuron_name(neuron_name)),
             )
 
     def forward(
@@ -721,7 +708,7 @@ class NeuronCluster(Module):
                 dtype=torch.long,
             )
             current_called_mask[index_tensor] = True
-            loss = self.__accumulate_auxiliary_loss(loss, neuron_loss)
+            loss = self._accumulate_auxiliary_loss(loss, neuron_loss)
 
         missing_current_mask = route_mask & ~current_called_mask
         if bool(missing_current_mask.any().item()):
@@ -891,15 +878,15 @@ class NeuronCluster(Module):
         coordinate_rows = selected_coords.detach().cpu().tolist()
         for batch_index in self.__mask_indices(call_mask):
             for topk_index in range(selected_coords.shape[1]):
-                coordinate = self.__coordinate_from_row(
+                coordinate = self._coordinate_from_row(
                     coordinate_rows[batch_index][topk_index]
                 )
                 if not self.__is_valid_coordinate(coordinate):
                     escape_mask[batch_index, topk_index] = True
-                    if self.__is_within_grid_capacity(coordinate):
+                    if self._is_within_grid_capacity(coordinate):
                         escaped_missing_positions.append(coordinate)
                     continue
-                neuron_name = self.__neuron_name(*coordinate)
+                neuron_name = self._neuron_name(*coordinate)
                 target_groups.setdefault(neuron_name, []).append(
                     (batch_index, topk_index)
                 )
@@ -1007,7 +994,7 @@ class NeuronCluster(Module):
             escaped_mask=route_state.escaped_mask,
             final_mask=route_state.final_mask,
             halting_state=route_state.halting_state,
-            loss=self.__accumulate_auxiliary_loss(
+            loss=self._accumulate_auxiliary_loss(
                 route_state.loss,
                 self.__reduce_ponder_loss(ponder_loss),
             ),
@@ -1028,27 +1015,15 @@ class NeuronCluster(Module):
         groups: dict[str, list[int]] = {}
         position_rows = positions.detach().cpu().tolist()
         for batch_index in self.__mask_indices(mask):
-            coordinate = self.__coordinate_from_row(position_rows[batch_index])
-            neuron_name = self.__neuron_name(*coordinate)
+            coordinate = self._coordinate_from_row(position_rows[batch_index])
+            neuron_name = self._neuron_name(*coordinate)
             groups.setdefault(neuron_name, []).append(batch_index)
         return groups
 
-    def __coordinate_from_row(self, row: list[int]) -> tuple[int, int, int]:
-        x, y, z = row
-        return int(x), int(y), int(z)
-
     def __is_valid_coordinate(self, coordinate: tuple[int, int, int]) -> bool:
-        if not self.__is_within_grid_capacity(coordinate):
+        if not self._is_within_grid_capacity(coordinate):
             return False
-        return self.__neuron_name(*coordinate) in self.cluster
-
-    def __is_within_grid_capacity(self, coordinate: tuple[int, int, int]) -> bool:
-        x, y, z = coordinate
-        return (
-            1 <= x <= self.x_axis_total_neurons
-            and 1 <= y <= self.y_axis_total_neurons
-            and 1 <= z <= self.z_axis_total_neurons
-        )
+        return self._neuron_name(*coordinate) in self.cluster
 
     def __mask_indices(self, mask: Tensor) -> list[int]:
         return torch.nonzero(mask, as_tuple=False).flatten().detach().cpu().tolist()
@@ -1083,10 +1058,3 @@ class NeuronCluster(Module):
 
     def __detach_trace_tensor(self, tensor: Tensor) -> Tensor:
         return tensor.detach().clone()
-
-    def __accumulate_auxiliary_loss(
-        self,
-        loss: Tensor,
-        auxiliary_loss: Tensor,
-    ) -> Tensor:
-        return loss + auxiliary_loss
