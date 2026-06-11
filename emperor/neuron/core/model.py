@@ -70,6 +70,8 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
         )
         self.max_steps: int = self.cfg.max_steps
         self.growth_threshold: int | None = self.cfg.growth_threshold
+        self.growth_cooldown_steps: int | None = self.cfg.growth_cooldown_steps
+        self.max_total_growths: int | None = self.cfg.max_total_growths
         self.pruning_threshold: int | None = self.cfg.pruning_threshold
         self.escape_driven_growth_flag: bool = bool(
             self.cfg.escape_driven_growth_flag
@@ -98,6 +100,22 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
             )
         else:
             self.escape_counts = None
+        if self.growth_cooldown_steps is not None:
+            self.register_buffer(
+                "forwards_since_last_growth",
+                torch.zeros((), dtype=torch.long),
+                persistent=True,
+            )
+        else:
+            self.forwards_since_last_growth = None
+        if self.max_total_growths is not None:
+            self.register_buffer(
+                "total_growth_count",
+                torch.zeros((), dtype=torch.long),
+                persistent=True,
+            )
+        else:
+            self.total_growth_count = None
         self.entry_sampler_config = self.__resolve_entry_sampler_config()
         self.cluster = self.__initialize_cluster()
         self.entry_sampler = self.__build_entry_sampler()
