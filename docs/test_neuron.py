@@ -1,3 +1,4 @@
+import math
 import os
 import tempfile
 import unittest
@@ -368,7 +369,10 @@ class NeuronTestCase(unittest.TestCase):
             or self.sampler_config(input_dim=input_dim, num_experts=num_experts),
         )
 
-    def neuron_config(self) -> NeuronConfig:
+    def neuron_config(
+        self,
+        coordinate_embedding_flag: bool | None = None,
+    ) -> NeuronConfig:
         return NeuronConfig(
             nucleus_config=NucleusConfig(
                 model_config=self.projection_config(
@@ -379,9 +383,13 @@ class NeuronTestCase(unittest.TestCase):
             ),
             axons_config=AxonsConfig(memory_config=None),
             terminal_config=self.terminal_config(input_dim=self.input_dim),
+            coordinate_embedding_flag=coordinate_embedding_flag,
         )
 
-    def full_sampler_neuron_config(self) -> NeuronConfig:
+    def full_sampler_neuron_config(
+        self,
+        coordinate_embedding_flag: bool | None = None,
+    ) -> NeuronConfig:
         total_connections = self.terminal_total_connections()
         return NeuronConfig(
             nucleus_config=NucleusConfig(
@@ -400,6 +408,16 @@ class NeuronTestCase(unittest.TestCase):
                     top_k=total_connections,
                 ),
             ),
+            coordinate_embedding_flag=coordinate_embedding_flag,
+        )
+
+    def expected_coordinate_embedding(self, x: int, y: int, z: int) -> Tensor:
+        # input_dim=4 splits channels (2, 1, 1) across the x, y, z axes; the
+        # frequency exponents are all zero at these channel counts, so the
+        # encoding reduces to [sin(x), cos(x), sin(y), sin(z)].
+        return torch.tensor(
+            [math.sin(x), math.cos(x), math.sin(y), math.sin(z)],
+            dtype=torch.float32,
         )
 
 
@@ -594,6 +612,81 @@ class TestNeuron(NeuronTestCase):
         self.assertIsInstance(auxiliary_loss, Tensor)
         self.assertEqual(model.batch_counter.item(), 1)
 
+    def test_coordinate_embedding_disabled_by_default(self):
+        model = self.neuron_config().build()
+
+        self.assertIsNone(model.coordinate_embedding)
+
+    def test_coordinate_embedding_matches_sinusoidal_encoding(self):
+        model = self.neuron_config(coordinate_embedding_flag=True).build()
+
+        torch.testing.assert_close(
+            model.coordinate_embedding,
+            self.expected_coordinate_embedding(1, 1, 1),
+        )
+
+    def test_coordinate_embedding_differs_across_coordinates(self):
+        base_model = self.neuron_config(coordinate_embedding_flag=True).build()
+        shifted_config = self.neuron_config(coordinate_embedding_flag=True)
+        shifted_config.terminal_config.x_axis_position = 2
+        shifted_model = shifted_config.build()
+
+        self.assertFalse(
+            torch.allclose(
+                base_model.coordinate_embedding,
+                shifted_model.coordinate_embedding,
+            )
+        )
+
+    def test_process_signal_injects_coordinate_embedding_into_nucleus(self):
+        model = self.neuron_config(coordinate_embedding_flag=True).build()
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        output = model.process_signal(input_batch)
+
+        torch.testing.assert_close(
+            output,
+            model.nucleus(input_batch + model.coordinate_embedding),
+        )
+
+    def test_route_signal_injects_coordinate_embedding_into_terminal(self):
+        model = self.neuron_config(coordinate_embedding_flag=True).build()
+        model.eval()
+        processed_signal = torch.randn(self.batch_size, self.input_dim)
+
+        probabilities, selected_neurons, _ = model.route_signal(processed_signal)
+
+        _, expected_probabilities, expected_selected_neurons, _ = model.terminal(
+            processed_signal + model.coordinate_embedding
+        )
+        torch.testing.assert_close(probabilities, expected_probabilities)
+        torch.testing.assert_close(selected_neurons, expected_selected_neurons)
+
+    def test_coordinate_embedding_excluded_from_state_dict(self):
+        model = self.neuron_config(coordinate_embedding_flag=True).build()
+
+        self.assertNotIn("coordinate_embedding", model.state_dict())
+
+    def test_coordinate_embedding_requires_minimum_input_dim(self):
+        config = self.neuron_config(coordinate_embedding_flag=True)
+        config.terminal_config.input_dim = 2
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "coordinate_embedding_flag requires terminal_config.input_dim",
+        ):
+            config.build()
+
+    def test_coordinate_embedding_flag_rejects_non_bool(self):
+        config = self.neuron_config()
+        config.coordinate_embedding_flag = 1
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "coordinate_embedding_flag must be a bool",
+        ):
+            config.build()
+
 
 class TestNeuronCluster(NeuronTestCase):
     def scripted_cluster(
@@ -753,6 +846,49 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertEqual(auxiliary_loss.shape, ())
         self.assertEqual(len(model.cluster), 2)
         self.assertIn("neuron_1_1_1", model.cluster)
+
+    def test_cluster_neurons_receive_their_own_coordinate_embedding(self):
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=None,
+            neuron_config=self.neuron_config(coordinate_embedding_flag=True),
+        ).build()
+
+        torch.testing.assert_close(
+            model.cluster["neuron_1_1_1"].coordinate_embedding,
+            self.expected_coordinate_embedding(1, 1, 1),
+        )
+        torch.testing.assert_close(
+            model.cluster["neuron_2_1_1"].coordinate_embedding,
+            self.expected_coordinate_embedding(2, 1, 1),
+        )
+
+    def test_grown_neuron_receives_embedding_for_grown_coordinate(self):
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            neuron_config=self.full_sampler_neuron_config(
+                coordinate_embedding_flag=True
+            ),
+        ).build()
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(len(model.cluster), 2)
+        self.assertIn("neuron_2_1_1", model.cluster)
+        torch.testing.assert_close(
+            model.cluster["neuron_2_1_1"].coordinate_embedding,
+            self.expected_coordinate_embedding(2, 1, 1),
+        )
 
     def test_growth_expands_from_centered_seed(self):
         model = NeuronClusterConfig(
