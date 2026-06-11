@@ -179,7 +179,16 @@ class NeuronValidator(ValidatorBase, NeuronValidationMixin):
 
 
 class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
-    OPTIONAL_FIELDS = {"growth_threshold"}
+    OPTIONAL_FIELDS = {
+        "entry_sampler_config",
+        "escape_driven_growth_flag",
+        "growth_threshold",
+        "halting_config",
+        "initial_x_axis_total_neurons",
+        "initial_y_axis_total_neurons",
+        "initial_z_axis_total_neurons",
+        "mitosis_initialization_flag",
+    }
 
     @staticmethod
     def validate(model) -> None:
@@ -198,8 +207,139 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
             "z_axis_total_neurons",
             model.cfg.z_axis_total_neurons,
         )
+        NeuronClusterValidator.validate_initial_grid_dimensions(model.cfg)
+        NeuronClusterValidator.validate_positive_integer(
+            "max_steps",
+            model.cfg.max_steps,
+        )
+        NeuronClusterValidator.validate_entry_sampler_config(model.cfg)
+        NeuronClusterValidator.validate_derived_entry_sampler_config(model.cfg)
         NeuronClusterValidator.validate_growth_threshold(
             model.cfg.growth_threshold,
+        )
+        NeuronClusterValidator.validate_growth_placement_options(model.cfg)
+        NeuronClusterValidator.validate_halting_config(model.cfg)
+        NeuronClusterValidator.validate_nucleus_model_dimensions(model.cfg)
+
+    @staticmethod
+    def validate_initial_grid_dimensions(cfg: "NeuronClusterConfig") -> None:
+        axis_pairs = (
+            (
+                "initial_x_axis_total_neurons",
+                cfg.initial_x_axis_total_neurons,
+                "x_axis_total_neurons",
+                cfg.x_axis_total_neurons,
+            ),
+            (
+                "initial_y_axis_total_neurons",
+                cfg.initial_y_axis_total_neurons,
+                "y_axis_total_neurons",
+                cfg.y_axis_total_neurons,
+            ),
+            (
+                "initial_z_axis_total_neurons",
+                cfg.initial_z_axis_total_neurons,
+                "z_axis_total_neurons",
+                cfg.z_axis_total_neurons,
+            ),
+        )
+        for initial_name, initial_value, max_name, max_value in axis_pairs:
+            if initial_value is None:
+                continue
+            NeuronClusterValidator.validate_positive_integer(
+                initial_name,
+                initial_value,
+            )
+            if initial_value > max_value:
+                raise ValueError(
+                    f"{initial_name} cannot exceed {max_name}, received "
+                    f"{initial_name}={initial_value} and {max_name}={max_value}."
+                )
+
+    @staticmethod
+    def validate_entry_sampler_config(cfg: "NeuronClusterConfig") -> None:
+        sampler_config = cfg.entry_sampler_config
+        if sampler_config is None:
+            return
+
+        from emperor.sampler.core.config import RouterConfig, SamplerConfig
+
+        if not isinstance(sampler_config, SamplerConfig):
+            raise TypeError(
+                "entry_sampler_config must be a SamplerConfig for "
+                "NeuronClusterConfig, got "
+                f"{type(sampler_config).__name__}."
+            )
+
+        entry_count = (
+            (cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons)
+            * (cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons)
+        )
+        NeuronClusterValidator.validate_positive_integer(
+            "entry_sampler_config.num_experts",
+            sampler_config.num_experts,
+        )
+        if sampler_config.num_experts != entry_count:
+            raise ValueError(
+                "entry_sampler_config.num_experts must equal the initialized "
+                "entry coordinate count, received "
+                f"num_experts={sampler_config.num_experts} and "
+                f"entry_coordinate_count={entry_count}."
+            )
+        NeuronClusterValidator.validate_positive_integer(
+            "entry_sampler_config.top_k",
+            sampler_config.top_k,
+        )
+        if sampler_config.top_k > entry_count:
+            raise ValueError(
+                "entry_sampler_config.top_k cannot exceed the initialized entry "
+                "coordinate count, received "
+                f"top_k={sampler_config.top_k} and "
+                f"entry_coordinate_count={entry_count}."
+            )
+
+        router_config = sampler_config.router_config
+        if router_config is None:
+            return
+        if not isinstance(router_config, RouterConfig):
+            raise TypeError(
+                "entry_sampler_config.router_config must be a RouterConfig for "
+                "NeuronClusterConfig, got "
+                f"{type(router_config).__name__}."
+            )
+        NeuronClusterValidator.validate_positive_integer(
+            "entry_sampler_config.router_config.num_experts",
+            router_config.num_experts,
+        )
+        if router_config.num_experts != entry_count:
+            raise ValueError(
+                "entry_sampler_config.router_config.num_experts must equal the "
+                "initialized entry coordinate count, received "
+                f"num_experts={router_config.num_experts} and "
+                f"entry_coordinate_count={entry_count}."
+            )
+
+    @staticmethod
+    def validate_derived_entry_sampler_config(cfg: "NeuronClusterConfig") -> None:
+        if cfg.entry_sampler_config is not None:
+            return
+
+        terminal_config = cfg.neuron_config.terminal_config
+        if terminal_config.sampler_config.router_config is not None:
+            return
+
+        entry_count = (
+            (cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons)
+            * (cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons)
+        )
+        if terminal_config.input_dim == entry_count:
+            return
+        raise ValueError(
+            "entry_sampler_config is required when the terminal sampler has no "
+            "router_config and input_dim does not equal the initialized entry "
+            "coordinate count, received "
+            f"input_dim={terminal_config.input_dim} and "
+            f"entry_coordinate_count={entry_count}."
         )
 
     @staticmethod
@@ -212,5 +352,95 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         )
 
     @staticmethod
+    def validate_growth_placement_options(cfg: "NeuronClusterConfig") -> None:
+        flag_fields = (
+            ("escape_driven_growth_flag", cfg.escape_driven_growth_flag),
+            ("mitosis_initialization_flag", cfg.mitosis_initialization_flag),
+        )
+        for flag_name, flag_value in flag_fields:
+            if flag_value is None:
+                continue
+            if not isinstance(flag_value, bool):
+                raise TypeError(
+                    f"{flag_name} must be a bool for NeuronClusterConfig, "
+                    f"got {type(flag_value).__name__}."
+                )
+            if flag_value and cfg.growth_threshold is None:
+                raise ValueError(
+                    f"{flag_name} requires growth_threshold to be set for "
+                    "NeuronClusterConfig; growth options have no effect when "
+                    "growth is disabled."
+                )
+
+    @staticmethod
+    def validate_halting_config(cfg: "NeuronClusterConfig") -> None:
+        halting_config = cfg.halting_config
+        if halting_config is None:
+            return
+
+        from emperor.halting.config import HaltingConfig
+
+        if not isinstance(halting_config, HaltingConfig):
+            raise TypeError(
+                "halting_config must be an instance of HaltingConfig for "
+                f"NeuronClusterConfig, got {type(halting_config).__name__}"
+            )
+
+        try:
+            owner = halting_config._registry_owner()
+        except NotImplementedError as exc:
+            raise ValueError(
+                "halting_config must be a concrete halting config for "
+                "NeuronClusterConfig"
+            ) from exc
+
+        if not hasattr(owner, "update_halting_state") or not hasattr(
+            owner,
+            "finalize_weighted_accumulation",
+        ):
+            raise ValueError(
+                f"halting_config {type(halting_config).__name__} builds "
+                f"{owner.__name__}, which does not expose update_halting_state "
+                "and finalize_weighted_accumulation required by NeuronCluster"
+            )
+
+        terminal_input_dim = cfg.neuron_config.terminal_config.input_dim
+        if (
+            halting_config.input_dim is not None
+            and halting_config.input_dim != terminal_input_dim
+        ):
+            raise ValueError(
+                "halting_config.input_dim must match "
+                "neuron_config.terminal_config.input_dim for NeuronClusterConfig, "
+                f"got halting_config.input_dim={halting_config.input_dim} and "
+                f"terminal input_dim={terminal_input_dim}."
+            )
+
+    @staticmethod
+    def validate_nucleus_model_dimensions(cfg: "NeuronClusterConfig") -> None:
+        model_config = cfg.neuron_config.nucleus_config.model_config
+        terminal_input_dim = cfg.neuron_config.terminal_config.input_dim
+        for dimension_name in ("input_dim", "output_dim"):
+            dimension_value = getattr(model_config, dimension_name, None)
+            if dimension_value is None:
+                continue
+            if dimension_value != terminal_input_dim:
+                raise ValueError(
+                    "nucleus_config.model_config must preserve the terminal "
+                    "feature dimension for NeuronClusterConfig, received "
+                    f"{dimension_name}={dimension_value} and terminal "
+                    f"input_dim={terminal_input_dim}."
+                )
+
+    @staticmethod
     def validate_forward_input(input: Tensor) -> None:
-        NeuronClusterValidator.validate_tensor_rank("NeuronCluster input", input, 2)
+        if not isinstance(input, Tensor):
+            raise TypeError(
+                "NeuronCluster input must be a Tensor, "
+                f"received {type(input).__name__}."
+            )
+        if input.dim() < 2:
+            raise ValueError(
+                "NeuronCluster input must be a feature-last tensor with at least "
+                f"2 dimensions, received shape {tuple(input.shape)}."
+            )

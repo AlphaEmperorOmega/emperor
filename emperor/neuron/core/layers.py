@@ -119,14 +119,21 @@ class Terminal(Module):
         range_end = self.z_axis_position + self.z_axis_range - self.z_axis_offset + 1
         return torch.arange(range_start, range_end)
 
-    def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         TerminalValidator.validate_forward_input(self, input)
-        probabilities, indices, _, _ = self.sampler.sample_probabilities_and_indices(
-            input
+        probabilities, indices, _, auxiliary_loss = (
+            self.sampler.sample_probabilities_and_indices(input)
         )
+        probabilities = self.__ensure_probability_matrix(probabilities)
         indices = self.__resolve_selected_indices(input, indices)
+        indices = self.__ensure_index_matrix(indices)
         selected_neurons = self.neuron_connections.to(indices.device)[indices]
-        return input, probabilities, selected_neurons
+        return input, probabilities, selected_neurons, auxiliary_loss
+
+    def __ensure_probability_matrix(self, probabilities: Tensor) -> Tensor:
+        if probabilities.dim() == 1:
+            return probabilities.unsqueeze(-1)
+        return probabilities
 
     def __resolve_selected_indices(self, input: Tensor, indices: Tensor | None) -> Tensor:
         if indices is not None:
@@ -136,6 +143,11 @@ class Terminal(Module):
             device=input.device,
             dtype=torch.long,
         ).expand(input.shape[0], -1)
+
+    def __ensure_index_matrix(self, indices: Tensor) -> Tensor:
+        if indices.dim() == 1:
+            return indices.unsqueeze(-1)
+        return indices
 
 
 class Neuron(Module):
@@ -157,9 +169,23 @@ class Neuron(Module):
             persistent=True,
         )
 
-    def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def process_signal(self, input: Tensor) -> Tensor:
         NeuronValidator.validate_forward_input(input)
-        self.batch_counter += 1
+        if self.training:
+            self.batch_counter += 1
         processed_signal = self.nucleus(input)
-        augmented_signal = self.axons(processed_signal)
-        return self.terminal(augmented_signal)
+        return self.axons(processed_signal)
+
+    def route_signal(self, processed_signal: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        NeuronValidator.validate_forward_input(processed_signal)
+        _, probabilities, selected_neurons, auxiliary_loss = self.terminal(
+            processed_signal
+        )
+        return probabilities, selected_neurons, auxiliary_loss
+
+    def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        processed_signal = self.process_signal(input)
+        probabilities, selected_neurons, auxiliary_loss = self.route_signal(
+            processed_signal
+        )
+        return processed_signal, probabilities, selected_neurons, auxiliary_loss

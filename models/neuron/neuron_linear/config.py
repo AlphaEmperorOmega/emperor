@@ -6,8 +6,12 @@ from emperor.datasets.image.classification.cifar_100 import Cifar100
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
 from emperor.experiments.monitors import MonitorOption
 from emperor.linears.core.monitor import LinearMonitorCallback
-from emperor.base.layer.monitor import LayerControllerMonitorCallback
+from emperor.base.layer.monitor import (
+    LayerControllerMonitorCallback,
+    RecurrentLayerMonitorCallback,
+)
 from emperor.neuron.core.monitor import NeuronClusterMonitorCallback
+from emperor.sampler.core.monitor import SamplerMonitorCallback
 from emperor.neuron.core.optimizer_sync import NeuronClusterOptimizerSyncCallback
 from emperor.halting.core.monitor import HaltingMonitorCallback
 from emperor.memory.core.monitor import MemoryMonitorCallback
@@ -36,6 +40,18 @@ MONITOR_OPTIONS: list[MonitorOption] = [
         callback_factory=lambda: LinearMonitorCallback(log_every_n_steps=100),
     ),
     MonitorOption(
+        name="recurrent-layer",
+        label="Recurrent layers",
+        description=(
+            "Logs recurrent step count, hidden-state convergence, recurrent gate "
+            "openness, halted-state preservation, and step-delta visual summaries."
+        ),
+        kinds=["scalar", "histogram", "image"],
+        callback_factory=lambda: RecurrentLayerMonitorCallback(
+            log_every_n_steps=100
+        ),
+    ),
+    MonitorOption(
         name="layer-controller",
         label="Layer controllers",
         description=(
@@ -58,6 +74,18 @@ MONITOR_OPTIONS: list[MonitorOption] = [
         default_enabled=True,
     ),
     MonitorOption(
+        name="sampler",
+        label="Routing samplers",
+        description=(
+            "Logs router/sampler internals for the cluster entry sampler and "
+            "per-neuron terminal samplers: probability distributions, "
+            "per-expert utilization, and auxiliary load-balancing loss "
+            "components."
+        ),
+        kinds=["scalar", "histogram", "image"],
+        callback_factory=lambda: SamplerMonitorCallback(log_every_n_steps=100),
+    ),
+    MonitorOption(
         name="halting",
         label="Halting (adaptive compute)",
         description=(
@@ -67,6 +95,18 @@ MONITOR_OPTIONS: list[MonitorOption] = [
         ),
         kinds=["scalar", "histogram", "image"],
         callback_factory=lambda: HaltingMonitorCallback(log_every_n_steps=100),
+        default_enabled=True,
+    ),
+    MonitorOption(
+        name="memory",
+        label="Memory modules",
+        description=(
+            "Logs gating, blend-weight, and state statistics for Emperor memory "
+            "modules. Inactive until a memory config is enabled (e.g. axons "
+            "memory or layer memory)."
+        ),
+        kinds=["scalar"],
+        callback_factory=lambda: MemoryMonitorCallback(log_every_n_steps=100),
     ),
 ]
 
@@ -89,7 +129,7 @@ BIAS_FLAG: bool = True
 # LAYER STACK OPTIONS
 HIDDEN_DIM: int = 64
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
-STACK_NUM_LAYERS: int = 5
+STACK_NUM_LAYERS: int = 2
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_RESIDUAL_FLAG: bool = False
 STACK_DROPOUT_PROBABILITY: float = 0.2
@@ -114,7 +154,7 @@ GATE_BIAS_FLAG: bool = True
 # Halting options
 # HALTING OPTIONS
 # If `HALTING_FLAG` is False, the halting-specific parameters below are ignored.
-HALTING_FLAG: bool = True
+HALTING_FLAG: bool = False
 HALTING_THRESHOLD: float = 0.99
 HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -170,25 +210,70 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
 from emperor.base.options import ActivationOptions
 from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
 
-CLUSTER_X_AXIS_TOTAL_NEURONS: int = 10
-CLUSTER_Y_AXIS_TOTAL_NEURONS: int = 10
-CLUSTER_Z_AXIS_TOTAL_NEURONS: int = 1
-CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS: int = 2
-CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS: int = 2
+CLUSTER_X_AXIS_TOTAL_NEURONS: int = 7
+CLUSTER_Y_AXIS_TOTAL_NEURONS: int = 7
+CLUSTER_Z_AXIS_TOTAL_NEURONS: int = 2
+CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS: int = 3
+CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS: int = 3
 CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS: int = 1
-CLUSTER_MAX_STEPS: int = 1
-CLUSTER_GROWTH_THRESHOLD: int | None = None
+CLUSTER_MAX_STEPS: int = 4
+CLUSTER_GROWTH_THRESHOLD: int | None = 250
 
-TERMINAL_XY_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.TWO
-TERMINAL_Z_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
-TERMINAL_Z_AXIS_OFFSET: TerminalZAxisOffsetOptions = TerminalZAxisOffsetOptions.ZERO
-TERMINAL_TOP_K: int = 1
-TERMINAL_ROUTER_NUM_LAYERS: int = 1
-TERMINAL_ROUTER_HIDDEN_DIM: int = HIDDEN_DIM
-TERMINAL_ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
+CLUSTER_TERMINAL_XY_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
+CLUSTER_TERMINAL_Z_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
+CLUSTER_TERMINAL_Z_AXIS_OFFSET: TerminalZAxisOffsetOptions = (
+    TerminalZAxisOffsetOptions.ZERO
+)
+CLUSTER_TERMINAL_TOP_K: int = 1
+CLUSTER_TERMINAL_ROUTER_NUM_LAYERS: int = 1
+CLUSTER_TERMINAL_ROUTER_HIDDEN_DIM: int = HIDDEN_DIM
+CLUSTER_TERMINAL_ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
+CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    LayerNormPositionOptions.DISABLED
+)
+CLUSTER_TERMINAL_ROUTER_RESIDUAL_FLAG: bool = False
+CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY: float = 0.0
+CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+    LastLayerBiasOptions.DEFAULT
+)
+CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+CLUSTER_TERMINAL_ROUTER_BIAS_FLAG: bool = True
 
-CLUSTER_HALTING_FLAG: bool = False
-CLUSTER_HALTING_THRESHOLD: float = 0.99
+# Applies to the terminal sampler of every neuron; the cluster entry sampler is
+# derived from this config with num_experts/top_k adjusted to the entry plane.
+CLUSTER_TERMINAL_SAMPLER_THRESHOLD: float = 0.0
+CLUSTER_TERMINAL_SAMPLER_FILTER_ABOVE_THRESHOLD: bool = False
+CLUSTER_TERMINAL_SAMPLER_NUM_TOPK_SAMPLES: int = 0
+CLUSTER_TERMINAL_SAMPLER_NORMALIZE_PROBABILITIES_FLAG: bool = False
+CLUSTER_TERMINAL_SAMPLER_NOISY_TOPK_FLAG: bool = False
+CLUSTER_TERMINAL_SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.0
+CLUSTER_TERMINAL_SAMPLER_SWITCH_LOSS_WEIGHT: float = 0.0
+CLUSTER_TERMINAL_SAMPLER_ZERO_CENTRED_LOSS_WEIGHT: float = 0.0
+CLUSTER_TERMINAL_SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
 
-SEARCH_SPACE_CLUSTER_MAX_STEPS: list = [1, 2, 3]
-SEARCH_SPACE_TERMINAL_TOP_K: list = [1, 2]
+# CLUSTER HALTING OPTIONS
+# If `CLUSTER_HALTING_FLAG` is False, the cluster-halting parameters below are ignored.
+CLUSTER_HALTING_FLAG: bool = True
+CLUSTER_HALTING_THRESHOLD: float = 0.95
+CLUSTER_HALTING_DROPOUT: float = 0.0
+CLUSTER_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
+    HaltingHiddenStateModeOptions.RAW
+)
+CLUSTER_HALTING_HIDDEN_DIM: int = HIDDEN_DIM
+CLUSTER_HALTING_OUTPUT_DIM: int = 2
+CLUSTER_HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    LayerNormPositionOptions.DISABLED
+)
+CLUSTER_HALTING_STACK_NUM_LAYERS: int = 1
+CLUSTER_HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
+CLUSTER_HALTING_STACK_RESIDUAL_FLAG: bool = False
+CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY: float = 0.0
+CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+    LastLayerBiasOptions.DISABLED
+)
+CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+CLUSTER_HALTING_BIAS_FLAG: bool = True
+
+SEARCH_SPACE_CLUSTER_MAX_STEPS: list = [1, 2, 4, 6]
+SEARCH_SPACE_CLUSTER_TERMINAL_TOP_K: list = [1, 2]
+SEARCH_SPACE_CLUSTER_GROWTH_THRESHOLD: list = [100, 250, 500, None]
