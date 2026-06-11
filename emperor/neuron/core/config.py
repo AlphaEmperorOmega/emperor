@@ -119,6 +119,15 @@ class NeuronClusterConfig(ConfigBase):
         "evaluations, so neurons in popular neighborhoods accrue pressure "
         "without being chosen. Set to None to disable."
     )
+    pruning_threshold: int | None = optional_field(
+        "Synchronized atrophy count that triggers pruning of an idle neuron. "
+        "A neuron's atrophy counter resets to zero on any training forward "
+        "in which it receives a process_signal call (on any rank) and "
+        "increments otherwise; when the cross-rank minimum reaches this "
+        "threshold the most atrophied neuron outside the entry plane is "
+        "removed, at most one per forward. Freed coordinates become growth "
+        "candidates again. Set to None to disable."
+    )
     escape_driven_growth_flag: bool | None = optional_field(
         "When True, growth placement targets the empty connection coordinate "
         "with the highest accumulated escape count (routes that selected a "

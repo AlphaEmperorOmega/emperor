@@ -70,6 +70,7 @@ class NeuronCluster(NeuronClusterModuleBase, NeuronClusterPlasticityMixin):
         )
         self.max_steps: int = self.cfg.max_steps
         self.growth_threshold: int | None = self.cfg.growth_threshold
+        self.pruning_threshold: int | None = self.cfg.pruning_threshold
         self.escape_driven_growth_flag: bool = bool(
             self.cfg.escape_driven_growth_flag
         )

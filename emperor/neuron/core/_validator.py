@@ -188,6 +188,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         "initial_y_axis_total_neurons",
         "initial_z_axis_total_neurons",
         "mitosis_initialization_flag",
+        "pruning_threshold",
     }
 
     @staticmethod
@@ -216,6 +217,9 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         NeuronClusterValidator.validate_derived_entry_sampler_config(model.cfg)
         NeuronClusterValidator.validate_growth_threshold(
             model.cfg.growth_threshold,
+        )
+        NeuronClusterValidator.validate_pruning_threshold(
+            model.cfg.pruning_threshold,
         )
         NeuronClusterValidator.validate_growth_placement_options(model.cfg)
         NeuronClusterValidator.validate_halting_config(model.cfg)
@@ -349,6 +353,15 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         NeuronClusterValidator.validate_positive_integer(
             "growth_threshold",
             growth_threshold,
+        )
+
+    @staticmethod
+    def validate_pruning_threshold(pruning_threshold: int | None) -> None:
+        if pruning_threshold is None:
+            return
+        NeuronClusterValidator.validate_positive_integer(
+            "pruning_threshold",
+            pruning_threshold,
         )
 
     @staticmethod
