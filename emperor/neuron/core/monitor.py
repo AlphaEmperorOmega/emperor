@@ -91,6 +91,7 @@ class NeuronClusterMonitorCallback(Callback):
             self.__log_cluster_size(pl_module, name, cluster)
             self.__log_plasticity_events(pl_module, name, cluster)
             self.__log_growth_pressure(pl_module, name, cluster)
+            self.__log_growth_budget(pl_module, name, cluster)
             self.__log_pruning_pressure(pl_module, name, cluster)
             trace = self._latest_trace.get(name)
             if trace is None:
@@ -152,6 +153,39 @@ class NeuronClusterMonitorCallback(Callback):
             return
         module.log(f"{name}/cluster/growth/pressure_mean", pressure.mean())
         module.log(f"{name}/cluster/growth/pressure_max", pressure.max())
+
+    def __log_growth_budget(
+        self,
+        module: "LightningModule",
+        name: str,
+        cluster: "NeuronCluster",
+    ) -> None:
+        total_growth_count = getattr(cluster, "total_growth_count", None)
+        if total_growth_count is not None:
+            module.log(
+                f"{name}/cluster/growth/total_growths",
+                float(total_growth_count.item()),
+            )
+            module.log(
+                f"{name}/cluster/growth/budget_remaining",
+                float(cluster.max_total_growths - int(total_growth_count)),
+            )
+        forwards_since_last_growth = getattr(
+            cluster,
+            "forwards_since_last_growth",
+            None,
+        )
+        if forwards_since_last_growth is not None:
+            module.log(
+                f"{name}/cluster/growth/cooldown_remaining",
+                float(
+                    max(
+                        cluster.growth_cooldown_steps
+                        - int(forwards_since_last_growth),
+                        0,
+                    )
+                ),
+            )
 
     def __log_pruning_pressure(
         self,
