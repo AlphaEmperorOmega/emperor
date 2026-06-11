@@ -13,12 +13,15 @@ if TYPE_CHECKING:
 
 
 class NeuronClusterOptimizerSyncCallback(Callback):
-    """Adds trainable parameters from grown neuron clusters to optimizers."""
+    """Keeps optimizers in sync with neuron cluster membership: grown
+    neurons' trainable parameters are added and pruned neurons' parameters
+    are removed together with their optimizer state."""
 
     def __init__(self) -> None:
         super().__init__()
         self._clusters: list[nn.Module] = []
-        self._synced_neuron_counts: dict[int, int] = {}
+        self._synced_neuron_names: dict[int, set[str]] = {}
+        self._synced_param_ids: dict[int, set[int]] = {}
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         self._clusters = self.__find_neuron_clusters(pl_module)
@@ -58,7 +61,8 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> bool:
         clusters = self._clusters or self.__find_neuron_clusters(pl_module)
         return any(
-            self._synced_neuron_counts.get(id(cluster)) != len(cluster.cluster)
+            self._synced_neuron_names.get(id(cluster))
+            != set(cluster.cluster.keys())
             for cluster in clusters
         )
 
@@ -78,8 +82,12 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         for optimizer in optimizers:
             self.__sync_optimizer(optimizer, clusters)
         self.__warn_about_unoptimized_cluster_parameters(optimizers, clusters)
-        self._synced_neuron_counts = {
-            id(cluster): len(cluster.cluster) for cluster in clusters
+        self._synced_neuron_names = {
+            id(cluster): set(cluster.cluster.keys()) for cluster in clusters
+        }
+        self._synced_param_ids = {
+            id(cluster): {id(parameter) for parameter in cluster.parameters()}
+            for cluster in clusters
         }
 
     def __find_neuron_clusters(self, module: nn.Module):
@@ -96,6 +104,9 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         optimizer: Optimizer,
         clusters: list[nn.Module],
     ) -> None:
+        for cluster in clusters:
+            self.__remove_pruned_neuron_parameters(optimizer, cluster)
+
         optimizer_param_ids = self.__optimizer_param_ids(optimizer)
         for cluster in clusters:
             trainable_params = [
@@ -129,6 +140,31 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 }
             )
             optimizer_param_ids.update(id(parameter) for parameter in missing_params)
+
+    def __remove_pruned_neuron_parameters(
+        self,
+        optimizer: Optimizer,
+        cluster: nn.Module,
+    ) -> None:
+        current_param_ids = {id(parameter) for parameter in cluster.parameters()}
+        stale_param_ids = (
+            self._synced_param_ids.get(id(cluster), set()) - current_param_ids
+        )
+        if not stale_param_ids:
+            return
+
+        for group in optimizer.param_groups:
+            group["params"] = [
+                parameter
+                for parameter in group["params"]
+                if id(parameter) not in stale_param_ids
+            ]
+        for parameter in list(optimizer.state.keys()):
+            if id(parameter) in stale_param_ids:
+                optimizer.state.pop(parameter, None)
+        optimizer.param_groups[:] = [
+            group for group in optimizer.param_groups if group["params"]
+        ]
 
     def __warn_about_unoptimized_cluster_parameters(
         self,
