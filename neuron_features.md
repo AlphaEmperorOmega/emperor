@@ -2,23 +2,13 @@
 
 Candidate features for `emperor/neuron/`, collected during the 2026-06 production-readiness review.
 Already implemented (not listed below): escape-driven growth placement (`escape_driven_growth_flag`),
-mitosis-style initialization (`mitosis_initialization_flag`), and pruning / atrophy
+mitosis-style initialization (`mitosis_initialization_flag`), pruning / atrophy
 (`pruning_threshold` — per-neuron atrophy counters, entry plane protected, bidirectional
-state-dict reconciliation, optimizer sync removal).
+state-dict reconciliation, optimizer sync removal), and growth budget / cooldown
+(`growth_cooldown_steps`, `max_total_growths` — persistent buffers, rank-deterministic
+early returns, legacy checkpoint seeding, monitor budget metrics).
 
 ---
-
-## Structural plasticity
-
-### Growth budget / cooldown
-
-Only throttles today: one growth per forward, per-neuron counter reset, grid capacity.
-
-- Config: e.g. `growth_cooldown_steps` (min training forwards between growths) and
-  `max_total_growths` (global budget).
-- Persistent step/growth-count buffers, early return in `__check_neuron_growth`,
-  validator wiring (require `growth_threshold`, like the placement flags).
-- Complexity: low — same shape as the escape/mitosis flags.
 
 ## Routing expressiveness
 
