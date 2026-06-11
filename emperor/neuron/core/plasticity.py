@@ -1,5 +1,4 @@
 import torch
-
 from torch import Tensor
 
 from emperor.base.utils import Module
@@ -295,6 +294,7 @@ class NeuronClusterPlasticityMixin:
             for name, counter in zip(
                 sorted_neuron_names,
                 stacked_counters.tolist(),
+                strict=True,
             )
         }
 

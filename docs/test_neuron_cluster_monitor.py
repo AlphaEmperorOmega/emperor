@@ -45,6 +45,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         z_axis_total_neurons: int = 1,
         max_steps: int = 2,
         growth_threshold: int | None = None,
+        pruning_threshold: int | None = None,
     ):
         return NeuronClusterConfig(
             x_axis_total_neurons=x_axis_total_neurons,
@@ -52,6 +53,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
             z_axis_total_neurons=z_axis_total_neurons,
             max_steps=max_steps,
             growth_threshold=growth_threshold,
+            pruning_threshold=pruning_threshold,
             neuron_config=self.full_sampler_neuron_config(),
         ).build()
 
@@ -159,7 +161,13 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         )
 
         names = self.scalar_names(module)
-        for suffix in ("neuron_count", "capacity", "fill_fraction", "growth/events"):
+        for suffix in (
+            "neuron_count",
+            "capacity",
+            "fill_fraction",
+            "growth/events",
+            "pruning/events",
+        ):
             self.assertIn(f"{self.CLUSTER_PATH}/cluster/{suffix}", names)
         for suffix in self.route_scalar_suffixes():
             self.assertIn(f"{self.CLUSTER_PATH}/cluster/{suffix}", names)
@@ -190,6 +198,33 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
 
         for name, _ in module.logged_scalars:
             self.assertNotIn("growth/pressure", name)
+
+    def test_pruning_pressure_logged_when_threshold_set(self):
+        cluster = self.build_cluster(pruning_threshold=2)
+        module = self.build_module(cluster)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        self.feed_cluster(module)
+
+        callback.on_train_batch_end(
+            trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
+        )
+
+        names = self.scalar_names(module)
+        self.assertIn(f"{self.CLUSTER_PATH}/cluster/pruning/pressure_mean", names)
+        self.assertIn(f"{self.CLUSTER_PATH}/cluster/pruning/pressure_max", names)
+
+    def test_pruning_pressure_skipped_when_threshold_disabled(self):
+        cluster = self.build_cluster(pruning_threshold=None)
+        module = self.build_module(cluster)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        self.feed_cluster(module)
+
+        callback.on_train_batch_end(
+            trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
+        )
+
+        for name, _ in module.logged_scalars:
+            self.assertNotIn("pruning/pressure", name)
 
     def test_visual_summaries_logged_when_experiment_present(self):
         experiment = FakeExperiment()

@@ -111,6 +111,11 @@ class ScriptedNeuron(nn.Module):
             persistent=True,
         )
         self.register_buffer(
+            "atrophy_counter",
+            torch.tensor(0, dtype=torch.int64),
+            persistent=True,
+        )
+        self.register_buffer(
             "route_call_counter",
             torch.tensor(0, dtype=torch.int64),
             persistent=True,
@@ -1079,6 +1084,257 @@ class TestNeuronCluster(NeuronTestCase):
             set(source_model.cluster.keys()),
         )
 
+    def pruning_cluster_model(
+        self,
+        pruning_threshold: int | None,
+        growth_threshold: int | None = None,
+    ) -> "NeuronCluster":
+        return NeuronClusterConfig(
+            x_axis_total_neurons=5,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=growth_threshold,
+            pruning_threshold=pruning_threshold,
+            neuron_config=self.full_sampler_neuron_config(),
+        ).build()
+
+    def plant_isolated_neuron(self, model, x_coordinate: int) -> str:
+        """Adds a real neuron outside the entry neuron's terminal range
+        (entry neuron_3_1_1 only reaches x in {2, 3, 4}), so routing never
+        process-calls it and its atrophy counter accrues every forward."""
+        name = f"neuron_{x_coordinate}_1_1"
+        model.cluster[name] = model._initialize_neuron(x_coordinate, 1, 1)
+        return name
+
+    def test_forward_prunes_idle_neuron_at_threshold(self):
+        model = self.pruning_cluster_model(pruning_threshold=2)
+        planted_name = self.plant_isolated_neuron(model, 5)
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        model(input_batch)
+        self.assertIn(planted_name, model.cluster)
+        self.assertEqual(
+            int(model.cluster[planted_name].atrophy_counter.item()),
+            1,
+        )
+
+        model(input_batch)
+        self.assertNotIn(planted_name, model.cluster)
+        self.assertIn("neuron_3_1_1", model.cluster)
+
+    def test_used_neuron_atrophy_counter_resets_to_zero(self):
+        model = self.pruning_cluster_model(pruning_threshold=10)
+        planted_name = self.plant_isolated_neuron(model, 5)
+        model.cluster["neuron_3_1_1"].atrophy_counter.fill_(5)
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(
+            int(model.cluster["neuron_3_1_1"].atrophy_counter.item()),
+            0,
+        )
+        self.assertEqual(
+            int(model.cluster[planted_name].atrophy_counter.item()),
+            1,
+        )
+
+    def test_prune_prefers_highest_atrophy_counter(self):
+        model = self.pruning_cluster_model(pruning_threshold=2)
+        lower_name = self.plant_isolated_neuron(model, 1)
+        higher_name = self.plant_isolated_neuron(model, 5)
+        model.cluster[lower_name].atrophy_counter.fill_(3)
+        model.cluster[higher_name].atrophy_counter.fill_(10)
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertNotIn(higher_name, model.cluster)
+        self.assertIn(lower_name, model.cluster)
+
+    def test_prune_tie_break_is_sorted_name(self):
+        model = self.pruning_cluster_model(pruning_threshold=2)
+        first_name = self.plant_isolated_neuron(model, 1)
+        second_name = self.plant_isolated_neuron(model, 5)
+        model.cluster[first_name].atrophy_counter.fill_(5)
+        model.cluster[second_name].atrophy_counter.fill_(5)
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertNotIn(first_name, model.cluster)
+        self.assertIn(second_name, model.cluster)
+
+    def test_at_most_one_prune_per_forward(self):
+        model = self.pruning_cluster_model(pruning_threshold=2)
+        self.plant_isolated_neuron(model, 1)
+        self.plant_isolated_neuron(model, 5)
+        model.cluster["neuron_1_1_1"].atrophy_counter.fill_(10)
+        model.cluster["neuron_5_1_1"].atrophy_counter.fill_(10)
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        model(input_batch)
+        self.assertEqual(len(model.cluster), 2)
+
+        model(input_batch)
+        self.assertEqual(set(model.cluster.keys()), {"neuron_3_1_1"})
+
+    def test_entry_plane_neurons_are_never_pruned(self):
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=5,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=2,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=None,
+            pruning_threshold=1,
+            neuron_config=self.full_sampler_neuron_config(),
+        ).build()
+        model.entry_sampler = ScriptedSampler(indices=[0], probabilities=[1.0])
+        model.cluster = nn.ModuleDict(
+            {
+                "neuron_2_1_1": ScriptedNeuron(
+                    routes=[[2, 1, 1]],
+                    probabilities=[1.0],
+                    delta=[0.0, 0.0, 0.0, 0.0],
+                ),
+                "neuron_3_1_1": ScriptedNeuron(
+                    routes=[[3, 1, 1]],
+                    probabilities=[1.0],
+                    delta=[0.0, 0.0, 0.0, 0.0],
+                ),
+            }
+        )
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        for _ in range(3):
+            model(input_batch)
+
+        self.assertEqual(
+            set(model.cluster.keys()),
+            {"neuron_2_1_1", "neuron_3_1_1"},
+        )
+        self.assertGreaterEqual(
+            int(model.cluster["neuron_3_1_1"].atrophy_counter.item()),
+            1,
+        )
+
+    def test_eval_forward_does_not_prune(self):
+        model = self.pruning_cluster_model(pruning_threshold=1)
+        planted_name = self.plant_isolated_neuron(model, 5)
+        model.cluster[planted_name].atrophy_counter.fill_(99)
+        model.eval()
+
+        with torch.no_grad():
+            model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertIn(planted_name, model.cluster)
+        self.assertEqual(
+            int(model.cluster[planted_name].atrophy_counter.item()),
+            99,
+        )
+
+    def test_pruning_disabled_when_threshold_none(self):
+        model = self.pruning_cluster_model(pruning_threshold=None)
+        planted_name = self.plant_isolated_neuron(model, 5)
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        for _ in range(3):
+            model(input_batch)
+
+        self.assertIn(planted_name, model.cluster)
+        self.assertEqual(
+            int(model.cluster[planted_name].atrophy_counter.item()),
+            0,
+        )
+
+    def test_grown_neuron_counts_as_used_on_its_birth_forward(self):
+        model = self.growth_cluster_config(growth_threshold=1).build()
+        model.pruning_threshold = 1
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertIn("neuron_2_1_1", model.cluster)
+        self.assertEqual(
+            int(model.cluster["neuron_2_1_1"].atrophy_counter.item()),
+            0,
+        )
+
+    def test_grow_and_prune_same_forward(self):
+        model = self.pruning_cluster_model(
+            pruning_threshold=2,
+            growth_threshold=50,
+        )
+        planted_name = self.plant_isolated_neuron(model, 5)
+        model.cluster[planted_name].atrophy_counter.fill_(10)
+        model.cluster["neuron_3_1_1"].batch_counter.fill_(100)
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertIn("neuron_2_1_1", model.cluster)
+        self.assertNotIn(planted_name, model.cluster)
+
+    def test_pruned_coordinate_becomes_growth_candidate_again(self):
+        model = self.pruning_cluster_model(
+            pruning_threshold=1,
+            growth_threshold=50,
+        )
+        planted_name = self.plant_isolated_neuron(model, 5)
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        model(input_batch)
+        self.assertNotIn(planted_name, model.cluster)
+
+        bridge_name = self.plant_isolated_neuron(model, 4)
+        model.cluster[bridge_name].batch_counter.fill_(1000)
+        model(input_batch)
+
+        self.assertIn(planted_name, model.cluster)
+
+    def test_load_state_dict_reconciles_pruned_neurons(self):
+        source_model = self.pruning_cluster_model(pruning_threshold=None)
+        target_model = self.pruning_cluster_model(pruning_threshold=None)
+        self.plant_isolated_neuron(target_model, 5)
+
+        target_model.load_state_dict(source_model.state_dict(), strict=True)
+
+        self.assertEqual(
+            set(target_model.cluster.keys()),
+            set(source_model.cluster.keys()),
+        )
+
+    def test_load_legacy_checkpoint_without_atrophy_counter(self):
+        source_model = self.pruning_cluster_model(pruning_threshold=None)
+        legacy_state_dict = {
+            key: value
+            for key, value in source_model.state_dict().items()
+            if not key.endswith(".atrophy_counter")
+        }
+        target_model = self.pruning_cluster_model(pruning_threshold=None)
+        target_model.cluster["neuron_3_1_1"].atrophy_counter.fill_(7)
+
+        target_model.load_state_dict(legacy_state_dict, strict=True)
+
+        self.assertEqual(
+            int(target_model.cluster["neuron_3_1_1"].atrophy_counter.item()),
+            0,
+        )
+
+    def test_state_dict_roundtrip_preserves_atrophy_counter(self):
+        source_model = self.pruning_cluster_model(pruning_threshold=None)
+        source_model.cluster["neuron_3_1_1"].atrophy_counter.fill_(5)
+        target_model = self.pruning_cluster_model(pruning_threshold=None)
+
+        target_model.load_state_dict(source_model.state_dict(), strict=True)
+
+        self.assertEqual(
+            int(target_model.cluster["neuron_3_1_1"].atrophy_counter.item()),
+            5,
+        )
+
     def test_grown_neuron_inherits_cluster_dtype_and_device(self):
         model = NeuronClusterConfig(
             x_axis_total_neurons=2,
@@ -1668,6 +1924,58 @@ def _distributed_growth_worker_assert_escape_count_alignment(
         torch.distributed.destroy_process_group()
 
 
+def _distributed_pruning_worker_assert_identical_pruning(
+    rank: int,
+    world_size: int,
+    init_file: str,
+    config: NeuronClusterConfig,
+) -> None:
+    _init_distributed_growth_process_group(rank, world_size, init_file)
+    try:
+        input_dim = config.neuron_config.terminal_config.input_dim
+        torch.manual_seed(0)
+        model = config.build()
+        model.cluster["neuron_5_1_1"] = model._initialize_neuron(5, 1, 1)
+        torch.manual_seed(100 + rank)
+
+        model(torch.randn(3, input_dim))
+        model(torch.randn(3, input_dim))
+
+        cluster_keys = sorted(model.cluster.keys())
+        _assert_equal_across_ranks(world_size, cluster_keys, "cluster keys")
+        assert "neuron_5_1_1" not in model.cluster, (
+            f"rank {rank} kept the idle neuron, found {cluster_keys}"
+        )
+    finally:
+        torch.distributed.destroy_process_group()
+
+
+def _distributed_pruning_worker_assert_min_reduce_protects_neuron(
+    rank: int,
+    world_size: int,
+    init_file: str,
+    config: NeuronClusterConfig,
+) -> None:
+    _init_distributed_growth_process_group(rank, world_size, init_file)
+    try:
+        input_dim = config.neuron_config.terminal_config.input_dim
+        torch.manual_seed(0)
+        model = config.build()
+        model.cluster["neuron_5_1_1"] = model._initialize_neuron(5, 1, 1)
+        torch.manual_seed(100 + rank)
+        if rank == 0:
+            model.cluster["neuron_5_1_1"].atrophy_counter.fill_(1000)
+
+        model(torch.randn(3, input_dim))
+
+        assert "neuron_5_1_1" in model.cluster, (
+            f"rank {rank} pruned a neuron whose cross-rank minimum atrophy "
+            "count is below pruning_threshold"
+        )
+    finally:
+        torch.distributed.destroy_process_group()
+
+
 @unittest.skipUnless(
     torch.distributed.is_available() and torch.distributed.is_gloo_available(),
     "gloo process group support is required",
@@ -1744,6 +2052,35 @@ class TestNeuronClusterDistributedGrowth(NeuronTestCase):
         self.spawn_distributed_growth_workers(
             _distributed_growth_worker_assert_escape_count_alignment,
             self.distributed_escape_growth_cluster_config(),
+        )
+
+    def distributed_pruning_cluster_config(
+        self,
+        pruning_threshold: int,
+    ) -> NeuronClusterConfig:
+        return NeuronClusterConfig(
+            x_axis_total_neurons=5,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=None,
+            pruning_threshold=pruning_threshold,
+            neuron_config=self.full_sampler_neuron_config(),
+        )
+
+    def test_pruning_is_identical_across_ranks(self):
+        self.spawn_distributed_growth_workers(
+            _distributed_pruning_worker_assert_identical_pruning,
+            self.distributed_pruning_cluster_config(pruning_threshold=2),
+        )
+
+    def test_pruning_uses_cross_rank_minimum_atrophy(self):
+        self.spawn_distributed_growth_workers(
+            _distributed_pruning_worker_assert_min_reduce_protects_neuron,
+            self.distributed_pruning_cluster_config(pruning_threshold=50),
         )
 
 
