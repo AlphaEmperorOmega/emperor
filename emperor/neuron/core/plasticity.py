@@ -51,6 +51,7 @@ class NeuronClusterPlasticityMixin:
                 ),
             )
             self.__reset_escape_count(position)
+            self._neurons_called_this_forward.add(new_name)
             return
 
     def __saturated_neurons_by_descending_counter(

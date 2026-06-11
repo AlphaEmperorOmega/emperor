@@ -123,10 +123,11 @@ class NeuronClusterConfig(ConfigBase):
         "Synchronized atrophy count that triggers pruning of an idle neuron. "
         "A neuron's atrophy counter resets to zero on any training forward "
         "in which it receives a process_signal call (on any rank) and "
-        "increments otherwise; when the cross-rank minimum reaches this "
-        "threshold the most atrophied neuron outside the entry plane is "
-        "removed, at most one per forward. Freed coordinates become growth "
-        "candidates again. Set to None to disable."
+        "increments otherwise; a neuron grown this forward counts as used, "
+        "so fresh neurons get a full grace period. When the cross-rank "
+        "minimum reaches this threshold the most atrophied neuron outside "
+        "the entry plane is removed, at most one per forward. Freed "
+        "coordinates become growth candidates again. Set to None to disable."
     )
     escape_driven_growth_flag: bool | None = optional_field(
         "When True, growth placement targets the empty connection coordinate "
