@@ -30,6 +30,12 @@ CORS_PREFLIGHT_METHODS = ("GET", "POST", "PATCH", "DELETE")
 CORS_PREFLIGHT_REQUEST_HEADERS = "authorization,content-type"
 CORS_PREFLIGHT_ALLOWED_HEADERS = {"authorization", "content-type"}
 
+# Routes that do blocking CPU or file work must stay sync handlers so FastAPI
+# dispatches them to the worker threadpool instead of the event loop.
+EXPECTED_THREADPOOL_ROUTE_PAIRS = {
+    ("POST", "/inspect"),
+}
+
 
 def business_route_pairs(api: FastAPI) -> set[tuple[str, str]]:
     return {
@@ -66,6 +72,22 @@ def header_values(value: str) -> set[str]:
 
 
 class AppFactoryTests(unittest.TestCase):
+    def test_blocking_route_handlers_are_dispatched_to_threadpool(self) -> None:
+        from viewer.backend.api import create_app
+
+        test_app = create_app()
+        coroutine_route_pairs = {
+            (method, route.path)
+            for route in test_app.routes
+            if isinstance(route, APIRoute)
+            and asyncio.iscoroutinefunction(route.endpoint)
+            for method in route.methods or ()
+        }
+        blocking_routes_on_event_loop = sorted(
+            EXPECTED_THREADPOOL_ROUTE_PAIRS & coroutine_route_pairs
+        )
+        self.assertEqual(blocking_routes_on_event_loop, [])
+
     def test_public_api_app_reexports_main_asgi_target(self) -> None:
         api = importlib.import_module("viewer.backend.api")
         main = importlib.import_module("viewer.backend.main")

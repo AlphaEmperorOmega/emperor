@@ -23,10 +23,12 @@ router = APIRouter(
     summary="Inspect a model preset",
     response_description="Serialized model graph for the requested model preset.",
 )
-async def inspect(
+def inspect(
     request: InspectRequest,
     service: Annotated[InspectionService, Depends(get_inspection_service)],
 ) -> InspectResponse:
+    # Sync handler on purpose: FastAPI dispatches it to the worker threadpool,
+    # keeping torch model instantiation off the event loop.
     return InspectResponse.model_validate(
         service.inspect(
             model=request.model,
