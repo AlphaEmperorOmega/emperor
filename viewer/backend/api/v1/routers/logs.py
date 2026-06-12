@@ -34,6 +34,10 @@ router = APIRouter(
     tags=["logs"],
     dependencies=[Depends(require_bearer_auth)],
 )
+# Read endpoints are sync handlers on purpose: FastAPI dispatches them to the
+# worker threadpool, keeping TensorBoard reads and log scans off the event
+# loop. Delete endpoints stay async because they share mutable
+# TrainingJobManager state with the training routes.
 DEFAULT_LOG_PAGE_LIMIT = 500
 MAX_LOG_PAGE_LIMIT = 2000
 
@@ -48,7 +52,7 @@ def active_job_payloads(service: TrainingJobService) -> list[dict[str, str]]:
     summary="List log runs",
     response_description="Historical TensorBoard runs indexed from the logs root.",
 )
-async def logs_runs(
+def logs_runs(
     service: Annotated[LogRunService, Depends(get_log_run_service)],
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
@@ -64,7 +68,7 @@ async def logs_runs(
     summary="List log experiments",
     response_description="Log experiment folders indexed from the logs root.",
 )
-async def logs_experiments(
+def logs_experiments(
     service: Annotated[LogRunService, Depends(get_log_run_service)],
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
@@ -154,7 +158,7 @@ async def delete_log_runs(
     summary="Read log-run tags",
     response_description="Scalar, histogram, and image tags for requested runs.",
 )
-async def logs_tags(
+def logs_tags(
     request: LogTagsRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogTagsResponse:
@@ -172,7 +176,7 @@ async def logs_tags(
     summary="Read log-run scalar series",
     response_description="Requested scalar series from historical TensorBoard runs.",
 )
-async def logs_scalars(
+def logs_scalars(
     request: LogScalarsRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogScalarsResponse:
@@ -193,7 +197,7 @@ async def logs_scalars(
     summary="Read log-run parameter status",
     response_description="Weight and bias update status for requested historical runs.",
 )
-async def logs_parameter_status(
+def logs_parameter_status(
     request: LogParameterStatusRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogParameterStatusResponse:
@@ -211,7 +215,7 @@ async def logs_parameter_status(
     summary="Read historical monitor data",
     response_description="Monitor scalars, histograms, and images for a log run.",
 )
-async def log_run_monitor_data(
+def log_run_monitor_data(
     run_id: str,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
     node_path: str = Query(..., alias="nodePath"),

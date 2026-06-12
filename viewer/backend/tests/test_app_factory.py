@@ -34,6 +34,12 @@ CORS_PREFLIGHT_ALLOWED_HEADERS = {"authorization", "content-type"}
 # dispatches them to the worker threadpool instead of the event loop.
 EXPECTED_THREADPOOL_ROUTE_PAIRS = {
     ("POST", "/inspect"),
+    ("GET", "/logs/runs"),
+    ("GET", "/logs/experiments"),
+    ("POST", "/logs/tags"),
+    ("POST", "/logs/scalars"),
+    ("POST", "/logs/parameter-status"),
+    ("GET", "/logs/runs/{run_id}/monitor-data"),
 }
 
 
