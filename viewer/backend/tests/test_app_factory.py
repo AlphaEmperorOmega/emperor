@@ -26,7 +26,7 @@ EXPECTED_ROOT_ROUTE_PAIRS = {
     ("POST", "/training/jobs"),
 }
 
-CORS_PREFLIGHT_METHODS = ("GET", "POST", "DELETE")
+CORS_PREFLIGHT_METHODS = ("GET", "POST", "PATCH", "DELETE")
 CORS_PREFLIGHT_REQUEST_HEADERS = "authorization,content-type"
 CORS_PREFLIGHT_ALLOWED_HEADERS = {"authorization", "content-type"}
 
