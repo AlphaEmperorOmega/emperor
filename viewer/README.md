@@ -12,7 +12,6 @@ The selected target preset remains the source of truth for preview, config schem
 - `emperor/` and `models/` must not import `viewer/`.
 - This dependency direction is enforced by `viewer/backend/tests/test_dependency_direction.py`; add shared contracts in `emperor/` or `models/` instead of importing viewer APIs into core packages.
 
-See [`FEATURE_ANALYSIS.md`](FEATURE_ANALYSIS.md) for the implemented feature matrix, endpoint contracts, workflow map, coverage map, and known limitations.
 
 ## Backend API Compatibility
 
