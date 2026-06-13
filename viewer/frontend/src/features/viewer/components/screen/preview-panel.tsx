@@ -4,19 +4,24 @@ import { EmptyState } from "@/features/viewer/components/empty-state";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { GraphLocationsCard } from "@/features/viewer/components/graph/graph-locations-card";
 import { nodeTypes } from "@/features/viewer/components/graph/graph-node-view";
+import { ParameterTreemapPanel } from "@/features/viewer/components/screen/parameter-treemap-panel";
 import { viewerStatusCopy } from "@/features/viewer/components/shared/status-copy";
 import { StatusPill } from "@/features/viewer/components/status-pill";
 import { useGraphView } from "@/features/viewer/providers/viewer-providers";
+import { type InspectResponse } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 
 export function PreviewPanel() {
   const {
     graph,
     graphForDetail,
+    previewVisualizationMode,
     nodes,
     edges,
     selectedNodeId,
+    parameterTreemapFocusNodeId,
     previewInspection,
+    setParameterTreemapFocusNodeId,
     setSelectedNodeId: onSelectNode,
     revealGraphNode: onRevealNode,
   } = useGraphView();
@@ -29,6 +34,7 @@ export function PreviewPanel() {
         (node) => node.id === selectedNodeId && node.typeName === "NeuronCluster",
       ),
   );
+  const hasPreviewGraph = Boolean(graph);
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden bg-transparent">
@@ -48,40 +54,26 @@ export function PreviewPanel() {
         </div>
       )}
       <div className="relative h-full min-h-0 overflow-hidden">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          fitView
-          minZoom={0.5}
-          maxZoom={1.5}
-          fitViewOptions={{ padding: 0.12, minZoom: 1, maxZoom: 1 }}
-          onNodeClick={(_, node) => onSelectNode(node.id)}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          elementsSelectable={false}
-          nodesFocusable={false}
-          nodeClickDistance={4}
-        >
-          <Background gap={26} color="rgba(255,255,255,0.05)" />
-          <Controls showInteractive={false} position="bottom-left" />
-          {hasSelectedClusterNode && (
-            <Panel
-              position="bottom-right"
-              className="nodrag nopan hidden xl:block"
-              style={{ right: 28, bottom: 24 }}
-            >
-              <GraphLocationsCard
-                key={selectedNodeId}
-                graph={graphForDetail}
-                selectedNodeId={selectedNodeId}
-                onRevealNode={onRevealNode}
-                className="max-h-[42vh]"
-              />
-            </Panel>
-          )}
-        </ReactFlow>
-        {!graph && !isPreviewBuilding && !isPreviewError && (
+        {hasPreviewGraph && previewVisualizationMode === "parameters" ? (
+          <ParameterTreemapPanel
+            graph={graphForDetail}
+            selectedNodeId={selectedNodeId}
+            focusNodeId={parameterTreemapFocusNodeId}
+            onFocusNode={setParameterTreemapFocusNodeId}
+            onRevealNode={onRevealNode}
+          />
+        ) : (
+          <GraphPreviewPanel
+            graph={graphForDetail}
+            nodes={nodes}
+            edges={edges}
+            selectedNodeId={selectedNodeId}
+            hasSelectedClusterNode={hasSelectedClusterNode}
+            onSelectNode={onSelectNode}
+            onRevealNode={onRevealNode}
+          />
+        )}
+        {!hasPreviewGraph && !isPreviewBuilding && !isPreviewError && (
           <EmptyState
             title={viewerStatusCopy.empty.graph}
             detail={viewerStatusCopy.empty.graphDetail}
@@ -90,5 +82,59 @@ export function PreviewPanel() {
         )}
       </div>
     </div>
+  );
+}
+
+function GraphPreviewPanel({
+  graph,
+  nodes,
+  edges,
+  selectedNodeId,
+  hasSelectedClusterNode,
+  onSelectNode,
+  onRevealNode,
+}: {
+  graph: InspectResponse | undefined;
+  nodes: ReturnType<typeof useGraphView>["nodes"];
+  edges: ReturnType<typeof useGraphView>["edges"];
+  selectedNodeId: string | null;
+  hasSelectedClusterNode: boolean;
+  onSelectNode: (nodeId: string | null) => void;
+  onRevealNode: (nodeId: string) => void;
+}) {
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      fitView
+      minZoom={0.5}
+      maxZoom={1.5}
+      fitViewOptions={{ padding: 0.12, minZoom: 1, maxZoom: 1 }}
+      onNodeClick={(_, node) => onSelectNode(node.id)}
+      nodesDraggable={false}
+      nodesConnectable={false}
+      elementsSelectable={false}
+      nodesFocusable={false}
+      nodeClickDistance={4}
+    >
+      <Background gap={26} color="rgba(255,255,255,0.05)" />
+      <Controls showInteractive={false} position="bottom-left" />
+      {hasSelectedClusterNode && (
+        <Panel
+          position="bottom-right"
+          className="nodrag nopan hidden xl:block"
+          style={{ right: 28, bottom: 24 }}
+        >
+          <GraphLocationsCard
+            key={selectedNodeId}
+            graph={graph}
+            selectedNodeId={selectedNodeId}
+            onRevealNode={onRevealNode}
+            className="max-h-[42vh]"
+          />
+        </Panel>
+      )}
+    </ReactFlow>
   );
 }

@@ -1,4 +1,6 @@
+import { useMemo, useState } from "react";
 import { type ClusterDiagram, formatExactCount } from "@/lib/graph";
+import { type ClusterDiagramReach } from "@/lib/graph/types";
 import {
   CLUSTER_DIAGRAM_CELL_GAP,
   CLUSTER_DIAGRAM_CELL_HEIGHT,
@@ -12,6 +14,24 @@ import {
 import { GraphChip } from "@/features/viewer/components/graph/graph-chip";
 import { cn } from "@/lib/utils";
 
+function coordinateKey([x, y, z]: [number, number, number]) {
+  return `${x},${y},${z}`;
+}
+
+function coordinateText([x, y, z]: [number, number, number]) {
+  return `(${x}, ${y}, ${z})`;
+}
+
+function reachSummary(reach: ClusterDiagramReach) {
+  const outsideText =
+    reach.outOfBoundsTotal > 0
+      ? ` · ${formatExactCount(reach.outOfBoundsTotal)} outside`
+      : "";
+  return `${coordinateText(reach.position)} · ${formatExactCount(
+    reach.connections.length,
+  )} reach · ${formatExactCount(reach.activeConnectionTotal)} active${outsideText}`;
+}
+
 export function ClusterDiagramView({
   diagram,
   nodeId,
@@ -19,10 +39,23 @@ export function ClusterDiagramView({
   diagram: ClusterDiagram;
   nodeId: string;
 }) {
+  const [hoveredReach, setHoveredReach] = useState<ClusterDiagramReach | null>(null);
   const gridHeight = clusterDiagramGridHeight(diagram);
   const planeWidth = clusterDiagramPlaneWidth(diagram);
   const isTruncated =
     diagram.hasColumnOverflow || diagram.hasRowOverflow || diagram.hasPlaneOverflow;
+  const hoveredPositionKey = hoveredReach ? coordinateKey(hoveredReach.position) : null;
+  const reachableKeys = useMemo(
+    () =>
+      new Set(
+        hoveredReach?.inBoundsConnections.map((coordinate) => coordinateKey(coordinate)) ??
+          [],
+      ),
+    [hoveredReach],
+  );
+  const summaryText = hoveredReach
+    ? reachSummary(hoveredReach)
+    : `${formatExactCount(diagram.instantiated)} / ${formatExactCount(diagram.capacityTotal)}`;
 
   return (
     <div
@@ -34,8 +67,11 @@ export function ClusterDiagramView({
       <div className="mb-3 flex h-10 items-center justify-between gap-2 rounded-[10px] border border-line-soft bg-black/20 px-2.5">
         <div className="min-w-0">
           <div className="truncate text-[12px] font-bold leading-4 text-ink">Cluster map</div>
-          <div className="mt-0.5 truncate font-mono text-[11px] leading-3 text-ink-faint">
-            {formatExactCount(diagram.instantiated)} / {formatExactCount(diagram.capacityTotal)}
+          <div
+            className="mt-0.5 truncate font-mono text-[11px] leading-3 text-ink-faint"
+            data-testid={`cluster-diagram-summary-${nodeId}`}
+          >
+            {summaryText}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -56,6 +92,7 @@ export function ClusterDiagramView({
       <div
         className="flex gap-2 overflow-x-auto overflow-y-hidden pb-1"
         style={{ height: gridHeight + 4, width: CLUSTER_DIAGRAM_WIDTH }}
+        onMouseLeave={() => setHoveredReach(null)}
       >
         {diagram.planes.map((plane) => (
           <div
@@ -74,23 +111,50 @@ export function ClusterDiagramView({
                 gridTemplateColumns: `repeat(${diagram.columns}, ${CLUSTER_DIAGRAM_CELL_HEIGHT}px)`,
               }}
             >
-              {plane.cells.map((cell) => (
-                <div
-                  key={`${plane.z}-${cell.x}-${cell.y}`}
-                  title={cell.title}
-                  aria-label={cell.title}
-                  className={cn(
-                    "rounded-[5px] border shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]",
-                    cell.filled
-                      ? "border-violet/45 bg-[linear-gradient(135deg,rgba(146,113,255,0.88),rgba(111,168,255,0.58))]"
-                      : "border-line-soft bg-white/[0.035]",
-                  )}
-                  style={{
-                    height: CLUSTER_DIAGRAM_CELL_HEIGHT,
-                    width: CLUSTER_DIAGRAM_CELL_HEIGHT,
-                  }}
-                />
-              ))}
+              {plane.cells.map((cell) => {
+                const cellKey = `${cell.x},${cell.y},${plane.z}`;
+                const isSource = hoveredPositionKey === cellKey;
+                const isReachable = Boolean(hoveredReach && reachableKeys.has(cellKey));
+                const isDimmed = Boolean(hoveredReach && !isSource && !isReachable);
+                const isReachableActive = isReachable && cell.filled && !isSource;
+                const isReachableEmpty = isReachable && !cell.filled;
+
+                return (
+                  <div
+                    key={`${plane.z}-${cell.x}-${cell.y}`}
+                    title={cell.title}
+                    aria-label={cell.title}
+                    onMouseEnter={() => {
+                      if (cell.filled && cell.reach) {
+                        setHoveredReach(cell.reach);
+                      }
+                    }}
+                    onMouseLeave={() => {
+                      if (cell.reach === hoveredReach) {
+                        setHoveredReach(null);
+                      }
+                    }}
+                    className={cn(
+                      "rounded-[5px] border shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)] transition duration-100",
+                      cell.filled
+                        ? "border-violet/45 bg-[linear-gradient(135deg,rgba(146,113,255,0.88),rgba(111,168,255,0.58))]"
+                        : "border-line-soft bg-white/[0.035]",
+                      cell.filled && cell.reach ? "cursor-crosshair" : "cursor-default",
+                      isSource &&
+                        "border-violet-text ring-2 ring-violet-text/80 ring-offset-1 ring-offset-bg",
+                      isReachableActive &&
+                        "border-cyan/90 ring-1 ring-cyan/60 shadow-[0_0_14px_-5px_rgba(127,208,255,0.95)]",
+                      isReachableEmpty &&
+                        "border-cyan/55 bg-cyan/15 shadow-[inset_0_0_0_1px_rgba(127,208,255,0.28)]",
+                      isDimmed && "opacity-35",
+                    )}
+                    style={{
+                      height: CLUSTER_DIAGRAM_CELL_HEIGHT,
+                      width: CLUSTER_DIAGRAM_CELL_HEIGHT,
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
         ))}

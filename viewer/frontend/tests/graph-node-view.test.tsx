@@ -36,12 +36,14 @@ function renderGraphNode(data: Partial<ViewerNodeData> = {}) {
         subtitle: "main_model.0",
         path: "main_model.0",
         parameterCount: 0,
+        parameterSizeBytes: 0,
         details: {},
         config: null,
         childCount: 1,
         childSummaries: [{ label: "LinearLayer", kind: "child" }],
         graphDetailMode: "basic",
         height: 148,
+        isRootNode: false,
         isExpanded: false,
         canToggleExpansion: true,
         isDetailsExpanded: false,
@@ -113,6 +115,34 @@ describe("GraphNodeView", () => {
       "whitespace-nowrap",
     );
     expect(screen.getByText("main_model.0")).toHaveClass("mt-1.5", "leading-5");
+  });
+
+  it("renders model size only on the root model node", () => {
+    renderGraphNode({
+      nodeId: "model",
+      path: "model",
+      subtitle: "model",
+      graphDetailMode: "full",
+      parameterCount: 65792,
+      parameterSizeBytes: 263168,
+      isRootNode: true,
+      height: 154,
+    });
+
+    expect(screen.getByTitle("263,168 bytes of parameter tensors"))
+      .toHaveTextContent("0.25 MB");
+  });
+
+  it("does not render model size on non-root graph nodes", () => {
+    renderGraphNode({
+      graphDetailMode: "full",
+      parameterCount: 65792,
+      parameterSizeBytes: 263168,
+      height: 154,
+    });
+
+    expect(screen.queryByTitle("263,168 bytes of parameter tensors"))
+      .not.toBeInTheDocument();
   });
 
   it("keeps basic-mode inline badges from wrapping around long titles", () => {
@@ -725,6 +755,197 @@ describe("GraphNodeView", () => {
     expect(screen.queryByTestId("child-summaries-neuron_cluster")).not.toBeInTheDocument();
   });
 
+  it("highlights terminal reach locations while hovering an active cluster cell", () => {
+    renderGraphNode({
+      nodeId: "neuron_cluster",
+      path: "neuron_cluster",
+      label: "Neuron Cluster",
+      clusterDiagram: {
+        columns: 3,
+        rows: 2,
+        instantiated: 3,
+        capacityTotal: 6,
+        maxSteps: 1,
+        growthThreshold: null,
+        hasColumnOverflow: false,
+        hasRowOverflow: false,
+        hasPlaneOverflow: false,
+        planes: [
+          {
+            z: 1,
+            cells: [
+              {
+                x: 1,
+                y: 1,
+                filled: true,
+                title: "Neuron (1, 1, 1) — active",
+                reach: {
+                  position: [1, 1, 1],
+                  connections: [
+                    [1, 1, 1],
+                    [2, 1, 1],
+                    [3, 1, 1],
+                    [4, 1, 1],
+                    [1, 2, 1],
+                  ],
+                  inBoundsConnections: [
+                    [1, 1, 1],
+                    [2, 1, 1],
+                    [3, 1, 1],
+                    [1, 2, 1],
+                  ],
+                  activeConnectionTotal: 2,
+                  emptyConnectionTotal: 1,
+                  outOfBoundsTotal: 1,
+                },
+              },
+              { x: 2, y: 1, filled: true, title: "Neuron (2, 1, 1) — active" },
+              { x: 3, y: 1, filled: false, title: "Neuron (3, 1, 1) — empty" },
+              { x: 1, y: 2, filled: true, title: "Neuron (1, 2, 1) — active" },
+              { x: 2, y: 2, filled: false, title: "Neuron (2, 2, 1) — empty" },
+              { x: 3, y: 2, filled: false, title: "Neuron (3, 2, 1) — empty" },
+            ],
+          },
+        ],
+      },
+      height: 214,
+    });
+
+    const diagram = screen.getByTestId("cluster-diagram-neuron_cluster");
+    const source = within(diagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i);
+    const activeReach = within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*active/i);
+    const emptyReach = within(diagram).getByLabelText(/Neuron \(3, 1, 1\).*empty/i);
+    const unrelated = within(diagram).getByLabelText(/Neuron \(2, 2, 1\).*empty/i);
+
+    fireEvent.mouseEnter(source);
+
+    expect(within(diagram).getByTestId("cluster-diagram-summary-neuron_cluster"))
+      .toHaveTextContent("(1, 1, 1) · 5 reach · 2 active · 1 outside");
+    expect(source).toHaveClass("ring-2", "ring-violet-text/80");
+    expect(activeReach).toHaveClass("border-cyan/90", "ring-cyan/60");
+    expect(emptyReach).toHaveClass("border-cyan/55", "bg-cyan/15");
+    expect(unrelated).toHaveClass("opacity-35");
+  });
+
+  it("resets the cluster reach overlay on mouse leave", () => {
+    renderGraphNode({
+      nodeId: "neuron_cluster",
+      path: "neuron_cluster",
+      label: "Neuron Cluster",
+      clusterDiagram: {
+        columns: 2,
+        rows: 1,
+        instantiated: 1,
+        capacityTotal: 2,
+        maxSteps: null,
+        growthThreshold: null,
+        hasColumnOverflow: false,
+        hasRowOverflow: false,
+        hasPlaneOverflow: false,
+        planes: [
+          {
+            z: 1,
+            cells: [
+              {
+                x: 1,
+                y: 1,
+                filled: true,
+                title: "Neuron (1, 1, 1) — active",
+                reach: {
+                  position: [1, 1, 1],
+                  connections: [
+                    [1, 1, 1],
+                    [2, 1, 1],
+                  ],
+                  inBoundsConnections: [
+                    [1, 1, 1],
+                    [2, 1, 1],
+                  ],
+                  activeConnectionTotal: 0,
+                  emptyConnectionTotal: 1,
+                  outOfBoundsTotal: 0,
+                },
+              },
+              { x: 2, y: 1, filled: false, title: "Neuron (2, 1, 1) — empty" },
+            ],
+          },
+        ],
+      },
+      height: 190,
+    });
+
+    const diagram = screen.getByTestId("cluster-diagram-neuron_cluster");
+    const source = within(diagram).getByLabelText(/Neuron \(1, 1, 1\).*active/i);
+    const emptyReach = within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*empty/i);
+
+    fireEvent.mouseEnter(source);
+    expect(emptyReach).toHaveClass("bg-cyan/15");
+
+    fireEvent.mouseLeave(source);
+
+    expect(within(diagram).getByTestId("cluster-diagram-summary-neuron_cluster"))
+      .toHaveTextContent("1 / 2");
+    expect(source).not.toHaveClass("ring-2");
+    expect(emptyReach).not.toHaveClass("bg-cyan/15");
+  });
+
+  it("does not activate the cluster reach overlay for empty cells", () => {
+    renderGraphNode({
+      nodeId: "neuron_cluster",
+      path: "neuron_cluster",
+      label: "Neuron Cluster",
+      clusterDiagram: {
+        columns: 2,
+        rows: 1,
+        instantiated: 1,
+        capacityTotal: 2,
+        maxSteps: null,
+        growthThreshold: null,
+        hasColumnOverflow: false,
+        hasRowOverflow: false,
+        hasPlaneOverflow: false,
+        planes: [
+          {
+            z: 1,
+            cells: [
+              {
+                x: 1,
+                y: 1,
+                filled: true,
+                title: "Neuron (1, 1, 1) — active",
+                reach: {
+                  position: [1, 1, 1],
+                  connections: [
+                    [1, 1, 1],
+                    [2, 1, 1],
+                  ],
+                  inBoundsConnections: [
+                    [1, 1, 1],
+                    [2, 1, 1],
+                  ],
+                  activeConnectionTotal: 0,
+                  emptyConnectionTotal: 1,
+                  outOfBoundsTotal: 0,
+                },
+              },
+              { x: 2, y: 1, filled: false, title: "Neuron (2, 1, 1) — empty" },
+            ],
+          },
+        ],
+      },
+      height: 190,
+    });
+
+    const diagram = screen.getByTestId("cluster-diagram-neuron_cluster");
+    const emptyCell = within(diagram).getByLabelText(/Neuron \(2, 1, 1\).*empty/i);
+
+    fireEvent.mouseEnter(emptyCell);
+
+    expect(within(diagram).getByTestId("cluster-diagram-summary-neuron_cluster"))
+      .toHaveTextContent("1 / 2");
+    expect(emptyCell).not.toHaveClass("bg-cyan/15");
+  });
+
   it("renders expert cells above the sampler and replaces child summaries", () => {
     renderGraphNode({
       childSummaries: [{ label: "LinearLayer", kind: "child" }],
@@ -943,6 +1164,7 @@ describe("SelectedNodeDetails", () => {
       path: "main_model.0.model",
       graphRole: "architecture",
       parameterCount: 512,
+      parameterSizeBytes: 2048,
       details: {
         dims: "128 -> 64",
         weightShape: "128 x 64",

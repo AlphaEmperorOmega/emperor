@@ -43,6 +43,7 @@ function node(
     path,
     graphRole: overrides.graphRole ?? "architecture",
     parameterCount: overrides.parameterCount ?? 0,
+    parameterSizeBytes: overrides.parameterSizeBytes ?? (overrides.parameterCount ?? 0) * 4,
     details: overrides.details ?? {},
     config: overrides.config ?? null,
   };
@@ -64,6 +65,7 @@ function graph({ withBias = true }: { withBias?: boolean } = {}): InspectRespons
     model: "linear",
     preset: "baseline",
     parameterCount: 0,
+    parameterSizeBytes: 0,
     nodes: [root, ...layers.flatMap((layer) => [layer.wrapper, layer.linear])],
     edges: layers.flatMap((layer, index) => [
       { id: `root-layer-${index}`, source: root.id, target: layer.wrapper.id },

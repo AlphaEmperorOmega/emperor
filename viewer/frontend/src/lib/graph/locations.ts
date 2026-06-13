@@ -1,8 +1,10 @@
 import { type GraphNode, type InspectResponse } from "@/lib/api";
 import { buildClusterDiagrams } from "@/lib/graph/cluster-diagrams";
-import { buildTerminalReachGrid } from "@/lib/graph/terminal-reach";
 import {
-  asGraphCoordinate,
+  buildTerminalReachGrid,
+  parseTerminalReachDetails,
+} from "@/lib/graph/terminal-reach";
+import {
   graphCoordinates,
   isRecord,
 } from "@/lib/graph/helpers";
@@ -11,19 +13,6 @@ import { type GraphLocationSummary } from "@/lib/graph/types";
 function clusterDetail(node: GraphNode): Record<string, unknown> | undefined {
   const cluster = node.details.cluster;
   return isRecord(cluster) ? cluster : undefined;
-}
-
-function terminalReachDetail(node: GraphNode): Record<string, unknown> | undefined {
-  const reach = node.details.terminalReach;
-  return isRecord(reach) ? reach : undefined;
-}
-
-function connectionTotal(reach: Record<string, unknown>, connectionCount: number) {
-  const total = reach.total;
-  if (typeof total === "number" && Number.isFinite(total) && total >= 0) {
-    return Math.trunc(total);
-  }
-  return connectionCount;
 }
 
 export function buildGraphLocationSummaries(
@@ -60,18 +49,11 @@ export function buildGraphLocationSummaries(
       }
     }
 
-    const reach = terminalReachDetail(node);
+    const reach = parseTerminalReachDetails(node.details);
     if (!reach) {
       continue;
     }
 
-    const position = asGraphCoordinate(reach.position);
-    if (!position) {
-      continue;
-    }
-
-    const connections = graphCoordinates(reach.connections);
-    const total = connectionTotal(reach, connections.length);
     const reachGrid = buildTerminalReachGrid(node.details);
 
     summaries.push({
@@ -80,10 +62,11 @@ export function buildGraphLocationSummaries(
       nodePath: node.path,
       nodeLabel: node.label,
       nodeType: node.typeName,
-      position,
-      connections,
-      total,
-      hasOverflow: Boolean(reachGrid?.hasOverflow) || total > connections.length,
+      position: reach.position,
+      connections: reach.connections,
+      total: reach.total,
+      hasOverflow:
+        Boolean(reachGrid?.hasOverflow) || reach.total > reach.connections.length,
     });
   }
 

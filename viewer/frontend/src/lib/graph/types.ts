@@ -2,6 +2,7 @@ import { type GraphNode } from "@/lib/api";
 
 export type GraphDetailMode = "simple" | "basic" | "full";
 export type GraphScope = "opened" | "entire";
+export type PreviewVisualizationMode = "graph" | "parameters";
 export type GraphCoordinate = [number, number, number];
 export type GraphParameterActivityStatus =
   | "updated"
@@ -37,6 +38,7 @@ export type ViewerNodeData = {
   subtitle: string;
   path: string;
   parameterCount: number;
+  parameterSizeBytes: number;
   details: GraphNode["details"];
   config: GraphNode["config"];
   childCount: number;
@@ -46,6 +48,7 @@ export type ViewerNodeData = {
   clusterDiagram?: ClusterDiagram;
   graphDetailMode: GraphDetailMode;
   height: number;
+  isRootNode: boolean;
   isExpanded: boolean;
   canToggleExpansion: boolean;
   canOpenMonitor?: boolean;
@@ -109,11 +112,21 @@ export type StackDiagram = {
   hasOverflow: boolean;
 };
 
+export type ClusterDiagramReach = {
+  position: GraphCoordinate;
+  connections: GraphCoordinate[];
+  inBoundsConnections: GraphCoordinate[];
+  activeConnectionTotal: number;
+  emptyConnectionTotal: number;
+  outOfBoundsTotal: number;
+};
+
 export type ClusterDiagramCell = {
   x: number;
   y: number;
   filled: boolean;
   title: string;
+  reach?: ClusterDiagramReach;
 };
 
 export type ClusterDiagramPlane = {

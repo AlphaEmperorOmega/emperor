@@ -5,8 +5,12 @@ const SIMPLE_PARAMETER_BADGE_CLASS =
   "shrink-0 whitespace-nowrap border-violet/25 bg-violet/15 px-1.5 py-0.5 font-mono text-[11px] leading-none text-violet-muted [overflow-wrap:normal]";
 const SIMPLE_DIMS_BADGE_CLASS =
   "shrink-0 whitespace-nowrap border-line bg-white/[0.04] px-1.5 py-0.5 font-mono text-[11px] leading-none text-ink-dim [overflow-wrap:normal]";
+const SIMPLE_MODEL_SIZE_BADGE_CLASS =
+  "shrink-0 whitespace-nowrap border-cyan-300/25 bg-cyan-300/10 px-1.5 py-0.5 font-mono text-[11px] leading-none text-cyan-100 [overflow-wrap:normal]";
 const PARAMETER_BADGE_CLASS =
   "h-6 shrink-0 items-center whitespace-nowrap border-violet/25 bg-violet/15 px-2 py-0 font-mono text-xs leading-none text-violet-muted [overflow-wrap:normal]";
+const MODEL_SIZE_BADGE_CLASS =
+  "h-6 shrink-0 items-center whitespace-nowrap border-cyan-300/25 bg-cyan-300/10 px-2 py-0 font-mono text-xs leading-none text-cyan-100 [overflow-wrap:normal]";
 const CHILD_BADGE_CLASS =
   "h-6 shrink-0 items-center whitespace-nowrap border-line bg-white/[0.04] px-2 py-0 font-sans text-xs font-medium leading-none text-ink-dim [overflow-wrap:normal]";
 
@@ -37,13 +41,36 @@ function GraphNodeChildBadge({ childCount }: { childCount: number }) {
   );
 }
 
+function GraphNodeModelSizeBadge({
+  parameterSizeBytes,
+  text,
+  className,
+}: {
+  parameterSizeBytes: number;
+  text: string;
+  className: string;
+}) {
+  return (
+    <Badge
+      className={className}
+      title={`${formatExactCount(parameterSizeBytes)} bytes of parameter tensors`}
+    >
+      {text}
+    </Badge>
+  );
+}
+
 export function GraphNodeSimpleBadges({
   parameterCount,
   parameterText,
+  parameterSizeBytes,
+  modelSizeText,
   dimsText,
 }: {
   parameterCount: number;
   parameterText?: string;
+  parameterSizeBytes: number;
+  modelSizeText?: string;
   dimsText?: string;
 }) {
   return (
@@ -53,6 +80,13 @@ export function GraphNodeSimpleBadges({
           parameterCount={parameterCount}
           text={parameterText}
           className={SIMPLE_PARAMETER_BADGE_CLASS}
+        />
+      )}
+      {modelSizeText && (
+        <GraphNodeModelSizeBadge
+          parameterSizeBytes={parameterSizeBytes}
+          text={modelSizeText}
+          className={SIMPLE_MODEL_SIZE_BADGE_CLASS}
         />
       )}
       {dimsText && (
@@ -69,9 +103,13 @@ export function GraphNodeSimpleBadges({
 
 export function GraphNodeInlineBadges({
   parameterCount,
+  parameterSizeBytes,
+  modelSizeText,
   childCount,
 }: {
   parameterCount: number;
+  parameterSizeBytes: number;
+  modelSizeText?: string;
   childCount: number;
 }) {
   return (
@@ -83,6 +121,13 @@ export function GraphNodeInlineBadges({
           className={PARAMETER_BADGE_CLASS}
         />
       )}
+      {modelSizeText && (
+        <GraphNodeModelSizeBadge
+          parameterSizeBytes={parameterSizeBytes}
+          text={modelSizeText}
+          className={MODEL_SIZE_BADGE_CLASS}
+        />
+      )}
       {childCount > 0 && <GraphNodeChildBadge childCount={childCount} />}
     </>
   );
@@ -91,10 +136,14 @@ export function GraphNodeInlineBadges({
 export function GraphNodeBadgeRow({
   nodeId,
   parameterCount,
+  parameterSizeBytes,
+  modelSizeText,
   childCount,
 }: {
   nodeId: string;
   parameterCount: number;
+  parameterSizeBytes: number;
+  modelSizeText?: string;
   childCount: number;
 }) {
   return (
@@ -104,6 +153,8 @@ export function GraphNodeBadgeRow({
     >
       <GraphNodeInlineBadges
         parameterCount={parameterCount}
+        parameterSizeBytes={parameterSizeBytes}
+        modelSizeText={modelSizeText}
         childCount={childCount}
       />
     </div>

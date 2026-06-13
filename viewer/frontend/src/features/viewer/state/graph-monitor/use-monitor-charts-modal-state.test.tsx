@@ -37,6 +37,7 @@ function graphNode(path: string): GraphNode {
     path,
     graphRole: "architecture",
     parameterCount: 2,
+    parameterSizeBytes: 8,
     details: {},
     config: null,
   };
@@ -67,6 +68,10 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
     metrics: overrides.metrics ?? {},
     logDir: overrides.logDir ?? "logs/runs",
     events: overrides.events ?? [],
+    eventCount: overrides.eventCount ?? 0,
+    eventCounts: overrides.eventCounts ?? {},
+    eventsTruncated: overrides.eventsTruncated ?? false,
+    clusterGrowth: overrides.clusterGrowth ?? [],
     logTail: overrides.logTail ?? [],
     resultLinks: overrides.resultLinks ?? [],
   };

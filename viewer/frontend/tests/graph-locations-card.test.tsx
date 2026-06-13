@@ -12,6 +12,7 @@ function graphNode(id: string, overrides: Partial<GraphNode> = {}): GraphNode {
     path: overrides.path ?? id,
     graphRole: overrides.graphRole ?? "architecture",
     parameterCount: overrides.parameterCount ?? 0,
+    parameterSizeBytes: overrides.parameterSizeBytes ?? (overrides.parameterCount ?? 0) * 4,
     details: overrides.details ?? {},
     config: overrides.config ?? null,
   };
@@ -22,6 +23,7 @@ function locationGraph(): InspectResponse {
     model: "linear",
     preset: "baseline",
     parameterCount: 0,
+    parameterSizeBytes: 0,
     nodes: [
       graphNode("neuron_cluster", {
         label: "Cluster",
@@ -223,6 +225,7 @@ describe("GraphLocationsCard", () => {
           model: "linear",
           preset: "baseline",
           parameterCount: 0,
+          parameterSizeBytes: 0,
           nodes: [
             graphNode("terminal", {
               label: "Terminal",

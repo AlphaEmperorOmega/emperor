@@ -18,6 +18,24 @@ import {
 describe("ViewerApp Monitor Charts And Errors", () => {
   beforeEach(resetViewerAppTestState);
 
+  async function selectExperimentRun(
+    user: ReturnType<typeof userEvent.setup>,
+    optionName: string | RegExp,
+  ) {
+    const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
+    await waitFor(() => expect(experimentsTab).not.toBeDisabled());
+    await user.click(experimentsTab);
+    const experimentRunControl = await screen.findByRole("combobox", {
+      name: /^experiment run$/i,
+    });
+    await user.click(experimentRunControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
+      ).getByRole("option", { name: optionName }),
+    );
+  }
+
   it("opens selected-node monitor charts for the active training job", async () => {
     const { monitorDataRequests } = installFetchMock();
     renderViewer();
@@ -366,10 +384,9 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     const user = userEvent.setup();
 
     // Pick a run so its experiment/dataset drives the historical monitor group.
-    await user.click(
-      await screen.findByRole("button", {
-        name: /select experiment run monitor_exp BASELINE Mnist 2026-06-01 06:00:00/i,
-      }),
+    await selectExperimentRun(
+      user,
+      "monitor_exp · BASELINE · Mnist · 2026-06-01 06:00:00",
     );
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
@@ -418,10 +435,9 @@ describe("ViewerApp Monitor Charts And Errors", () => {
     const user = userEvent.setup();
 
     // Pick a run so its experiment/dataset drives the historical monitor group.
-    await user.click(
-      await screen.findByRole("button", {
-        name: /select experiment run monitor_exp BASELINE Mnist 2026-06-01 02:00:00/i,
-      }),
+    await selectExperimentRun(
+      user,
+      "monitor_exp · BASELINE · Mnist · 2026-06-01 02:00:00",
     );
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),

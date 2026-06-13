@@ -3,6 +3,7 @@ export type {
   ClusterDiagram,
   ClusterDiagramCell,
   ClusterDiagramPlane,
+  ClusterDiagramReach,
   ExpertDiagram,
   ExpertDiagramCell,
   GraphDetailMode,
@@ -12,6 +13,7 @@ export type {
   GraphParameterActivitySource,
   GraphParameterActivityStatus,
   GraphScope,
+  PreviewVisualizationMode,
   HierarchyNode,
   StackDiagram,
   StackDiagramCell,
@@ -39,6 +41,7 @@ export {
   detailText,
   formatCompactCount,
   formatExactCount,
+  formatModelSize,
   graphNodeHeight,
   nodeDimsText,
   nodeDetailEntryText,
@@ -61,7 +64,10 @@ export { buildChildSummaries } from "@/lib/graph/child-summaries";
 export { buildExpertDiagrams } from "@/lib/graph/expert-diagrams";
 export { buildStackDiagrams } from "@/lib/graph/stack-diagrams";
 export { buildClusterDiagrams } from "@/lib/graph/cluster-diagrams";
-export { buildTerminalReachGrid } from "@/lib/graph/terminal-reach";
+export {
+  buildTerminalReachGrid,
+  parseTerminalReachDetails,
+} from "@/lib/graph/terminal-reach";
 export { buildGraphLocationSummaries } from "@/lib/graph/locations";
 export { layoutGraph } from "@/lib/graph/layout";
 export {

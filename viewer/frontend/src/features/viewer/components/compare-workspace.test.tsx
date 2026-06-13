@@ -47,6 +47,7 @@ function graph(model: string, preset: string, parameterCount: number) {
     model,
     preset,
     parameterCount,
+    parameterSizeBytes: parameterCount * 4,
     nodes: [
       {
         id: `${model}-root`,
@@ -55,6 +56,7 @@ function graph(model: string, preset: string, parameterCount: number) {
         path: "main_model",
         graphRole: "architecture",
         parameterCount,
+        parameterSizeBytes: parameterCount * 4,
         details: {},
         config: null,
       },
@@ -65,6 +67,7 @@ function graph(model: string, preset: string, parameterCount: number) {
         path: "main_model.runtime",
         graphRole: "runtime",
         parameterCount: 0,
+        parameterSizeBytes: 0,
         details: {},
         config: null,
       },

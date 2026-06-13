@@ -12,6 +12,8 @@ export function GraphNodeHeader({
   subtitle,
   graphDetailMode,
   parameterCount,
+  parameterSizeBytes,
+  modelSizeText,
   childCount,
   simpleParameterText,
   simpleDimsText,
@@ -24,6 +26,8 @@ export function GraphNodeHeader({
   subtitle: string;
   graphDetailMode: GraphDetailMode;
   parameterCount: number;
+  parameterSizeBytes: number;
+  modelSizeText?: string;
   childCount: number;
   simpleParameterText?: string;
   simpleDimsText?: string;
@@ -33,7 +37,7 @@ export function GraphNodeHeader({
 }) {
   const isSimpleMode = graphDetailMode === "simple";
   const isBasicMode = graphDetailMode === "basic";
-  const hasGraphBadges = parameterCount > 0 || childCount > 0;
+  const hasGraphBadges = parameterCount > 0 || childCount > 0 || Boolean(modelSizeText);
 
   if (isSimpleMode) {
     return (
@@ -47,6 +51,8 @@ export function GraphNodeHeader({
             <GraphNodeSimpleBadges
               parameterCount={parameterCount}
               parameterText={simpleParameterText}
+              parameterSizeBytes={parameterSizeBytes}
+              modelSizeText={modelSizeText}
               dimsText={simpleDimsText}
             />
           </div>
@@ -71,6 +77,8 @@ export function GraphNodeHeader({
           {isBasicMode && (
             <GraphNodeInlineBadges
               parameterCount={parameterCount}
+              parameterSizeBytes={parameterSizeBytes}
+              modelSizeText={modelSizeText}
               childCount={childCount}
             />
           )}
@@ -82,6 +90,8 @@ export function GraphNodeHeader({
         <GraphNodeBadgeRow
           nodeId={nodeId}
           parameterCount={parameterCount}
+          parameterSizeBytes={parameterSizeBytes}
+          modelSizeText={modelSizeText}
           childCount={childCount}
         />
       )}

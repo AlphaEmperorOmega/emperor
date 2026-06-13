@@ -65,6 +65,7 @@ function node(
     path,
     graphRole: overrides.graphRole ?? "architecture",
     parameterCount: overrides.parameterCount ?? 0,
+    parameterSizeBytes: overrides.parameterSizeBytes ?? (overrides.parameterCount ?? 0) * 4,
     details: overrides.details ?? {},
     config: overrides.config ?? null,
   };
@@ -85,6 +86,7 @@ function monitorGraph(): InspectResponse {
     model: "linear",
     preset: "baseline",
     parameterCount: 0,
+    parameterSizeBytes: 0,
     nodes: [root, layer0, linear0, layer1, linear1],
     edges: [
       { id: "root-layer-0", source: root.id, target: layer0.id },
@@ -132,6 +134,10 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
     metrics: overrides.metrics ?? {},
     logDir: overrides.logDir ?? "runs/job-1",
     events: overrides.events ?? [],
+    eventCount: overrides.eventCount ?? 0,
+    eventCounts: overrides.eventCounts ?? {},
+    eventsTruncated: overrides.eventsTruncated ?? false,
+    clusterGrowth: overrides.clusterGrowth ?? [],
     logTail: overrides.logTail ?? [],
     resultLinks: overrides.resultLinks ?? [],
   };
@@ -387,6 +393,7 @@ describe("viewer state selectors", () => {
       model: "bert",
       preset: "baseline",
       parameterCount: 0,
+      parameterSizeBytes: 0,
       nodes: [node("root", "encoder", "LayerStack"), attention],
       edges: [{ id: "root-attention", source: "root", target: attention.id }],
     };

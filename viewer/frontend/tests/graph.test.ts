@@ -4,6 +4,7 @@ import {
   detailText,
   formatCompactCount,
   formatExactCount,
+  formatModelSize,
   nodeDimsText,
   nodeBadges,
   nodeDetailEntries,
@@ -51,6 +52,7 @@ function node(
     path: overrides.path ?? id,
     graphRole: (overrides.graphRole ?? "architecture") as GraphRole,
     parameterCount: overrides.parameterCount ?? 0,
+    parameterSizeBytes: overrides.parameterSizeBytes ?? (overrides.parameterCount ?? 0) * 4,
     details: overrides.details ?? {},
     config: overrides.config ?? null,
   };
@@ -64,6 +66,7 @@ function graph(
     model: "linear",
     preset: "baseline",
     parameterCount: nodes[0]?.parameterCount ?? 0,
+    parameterSizeBytes: nodes[0]?.parameterSizeBytes ?? 0,
     nodes,
     edges: edges.map(([source, target]) => ({
       id: `${source}-${target}`,
@@ -135,6 +138,12 @@ describe("parameter count formatting", () => {
     expect(formatCompactCount(1000000)).toBe("1M");
     expect(formatExactCount(65800)).toBe("65,800");
   });
+
+  it("formats model size bytes as megabytes", () => {
+    expect(formatModelSize(262_144)).toBe("0.25 MB");
+    expect(formatModelSize(1_536)).toBe("<0.01 MB");
+    expect(formatModelSize(0)).toBeUndefined();
+  });
 });
 
 describe("simple graph inline metric formatting", () => {
@@ -202,7 +211,9 @@ describe("inspectResponseSchema", () => {
     );
 
     expect(parsed.parameterCount).toBe(15);
+    expect(parsed.parameterSizeBytes).toBe(60);
     expect(parsed.nodes[0].parameterCount).toBe(15);
+    expect(parsed.nodes[0].parameterSizeBytes).toBe(60);
   });
 });
 
@@ -1445,7 +1456,7 @@ describe("buildClusterDiagrams", () => {
     ]);
   });
 
-  it("flags overflow when capacity exceeds the display limits", () => {
+  it("renders full capacity without clipping", () => {
     const g = graph(
       [
         node("neuron_cluster", {
@@ -1467,12 +1478,180 @@ describe("buildClusterDiagrams", () => {
     );
     const diagram = buildClusterDiagrams(g).get("neuron_cluster");
 
-    expect(diagram?.columns).toBe(8);
-    expect(diagram?.planes).toHaveLength(4);
-    expect(diagram?.hasColumnOverflow).toBe(true);
-    expect(diagram?.hasPlaneOverflow).toBe(true);
+    expect(diagram?.columns).toBe(12);
+    expect(diagram?.rows).toBe(1);
+    expect(diagram?.planes).toHaveLength(6);
+    expect(diagram?.hasColumnOverflow).toBe(false);
+    expect(diagram?.hasPlaneOverflow).toBe(false);
     expect(diagram?.hasRowOverflow).toBe(false);
     expect(diagram?.growthThreshold).toBe(50);
+  });
+
+  it("attaches descendant neuron reach metadata to matching active cells", () => {
+    const g = graph(
+      [
+        node("neuron_cluster", {
+          typeName: "NeuronCluster",
+          path: "neuron_cluster",
+          details: {
+            cluster: {
+              capacity: [3, 2, 1],
+              instantiated: 3,
+              coordinates: [
+                [1, 1, 1],
+                [2, 1, 1],
+                [1, 2, 1],
+              ],
+            },
+          },
+        }),
+        node("neuron_cluster.cluster.1_1_1", {
+          typeName: "Neuron",
+          path: "neuron_cluster.cluster.1_1_1",
+          details: {
+            terminalReach: {
+              position: [1, 1, 1],
+              connections: [
+                [1, 1, 1],
+                [2, 1, 1],
+                [3, 1, 1],
+                [4, 1, 1],
+                [1, 2, 1],
+                [2, 2, 1],
+              ],
+              total: 6,
+            },
+          },
+        }),
+      ],
+      [["neuron_cluster", "neuron_cluster.cluster.1_1_1"]],
+    );
+    const diagram = buildClusterDiagrams(g).get("neuron_cluster");
+    const plane = diagram?.planes[0];
+    const source = plane?.cells.find((cell) => cell.x === 1 && cell.y === 1);
+    const emptyReachable = plane?.cells.find((cell) => cell.x === 3 && cell.y === 1);
+
+    expect(source?.reach).toMatchObject({
+      position: [1, 1, 1],
+      connections: [
+        [1, 1, 1],
+        [2, 1, 1],
+        [3, 1, 1],
+        [4, 1, 1],
+        [1, 2, 1],
+        [2, 2, 1],
+      ],
+      inBoundsConnections: [
+        [1, 1, 1],
+        [2, 1, 1],
+        [3, 1, 1],
+        [1, 2, 1],
+        [2, 2, 1],
+      ],
+      activeConnectionTotal: 2,
+      emptyConnectionTotal: 2,
+      outOfBoundsTotal: 1,
+    });
+    expect(emptyReachable?.filled).toBe(false);
+    expect(emptyReachable?.reach).toBeUndefined();
+  });
+
+  it("does not attach reach metadata when the reach position is not instantiated", () => {
+    const g = graph(
+      [
+        node("neuron_cluster", {
+          typeName: "NeuronCluster",
+          path: "neuron_cluster",
+          details: {
+            cluster: {
+              capacity: [2, 2, 1],
+              instantiated: 1,
+              coordinates: [[1, 1, 1]],
+            },
+          },
+        }),
+        node("neuron_cluster.cluster.2_2_1", {
+          typeName: "Neuron",
+          path: "neuron_cluster.cluster.2_2_1",
+          details: {
+            terminalReach: {
+              position: [2, 2, 1],
+              connections: [[1, 1, 1]],
+            },
+          },
+        }),
+      ],
+      [["neuron_cluster", "neuron_cluster.cluster.2_2_1"]],
+    );
+    const diagram = buildClusterDiagrams(g).get("neuron_cluster");
+
+    expect(
+      diagram?.planes.flatMap((plane) => plane.cells).some((cell) => cell.reach),
+    ).toBe(false);
+  });
+
+  it("prefers neuron reach over duplicate child terminal reach records", () => {
+    const g = graph(
+      [
+        node("neuron_cluster", {
+          typeName: "NeuronCluster",
+          path: "neuron_cluster",
+          details: {
+            cluster: {
+              capacity: [3, 1, 1],
+              instantiated: 2,
+              coordinates: [
+                [1, 1, 1],
+                [2, 1, 1],
+              ],
+            },
+          },
+        }),
+        node("neuron_cluster.cluster.1_1_1.terminal", {
+          typeName: "Terminal",
+          path: "neuron_cluster.cluster.1_1_1.terminal",
+          details: {
+            terminalReach: {
+              position: [1, 1, 1],
+              connections: [
+                [1, 1, 1],
+                [2, 1, 1],
+                [3, 1, 1],
+                [4, 1, 1],
+              ],
+            },
+          },
+        }),
+        node("neuron_cluster.cluster.1_1_1", {
+          typeName: "Neuron",
+          path: "neuron_cluster.cluster.1_1_1",
+          details: {
+            terminalReach: {
+              position: [1, 1, 1],
+              connections: [
+                [1, 1, 1],
+                [2, 1, 1],
+              ],
+            },
+          },
+        }),
+      ],
+      [
+        ["neuron_cluster", "neuron_cluster.cluster.1_1_1"],
+        ["neuron_cluster.cluster.1_1_1", "neuron_cluster.cluster.1_1_1.terminal"],
+      ],
+    );
+    const source = buildClusterDiagrams(g)
+      .get("neuron_cluster")
+      ?.planes[0].cells.find((cell) => cell.x === 1 && cell.y === 1);
+
+    expect(source?.reach?.connections).toEqual([
+      [1, 1, 1],
+      [2, 1, 1],
+    ]);
+    expect(source?.reach?.activeConnectionTotal).toBe(1);
+    expect(source?.reach?.emptyConnectionTotal).toBe(0);
+    expect(source?.reach?.outOfBoundsTotal).toBe(0);
   });
 
   it("ignores nodes without cluster details", () => {
@@ -2077,9 +2256,9 @@ describe("layoutGraph", () => {
   });
 
   it("reserves large cluster map height before config options", () => {
-    const activeCoordinates = Array.from({ length: 64 }, (_, index) => [
-      (index % 8) + 1,
-      Math.floor(index / 8) + 1,
+    const activeCoordinates = Array.from({ length: 100 }, (_, index) => [
+      (index % 10) + 1,
+      Math.floor(index / 10) + 1,
       1,
     ]);
     const g = graph(
@@ -2095,7 +2274,7 @@ describe("layoutGraph", () => {
           details: {
             cluster: {
               capacity: [10, 10, 1],
-              instantiated: 64,
+              instantiated: 100,
               coordinates: activeCoordinates,
             },
           },
@@ -2141,11 +2320,11 @@ describe("layoutGraph", () => {
     expect(clusterNode?.data.canToggleExpansion).toBe(true);
     expect(clusterNode?.data.parameterCount).toBe(12345);
     expect(clusterNode?.data.childCount).toBe(2);
-    expect(clusterNode?.data.clusterDiagram?.rows).toBe(8);
-    expect(clusterNode?.data.clusterDiagram?.columns).toBe(8);
+    expect(clusterNode?.data.clusterDiagram?.rows).toBe(10);
+    expect(clusterNode?.data.clusterDiagram?.columns).toBe(10);
     expect(clusterNode?.data.config?.fields).toHaveLength(2);
-    expect(clusterNode?.data.height).toBe(395);
-    expect(clusterNode?.style?.height).toBe(395);
+    expect(clusterNode?.data.height).toBe(443);
+    expect(clusterNode?.style?.height).toBe(443);
   });
 
   it("reserves taller stack diagram height for dense layer previews", () => {

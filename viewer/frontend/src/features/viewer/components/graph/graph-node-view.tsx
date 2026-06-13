@@ -14,6 +14,7 @@ import {
 import { GraphNodeParameterShapes } from "@/features/viewer/components/graph/graph-node-parameter-shapes";
 import {
   type ViewerNodeData,
+  formatModelSize,
   nodeDimsText,
   nodeDetailEntries,
   parameterShapeEntries,
@@ -30,6 +31,7 @@ const GraphNodeView = memo(function GraphNodeView({
   const parameterShapes = parameterShapeEntries(data.details);
   const hasMetadata = entries.length > 0;
   const simpleParamText = isSimpleMode ? simpleGraphParamText(data.parameterCount) : undefined;
+  const modelSizeText = data.isRootNode ? formatModelSize(data.parameterSizeBytes) : undefined;
   const simpleDimsText = isSimpleMode
     ? nodeDimsText(data.details, data.config) ?? data.stackDiagram?.dims
     : undefined;
@@ -93,6 +95,8 @@ const GraphNodeView = memo(function GraphNodeView({
         subtitle={data.subtitle}
         graphDetailMode={data.graphDetailMode}
         parameterCount={data.parameterCount}
+        parameterSizeBytes={data.parameterSizeBytes}
+        modelSizeText={modelSizeText}
         childCount={data.childCount}
         simpleParameterText={simpleParamText}
         simpleDimsText={simpleDimsText}

@@ -43,7 +43,14 @@ describe("usePreviewInspectionState", () => {
   it("clears the graph immediately and stores a successful response", async () => {
     const d = deferred<unknown>();
     inspectModelMock.mockReturnValueOnce(d.promise);
-    const graph = { model: "a", preset: "p", parameterCount: 0, nodes: [], edges: [] };
+    const graph = {
+      model: "a",
+      preset: "p",
+      parameterCount: 0,
+      parameterSizeBytes: 0,
+      nodes: [],
+      edges: [],
+    };
 
     const { result } = renderPreview();
     act(() => result.current.requestPreview(request("a")));
@@ -63,8 +70,22 @@ describe("usePreviewInspectionState", () => {
     const first = deferred<unknown>();
     const second = deferred<unknown>();
     inspectModelMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-    const graphA = { model: "A", preset: "p", parameterCount: 1, nodes: [], edges: [] };
-    const graphB = { model: "B", preset: "p", parameterCount: 2, nodes: [], edges: [] };
+    const graphA = {
+      model: "A",
+      preset: "p",
+      parameterCount: 1,
+      parameterSizeBytes: 4,
+      nodes: [],
+      edges: [],
+    };
+    const graphB = {
+      model: "B",
+      preset: "p",
+      parameterCount: 2,
+      parameterSizeBytes: 8,
+      nodes: [],
+      edges: [],
+    };
 
     const { result } = renderPreview();
     act(() => result.current.requestPreview(request("A")));

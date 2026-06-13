@@ -3,6 +3,7 @@ import { SEMANTIC_LABEL_TYPE_NAMES } from "@/lib/graph/constants";
 import { lastPathSegment } from "@/lib/graph/helpers";
 
 const exactCountFormatter = new Intl.NumberFormat("en-US");
+const bytesPerMegabyte = 1024 * 1024;
 
 export type NodeDetailEntry = {
   key: string;
@@ -54,6 +55,28 @@ export function formatCompactCount(count: number) {
   const value = count / unit.value;
   const formatted = value >= 100 ? value.toFixed(0) : value.toFixed(1);
   return `${formatted.replace(/\.0$/, "")}${unit.suffix}`;
+}
+
+export function formatModelSize(bytes: number | null | undefined) {
+  if (
+    typeof bytes !== "number" ||
+    !Number.isFinite(bytes) ||
+    bytes <= 0
+  ) {
+    return undefined;
+  }
+
+  const megabytes = bytes / bytesPerMegabyte;
+  if (megabytes < 0.01) {
+    return "<0.01 MB";
+  }
+  if (megabytes < 10) {
+    return `${megabytes.toFixed(2).replace(/\.?0+$/, "")} MB`;
+  }
+  if (megabytes < 100) {
+    return `${megabytes.toFixed(1).replace(/\.0$/, "")} MB`;
+  }
+  return `${formatExactCount(Math.round(megabytes))} MB`;
 }
 
 export function simpleGraphParamText(parameterCount: number | null | undefined) {

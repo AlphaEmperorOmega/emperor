@@ -5,14 +5,28 @@ import {
 } from "@/lib/graph/constants";
 import { asGraphCoordinate, graphCoordinates, isRecord } from "@/lib/graph/helpers";
 import {
+  type GraphCoordinate,
   type TerminalReachCell,
   type TerminalReachGrid,
   type TerminalReachPlane,
 } from "@/lib/graph/types";
 
-export function buildTerminalReachGrid(
+export type ParsedTerminalReach = {
+  position: GraphCoordinate;
+  connections: GraphCoordinate[];
+  total: number;
+};
+
+function connectionTotal(value: unknown, connectionCount: number) {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.trunc(value);
+  }
+  return connectionCount;
+}
+
+export function parseTerminalReachDetails(
   details: GraphNode["details"],
-): TerminalReachGrid | undefined {
+): ParsedTerminalReach | undefined {
   const reach = details.terminalReach;
   if (!isRecord(reach)) {
     return undefined;
@@ -20,10 +34,26 @@ export function buildTerminalReachGrid(
 
   const position = asGraphCoordinate(reach.position);
   const connections = graphCoordinates(reach.connections);
-  if (!position || connections.length === 0) {
+  if (!position) {
     return undefined;
   }
 
+  return {
+    position,
+    connections,
+    total: connectionTotal(reach.total, connections.length),
+  };
+}
+
+export function buildTerminalReachGrid(
+  details: GraphNode["details"],
+): TerminalReachGrid | undefined {
+  const reach = parseTerminalReachDetails(details);
+  if (!reach || reach.connections.length === 0) {
+    return undefined;
+  }
+
+  const { connections, position } = reach;
   const xs = [position[0], ...connections.map((coordinate) => coordinate[0])];
   const ys = [position[1], ...connections.map((coordinate) => coordinate[1])];
   const minX = Math.min(...xs);
@@ -72,7 +102,7 @@ export function buildTerminalReachGrid(
     minY,
     position,
     planes,
-    total: typeof reach.total === "number" ? reach.total : connections.length,
+    total: reach.total,
     hasOverflow:
       fullColumns > columns ||
       fullRows > rows ||

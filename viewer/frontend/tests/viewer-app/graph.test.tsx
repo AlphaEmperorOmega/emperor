@@ -3,16 +3,20 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   installFetchMock,
+  inspectResponse,
   locationInspectResponse,
   manyRepeatedLayersInspectResponse,
   mechanismChildrenInspectResponse,
   mechanismMetadataInspectResponse,
+  openFullConfig,
   parameterShapeInspectResponse,
   renderViewer,
   repeatedLayersInspectResponse,
   resetViewerAppTestState,
+  selectTargetOption,
   stackContainerInspectResponse,
   tallSummaryInspectResponse,
+  typeConfigFieldValue,
 } from "./support";
 
 describe("ViewerApp Graph Workspace", () => {
@@ -65,8 +69,14 @@ describe("ViewerApp Graph Workspace", () => {
     renderViewer();
     const user = userEvent.setup();
 
+    const modelNode = await screen.findByTestId("node-model");
+    expect(within(modelNode).getByTitle("263,168 bytes of parameter tensors"))
+      .toHaveTextContent("0.25 MB");
+
     const layerNode = await screen.findByTestId("node-main_model.0");
     expect(within(layerNode).getByTitle("33,024 parameters")).toHaveTextContent("33K");
+    expect(within(layerNode).queryByTitle(/bytes of parameter tensors/i))
+      .not.toBeInTheDocument();
 
     await user.click(
       await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
@@ -74,6 +84,58 @@ describe("ViewerApp Graph Workspace", () => {
 
     const gateNode = await screen.findByTestId("node-main_model.0.gate_model");
     expect(within(gateNode).queryByTitle(/parameters/)).not.toBeInTheDocument();
+  });
+
+  it("refreshes the root model size when the target preset changes", async () => {
+    const largerPresetInspectResponse = {
+      ...inspectResponse,
+      preset: "recurrent-gating-halting",
+      parameterCount: 524288,
+      parameterSizeBytes: 2 * 1024 * 1024,
+      nodes: inspectResponse.nodes.map((node) =>
+        node.id === "model"
+          ? {
+              ...node,
+              parameterCount: 524288,
+              parameterSizeBytes: 2 * 1024 * 1024,
+            }
+          : node,
+      ),
+    };
+    let inspectBodies: unknown[] = [];
+    ({ inspectBodies } = installFetchMock({
+      inspectResponseFactory: (requestIndex) => {
+        const request = inspectBodies[requestIndex] as { preset?: string } | undefined;
+        return request?.preset === "recurrent-gating-halting"
+          ? largerPresetInspectResponse
+          : inspectResponse;
+      },
+    }));
+    renderViewer();
+    const user = userEvent.setup();
+
+    const modelNode = await screen.findByTestId("node-model");
+    expect(within(modelNode).getByTitle("263,168 bytes of parameter tensors"))
+      .toHaveTextContent("0.25 MB");
+    const dialog = await openFullConfig(user);
+    await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
+    await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
+    const initialRequestCount = inspectBodies.length;
+
+    await selectTargetOption(user, "preset", "recurrent-gating-halting");
+
+    await waitFor(() =>
+      expect(inspectBodies.length).toBeGreaterThan(initialRequestCount),
+    );
+    expect(inspectBodies.at(-1)).toEqual({
+      model: "linear",
+      preset: "recurrent-gating-halting",
+      dataset: "Mnist",
+      overrides: {},
+    });
+    const refreshedModelNode = await screen.findByTestId("node-model");
+    expect(within(refreshedModelNode).getByTitle("2,097,152 bytes of parameter tensors"))
+      .toHaveTextContent("2 MB");
   });
 
   it("renders layer dims on the inner-model graph-card row", async () => {
@@ -629,17 +691,24 @@ describe("ViewerApp Graph Workspace", () => {
 
     expect(await screen.findByTestId("flow")).toBeInTheDocument();
     expect(screen.queryByRole("tablist", { name: /visualization mode/i })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+    const graphDetailTabs = screen.getByRole("tablist", { name: /graph detail/i });
+    const graphScopeTabs = screen.getByRole("tablist", { name: /graph scope/i });
+    expect([
+      ...within(graphDetailTabs).getAllByRole("tab"),
+      ...within(graphScopeTabs).getAllByRole("tab"),
+    ].map((tab) => tab.textContent)).toEqual([
       "Simple",
       "Basic",
       "Full",
       "Opened",
       "Entire",
     ]);
-    expect(screen.getByRole("tablist", { name: /graph detail/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /basic/i })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tablist", { name: /graph scope/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /opened/i })).toHaveAttribute("aria-selected", "true");
+    expect(graphDetailTabs).toBeInTheDocument();
+    expect(within(graphDetailTabs).getByRole("tab", { name: /basic/i }))
+      .toHaveAttribute("aria-selected", "true");
+    expect(graphScopeTabs).toBeInTheDocument();
+    expect(within(graphScopeTabs).getByRole("tab", { name: /opened/i }))
+      .toHaveAttribute("aria-selected", "true");
     expect(screen.queryByTestId("flow-panel-bottom-right")).not.toBeInTheDocument();
 
     await user.click(await screen.findByRole("button", { name: /^select model\.cluster$/i }));
@@ -738,6 +807,235 @@ describe("ViewerApp Graph Workspace", () => {
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
     expect(screen.getByText("33,024")).toBeInTheDocument();
     expect(screen.getByText("BEFORE")).toBeInTheDocument();
+  });
+
+  it("switches from Graph to Parameters preview mode", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+
+    expect(screen.getByRole("tab", { name: /^parameters$/i })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByTestId("flow")).not.toBeInTheDocument();
+  });
+
+  it("renders the Parameters treemap container", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+
+    expect(await screen.findByTestId("parameter-treemap-panel")).toBeInTheDocument();
+  });
+
+  it("opens Parameters at the root overview with an inspector child list", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+
+    const panel = await screen.findByTestId("parameter-treemap-panel");
+    expect(within(panel).getByTestId("parameter-treemap-focus")).toHaveTextContent(
+      "model: Model",
+    );
+    expect(
+      within(panel).getByRole("button", { name: /^select component main_model\.0$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("clicking a Parameters module drills into its components", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /^treemap node main_model\.0$/i }),
+    );
+
+    const panel = await screen.findByTestId("parameter-treemap-panel");
+    expect(within(panel).getByTestId("parameter-treemap-focus")).toHaveTextContent(
+      "0: Layer",
+    );
+    expect(
+      within(panel).getByRole("button", {
+        name: /^select component main_model\.0\.model$/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", {
+        name: /^select component main_model\.0\.gate_model$/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("breadcrumb Root navigation returns Parameters to the root focus", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /^treemap node main_model\.0$/i }),
+    );
+
+    let panel = await screen.findByTestId("parameter-treemap-panel");
+    expect(within(panel).getByTestId("parameter-treemap-focus")).toHaveTextContent(
+      "0: Layer",
+    );
+    await user.click(within(panel).getByRole("button", { name: /^root$/i }));
+
+    panel = await screen.findByTestId("parameter-treemap-panel");
+    expect(within(panel).getByTestId("parameter-treemap-focus")).toHaveTextContent(
+      "model: Model",
+    );
+  });
+
+  it("updates node details when a Parameters treemap node is clicked", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^treemap node main_model\.0\.model$/i,
+      }),
+    );
+
+    expect(screen.getByText("LinearLayer")).toBeInTheDocument();
+    expect(screen.getAllByText("main_model.0.model").length).toBeGreaterThan(0);
+    expect(screen.getByText("16,512")).toBeInTheDocument();
+  });
+
+  it("clicking a Parameters leaf selects it without leaving the current focus", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /^treemap node main_model\.0$/i }),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^treemap node main_model\.0\.model$/i,
+      }),
+    );
+
+    const panel = await screen.findByTestId("parameter-treemap-panel");
+    expect(within(panel).getByTestId("parameter-treemap-focus")).toHaveTextContent(
+      "0: Layer",
+    );
+    expect(screen.getAllByText("main_model.0.model").length).toBeGreaterThan(0);
+  });
+
+  it("shows zero-parameter children in the inspector and lets them be selected", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /^treemap node main_model\.0$/i }),
+    );
+
+    const panel = await screen.findByTestId("parameter-treemap-panel");
+    await user.click(
+      within(panel).getByRole("button", {
+        name: /^select component main_model\.0\.gate_model$/i,
+      }),
+    );
+
+    expect(screen.getAllByText("Sequential").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("main_model.0.gate_model").length).toBeGreaterThan(0);
+    expect(within(panel).getByTestId("parameter-treemap-focus")).toHaveTextContent(
+      "0: Layer",
+    );
+  });
+
+  it("restores the React Flow graph after switching back from Parameters", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    expect(await screen.findByTestId("parameter-treemap-panel")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^graph$/i }));
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    expect(screen.queryByTestId("parameter-treemap-panel")).not.toBeInTheDocument();
+  });
+
+  it("reveals a Parameters-selected node when switching back to Graph", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /^treemap node main_model\.0\.model$/i,
+      }),
+    );
+    await user.click(screen.getByRole("tab", { name: /^graph$/i }));
+
+    expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
+  });
+
+  it("uses graph detail mode as the Parameters treemap input", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByTestId("flow")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+
+    expect(
+      screen.queryByRole("button", {
+        name: /^treemap node main_model\.0\.layer_norm_module$/i,
+      }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^full$/i }));
+
+    expect(
+      await screen.findByRole("button", {
+        name: /^treemap node main_model\.0\.layer_norm_module$/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides graph scope controls in Parameters preview mode", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("tablist", { name: /graph scope/i }))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^parameters$/i }));
+
+    expect(screen.queryByRole("tablist", { name: /graph scope/i }))
+      .not.toBeInTheDocument();
   });
 
 });

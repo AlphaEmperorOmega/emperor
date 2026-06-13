@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
+import { fallbackParameterTreemapFocusNodeId } from "@/lib/echarts/parameter-treemap-options";
 import {
   type GraphDetailMode,
   type GraphParameterActivity,
   type GraphScope,
+  type PreviewVisualizationMode,
   ancestorNodeIds,
   buildChildSummaries,
   buildClusterDiagrams,
@@ -35,9 +37,14 @@ export function useGraphViewState(
   } = options;
   const [graphDetailMode, setGraphDetailMode] = useState<GraphDetailMode>("basic");
   const [graphScope, setGraphScope] = useState<GraphScope>("opened");
+  const [previewVisualizationMode, setPreviewVisualizationMode] =
+    useState<PreviewVisualizationMode>("graph");
   const [expandedGraphNodeIds, setExpandedGraphNodeIds] = useState<Set<string>>(new Set());
   const [expandedDetailNodeIds, setExpandedDetailNodeIds] = useState<Set<string>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [parameterTreemapFocusNodeId, setParameterTreemapFocusNodeId] =
+    useState<string | null>(null);
+  const previousGraphRef = useRef<InspectResponse | undefined>(graph);
 
   const graphForDetail = useMemo(
     () => filterGraphByDetail(graph, graphDetailMode),
@@ -255,6 +262,25 @@ export function useGraphViewState(
     }
   }, [graphForDisplay, selectedNodeId]);
 
+  useEffect(() => {
+    if (previousGraphRef.current !== graph) {
+      previousGraphRef.current = graph;
+      setParameterTreemapFocusNodeId(null);
+      return;
+    }
+    if (!parameterTreemapFocusNodeId) {
+      return;
+    }
+    const fallbackFocusNodeId = fallbackParameterTreemapFocusNodeId(
+      parameterTreemapFocusNodeId,
+      graphForDetail,
+      graph,
+    );
+    if (fallbackFocusNodeId !== parameterTreemapFocusNodeId) {
+      setParameterTreemapFocusNodeId(fallbackFocusNodeId);
+    }
+  }, [graph, graphForDetail, parameterTreemapFocusNodeId]);
+
   const collapseGraphNodes = useCallback(() => {
     setExpandedGraphNodeIds(new Set());
     setSelectedNodeId(null);
@@ -267,17 +293,24 @@ export function useGraphViewState(
 
   const resetGraphSelectionAndExpansion = useCallback(() => {
     setSelectedNodeId(null);
+    setParameterTreemapFocusNodeId(null);
     resetGraphExpansion();
   }, [resetGraphExpansion]);
 
   return {
     graphDetailMode,
     setGraphDetailMode,
+    previewVisualizationMode,
+    setPreviewVisualizationMode,
     graphScope,
     setGraphScope,
     expandedGraphNodeIds,
     selectedNodeId,
     setSelectedNodeId: setSelectedNodeId as (nodeId: string | null) => void,
+    parameterTreemapFocusNodeId,
+    setParameterTreemapFocusNodeId: setParameterTreemapFocusNodeId as (
+      nodeId: string | null
+    ) => void,
     graphForDetail,
     nodes,
     edges,
