@@ -28,11 +28,15 @@ import {
 describe("ViewerApp Full Config", () => {
   beforeEach(resetViewerAppTestState);
 
-  it("keeps config controls compact in the left sidebar", async () => {
+  it("keeps full config controls out of the left sidebar", async () => {
     installFetchMock();
     renderViewer();
+    const user = userEvent.setup();
 
-    expect(await waitForOpenFullConfigButton()).toBeInTheDocument();
+    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open full config/i }))
+      .not.toBeInTheDocument();
+    expect(await waitForOpenFullConfigButton(user)).toBeInTheDocument();
     expect(screen.queryByText("Sections")).not.toBeInTheDocument();
     expect(screen.queryByText("Fields")).not.toBeInTheDocument();
     expect(screen.queryByText("Changed")).not.toBeInTheDocument();
@@ -41,6 +45,32 @@ describe("ViewerApp Full Config", () => {
     expect(screen.queryByText("Modified Overrides")).not.toBeInTheDocument();
     expect(screen.queryByText("No overrides set")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the global snapshot library out of the model sidebar", async () => {
+    installFetchMock({
+      configSnapshotsResponse: { model: "linear", snapshots: [] },
+      configSnapshotLibraryResponse: {
+        snapshots: [
+          {
+            id: "bert-snapshot",
+            model: "bert_linear",
+            preset: "bert-baseline",
+            name: "Bert tuned",
+            overrides: { hidden_dim: "128" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+
+    await waitForTargetValue("preset", "baseline");
+    expect(screen.getByText(/^Target$/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Snapshots" }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByText("Bert tuned")).not.toBeInTheDocument();
   });
 
   it("opens the full config popup with section accordions expanded by default", async () => {
@@ -762,7 +792,7 @@ describe("ViewerApp Full Config", () => {
     expect(hiddenDimRow).not.toHaveClass("border-amber/55", "bg-amber/[0.055]");
     expect(within(hiddenDimRow).queryByText("preset")).not.toBeInTheDocument();
     expect(within(dialog).queryByText(/\d+ preset/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText("hidden dim")).toHaveLength(1);
+    expect(within(dialog).getAllByText("hidden dim")).toHaveLength(1);
   });
 
   it("highlights a section gradient when it has an override and a preset-owned field", async () => {

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { DatasetSelectorTrigger } from "@/features/viewer/components/screen/dataset-selector-trigger";
-import { DatasetSubmenu } from "@/features/viewer/components/screen/dataset-submenu";
 import {
   useFixedPopupPosition,
   usePopupDismissal,
@@ -9,8 +7,10 @@ import {
 import { PresetDescriptionSubmenu } from "@/features/viewer/components/screen/preset-description-submenu";
 import { TargetSelectorSection } from "@/features/viewer/components/screen/target-selector-section";
 import {
+  useHistoricalRuns,
   useTargetSelectorState,
 } from "@/features/viewer/providers/viewer-providers";
+import { formatRunTimestamp } from "@/lib/format";
 import {
   modelNameForId,
   modelsForType,
@@ -21,31 +21,36 @@ export function TargetPresetPanel() {
   const {
     selectedModelType,
     selectedModel,
+    selectedTargetMode,
+    activateTargetPresetMode,
+    activateTargetSnapshotMode,
+    activateTargetExperimentMode,
     selectedPreset,
     selectedPresetMeta,
-    selectedDatasets,
+    selectedSnapshotId,
+    selectedExperimentRunId,
     selectModelType: onSelectModelType,
     selectModel: onSelectModel,
     selectPreset: onSelectPreset,
-    toggleDataset: onToggleDataset,
-    selectAllDatasets: onSelectAllDatasets,
-    selectFirstDataset: onSelectFirstDataset,
+    selectSnapshot: onSelectSnapshot,
     models,
     presets,
-    datasets,
+    snapshots,
   } = useTargetSelectorState();
+  const {
+    visibleHistoricalRuns,
+    selectedLogRunId,
+    selectLogRun,
+  } = useHistoricalRuns();
   const selectedPresetDescription = selectedPresetMeta?.description;
   const presetDescriptionId = useId();
   const presetSelectId = useId();
-  const datasetSelectorId = useId();
+  const snapshotSelectId = useId();
+  const experimentSelectId = useId();
   const presetDescriptionTriggerRef = useRef<HTMLButtonElement>(null);
   const presetDescriptionSubmenuRef = useRef<HTMLDivElement>(null);
-  const datasetTriggerRef = useRef<HTMLButtonElement>(null);
-  const datasetSubmenuRef = useRef<HTMLDivElement>(null);
   const [isPresetDescriptionOpen, setIsPresetDescriptionOpen] = useState(false);
-  const [isDatasetSelectorOpen, setIsDatasetSelectorOpen] = useState(false);
   const hasPresetDescription = Boolean(selectedPresetDescription?.trim());
-  const datasetCount = `${selectedDatasets.length} / ${datasets.length}`;
   const modelTypeOptions = createModelTypeOptions(models);
   const modelOptions = modelsForType(models, selectedModelType).map((model) => ({
     value: model,
@@ -55,14 +60,27 @@ export function TargetPresetPanel() {
     value: preset.name,
     label: preset.name,
   }));
+  const snapshotOptions = snapshots.map((snapshot) => {
+    const overrideCount = Object.keys(snapshot.overrides).length;
+    return {
+      value: snapshot.id,
+      label: `${snapshot.name} · ${snapshot.preset} · ${overrideCount} ${
+        overrideCount === 1 ? "override" : "overrides"
+      }`,
+    };
+  });
+  const experimentOptions = visibleHistoricalRuns.map((run) => ({
+    value: run.id,
+    label: `${run.experiment} · ${run.preset} · ${run.dataset} · ${formatRunTimestamp(
+      run.timestamp ?? run.version,
+    )}`,
+  }));
   const {
     position: presetDescriptionPosition,
     updatePosition: updatePresetDescriptionPosition,
   } = useFixedPopupPosition(presetDescriptionTriggerRef, isPresetDescriptionOpen, {
     minimumHeight: 180,
   });
-  const { position: datasetSubmenuPosition, updatePosition: updateDatasetSubmenuPosition } =
-    useFixedPopupPosition(datasetTriggerRef, isDatasetSelectorOpen);
 
   const closePresetDescription = useCallback((restoreFocus = false) => {
     setIsPresetDescriptionOpen(false);
@@ -74,17 +92,6 @@ export function TargetPresetPanel() {
   const closePresetDescriptionWithFocus = useCallback(() => {
     closePresetDescription(true);
   }, [closePresetDescription]);
-
-  const closeDatasetSelector = useCallback((restoreFocus = false) => {
-    setIsDatasetSelectorOpen(false);
-    if (restoreFocus) {
-      datasetTriggerRef.current?.focus();
-    }
-  }, []);
-
-  const closeDatasetSelectorWithFocus = useCallback(() => {
-    closeDatasetSelector(true);
-  }, [closeDatasetSelector]);
 
   const togglePresetDescription = () => {
     if (!hasPresetDescription) {
@@ -99,38 +106,15 @@ export function TargetPresetPanel() {
     });
   };
 
-  const toggleDatasetSelector = () => {
-    if (datasets.length === 0) {
-      return;
-    }
-    setIsDatasetSelectorOpen((isOpen) => {
-      const nextOpen = !isOpen;
-      if (nextOpen) {
-        updateDatasetSubmenuPosition();
-      }
-      return nextOpen;
-    });
-  };
-
   useEffect(() => {
     closePresetDescription();
-  }, [closePresetDescription, selectedModel, selectedPreset]);
+  }, [closePresetDescription, selectedModel, selectedPreset, selectedTargetMode]);
 
   useEffect(() => {
     if (!hasPresetDescription) {
       closePresetDescription();
     }
   }, [closePresetDescription, hasPresetDescription]);
-
-  useEffect(() => {
-    closeDatasetSelector();
-  }, [closeDatasetSelector, selectedModel, selectedPreset]);
-
-  useEffect(() => {
-    if (datasets.length === 0) {
-      closeDatasetSelector();
-    }
-  }, [closeDatasetSelector, datasets.length]);
 
   usePopupDismissal({
     isOpen: isPresetDescriptionOpen,
@@ -139,13 +123,6 @@ export function TargetPresetPanel() {
     onDismiss: closePresetDescription,
     onDismissWithFocus: closePresetDescriptionWithFocus,
   });
-  usePopupDismissal({
-    isOpen: isDatasetSelectorOpen,
-    triggerRef: datasetTriggerRef,
-    popupRef: datasetSubmenuRef,
-    onDismiss: closeDatasetSelector,
-    onDismissWithFocus: closeDatasetSelectorWithFocus,
-  });
 
   return (
     <>
@@ -153,46 +130,33 @@ export function TargetPresetPanel() {
         presetCount={presets.length}
         selectedModelType={selectedModelType}
         selectedModel={selectedModel}
+        selectedTargetMode={selectedTargetMode}
         selectedPreset={selectedPreset}
+        selectedSnapshotId={selectedSnapshotId}
+        selectedExperimentRunId={selectedLogRunId ?? selectedExperimentRunId}
         modelTypeOptions={modelTypeOptions}
         modelOptions={modelOptions}
         presetOptions={presetOptions}
+        snapshotOptions={snapshotOptions}
+        experimentOptions={experimentOptions}
         presetSelectId={presetSelectId}
+        snapshotSelectId={snapshotSelectId}
+        experimentSelectId={experimentSelectId}
         presetDescriptionId={presetDescriptionId}
         presetDescriptionTriggerRef={presetDescriptionTriggerRef}
         isPresetDescriptionOpen={isPresetDescriptionOpen}
         hasPresetDescription={hasPresetDescription}
         onSelectModelType={onSelectModelType}
         onSelectModel={onSelectModel}
+        onActivatePresetMode={activateTargetPresetMode}
+        onActivateSnapshotMode={activateTargetSnapshotMode}
+        onActivateExperimentMode={activateTargetExperimentMode}
         onSelectPreset={onSelectPreset}
+        onSelectSnapshot={onSelectSnapshot}
+        onSelectExperimentRun={selectLogRun}
         onTogglePresetDescription={togglePresetDescription}
       />
 
-      <DatasetSelectorTrigger
-        datasetTriggerRef={datasetTriggerRef}
-        datasetSelectorId={datasetSelectorId}
-        isOpen={isDatasetSelectorOpen}
-        disabled={datasets.length === 0}
-        datasetCount={datasetCount}
-        onToggle={toggleDatasetSelector}
-      />
-
-      {isDatasetSelectorOpen &&
-        datasetSubmenuPosition &&
-        createPortal(
-          <DatasetSubmenu
-            id={datasetSelectorId}
-            submenuRef={datasetSubmenuRef}
-            datasets={datasets}
-            selectedDatasets={selectedDatasets}
-            position={datasetSubmenuPosition}
-            onToggleDataset={onToggleDataset}
-            onSelectAllDatasets={onSelectAllDatasets}
-            onSelectFirstDataset={onSelectFirstDataset}
-            onClose={closeDatasetSelectorWithFocus}
-          />,
-          document.body,
-        )}
       {isPresetDescriptionOpen &&
         presetDescriptionPosition &&
         hasPresetDescription &&

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   buildTrainingModelOptions,
+  buildTrainingModelTypeOptions,
   buildTrainingMonitorOptions,
   buildTrainingPresetOptions,
 } from "@/features/viewer/state/training/training-panel-options";
@@ -17,6 +18,23 @@ describe("training panel options", () => {
         { name: "baseline", label: "Baseline", description: "Base run" },
       ]),
     ).toEqual([{ value: "baseline", label: "baseline" }]);
+  });
+
+  it("groups public model IDs by type for the training selector", () => {
+    const models = [
+      "linears/linear",
+      "linears/linear_adaptive",
+      "experts/experts_linear",
+    ];
+
+    expect(buildTrainingModelTypeOptions(models)).toEqual([
+      { value: "linears", label: "Linears" },
+      { value: "experts", label: "Experts" },
+    ]);
+    expect(buildTrainingModelOptions(models, "linears")).toEqual([
+      { value: "linears/linear", label: "linear" },
+      { value: "linears/linear_adaptive", label: "linear_adaptive" },
+    ]);
   });
 
   it("maps monitor metadata for the training multi-select", () => {

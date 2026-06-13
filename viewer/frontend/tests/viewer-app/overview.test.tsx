@@ -3,14 +3,17 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   IMPLEMENTED_FEATURES,
+  expandedTrainingDetails,
   installFetchMock,
+  inspectResponse,
   logRunsResponse,
-  openDatasetSelector,
   openFullConfig,
+  openTrainingMultiSelect,
   renderViewer,
   resetViewerAppTestState,
   schemaResponse,
   selectTargetOption,
+  setTrainingMultiSelectOption,
   typeConfigFieldValue,
   waitForTargetValue,
 } from "./support";
@@ -157,9 +160,275 @@ describe("ViewerApp Overview", () => {
     expect(inspectBodies[0]).toEqual({
       model: "linear",
       preset: "baseline",
-      dataset: "Cifar10",
+      dataset: "Mnist",
       overrides: {},
     });
+  });
+
+  it("defaults the target panel to Presets and renders all target mode tabs", async () => {
+    installFetchMock();
+    renderViewer();
+
+    await waitForTargetValue("preset", "baseline");
+
+    const presetsTab = screen.getByRole("tab", { name: "Presets" });
+    const snapshotsTab = screen.getByRole("tab", { name: "Snapshots" });
+    const experimentsTab = screen.getByRole("tab", { name: "Experiments" });
+
+    expect(presetsTab).toHaveAttribute("aria-selected", "true");
+    expect(snapshotsTab).toHaveAttribute("aria-selected", "false");
+    expect(snapshotsTab).toBeDisabled();
+    expect(experimentsTab).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("combobox", { name: /^preset$/i }))
+      .toHaveTextContent("baseline");
+    expect(screen.queryByRole("combobox", { name: /^snapshot$/i }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /^experiment run$/i }))
+      .not.toBeInTheDocument();
+  });
+
+  it("disables the Experiments tab when the selected model has no eligible layer-monitor runs", async () => {
+    installFetchMock({
+      logTagsByRun: {
+        "log-mnist": ["train/loss"],
+        "log-cifar": ["validation/accuracy"],
+      },
+    });
+    renderViewer();
+
+    await waitForTargetValue("preset", "baseline");
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Experiments" })).toBeDisabled();
+    });
+  });
+
+  it("shows only current-model snapshots in the target snapshot selector", async () => {
+    installFetchMock({
+      configSnapshotsResponse: {
+        model: "linear",
+        snapshots: [
+          {
+            id: "linear-wide",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128", num_epochs: "5" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "bert-wide",
+            model: "bert_linear",
+            preset: "bert-baseline",
+            name: "Bert snapshot",
+            overrides: { hidden_dim: "64" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("preset", "baseline");
+    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    const snapshotControl = await screen.findByRole("combobox", {
+      name: /^snapshot$/i,
+    });
+    expect(snapshotControl).toHaveTextContent(
+      "Wide snapshot · baseline · 2 overrides",
+    );
+
+    await user.click(snapshotControl);
+    const snapshotOptions = await screen.findByRole("listbox", {
+      name: /^snapshot options$/i,
+    });
+    expect(
+      within(snapshotOptions).getByRole("option", {
+        name: "Wide snapshot · baseline · 2 overrides",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(snapshotOptions).queryByRole("option", {
+        name: "Bert snapshot · bert-baseline · 1 override",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("selects a snapshot target with its preset and saved overrides", async () => {
+    let inspectBodies: unknown[] = [];
+    ({ inspectBodies } = installFetchMock({
+      configSnapshotsResponse: {
+        model: "linear",
+        snapshots: [
+          {
+            id: "linear-wide",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128", num_epochs: "5" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "linear-recurrent",
+            model: "linear",
+            preset: "recurrent-gating-halting",
+            name: "Recurrent snapshot",
+            overrides: { hidden_dim: "64" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+      inspectResponseFactory: (requestIndex) => {
+        const request = inspectBodies[requestIndex] as { preset?: string } | undefined;
+        return { ...inspectResponse, preset: request?.preset ?? "baseline" };
+      },
+    }));
+    renderViewer();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("preset", "baseline");
+    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    const snapshotControl = await screen.findByRole("combobox", {
+      name: /^snapshot$/i,
+    });
+    await user.click(snapshotControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^snapshot options$/i }),
+      ).getByRole("option", {
+        name: "Recurrent snapshot · recurrent-gating-halting · 1 override",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(inspectBodies.at(-1)).toEqual({
+        model: "linear",
+        preset: "recurrent-gating-halting",
+        dataset: "Mnist",
+        overrides: { hidden_dim: "64" },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getAllByText("linear / recurrent-gating-halting").length)
+        .toBeGreaterThan(0);
+    });
+    expect(screen.getByRole("combobox", { name: /^snapshot$/i }))
+      .toHaveTextContent(
+        "Recurrent snapshot · recurrent-gating-halting · 1 override",
+      );
+  });
+
+  it("switches from a snapshot target back to Presets with empty overrides", async () => {
+    const { inspectBodies } = installFetchMock({
+      configSnapshotsResponse: {
+        model: "linear",
+        snapshots: [
+          {
+            id: "linear-wide",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128", num_epochs: "5" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("preset", "baseline");
+    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    await waitFor(() => {
+      expect(inspectBodies.at(-1)).toEqual({
+        model: "linear",
+        preset: "baseline",
+        dataset: "Mnist",
+        overrides: { hidden_dim: "128", num_epochs: "5" },
+      });
+    });
+
+    await user.click(screen.getByRole("tab", { name: "Presets" }));
+
+    await waitFor(() => {
+      expect(inspectBodies.at(-1)).toEqual({
+        model: "linear",
+        preset: "baseline",
+        dataset: "Mnist",
+        overrides: {},
+      });
+    });
+    expect(screen.getByRole("combobox", { name: /^preset$/i }))
+      .toHaveTextContent("baseline");
+    expect(screen.queryByRole("combobox", { name: /^snapshot$/i }))
+      .not.toBeInTheDocument();
+  });
+
+  it("refreshes snapshot options when the selected model changes", async () => {
+    installFetchMock({
+      configSnapshotsResponse: {
+        model: "linear",
+        snapshots: [
+          {
+            id: "linear-wide",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "bert-wide",
+            model: "bert_linear",
+            preset: "bert-baseline",
+            name: "Bert snapshot",
+            overrides: { hidden_dim: "64" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("preset", "baseline");
+    await selectTargetOption(user, "model", "bert_linear");
+    await waitForTargetValue("model", "bert_linear");
+    await waitForTargetValue("preset", "bert-baseline");
+
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Snapshots" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    const snapshotControl = await screen.findByRole("combobox", {
+      name: /^snapshot$/i,
+    });
+    expect(snapshotControl).toHaveTextContent(
+      "Bert snapshot · bert-baseline · 1 override",
+    );
+
+    await user.click(snapshotControl);
+    const snapshotOptions = await screen.findByRole("listbox", {
+      name: /^snapshot options$/i,
+    });
+    expect(
+      within(snapshotOptions).getByRole("option", {
+        name: "Bert snapshot · bert-baseline · 1 override",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(snapshotOptions).queryByRole("option", {
+        name: "Wide snapshot · baseline · 1 override",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the selected preset description in a compact popup", async () => {
@@ -242,9 +511,20 @@ describe("ViewerApp Overview", () => {
     const user = userEvent.setup();
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    const datasetDialog = await openDatasetSelector(user);
-    await user.click(within(datasetDialog).getByLabelText(/dataset Cifar10/i));
-    await user.click(within(datasetDialog).getByLabelText(/dataset Mnist/i));
+    const trainingDetails = await expandedTrainingDetails(user);
+    await setTrainingMultiSelectOption(
+      user,
+      trainingDetails,
+      "Training datasets",
+      /Cifar 10/i,
+    );
+    await setTrainingMultiSelectOption(
+      user,
+      trainingDetails,
+      "Training datasets",
+      /Mnist/i,
+      false,
+    );
     await user.click(screen.getByRole("button", { name: /update preview/i }));
 
     await waitFor(() => {
@@ -252,52 +532,31 @@ describe("ViewerApp Overview", () => {
     });
   });
 
-  it("opens dataset selection from the compact sidebar trigger", async () => {
+  it("keeps dataset selection out of the main sidebar", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
 
-    const trigger = await screen.findByRole("button", {
-      name: /datasets\s+1\s*\/\s*2/i,
-    });
-    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByLabelText(/dataset Mnist/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/dataset Cifar10/i)).not.toBeInTheDocument();
+    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /datasets\s+\d+\s*\/\s*\d+/i }),
+    ).not.toBeInTheDocument();
 
-    await user.click(trigger);
-
-    const dialog = await screen.findByRole("dialog", { name: /dataset selector/i });
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(within(dialog).getByLabelText(/dataset Mnist/i)).toBeChecked();
-    expect(within(dialog).getByLabelText(/dataset Cifar10/i)).not.toBeChecked();
-
-    await user.click(within(dialog).getByLabelText(/dataset Cifar10/i));
-
-    expect(screen.getByRole("button", { name: /datasets\s+2\s*\/\s*2/i }))
-      .toBeInTheDocument();
-
-    await user.click(within(dialog).getByRole("button", { name: /^first$/i }));
-
-    expect(screen.getByRole("button", { name: /datasets\s+1\s*\/\s*2/i }))
-      .toBeInTheDocument();
-
-    await user.click(within(dialog).getByRole("button", { name: /^all$/i }));
-
-    expect(screen.getByRole("button", { name: /datasets\s+2\s*\/\s*2/i }))
-      .toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: /dataset selector/i }))
-        .not.toBeInTheDocument();
-    });
-    expect(screen.getByRole("button", { name: /datasets\s+2\s*\/\s*2/i }))
-      .toHaveFocus();
+    const trainingDetails = await expandedTrainingDetails(user);
+    const datasetsDropdown = await openTrainingMultiSelect(
+      user,
+      trainingDetails,
+      "Training datasets",
+    );
+    expect(
+      within(datasetsDropdown.listbox).getByRole("option", { name: /Mnist/i }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(datasetsDropdown.listbox).getByRole("option", { name: /Cifar 10/i }),
+    ).toHaveAttribute("aria-selected", "false");
   });
 
-  it("renders the experiments preset filter and selects a run on click", async () => {
+  it("renders experiment runs as a Target mode and keeps the active run selected", async () => {
     const { inspectBodies } = installFetchMock({
       logRunsResponse: {
         runs: [
@@ -309,8 +568,10 @@ describe("ViewerApp Overview", () => {
             group: "bert_experiment",
             experiment: "bert_experiment",
             model: "bert_linear",
+            preset: "BERT_BASELINE",
+            dataset: "ToyText",
             relativePath:
-              "bert_experiment/bert_linear/BASELINE/Mnist/ccc_20260601_030405/version_0",
+              "bert_experiment/bert_linear/BERT_BASELINE/ToyText/ccc_20260601_030405/version_0",
           },
         ],
       },
@@ -318,32 +579,39 @@ describe("ViewerApp Overview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole("heading", { name: "Experiments" }))
-      .toBeInTheDocument();
-    // The preset filter is independent of the model's build preset; it defaults to
-    // "All presets" and lists the presets present in the model's runs.
-    const presetFilter = (
-      await screen.findByRole("option", { name: "BASELINE (2)" })
-    ).closest("select") as HTMLSelectElement;
-    expect(presetFilter).toHaveValue("");
+    const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
+    await waitFor(() => expect(experimentsTab).not.toBeDisabled());
+    await user.click(experimentsTab);
+
+    const experimentRunControl = await screen.findByRole("combobox", {
+      name: /^experiment run$/i,
+    });
+    expect(experimentRunControl).toHaveTextContent("Select run");
+
+    await user.click(experimentRunControl);
+    const runOptions = await screen.findByRole("listbox", {
+      name: /^experiment run options$/i,
+    });
+    const newestRun = within(runOptions).getByRole("option", {
+      name: "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
+    });
     expect(
-      within(presetFilter).getByRole("option", { name: "All presets" }),
+      within(runOptions).getByRole("option", {
+        name: "test_model · BASELINE · Mnist · 2026-06-01 01:02:03",
+      }),
     ).toBeInTheDocument();
+    expect(
+      within(runOptions).queryByRole("option", {
+        name: /bert_experiment/i,
+      }),
+    ).not.toBeInTheDocument();
 
-    // Both layer-data runs are listed; nothing is auto-selected.
-    const newestRun = await screen.findByRole("button", {
-      name: /select experiment run test_model_2 BASELINE Cifar10 2026-06-01 02:03:04/i,
-    });
-    const olderRun = screen.getByRole("button", {
-      name: /select experiment run test_model BASELINE Mnist 2026-06-01 01:02:03/i,
-    });
-    expect(newestRun).toHaveAttribute("aria-pressed", "false");
-    expect(olderRun).toHaveAttribute("aria-pressed", "false");
-    expect(screen.queryByText("bert_experiment")).not.toBeInTheDocument();
-
-    // Selecting a run drives the preview; selecting it again clears the selection.
     await user.click(newestRun);
-    await waitFor(() => expect(newestRun).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() =>
+      expect(experimentRunControl).toHaveTextContent(
+        "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
+      ),
+    );
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
         model: "linear",
@@ -353,79 +621,110 @@ describe("ViewerApp Overview", () => {
       });
     });
 
-    await user.click(newestRun);
-    await waitFor(() => expect(newestRun).toHaveAttribute("aria-pressed", "false"));
+    const requestCount = inspectBodies.length;
+    await user.click(experimentRunControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
+      ).getByRole("option", {
+        name: "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
+      }),
+    );
+    expect(experimentRunControl).toHaveTextContent(
+      "test_model_2 · BASELINE · Cifar10 · 2026-06-01 02:03:04",
+    );
+    expect(inspectBodies).toHaveLength(requestCount);
   });
 
-  it("filtering by preset narrows the visible run list", async () => {
+  it("refreshes experiment run options when the selected model changes", async () => {
     installFetchMock({
       logRunsResponse: {
         runs: [
           {
             ...logRunsResponse.runs[0],
-            id: "fast-mnist",
+            id: "linear-run",
             experiment: "exp_alpha",
             group: "exp_alpha",
-            preset: "RECURRENT_GATING_HALTING",
+            preset: "BASELINE",
             dataset: "Mnist",
             timestamp: "2026-06-01 01:00:00",
-            runName: "fast_20260601_010000",
+            runName: "linear_20260601_010000",
             relativePath:
-              "exp_alpha/linear/RECURRENT_GATING_HALTING/Mnist/fast_20260601_010000/version_0",
+              "exp_alpha/linear/BASELINE/Mnist/linear_20260601_010000/version_0",
           },
           {
             ...logRunsResponse.runs[1],
-            id: "base-cifar",
-            experiment: "exp_beta",
-            group: "exp_beta",
-            preset: "BASELINE",
-            dataset: "Cifar10",
+            id: "bert-run",
+            experiment: "exp_bert",
+            group: "exp_bert",
+            model: "bert_linear",
+            preset: "BERT_BASELINE",
+            dataset: "ToyText",
             timestamp: "2026-06-01 03:00:00",
-            runName: "base_20260601_030000",
+            runName: "bert_20260601_030000",
             relativePath:
-              "exp_beta/linear/BASELINE/Cifar10/base_20260601_030000/version_0",
+              "exp_bert/bert_linear/BERT_BASELINE/ToyText/bert_20260601_030000/version_0",
           },
         ],
       },
       logTagsByRun: {
-        "fast-mnist": ["main_model.0.model/weights/mean"],
-        "base-cifar": ["main_model.0.model/weights/mean"],
+        "linear-run": ["main_model.0.model/weights/mean"],
+        "bert-run": ["main_model.0.model/weights/mean"],
       },
     });
     renderViewer();
     const user = userEvent.setup();
 
-    const presetFilter = (
-      await screen.findByRole("option", { name: "All presets" })
-    ).closest("select") as HTMLSelectElement;
-
-    const fastRunName =
-      /select experiment run exp_alpha RECURRENT_GATING_HALTING Mnist 2026-06-01 01:00:00/i;
-    const baseRunName =
-      /select experiment run exp_beta BASELINE Cifar10 2026-06-01 03:00:00/i;
-
-    // All presets: both runs visible.
-    expect(await screen.findByRole("button", { name: fastRunName })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: baseRunName })).toBeInTheDocument();
-
-    // Narrow to BASELINE.
-    await user.selectOptions(presetFilter, "BASELINE");
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: fastRunName })).not.toBeInTheDocument(),
+    const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
+    await waitFor(() => expect(experimentsTab).not.toBeDisabled());
+    await user.click(experimentsTab);
+    const experimentRunControl = await screen.findByRole("combobox", {
+      name: /^experiment run$/i,
+    });
+    await user.click(experimentRunControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
+      ).getByRole("option", {
+        name: "exp_alpha · BASELINE · Mnist · 2026-06-01 01:00:00",
+      }),
     );
-    expect(screen.getByRole("button", { name: baseRunName })).toBeInTheDocument();
-
-    // Narrow to the other preset.
-    await user.selectOptions(presetFilter, "RECURRENT_GATING_HALTING");
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: baseRunName })).not.toBeInTheDocument(),
+      expect(experimentRunControl).toHaveTextContent(
+        "exp_alpha · BASELINE · Mnist · 2026-06-01 01:00:00",
+      ),
     );
-    expect(screen.getByRole("button", { name: fastRunName })).toBeInTheDocument();
 
-    // Back to all presets.
-    await user.selectOptions(presetFilter, "");
-    expect(await screen.findByRole("button", { name: baseRunName })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: fastRunName })).toBeInTheDocument();
+    const modelControl = screen.getByRole("combobox", { name: /^model$/i });
+    await user.click(modelControl);
+    await user.click(
+      within(await screen.findByRole("listbox", { name: /^model options$/i }))
+        .getByRole("option", { name: "bert_linear" }),
+    );
+
+    await waitFor(() => expect(modelControl).toHaveTextContent("bert_linear"));
+    const refreshedExperimentsTab = screen.getByRole("tab", { name: "Experiments" });
+    await waitFor(() => expect(refreshedExperimentsTab).not.toBeDisabled());
+    await user.click(refreshedExperimentsTab);
+    const refreshedRunControl = await screen.findByRole("combobox", {
+      name: /^experiment run$/i,
+    });
+    expect(refreshedRunControl).toHaveTextContent("Select run");
+
+    await user.click(refreshedRunControl);
+    const refreshedOptions = await screen.findByRole("listbox", {
+      name: /^experiment run options$/i,
+    });
+    expect(
+      within(refreshedOptions).getByRole("option", {
+        name: "exp_bert · BERT_BASELINE · ToyText · 2026-06-01 03:00:00",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(refreshedOptions).queryByRole("option", {
+        name: /exp_alpha/i,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("selecting a historical run syncs preset and dataset, clears overrides, and refreshes preview", async () => {
@@ -438,10 +737,20 @@ describe("ViewerApp Overview", () => {
     await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
     expect(screen.getByText(/1 overrides?/i)).toBeInTheDocument();
 
-    const mnistRun = await screen.findByRole("button", {
-      name: /select experiment run test_model BASELINE Mnist 2026-06-01 01:02:03/i,
+    const experimentsTab = await screen.findByRole("tab", { name: "Experiments" });
+    await waitFor(() => expect(experimentsTab).not.toBeDisabled());
+    await user.click(experimentsTab);
+    const experimentRunControl = await screen.findByRole("combobox", {
+      name: /^experiment run$/i,
     });
-    await user.click(mnistRun);
+    await user.click(experimentRunControl);
+    await user.click(
+      within(
+        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
+      ).getByRole("option", {
+        name: "test_model · BASELINE · Mnist · 2026-06-01 01:02:03",
+      }),
+    );
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
@@ -451,7 +760,9 @@ describe("ViewerApp Overview", () => {
         overrides: {},
       });
     });
-    expect(mnistRun).toHaveAttribute("aria-pressed", "true");
+    expect(experimentRunControl).toHaveTextContent(
+      "test_model · BASELINE · Mnist · 2026-06-01 01:02:03",
+    );
     expect(screen.getByText("0 overrides")).toBeInTheDocument();
   });
 

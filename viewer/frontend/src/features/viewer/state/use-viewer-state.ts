@@ -31,11 +31,16 @@ function targetConfigCascadeRules(
   graphPreview: GraphPreviewControllerState,
   historicalRunSelection: HistoricalRunSelectionState,
 ): Parameters<typeof useTargetConfigState>[0] {
+  const clearHistoricalSelection =
+    historicalRunSelection.clearHistoricalSelectionForTarget;
+
   return {
     requestPreview: graphPreview.requestPreview,
     resetGraphSelectionAndExpansion: graphPreview.resetGraphSelectionAndExpansion,
     resetGraphExpansion: graphPreview.resetGraphExpansion,
-    onModelSelected: historicalRunSelection.clearHistoricalSelectionForTarget,
+    onModelSelected: clearHistoricalSelection,
+    onTargetPresetSelected: clearHistoricalSelection,
+    onTargetSnapshotSelected: clearHistoricalSelection,
   };
 }
 
@@ -108,12 +113,10 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     targetConfigCascadeRules(graphPreview, historicalRunSelection),
   );
   const { selectedModel } = targetConfig.selection;
-  const { presetsQuery } = targetConfig.queries;
 
   const activeTrainingJobState = useActiveTrainingJobState({ onJobStarted });
   const historicalRuns = useHistoricalRunsState({
     selectedModel,
-    presetOptions: presetsQuery.data?.presets,
     syncSelectedLogRun: targetConfig.syncSelectedLogRun,
     selection: historicalRunSelection,
   });

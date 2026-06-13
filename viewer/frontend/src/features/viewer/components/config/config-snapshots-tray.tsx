@@ -58,6 +58,8 @@ export function AddConfigSnapshotDialog({
   fields,
   overrides,
   snapshots,
+  title = "Add Config Snapshot",
+  actionLabel = "Add Snapshot",
   onAdd,
   onClose,
 }: {
@@ -66,6 +68,8 @@ export function AddConfigSnapshotDialog({
   fields: ConfigField[];
   overrides: OverrideValues;
   snapshots: ConfigSnapshot[];
+  title?: string;
+  actionLabel?: string;
   onAdd: (name: string) => ConfigSnapshotCreateResult;
   onClose: () => void;
 }) {
@@ -120,7 +124,7 @@ export function AddConfigSnapshotDialog({
             id="add-config-snapshot-title"
             className="text-base font-semibold text-ink"
           >
-            Add Config Snapshot
+            {title}
           </h2>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
             <span className="font-mono">{model || "No model"}</span>
@@ -195,7 +199,7 @@ export function AddConfigSnapshotDialog({
         </Button>
         <Button variant="primary" onClick={confirm} disabled={!candidate.ok}>
           <FilePlus2 className="h-4 w-4" aria-hidden />
-          Add Snapshot
+          {actionLabel}
         </Button>
       </div>
     </DialogShell>
@@ -260,6 +264,7 @@ function SnapshotNameEditor({
 export function ConfigSnapshotsTray({
   groups,
   selectedPreset,
+  selectedTrainingPresets,
   overrides,
   deselectedSnapshotIds,
   canManage,
@@ -270,6 +275,7 @@ export function ConfigSnapshotsTray({
 }: {
   groups: ConfigSnapshotGroup[];
   selectedPreset: string;
+  selectedTrainingPresets: string[];
   overrides: OverrideValues;
   deselectedSnapshotIds: string[];
   canManage: boolean;
@@ -327,7 +333,7 @@ export function ConfigSnapshotsTray({
               key={group.preset}
               className={cn(
                 "grid gap-2 rounded-[10px] border p-2",
-                group.preset === selectedPreset
+                selectedTrainingPresets.includes(group.preset)
                   ? "border-violet/35 bg-violet/[0.06]"
                   : "border-line-soft bg-black/15",
               )}
@@ -338,7 +344,7 @@ export function ConfigSnapshotsTray({
                 </span>
                 <Badge
                   className={
-                    group.preset === selectedPreset
+                    selectedTrainingPresets.includes(group.preset)
                       ? "border-violet/30 bg-violet/15 text-violet"
                       : undefined
                   }
@@ -350,6 +356,9 @@ export function ConfigSnapshotsTray({
                 {group.snapshots.map((snapshot) => {
                   const isEditing = editingId === snapshot.id;
                   const overrideCount = Object.keys(snapshot.overrides).length;
+                  const isIncluded =
+                    selectedTrainingPresets.includes(snapshot.preset) &&
+                    !deselectedSnapshotIds.includes(snapshot.id);
                   return (
                     <div
                       key={snapshot.id}
@@ -368,7 +377,7 @@ export function ConfigSnapshotsTray({
                         <div className="flex min-w-0 items-start justify-between gap-2">
                           <div className="flex min-w-0 items-start gap-2">
                             <Checkbox
-                              checked={!deselectedSnapshotIds.includes(snapshot.id)}
+                              checked={isIncluded}
                               onCheckedChange={() => onToggleSelection(snapshot.id)}
                               aria-label={`Include snapshot ${snapshot.name} in training`}
                               className="mt-0.5 shrink-0"

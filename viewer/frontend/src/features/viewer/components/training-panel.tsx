@@ -46,12 +46,15 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
   const {
     datasetOptions,
     configSections,
+    selectedModelType,
     selectedModel,
     selectedPreset,
     selectedTrainingPresets,
     selectedDatasets,
     overrides,
+    allConfigSnapshots,
     configSnapshotCount,
+    deselectedSnapshotIds,
     monitorOptions,
     selectedMonitors,
     monitorsLoading,
@@ -59,10 +62,12 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     searchLoading,
     trainingEnabled,
     canOpenFullConfig,
+    onSelectModelType,
     onSelectModel,
     onSelectPreset,
     onSetTrainingPresets,
     onToggleTrainingPreset,
+    onToggleDraftTrainingPreset,
     onMakeTrainingPresetPrimary,
     onSelectAllTrainingPresets,
     onSelectPrimaryTrainingPreset,
@@ -73,6 +78,11 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     onResetOverrides,
     onOpenFullConfig,
     onRemoveConfigSnapshot,
+    onIncludeConfigSnapshot,
+    onExcludeConfigSnapshot,
+    onExcludeDraftTrainingPreset,
+    onEditPresetAsSnapshot,
+    onEditConfigSnapshotCopy,
     onTrainingSearchChange,
   } = input;
   const { changeMonitors } = actions;
@@ -88,8 +98,14 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     setExistingValue: setSelectedExistingLogFolder,
     setNewValue: setNewLogFolder,
   } = logFolder;
-  const { modelOptions, presetOptions, trainingMonitorOptions } = options;
   const {
+    modelTypeOptions,
+    modelOptions,
+    presetOptions,
+    trainingMonitorOptions,
+  } = options;
+  const {
+    activeConfigSnapshotCount,
     activeSearchAxisCount,
     canRequestTraining,
     effectiveTrainingSearch,
@@ -355,13 +371,16 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
               </div>
 
               <TrainingTargetDatasetPanel
+                modelTypeOptions={modelTypeOptions}
                 modelOptions={modelOptions}
+                selectedModelType={selectedModelType}
                 presetOptions={presetOptions}
                 selectedModel={selectedModel}
                 selectedPreset={selectedPreset}
                 selectedTrainingPresets={selectedTrainingPresets}
                 datasetOptions={datasetOptions}
                 selectedDatasets={selectedDatasets}
+                onSelectModelType={onSelectModelType}
                 onSelectModel={onSelectModel}
                 onSelectPreset={onSelectPreset}
                 onSetTrainingPresets={onSetTrainingPresets}
@@ -440,7 +459,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 <Button
                   variant="primary"
                   aria-label="Open Full Config"
-                  onClick={onOpenFullConfig}
+                  onClick={() => onOpenFullConfig()}
                   disabled={!canOpenFullConfig}
                   className="h-10 w-full text-[13.5px]"
                 >
@@ -464,7 +483,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 selectedPresetCount={selectedTrainingPresetCount}
                 isLoading={searchLoading}
                 disabledReason={
-                  hasConfigSnapshots
+                  activeConfigSnapshotCount > 0
                     ? "Config snapshots train fixed variants; grid and random search are unavailable."
                     : undefined
                 }
@@ -487,7 +506,10 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 <div>{datasetCountLabel}</div>
                 <div>{selectedMonitors.length} monitors</div>
                 {hasConfigSnapshots && (
-                  <div>{configSnapshotCount} config snapshots</div>
+                  <div>
+                    {activeConfigSnapshotCount} included / {configSnapshotCount}{" "}
+                    available config snapshots
+                  </div>
                 )}
                 <div>{selectedFieldSummary.length} effective overrides</div>
                 <div>{plannedRunLabel}</div>
@@ -556,8 +578,8 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                             ? ` / ${summary.capacityTotal}`
                             : ""}{" "}
                           neurons
-                          {summary.additions.length > 0
-                            ? ` · +${summary.additions.length}`
+                          {summary.additionCount > 0
+                            ? ` · +${summary.additionCount}`
                             : ""}
                         </span>
                       </div>
@@ -611,8 +633,22 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
           canResample={canResampleRunPlan}
           isResampling={isResampling}
           onResample={resampleRunPlan}
-          canRemoveSnapshots={hasConfigSnapshots && !job}
+          canRemoveSnapshots={allConfigSnapshots.length > 0 && !job}
           onRemoveSnapshot={onRemoveConfigSnapshot}
+          draftManagement={{
+            enabled: !job,
+            snapshots: allConfigSnapshots,
+            presetOptions,
+            selectedPreset,
+            selectedTrainingPresets,
+            deselectedSnapshotIds,
+            onIncludeSnapshot: onIncludeConfigSnapshot,
+            onExcludeSnapshot: onExcludeConfigSnapshot,
+            onTogglePreset: onToggleDraftTrainingPreset,
+            onExcludePreset: onExcludeDraftTrainingPreset,
+            onEditPresetAsSnapshot,
+            onEditSnapshotCopy: onEditConfigSnapshotCopy,
+          }}
           onClose={ui.closeProgress}
         />
       )}

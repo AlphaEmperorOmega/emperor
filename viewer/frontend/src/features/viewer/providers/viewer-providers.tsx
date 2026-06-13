@@ -45,15 +45,23 @@ export function useTargetSelectorState() {
   const {
     selectedModelType,
     selectedModel,
+    selectedTargetMode,
+    activateTargetPresetMode,
+    activateTargetSnapshotMode,
+    activateTargetExperimentMode,
     selectedPreset,
     selectedPresetMeta,
+    selectedSnapshotId,
+    selectedExperimentRunId,
     selectedDatasets,
     selectModelType,
     selectModel,
-    selectPreset,
+    selectTargetPreset,
+    selectTargetSnapshot,
     toggleDataset,
     selectAllDatasets,
     selectFirstDataset,
+    allConfigSnapshots,
     modelsQuery,
     presetsQuery,
     datasetsQuery,
@@ -62,15 +70,23 @@ export function useTargetSelectorState() {
   return {
     selectedModelType,
     selectedModel,
+    selectedTargetMode,
+    activateTargetPresetMode,
+    activateTargetSnapshotMode,
+    activateTargetExperimentMode,
     selectedPreset,
     selectedPresetMeta,
+    selectedSnapshotId,
+    selectedExperimentRunId,
     selectedDatasets,
     selectModelType,
     selectModel,
-    selectPreset,
+    selectPreset: selectTargetPreset,
+    selectSnapshot: selectTargetSnapshot,
     toggleDataset,
     selectAllDatasets,
     selectFirstDataset,
+    snapshots: allConfigSnapshots,
     models: modelsQuery.data?.models ?? [],
     presets: presetsQuery.data?.presets ?? [],
     datasets: datasetsQuery.data?.datasets ?? [],
@@ -81,7 +97,7 @@ export function useTargetConfigSummaryState() {
   const {
     fieldCount,
     overrideCount,
-    configSnapshotCount,
+    allConfigSnapshotCount,
     selectedModel,
     selectedPreset,
     schemaQuery,
@@ -90,11 +106,29 @@ export function useTargetConfigSummaryState() {
   return {
     fieldCount,
     overrideCount,
-    configSnapshotCount,
+    configSnapshotCount: allConfigSnapshotCount,
     canOpenFullConfig: Boolean(
       selectedModel && selectedPreset && schemaQuery.isSuccess,
     ),
     isSchemaLoading: schemaQuery.isLoading,
+  };
+}
+
+export function useConfigSnapshotLibraryState() {
+  const {
+    configSnapshotLibrary,
+    configSnapshotLibraryCount,
+    configSnapshotLibraryQuery,
+    loadConfigSnapshot,
+  } = useTargetConfig();
+
+  return {
+    snapshots: configSnapshotLibrary,
+    snapshotCount: configSnapshotLibraryCount,
+    isLoading: configSnapshotLibraryQuery.isLoading,
+    isError: configSnapshotLibraryQuery.isError,
+    error: configSnapshotLibraryQuery.error,
+    loadConfigSnapshot,
   };
 }
 

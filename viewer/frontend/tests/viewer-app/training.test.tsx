@@ -35,6 +35,44 @@ import {
 describe("ViewerApp Training And Preview", () => {
   beforeEach(resetViewerAppTestState);
 
+  it("keeps the training footer visible when switching viewer workspaces", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    expect(await screen.findByRole("button", { name: /start training/i }))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^compare$/i }));
+
+    expect(await screen.findByRole("heading", { name: /model comparison/i }))
+      .toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start training/i }))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^logs$/i }));
+
+    expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start training/i }))
+      .toBeInTheDocument();
+  });
+
+  it("opens the footer full config dialog from a non-model workspace", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^compare$/i }));
+    expect(await screen.findByRole("heading", { name: /model comparison/i }))
+      .toBeInTheDocument();
+
+    const details = await expandedTrainingDetailsWithConfig(user);
+    const dialog = await openTrainingFullConfig(user, details);
+
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
+  });
+
   it("renders preset-locked fields disabled with their reason", async () => {
     installFetchMock({
       schemaResponse: {
@@ -696,6 +734,320 @@ describe("ViewerApp Training And Preview", () => {
     expect(commandField(commandDialog)).toHaveValue(
       "source experiment.sh linear --preset baseline --datasets Mnist",
     );
+  });
+
+  it("shows and submits plain preset rows alongside checked config snapshots", async () => {
+    const { fetchMock, trainingBodies } = installFetchMock({
+      schemaResponse: {
+        ...schemaResponse,
+        fields: [
+          ...schemaResponse.fields,
+          {
+            key: "num_epochs",
+            configKey: "NUM_EPOCHS",
+            flag: "--num-epochs",
+            label: "num epochs",
+            section: "Training",
+            type: "int",
+            default: 30,
+            nullable: false,
+            choices: [],
+          },
+        ],
+      },
+      configSnapshotsResponse: {
+        model: "linear",
+        snapshots: [
+          {
+            id: "snap-wide",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128", num_epochs: "5" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await expandedTrainingDetailsWithConfig(user);
+    await selectNewTrainingLogFolder(user, "mixed_snapshots");
+
+    const progressButton = await screen.findByRole("button", {
+      name: /0\s*\/\s*2 runs.*35 epochs left/i,
+    });
+    await user.click(progressButton);
+
+    const progressDialog = await screen.findByRole("dialog", {
+      name: /training progress/i,
+    });
+    expect(within(progressDialog).getByText("2 runs")).toBeInTheDocument();
+    expect(within(progressDialog).getByText("35 epochs left")).toBeInTheDocument();
+    expect(within(progressDialog).getByText("Wide snapshot")).toBeInTheDocument();
+    expect(within(progressDialog).getByText("hidden_dim=128")).toBeInTheDocument();
+
+    await user.click(
+      within(progressDialog).getByRole("button", { name: /command for run 1/i }),
+    );
+    let commandDialog = await screen.findByRole("dialog", {
+      name: /training command/i,
+    });
+    expect(commandField(commandDialog)).toHaveValue(
+      "source experiment.sh linear --preset baseline --datasets Mnist --logdir mixed_snapshots",
+    );
+    await user.click(
+      within(commandDialog).getByRole("button", {
+        name: /close training command/i,
+      }),
+    );
+
+    await user.click(
+      within(progressDialog).getByRole("button", { name: /command for run 2/i }),
+    );
+    commandDialog = await screen.findByRole("dialog", {
+      name: /training command/i,
+    });
+    expect(commandField(commandDialog)).toHaveValue(
+      "source experiment.sh linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 128 --num-epochs 5",
+    );
+    await user.click(
+      within(commandDialog).getByRole("button", {
+        name: /close training command/i,
+      }),
+    );
+    await user.click(
+      within(progressDialog).getByRole("button", {
+        name: /close training progress/i,
+      }),
+    );
+
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith("/training/run-plan")),
+    ).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /start training/i }));
+
+    await waitFor(() => {
+      expect(trainingBodies).toHaveLength(1);
+    });
+    expect(trainingBodies[0]).toMatchObject({
+      overrides: {},
+      logFolder: "mixed_snapshots",
+    });
+    expect(trainingBodies[0]).not.toHaveProperty("search");
+    expect(trainingBodies[0]).toHaveProperty("runPlan.summary.totalRuns", 2);
+    expect(trainingBodies[0]).toHaveProperty("runPlan.runs.0.overrides", {});
+    expect(trainingBodies[0]).toHaveProperty(
+      "runPlan.runs.0.command",
+      "source experiment.sh linear --preset baseline --datasets Mnist --logdir mixed_snapshots",
+    );
+    expect(trainingBodies[0]).toHaveProperty(
+      "runPlan.runs.1.snapshotId",
+      "snap-wide",
+    );
+    expect(trainingBodies[0]).toHaveProperty(
+      "runPlan.runs.1.snapshotName",
+      "Wide snapshot",
+    );
+    expect(trainingBodies[0]).toHaveProperty(
+      "runPlan.runs.1.overrides.hidden_dim",
+      "128",
+    );
+  });
+
+  it("deselects a preset run from the progress popup and syncs the Presets tab", async () => {
+    installFetchMock({
+      schemaResponse: {
+        ...schemaResponse,
+        fields: [
+          ...schemaResponse.fields,
+          {
+            key: "num_epochs",
+            configKey: "NUM_EPOCHS",
+            flag: "--num-epochs",
+            label: "num epochs",
+            section: "Training",
+            type: "int",
+            default: 30,
+            nullable: false,
+            choices: [],
+          },
+        ],
+      },
+      configSnapshotsResponse: {
+        model: "linear",
+        snapshots: [
+          {
+            id: "snap-wide",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128", num_epochs: "5" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await expandedTrainingDetailsWithConfig(user);
+    await user.click(
+      await screen.findByRole("button", {
+        name: /0\s*\/\s*2 runs.*35 epochs left/i,
+      }),
+    );
+
+    const progressDialog = await screen.findByRole("dialog", {
+      name: /training progress/i,
+    });
+    await user.click(
+      within(progressDialog).getByLabelText(
+        "Exclude preset baseline from training",
+      ),
+    );
+
+    await waitFor(() => {
+      expect(
+        within(progressDialog).getByText("No training runs planned"),
+      ).toBeInTheDocument();
+    });
+
+    await user.click(within(progressDialog).getByRole("tab", { name: "Presets" }));
+    const presetsPanel = within(progressDialog).getByRole("tabpanel", {
+      name: "Presets",
+    });
+    expect(
+      within(presetsPanel).getByLabelText("Include preset baseline in training"),
+    ).not.toBeChecked();
+  });
+
+  it("deselects a snapshot run across datasets and syncs the Snapshots tab", async () => {
+    installFetchMock({
+      schemaResponse: {
+        ...schemaResponse,
+        fields: [
+          ...schemaResponse.fields,
+          {
+            key: "num_epochs",
+            configKey: "NUM_EPOCHS",
+            flag: "--num-epochs",
+            label: "num epochs",
+            section: "Training",
+            type: "int",
+            default: 30,
+            nullable: false,
+            choices: [],
+          },
+        ],
+      },
+      configSnapshotsResponse: {
+        model: "linear",
+        snapshots: [
+          {
+            id: "snap-wide",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128", num_epochs: "5" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const details = await expandedTrainingDetailsWithConfig(user);
+    await setTrainingMultiSelectOption(
+      user,
+      details,
+      "Training datasets",
+      /Cifar 10/i,
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: /0\s*\/\s*4 runs.*70 epochs left/i,
+      }),
+    );
+
+    const progressDialog = await screen.findByRole("dialog", {
+      name: /training progress/i,
+    });
+    expect(within(progressDialog).getAllByText("Wide snapshot")).toHaveLength(2);
+
+    await user.click(
+      within(progressDialog).getAllByLabelText(
+        "Exclude snapshot Wide snapshot from training",
+      )[0],
+    );
+
+    await waitFor(() => {
+      expect(
+        within(progressDialog).queryByText("Wide snapshot"),
+      ).not.toBeInTheDocument();
+      expect(
+        within(progressDialog).getAllByRole("button", {
+          name: /command for run/i,
+        }),
+      ).toHaveLength(2);
+    });
+
+    await user.click(within(progressDialog).getByRole("tab", { name: "Snapshots" }));
+    const snapshotsPanel = within(progressDialog).getByRole("tabpanel", {
+      name: "Snapshots",
+    });
+    expect(
+      within(snapshotsPanel).getByLabelText(
+        "Include snapshot Wide snapshot in training",
+      ),
+    ).not.toBeChecked();
+
+    await user.click(within(progressDialog).getByRole("tab", { name: "Presets" }));
+    const presetsPanel = within(progressDialog).getByRole("tabpanel", {
+      name: "Presets",
+    });
+    expect(
+      within(presetsPanel).getByLabelText("Include preset baseline in training"),
+    ).toBeChecked();
+  });
+
+  it("replaces the progress popup with snapshot draft config when editing a preset", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await expandedTrainingDetailsWithConfig(user);
+    await user.click(
+      await screen.findByRole("button", {
+        name: /0\s*\/\s*1 runs.*30 epochs left/i,
+      }),
+    );
+
+    const progressDialog = await screen.findByRole("dialog", {
+      name: /training progress/i,
+    });
+    await user.click(within(progressDialog).getByRole("tab", { name: "Presets" }));
+    await user.click(
+      within(progressDialog).getAllByRole("button", {
+        name: "Edit as Snapshot",
+      })[0],
+    );
+
+    const fullConfigDialog = await screen.findByRole("dialog", {
+      name: /full configuration/i,
+    });
+    expect(
+      within(fullConfigDialog).getByRole("button", { name: "Save as Snapshot" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: /training progress/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows Resample in the progress popup for random search before start", async () => {
@@ -1378,7 +1730,7 @@ describe("ViewerApp Training And Preview", () => {
     await waitFor(() => expect(inspectBodies).toHaveLength(initialRequestCount + 2));
   });
 
-  it("changing presets clears overrides without auto-updating the preview", async () => {
+  it("changing the main-menu preset clears overrides and refreshes the preview", async () => {
     const { inspectBodies } = installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -1392,10 +1744,6 @@ describe("ViewerApp Training And Preview", () => {
 
     expect(screen.getByText("0 overrides")).toBeInTheDocument();
     expect(screen.queryByText("No overrides set")).not.toBeInTheDocument();
-    expect(inspectBodies).toHaveLength(initialRequestCount);
-
-    await user.click(screen.getByRole("button", { name: /update preview/i }));
-
     await waitFor(() => expect(inspectBodies).toHaveLength(initialRequestCount + 1));
     expect(inspectBodies.at(-1)).toEqual({
       model: "linear",

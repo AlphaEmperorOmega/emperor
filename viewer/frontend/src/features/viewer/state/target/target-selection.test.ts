@@ -73,6 +73,7 @@ describe("target selection", () => {
       configSnapshots: [
         snapshot({ id: "fast", preset: "fast" }),
         snapshot({ id: "baseline", preset: "baseline" }),
+        snapshot({ id: "other-preset", preset: "rare" }),
         snapshot({ id: "other-model", model: "bert", preset: "fast" }),
       ],
       selectedModel: "linear",
@@ -97,6 +98,11 @@ describe("target selection", () => {
     expect(state.overrideCount).toBe(2);
     expect(state.presetOwnedFieldCount).toBe(1);
     expect(state.fieldCount).toBe(3);
+    expect(state.modelConfigSnapshots.map((item) => item.id)).toEqual([
+      "fast",
+      "baseline",
+      "other-preset",
+    ]);
     expect(state.visibleConfigSnapshots.map((item) => item.id)).toEqual([
       "fast",
       "baseline",
@@ -107,6 +113,11 @@ describe("target selection", () => {
         preset: "baseline",
         snapshots: [snapshot({ id: "baseline", preset: "baseline" })],
       },
+    ]);
+    expect(state.modelConfigSnapshotGroups).toEqual([
+      { preset: "baseline", snapshots: [snapshot({ id: "baseline", preset: "baseline" })] },
+      { preset: "fast", snapshots: [snapshot({ id: "fast", preset: "fast" })] },
+      { preset: "rare", snapshots: [snapshot({ id: "other-preset", preset: "rare" })] },
     ]);
   });
 });

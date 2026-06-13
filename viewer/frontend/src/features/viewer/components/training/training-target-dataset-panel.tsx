@@ -18,13 +18,16 @@ const defaultFieldLabelClass =
   "text-xs font-semibold tracking-[0.02em] text-ink-dim";
 
 export function TrainingTargetDatasetPanel({
+  modelTypeOptions = [],
   modelOptions,
+  selectedModelType = "",
   presetOptions,
   selectedModel,
   selectedPreset,
   selectedTrainingPresets = selectedPreset ? [selectedPreset] : [],
   datasetOptions,
   selectedDatasets,
+  onSelectModelType,
   onSelectModel,
   onSelectPreset,
   onSetTrainingPresets,
@@ -38,13 +41,16 @@ export function TrainingTargetDatasetPanel({
   onSelectFirstDataset,
   presentation = "default",
 }: {
+  modelTypeOptions?: SelectOption[];
   modelOptions: SelectOption[];
+  selectedModelType?: string;
   presetOptions: SelectOption[];
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets?: string[];
   datasetOptions: Dataset[];
   selectedDatasets: string[];
+  onSelectModelType?: (modelType: string) => void;
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
   onSetTrainingPresets?: (presets: string[]) => void;
@@ -118,6 +124,17 @@ export function TrainingTargetDatasetPanel({
     }
   }
 
+  const modelTypeControl =
+    modelTypeOptions.length > 0 && onSelectModelType ? (
+      <SelectOnlyDropdown
+        label="training model type"
+        value={selectedModelType}
+        options={modelTypeOptions}
+        onChange={onSelectModelType}
+        placeholder="Select type"
+      />
+    ) : null;
+
   const modelControl = (
     <SelectOnlyDropdown
       label="training model"
@@ -127,6 +144,9 @@ export function TrainingTargetDatasetPanel({
       placeholder="Select model"
     />
   );
+  const modelSelectorGridClass = modelTypeControl
+    ? "grid min-w-0 grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-2"
+    : "grid min-w-0 gap-2";
 
   const modelField = isFooterPresentation ? (
     <TrainingFooterField
@@ -134,12 +154,33 @@ export function TrainingTargetDatasetPanel({
       icon={<Layers className={footerIconClass} aria-hidden />}
       label="Model"
     >
-      {modelControl}
+      <div className={modelSelectorGridClass}>
+        {modelTypeControl && (
+          <div className="grid min-w-0 gap-1.5">
+            <span className={defaultFieldLabelClass}>Model type</span>
+            {modelTypeControl}
+          </div>
+        )}
+        <div className="grid min-w-0 gap-1.5">
+          {modelTypeControl && (
+            <span className={defaultFieldLabelClass}>Model name</span>
+          )}
+          {modelControl}
+        </div>
+      </div>
     </TrainingFooterField>
   ) : (
-    <div className="grid min-w-0 gap-1.5">
-      <span className={defaultFieldLabelClass}>Model</span>
-      {modelControl}
+    <div className={modelSelectorGridClass}>
+      {modelTypeControl && (
+        <div className="grid min-w-0 gap-1.5">
+          <span className={defaultFieldLabelClass}>Model type</span>
+          {modelTypeControl}
+        </div>
+      )}
+      <div className="grid min-w-0 gap-1.5">
+        <span className={defaultFieldLabelClass}>Model</span>
+        {modelControl}
+      </div>
     </div>
   );
 

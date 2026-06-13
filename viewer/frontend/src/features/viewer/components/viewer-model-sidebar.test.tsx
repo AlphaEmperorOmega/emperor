@@ -11,14 +11,6 @@ vi.mock("@/features/viewer/providers/viewer-providers", () => ({
   useTargetQueryStatusState: mocks.useTargetQueryStatusState,
 }));
 
-vi.mock("@/features/viewer/components/config/config-summary-panel", () => ({
-  ConfigSummaryPanel: () => null,
-}));
-
-vi.mock("@/features/viewer/components/model-experiments-panel", () => ({
-  ModelExperimentsPanel: () => null,
-}));
-
 vi.mock("@/features/viewer/components/screen/target-preset-panel", () => ({
   TargetPresetPanel: () => null,
 }));
@@ -79,7 +71,7 @@ function renderSidebarWithModelError(error: unknown) {
     schemaQuery: queryState(),
   });
 
-  render(<ViewerModelSidebar onOpenFullConfig={vi.fn()} />);
+  render(<ViewerModelSidebar />);
 }
 
 afterEach(() => {

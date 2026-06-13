@@ -506,6 +506,369 @@ describe("KeyValueRow", () => {
 });
 
 describe("TrainingProgressDialog", () => {
+  function progressPlan(): TrainingRunPlan {
+    return {
+      model: "linear",
+      preset: "baseline",
+      presets: ["baseline"],
+      datasets: ["Mnist"],
+      overrides: {},
+      search: null,
+      logFolder: "snapshots",
+      isRandomSearch: false,
+      runs: [
+        {
+          id: "run-0001",
+          index: 1,
+          status: "Pending",
+          preset: "baseline",
+          dataset: "Mnist",
+          snapshotId: "snap-wide",
+          snapshotName: "Wide snapshot",
+          changes: [
+            {
+              key: "hidden_dim",
+              label: "Hidden Dim",
+              value: "128",
+              source: "override",
+            },
+          ],
+          overrides: { hidden_dim: "128" },
+          command:
+            "source experiment.sh linear --preset baseline --datasets Mnist --config --hidden-dim 128",
+          totalEpochs: 2,
+          currentEpoch: 0,
+          metrics: {},
+          logDir: null,
+          error: null,
+          errorTraceback: null,
+        },
+      ],
+      summary: {
+        totalRuns: 1,
+        completedRuns: 0,
+        runningRuns: 0,
+        pendingRuns: 1,
+        failedRuns: 0,
+        cancelledRuns: 0,
+        skippedRuns: 0,
+        totalEpochs: 2,
+        completedEpochs: 0,
+        remainingEpochs: 2,
+      },
+    };
+  }
+
+  function draftRunsPlan(): TrainingRunPlan {
+    const snapshotRun = progressPlan().runs[0];
+    return {
+      ...progressPlan(),
+      runs: [
+        {
+          id: "run-plain",
+          index: 1,
+          status: "Pending",
+          preset: "baseline",
+          dataset: "Mnist",
+          changes: [],
+          overrides: {},
+          command: "source experiment.sh linear --preset baseline --datasets Mnist",
+          totalEpochs: 30,
+          currentEpoch: 0,
+          metrics: {},
+          logDir: null,
+          error: null,
+          errorTraceback: null,
+        },
+        {
+          ...snapshotRun,
+          id: "run-snapshot",
+          index: 2,
+        },
+      ],
+      summary: {
+        totalRuns: 2,
+        completedRuns: 0,
+        runningRuns: 0,
+        pendingRuns: 2,
+        failedRuns: 0,
+        cancelledRuns: 0,
+        skippedRuns: 0,
+        totalEpochs: 32,
+        completedEpochs: 0,
+        remainingEpochs: 32,
+      },
+    };
+  }
+
+  it("lets draft run rows exclude presets and snapshots from the Runs tab", async () => {
+    const user = userEvent.setup();
+    const onExcludePreset = vi.fn();
+    const onExcludeSnapshot = vi.fn();
+
+    render(
+      <TrainingProgressDialog
+        plan={draftRunsPlan()}
+        isLoading={false}
+        error=""
+        canResample={false}
+        isResampling={false}
+        onResample={() => {}}
+        draftManagement={{
+          enabled: true,
+          snapshots: [
+            {
+              id: "snap-wide",
+              name: "Wide snapshot",
+              model: "linear",
+              preset: "baseline",
+              overrides: { hidden_dim: "128" },
+              createdAt: "2026-06-01T00:00:00.000Z",
+            },
+          ],
+          presetOptions: [{ value: "baseline", label: "baseline" }],
+          selectedPreset: "baseline",
+          selectedTrainingPresets: ["baseline"],
+          deselectedSnapshotIds: [],
+          onIncludeSnapshot: () => {},
+          onExcludeSnapshot,
+          onTogglePreset: () => {},
+          onExcludePreset,
+          onEditPresetAsSnapshot: () => {},
+          onEditSnapshotCopy: () => {},
+        }}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /delete snapshot/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByLabelText("Exclude preset baseline from training"),
+    );
+    expect(onExcludePreset).toHaveBeenCalledWith("baseline");
+
+    await user.click(
+      screen.getByLabelText("Exclude snapshot Wide snapshot from training"),
+    );
+    expect(onExcludeSnapshot).toHaveBeenCalledWith("snap-wide");
+  });
+
+  it("confirms before deleting a snapshot from the Snapshots tab", async () => {
+    const user = userEvent.setup();
+    const onRemoveSnapshot = vi.fn();
+
+    render(
+      <TrainingProgressDialog
+        plan={progressPlan()}
+        isLoading={false}
+        error=""
+        canResample={false}
+        isResampling={false}
+        onResample={() => {}}
+        canRemoveSnapshots
+        onRemoveSnapshot={onRemoveSnapshot}
+        draftManagement={{
+          enabled: true,
+          snapshots: [
+            {
+              id: "snap-wide",
+              name: "Wide snapshot",
+              model: "linear",
+              preset: "baseline",
+              overrides: { hidden_dim: "128" },
+              createdAt: "2026-06-01T00:00:00.000Z",
+            },
+          ],
+          presetOptions: [{ value: "baseline", label: "baseline" }],
+          selectedPreset: "baseline",
+          selectedTrainingPresets: ["baseline"],
+          deselectedSnapshotIds: [],
+          onIncludeSnapshot: () => {},
+          onExcludeSnapshot: () => {},
+          onTogglePreset: () => {},
+          onExcludePreset: () => {},
+          onEditPresetAsSnapshot: () => {},
+          onEditSnapshotCopy: () => {},
+        }}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Delete snapshot Wide snapshot" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    await user.click(
+      screen.getByRole("button", { name: "Delete snapshot Wide snapshot" }),
+    );
+    let confirmDialog = screen.getByRole("dialog", { name: "Delete Snapshot" });
+
+    await user.click(within(confirmDialog).getByRole("button", { name: "Cancel" }));
+    expect(onRemoveSnapshot).not.toHaveBeenCalled();
+
+    await user.click(
+      screen.getByRole("button", { name: "Delete snapshot Wide snapshot" }),
+    );
+    confirmDialog = screen.getByRole("dialog", { name: "Delete Snapshot" });
+    await user.click(
+      within(confirmDialog).getByRole("button", { name: "Delete Snapshot" }),
+    );
+
+    expect(onRemoveSnapshot).toHaveBeenCalledTimes(1);
+    expect(onRemoveSnapshot).toHaveBeenCalledWith("snap-wide");
+  });
+
+  it("renders draft snapshot and preset tabs with selected state", async () => {
+    const user = userEvent.setup();
+    const onIncludeSnapshot = vi.fn();
+    const onExcludeSnapshot = vi.fn();
+    const onTogglePreset = vi.fn();
+    const onEditPresetAsSnapshot = vi.fn();
+    const onEditSnapshotCopy = vi.fn();
+
+    render(
+      <TrainingProgressDialog
+        plan={progressPlan()}
+        isLoading={false}
+        error=""
+        canResample={false}
+        isResampling={false}
+        onResample={() => {}}
+        draftManagement={{
+          enabled: true,
+          snapshots: [
+            {
+              id: "snap-wide",
+              name: "Wide snapshot",
+              model: "linear",
+              preset: "baseline",
+              overrides: { hidden_dim: "128" },
+              createdAt: "2026-06-01T00:00:00.000Z",
+            },
+            {
+              id: "snap-fast",
+              name: "Fast copy",
+              model: "linear",
+              preset: "fast",
+              overrides: { num_layers: "4" },
+              createdAt: "2026-06-01T00:00:00.000Z",
+            },
+          ],
+          presetOptions: [
+            { value: "baseline", label: "baseline" },
+            { value: "fast", label: "fast" },
+          ],
+          selectedPreset: "baseline",
+          selectedTrainingPresets: ["baseline"],
+          deselectedSnapshotIds: ["snap-fast"],
+          onIncludeSnapshot,
+          onExcludeSnapshot,
+          onTogglePreset,
+          onExcludePreset: () => {},
+          onEditPresetAsSnapshot,
+          onEditSnapshotCopy,
+        }}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("tab", { name: "Runs" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+
+    const snapshotsPanel = screen.getByRole("tabpanel", { name: "Snapshots" });
+    expect(within(snapshotsPanel).getByText("Wide snapshot")).toBeInTheDocument();
+    expect(within(snapshotsPanel).getByText("Fast copy")).toBeInTheDocument();
+    expect(within(snapshotsPanel).getByText("Included")).toBeInTheDocument();
+
+    await user.click(
+      within(snapshotsPanel).getByLabelText(
+        "Include snapshot Wide snapshot in training",
+      ),
+    );
+    expect(onExcludeSnapshot).toHaveBeenCalledWith("snap-wide");
+
+    await user.click(
+      within(snapshotsPanel).getByLabelText("Include snapshot Fast copy in training"),
+    );
+    expect(onIncludeSnapshot).toHaveBeenCalledWith("snap-fast");
+
+    await user.click(
+      within(snapshotsPanel).getAllByRole("button", { name: "Edit Copy" })[0],
+    );
+    expect(onEditSnapshotCopy).toHaveBeenCalledWith("snap-wide");
+
+    await user.click(screen.getByRole("tab", { name: "Presets" }));
+    const presetsPanel = screen.getByRole("tabpanel", { name: "Presets" });
+    expect(within(presetsPanel).getByText("Primary")).toBeInTheDocument();
+
+    await user.click(
+      within(presetsPanel).getByLabelText("Include preset fast in training"),
+    );
+    expect(onTogglePreset).toHaveBeenCalledWith("fast");
+
+    await user.click(
+      within(presetsPanel).getByLabelText("Include preset baseline in training"),
+    );
+    expect(onTogglePreset).toHaveBeenCalledWith("baseline");
+
+    await user.click(
+      within(presetsPanel).getAllByRole("button", {
+        name: "Edit as Snapshot",
+      })[0],
+    );
+    expect(onEditPresetAsSnapshot).toHaveBeenCalledWith("baseline");
+  });
+
+  it("hides draft tabs when draft management is disabled", () => {
+    render(
+      <TrainingProgressDialog
+        plan={progressPlan()}
+        isLoading={false}
+        error=""
+        canResample={false}
+        isResampling={false}
+        onResample={() => {}}
+        draftManagement={{
+          enabled: false,
+          snapshots: [
+            {
+              id: "snap-wide",
+              name: "Wide snapshot",
+              model: "linear",
+              preset: "baseline",
+              overrides: { hidden_dim: "128" },
+              createdAt: "2026-06-01T00:00:00.000Z",
+            },
+          ],
+          presetOptions: [{ value: "baseline", label: "baseline" }],
+          selectedPreset: "baseline",
+          selectedTrainingPresets: ["baseline"],
+          deselectedSnapshotIds: [],
+          onIncludeSnapshot: () => {},
+          onExcludeSnapshot: () => {},
+          onTogglePreset: () => {},
+          onExcludePreset: () => {},
+          onEditPresetAsSnapshot: () => {},
+          onEditSnapshotCopy: () => {},
+        }}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("tab", { name: "Snapshots" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Presets" })).not.toBeInTheDocument();
+    expect(screen.getByText("Wide snapshot")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("Exclude snapshot Wide snapshot from training"),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens the full traceback for a failed row", async () => {
     const user = userEvent.setup();
     const plan: TrainingRunPlan = {

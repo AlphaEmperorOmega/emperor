@@ -171,7 +171,7 @@ describe("config snapshots", () => {
     });
   });
 
-  it("builds snapshot run plans across selected datasets without search rows", () => {
+  it("builds mixed default and snapshot run plans across selected datasets", () => {
     const snapshots: ConfigSnapshot[] = [
       makeSnapshot({ hidden_dim: "128", num_epochs: "3" }, "wide"),
       makeSnapshot({ num_layers: "4" }, "deep"),
@@ -188,15 +188,28 @@ describe("config snapshots", () => {
     });
 
     expect(plan?.search).toBeNull();
-    expect(plan?.summary.totalRuns).toBe(4);
-    expect(plan?.summary.remainingEpochs).toBe(26);
+    expect(plan?.summary.totalRuns).toBe(6);
+    expect(plan?.summary.remainingEpochs).toBe(46);
+    expect(plan?.runs.slice(0, 2).map((run) => run.snapshotName)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(plan?.runs.slice(0, 2).map((run) => run.overrides)).toEqual([{}, {}]);
+    expect(plan?.runs[0]).not.toHaveProperty("snapshotId");
+    expect(plan?.runs[0]).not.toHaveProperty("snapshotName");
+    expect(plan?.runs[0].changes).toEqual([]);
+    expect(plan?.runs[0].command).toBe(
+      "source experiment.sh linear --preset baseline --datasets Mnist --logdir snapshots",
+    );
     expect(plan?.runs.map((run) => run.snapshotName)).toEqual([
+      undefined,
+      undefined,
       "wide",
       "wide",
       "deep",
       "deep",
     ]);
-    expect(plan?.runs[0].changes).toEqual([
+    expect(plan?.runs[2].changes).toEqual([
       {
         key: "hidden_dim",
         label: "Hidden Dim",
@@ -210,8 +223,33 @@ describe("config snapshots", () => {
         source: "override",
       },
     ]);
-    expect(plan?.runs[0].command).toContain("--logdir snapshots");
-    expect(plan?.runs[0].command).not.toContain("wide");
-    expect(plan?.runs[0].command).not.toContain("snap-wide");
+    expect(plan?.runs[2].command).toContain("--logdir snapshots");
+    expect(plan?.runs[2].command).toContain("--config --hidden-dim 128");
+    expect(plan?.runs[2].command).not.toContain("wide");
+    expect(plan?.runs[2].command).not.toContain("snap-wide");
+  });
+
+  it("uses the first selected training preset when the target primary is deselected", () => {
+    const snapshots: ConfigSnapshot[] = [
+      {
+        ...makeSnapshot({ hidden_dim: "128" }, "fast-wide"),
+        preset: "fast",
+      },
+    ];
+
+    const plan = buildConfigSnapshotRunPlan({
+      model: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["fast"],
+      selectedDatasets: ["Mnist"],
+      snapshots,
+      fields,
+      logFolder: "snapshots",
+    });
+
+    expect(plan?.preset).toBe("fast");
+    expect(plan?.presets).toEqual(["fast"]);
+    expect(plan?.runs[0].preset).toBe("fast");
+    expect(plan?.runs[0].command).toContain("--preset fast");
   });
 });

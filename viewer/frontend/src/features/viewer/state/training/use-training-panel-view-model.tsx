@@ -13,6 +13,9 @@ import {
 } from "@/lib/api";
 import { type ConfigSection, type OverrideValues } from "@/lib/config";
 import { type ConfigSnapshot } from "@/lib/config-snapshots";
+import {
+  type FullConfigDialogMode,
+} from "@/features/viewer/state/use-viewer-workspace-shell";
 import { buildClusterGrowth } from "@/lib/cluster-growth";
 import { type TrainingSearchState } from "@/lib/training-search";
 import { metricLabel } from "@/lib/training/summary";
@@ -26,12 +29,14 @@ export type TrainingPanelViewModelInput = {
   presets: Preset[];
   datasetOptions: Dataset[];
   configSections: ConfigSection[];
+  selectedModelType: string;
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
   selectedDatasets: string[];
   overrides: OverrideValues;
   configSnapshots: ConfigSnapshot[];
+  allConfigSnapshots: ConfigSnapshot[];
   configSnapshotCount: number;
   deselectedSnapshotIds: string[];
   monitorOptions: MonitorOption[];
@@ -45,10 +50,13 @@ export type TrainingPanelViewModelInput = {
   historicalTrainingLockExperiment: string;
   canOpenFullConfig: boolean;
   onToggleMonitor: (monitor: string) => void;
+  onSelectModelType: (modelType: string) => void;
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
   onSetTrainingPresets: (presets: string[]) => void;
   onToggleTrainingPreset: (preset: string) => void;
+  onToggleDraftTrainingPreset: (preset: string) => void;
+  onExcludeDraftTrainingPreset: (preset: string) => void;
   onMakeTrainingPresetPrimary: (preset: string) => void;
   onSelectAllTrainingPresets: () => void;
   onSelectPrimaryTrainingPreset: () => void;
@@ -57,8 +65,12 @@ export type TrainingPanelViewModelInput = {
   onSelectAllDatasets: () => void;
   onSelectFirstDataset: () => void;
   onResetOverrides: () => void;
-  onOpenFullConfig: () => void;
+  onOpenFullConfig: (mode?: FullConfigDialogMode) => void;
   onRemoveConfigSnapshot: (snapshotId: string) => void;
+  onIncludeConfigSnapshot: (snapshotId: string) => void;
+  onExcludeConfigSnapshot: (snapshotId: string) => void;
+  onEditPresetAsSnapshot: (preset: string) => void;
+  onEditConfigSnapshotCopy: (snapshotId: string) => void;
   onTrainingSearchChange: Dispatch<SetStateAction<TrainingSearchState>>;
   activeJobId: string | null;
   onActiveJobIdChange: (jobId: string | null) => void;
@@ -70,12 +82,14 @@ export function useTrainingPanelViewModel({
   presets,
   datasetOptions,
   configSections,
+  selectedModelType,
   selectedModel,
   selectedPreset,
   selectedTrainingPresets,
   selectedDatasets,
   overrides,
   configSnapshots,
+  allConfigSnapshots,
   configSnapshotCount,
   deselectedSnapshotIds,
   monitorOptions,
@@ -89,10 +103,13 @@ export function useTrainingPanelViewModel({
   historicalTrainingLockExperiment,
   canOpenFullConfig,
   onToggleMonitor,
+  onSelectModelType,
   onSelectModel,
   onSelectPreset,
   onSetTrainingPresets,
   onToggleTrainingPreset,
+  onToggleDraftTrainingPreset,
+  onExcludeDraftTrainingPreset,
   onMakeTrainingPresetPrimary,
   onSelectAllTrainingPresets,
   onSelectPrimaryTrainingPreset,
@@ -103,6 +120,10 @@ export function useTrainingPanelViewModel({
   onResetOverrides,
   onOpenFullConfig,
   onRemoveConfigSnapshot,
+  onIncludeConfigSnapshot,
+  onExcludeConfigSnapshot,
+  onEditPresetAsSnapshot,
+  onEditConfigSnapshotCopy,
   onTrainingSearchChange,
   activeJobId,
   onActiveJobIdChange,
@@ -111,7 +132,12 @@ export function useTrainingPanelViewModel({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isProgressOpen, setIsProgressOpen] = useState(false);
   const logFolder = useTrainingLogFolderState();
-  const options = useTrainingPanelOptions({ models, presets, monitorOptions });
+  const options = useTrainingPanelOptions({
+    models,
+    selectedModelType,
+    presets,
+    monitorOptions,
+  });
   const requestState = useTrainingRequestState({
     configSections,
     overrides,
@@ -205,12 +231,15 @@ export function useTrainingPanelViewModel({
     input: {
       datasetOptions,
       configSections,
+      selectedModelType,
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,
       selectedDatasets,
       overrides,
+      allConfigSnapshots,
       configSnapshotCount,
+      deselectedSnapshotIds,
       monitorOptions,
       selectedMonitors,
       monitorsLoading,
@@ -218,10 +247,13 @@ export function useTrainingPanelViewModel({
       searchLoading,
       trainingEnabled,
       canOpenFullConfig,
+      onSelectModelType,
       onSelectModel,
       onSelectPreset,
       onSetTrainingPresets,
       onToggleTrainingPreset,
+      onToggleDraftTrainingPreset,
+      onExcludeDraftTrainingPreset,
       onMakeTrainingPresetPrimary,
       onSelectAllTrainingPresets,
       onSelectPrimaryTrainingPreset,
@@ -232,6 +264,10 @@ export function useTrainingPanelViewModel({
       onResetOverrides,
       onOpenFullConfig,
       onRemoveConfigSnapshot,
+      onIncludeConfigSnapshot,
+      onExcludeConfigSnapshot,
+      onEditPresetAsSnapshot,
+      onEditConfigSnapshotCopy,
       onTrainingSearchChange,
     },
     ui: {
@@ -259,6 +295,7 @@ export function useTrainingPanelViewModel({
       fieldCount: requestState.fieldCount,
       overrideCount: requestState.overrideCount,
       hasConfigSnapshots: requestState.hasConfigSnapshots,
+      activeConfigSnapshotCount: requestState.activeConfigSnapshotCount,
       effectiveTrainingSearch: requestState.effectiveTrainingSearch,
       selectedFieldSummary: requestState.selectedFieldSummary,
       searchConflictKeys: requestState.searchConflictKeys,

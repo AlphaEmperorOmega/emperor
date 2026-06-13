@@ -167,7 +167,7 @@ describe("training requests", () => {
     });
   });
 
-  it("submits Config Snapshot run plans without direct overrides or search payloads", () => {
+  it("submits mixed Config Snapshot run plans without direct overrides or search payloads", () => {
     const snapshotRunPlan = buildConfigSnapshotRunPlan({
       model: "linears/linear",
       selectedPreset: "baseline",
@@ -206,12 +206,23 @@ describe("training requests", () => {
     expect(request).not.toHaveProperty("search");
     expect(request?.monitors).toEqual(["linear_layers"]);
     expect(request?.runPlan?.search).toBeNull();
-    expect(request?.runPlan?.summary.totalRuns).toBe(4);
+    expect(request?.runPlan?.summary.totalRuns).toBe(8);
     expect(request?.runPlan?.runs.map((run) => run.snapshotName)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       "Wide",
       "Wide",
       "Dropout",
       "Dropout",
     ]);
+    expect(request?.runPlan?.runs[0]).not.toHaveProperty("snapshotId");
+    expect(request?.runPlan?.runs[0].overrides).toEqual({});
+    expect(request?.runPlan?.runs[4]).toMatchObject({
+      snapshotId: "wide",
+      snapshotName: "Wide",
+      overrides: { hidden_size: "256" },
+    });
   });
 });

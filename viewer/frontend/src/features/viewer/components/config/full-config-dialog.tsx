@@ -29,19 +29,29 @@ import {
 import { useConfigDialogSections } from "@/features/viewer/components/config/use-config-dialog-sections";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useTargetConfig } from "@/features/viewer/providers/viewer-providers";
+import {
+  type FullConfigDialogMode,
+} from "@/features/viewer/state/use-viewer-workspace-shell";
 
-export function FullConfigDialog({ onClose }: { onClose: () => void }) {
+export function FullConfigDialog({
+  mode = "default",
+  onClose,
+}: {
+  mode?: FullConfigDialogMode;
+  onClose: () => void;
+}) {
   const {
     selectedModel: model,
     selectedPreset: preset,
+    selectedTrainingPresets,
     configSections: sections,
     fieldCount,
     overrideCount,
     overrides,
     selectedDatasets,
-    configSnapshots,
-    configSnapshotGroups,
-    configSnapshotCount,
+    allConfigSnapshots,
+    allConfigSnapshotGroups,
+    allConfigSnapshotCount,
     deselectedSnapshotIds,
     capabilities,
     schemaQuery,
@@ -56,6 +66,7 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
     updatePreview: onUpdatePreview,
   } = useTargetConfig();
   const isLoading = schemaQuery.isLoading;
+  const isSnapshotDraftMode = mode === "snapshotDraft";
   const canUpdate = Boolean(model && preset && selectedDatasets.length > 0);
   const [isTrainingCommandOpen, setIsTrainingCommandOpen] = useState(false);
   const [isAddSnapshotOpen, setIsAddSnapshotOpen] = useState(false);
@@ -155,9 +166,9 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
               {presetOwnedFieldCount > 0 && (
                 <Badge variant="preset">{presetOwnedFieldCount} preset</Badge>
               )}
-              {configSnapshotCount > 0 && (
+              {allConfigSnapshotCount > 0 && (
                 <Badge variant="success">
-                  {configSnapshotCount} snapshots
+                  {allConfigSnapshotCount} snapshots
                 </Badge>
               )}
               <IconButton
@@ -182,19 +193,21 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
               <RotateCcw className="h-4 w-4" aria-hidden />
               Reset Overrides
             </Button>
-            <Button
-              variant="secondary"
-              onClick={() => setIsAddSnapshotOpen(true)}
-              disabled={
-                !model ||
-                !preset ||
-                fieldCount === 0 ||
-                !capabilities.configSnapshotsEnabled
-              }
-            >
-              <FilePlus2 className="h-4 w-4" aria-hidden />
-              Add Config Snapshot
-            </Button>
+            {!isSnapshotDraftMode && (
+              <Button
+                variant="secondary"
+                onClick={() => setIsAddSnapshotOpen(true)}
+                disabled={
+                  !model ||
+                  !preset ||
+                  fieldCount === 0 ||
+                  !capabilities.configSnapshotsEnabled
+                }
+              >
+                <FilePlus2 className="h-4 w-4" aria-hidden />
+                Add Config Snapshot
+              </Button>
+            )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>
@@ -204,9 +217,25 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
               <Terminal className="h-4 w-4" aria-hidden />
               Training Command
             </Button>
-            <Button variant="primary" onClick={onUpdatePreview} disabled={!canUpdate}>
-              Update Preview
-            </Button>
+            {isSnapshotDraftMode ? (
+              <Button
+                variant="primary"
+                onClick={() => setIsAddSnapshotOpen(true)}
+                disabled={
+                  !model ||
+                  !preset ||
+                  fieldCount === 0 ||
+                  !capabilities.configSnapshotsEnabled
+                }
+              >
+                <FilePlus2 className="h-4 w-4" aria-hidden />
+                Save as Snapshot
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={onUpdatePreview} disabled={!canUpdate}>
+                Update Preview
+              </Button>
+            )}
           </div>
         </footer>
       }
@@ -228,7 +257,9 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
               preset={preset}
               fields={configFields}
               overrides={overrides}
-              snapshots={configSnapshots}
+              snapshots={allConfigSnapshots}
+              title={isSnapshotDraftMode ? "Save as Snapshot" : undefined}
+              actionLabel={isSnapshotDraftMode ? "Save Snapshot" : undefined}
               onAdd={addConfigSnapshot}
               onClose={() => setIsAddSnapshotOpen(false)}
             />
@@ -247,11 +278,12 @@ export function FullConfigDialog({ onClose }: { onClose: () => void }) {
           </InlineStatus>
         ) : (
           <div className="grid min-h-0 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-            {configSnapshotGroups.length > 0 && (
+            {allConfigSnapshotGroups.length > 0 && (
               <div className="lg:col-span-2">
                 <ConfigSnapshotsTray
-                  groups={configSnapshotGroups}
+                  groups={allConfigSnapshotGroups}
                   selectedPreset={preset}
+                  selectedTrainingPresets={selectedTrainingPresets}
                   overrides={overrides}
                   deselectedSnapshotIds={deselectedSnapshotIds}
                   canManage={capabilities.configSnapshotsEnabled}

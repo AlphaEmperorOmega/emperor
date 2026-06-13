@@ -17,7 +17,6 @@ export function ViewerScreen({ shell }: { shell: ViewerScreenShell }) {
         <ViewerWorkspaceSidebar
           activeWorkspace={activeWorkspace}
           onChangeWorkspace={onChangeWorkspace}
-          onOpenFullConfig={fullConfigDialog.open}
         />
         <ViewerWorkspaceMain
           activeWorkspace={activeWorkspace}

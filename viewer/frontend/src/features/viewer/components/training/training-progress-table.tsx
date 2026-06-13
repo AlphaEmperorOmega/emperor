@@ -1,14 +1,16 @@
-import { AlertTriangle, Terminal, Trash2 } from "lucide-react";
+import { AlertTriangle, Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { type TrainingRun } from "@/lib/api";
 
 type TrainingProgressTableProps = {
   runs: TrainingRun[];
-  canRemoveSnapshots: boolean;
-  onRemoveSnapshot?: (snapshotId: string) => void;
   onCommand: (run: TrainingRun) => void;
   onFullError: (run: TrainingRun) => void;
+  canManageDraftRuns?: boolean;
+  onExcludePreset?: (preset: string) => void;
+  onExcludeSnapshot?: (snapshotId: string) => void;
 };
 
 function statusClass(status: TrainingRun["status"]) {
@@ -49,7 +51,7 @@ function epochText(run: TrainingRun) {
   return `${run.currentEpoch} / ${run.totalEpochs || "-"}`;
 }
 
-const bodyCellClass = "border-b border-line-soft px-3 py-3";
+const bodyCellClass = "border-b border-line-soft px-3 py-3 align-middle";
 const monoCellClass = `${bodyCellClass} font-mono text-xs text-ink`;
 const emptyCell = <span className="font-mono text-xs text-ink-dim">-</span>;
 
@@ -110,38 +112,18 @@ function RunChangesCell({ run }: { run: TrainingRun }) {
   );
 }
 
-function RunSnapshotCell({
-  run,
-  canRemoveSnapshots,
-  onRemoveSnapshot,
-}: {
-  run: TrainingRun;
-  canRemoveSnapshots: boolean;
-  onRemoveSnapshot?: (snapshotId: string) => void;
-}) {
+function RunSnapshotCell({ run }: { run: TrainingRun }) {
   const snapshotName = run.snapshotName ?? "";
-  const snapshotId = run.snapshotId ?? "";
   if (!snapshotName) {
     return <td className={bodyCellClass}>{emptyCell}</td>;
   }
 
   return (
     <td className={bodyCellClass}>
-      <div className="grid max-w-[14rem] gap-1.5">
+      <div className="flex max-w-[14rem] items-center">
         <span className="truncate font-mono text-xs text-ink" title={snapshotName}>
           {snapshotName}
         </span>
-        {canRemoveSnapshots && snapshotId && (
-          <Button
-            variant="ghost"
-            className="h-7 justify-start border border-danger-line bg-danger-soft px-2 text-xs text-danger-text hover:bg-danger-hover/40 hover:text-white"
-            onClick={() => onRemoveSnapshot?.(snapshotId)}
-            aria-label={`Remove snapshot "${snapshotName}"`}
-          >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden />
-            Remove snapshot &quot;{snapshotName}&quot;
-          </Button>
-        )}
       </div>
     </td>
   );
@@ -151,7 +133,7 @@ function RunMetricsCell({ run }: { run: TrainingRun }) {
   const metrics = metricsText(run.metrics);
 
   return (
-    <td className="max-w-[16rem] border-b border-line-soft px-3 py-3 font-mono text-xs text-ink-dim">
+    <td className="max-w-[16rem] border-b border-line-soft px-3 py-3 align-middle font-mono text-xs text-ink-dim">
       <div className="truncate" title={metrics}>
         {metrics}
       </div>
@@ -183,29 +165,57 @@ function RunArtifactsCell({ run }: { run: TrainingRun }) {
 
 function TrainingRunProgressRow({
   run,
-  canRemoveSnapshots,
-  onRemoveSnapshot,
   onCommand,
   onFullError,
+  canManageDraftRuns,
+  onExcludePreset,
+  onExcludeSnapshot,
 }: {
   run: TrainingRun;
-  canRemoveSnapshots: boolean;
-  onRemoveSnapshot?: (snapshotId: string) => void;
   onCommand: (run: TrainingRun) => void;
   onFullError: (run: TrainingRun) => void;
+  canManageDraftRuns: boolean;
+  onExcludePreset?: (preset: string) => void;
+  onExcludeSnapshot?: (snapshotId: string) => void;
 }) {
+  const snapshotId = run.snapshotId ?? "";
+  const canExcludeSnapshot = Boolean(snapshotId && onExcludeSnapshot);
+  const canExcludePreset = Boolean(!snapshotId && onExcludePreset);
+  const canExcludeRun =
+    canManageDraftRuns && (canExcludeSnapshot || canExcludePreset);
+  const excludeLabel = snapshotId
+    ? `Exclude snapshot ${run.snapshotName ?? snapshotId} from training`
+    : `Exclude preset ${run.preset} from training`;
+
   return (
-    <tr className="align-top">
-      <td className="border-b border-line-soft px-3 py-3 font-mono text-xs text-ink-dim">
-        {run.index}
+    <tr className="align-middle">
+      <td className="border-b border-line-soft px-3 py-3 align-middle font-mono text-xs text-ink-dim">
+        {canExcludeRun ? (
+          <label className="inline-flex items-center gap-2">
+            <Checkbox
+              checked
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  return;
+                }
+                if (snapshotId) {
+                  onExcludeSnapshot?.(snapshotId);
+                  return;
+                }
+                onExcludePreset?.(run.preset);
+              }}
+              aria-label={excludeLabel}
+              className="shrink-0"
+            />
+            <span>{run.index}</span>
+          </label>
+        ) : (
+          run.index
+        )}
       </td>
       <RunStatusCell run={run} onFullError={onFullError} />
       <td className={monoCellClass}>{run.preset}</td>
-      <RunSnapshotCell
-        run={run}
-        canRemoveSnapshots={canRemoveSnapshots}
-        onRemoveSnapshot={onRemoveSnapshot}
-      />
+      <RunSnapshotCell run={run} />
       <td className={monoCellClass}>{run.dataset}</td>
       <RunChangesCell run={run} />
       <td className={monoCellClass}>{epochText(run)}</td>
@@ -228,10 +238,11 @@ function TrainingRunProgressRow({
 
 export function TrainingProgressTable({
   runs,
-  canRemoveSnapshots,
-  onRemoveSnapshot,
   onCommand,
   onFullError,
+  canManageDraftRuns = false,
+  onExcludePreset,
+  onExcludeSnapshot,
 }: TrainingProgressTableProps) {
   return (
     <table className="min-w-[1080px] w-full border-separate border-spacing-0 text-left text-sm">
@@ -264,10 +275,11 @@ export function TrainingProgressTable({
           <TrainingRunProgressRow
             key={run.id}
             run={run}
-            canRemoveSnapshots={canRemoveSnapshots}
-            onRemoveSnapshot={onRemoveSnapshot}
             onCommand={onCommand}
             onFullError={onFullError}
+            canManageDraftRuns={canManageDraftRuns}
+            onExcludePreset={onExcludePreset}
+            onExcludeSnapshot={onExcludeSnapshot}
           />
         ))}
       </tbody>

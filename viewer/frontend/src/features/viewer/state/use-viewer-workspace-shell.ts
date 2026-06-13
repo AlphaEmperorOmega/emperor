@@ -12,16 +12,27 @@ export type ViewerDialogControls = {
   close: () => void;
 };
 
+export type FullConfigDialogMode = "default" | "snapshotDraft";
+
+export type FullConfigDialogControls = {
+  isOpen: boolean;
+  mode: FullConfigDialogMode;
+  open: (mode?: FullConfigDialogMode) => void;
+  close: () => void;
+};
+
 export type ViewerScreenShell = {
   activeWorkspace: ViewerWorkspace;
   onChangeWorkspace: (workspace: ViewerWorkspace) => void;
-  fullConfigDialog: ViewerDialogControls;
+  fullConfigDialog: FullConfigDialogControls;
   featureListDialog: ViewerDialogControls;
 };
 
 export function useViewerWorkspaceShell() {
   const [activeWorkspace, setActiveWorkspace] = useState<ViewerWorkspace>("model");
   const [isFullConfigOpen, setIsFullConfigOpen] = useState(false);
+  const [fullConfigMode, setFullConfigMode] =
+    useState<FullConfigDialogMode>("default");
   const [isFeatureListOpen, setIsFeatureListOpen] = useState(false);
   const capabilitiesQuery = useCapabilitiesQuery();
   const capabilities = capabilitiesQuery.data ?? LOCAL_DEFAULT_CAPABILITIES;
@@ -36,7 +47,10 @@ export function useViewerWorkspaceShell() {
       setIsFullConfigOpen(false);
     }
   }, []);
-  const openFullConfig = useCallback(() => setIsFullConfigOpen(true), []);
+  const openFullConfig = useCallback((mode: FullConfigDialogMode = "default") => {
+    setFullConfigMode(mode);
+    setIsFullConfigOpen(true);
+  }, []);
   const closeFullConfig = useCallback(() => setIsFullConfigOpen(false), []);
   const openFeatureList = useCallback(() => setIsFeatureListOpen(true), []);
   const closeFeatureList = useCallback(() => setIsFeatureListOpen(false), []);
@@ -46,6 +60,7 @@ export function useViewerWorkspaceShell() {
     onChangeWorkspace: changeWorkspace,
     fullConfigDialog: {
       isOpen: isFullConfigOpen,
+      mode: fullConfigMode,
       open: openFullConfig,
       close: closeFullConfig,
     },

@@ -35,7 +35,7 @@ export function ViewerWorkspaceNav({
             aria-pressed={active}
             onClick={() => onChange(item.value)}
           >
-            <Icon className="h-4 w-4" aria-hidden />
+            <Icon className="h-4 w-4 shrink-0 text-current" aria-hidden />
             {item.label}
           </button>
         );

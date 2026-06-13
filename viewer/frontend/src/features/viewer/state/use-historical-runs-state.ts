@@ -6,27 +6,12 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
-import {
-  fetchLogParameterStatus,
-  inspectModel,
-  type LogRun,
-  type LogRunTags,
-  type Preset,
-} from "@/lib/api";
+import { type LogRun, type LogRunTags } from "@/lib/api";
 import { useLogRunsQuery, useLogTagsQuery } from "@/features/viewer/state/logs/use-log-queries";
-import {
-  historicalMonitorRunGroups,
-  resolveRunPresetName,
-} from "@/lib/historical-monitor-runs";
-import {
-  summarizeHistoricalParameterStatus,
-  type HistoricalParameterSummaryState,
-} from "@/lib/parameter-summary";
 import {
   deriveDatasetSelectionState,
 } from "@/features/viewer/state/graph-monitor/graph-monitor-selectors";
-import { logQueryKeys, monitorQueryKeys, viewerQueryKeys } from "@/lib/query-keys";
+import { logQueryKeys } from "@/lib/query-keys";
 
 type HistoricalRunSelectionState = {
   selectedLogRunId: string | null;
@@ -39,7 +24,6 @@ type HistoricalRunSelectionState = {
 
 type HistoricalRunsStateInput = {
   selectedModel: string;
-  presetOptions?: Preset[];
   syncSelectedLogRun: (selectedLogRun: LogRun) => void;
   selection: HistoricalRunSelectionState;
 };
@@ -57,10 +41,6 @@ type HistoricalRunsProviderSlice = {
   selectedHistoricalRunPreset: string;
   selectedLogRunId: string | null;
   selectLogRun: (runId: string) => void;
-  historicalParameterSummariesByRunId: Map<
-    string,
-    HistoricalParameterSummaryState
-  >;
   logRunsQuery: ReturnType<typeof useLogRunsQuery>;
   logRunTagsQuery: ReturnType<typeof useLogTagsQuery>;
   experimentsLoading: boolean;
@@ -91,7 +71,7 @@ export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
   }, []);
 
   const selectLogRun = useCallback((runId: string) => {
-    setSelectedLogRunId((current) => (current === runId ? null : runId));
+    setSelectedLogRunId((current) => (current === runId ? current : runId));
   }, []);
 
   return {
@@ -106,11 +86,9 @@ export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
 
 export function useHistoricalRunsState({
   selectedModel,
-  presetOptions,
   syncSelectedLogRun,
   selection,
 }: HistoricalRunsStateInput): HistoricalRunsState {
-  const queryClient = useQueryClient();
   const {
     selectedLogRunId,
     selectedHistoricalPreset,
@@ -162,87 +140,6 @@ export function useHistoricalRunsState({
     runIds: filteredHistoricalRunIds,
     queryKey: logQueryKeys.filteredHistoricalRunTags(filteredHistoricalRunIds),
   });
-  const historicalParameterSummaryGroups = useMemo(
-    () =>
-      historicalMonitorRunGroups(visibleHistoricalRuns).map((group) => {
-        const representativeRun = group.runs[0];
-        const inspectPreset = representativeRun
-          ? presetOptions
-            ? resolveRunPresetName(representativeRun, presetOptions) ||
-              representativeRun.preset
-            : ""
-          : group.preset;
-        const runIds = group.runs.map((run) => run.id);
-        return {
-          ...group,
-          inspectPreset,
-          runIds,
-        };
-      }),
-    [presetOptions, visibleHistoricalRuns],
-  );
-  const historicalParameterSummaryQueries = useQueries({
-    queries: historicalParameterSummaryGroups.map((group) => ({
-      queryKey: monitorQueryKeys.historicalParameterSummary(
-        group.model,
-        group.inspectPreset,
-        group.dataset,
-        group.runIds,
-      ),
-      queryFn: async () => {
-        const [summaryGraph, status] = await Promise.all([
-          queryClient.fetchQuery({
-            queryKey: viewerQueryKeys.historicalSummaryInspection(
-              group.model,
-              group.inspectPreset,
-              group.dataset,
-            ),
-            queryFn: () =>
-              inspectModel({
-                model: group.model,
-                preset: group.inspectPreset,
-                dataset: group.dataset,
-                overrides: {},
-              }),
-            retry: false,
-          }),
-          queryClient.fetchQuery({
-            queryKey: monitorQueryKeys.historicalParameterStatus(group.runIds),
-            queryFn: () => fetchLogParameterStatus({ runIds: group.runIds }),
-            retry: false,
-          }),
-        ]);
-
-        return summarizeHistoricalParameterStatus({
-          graph: summaryGraph,
-          status,
-          runs: group.runs,
-        });
-      },
-      enabled:
-        group.model.length > 0 &&
-        group.inspectPreset.length > 0 &&
-        group.dataset.length > 0 &&
-        group.runIds.length > 0,
-      retry: false,
-    })),
-  });
-  const historicalParameterSummariesByRunId = useMemo(() => {
-    const summaries = new Map<string, HistoricalParameterSummaryState>();
-    historicalParameterSummaryGroups.forEach((group, index) => {
-      const query = historicalParameterSummaryQueries[index];
-      const state: HistoricalParameterSummaryState = {
-        summary: query?.data,
-        isLoading: Boolean(query?.isLoading || query?.isFetching),
-        isError: Boolean(query?.isError),
-        error: query?.error,
-      };
-      for (const runId of group.cardRunIds) {
-        summaries.set(runId, state);
-      }
-    });
-    return summaries;
-  }, [historicalParameterSummaryGroups, historicalParameterSummaryQueries]);
 
   useEffect(() => {
     if (!selectedModel) {
@@ -287,7 +184,6 @@ export function useHistoricalRunsState({
       selectedHistoricalRunPreset,
       selectedLogRunId,
       selectLogRun,
-      historicalParameterSummariesByRunId,
       logRunsQuery,
       logRunTagsQuery,
       experimentsLoading: logRunsQuery.isLoading || modelRunTagsQuery.isLoading,

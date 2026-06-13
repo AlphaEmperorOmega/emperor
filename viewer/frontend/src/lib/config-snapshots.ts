@@ -344,7 +344,7 @@ function snapshotCommandFlag(key: string) {
   return `--${key.replace(/_/g, "-")}`;
 }
 
-function snapshotTrainingCommand({
+function trainingCommand({
   model,
   preset,
   dataset,
@@ -416,6 +416,45 @@ function snapshotEpochs(
   return Number.isFinite(epochValue) ? Math.max(0, Math.trunc(epochValue)) : 0;
 }
 
+function baseRun({
+  model,
+  preset,
+  dataset,
+  index,
+  fieldsByKey,
+  logFolder,
+}: {
+  model: string;
+  preset: string;
+  dataset: string;
+  index: number;
+  fieldsByKey: Map<string, ConfigField>;
+  logFolder: string;
+}): TrainingRun {
+  return {
+    id: `preset-${preset}-${dataset}-${index}`,
+    index,
+    status: "Pending",
+    preset,
+    dataset,
+    changes: [],
+    overrides: {},
+    command: trainingCommand({
+      model,
+      preset,
+      dataset,
+      overrides: {},
+      logFolder,
+    }),
+    totalEpochs: epochDefault(fieldsByKey),
+    currentEpoch: 0,
+    metrics: {},
+    logDir: null,
+    error: null,
+    errorTraceback: null,
+  };
+}
+
 function summarizeSnapshotRuns(runs: TrainingRun[]) {
   const totalEpochs = runs.reduce((total, run) => total + run.totalEpochs, 0);
   return {
@@ -460,6 +499,21 @@ export function buildConfigSnapshotRunPlan({
 
   const fieldsByKey = new Map(fields.map((field) => [field.key, field]));
   const runs: TrainingRun[] = [];
+  for (const preset of selectedTrainingPresets) {
+    for (const dataset of selectedDatasets) {
+      const index = runs.length + 1;
+      runs.push(
+        baseRun({
+          model,
+          preset,
+          dataset,
+          index,
+          fieldsByKey,
+          logFolder,
+        }),
+      );
+    }
+  }
   for (const snapshot of selectedSnapshots) {
     for (const dataset of selectedDatasets) {
       const index = runs.length + 1;
@@ -473,7 +527,7 @@ export function buildConfigSnapshotRunPlan({
         dataset,
         changes: snapshotRunChanges(snapshot, fieldsByKey),
         overrides: snapshot.overrides,
-        command: snapshotTrainingCommand({
+        command: trainingCommand({
           model,
           preset: snapshot.preset,
           dataset,
@@ -493,9 +547,12 @@ export function buildConfigSnapshotRunPlan({
   const presets = selectedTrainingPresets.length
     ? selectedTrainingPresets
     : Array.from(new Set(selectedSnapshots.map((snapshot) => snapshot.preset)));
+  const primaryPreset = presets.includes(selectedPreset)
+    ? selectedPreset
+    : presets[0] || selectedPreset;
   return {
     model,
-    preset: selectedPreset || presets[0] || "",
+    preset: primaryPreset,
     presets,
     datasets: selectedDatasets,
     overrides: {},

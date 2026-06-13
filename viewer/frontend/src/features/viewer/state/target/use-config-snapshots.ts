@@ -4,6 +4,7 @@ import {
   type ConfigSnapshotRecord,
   createConfigSnapshot,
   deleteConfigSnapshot,
+  fetchConfigSnapshotLibrary,
   fetchConfigSnapshots,
   renameConfigSnapshot,
 } from "@/lib/api";
@@ -31,23 +32,44 @@ export function useConfigSnapshots(model: string) {
     });
   }
 
+  function invalidateLibrary() {
+    return queryClient.invalidateQueries({
+      queryKey: viewerQueryKeys.configSnapshotLibrary(),
+    });
+  }
+
   const createMutation = useMutation({
     mutationFn: (input: ConfigSnapshotCreateInput) => createConfigSnapshot(input),
-    onSuccess: (snapshot) => invalidateModel(snapshot.model),
+    onSuccess: (snapshot) =>
+      Promise.all([invalidateModel(snapshot.model), invalidateLibrary()]),
   });
 
   const renameMutation = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
       renameConfigSnapshot(id, name),
-    onSuccess: (snapshot) => invalidateModel(snapshot.model),
+    onSuccess: (snapshot) =>
+      Promise.all([invalidateModel(snapshot.model), invalidateLibrary()]),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteConfigSnapshot(id),
-    onSuccess: (result) => invalidateModel(result.model),
+    onSuccess: (result) =>
+      Promise.all([invalidateModel(result.model), invalidateLibrary()]),
   });
 
   const snapshots: ConfigSnapshotRecord[] = query.data?.snapshots ?? [];
 
   return { query, snapshots, createMutation, renameMutation, deleteMutation };
+}
+
+export function useConfigSnapshotLibrary() {
+  const query = useQuery({
+    queryKey: viewerQueryKeys.configSnapshotLibrary(),
+    queryFn: fetchConfigSnapshotLibrary,
+    retry: false,
+  });
+
+  const snapshots: ConfigSnapshotRecord[] = query.data?.snapshots ?? [];
+
+  return { query, snapshots };
 }

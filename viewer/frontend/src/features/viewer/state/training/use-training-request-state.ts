@@ -69,15 +69,17 @@ export function useTrainingRequestState({
       ),
     [configSnapshots, deselectedSnapshotIds],
   );
-  const effectiveTrainingSearch = hasConfigSnapshots
+  const activeConfigSnapshotCount = runnableConfigSnapshots.length;
+  const hasActiveConfigSnapshots = activeConfigSnapshotCount > 0;
+  const effectiveTrainingSearch = hasActiveConfigSnapshots
     ? DEFAULT_TRAINING_SEARCH_STATE
     : trainingSearch;
   const effectiveOverrides = useMemo<OverrideValues>(
     () =>
-      hasConfigSnapshots
+      hasActiveConfigSnapshots
         ? {}
         : buildEffectiveOverrides(overrides, effectiveTrainingSearch),
-    [effectiveTrainingSearch, hasConfigSnapshots, overrides],
+    [effectiveTrainingSearch, hasActiveConfigSnapshots, overrides],
   );
   const selectedFieldSummary = useMemo(
     () => overrideSummary(configFields, effectiveOverrides),
@@ -102,14 +104,14 @@ export function useTrainingRequestState({
     : "";
   const searchPayload = useMemo(
     () =>
-      hasConfigSnapshots
+      hasActiveConfigSnapshots
         ? undefined
         : buildTrainingSearchPayload(effectiveTrainingSearch),
-    [effectiveTrainingSearch, hasConfigSnapshots],
+    [effectiveTrainingSearch, hasActiveConfigSnapshots],
   );
   const snapshotRunPlan = useMemo(
     () =>
-      hasConfigSnapshots
+      hasActiveConfigSnapshots
         ? buildConfigSnapshotRunPlan({
             model: selectedModel,
             selectedPreset,
@@ -122,7 +124,7 @@ export function useTrainingRequestState({
         : undefined,
     [
       configFields,
-      hasConfigSnapshots,
+      hasActiveConfigSnapshots,
       logFolder,
       runnableConfigSnapshots,
       selectedDatasets,
@@ -148,8 +150,12 @@ export function useTrainingRequestState({
   );
   const canPlan = Boolean(
     canRequestTraining &&
-      (hasConfigSnapshots
-        ? selectedModel && selectedPreset && snapshotRunPlan
+      (hasActiveConfigSnapshots
+        ? selectedModel &&
+          selectedPreset &&
+          selectedTrainingPresetCount > 0 &&
+          selectedDatasets.length > 0 &&
+          snapshotRunPlan
         : selectedModel &&
             selectedPreset &&
             selectedTrainingPresetCount > 0 &&
@@ -163,6 +169,7 @@ export function useTrainingRequestState({
     fieldCount,
     overrideCount,
     hasConfigSnapshots,
+    activeConfigSnapshotCount,
     effectiveTrainingSearch,
     effectiveOverrides,
     selectedFieldSummary,

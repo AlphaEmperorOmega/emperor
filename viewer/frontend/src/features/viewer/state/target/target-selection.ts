@@ -24,6 +24,8 @@ export type TargetSelectionState = {
   selectedPresetMeta: Preset | undefined;
   configSections: ConfigSection[];
   configFields: ConfigField[];
+  modelConfigSnapshots: ConfigSnapshot[];
+  modelConfigSnapshotGroups: ConfigSnapshotGroup[];
   visibleConfigSnapshots: ConfigSnapshot[];
   configSnapshotGroups: ConfigSnapshotGroup[];
   overrideCount: number;
@@ -47,8 +49,15 @@ export function deriveTargetSelectionState(
   }
   const configSections = Array.from(groups, ([title, fields]) => ({ title, fields }));
   const configFields = configSections.flatMap((section) => section.fields);
+  const modelConfigSnapshots = input.configSnapshots.filter(
+    (snapshot) => snapshot.model === input.selectedModel,
+  );
+  const modelConfigSnapshotGroups = groupConfigSnapshotsByPreset(
+    modelConfigSnapshots,
+    presetNames,
+  );
   const visibleConfigSnapshots = selectedConfigSnapshots(
-    input.configSnapshots,
+    modelConfigSnapshots,
     input.selectedModel,
     input.selectedTrainingPresets,
   );
@@ -71,6 +80,8 @@ export function deriveTargetSelectionState(
     selectedPresetMeta,
     configSections,
     configFields,
+    modelConfigSnapshots,
+    modelConfigSnapshotGroups,
     visibleConfigSnapshots,
     configSnapshotGroups,
     overrideCount: Object.keys(input.overrides).length,

@@ -7,7 +7,10 @@ import { PreviewPanel } from "@/features/viewer/components/screen/preview-panel"
 import { PreviewToolbar } from "@/features/viewer/components/screen/preview-toolbar";
 import { ViewerModelSidebar } from "@/features/viewer/components/viewer-model-sidebar";
 import { ViewerWorkspaceNav } from "@/features/viewer/components/viewer-workspace-nav";
-import { type ViewerDialogControls } from "@/features/viewer/state/use-viewer-workspace-shell";
+import {
+  type FullConfigDialogControls,
+  type ViewerDialogControls,
+} from "@/features/viewer/state/use-viewer-workspace-shell";
 import { type ViewerWorkspace } from "@/types/viewer";
 
 const FullConfigDialog = dynamic(
@@ -49,11 +52,9 @@ const ConnectedLogRunDetailsPanel = dynamic(
 export function ViewerWorkspaceSidebar({
   activeWorkspace,
   onChangeWorkspace,
-  onOpenFullConfig,
 }: {
   activeWorkspace: ViewerWorkspace;
   onChangeWorkspace: (workspace: ViewerWorkspace) => void;
-  onOpenFullConfig: () => void;
 }) {
   const isModelWorkspace = activeWorkspace === "model";
   const isLogsWorkspace = activeWorkspace === "logs";
@@ -67,7 +68,7 @@ export function ViewerWorkspaceSidebar({
         />
 
         {isModelWorkspace ? (
-          <ViewerModelSidebar onOpenFullConfig={onOpenFullConfig} />
+          <ViewerModelSidebar />
         ) : isLogsWorkspace ? (
           <ConnectedLogsSidebarPanel />
         ) : null}
@@ -118,23 +119,24 @@ export function ViewerWorkspaceOverlays({
   featureListDialog,
 }: {
   activeWorkspace: ViewerWorkspace;
-  fullConfigDialog: ViewerDialogControls;
+  fullConfigDialog: FullConfigDialogControls;
   featureListDialog: ViewerDialogControls;
 }) {
   const isModelWorkspace = activeWorkspace === "model";
 
   return (
     <>
-      {isModelWorkspace && fullConfigDialog.isOpen && (
-        <FullConfigDialog onClose={fullConfigDialog.close} />
+      {fullConfigDialog.isOpen && (
+        <FullConfigDialog
+          mode={fullConfigDialog.mode}
+          onClose={fullConfigDialog.close}
+        />
       )}
       {featureListDialog.isOpen && (
         <FeatureListDialog onClose={featureListDialog.close} />
       )}
       {isModelWorkspace && <ConnectedMonitorChartsModal />}
-      {isModelWorkspace && (
-        <ConnectedTrainingPanel onOpenFullConfig={fullConfigDialog.open} />
-      )}
+      <ConnectedTrainingPanel onOpenFullConfig={fullConfigDialog.open} />
     </>
   );
 }

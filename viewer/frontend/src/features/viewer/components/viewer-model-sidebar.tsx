@@ -1,6 +1,4 @@
-import { ConfigSummaryPanel } from "@/features/viewer/components/config/config-summary-panel";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
-import { ModelExperimentsPanel } from "@/features/viewer/components/model-experiments-panel";
 import { TargetPresetPanel } from "@/features/viewer/components/screen/target-preset-panel";
 import {
   useTargetQueryStatusState,
@@ -12,7 +10,7 @@ function errorPanelTitle(defaultTitle: string, error: unknown) {
   return isUnauthorizedApiError(error) ? "Authentication required" : defaultTitle;
 }
 
-export function ViewerModelSidebar({ onOpenFullConfig }: { onOpenFullConfig: () => void }) {
+export function ViewerModelSidebar() {
   const { modelsQuery, presetsQuery, datasetsQuery, schemaQuery } =
     useTargetQueryStatusState();
 
@@ -45,10 +43,6 @@ export function ViewerModelSidebar({ onOpenFullConfig }: { onOpenFullConfig: () 
           message={errorMessage(schemaQuery.error)}
         />
       )}
-
-      <ConfigSummaryPanel onOpenFullConfig={onOpenFullConfig} />
-
-      <ModelExperimentsPanel />
     </>
   );
 }

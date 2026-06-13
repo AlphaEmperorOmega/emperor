@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   fetchMonitors: vi.fn(),
   fetchConfigSchema: vi.fn(),
   fetchSearchSpace: vi.fn(),
+  fetchConfigSnapshots: vi.fn(),
+  fetchConfigSnapshotLibrary: vi.fn(),
+  createConfigSnapshot: vi.fn(),
+  renameConfigSnapshot: vi.fn(),
+  deleteConfigSnapshot: vi.fn(),
   fetchLogRuns: vi.fn(),
   fetchLogExperiments: vi.fn(),
   fetchLogTags: vi.fn(),
@@ -28,7 +33,6 @@ vi.mock("@/lib/api", () => mocks);
 
 import { useViewerState } from "@/features/viewer/state/use-viewer-state";
 import { ConnectedTrainingPanel } from "@/features/viewer/components/connected-training-panel";
-import { ModelExperimentsPanel } from "@/features/viewer/components/model-experiments-panel";
 import { ViewerProviders } from "@/features/viewer/providers/viewer-providers";
 import { TargetPresetPanel } from "@/features/viewer/components/screen/target-preset-panel";
 import {
@@ -85,7 +89,7 @@ function renderTrainingPanelWithExperiments() {
   return render(
     <QueryClientProvider client={client}>
       <ViewerProviders>
-        <ModelExperimentsPanel />
+        <TargetPresetPanel />
         <ConnectedTrainingPanel onOpenFullConfig={vi.fn()} />
       </ViewerProviders>
     </QueryClientProvider>,
@@ -127,6 +131,7 @@ function graphNode(
     path,
     graphRole: overrides.graphRole ?? "architecture",
     parameterCount: overrides.parameterCount ?? 0,
+    parameterSizeBytes: overrides.parameterSizeBytes ?? (overrides.parameterCount ?? 0) * 4,
     details: overrides.details ?? {},
     config: overrides.config ?? null,
   };
@@ -141,6 +146,7 @@ function monitorGraph(): InspectResponse {
     model: "linear",
     preset: "baseline",
     parameterCount: 0,
+    parameterSizeBytes: 0,
     nodes: [root, wrapper, linear],
     edges: [
       { id: "root-layer-0", source: root.id, target: wrapper.id },
@@ -174,6 +180,10 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
     metrics: overrides.metrics ?? {},
     logDir: overrides.logDir ?? "runs/job-1",
     events: overrides.events ?? [],
+    eventCount: overrides.eventCount ?? 0,
+    eventCounts: overrides.eventCounts ?? {},
+    eventsTruncated: overrides.eventsTruncated ?? false,
+    clusterGrowth: overrides.clusterGrowth ?? [],
     logTail: overrides.logTail ?? [],
     resultLinks: overrides.resultLinks ?? [],
   };
@@ -264,6 +274,7 @@ function mockPublicModelCatalog() {
         model: request.model,
         preset: request.preset,
         parameterCount: 0,
+        parameterSizeBytes: 0,
         nodes: [],
         edges: [],
       }),
@@ -346,10 +357,40 @@ beforeEach(() => {
       axes: [],
     }),
   );
+  mocks.fetchConfigSnapshots.mockReset().mockImplementation((model: string) =>
+    Promise.resolve({
+      model,
+      snapshots: [],
+    }),
+  );
+  mocks.fetchConfigSnapshotLibrary.mockReset().mockResolvedValue({ snapshots: [] });
+  mocks.createConfigSnapshot.mockReset().mockImplementation((input) =>
+    Promise.resolve({
+      id: "snapshot-1",
+      ...input,
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    }),
+  );
+  mocks.renameConfigSnapshot.mockReset().mockImplementation((id: string, name: string) =>
+    Promise.resolve({
+      id,
+      model: "linear",
+      preset: "baseline",
+      name,
+      overrides: {},
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    }),
+  );
+  mocks.deleteConfigSnapshot.mockReset().mockResolvedValue({
+    model: "linear",
+    snapshots: [],
+  });
   mocks.fetchLogRuns.mockReset().mockResolvedValue({ runs: [] });
   mocks.fetchLogExperiments.mockReset().mockResolvedValue({ experiments: [] });
   // Default: every requested run carries per-layer monitor data, so its
-  // experiment qualifies for the sidebar Experiments panel.
+  // experiment qualifies for the Target Experiments tab.
   mocks.fetchLogTags
     .mockReset()
     .mockImplementation((input: { runIds: string[] }) =>
@@ -366,6 +407,7 @@ beforeEach(() => {
     model: "linear",
     preset: "baseline",
     parameterCount: 0,
+    parameterSizeBytes: 0,
     nodes: [],
     edges: [],
   });
@@ -552,6 +594,8 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("linears-history");
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("linears-history");
       expect(result.current.target.selectedPreset).toBe("fast");
     });
 
@@ -563,6 +607,8 @@ describe("useViewerState", () => {
       expect(result.current.target.selectedModel).toBe("experts/experts_linear");
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.history.selectedHistoricalPreset).toBe("");
+      expect(result.current.target.selectedTargetMode).toBe("preset");
+      expect(result.current.target.selectedExperimentRunId).toBe("");
     });
   });
 
@@ -663,6 +709,8 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(result.current.history.selectedLogRunId).toBe("linear-history");
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.target.selectedExperimentRunId).toBe("linear-history");
       expect(result.current.target.selectedPreset).toBe("fast");
       expect(result.current.target.selectedTrainingPresets).toEqual(["fast"]);
       expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
@@ -676,6 +724,121 @@ describe("useViewerState", () => {
         request.dataset === "FashionMnist",
     );
     expect(finalHistoricalRequests).toHaveLength(1);
+
+    const requestCount = mocks.inspectModel.mock.calls.length;
+    act(() => {
+      result.current.history.selectLogRun("linear-history");
+    });
+    expect(result.current.history.selectedLogRunId).toBe("linear-history");
+    expect(result.current.target.selectedTargetMode).toBe("experiment");
+    expect(mocks.inspectModel.mock.calls.length).toBe(requestCount);
+  });
+
+  it("switches from an experiment target back to a preset target with empty overrides", async () => {
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "linear-history",
+          preset: "Fast",
+          dataset: "FashionMnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["linear-history"]);
+    });
+
+    act(() => {
+      result.current.history.selectLogRun("linear-history");
+    });
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.history.selectedLogRunId).toBe("linear-history");
+    });
+
+    mocks.inspectModel.mockClear();
+    act(() => {
+      result.current.target.selectTargetPreset("baseline");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("preset");
+      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.history.selectedLogRunId).toBeNull();
+      expect(result.current.target.selectedSnapshotId).toBe("");
+      expect(result.current.target.overrides).toEqual({});
+    });
+    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
+      model: "linear",
+      preset: "baseline",
+      dataset: "FashionMnist",
+      overrides: {},
+    });
+  });
+
+  it("switches from an experiment target to a snapshot target with saved overrides", async () => {
+    mocks.fetchConfigSnapshots.mockResolvedValue({
+      model: "linear",
+      snapshots: [
+        {
+          id: "snapshot-wide",
+          model: "linear",
+          preset: "baseline",
+          name: "Wide",
+          overrides: { hidden_size: "256" },
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    });
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "linear-history",
+          preset: "Fast",
+          dataset: "FashionMnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.allConfigSnapshotCount).toBe(1);
+      expect(result.current.history.visibleHistoricalRuns.map((run) => run.id))
+        .toEqual(["linear-history"]);
+    });
+
+    act(() => {
+      result.current.history.selectLogRun("linear-history");
+    });
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("experiment");
+      expect(result.current.history.selectedLogRunId).toBe("linear-history");
+    });
+
+    mocks.inspectModel.mockClear();
+    act(() => {
+      expect(result.current.target.selectTargetSnapshot("snapshot-wide")).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("snapshot");
+      expect(result.current.target.selectedSnapshotId).toBe("snapshot-wide");
+      expect(result.current.target.selectedExperimentRunId).toBe("");
+      expect(result.current.history.selectedLogRunId).toBeNull();
+      expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
+    });
+    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
+      model: "linear",
+      preset: "baseline",
+      dataset: "FashionMnist",
+      overrides: { hidden_size: "256" },
+    });
   });
 
   it("requests parameter status for the active linear training job", async () => {
@@ -878,6 +1041,63 @@ describe("useViewerState", () => {
     });
   });
 
+  it("filters the training model dropdown by model type", async () => {
+    mockPublicModelCatalog();
+    renderTrainingPanel();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^training/i }));
+    const details = document.getElementById("training-panel-details");
+    expect(details).toBeInstanceOf(HTMLElement);
+    const panel = details as HTMLElement;
+    const modelTypeControl = await within(panel).findByRole("combobox", {
+      name: /^training model type$/i,
+    });
+    const modelControl = await within(panel).findByRole("combobox", {
+      name: /^training model$/i,
+    });
+
+    await waitFor(() => {
+      expect(modelTypeControl).toHaveTextContent("Linears");
+      expect(modelControl).toHaveTextContent("linear");
+      expect(modelControl).not.toHaveTextContent("linears/linear");
+    });
+
+    await user.click(modelControl);
+    const modelListbox = await within(panel).findByRole("listbox", {
+      name: /^training model options$/i,
+    });
+    expect(
+      within(modelListbox).getByRole("option", { name: "linear" }),
+    ).toBeInTheDocument();
+    expect(
+      within(modelListbox).getByRole("option", { name: "linear_adaptive" }),
+    ).toBeInTheDocument();
+    expect(
+      within(modelListbox).queryByRole("option", {
+        name: "experts_linear",
+      }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(modelTypeControl);
+    const typeListbox = await within(panel).findByRole("listbox", {
+      name: /^training model type options$/i,
+    });
+    await user.click(within(typeListbox).getByRole("option", { name: "Experts" }));
+
+    await waitFor(() => {
+      expect(modelTypeControl).toHaveTextContent("Experts");
+      expect(modelControl).toHaveTextContent("experts_linear");
+      expect(modelControl).not.toHaveTextContent("experts/experts_linear");
+      expect(
+        within(panel).getByRole("combobox", {
+          name: /^presets\s+1\s*\/\s*1 selected$/i,
+        }),
+      ).toHaveTextContent("expert-baseline");
+    });
+  });
+
   it("blocks training while a historical experiment run is selected", async () => {
     mocks.fetchLogRuns.mockResolvedValueOnce({
       runs: [
@@ -911,9 +1131,16 @@ describe("useViewerState", () => {
         .toBeEnabled();
     });
 
+    await user.click(await screen.findByRole("tab", { name: "Experiments" }));
+    const experimentRunControl = await screen.findByRole("combobox", {
+      name: /^experiment run$/i,
+    });
+    await user.click(experimentRunControl);
     await user.click(
-      await screen.findByRole("button", {
-        name: /select experiment run exp_locked baseline mnist/i,
+      within(
+        await screen.findByRole("listbox", { name: /^experiment run options$/i }),
+      ).getByRole("option", {
+        name: /exp_locked · baseline · Mnist · 2026-06-02 01:02:03/i,
       }),
     );
 
