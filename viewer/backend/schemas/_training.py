@@ -172,6 +172,20 @@ class TrainingResultLinkResponse(ApiResponseModel):
     logDir: str | None = None
 
 
+class TrainingClusterGrowthAdditionResponse(ApiResponseModel):
+    coord: list[int]
+    step: int | None = None
+    epoch: int | None = None
+
+
+class TrainingClusterGrowthResponse(ApiResponseModel):
+    node: str
+    count: int = 0
+    capacityTotal: int = 0
+    additionCount: int = 0
+    additions: list[TrainingClusterGrowthAdditionResponse] = Field(default_factory=list)
+
+
 TrainingProgressStatus = Literal["running", "completed", "failed", "cancelled"]
 TrainingProgressMetricMap = JsonObject
 TrainingProgressParams = JsonObject
@@ -316,5 +330,18 @@ class TrainingJobResponse(ApiResponseModel):
     metrics: JsonObject
     logDir: str | None = None
     events: list[TrainingProgressEventResponse]
+    eventCount: int = 0
+    eventCounts: dict[str, int] = Field(default_factory=dict)
+    eventsTruncated: bool = False
+    clusterGrowth: list[TrainingClusterGrowthResponse] = Field(default_factory=list)
     logTail: list[str]
     resultLinks: list[TrainingResultLinkResponse]
+
+
+class TrainingProgressEventsResponse(ApiResponseModel):
+    jobId: str
+    offset: int
+    limit: int
+    totalCount: int
+    nextOffset: int | None = None
+    events: list[TrainingProgressEventResponse]

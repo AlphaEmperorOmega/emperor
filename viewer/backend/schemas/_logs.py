@@ -34,6 +34,42 @@ class LogRunsResponse(ApiResponseModel):
     runs: list[LogRunResponse]
 
 
+class LogCheckpointsRequest(ApiResponseModel):
+    runIds: list[str] = Field(default_factory=list)
+
+
+class LogCheckpointResponse(ApiResponseModel):
+    id: str
+    runId: str
+    filename: str
+    relativePath: str
+    epoch: int | None = None
+    step: int | None = None
+    sizeBytes: int
+    modifiedAt: str
+
+
+class LogCheckpointsResponse(ApiResponseModel):
+    checkpoints: list[LogCheckpointResponse]
+
+
+class LogRunArtifactResponse(ApiResponseModel):
+    id: str
+    kind: str
+    label: str
+    relativePath: str
+    sizeBytes: int
+    modifiedAt: str
+
+
+class LogRunArtifactsResponse(ApiResponseModel):
+    runId: str
+    params: JsonObject
+    metrics: JsonObject
+    artifacts: list[LogRunArtifactResponse]
+    checkpoints: list[LogCheckpointResponse]
+
+
 class LogExperimentResponse(ApiResponseModel):
     experiment: str
     runCount: int

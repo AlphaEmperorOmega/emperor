@@ -22,6 +22,10 @@ function job(events: TrainingProgressEvent[]): TrainingJob {
     metrics: {},
     logDir: null,
     events,
+    eventCount: events.length,
+    eventCounts: {},
+    eventsTruncated: false,
+    clusterGrowth: [],
     logTail: [],
     resultLinks: [],
   };
@@ -72,5 +76,31 @@ describe("buildClusterGrowth", () => {
   it("returns an empty list when there are no cluster events", () => {
     expect(buildClusterGrowth(job([{ type: "step", metrics: {} }]))).toEqual([]);
     expect(buildClusterGrowth(undefined)).toEqual([]);
+  });
+
+  it("uses server-projected cluster growth before scanning event history", () => {
+    const clusterGrowth: TrainingJob["clusterGrowth"] = [
+      {
+        node: "root.cluster",
+        count: 12,
+        capacityTotal: 27,
+        additionCount: 10,
+        additions: [{ coord: [1, 2, 3], step: 40, epoch: 2 }],
+      },
+    ];
+    const withSummary = {
+      ...job([
+        {
+          type: "cluster_initialized",
+          node: "ignored",
+          count: 1,
+          capacity: [1],
+          coordinates: [],
+        },
+      ]),
+      clusterGrowth,
+    };
+
+    expect(buildClusterGrowth(withSummary)).toEqual(clusterGrowth);
   });
 });

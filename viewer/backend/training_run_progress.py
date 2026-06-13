@@ -19,55 +19,90 @@ def project_training_run_progress(
         (event for event in reversed(events) if event.get("status") == "failed"),
         {},
     )
-    run_by_id = {
+    run_by_id = run_lookup_by_id(runs)
+    for event in events:
+        apply_training_run_progress_event(
+            runs=runs,
+            run_by_id=run_by_id,
+            event=event,
+        )
+
+    return finalize_training_run_progress(
+        plan,
+        job_status=job_status,
+        summarize=summarize,
+        latest_failed_event=latest_failed_event,
+    )
+
+
+def run_lookup_by_id(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
         str(run.get("id")): run
         for run in runs
         if run.get("id") is not None
     }
-    for event in events:
-        row = _run_for_event(
-            event=event,
-            runs=runs,
-            run_by_id=run_by_id,
+
+
+def apply_training_run_progress_event(
+    *,
+    runs: list[dict[str, Any]],
+    run_by_id: dict[str, dict[str, Any]],
+    event: dict[str, Any],
+) -> None:
+    row = _run_for_event(
+        event=event,
+        runs=runs,
+        run_by_id=run_by_id,
+    )
+    if row is None:
+        return
+
+    event_type = event.get("type")
+    total_epochs = int(row.get("totalEpochs") or 0)
+    if event.get("logDir"):
+        row["logDir"] = event.get("logDir")
+    if isinstance(event.get("metrics"), dict):
+        row["metrics"] = event["metrics"]
+
+    if event_type == "dataset_started":
+        row["status"] = "Running"
+        row["currentEpoch"] = max(0, int(row.get("currentEpoch") or 0))
+    elif event_type in {
+        "epoch_started",
+        "step",
+        "validation",
+        "fit_completed",
+        "test_completed",
+    }:
+        row["status"] = "Running"
+        row["currentEpoch"] = max(
+            int(row.get("currentEpoch") or 0),
+            _event_epoch(event, total_epochs),
         )
-        if row is None:
-            continue
+    elif event_type == "dataset_completed":
+        row["status"] = "Completed"
+        row["currentEpoch"] = total_epochs
+    elif event_type == "error":
+        row["status"] = "Failed"
+        row["currentEpoch"] = max(
+            int(row.get("currentEpoch") or 0),
+            _event_epoch(event, total_epochs),
+        )
+        row["error"] = str(event.get("error") or "Training failed")
+        if event.get("traceback"):
+            row["errorTraceback"] = str(event.get("traceback"))
 
-        event_type = event.get("type")
-        total_epochs = int(row.get("totalEpochs") or 0)
-        if event.get("logDir"):
-            row["logDir"] = event.get("logDir")
-        if isinstance(event.get("metrics"), dict):
-            row["metrics"] = event["metrics"]
 
-        if event_type == "dataset_started":
-            row["status"] = "Running"
-            row["currentEpoch"] = max(0, int(row.get("currentEpoch") or 0))
-        elif event_type in {
-            "epoch_started",
-            "step",
-            "validation",
-            "fit_completed",
-            "test_completed",
-        }:
-            row["status"] = "Running"
-            row["currentEpoch"] = max(
-                int(row.get("currentEpoch") or 0),
-                _event_epoch(event, total_epochs),
-            )
-        elif event_type == "dataset_completed":
-            row["status"] = "Completed"
-            row["currentEpoch"] = total_epochs
-        elif event_type == "error":
-            row["status"] = "Failed"
-            row["currentEpoch"] = max(
-                int(row.get("currentEpoch") or 0),
-                _event_epoch(event, total_epochs),
-            )
-            row["error"] = str(event.get("error") or "Training failed")
-            if event.get("traceback"):
-                row["errorTraceback"] = str(event.get("traceback"))
-
+def finalize_training_run_progress(
+    plan: dict[str, Any],
+    *,
+    job_status: str,
+    summarize: SummaryCallback,
+    latest_failed_event: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    plan = copy.deepcopy(plan)
+    runs = plan.get("runs") or []
+    latest_failed_event = latest_failed_event or {}
     if job_status == "cancelled":
         for row in runs:
             if row.get("status") == "Running":

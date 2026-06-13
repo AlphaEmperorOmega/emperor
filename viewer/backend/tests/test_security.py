@@ -157,6 +157,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                     "model": model,
                     "preset": preset,
                     "parameterCount": 0,
+                    "parameterSizeBytes": 0,
                     "nodes": [
                         {
                             "id": "root",
@@ -165,6 +166,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                             "path": "root",
                             "graphRole": "architecture",
                             "parameterCount": 0,
+                            "parameterSizeBytes": 0,
                             "details": {},
                             "config": None,
                         }

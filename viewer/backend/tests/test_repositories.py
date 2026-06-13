@@ -116,6 +116,20 @@ class RecordingTrainingJobManager(RecordingDelegate):
     def get_job(self, job_id: object) -> object:
         return self._record("get_job", job_id)
 
+    def get_job_events(
+        self,
+        job_id: object,
+        *,
+        offset: object,
+        limit: object,
+    ) -> object:
+        return self._record(
+            "get_job_events",
+            job_id,
+            offset=offset,
+            limit=limit,
+        )
+
     def get_monitor_data(
         self,
         job_id: object,
@@ -353,6 +367,10 @@ class TrainingJobRepositoryTests(unittest.TestCase):
             "metrics": {},
             "logDir": None,
             "events": [],
+            "eventCount": 0,
+            "eventCounts": {},
+            "eventsTruncated": False,
+            "clusterGrowth": [],
             "logTail": [],
             "resultLinks": [],
         }
@@ -401,11 +419,13 @@ class TrainingJobRepositoryTests(unittest.TestCase):
         }
         job_id = object()
         monitor_job_id = object()
+        event_job_id = object()
         monitor_kwargs = {
             "node_path": object(),
             "dataset": object(),
             "preset": object(),
         }
+        event_kwargs = {"offset": 10, "limit": 25}
         cancel_job_id = object()
 
         cases: tuple[
@@ -454,6 +474,18 @@ class TrainingJobRepositoryTests(unittest.TestCase):
                 (monitor_job_id,),
                 monitor_kwargs,
                 object(),
+                None,
+            ),
+            (
+                "get_job_events",
+                lambda repository: repository.get_job_events(  # type: ignore[arg-type]
+                    event_job_id,
+                    offset=event_kwargs["offset"],
+                    limit=event_kwargs["limit"],
+                ),
+                (event_job_id,),
+                event_kwargs,
+                {"events": []},
                 None,
             ),
             (

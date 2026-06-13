@@ -31,6 +31,7 @@ class GraphNodeResponse(ApiResponseModel):
     path: str
     graphRole: Literal["architecture", "internal", "runtime"]
     parameterCount: int
+    parameterSizeBytes: int
     details: JsonObject
     config: GraphConfigResponse | None
 
@@ -52,5 +53,6 @@ class InspectResponse(ApiResponseModel):
     model: str
     preset: str
     parameterCount: int
+    parameterSizeBytes: int
     nodes: list[GraphNodeResponse]
     edges: list[GraphEdgeResponse]

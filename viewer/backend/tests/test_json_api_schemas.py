@@ -9,6 +9,7 @@ from viewer.backend.schemas import (
     GraphNodeResponse,
     JsonObject,
     JsonValue,
+    LogRunArtifactsResponse,
     LogRunResponse,
     TrainingRunResponse,
 )
@@ -43,6 +44,7 @@ class JsonApiSchemaTests(unittest.TestCase):
                     "path": "main.node",
                     "graphRole": "architecture",
                     "parameterCount": 0,
+                    "parameterSizeBytes": 0,
                     "details": {"bad": object()},
                     "config": None,
                 }
@@ -65,6 +67,16 @@ class JsonApiSchemaTests(unittest.TestCase):
                     "checkpointCount": 0,
                     "hasHparams": True,
                     "metrics": {"bad": object()},
+                }
+            )
+        with self.assertRaises(ValidationError):
+            LogRunArtifactsResponse.model_validate(
+                {
+                    "runId": "run-1",
+                    "params": {"bad": object()},
+                    "metrics": {},
+                    "artifacts": [],
+                    "checkpoints": [],
                 }
             )
         with self.assertRaises(ValidationError):

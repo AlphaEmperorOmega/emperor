@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import copy
+import subprocess
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -25,15 +28,27 @@ from viewer.backend.runtime.job_status import (
     is_active_job_status,
     is_live_process_job_status,
 )
-from viewer.backend.training_job_projector import TrainingJobProjector
+from viewer.backend.training_job_projector import (
+    TRAINING_JOB_EVENT_TAIL_LIMIT,
+    TrainingJobLiveProjection,
+    TrainingJobProjector,
+)
 from viewer.backend.training_monitor_locator import (
     TrainingMonitorLocator,
     normalize_preset_token,
 )
-from viewer.backend.training_progress_store import TrainingProgressStore
+from viewer.backend.training_progress_store import (
+    TrainingProgressSnapshot,
+    TrainingProgressStore,
+)
 from viewer.backend.training_run_plans import (
     SelectedTrainingInputs,
     TrainingRunPlanBuilder,
+)
+from viewer.backend.training_run_progress import (
+    apply_training_run_progress_event,
+    finalize_training_run_progress,
+    run_lookup_by_id,
 )
 from viewer.backend.training_worker_launcher import (
     ProcessHandle,
@@ -41,6 +56,10 @@ from viewer.backend.training_worker_launcher import (
     SubprocessRunner,
     TrainingWorkerLauncher,
 )
+
+# Grace period for a cancelled worker to exit after SIGTERM (and again after
+# the SIGKILL escalation) before cancellation is reported as failed.
+CANCEL_REAP_GRACE_SECONDS = 5.0
 
 
 def _now() -> str:
@@ -56,6 +75,59 @@ __all__ = [
     "TrainingJob",
     "TrainingJobManager",
 ]
+
+
+@dataclass
+class _ClusterGrowthState:
+    node: str
+    count: int = 0
+    capacity_total: int = 0
+    addition_count: int = 0
+    additions: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "node": self.node,
+            "count": self.count,
+            "capacityTotal": self.capacity_total,
+            "additionCount": self.addition_count,
+            "additions": list(self.additions),
+        }
+
+
+@dataclass
+class _LiveProjectionCache:
+    event_count: int
+    event_counts: dict[str, int]
+    events_tail: list[dict[str, Any]]
+    run_plan_base: dict[str, Any]
+    run_by_id: dict[str, dict[str, Any]]
+    latest_event: dict[str, Any] = field(default_factory=dict)
+    metrics_event: dict[str, Any] = field(default_factory=dict)
+    latest_failed_event: dict[str, Any] = field(default_factory=dict)
+    result_events: list[dict[str, Any]] = field(default_factory=list)
+    cluster_growth: dict[str, _ClusterGrowthState] = field(default_factory=dict)
+
+
+def _capacity_total(value: Any) -> int:
+    if not isinstance(value, list):
+        return 0
+    total = 1
+    for axis in value:
+        if not isinstance(axis, int | float):
+            return 0
+        total *= int(axis)
+    return total
+
+
+def _coord(value: Any) -> list[int] | None:
+    if (
+        isinstance(value, list)
+        and len(value) == 3
+        and all(isinstance(item, int | float) for item in value)
+    ):
+        return [int(value[0]), int(value[1]), int(value[2])]
+    return None
 
 
 class TrainingJobManager:
@@ -95,6 +167,7 @@ class TrainingJobManager:
             self.monitor_locator
         )
         self._processes: dict[str, ProcessHandle] = {}
+        self._live_projection_cache: dict[str, _LiveProjectionCache] = {}
 
     @property
     def jobs(self) -> dict[str, TrainingJob]:
@@ -337,8 +410,9 @@ class TrainingJobManager:
 
     def get_job(self, job_id: str) -> dict[str, Any]:
         job = self._get_job_record(job_id)
-        self._refresh(job)
-        return self._serialize(job)
+        snapshot = self.progress_store.read_snapshot(job)
+        self._refresh(job, events=snapshot.events)
+        return self._serialize(job, snapshot=snapshot)
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         job = self._get_job_record(job_id)
@@ -347,19 +421,23 @@ class TrainingJobManager:
             raise InspectorError(
                 f"Training job '{job_id}' has no live process handle."
             )
+        reaped_exit_code: int | None = None
         if is_live_process_job_status(job.status):
-            if process.poll() is None:
-                process.terminate()
+            reaped_exit_code = self._terminate_and_reap_process(job_id, process)
         job.status = "cancelled"
+        if reaped_exit_code is not None:
+            job.exit_code = reaped_exit_code
         job.updated_at = _now()
         self.job_store.save(job)
         self._write_event(job, {"type": "cancelled", "status": "cancelled"})
-        return self._serialize(job)
+        snapshot = self.progress_store.read_snapshot(job)
+        return self._serialize(job, snapshot=snapshot)
 
     def active_jobs(self) -> list[dict[str, Any]]:
         active: list[dict[str, Any]] = []
         for job in self.job_store.list():
-            self._refresh(job)
+            snapshot = self.progress_store.read_snapshot(job)
+            self._refresh(job, events=snapshot.events)
             if not is_active_job_status(job.status):
                 continue
             active.append(
@@ -370,6 +448,30 @@ class TrainingJobManager:
                 }
             )
         return active
+
+    def get_job_events(
+        self,
+        job_id: str,
+        *,
+        offset: int = 0,
+        limit: int = 500,
+    ) -> dict[str, Any]:
+        job = self._get_job_record(job_id)
+        snapshot = self.progress_store.read_snapshot(job)
+        self._refresh(job, events=snapshot.events)
+        safe_offset = max(0, offset)
+        safe_limit = min(5000, max(1, limit))
+        events = snapshot.events
+        page = events[safe_offset : safe_offset + safe_limit]
+        next_offset = safe_offset + len(page)
+        return {
+            "jobId": job.id,
+            "offset": safe_offset,
+            "limit": safe_limit,
+            "totalCount": snapshot.total_count,
+            "nextOffset": next_offset if next_offset < snapshot.total_count else None,
+            "events": page,
+        }
 
     def get_monitor_data(
         self,
@@ -438,11 +540,36 @@ class TrainingJobManager:
             raise InspectorError(f"Unknown training job '{job_id}'.")
         return job
 
-    def _refresh(self, job: TrainingJob) -> None:
+    def _terminate_and_reap_process(
+        self,
+        job_id: str,
+        process: ProcessHandle,
+    ) -> int | None:
+        already_exited_code = process.poll()
+        if already_exited_code is not None:
+            return already_exited_code
+        process.terminate()
+        try:
+            return process.wait(timeout=CANCEL_REAP_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            process.kill()
+        try:
+            return process.wait(timeout=CANCEL_REAP_GRACE_SECONDS)
+        except subprocess.TimeoutExpired as exc:
+            raise InspectorError(
+                f"Training job '{job_id}' process survived terminate and kill."
+            ) from exc
+
+    def _refresh(
+        self,
+        job: TrainingJob,
+        *,
+        events: list[dict[str, Any]] | None = None,
+    ) -> None:
         original_state = (job.status, job.exit_code, job.updated_at)
         process = self._processes.get(job.id)
         exit_code = process.poll() if process is not None else None
-        events = self._events(job)
+        events = events if events is not None else self._events(job)
         latest_failed = next(
             (event for event in reversed(events) if event.get("status") == "failed"),
             None,
@@ -514,9 +641,133 @@ class TrainingJobManager:
             summarize=self.run_plan_builder.summarize,
         )["runPlan"]
 
-    def _serialize(self, job: TrainingJob) -> dict[str, Any]:
-        return self.job_projector.project(
+    def _serialize(
+        self,
+        job: TrainingJob,
+        *,
+        snapshot: TrainingProgressSnapshot | None = None,
+    ) -> dict[str, Any]:
+        snapshot = snapshot or self.progress_store.read_snapshot(job)
+        return self.job_projector.project_live(
             job,
-            events=self._events(job),
-            summarize=self.run_plan_builder.summarize,
+            self._live_projection(job, snapshot),
         )
+
+    def _live_projection(
+        self,
+        job: TrainingJob,
+        snapshot: TrainingProgressSnapshot,
+    ) -> TrainingJobLiveProjection:
+        cache = self._live_projection_cache.get(job.id)
+        if (
+            cache is None
+            or snapshot.reset
+            or snapshot.total_count < cache.event_count
+            or cache.run_plan_base.get("runs") is None
+        ):
+            cache = self._new_live_projection_cache(job)
+            self._live_projection_cache[job.id] = cache
+            events_to_apply = snapshot.events
+        else:
+            events_to_apply = snapshot.events[cache.event_count :]
+
+        for event in events_to_apply:
+            self._apply_live_event(cache, event)
+        cache.event_count = snapshot.total_count
+
+        run_plan = finalize_training_run_progress(
+            cache.run_plan_base,
+            job_status=job.status,
+            summarize=self.run_plan_builder.summarize,
+            latest_failed_event=cache.latest_failed_event,
+        )
+        return TrainingJobLiveProjection(
+            run_plan=run_plan,
+            latest_event=dict(cache.latest_event),
+            metrics_event=dict(cache.metrics_event),
+            result_events=list(cache.result_events),
+            events_tail=list(cache.events_tail),
+            event_count=cache.event_count,
+            event_counts=dict(cache.event_counts),
+            events_truncated=cache.event_count > len(cache.events_tail),
+            cluster_growth=[
+                entry.to_payload()
+                for entry in cache.cluster_growth.values()
+            ],
+        )
+
+    def _new_live_projection_cache(self, job: TrainingJob) -> _LiveProjectionCache:
+        run_plan_base = copy.deepcopy(job.run_plan)
+        runs = run_plan_base.get("runs") or []
+        return _LiveProjectionCache(
+            event_count=0,
+            event_counts={},
+            events_tail=[],
+            run_plan_base=run_plan_base,
+            run_by_id=run_lookup_by_id(runs),
+        )
+
+    def _apply_live_event(
+        self,
+        cache: _LiveProjectionCache,
+        event: dict[str, Any],
+    ) -> None:
+        event_type = str(event.get("type") or "unknown")
+        cache.event_counts[event_type] = cache.event_counts.get(event_type, 0) + 1
+        cache.events_tail.append(event)
+        cache.events_tail = cache.events_tail[-TRAINING_JOB_EVENT_TAIL_LIMIT:]
+        cache.latest_event = event
+        if isinstance(event.get("metrics"), dict):
+            cache.metrics_event = event
+        if event.get("status") == "failed":
+            cache.latest_failed_event = event
+        if event_type == "dataset_completed":
+            cache.result_events.append(event)
+        apply_training_run_progress_event(
+            runs=cache.run_plan_base.get("runs") or [],
+            run_by_id=cache.run_by_id,
+            event=event,
+        )
+        self._apply_cluster_growth_event(cache, event)
+
+    def _apply_cluster_growth_event(
+        self,
+        cache: _LiveProjectionCache,
+        event: dict[str, Any],
+    ) -> None:
+        node = event.get("node")
+        if not isinstance(node, str) or not node:
+            return
+
+        event_type = event.get("type")
+        if event_type not in {"cluster_initialized", "neuron_added"}:
+            return
+
+        summary = cache.cluster_growth.setdefault(
+            node,
+            _ClusterGrowthState(node=node),
+        )
+        if isinstance(event.get("count"), int):
+            summary.count = event["count"]
+        capacity_total = _capacity_total(event.get("capacity"))
+        if capacity_total:
+            summary.capacity_total = capacity_total
+
+        if event_type != "neuron_added":
+            return
+        coord = _coord(event.get("coord"))
+        if coord is None:
+            return
+        summary.addition_count += 1
+        summary.additions.append(
+            {
+                "coord": coord,
+                "step": (
+                    event.get("step") if isinstance(event.get("step"), int) else None
+                ),
+                "epoch": (
+                    event.get("epoch") if isinstance(event.get("epoch"), int) else None
+                ),
+            }
+        )
+        summary.additions = summary.additions[-50:]

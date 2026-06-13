@@ -78,13 +78,19 @@ class ConfigSnapshotApiTests(unittest.TestCase):
 
         return asyncio.run(request())
 
-    def _create(self, **overrides: str):
+    def _create(
+        self,
+        *,
+        model: str = "linears/linear",
+        preset: str = "baseline",
+        **overrides: str,
+    ):
         return self._request(
             "POST",
             "/config-snapshots",
             json={
-                "model": "linears/linear",
-                "preset": "baseline",
+                "model": model,
+                "preset": preset,
                 "name": "",
                 "overrides": overrides,
             },
@@ -108,6 +114,36 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         body = listed.json()
         self.assertEqual(body["model"], "linears/linear")
         self.assertEqual([s["id"] for s in body["snapshots"]], [snapshot["id"]])
+
+    def test_library_lists_all_snapshots_while_scoped_list_stays_filtered(self) -> None:
+        linear_snapshot = self._create(
+            model="linears/linear",
+            learning_rate="0.01",
+        ).json()
+        adaptive_snapshot = self._create(
+            model="linears/linear_adaptive",
+            learning_rate="0.02",
+        ).json()
+
+        library = self._request("GET", "/config-snapshots/library")
+        self.assertEqual(library.status_code, 200, library.text)
+        self.assertEqual(
+            [(snapshot["model"], snapshot["id"]) for snapshot in library.json()["snapshots"]],
+            [
+                ("linears/linear", linear_snapshot["id"]),
+                ("linears/linear_adaptive", adaptive_snapshot["id"]),
+            ],
+        )
+
+        scoped = self._request(
+            "GET",
+            "/config-snapshots",
+            params={"model": "linears/linear"},
+        )
+        self.assertEqual(
+            [(snapshot["model"], snapshot["id"]) for snapshot in scoped.json()["snapshots"]],
+            [("linears/linear", linear_snapshot["id"])],
+        )
 
     def test_rejects_unsafe_storage_paths(self) -> None:
         listed = self._request(

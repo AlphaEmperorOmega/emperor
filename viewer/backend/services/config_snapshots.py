@@ -34,6 +34,12 @@ class ConfigSnapshotService:
             for snapshot in self._list_snapshot_records(model)
         ]
 
+    def list_all_snapshots(self) -> list[dict[str, Any]]:
+        return [
+            _snapshot_to_api(snapshot)
+            for snapshot in self._list_all_snapshot_records()
+        ]
+
     def create_snapshot(
         self,
         *,
@@ -106,6 +112,12 @@ class ConfigSnapshotService:
     def _list_snapshot_records(self, model: str) -> list[ConfigSnapshotRecord]:
         try:
             return self._repository.list_snapshots(model)
+        except ValueError as exc:
+            raise InspectorError("Invalid config snapshot storage path.") from exc
+
+    def _list_all_snapshot_records(self) -> list[ConfigSnapshotRecord]:
+        try:
+            return self._repository.list_all_snapshots()
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
 

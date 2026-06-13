@@ -25,6 +25,12 @@ class FakeProcess:
     def terminate(self) -> None:
         return None
 
+    def wait(self, timeout: float | None = None) -> int:
+        return -15
+
+    def kill(self) -> None:
+        return None
+
 
 class RecordingRunner:
     def __init__(self) -> None:

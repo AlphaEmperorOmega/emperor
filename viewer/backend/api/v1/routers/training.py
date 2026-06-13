@@ -13,6 +13,7 @@ from viewer.backend.schemas import (
     ParameterStatusResponse,
     TrainingJobCreateRequest,
     TrainingJobResponse,
+    TrainingProgressEventsResponse,
     TrainingRunPlanCreateRequest,
     TrainingRunPlanResponse,
 )
@@ -105,6 +106,27 @@ async def training_job(
 ) -> TrainingJobResponse:
     return TrainingJobResponse.model_validate(
         service.get_job(job_id).to_api_payload()
+    )
+
+
+@router.get(
+    "/jobs/{job_id}/events",
+    response_model=TrainingProgressEventsResponse,
+    summary="Read training progress event history",
+    response_description="Paginated raw training progress events.",
+)
+async def training_job_events(
+    job_id: str,
+    service: Annotated[TrainingJobService, Depends(get_training_job_service)],
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=5000)] = 500,
+) -> TrainingProgressEventsResponse:
+    return TrainingProgressEventsResponse.model_validate(
+        service.get_job_events(
+            job_id,
+            offset=offset,
+            limit=limit,
+        )
     )
 
 

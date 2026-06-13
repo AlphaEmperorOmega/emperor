@@ -315,13 +315,35 @@ def graph_role(module: Module) -> GraphRole:
     return ARCHITECTURE_ROLE
 
 
+def _unique_registered_parameters(module: Module):
+    seen_parameter_ids: set[int] = set()
+    for _name, parameter in module.named_parameters(
+        recurse=True,
+        remove_duplicate=False,
+    ):
+        parameter_id = id(parameter)
+        if parameter_id in seen_parameter_ids:
+            continue
+        seen_parameter_ids.add(parameter_id)
+        yield parameter
+
+
 def parameter_count(module: Module) -> int:
     count = 0
-    for parameter in module.parameters(recurse=True):
+    for parameter in _unique_registered_parameters(module):
         if is_lazy(parameter):
             continue
         count += parameter.numel()
     return count
+
+
+def parameter_size_bytes(module: Module) -> int:
+    size = 0
+    for parameter in _unique_registered_parameters(module):
+        if is_lazy(parameter):
+            continue
+        size += parameter.numel() * parameter.element_size()
+    return size
 
 
 def _node(node_id: str, path: str, module: Module) -> dict[str, Any]:
@@ -333,6 +355,7 @@ def _node(node_id: str, path: str, module: Module) -> dict[str, Any]:
         "path": path,
         "graphRole": graph_role(module),
         "parameterCount": parameter_count(module),
+        "parameterSizeBytes": parameter_size_bytes(module),
         "details": module_details(module),
         "config": _module_config(module),
     }

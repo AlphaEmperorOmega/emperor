@@ -96,6 +96,7 @@ def inspect_model(
         "model": model_name,
         "preset": option_cli_name(parts.experiment_options, option),
         "parameterCount": nodes[0]["parameterCount"] if nodes else 0,
+        "parameterSizeBytes": nodes[0]["parameterSizeBytes"] if nodes else 0,
         "nodes": nodes,
         "edges": edges,
     }

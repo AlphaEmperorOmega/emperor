@@ -10,6 +10,7 @@ export type ClusterGrowthSummary = {
   node: string;
   count: number;
   capacityTotal: number;
+  additionCount: number;
   additions: ClusterGrowthAddition[];
 };
 
@@ -44,6 +45,15 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
   if (!job) {
     return [];
   }
+  if (job.clusterGrowth.length > 0) {
+    return job.clusterGrowth.map((summary) => ({
+      node: summary.node,
+      count: summary.count,
+      capacityTotal: summary.capacityTotal,
+      additionCount: summary.additionCount,
+      additions: summary.additions,
+    }));
+  }
 
   const byNode = new Map<string, ClusterGrowthSummary>();
   const ensure = (node: string): ClusterGrowthSummary => {
@@ -55,6 +65,7 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
       node,
       count: 0,
       capacityTotal: 0,
+      additionCount: 0,
       additions: [],
     };
     byNode.set(node, created);
@@ -82,6 +93,7 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
       }
       const coord = toCoord(event.coord);
       if (coord) {
+        summary.additionCount += 1;
         summary.additions.push({
           coord,
           step: numberOrNull(event.step),

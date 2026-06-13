@@ -24,6 +24,7 @@ export const graphNodeSchema = z.object({
   path: z.string(),
   graphRole: z.enum(["architecture", "internal", "runtime"]),
   parameterCount: z.number(),
+  parameterSizeBytes: z.number().default(0),
   details: jsonObjectSchema,
   config: graphConfigSchema.nullable(),
 });
@@ -38,6 +39,7 @@ export const inspectResponseSchema = z.object({
   model: z.string(),
   preset: z.string(),
   parameterCount: z.number(),
+  parameterSizeBytes: z.number().default(0),
   nodes: z.array(graphNodeSchema),
   edges: z.array(graphEdgeSchema),
 });

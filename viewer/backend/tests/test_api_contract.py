@@ -25,9 +25,11 @@ EXPECTED_BUSINESS_ROUTES = [
     (("DELETE",), "/logs/experiments/{experiment}"),
     (("GET",), "/capabilities"),
     (("GET",), "/config-snapshots"),
+    (("GET",), "/config-snapshots/library"),
     (("GET",), "/health"),
     (("GET",), "/logs/experiments"),
     (("GET",), "/logs/runs"),
+    (("GET",), "/logs/runs/{run_id}/artifacts"),
     (("GET",), "/logs/runs/{run_id}/monitor-data"),
     (("GET",), "/models"),
     (("GET",), "/models/{model:path}/config-schema"),
@@ -36,11 +38,13 @@ EXPECTED_BUSINESS_ROUTES = [
     (("GET",), "/models/{model:path}/presets"),
     (("GET",), "/models/{model:path}/search-space"),
     (("GET",), "/training/jobs/{job_id}"),
+    (("GET",), "/training/jobs/{job_id}/events"),
     (("GET",), "/training/jobs/{job_id}/monitor-data"),
     (("GET",), "/training/jobs/{job_id}/monitor-parameter-status"),
     (("PATCH",), "/config-snapshots/{snapshot_id}"),
     (("POST",), "/config-snapshots"),
     (("POST",), "/inspect"),
+    (("POST",), "/logs/checkpoints"),
     (("POST",), "/logs/parameter-status"),
     (("POST",), "/logs/runs/delete"),
     (("POST",), "/logs/runs/delete-plan"),
@@ -63,6 +67,12 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         backend_response_schema=schemas.ConfigSnapshotsResponse,
         frontend_api_function="fetchConfigSnapshots",
         frontend_response_schema="configSnapshotsSchema",
+    ),
+    (("GET",), "/config-snapshots/library"): EndpointSchemaMapping(
+        backend_body_request_schemas=(),
+        backend_response_schema=schemas.ConfigSnapshotLibraryResponse,
+        frontend_api_function="fetchConfigSnapshotLibrary",
+        frontend_response_schema="configSnapshotLibrarySchema",
     ),
     (("PATCH",), "/config-snapshots/{snapshot_id}"): EndpointSchemaMapping(
         backend_body_request_schemas=(schemas.ConfigSnapshotRenameRequest,),
@@ -105,6 +115,12 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         backend_response_schema=schemas.LogRunsResponse,
         frontend_api_function="fetchLogRuns",
         frontend_response_schema="logRunsSchema",
+    ),
+    (("GET",), "/logs/runs/{run_id}/artifacts"): EndpointSchemaMapping(
+        backend_body_request_schemas=(),
+        backend_response_schema=schemas.LogRunArtifactsResponse,
+        frontend_api_function="fetchLogRunArtifacts",
+        frontend_response_schema="logRunArtifactsSchema",
     ),
     (("GET",), "/logs/runs/{run_id}/monitor-data"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
@@ -154,6 +170,12 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         frontend_api_function="fetchTrainingJob",
         frontend_response_schema="trainingJobSchema",
     ),
+    (("GET",), "/training/jobs/{job_id}/events"): EndpointSchemaMapping(
+        backend_body_request_schemas=(),
+        backend_response_schema=schemas.TrainingProgressEventsResponse,
+        frontend_api_function="fetchTrainingJobEvents",
+        frontend_response_schema="trainingJobEventsSchema",
+    ),
     (("GET",), "/training/jobs/{job_id}/monitor-data"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.MonitorDataResponse,
@@ -174,6 +196,12 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         backend_response_schema=schemas.InspectResponse,
         frontend_api_function="inspectModel",
         frontend_response_schema="inspectResponseSchema",
+    ),
+    (("POST",), "/logs/checkpoints"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.LogCheckpointsRequest,),
+        backend_response_schema=schemas.LogCheckpointsResponse,
+        frontend_api_function="fetchLogCheckpoints",
+        frontend_response_schema="logCheckpointsSchema",
     ),
     (("POST",), "/logs/runs/delete"): EndpointSchemaMapping(
         backend_body_request_schemas=(schemas.LogRunDeleteFiltersRequest,),
@@ -333,6 +361,7 @@ GRAPH_NODE_FIELDS = (
     "path",
     "graphRole",
     "parameterCount",
+    "parameterSizeBytes",
     "details",
     "config",
 )
@@ -420,6 +449,10 @@ TRAINING_JOB_FIELDS = (
     "metrics",
     "logDir",
     "events",
+    "eventCount",
+    "eventCounts",
+    "eventsTruncated",
+    "clusterGrowth",
     "logTail",
     "resultLinks",
 )
@@ -516,6 +549,32 @@ LOG_RUN_LOOSENESS = {
         "relativePath before piping to the output schema."
     ),
 }
+LOG_CHECKPOINT_REQUEST_FIELDS = ("runIds",)
+LOG_CHECKPOINT_FIELDS = (
+    "id",
+    "runId",
+    "filename",
+    "relativePath",
+    "epoch",
+    "step",
+    "sizeBytes",
+    "modifiedAt",
+)
+LOG_ARTIFACT_FIELDS = (
+    "id",
+    "kind",
+    "label",
+    "relativePath",
+    "sizeBytes",
+    "modifiedAt",
+)
+LOG_RUN_ARTIFACTS_FIELDS = (
+    "runId",
+    "params",
+    "metrics",
+    "artifacts",
+    "checkpoints",
+)
 LOG_DELETE_FILTER_FIELDS = (
     "experiments",
     "datasets",
@@ -575,6 +634,12 @@ SCHEMA_PARITY_CASES = (
         "configSnapshotsSchema",
         ("model", "snapshots"),
         ("model", "snapshots"),
+    ),
+    SchemaParityCase(
+        schemas.ConfigSnapshotLibraryResponse,
+        "configSnapshotLibrarySchema",
+        ("snapshots",),
+        ("snapshots",),
     ),
     SchemaParityCase(
         schemas.ConfigSnapshotCreateRequest,
@@ -690,8 +755,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.InspectResponse,
         "inspectResponseSchema",
-        ("model", "preset", "parameterCount", "nodes", "edges"),
-        ("model", "preset", "parameterCount", "nodes", "edges"),
+        ("model", "preset", "parameterCount", "parameterSizeBytes", "nodes", "edges"),
+        ("model", "preset", "parameterCount", "parameterSizeBytes", "nodes", "edges"),
     ),
     SchemaParityCase(
         schemas.TrainingJobCreateRequest,
@@ -790,10 +855,28 @@ SCHEMA_PARITY_CASES = (
         (),
     ),
     SchemaParityCase(
+        schemas.TrainingClusterGrowthAdditionResponse,
+        "trainingClusterGrowthAdditionSchema",
+        ("coord", "step", "epoch"),
+        ("coord", "step", "epoch"),
+    ),
+    SchemaParityCase(
+        schemas.TrainingClusterGrowthResponse,
+        "trainingClusterGrowthSchema",
+        ("node", "count", "capacityTotal", "additionCount", "additions"),
+        ("node", "count", "capacityTotal", "additionCount", "additions"),
+    ),
+    SchemaParityCase(
         schemas.TrainingJobResponse,
         "trainingJobSchema",
         TRAINING_JOB_FIELDS,
         TRAINING_JOB_REQUIRED_FIELDS,
+    ),
+    SchemaParityCase(
+        schemas.TrainingProgressEventsResponse,
+        "trainingJobEventsSchema",
+        ("jobId", "offset", "limit", "totalCount", "nextOffset", "events"),
+        ("jobId", "offset", "limit", "totalCount", "nextOffset", "events"),
     ),
     SchemaParityCase(
         schemas.ScalarPointResponse,
@@ -861,6 +944,36 @@ SCHEMA_PARITY_CASES = (
         "logRunsSchema",
         ("total", "limit", "offset", "hasMore", "runs"),
         ("runs",),
+    ),
+    SchemaParityCase(
+        schemas.LogCheckpointsRequest,
+        "fetchLogCheckpoints input",
+        LOG_CHECKPOINT_REQUEST_FIELDS,
+        LOG_CHECKPOINT_REQUEST_FIELDS,
+    ),
+    SchemaParityCase(
+        schemas.LogCheckpointResponse,
+        "logCheckpointSchema",
+        LOG_CHECKPOINT_FIELDS,
+        LOG_CHECKPOINT_FIELDS,
+    ),
+    SchemaParityCase(
+        schemas.LogCheckpointsResponse,
+        "logCheckpointsSchema",
+        ("checkpoints",),
+        ("checkpoints",),
+    ),
+    SchemaParityCase(
+        schemas.LogRunArtifactResponse,
+        "logRunArtifactSchema",
+        LOG_ARTIFACT_FIELDS,
+        LOG_ARTIFACT_FIELDS,
+    ),
+    SchemaParityCase(
+        schemas.LogRunArtifactsResponse,
+        "logRunArtifactsSchema",
+        LOG_RUN_ARTIFACTS_FIELDS,
+        LOG_RUN_ARTIFACTS_FIELDS,
     ),
     SchemaParityCase(
         schemas.LogExperimentResponse,
@@ -1003,6 +1116,7 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
     "config snapshots": (
         schemas.ConfigSnapshotResponse,
         schemas.ConfigSnapshotsResponse,
+        schemas.ConfigSnapshotLibraryResponse,
         schemas.ConfigSnapshotCreateRequest,
         schemas.ConfigSnapshotRenameRequest,
     ),
@@ -1034,7 +1148,10 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.TrainingRunPlanResponse,
         schemas.SubmittedTrainingRunPlanRequest,
         schemas.TrainingResultLinkResponse,
+        schemas.TrainingClusterGrowthAdditionResponse,
+        schemas.TrainingClusterGrowthResponse,
         schemas.TrainingJobResponse,
+        schemas.TrainingProgressEventsResponse,
     ),
     "monitor data": (
         schemas.ScalarPointResponse,
@@ -1050,6 +1167,11 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
     "logs": (
         schemas.LogRunResponse,
         schemas.LogRunsResponse,
+        schemas.LogCheckpointsRequest,
+        schemas.LogCheckpointResponse,
+        schemas.LogCheckpointsResponse,
+        schemas.LogRunArtifactResponse,
+        schemas.LogRunArtifactsResponse,
         schemas.LogExperimentResponse,
         schemas.LogExperimentsResponse,
         schemas.LogExperimentDeleteResponse,
@@ -1246,6 +1368,8 @@ class ApiSchemaContractTests(unittest.TestCase):
             ("GraphConfigFieldResponse", "value"): "JsonValue-Output",
             ("GraphNodeResponse", "details"): "JsonObject-Output",
             ("LogRunResponse", "metrics"): "JsonObject-Output",
+            ("LogRunArtifactsResponse", "params"): "JsonObject-Output",
+            ("LogRunArtifactsResponse", "metrics"): "JsonObject-Output",
             ("TrainingRunResponse", "metrics"): "JsonObject-Output",
             ("TrainingJobResponse", "metrics"): "JsonObject-Output",
         }
@@ -1504,7 +1628,9 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertTrue(payload["nodes"])
         self.assertTrue(payload["edges"])
         self.assertIn("parameterCount", payload)
+        self.assertIn("parameterSizeBytes", payload)
         self.assertIn("parameterCount", payload["nodes"][0])
+        self.assertIn("parameterSizeBytes", payload["nodes"][0])
 
     def test_inspect_rejects_path_like_dataset_input(self) -> None:
         import httpx

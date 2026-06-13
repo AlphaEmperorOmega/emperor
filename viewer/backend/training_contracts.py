@@ -307,6 +307,10 @@ class TrainingJobView:
     metrics: dict[str, Any]
     log_dir: str | None
     events: list[dict[str, Any]]
+    event_count: int
+    event_counts: dict[str, int]
+    events_truncated: bool
+    cluster_growth: list[dict[str, Any]]
     log_tail: list[str]
     result_links: list[TrainingResultLinkView]
 
@@ -354,6 +358,15 @@ class TrainingJobView:
             metrics=dict(payload.get("metrics") or {}),
             log_dir=str(log_dir) if log_dir is not None else None,
             events=[dict(item) for item in _mapping_items(payload.get("events"))],
+            event_count=int(payload.get("eventCount") or 0),
+            event_counts={
+                str(key): int(value)
+                for key, value in dict(payload.get("eventCounts") or {}).items()
+            },
+            events_truncated=bool(payload.get("eventsTruncated")),
+            cluster_growth=[
+                dict(item) for item in _mapping_items(payload.get("clusterGrowth"))
+            ],
             log_tail=[str(item) for item in payload.get("logTail") or []],
             result_links=[
                 TrainingResultLinkView.from_payload(item)
@@ -386,6 +399,10 @@ class TrainingJobView:
             "metrics": self.metrics,
             "logDir": self.log_dir,
             "events": self.events,
+            "eventCount": self.event_count,
+            "eventCounts": self.event_counts,
+            "eventsTruncated": self.events_truncated,
+            "clusterGrowth": self.cluster_growth,
             "logTail": self.log_tail,
             "resultLinks": [
                 result_link.to_api_payload()

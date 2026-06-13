@@ -79,14 +79,47 @@ const logExperimentsSchema = paginationSchema.extend({
   experiments: z.array(logExperimentSchema),
 });
 
+export const logCheckpointSchema = z.object({
+  id: z.string(),
+  runId: z.string(),
+  filename: z.string(),
+  relativePath: z.string(),
+  epoch: z.number().nullable(),
+  step: z.number().nullable(),
+  sizeBytes: z.number(),
+  modifiedAt: z.string(),
+});
+
+export const logRunArtifactSchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  label: z.string(),
+  relativePath: z.string(),
+  sizeBytes: z.number(),
+  modifiedAt: z.string(),
+});
+
 const logTagsSchema = z.object({ runs: z.array(logRunTagsSchema) });
 const logScalarsSchema = z.object({ series: z.array(logScalarSeriesSchema) });
+export const logCheckpointsSchema = z.object({
+  checkpoints: z.array(logCheckpointSchema),
+});
+export const logRunArtifactsSchema = z.object({
+  runId: z.string(),
+  params: jsonObjectSchema,
+  metrics: jsonObjectSchema,
+  artifacts: z.array(logRunArtifactSchema),
+  checkpoints: z.array(logCheckpointSchema),
+});
 
 export type LogRun = z.infer<typeof logRunSchema>;
 export type LogExperiment = z.infer<typeof logExperimentSchema>;
 export type LogRunTags = z.infer<typeof logRunTagsSchema>;
 export type LogScalarPoint = z.infer<typeof logScalarPointSchema>;
 export type LogScalarSeries = z.infer<typeof logScalarSeriesSchema>;
+export type LogCheckpoint = z.infer<typeof logCheckpointSchema>;
+export type LogRunArtifact = z.infer<typeof logRunArtifactSchema>;
+export type LogRunArtifacts = z.infer<typeof logRunArtifactsSchema>;
 
 const DEFAULT_LOG_PAGE_LIMIT = 500;
 
@@ -221,4 +254,18 @@ export function fetchLogScalars(input: { runIds: string[]; tags: string[] }) {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function fetchLogCheckpoints(input: { runIds: string[] }) {
+  return requestJson("/logs/checkpoints", logCheckpointsSchema, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function fetchLogRunArtifacts(runId: string) {
+  return requestJson(
+    `/logs/runs/${encodeURIComponent(runId)}/artifacts`,
+    logRunArtifactsSchema,
+  );
 }

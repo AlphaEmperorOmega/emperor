@@ -36,9 +36,11 @@ EXPECTED_THREADPOOL_ROUTE_PAIRS = {
     ("POST", "/inspect"),
     ("GET", "/logs/runs"),
     ("GET", "/logs/experiments"),
+    ("POST", "/logs/checkpoints"),
     ("POST", "/logs/tags"),
     ("POST", "/logs/scalars"),
     ("POST", "/logs/parameter-status"),
+    ("GET", "/logs/runs/{run_id}/artifacts"),
     ("GET", "/logs/runs/{run_id}/monitor-data"),
 }
 

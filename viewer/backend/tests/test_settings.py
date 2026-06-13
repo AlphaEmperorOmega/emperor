@@ -4,10 +4,12 @@ import os
 import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 from pydantic import ValidationError
 
 from viewer.backend.core.config import (
+    DEFAULT_SNAPSHOTS_ROOT,
     LOCAL_FRONTEND_ORIGINS,
     ViewerApiSettings,
     get_viewer_api_settings,
@@ -17,6 +19,7 @@ SETTINGS_ENV_NAMES = (
     "VIEWER_API_AUTH_MODE",
     "VIEWER_API_TOKEN",
     "VIEWER_API_CORS_ORIGINS",
+    "VIEWER_API_SNAPSHOTS_ROOT",
 )
 
 
@@ -60,6 +63,14 @@ class ViewerApiSettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.cors_origins, LOCAL_FRONTEND_ORIGINS)
         self.assertIsNot(settings.cors_origins, LOCAL_FRONTEND_ORIGINS)
+
+    def test_default_snapshots_root_is_owned_by_viewer(self) -> None:
+        with isolated_settings_env():
+            settings = ViewerApiSettings()
+
+        self.assertEqual(settings.snapshots_root, DEFAULT_SNAPSHOTS_ROOT)
+        self.assertEqual(Path(settings.snapshots_root).name, "snapshots")
+        self.assertEqual(Path(settings.snapshots_root).parent.name, "viewer")
 
     def test_bearer_mode_accepts_non_empty_token(self) -> None:
         settings = ViewerApiSettings(auth_mode="bearer", token="secret-token")

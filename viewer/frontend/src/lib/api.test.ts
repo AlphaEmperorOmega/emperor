@@ -10,11 +10,14 @@ import {
   deleteLogRuns,
   fetchCapabilities,
   fetchConfigSchema,
+  fetchConfigSnapshotLibrary,
   fetchConfigSnapshots,
   fetchDatasets,
   fetchHealth,
   fetchLogExperiments,
+  fetchLogCheckpoints,
   fetchLogParameterStatus,
+  fetchLogRunArtifacts,
   fetchLogRunMonitorData,
   fetchLogRuns,
   fetchLogScalars,
@@ -26,6 +29,7 @@ import {
   fetchPresets,
   fetchSearchSpace,
   fetchTrainingJob,
+  fetchTrainingJobEvents,
   fetchTrainingRunPlan,
   inspectModel,
   isUnauthorizedApiError,
@@ -33,6 +37,7 @@ import {
   jsonValueSchema,
   renameConfigSnapshot,
   trainingJobSchema,
+  trainingJobEventsSchema,
   trainingProgressEventSchema,
   trainingRunPlanSchema,
 } from "@/lib/api";
@@ -301,6 +306,7 @@ const successfulInspectResponse = {
   model: "linear",
   preset: "baseline",
   parameterCount: 7850,
+  parameterSizeBytes: 31400,
   nodes: [
     {
       id: "input",
@@ -309,6 +315,7 @@ const successfulInspectResponse = {
       path: "root.input",
       graphRole: "architecture",
       parameterCount: 0,
+      parameterSizeBytes: 0,
       details: {
         shape: [784],
       },
@@ -321,6 +328,7 @@ const successfulInspectResponse = {
       path: "root.classifier",
       graphRole: "runtime",
       parameterCount: 7850,
+      parameterSizeBytes: 31400,
       details: {
         weightShape: [10, 784],
         biasShape: [10],
@@ -456,6 +464,20 @@ const successfulTrainingJobFixture = {
       type: "epoch",
       epoch: 3,
       message: "trainLoss=0.42",
+    },
+  ],
+  eventCount: 1,
+  eventCounts: {
+    epoch: 1,
+  },
+  eventsTruncated: false,
+  clusterGrowth: [
+    {
+      node: "root.cluster",
+      count: 2,
+      capacityTotal: 8,
+      additionCount: 1,
+      additions: [{ coord: [1, 0, 0], step: 30, epoch: 3 }],
     },
   ],
   logTail: ["epoch 3 trainLoss=0.42"],
@@ -804,6 +826,27 @@ describe("successful API fixtures", () => {
     );
 
     expect(result.metrics).toMatchObject({ trainLoss: 0.42 });
+    expect(result.eventCount).toBe(1);
+    expect(result.clusterGrowth[0]?.additionCount).toBe(1);
+  });
+
+  it("accepts a paginated training job event history fixture", async () => {
+    const result = await validateSuccessfulFixture(
+      {
+        jobId: "job-123",
+        offset: 10,
+        limit: 2,
+        totalCount: 13,
+        nextOffset: 12,
+        events: [
+          { type: "step", status: "running", step: 10 },
+          { type: "validation", status: "running", step: 11, metrics: {} },
+        ],
+      },
+      () => fetchTrainingJobEvents("job-123", { offset: 10, limit: 2 }),
+    );
+
+    expect(trainingJobEventsSchema.parse(result).nextOffset).toBe(12);
   });
 
   it("rejects nested training job response override objects", () => {
@@ -1005,6 +1048,7 @@ describe("requestJson success", () => {
             model: "linear",
             preset: "base",
             parameterCount: 0,
+            parameterSizeBytes: 0,
             nodes: [],
             edges: [],
           }),
@@ -1160,6 +1204,32 @@ describe("requestJson error handling", () => {
       fetchLogScalars({ runIds: ["run-1"], tags: ["train/loss"] }),
     ).rejects.toThrow(
       `Invalid API response for POST /logs/scalars from ${BASE}: series.0.points.0.value:`,
+    );
+  });
+
+  it("includes nested paths in checkpoint schema validation errors", async () => {
+    stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            checkpoints: [
+              {
+                id: "ckpt-1",
+                runId: "run-1",
+                filename: "epoch=0-step=1.ckpt",
+                relativePath: "run/checkpoints/epoch=0-step=1.ckpt",
+                epoch: 0,
+                step: "bad",
+                sizeBytes: 8,
+                modifiedAt: "2026-06-01T00:00:00Z",
+              },
+            ],
+          }),
+      }),
+    );
+
+    await expect(fetchLogCheckpoints({ runIds: ["run-1"] })).rejects.toThrow(
+      `Invalid API response for POST /logs/checkpoints from ${BASE}: checkpoints.0.step:`,
     );
   });
 
@@ -1768,6 +1838,7 @@ describe("POST requests", () => {
             model: "linear",
             preset: "base",
             parameterCount: 0,
+            parameterSizeBytes: 0,
             nodes: [],
             edges: [],
           }),
@@ -1834,6 +1905,67 @@ describe("POST requests", () => {
       JSON.stringify({ runIds: ["run-1"], tags: ["train/loss"] }),
     );
     expect(scalars.series[0].points[0].value).toBe(0.25);
+  });
+
+  it("fetches checkpoint metadata and run artifacts", async () => {
+    const checkpointFetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            checkpoints: [
+              {
+                id: "ckpt-1",
+                runId: "run/1",
+                filename: "epoch=0-step=2.ckpt",
+                relativePath: "run/checkpoints/epoch=0-step=2.ckpt",
+                epoch: 0,
+                step: 2,
+                sizeBytes: 2048,
+                modifiedAt: "2026-06-01T00:00:00Z",
+              },
+            ],
+          }),
+      }),
+    );
+
+    const checkpoints = await fetchLogCheckpoints({ runIds: ["run/1"] });
+
+    expect(checkpointFetchMock.mock.calls[0][0]).toBe(`${BASE}/logs/checkpoints`);
+    expect((checkpointFetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
+    expect((checkpointFetchMock.mock.calls[0][1] as RequestInit).body).toBe(
+      JSON.stringify({ runIds: ["run/1"] }),
+    );
+    expect(checkpoints.checkpoints[0].step).toBe(2);
+
+    const artifactFetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            runId: "run/1",
+            params: { batch_size: 4 },
+            metrics: { "test/accuracy": 0.9 },
+            artifacts: [
+              {
+                id: "event-1",
+                kind: "event_file",
+                label: "events.out.tfevents.1",
+                relativePath: "run/events.out.tfevents.1",
+                sizeBytes: 4096,
+                modifiedAt: "2026-06-01T00:00:00Z",
+              },
+            ],
+            checkpoints: checkpoints.checkpoints,
+          }),
+      }),
+    );
+
+    const artifacts = await fetchLogRunArtifacts("run/1");
+
+    expect(artifactFetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/logs/runs/run%2F1/artifacts`,
+    );
+    expect(artifacts.params.batch_size).toBe(4);
+    expect(artifacts.checkpoints[0].filename).toBe("epoch=0-step=2.ckpt");
   });
 
   it("posts filtered log-run delete planning requests as JSON", async () => {
@@ -2073,6 +2205,26 @@ describe("POST requests", () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/training/jobs/j2`);
   });
+
+  it("fetches paginated training job events with GET", async () => {
+    const payload = {
+      jobId: "j2",
+      offset: 50,
+      limit: 25,
+      totalCount: 120,
+      nextOffset: 75,
+      events: [],
+    };
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve(payload) }),
+    );
+
+    await fetchTrainingJobEvents("j2", { offset: 50, limit: 25 });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/training/jobs/j2/events?offset=50&limit=25`,
+    );
+  });
 });
 
 describe("createTrainingJob", () => {
@@ -2201,6 +2353,19 @@ describe("config snapshots", () => {
     const result = await fetchConfigSnapshots("linears/linear");
 
     expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/config-snapshots?model=linears%2Flinear`);
+    expect(result.snapshots[0].id).toBe("snap-1");
+  });
+
+  it("fetches the global snapshot library", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () => Promise.resolve({ snapshots: [snapshot] }),
+      }),
+    );
+
+    const result = await fetchConfigSnapshotLibrary();
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/config-snapshots/library`);
     expect(result.snapshots[0].id).toBe("snap-1");
   });
 

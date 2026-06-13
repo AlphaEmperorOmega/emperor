@@ -167,3 +167,9 @@ class LogRunService:
 
     def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         return self._repository.parameter_status_for_runs(run_ids)
+
+    def checkpoints_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        return self._repository.checkpoints_for_runs(run_ids)
+
+    def artifacts_for_run(self, run_id: str) -> dict[str, Any]:
+        return self._repository.artifacts_for_run(run_id)

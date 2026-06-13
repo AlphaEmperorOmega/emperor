@@ -41,6 +41,10 @@ Setup installs the Python and Node versions from `mise.toml`, installs the edita
 
 Running `source env.sh` again is safe: it reuses live PID files and also checks whether ports `9999` or `9000` are already listening before starting another server.
 
+Config snapshots created from the viewer are stored under `viewer/snapshots/`
+by default. Override `VIEWER_API_SNAPSHOTS_ROOT` only when you intentionally
+want a different local snapshot library.
+
 Stop or inspect the viewer:
 
 ```bash

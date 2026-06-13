@@ -129,6 +129,54 @@ class TrainingJobTests(unittest.TestCase):
         for internal_key in ("command", "root", "process"):
             self.assertNotIn(internal_key, payload)
 
+    def test_cancel_job_reaps_process_after_terminate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess()
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+            )
+            payload = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="cancel_reap",
+                monitors=[],
+            )
+            cancelled = manager.cancel_job(str(payload["id"]))
+
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertTrue(process.terminated)
+        self.assertFalse(process.killed)
+        self.assertEqual(cancelled["exitCode"], -15)
+
+    def test_cancel_job_kills_process_that_ignores_terminate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess(ignores_terminate=True)
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+            )
+            payload = manager.create_job(
+                model="linears/linear",
+                preset="baseline",
+                datasets=["Mnist"],
+                overrides={},
+                log_folder="cancel_kill",
+                monitors=[],
+            )
+            cancelled = manager.cancel_job(str(payload["id"]))
+
+        self.assertEqual(cancelled["status"], "cancelled")
+        self.assertTrue(process.terminated)
+        self.assertTrue(process.killed)
+        self.assertEqual(cancelled["exitCode"], -9)
+
     def test_training_api_cancel_job_terminates_process(self) -> None:
         import httpx
 
@@ -520,7 +568,7 @@ class TrainingJobTests(unittest.TestCase):
             with self.assertRaises(IsADirectoryError):
                 manager.get_job(str(created_payload["id"]))
 
-    def test_training_job_large_progress_jsonl_preserves_order_without_truncation(
+    def test_training_job_large_progress_jsonl_is_bounded_with_paginated_history(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -543,14 +591,57 @@ class TrainingJobTests(unittest.TestCase):
             )
 
             payload = manager.get_job(str(created_payload["id"]))
+            history = manager.get_job_events(
+                str(created_payload["id"]),
+                offset=0,
+                limit=200,
+            )
 
-        self.assertEqual(payload["events"], events)
+        self.assertEqual(payload["eventCount"], 125)
+        self.assertEqual(payload["eventCounts"], {"step": 125})
+        self.assertTrue(payload["eventsTruncated"])
+        self.assertEqual(len(payload["events"]), 100)
         self.assertEqual(
             [event["step"] for event in payload["events"]],
-            list(range(125)),
+            list(range(25, 125)),
         )
         self.assertEqual(payload["step"], 124)
         self.assertEqual(payload["logTail"], ["fake training log"])
+        self.assertEqual(history["totalCount"], 125)
+        self.assertIsNone(history["nextOffset"])
+        self.assertEqual(history["events"], events)
+
+    def test_training_job_live_payload_stays_small_for_large_progress_history(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manager, created_payload, progress_path = create_progress_test_job(
+                Path(tmp)
+            )
+            events = [
+                {
+                    "type": "step",
+                    "dataset": "Mnist",
+                    "preset": "baseline",
+                    "runIndex": 1,
+                    "step": step,
+                    "metrics": {"train/loss": 1.0},
+                }
+                for step in range(150_000)
+            ]
+            progress_path.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n",
+                encoding="utf-8",
+            )
+
+            payload = manager.get_job(str(created_payload["id"]))
+            encoded = json.dumps(payload)
+
+        self.assertEqual(payload["eventCount"], 150_000)
+        self.assertEqual(payload["eventCounts"], {"step": 150_000})
+        self.assertTrue(payload["eventsTruncated"])
+        self.assertEqual(len(payload["events"]), 100)
+        self.assertLess(len(encoded), 250_000)
 
     def test_training_job_serializes_result_links_and_log_tail(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -600,6 +691,57 @@ class TrainingJobTests(unittest.TestCase):
             [f"log line {index}" for index in range(5, 85)],
         )
         self.assertEqual(payload["logDir"], log_dir)
+
+    def test_training_job_projects_cluster_growth_without_full_event_history(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            manager, created_payload, progress_path = create_progress_test_job(
+                Path(tmp)
+            )
+            events = [
+                {
+                    "type": "cluster_initialized",
+                    "node": "root.cluster",
+                    "count": 1,
+                    "capacity": [4, 1, 1],
+                    "coordinates": [[1, 1, 1]],
+                },
+                *[
+                    {
+                        "type": "neuron_added",
+                        "node": "root.cluster",
+                        "coord": [index, 1, 1],
+                        "count": index,
+                        "capacity": [4, 1, 1],
+                        "step": index * 10,
+                    }
+                    for index in range(2, 5)
+                ],
+            ]
+            progress_path.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n",
+                encoding="utf-8",
+            )
+
+            payload = manager.get_job(str(created_payload["id"]))
+
+        self.assertEqual(
+            payload["clusterGrowth"],
+            [
+                {
+                    "node": "root.cluster",
+                    "count": 4,
+                    "capacityTotal": 4,
+                    "additionCount": 3,
+                    "additions": [
+                        {"coord": [2, 1, 1], "step": 20, "epoch": None},
+                        {"coord": [3, 1, 1], "step": 30, "epoch": None},
+                        {"coord": [4, 1, 1], "step": 40, "epoch": None},
+                    ],
+                }
+            ],
+        )
 
     def test_training_job_rejects_symlink_top_level_log_folder(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

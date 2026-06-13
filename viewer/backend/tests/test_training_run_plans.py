@@ -577,7 +577,7 @@ class TrainingRunPlanTests(unittest.TestCase):
             "--stack-num-layers 4 --stack-activation RELU",
         )
 
-    def test_training_job_accepts_submitted_run_plan(self) -> None:
+    def test_training_job_accepts_mixed_submitted_run_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             manager = TrainingJobManager(
                 root=Path(tmp) / "jobs",
@@ -597,9 +597,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 {
                     "id": "frontend-row-b",
                     "index": 99,
-                    "snapshotId": "snapshot-1",
-                    "snapshotName": "wide hidden",
-                    "command": "stale --logdir draft_plan snapshot-1 wide hidden",
+                    "command": "stale --logdir draft_plan plain baseline",
                 }
             )
             plan["runs"][1].update(
@@ -637,11 +635,11 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
         self.assertEqual(
             [run["snapshotId"] for run in normalized_plan["runs"]],
-            ["snapshot-1", "snapshot-2"],
+            [None, "snapshot-2"],
         )
         self.assertEqual(
             [run["snapshotName"] for run in normalized_plan["runs"]],
-            ["wide hidden", "gating hidden"],
+            [None, "gating hidden"],
         )
         self.assertEqual(
             [run["command"] for run in normalized_plan["runs"]],

@@ -9,10 +9,15 @@ from fastapi import APIRouter, Depends, Query
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_log_run_service, get_training_job_service
 from viewer.backend.schemas import (
+    LogCheckpointResponse,
+    LogCheckpointsRequest,
+    LogCheckpointsResponse,
     LogExperimentDeleteResponse,
     LogExperimentsResponse,
     LogParameterStatusRequest,
     LogParameterStatusResponse,
+    LogRunArtifactResponse,
+    LogRunArtifactsResponse,
     LogRunDeleteFiltersRequest,
     LogRunDeletePlanResponse,
     LogRunDeleteResponse,
@@ -75,6 +80,24 @@ def logs_experiments(
 ) -> LogExperimentsResponse:
     return LogExperimentsResponse.model_validate(
         service.list_experiments(limit=limit, offset=offset)
+    )
+
+
+@router.post(
+    "/checkpoints",
+    response_model=LogCheckpointsResponse,
+    summary="Read log-run checkpoints",
+    response_description="Checkpoint file metadata for requested historical runs.",
+)
+def logs_checkpoints(
+    request: LogCheckpointsRequest,
+    service: Annotated[LogRunService, Depends(get_log_run_service)],
+) -> LogCheckpointsResponse:
+    return LogCheckpointsResponse(
+        checkpoints=[
+            LogCheckpointResponse.model_validate(checkpoint)
+            for checkpoint in service.checkpoints_for_runs(request.runIds)
+        ]
     )
 
 
@@ -206,6 +229,32 @@ def logs_parameter_status(
             ParameterStatusResponse.model_validate(status)
             for status in service.parameter_status_for_runs(request.runIds)
         ]
+    )
+
+
+@router.get(
+    "/runs/{run_id}/artifacts",
+    response_model=LogRunArtifactsResponse,
+    summary="Read historical run artifacts",
+    response_description="Result, hparams, event, and checkpoint file metadata.",
+)
+def log_run_artifacts(
+    run_id: str,
+    service: Annotated[LogRunService, Depends(get_log_run_service)],
+) -> LogRunArtifactsResponse:
+    payload = service.artifacts_for_run(run_id)
+    return LogRunArtifactsResponse(
+        runId=str(payload["runId"]),
+        params=dict(payload["params"]),
+        metrics=dict(payload["metrics"]),
+        artifacts=[
+            LogRunArtifactResponse.model_validate(artifact)
+            for artifact in payload["artifacts"]
+        ],
+        checkpoints=[
+            LogCheckpointResponse.model_validate(checkpoint)
+            for checkpoint in payload["checkpoints"]
+        ],
     )
 
 

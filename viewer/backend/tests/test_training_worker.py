@@ -423,6 +423,10 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             callbacks = train_call["callbacks"]
             self.assertIsInstance(callbacks[0], JsonlTrainingProgressCallback)
             self.assertEqual(callbacks[0].path, progress_path)
+            self.assertEqual(
+                callbacks[0].step_interval,
+                training_worker.VIEWER_PROGRESS_STEP_INTERVAL,
+            )
             self.assertIsInstance(callbacks[1], NeuronClusterGrowthCallback)
             self.assertIsInstance(callbacks[2], FakeMonitorCallback)
 

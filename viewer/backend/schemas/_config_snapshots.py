@@ -22,6 +22,10 @@ class ConfigSnapshotsResponse(ApiResponseModel):
     snapshots: list[ConfigSnapshotResponse]
 
 
+class ConfigSnapshotLibraryResponse(ApiResponseModel):
+    snapshots: list[ConfigSnapshotResponse]
+
+
 class ConfigSnapshotCreateRequest(ApiResponseModel):
     model: str
     preset: str

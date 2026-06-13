@@ -51,6 +51,9 @@ class ConfigSnapshotStore(Protocol):
     def list(self, model: str) -> list[ConfigSnapshotRecord]:
         ...
 
+    def list_all(self) -> list[ConfigSnapshotRecord]:
+        ...
+
     def delete(self, snapshot_id: str) -> bool:
         ...
 
@@ -76,6 +79,9 @@ class InMemoryConfigSnapshotStore:
             if snapshot.model == model
         ]
         return sorted(snapshots, key=lambda snapshot: snapshot.created_at)
+
+    def list_all(self) -> list[ConfigSnapshotRecord]:
+        return sorted(self._snapshots.values(), key=_snapshot_sort_key)
 
     def delete(self, snapshot_id: str) -> bool:
         return self._snapshots.pop(snapshot_id, None) is not None
@@ -109,6 +115,22 @@ class FileSystemConfigSnapshotStore:
                 snapshots.append(snapshot)
         return sorted(snapshots, key=lambda snapshot: snapshot.created_at)
 
+    def list_all(self) -> list[ConfigSnapshotRecord]:
+        if not self.root.exists():
+            return []
+        snapshots: list[ConfigSnapshotRecord] = []
+        for snapshot_path in sorted(self._root().rglob(f"*{SNAPSHOT_FILENAME_SUFFIX}")):
+            resolved_path = self._resolve_existing_snapshot_path(snapshot_path)
+            if resolved_path is None:
+                continue
+            snapshot = self._read_metadata(resolved_path)
+            if snapshot is None:
+                continue
+            if not self._is_canonical_snapshot_path(resolved_path, snapshot):
+                continue
+            snapshots.append(snapshot)
+        return sorted(snapshots, key=_snapshot_sort_key)
+
     def delete(self, snapshot_id: str) -> bool:
         snapshot_path = self._find_snapshot_path(snapshot_id)
         if snapshot_path is None:
@@ -136,7 +158,7 @@ class FileSystemConfigSnapshotStore:
             snapshot = self._read_metadata(snapshot_path)
             if snapshot is None or snapshot.id != snapshot_id:
                 continue
-            if snapshot_path != self._snapshot_path(snapshot.model, snapshot.id):
+            if not self._is_canonical_snapshot_path(snapshot_path, snapshot):
                 continue
             return snapshot_path
         return None
@@ -179,6 +201,16 @@ class FileSystemConfigSnapshotStore:
             return None
         return resolved
 
+    def _is_canonical_snapshot_path(
+        self,
+        snapshot_path: Path,
+        snapshot: ConfigSnapshotRecord,
+    ) -> bool:
+        try:
+            return snapshot_path == self._snapshot_path(snapshot.model, snapshot.id)
+        except ValueError:
+            return False
+
 
 def _record_to_metadata(snapshot: ConfigSnapshotRecord) -> dict[str, object]:
     return {
@@ -205,3 +237,7 @@ def _record_from_metadata(payload: dict[str, object]) -> ConfigSnapshotRecord:
         created_at=str(payload["created_at"]),
         updated_at=str(payload["updated_at"]),
     )
+
+
+def _snapshot_sort_key(snapshot: ConfigSnapshotRecord) -> tuple[str, str, str, str]:
+    return (snapshot.model, snapshot.preset, snapshot.created_at, snapshot.id)

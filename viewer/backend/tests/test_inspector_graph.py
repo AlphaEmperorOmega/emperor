@@ -7,11 +7,13 @@ from typing import Any, TypeAlias
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import torch
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import LayerStack
+from emperor.base.layer import Layer, LayerStack
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -22,7 +24,7 @@ from torch import nn
 
 from viewer.backend.inspector.discovery import discover_models, list_model_presets
 from viewer.backend.inspector.graph import serialize_graph
-from viewer.backend.inspector.service import inspect_model
+from viewer.backend.inspector.service import build_config, inspect_model
 
 GraphNodePayload: TypeAlias = dict[str, Any]
 GraphEdgePayload: TypeAlias = dict[str, str]
@@ -41,6 +43,20 @@ class TinyGraphFixture(nn.Module):
         self.encoder.add_module("linear", nn.Linear(2, 3))
         self.encoder.add_module("relu", nn.ReLU())
         self.head = nn.Linear(3, 1, bias=False)
+
+
+class SharedParameterBranch(nn.Module):
+    def __init__(self, parameter: nn.Parameter) -> None:
+        super().__init__()
+        self.weight = parameter
+
+
+class SharedParameterGraph(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        shared_parameter = nn.Parameter(torch.ones(2, 3))
+        self.left = SharedParameterBranch(shared_parameter)
+        self.right = SharedParameterBranch(shared_parameter)
 
 
 def config_fields(node: GraphNodePayload) -> dict[str, object]:
@@ -88,6 +104,7 @@ class InspectorGraphTests(unittest.TestCase):
             "path",
             "graphRole",
             "parameterCount",
+            "parameterSizeBytes",
             "details",
             "config",
         }
@@ -99,10 +116,15 @@ class InspectorGraphTests(unittest.TestCase):
 
         self.assertEqual(node_by_id["__root__"]["path"], "model")
         self.assertEqual(node_by_id["__root__"]["parameterCount"], 12)
+        self.assertEqual(node_by_id["__root__"]["parameterSizeBytes"], 48)
         self.assertEqual(node_by_id["encoder"]["parameterCount"], 9)
+        self.assertEqual(node_by_id["encoder"]["parameterSizeBytes"], 36)
         self.assertEqual(node_by_id["encoder.linear"]["parameterCount"], 9)
+        self.assertEqual(node_by_id["encoder.linear"]["parameterSizeBytes"], 36)
         self.assertEqual(node_by_id["encoder.relu"]["parameterCount"], 0)
+        self.assertEqual(node_by_id["encoder.relu"]["parameterSizeBytes"], 0)
         self.assertEqual(node_by_id["head"]["parameterCount"], 3)
+        self.assertEqual(node_by_id["head"]["parameterSizeBytes"], 12)
         self.assertEqual(
             node_by_id["encoder.linear"]["details"],
             {"weightShape": "3 x 2", "biasShape": "3"},
@@ -151,6 +173,50 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertEqual(count_by_id["__root__"], 15)
         self.assertEqual(count_by_id["0"], 15)
         self.assertEqual(count_by_id["1"], 0)
+
+    def test_graph_serializer_counts_shared_parameters_once_at_root(self) -> None:
+        model = SharedParameterGraph()
+        nodes, _edges = serialize_graph(model)
+        node_by_id = nodes_by_id(nodes)
+        expected_count = model.left.weight.numel()
+        expected_size_bytes = expected_count * model.left.weight.element_size()
+
+        self.assertIs(model.left.weight, model.right.weight)
+        self.assertEqual(node_by_id["__root__"]["parameterCount"], expected_count)
+        self.assertEqual(
+            node_by_id["__root__"]["parameterSizeBytes"],
+            expected_size_bytes,
+        )
+        self.assertEqual(node_by_id["left"]["parameterCount"], expected_count)
+        self.assertEqual(node_by_id["right"]["parameterCount"], expected_count)
+
+    def test_inspect_linear_baseline_model_size_matches_registered_parameters(
+        self,
+    ) -> None:
+        parts, _option, cfg = build_config("linears/linear", "baseline")
+        model = parts.model_type(cfg)
+        result = inspect_model("linears/linear", "baseline")
+        node_by_id = nodes_by_id(result["nodes"])
+        expected_count = sum(parameter.numel() for parameter in model.parameters())
+        expected_size_bytes = sum(
+            parameter.numel() * parameter.element_size()
+            for parameter in model.parameters()
+        )
+
+        self.assertEqual(result["parameterCount"], expected_count)
+        self.assertEqual(result["parameterSizeBytes"], expected_size_bytes)
+        self.assertEqual(
+            node_by_id["__root__"]["parameterCount"],
+            result["parameterCount"],
+        )
+        self.assertEqual(
+            node_by_id["__root__"]["parameterSizeBytes"],
+            result["parameterSizeBytes"],
+        )
+        for node_id in ("input_model", "main_model", "output_model"):
+            with self.subTest(node_id=node_id):
+                self.assertGreater(node_by_id[node_id]["parameterCount"], 0)
+                self.assertGreater(node_by_id[node_id]["parameterSizeBytes"], 0)
 
     def test_graph_serializer_reports_direct_weight_and_bias_shapes(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.Linear(4, 3), nn.ReLU()))
@@ -219,13 +285,12 @@ class InspectorGraphTests(unittest.TestCase):
             input_dim=4,
             output_dim=3,
             activation=ActivationOptions.GELU,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.1,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             gate_config=None,
             halting_config=None,
             memory_config=None,
-            shared_halting_flag=False,
             layer_model_config=LinearLayerConfig(
                 input_dim=4,
                 output_dim=3,
@@ -242,13 +307,12 @@ class InspectorGraphTests(unittest.TestCase):
                 "input_dim",
                 "output_dim",
                 "activation",
-                "residual_flag",
+                "residual_connection_option",
                 "dropout_probability",
                 "layer_norm_position",
                 "gate_config",
                 "halting_config",
                 "memory_config",
-                "shared_halting_flag",
                 "layer_model_config",
             ],
         )
@@ -258,6 +322,43 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertIsNone(config_fields(root)["gate_config"])
         self.assertIsNone(config_fields(root)["halting_config"])
         self.assertIsNone(config_fields(root)["memory_config"])
+
+    def test_graph_serializer_omits_disabled_layer_residual_module(self) -> None:
+        def layer_config(
+            residual_connection_option: ResidualConnectionOptions,
+        ) -> LayerConfig:
+            return LayerConfig(
+                input_dim=4,
+                output_dim=4,
+                activation=ActivationOptions.DISABLED,
+                residual_connection_option=residual_connection_option,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=4,
+                    output_dim=4,
+                    bias_flag=True,
+                ),
+            )
+
+        disabled_layer = Layer(layer_config(ResidualConnectionOptions.DISABLED))
+        enabled_layer = Layer(layer_config(ResidualConnectionOptions.RESIDUAL))
+
+        disabled_nodes, _disabled_edges = serialize_graph(disabled_layer)
+        enabled_nodes, _enabled_edges = serialize_graph(enabled_layer)
+
+        self.assertIsNone(disabled_layer.residual_connection)
+        self.assertNotIn(
+            "ResidualConnection",
+            {node["typeName"] for node in disabled_nodes},
+        )
+        self.assertIn(
+            "ResidualConnection",
+            {node["typeName"] for node in enabled_nodes},
+        )
 
     def test_graph_serializer_preserves_layer_stack_config_on_layer_stack(self) -> None:
         stack_config = LayerStackConfig(
@@ -271,13 +372,12 @@ class InspectorGraphTests(unittest.TestCase):
                 input_dim=4,
                 output_dim=5,
                 activation=ActivationOptions.GELU,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
                 halting_config=None,
                 memory_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(
                     input_dim=4,
                     output_dim=5,
@@ -324,6 +424,7 @@ class InspectorGraphTests(unittest.TestCase):
             {
                 "cluster_x_axis_total_neurons": "3",
                 "cluster_y_axis_total_neurons": "3",
+                "cluster_z_axis_total_neurons": "1",
                 "cluster_initial_x_axis_total_neurons": "2",
                 "cluster_initial_y_axis_total_neurons": "2",
             },
@@ -350,9 +451,9 @@ class InspectorGraphTests(unittest.TestCase):
         )
         reach = terminal_node["details"]["terminalReach"]
 
-        self.assertEqual(reach["position"], [1, 1, 1])
+        self.assertEqual(reach["position"], [3, 3, 1])
         self.assertEqual(reach["total"], len(reach["connections"]))
-        self.assertIn([1, 1, 1], reach["connections"])
+        self.assertIn([3, 3, 1], reach["connections"])
         self.assertTrue(
             all(len(coordinate) == 3 for coordinate in reach["connections"])
         )
@@ -360,10 +461,13 @@ class InspectorGraphTests(unittest.TestCase):
     def test_graph_serializer_skips_uninitialized_lazy_parameters(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.LazyLinear(3)))
         count_by_id = {node["id"]: node["parameterCount"] for node in nodes}
+        size_by_id = {node["id"]: node["parameterSizeBytes"] for node in nodes}
         details_by_id = {node["id"]: node["details"] for node in nodes}
 
         self.assertEqual(count_by_id["__root__"], 0)
         self.assertEqual(count_by_id["0"], 0)
+        self.assertEqual(size_by_id["__root__"], 0)
+        self.assertEqual(size_by_id["0"], 0)
         self.assertNotIn("weightShape", details_by_id["0"])
         self.assertNotIn("biasShape", details_by_id["0"])
 

@@ -23,6 +23,12 @@ class FakeProcess:
     def terminate(self) -> None:
         pass
 
+    def wait(self, timeout: float | None = None) -> int:
+        return -15
+
+    def kill(self) -> None:
+        pass
+
 
 class FakeRunner:
     def start(self, command, *, cwd, env, log_path):
@@ -61,6 +67,12 @@ REQUEST_BODY_ENDPOINT_CASES = (
     ),
     (
         "/logs/tags",
+        {
+            "runIds": [],
+        },
+    ),
+    (
+        "/logs/checkpoints",
         {
             "runIds": [],
         },

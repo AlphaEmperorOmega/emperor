@@ -6,6 +6,7 @@ import re
 import shutil
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,13 @@ from viewer.backend.tensorboard_reader import (
 
 RUN_TIMESTAMP_RE = re.compile(r"(?P<timestamp>\d{8}_\d{6})$")
 LOG_EXPERIMENT_NAME_RE = re.compile(r"^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*$")
+CHECKPOINT_EPOCH_RE = re.compile(r"(?:^|[-_])epoch=(?P<value>\d+)(?:[-_]|$)")
+CHECKPOINT_STEP_RE = re.compile(r"(?:^|[-_])step=(?P<value>\d+)(?:[-_]|$)")
+HPARAM_INT_RE = re.compile(r"^[+-]?\d+$")
+HPARAM_FLOAT_RE = re.compile(
+    r"^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][+-]?\d+)$"
+    r"|^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+))$"
+)
 
 
 def is_valid_log_experiment_name(name: str) -> bool:
@@ -94,13 +102,141 @@ def _display_timestamp(run_name: str) -> str | None:
     )
 
 
-def _read_result_metrics(result_path: Path) -> dict[str, Any]:
+def _read_result_payload(result_path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(result_path.read_text(encoding="utf-8"))
     except Exception:
         return {}
-    metrics = payload.get("metrics") if isinstance(payload, dict) else None
-    return metrics if isinstance(metrics, dict) else {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _read_result_object(result_path: Path, key: str) -> dict[str, Any]:
+    value = _read_result_payload(result_path).get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _read_result_metrics(result_path: Path) -> dict[str, Any]:
+    return _read_result_object(result_path, "metrics")
+
+
+def _read_result_params(result_path: Path) -> dict[str, Any]:
+    return _read_result_object(result_path, "params")
+
+
+def _parse_hparam_value(raw_value: str) -> bool | int | float | str | None:
+    value = raw_value.strip()
+    if not value:
+        return ""
+    if " #" in value:
+        value = value.split(" #", 1)[0].strip()
+    normalized = value.lower()
+    if normalized in {"null", "none", "~"}:
+        return None
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    if (
+        len(value) >= 2
+        and value[0] == value[-1]
+        and value[0] in {"'", '"'}
+    ):
+        return value[1:-1]
+    if HPARAM_INT_RE.fullmatch(value):
+        try:
+            return int(value)
+        except ValueError:
+            return value
+    if HPARAM_FLOAT_RE.fullmatch(value):
+        try:
+            return float(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _read_hparams_flat(hparams_path: Path) -> dict[str, Any]:
+    try:
+        lines = hparams_path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return {}
+
+    values: dict[str, Any] = {}
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, raw_value = line.split(":", 1)
+        key = key.strip()
+        value = raw_value.strip()
+        if (
+            not key
+            or not value
+            or value in {"|", ">"}
+            or value.startswith(("[", "{", "- "))
+        ):
+            continue
+        values[key] = _parse_hparam_value(value)
+    return values
+
+
+def _file_modified_at(path: Path) -> str:
+    return (
+        datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
+def _relative_file_path(root: Path, path: Path) -> str:
+    return path.relative_to(root).as_posix()
+
+
+def _run_relative_file_label(run_dir: Path, path: Path) -> str:
+    try:
+        return path.relative_to(run_dir).as_posix()
+    except ValueError:
+        return path.name
+
+
+def _safe_artifact_file(path: Path, root: Path) -> Path | None:
+    if not path.is_file():
+        return None
+    resolved = _resolve_log_path_under_root(path, root)
+    if resolved is None or not resolved.is_file():
+        return None
+    return resolved
+
+
+def _safe_artifact_files(run_dir: Path, root: Path, pattern: str) -> list[Path]:
+    files: list[Path] = []
+    for path in sorted(run_dir.rglob(pattern)):
+        resolved = _safe_artifact_file(path, root)
+        if resolved is not None:
+            files.append(resolved)
+    return files
+
+
+def _file_id(run_id: str, relative_path: str) -> str:
+    return hashlib.sha256(f"{run_id}:{relative_path}".encode()).hexdigest()[:16]
+
+
+def _parse_checkpoint_field(pattern: re.Pattern[str], filename: str) -> int | None:
+    match = pattern.search(filename)
+    if not match:
+        return None
+    try:
+        return int(match.group("value"))
+    except ValueError:
+        return None
+
+
+def _parse_checkpoint_epoch(filename: str) -> int | None:
+    return _parse_checkpoint_field(CHECKPOINT_EPOCH_RE, Path(filename).stem)
+
+
+def _parse_checkpoint_step(filename: str) -> int | None:
+    return _parse_checkpoint_field(CHECKPOINT_STEP_RE, Path(filename).stem)
 
 
 def _split_log_model_prefix(
@@ -153,6 +289,70 @@ class LogRun:
             "checkpointCount": self.checkpointCount,
             "hasHparams": self.hasHparams,
             "metrics": self.metrics,
+        }
+
+
+@dataclass(frozen=True)
+class LogCheckpoint:
+    id: str
+    runId: str
+    filename: str
+    relativePath: str
+    epoch: int | None
+    step: int | None
+    sizeBytes: int
+    modifiedAt: str
+
+    def to_response(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "runId": self.runId,
+            "filename": self.filename,
+            "relativePath": self.relativePath,
+            "epoch": self.epoch,
+            "step": self.step,
+            "sizeBytes": self.sizeBytes,
+            "modifiedAt": self.modifiedAt,
+        }
+
+
+@dataclass(frozen=True)
+class LogRunArtifact:
+    id: str
+    kind: str
+    label: str
+    relativePath: str
+    sizeBytes: int
+    modifiedAt: str
+
+    def to_response(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "label": self.label,
+            "relativePath": self.relativePath,
+            "sizeBytes": self.sizeBytes,
+            "modifiedAt": self.modifiedAt,
+        }
+
+
+@dataclass(frozen=True)
+class LogRunArtifacts:
+    runId: str
+    params: dict[str, Any]
+    metrics: dict[str, Any]
+    artifacts: list[LogRunArtifact]
+    checkpoints: list[LogCheckpoint]
+
+    def to_response(self) -> dict[str, Any]:
+        return {
+            "runId": self.runId,
+            "params": self.params,
+            "metrics": self.metrics,
+            "artifacts": [artifact.to_response() for artifact in self.artifacts],
+            "checkpoints": [
+                checkpoint.to_response() for checkpoint in self.checkpoints
+            ],
         }
 
 
@@ -452,9 +652,14 @@ class LogRunScanner:
         group = "/".join(group_parts) if group_parts else None
         experiment = parts[0]
         relative_path = relative.as_posix()
-        result_path = version_dir / "result.json"
-        event_files = list(version_dir.rglob("events.out.tfevents.*"))
-        checkpoints = list((version_dir / "checkpoints").glob("*.ckpt"))
+        result_path = _safe_artifact_file(version_dir / "result.json", root)
+        hparams_path = _safe_artifact_file(version_dir / "hparams.yaml", root)
+        event_files = _safe_artifact_files(
+            version_dir,
+            root,
+            "events.out.tfevents.*",
+        )
+        checkpoints = _safe_artifact_files(version_dir, root, "*.ckpt")
 
         return LogRun(
             id=_run_id(relative_path),
@@ -467,11 +672,11 @@ class LogRunScanner:
             timestamp=_display_timestamp(run_name),
             version=version,
             relativePath=relative_path,
-            hasResult=result_path.is_file(),
+            hasResult=result_path is not None,
             eventFileCount=len(event_files),
             checkpointCount=len(checkpoints),
-            hasHparams=(version_dir / "hparams.yaml").is_file(),
-            metrics=_read_result_metrics(result_path) if result_path.is_file() else {},
+            hasHparams=hparams_path is not None,
+            metrics=_read_result_metrics(result_path) if result_path else {},
             path=version_dir,
         )
 
@@ -483,6 +688,12 @@ class LogRunScanner:
         if unknown:
             raise InspectorError(f"Unknown log run id: {unknown[0]}")
         return [runs_by_id[run_id] for run_id in dict.fromkeys(run_ids)]
+
+    def artifact_path(self, run: LogRun, filename: str) -> Path | None:
+        return _safe_artifact_file(run.path / filename, self.resolved_root())
+
+    def artifact_files(self, run: LogRun, pattern: str) -> list[Path]:
+        return _safe_artifact_files(run.path, self.resolved_root(), pattern)
 
 
 class LogRunQueryService:
@@ -558,6 +769,118 @@ class LogRunQueryService:
             )
             for run in runs
         ]
+
+    def checkpoints_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        runs = self.scanner.resolve_runs(run_ids)
+        return [
+            checkpoint.to_response()
+            for run in runs
+            for checkpoint in self.read_checkpoints(run)
+        ]
+
+    def artifacts_for_run(self, run_id: str) -> dict[str, Any]:
+        run = self.scanner.resolve_runs([run_id])[0]
+        result_path = self.scanner.artifact_path(run, "result.json")
+        hparams_path = self.scanner.artifact_path(run, "hparams.yaml")
+        result_params = _read_result_params(result_path) if result_path else {}
+        hparams = _read_hparams_flat(hparams_path) if hparams_path else {}
+        metrics = _read_result_metrics(result_path) if result_path else {}
+        checkpoints = self.read_checkpoints(run)
+        artifacts: list[LogRunArtifact] = []
+
+        artifacts.extend(
+            self.artifact_metadata(
+                run,
+                path,
+                kind="event_file",
+                label=_run_relative_file_label(run.path, path),
+            )
+            for path in self.scanner.artifact_files(run, "events.out.tfevents.*")
+        )
+        for filename, kind in (
+            ("hparams.yaml", "hparams"),
+            ("result.json", "result"),
+        ):
+            path = self.scanner.artifact_path(run, filename)
+            if path is not None:
+                artifacts.append(
+                    self.artifact_metadata(
+                        run,
+                        path,
+                        kind=kind,
+                        label=filename,
+                    )
+                )
+        artifacts.extend(
+            self.artifact_metadata(
+                run,
+                self.scanner.resolved_root() / checkpoint.relativePath,
+                kind="checkpoint",
+                label=_run_relative_file_label(
+                    run.path,
+                    self.scanner.resolved_root() / checkpoint.relativePath,
+                ),
+            )
+            for checkpoint in checkpoints
+        )
+
+        return LogRunArtifacts(
+            runId=run.id,
+            params={**hparams, **result_params},
+            metrics=metrics,
+            artifacts=artifacts,
+            checkpoints=checkpoints,
+        ).to_response()
+
+    def read_checkpoints(self, run: LogRun) -> list[LogCheckpoint]:
+        checkpoints = [
+            self.checkpoint_metadata(run, path)
+            for path in self.scanner.artifact_files(run, "*.ckpt")
+        ]
+        return sorted(
+            checkpoints,
+            key=lambda checkpoint: (
+                checkpoint.step is None,
+                checkpoint.step if checkpoint.step is not None else -1,
+                checkpoint.epoch is None,
+                checkpoint.epoch if checkpoint.epoch is not None else -1,
+                checkpoint.filename,
+                checkpoint.relativePath,
+            ),
+        )
+
+    def checkpoint_metadata(self, run: LogRun, path: Path) -> LogCheckpoint:
+        root = self.scanner.resolved_root()
+        relative_path = _relative_file_path(root, path)
+        return LogCheckpoint(
+            id=_file_id(run.id, relative_path),
+            runId=run.id,
+            filename=path.name,
+            relativePath=relative_path,
+            epoch=_parse_checkpoint_epoch(path.name),
+            step=_parse_checkpoint_step(path.name),
+            sizeBytes=path.stat().st_size,
+            modifiedAt=_file_modified_at(path),
+        )
+
+    def artifact_metadata(
+        self,
+        run: LogRun,
+        path: Path,
+        *,
+        kind: str,
+        label: str,
+    ) -> LogRunArtifact:
+        root = self.scanner.resolved_root()
+        relative_path = _relative_file_path(root, path)
+        return LogRunArtifact(
+            id=_file_id(run.id, relative_path),
+            kind=kind,
+            label=label,
+            relativePath=relative_path,
+            sizeBytes=path.stat().st_size,
+            modifiedAt=_file_modified_at(path),
+        )
 
     def read_tags(self, run_dir: Path) -> dict[str, list[str]]:
         tags = {"scalars": set(), "histograms": set(), "images": set()}
@@ -783,6 +1106,12 @@ class LogRunIndex:
 
     def parameter_status_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
         return self.query_service.parameter_status_for_runs(run_ids)
+
+    def checkpoints_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
+        return self.query_service.checkpoints_for_runs(run_ids)
+
+    def artifacts_for_run(self, run_id: str) -> dict[str, Any]:
+        return self.query_service.artifacts_for_run(run_id)
 
     def delete_experiment(
         self,

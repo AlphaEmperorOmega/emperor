@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import Field, model_validator
@@ -20,13 +21,15 @@ LOCAL_FRONTEND_ORIGINS = [
     "http://0.0.0.0:3000",
 ]
 
+DEFAULT_SNAPSHOTS_ROOT = str(Path(__file__).resolve().parents[2] / "snapshots")
+
 
 class ViewerApiSettings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: LOCAL_FRONTEND_ORIGINS.copy()
     )
     logs_root: str = "logs"
-    snapshots_root: str = "snapshots"
+    snapshots_root: str = DEFAULT_SNAPSHOTS_ROOT
     auth_mode: Literal["none", "bearer"] = "none"
     token: str | None = Field(default=None, repr=False)
 

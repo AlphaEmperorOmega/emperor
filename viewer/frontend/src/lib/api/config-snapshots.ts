@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
 
-const configSnapshotSchema = z.object({
+export const configSnapshotSchema = z.object({
   id: z.string(),
   model: z.string(),
   preset: z.string(),
@@ -12,8 +12,12 @@ const configSnapshotSchema = z.object({
   updatedAt: z.string(),
 });
 
-const configSnapshotsSchema = z.object({
+export const configSnapshotsSchema = z.object({
   model: z.string(),
+  snapshots: z.array(configSnapshotSchema),
+});
+
+export const configSnapshotLibrarySchema = z.object({
   snapshots: z.array(configSnapshotSchema),
 });
 
@@ -31,6 +35,10 @@ export function fetchConfigSnapshots(model: string) {
     `/config-snapshots?model=${encodeURIComponent(model)}`,
     configSnapshotsSchema,
   );
+}
+
+export function fetchConfigSnapshotLibrary() {
+  return requestJson("/config-snapshots/library", configSnapshotLibrarySchema);
 }
 
 export function createConfigSnapshot(input: ConfigSnapshotCreateInput) {

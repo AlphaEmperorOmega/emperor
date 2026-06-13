@@ -18,6 +18,7 @@ from viewer.backend.schemas import (
     SubmittedTrainingRunPlanRequest,
     TrainingJobCreateRequest,
     TrainingJobResponse,
+    TrainingProgressEventsResponse,
     TrainingRunPlanCreateRequest,
     TrainingRunPlanResponse,
 )
@@ -48,6 +49,10 @@ EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
     "metrics",
     "logDir",
     "events",
+    "eventCount",
+    "eventCounts",
+    "eventsTruncated",
+    "clusterGrowth",
     "logTail",
     "resultLinks",
 )
@@ -125,6 +130,10 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             ),
             (("GET",), "/training/jobs/{job_id}"): (
                 TrainingJobResponse,
+                (),
+            ),
+            (("GET",), "/training/jobs/{job_id}/events"): (
+                TrainingProgressEventsResponse,
                 (),
             ),
             (("GET",), "/training/jobs/{job_id}/monitor-data"): (
@@ -484,6 +493,59 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         self.assertEqual(create_payload["resultLinks"], [])
         for internal_key in ("command", "root", "process"):
             self.assertNotIn(internal_key, create_payload)
+
+    def test_training_job_events_endpoint_paginates_progress_history(self) -> None:
+        import httpx
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, manager = self._create_test_app(Path(tmp))
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    create_response = await client.post(
+                        "/training/jobs",
+                        json={
+                            "model": "linears/linear",
+                            "preset": "baseline",
+                            "datasets": ["Mnist"],
+                            "overrides": {},
+                            "logFolder": "history_api",
+                            "monitors": [],
+                        },
+                    )
+                    job_id = create_response.json()["id"]
+                    job = manager.jobs[job_id]
+                    for step in range(5):
+                        manager._write_event(
+                            job,
+                            {
+                                "type": "step",
+                                "status": "running",
+                                "dataset": "Mnist",
+                                "preset": "baseline",
+                                "runIndex": 1,
+                                "step": step,
+                            },
+                        )
+                    events_response = await client.get(
+                        f"/training/jobs/{job_id}/events?offset=2&limit=3"
+                    )
+                    return create_response, events_response
+
+            create_response, events_response = asyncio.run(call_api())
+
+        self.assertEqual(create_response.status_code, 200, create_response.text)
+        self.assertEqual(events_response.status_code, 200, events_response.text)
+        payload = events_response.json()
+        self.assertEqual(payload["offset"], 2)
+        self.assertEqual(payload["limit"], 3)
+        self.assertEqual(payload["totalCount"], 6)
+        self.assertEqual(payload["nextOffset"], 5)
+        self.assertEqual([event["step"] for event in payload["events"]], [1, 2, 3])
 
     def test_training_run_plan_rejects_path_like_dataset_input(self) -> None:
         import httpx

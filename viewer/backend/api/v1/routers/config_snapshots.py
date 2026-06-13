@@ -10,6 +10,7 @@ from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_config_snapshot_service
 from viewer.backend.schemas import (
     ConfigSnapshotCreateRequest,
+    ConfigSnapshotLibraryResponse,
     ConfigSnapshotRenameRequest,
     ConfigSnapshotResponse,
     ConfigSnapshotsResponse,
@@ -35,6 +36,20 @@ async def list_config_snapshots(
 ) -> ConfigSnapshotsResponse:
     return ConfigSnapshotsResponse.model_validate(
         {"model": model, "snapshots": service.list_snapshots(model)}
+    )
+
+
+@router.get(
+    "/library",
+    response_model=ConfigSnapshotLibraryResponse,
+    summary="List all config snapshots",
+    response_description="Stored config snapshots across all models.",
+)
+async def list_config_snapshot_library(
+    service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
+) -> ConfigSnapshotLibraryResponse:
+    return ConfigSnapshotLibraryResponse.model_validate(
+        {"snapshots": service.list_all_snapshots()}
     )
 
 

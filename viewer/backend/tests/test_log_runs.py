@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -334,6 +335,132 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             "linear/BASELINE/Mnist/escaped_20260601_070809/version_99",
             by_path,
         )
+
+    def test_log_run_index_reads_checkpoints_and_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = write_tensorboard_run(
+                logs_root,
+                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                metrics={"test/accuracy": 0.9},
+            )
+            (run_dir / "result.json").write_text(
+                json.dumps(
+                    {
+                        "params": {"learning_rate": 0.01, "optimizer": "adam"},
+                        "metrics": {"test/accuracy": 0.9},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (run_dir / "hparams.yaml").write_text(
+                "\n".join(
+                    [
+                        "batch_size: 4",
+                        "use_bias: true",
+                        "description: 'baseline run'",
+                        "nested:",
+                        "ignored_list: [1, 2]",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (run_dir / "checkpoints" / "last.ckpt").write_text(
+                "checkpoint",
+                encoding="utf-8",
+            )
+            (run_dir / "checkpoints" / "epoch=2-step=300.ckpt").write_text(
+                "checkpoint",
+                encoding="utf-8",
+            )
+            malformed_run = write_tensorboard_run(
+                logs_root,
+                [
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "malformed_20260601_050607",
+                    "version_0",
+                ],
+                metrics=None,
+            )
+            (malformed_run / "result.json").write_text(
+                "{not valid json",
+                encoding="utf-8",
+            )
+            (malformed_run / "hparams.yaml").write_text(
+                "nested:\nignored_list: [1, 2]\n",
+                encoding="utf-8",
+            )
+
+            index = LogRunIndex(logs_root=logs_root)
+            runs_by_path = {run.relativePath: run for run in index.list_runs()}
+            run = runs_by_path[
+                "linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
+            ]
+            malformed = runs_by_path[
+                "linear/BASELINE/Mnist/malformed_20260601_050607/version_0"
+            ]
+
+            checkpoints = index.checkpoints_for_runs([run.id])
+            artifacts = index.artifacts_for_run(run.id)
+            malformed_artifacts = index.artifacts_for_run(malformed.id)
+            with self.assertRaises(InspectorError):
+                index.checkpoints_for_runs(["not-a-run"])
+            with self.assertRaises(InspectorError):
+                index.artifacts_for_run("not-a-run")
+
+        self.assertEqual(
+            [
+                (
+                    checkpoint["filename"],
+                    checkpoint["epoch"],
+                    checkpoint["step"],
+                )
+                for checkpoint in checkpoints
+            ],
+            [
+                ("epoch=0-step=1.ckpt", 0, 1),
+                ("epoch=2-step=300.ckpt", 2, 300),
+                ("last.ckpt", None, None),
+            ],
+        )
+        self.assertTrue(
+            checkpoints[0]["relativePath"].endswith(
+                "linear/BASELINE/Mnist/aaa_20260601_010203/version_0/"
+                "checkpoints/epoch=0-step=1.ckpt"
+            )
+        )
+        self.assertGreater(checkpoints[0]["sizeBytes"], 0)
+        self.assertTrue(checkpoints[0]["modifiedAt"].endswith("Z"))
+        self.assertEqual(artifacts["runId"], run.id)
+        self.assertEqual(
+            artifacts["params"],
+            {
+                "batch_size": 4,
+                "use_bias": True,
+                "description": "baseline run",
+                "learning_rate": 0.01,
+                "optimizer": "adam",
+            },
+        )
+        self.assertEqual(artifacts["metrics"], {"test/accuracy": 0.9})
+        self.assertEqual(
+            sorted({artifact["kind"] for artifact in artifacts["artifacts"]}),
+            ["checkpoint", "event_file", "hparams", "result"],
+        )
+        self.assertEqual(
+            len(
+                [
+                    artifact
+                    for artifact in artifacts["artifacts"]
+                    if artifact["kind"] == "checkpoint"
+                ]
+            ),
+            3,
+        )
+        self.assertEqual(malformed_artifacts["params"], {})
+        self.assertEqual(malformed_artifacts["metrics"], {})
 
     def test_log_run_index_deletes_experiment_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

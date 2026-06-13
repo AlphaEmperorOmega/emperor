@@ -98,6 +98,12 @@ export const logQueryKeys = {
       normalizedStringSet(runIds),
       normalizedStringSet(tags),
     ] as const,
+  checkpoints: () => ["log-checkpoints"] as const,
+  checkpointsForRuns: (runIds: StringList) =>
+    ["log-checkpoints", normalizedStringSet(runIds)] as const,
+  artifacts: () => ["log-artifacts"] as const,
+  artifactsForRun: (runId: string | null | undefined) =>
+    ["log-artifacts", runId ?? null] as const,
 };
 
 export const viewerQueryKeys = {
@@ -120,10 +126,13 @@ export const viewerQueryKeys = {
     ["comparison-inspection", model, preset, dataset] as const,
   configSnapshots: (selectedModel: string) =>
     ["config-snapshots", selectedModel] as const,
+  configSnapshotLibrary: () => ["config-snapshot-library"] as const,
 };
 
 export const trainingQueryKeys = {
   job: (activeJobId: string | null) => ["training-job", activeJobId] as const,
+  jobEvents: (jobId: string, offset: number, limit: number) =>
+    ["training-job-events", jobId, offset, limit] as const,
   runPlan: (planNonce: number, input: TrainingRunPlanQueryKeyInput) =>
     ["training-run-plan", planNonce, trainingRunPlanInputKey(input)] as const,
 };
@@ -175,3 +184,5 @@ export const LOG_RUNS_QUERY_KEY = logQueryKeys.runs();
 export const LOG_EXPERIMENTS_QUERY_KEY = logQueryKeys.experiments();
 export const LOG_TAGS_QUERY_KEY = logQueryKeys.tags();
 export const LOG_SCALARS_QUERY_KEY = logQueryKeys.scalars();
+export const LOG_CHECKPOINTS_QUERY_KEY = logQueryKeys.checkpoints();
+export const LOG_ARTIFACTS_QUERY_KEY = logQueryKeys.artifacts();

@@ -26,6 +26,8 @@ from viewer.backend.inspector.search import (
 from viewer.backend.inspector.service import reject_locked_overrides
 from viewer.backend.training_events import NeuronClusterGrowthCallback
 
+VIEWER_PROGRESS_STEP_INTERVAL = 25
+
 
 def search_mode_from_parsed_search(parsed_search):
     if parsed_search is None:
@@ -110,7 +112,10 @@ def main() -> None:
     payload_path = Path(args.payload)
     progress_path = Path(args.progress)
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
-    progress = JsonlTrainingProgressCallback(progress_path)
+    progress = JsonlTrainingProgressCallback(
+        progress_path,
+        step_interval=VIEWER_PROGRESS_STEP_INTERVAL,
+    )
     growth = NeuronClusterGrowthCallback(progress.write_event)
     try:
         progress.write_event(

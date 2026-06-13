@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -15,16 +16,36 @@ from viewer.backend.training_jobs import TrainingJobManager
 class FakeProcess:
     pid = 1234
 
-    def __init__(self, exit_code: int | None = None) -> None:
+    def __init__(
+        self,
+        exit_code: int | None = None,
+        *,
+        ignores_terminate: bool = False,
+    ) -> None:
         self.exit_code = exit_code
         self.terminated = False
+        self.killed = False
+        self.ignores_terminate = ignores_terminate
 
     def poll(self) -> int | None:
         return self.exit_code
 
     def terminate(self) -> None:
         self.terminated = True
-        self.exit_code = -15
+        if not self.ignores_terminate:
+            self.exit_code = -15
+
+    def kill(self) -> None:
+        self.killed = True
+        self.exit_code = -9
+
+    def wait(self, timeout: float | None = None) -> int:
+        if self.exit_code is None:
+            raise subprocess.TimeoutExpired(
+                cmd=["fake-training-worker"],
+                timeout=timeout or 0.0,
+            )
+        return self.exit_code
 
 
 class FakeRunner:

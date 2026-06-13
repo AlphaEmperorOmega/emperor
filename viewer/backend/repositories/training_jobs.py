@@ -68,6 +68,19 @@ class TrainingJobRepository:
     def get_job(self, job_id: str) -> TrainingJobView:
         return TrainingJobView.from_payload(self._manager.get_job(job_id))
 
+    def get_job_events(
+        self,
+        job_id: str,
+        *,
+        offset: int,
+        limit: int,
+    ) -> dict[str, Any]:
+        return self._manager.get_job_events(
+            job_id,
+            offset=offset,
+            limit=limit,
+        )
+
     def get_monitor_data(
         self,
         job_id: str,

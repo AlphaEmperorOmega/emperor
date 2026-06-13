@@ -191,6 +191,20 @@ export const trainingProgressEventSchema = z.union([
   trainingProgressEventBaseSchema,
 ]);
 
+export const trainingClusterGrowthAdditionSchema = z.object({
+  coord: z.tuple([z.number(), z.number(), z.number()]),
+  step: z.number().nullable(),
+  epoch: z.number().nullable(),
+});
+
+export const trainingClusterGrowthSchema = z.object({
+  node: z.string(),
+  count: z.number(),
+  capacityTotal: z.number(),
+  additionCount: z.number(),
+  additions: z.array(trainingClusterGrowthAdditionSchema),
+});
+
 export const trainingJobSchema = z.object({
   id: z.string(),
   status: z.string(),
@@ -221,7 +235,11 @@ export const trainingJobSchema = z.object({
   step: z.number().nullable(),
   metrics: jsonObjectSchema,
   logDir: z.string().nullable(),
-  events: z.array(trainingProgressEventSchema),
+  events: z.array(trainingProgressEventSchema).optional().default([]),
+  eventCount: z.number().optional().default(0),
+  eventCounts: z.record(z.number()).optional().default({}),
+  eventsTruncated: z.boolean().optional().default(false),
+  clusterGrowth: z.array(trainingClusterGrowthSchema).optional().default([]),
   logTail: z.array(z.string()),
   resultLinks: z.array(
     z.object({
@@ -232,12 +250,23 @@ export const trainingJobSchema = z.object({
   ),
 });
 
+export const trainingJobEventsSchema = z.object({
+  jobId: z.string(),
+  offset: z.number(),
+  limit: z.number(),
+  totalCount: z.number(),
+  nextOffset: z.number().nullable(),
+  events: z.array(trainingProgressEventSchema),
+});
+
 export type TrainingRunChange = z.infer<typeof trainingRunChangeSchema>;
 export type TrainingRun = z.infer<typeof trainingRunSchema>;
 export type TrainingRunPlanSummary = z.infer<typeof trainingRunPlanSummarySchema>;
 export type TrainingRunPlan = z.infer<typeof trainingRunPlanSchema>;
 export type TrainingProgressEvent = z.infer<typeof trainingProgressEventSchema>;
+export type TrainingClusterGrowth = z.infer<typeof trainingClusterGrowthSchema>;
 export type TrainingJob = z.infer<typeof trainingJobSchema>;
+export type TrainingJobEvents = z.infer<typeof trainingJobEventsSchema>;
 
 export type TrainingSearchCreateInput = {
   mode: "grid" | "random";
@@ -341,6 +370,24 @@ export function fetchTrainingRunPlan(input: TrainingRunPlanCreateInput) {
 
 export function fetchTrainingJob(id: string) {
   return requestJson(`/training/jobs/${id}`, trainingJobSchema);
+}
+
+export function fetchTrainingJobEvents(
+  id: string,
+  input: { offset?: number; limit?: number } = {},
+) {
+  const params = new URLSearchParams();
+  if (input.offset !== undefined) {
+    params.set("offset", String(input.offset));
+  }
+  if (input.limit !== undefined) {
+    params.set("limit", String(input.limit));
+  }
+  const query = params.toString();
+  return requestJson(
+    `/training/jobs/${id}/events${query ? `?${query}` : ""}`,
+    trainingJobEventsSchema,
+  );
 }
 
 export function cancelTrainingJob(id: string) {

@@ -56,6 +56,35 @@ class InMemoryConfigSnapshotStoreTests(unittest.TestCase):
 
         self.assertEqual([s.id for s in store.list("m")], ["a", "b"])
 
+    def test_list_all_is_sorted_across_models(self) -> None:
+        store = InMemoryConfigSnapshotStore()
+        store.save(
+            make_record(
+                snapshot_id="b",
+                model="m2",
+                preset="z",
+                created_at="2026-01-02",
+            )
+        )
+        store.save(
+            make_record(
+                snapshot_id="a",
+                model="m1",
+                preset="z",
+                created_at="2026-01-02",
+            )
+        )
+        store.save(
+            make_record(
+                snapshot_id="c",
+                model="m1",
+                preset="a",
+                created_at="2026-01-03",
+            )
+        )
+
+        self.assertEqual([s.id for s in store.list_all()], ["c", "a", "b"])
+
 
 class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
     def test_persists_across_store_instances(self) -> None:
@@ -102,6 +131,46 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             self.assertTrue(store.delete("a"))
             self.assertFalse((Path(tmp) / "linears" / "linear" / "a.json").exists())
 
+    def test_list_all_finds_nested_model_paths_and_sorts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = FileSystemConfigSnapshotStore(Path(tmp))
+            store.save(
+                make_record(
+                    snapshot_id="b",
+                    model="linears/linear_adaptive",
+                    preset="wide",
+                    created_at="2026-01-02",
+                )
+            )
+            store.save(
+                make_record(
+                    snapshot_id="c",
+                    model="linears/linear",
+                    preset="fast",
+                    created_at="2026-01-03",
+                )
+            )
+            store.save(
+                make_record(
+                    snapshot_id="a",
+                    model="linears/linear",
+                    preset="baseline",
+                    created_at="2026-01-04",
+                )
+            )
+
+            self.assertEqual(
+                [
+                    (snapshot.model, snapshot.preset, snapshot.id)
+                    for snapshot in store.list_all()
+                ],
+                [
+                    ("linears/linear", "baseline", "a"),
+                    ("linears/linear", "fast", "c"),
+                    ("linears/linear_adaptive", "wide", "b"),
+                ],
+            )
+
     def test_list_unknown_model_is_empty(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             store = FileSystemConfigSnapshotStore(Path(tmp))
@@ -116,6 +185,28 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
             (model_dir / "broken.json").write_text("{not json", encoding="utf-8")
 
             self.assertEqual(store.list("m1"), [])
+            self.assertEqual(store.list_all(), [])
+
+    def test_list_all_ignores_noncanonical_snapshot_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = FileSystemConfigSnapshotStore(root)
+            model_dir = root / "m1"
+            wrong_model_dir = root / "wrong"
+            model_dir.mkdir(parents=True)
+            wrong_model_dir.mkdir(parents=True)
+            (model_dir / "wrong-name.json").write_text(
+                '{"id": "a", "model": "m1", "preset": "base", "name": "x", '
+                '"overrides": {}, "created_at": "2026", "updated_at": "2026"}',
+                encoding="utf-8",
+            )
+            (wrong_model_dir / "a.json").write_text(
+                '{"id": "a", "model": "m1", "preset": "base", "name": "x", '
+                '"overrides": {}, "created_at": "2026", "updated_at": "2026"}',
+                encoding="utf-8",
+            )
+
+            self.assertEqual(store.list_all(), [])
 
     def test_rejects_unsafe_model_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -208,6 +299,7 @@ class FileSystemConfigSnapshotStoreTests(unittest.TestCase):
 
             self.assertIsNone(store.get("a"))
             self.assertEqual(store.list("m1"), [])
+            self.assertEqual(store.list_all(), [])
             self.assertFalse(store.delete("a"))
             self.assertTrue(link.is_symlink())
             self.assertTrue(outside_snapshot.exists())

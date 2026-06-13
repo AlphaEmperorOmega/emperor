@@ -16,6 +16,9 @@ class ConfigSnapshotRepository:
     def list_snapshots(self, model: str) -> list[ConfigSnapshotRecord]:
         return self._store.list(model)
 
+    def list_all_snapshots(self) -> list[ConfigSnapshotRecord]:
+        return self._store.list_all()
+
     def get_snapshot(self, snapshot_id: str) -> ConfigSnapshotRecord | None:
         return self._store.get(snapshot_id)
 

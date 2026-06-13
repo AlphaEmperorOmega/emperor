@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   LOG_EXPERIMENTS_QUERY_KEY,
+  LOG_ARTIFACTS_QUERY_KEY,
+  LOG_CHECKPOINTS_QUERY_KEY,
   LOG_RUNS_QUERY_KEY,
   LOG_SCALARS_QUERY_KEY,
   LOG_TAGS_QUERY_KEY,
@@ -53,6 +55,16 @@ describe("query key factories", () => {
       ["run-1", "run-2"],
       ["accuracy", "loss"],
     ]);
+    expect(logQueryKeys.checkpoints()).toEqual(["log-checkpoints"]);
+    expect(logQueryKeys.checkpointsForRuns(runIds)).toEqual([
+      "log-checkpoints",
+      ["run-1", "run-2"],
+    ]);
+    expect(logQueryKeys.artifacts()).toEqual(["log-artifacts"]);
+    expect(logQueryKeys.artifactsForRun("run/1")).toEqual([
+      "log-artifacts",
+      "run/1",
+    ]);
     expect(runIds).toEqual(["run-2", "run-1"]);
     expect(tags).toEqual(["loss", "accuracy"]);
   });
@@ -79,6 +91,8 @@ describe("query key factories", () => {
     expect(LOG_EXPERIMENTS_QUERY_KEY).toEqual(["log-experiments"]);
     expect(LOG_TAGS_QUERY_KEY).toEqual(["log-tags"]);
     expect(LOG_SCALARS_QUERY_KEY).toEqual(["log-scalars"]);
+    expect(LOG_CHECKPOINTS_QUERY_KEY).toEqual(["log-checkpoints"]);
+    expect(LOG_ARTIFACTS_QUERY_KEY).toEqual(["log-artifacts"]);
   });
 
   it("preserves viewer query key shapes", () => {
@@ -103,11 +117,24 @@ describe("query key factories", () => {
     expect(
       viewerQueryKeys.comparisonInspection("linear", "baseline", "Mnist"),
     ).toEqual(["comparison-inspection", "linear", "baseline", "Mnist"]);
+    expect(viewerQueryKeys.configSnapshots("linear")).toEqual([
+      "config-snapshots",
+      "linear",
+    ]);
+    expect(viewerQueryKeys.configSnapshotLibrary()).toEqual([
+      "config-snapshot-library",
+    ]);
   });
 
   it("preserves training query key shapes", () => {
     expect(trainingQueryKeys.job("job-1")).toEqual(["training-job", "job-1"]);
     expect(trainingQueryKeys.job(null)).toEqual(["training-job", null]);
+    expect(trainingQueryKeys.jobEvents("job-1", 10, 50)).toEqual([
+      "training-job-events",
+      "job-1",
+      10,
+      50,
+    ]);
     expect(trainingQueryKeys.runPlan(2, trainingRunPlanInput())).toEqual([
       "training-run-plan",
       2,

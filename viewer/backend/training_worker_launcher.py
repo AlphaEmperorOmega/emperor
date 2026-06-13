@@ -20,6 +20,12 @@ class ProcessHandle(Protocol):
     def terminate(self) -> None:
         ...
 
+    def wait(self, timeout: float | None = None) -> int:
+        ...
+
+    def kill(self) -> None:
+        ...
+
 
 class ProcessRunner(Protocol):
     def start(
