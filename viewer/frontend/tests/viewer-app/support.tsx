@@ -11,6 +11,7 @@ export type MockNodeData = {
   subtitle: string;
   path: string;
   parameterCount: number;
+  parameterSizeBytes: number;
   details: Record<string, unknown>;
   config: {
     typeName: string;
@@ -46,6 +47,7 @@ export type MockNodeData = {
   };
   graphDetailMode: "simple" | "basic" | "full";
   height: number;
+  isRootNode: boolean;
   isExpanded: boolean;
   canToggleExpansion: boolean;
   canOpenMonitor?: boolean;
@@ -54,6 +56,16 @@ export type MockNodeData = {
   onToggleExpansion: () => void;
   onOpenMonitor?: () => void;
   onToggleDetails: () => void;
+};
+
+export type MockConfigSnapshot = {
+  id: string;
+  model: string;
+  preset: string;
+  name: string;
+  overrides: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export function detailText(value: unknown) {
@@ -124,6 +136,23 @@ export function formatCompactCount(count: number) {
   const value = count / unit.value;
   const formatted = value >= 100 ? value.toFixed(0) : value.toFixed(1);
   return `${formatted.replace(/\.0$/, "")}${unit.suffix}`;
+}
+
+export function formatModelSize(bytes: number | null | undefined) {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes <= 0) {
+    return undefined;
+  }
+  const megabytes = bytes / (1024 * 1024);
+  if (megabytes < 0.01) {
+    return "<0.01 MB";
+  }
+  if (megabytes < 10) {
+    return `${megabytes.toFixed(2).replace(/\.?0+$/, "")} MB`;
+  }
+  if (megabytes < 100) {
+    return `${megabytes.toFixed(1).replace(/\.0$/, "")} MB`;
+  }
+  return `${formatExactCount(Math.round(megabytes))} MB`;
 }
 
 export function simpleGraphParamText(parameterCount: number) {
@@ -243,6 +272,9 @@ vi.mock("@xyflow/react", () => ({
               const simpleParamText = isSimpleMode
                 ? simpleGraphParamText(node.data.parameterCount)
                 : undefined;
+              const modelSizeText = node.data.isRootNode
+                ? formatModelSize(node.data.parameterSizeBytes)
+                : undefined;
               const simpleDimsText = isSimpleMode
                 ? nodeDimsText(node.data.details, node.data.config) ?? node.data.stackDiagram?.dims
                 : undefined;
@@ -283,6 +315,15 @@ vi.mock("@xyflow/react", () => ({
                           {simpleParamText}
                         </span>
                       )}
+                      {isSimpleMode && modelSizeText && (
+                        <span
+                          title={`${formatExactCount(
+                            node.data.parameterSizeBytes,
+                          )} bytes of parameter tensors`}
+                        >
+                          {modelSizeText}
+                        </span>
+                      )}
                       {isSimpleMode && simpleDimsText && (
                         <span title={`input/output: ${simpleDimsText}`}>{simpleDimsText}</span>
                       )}
@@ -295,6 +336,15 @@ vi.mock("@xyflow/react", () => ({
                       {!isSimpleMode && node.data.parameterCount > 0 && (
                         <span title={`${formatExactCount(node.data.parameterCount)} parameters`}>
                           {formatCompactCount(node.data.parameterCount)}
+                        </span>
+                      )}
+                      {!isSimpleMode && modelSizeText && (
+                        <span
+                          title={`${formatExactCount(
+                            node.data.parameterSizeBytes,
+                          )} bytes of parameter tensors`}
+                        >
+                          {modelSizeText}
                         </span>
                       )}
                     </div>
@@ -519,6 +569,13 @@ export const capabilitiesResponse = {
   dataSourcesEnabled: false,
   dataSources: [],
 };
+export const configSnapshotsResponse = {
+  model: "linear",
+  snapshots: [] as MockConfigSnapshot[],
+};
+export const configSnapshotLibraryResponse = {
+  snapshots: [] as MockConfigSnapshot[],
+};
 export const logRunsResponse = {
   runs: [
     {
@@ -661,6 +718,125 @@ export const logScalarSeries = [
     ],
   },
 ];
+
+export type MockLogCheckpoint = {
+  id: string;
+  runId: string;
+  filename: string;
+  relativePath: string;
+  epoch: number | null;
+  step: number | null;
+  sizeBytes: number;
+  modifiedAt: string;
+};
+
+export type MockLogArtifact = {
+  id: string;
+  kind: string;
+  label: string;
+  relativePath: string;
+  sizeBytes: number;
+  modifiedAt: string;
+};
+
+export const logCheckpointsByRun: Record<string, MockLogCheckpoint[]> = {
+  "log-mnist": [
+    {
+      id: "ckpt-log-mnist-2",
+      runId: "log-mnist",
+      filename: "epoch=0-step=2.ckpt",
+      relativePath:
+        "test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0/checkpoints/epoch=0-step=2.ckpt",
+      epoch: 0,
+      step: 2,
+      sizeBytes: 2048,
+      modifiedAt: "2026-06-01T01:03:00Z",
+    },
+  ],
+  "log-cifar": [],
+};
+
+function fallbackCheckpointsForRun(
+  run: (typeof logRunsResponse.runs)[number],
+  overrides: Record<string, MockLogCheckpoint[]> | undefined,
+) {
+  if (overrides && run.id in overrides) {
+    return overrides[run.id] ?? [];
+  }
+  if (run.id in logCheckpointsByRun) {
+    return logCheckpointsByRun[run.id] ?? [];
+  }
+  return Array.from({ length: run.checkpointCount }, (_, index) => {
+    const step = index + 1;
+    const filename = `epoch=0-step=${step}.ckpt`;
+    return {
+      id: `ckpt-${run.id}-${step}`,
+      runId: run.id,
+      filename,
+      relativePath: `${run.relativePath}/checkpoints/${filename}`,
+      epoch: 0,
+      step,
+      sizeBytes: 2048,
+      modifiedAt: "2026-06-01T01:03:00Z",
+    };
+  });
+}
+
+function defaultArtifactsForRun(
+  run: (typeof logRunsResponse.runs)[number],
+  checkpoints: MockLogCheckpoint[],
+) {
+  const artifacts: MockLogArtifact[] = [
+    {
+      id: `event-${run.id}`,
+      kind: "event_file",
+      label: "events.out.tfevents.1780000000",
+      relativePath: `${run.relativePath}/events.out.tfevents.1780000000`,
+      sizeBytes: 4096,
+      modifiedAt: "2026-06-01T01:02:30Z",
+    },
+  ];
+  if (run.hasHparams) {
+    artifacts.push({
+      id: `hparams-${run.id}`,
+      kind: "hparams",
+      label: "hparams.yaml",
+      relativePath: `${run.relativePath}/hparams.yaml`,
+      sizeBytes: 42,
+      modifiedAt: "2026-06-01T01:02:40Z",
+    });
+  }
+  if (run.hasResult) {
+    artifacts.push({
+      id: `result-${run.id}`,
+      kind: "result",
+      label: "result.json",
+      relativePath: `${run.relativePath}/result.json`,
+      sizeBytes: 120,
+      modifiedAt: "2026-06-01T01:02:50Z",
+    });
+  }
+  artifacts.push(
+    ...checkpoints.map((checkpoint) => ({
+      id: `artifact-${checkpoint.id}`,
+      kind: "checkpoint",
+      label: `checkpoints/${checkpoint.filename}`,
+      relativePath: checkpoint.relativePath,
+      sizeBytes: checkpoint.sizeBytes,
+      modifiedAt: checkpoint.modifiedAt,
+    })),
+  );
+  return {
+    runId: run.id,
+    params:
+      run.id === "log-mnist"
+        ? { batch_size: 4, learning_rate: 0.01 }
+        : { batch_size: 8 },
+    metrics: run.metrics,
+    artifacts,
+    checkpoints,
+  };
+}
 
 export function buildLargeLogFixture(count = 64) {
   const runs = Array.from({ length: count }, (_, index) => {
@@ -1944,6 +2120,7 @@ export function withParameterCounts(body: unknown) {
 
   const payload = body as {
     parameterCount?: unknown;
+    parameterSizeBytes?: unknown;
     nodes?: unknown[];
     [key: string]: unknown;
   };
@@ -1955,27 +2132,45 @@ export function withParameterCounts(body: unknown) {
     if (typeof node !== "object" || node === null) {
       return node;
     }
-    const graphNode = node as { parameterCount?: unknown; [key: string]: unknown };
+    const graphNode = node as {
+      parameterCount?: unknown;
+      parameterSizeBytes?: unknown;
+      [key: string]: unknown;
+    };
+    const parameterCount =
+      typeof graphNode.parameterCount === "number" ? graphNode.parameterCount : 0;
     return {
       ...graphNode,
       config:
         graphNode.config && typeof graphNode.config === "object"
           ? graphNode.config
           : null,
-      parameterCount:
-        typeof graphNode.parameterCount === "number" ? graphNode.parameterCount : 0,
+      parameterCount,
+      parameterSizeBytes:
+        typeof graphNode.parameterSizeBytes === "number"
+          ? graphNode.parameterSizeBytes
+          : parameterCount * 4,
     };
   });
-  const firstNode = nodes[0] as { parameterCount?: unknown } | undefined;
+  const firstNode = nodes[0] as
+    | { parameterCount?: unknown; parameterSizeBytes?: unknown }
+    | undefined;
+  const parameterCount =
+    typeof payload.parameterCount === "number"
+      ? payload.parameterCount
+      : typeof firstNode?.parameterCount === "number"
+        ? firstNode.parameterCount
+        : 0;
 
   return {
     ...payload,
-    parameterCount:
-      typeof payload.parameterCount === "number"
-        ? payload.parameterCount
-        : typeof firstNode?.parameterCount === "number"
-          ? firstNode.parameterCount
-          : 0,
+    parameterCount,
+    parameterSizeBytes:
+      typeof payload.parameterSizeBytes === "number"
+        ? payload.parameterSizeBytes
+        : typeof firstNode?.parameterSizeBytes === "number"
+          ? firstNode.parameterSizeBytes
+          : parameterCount * 4,
     nodes,
   };
 }
@@ -1989,6 +2184,7 @@ export function installFetchMock(
     logExperimentsResponse?: typeof logExperimentsResponse;
     logScalarSeries?: typeof logScalarSeries;
     logTagsByRun?: Record<string, MockLogTags>;
+    logCheckpointsByRun?: Record<string, MockLogCheckpoint[]>;
     deleteLogExperimentError?: string;
     deleteLogRunsError?: string;
     deleteLogRunsBlockers?: Array<{ id: string; logFolder: string; status: string }>;
@@ -2005,11 +2201,20 @@ export function installFetchMock(
       logDir: string | null;
     }) => unknown;
     logParameterStatusResponse?: (context: { runIds: string[] }) => unknown;
+    configSnapshotsResponse?: {
+      model: string;
+      snapshots: MockConfigSnapshot[];
+    };
+    configSnapshotLibraryResponse?: {
+      snapshots: MockConfigSnapshot[];
+    };
   } = {},
 ) {
   const inspectBodies: unknown[] = [];
   const trainingBodies: unknown[] = [];
   const logScalarRequests: Array<{ runIds: string[]; tags: string[] }> = [];
+  const logCheckpointRequests: Array<{ runIds: string[] }> = [];
+  const logArtifactRequests: string[] = [];
   const deleteExperimentRequests: string[] = [];
   const deleteRunPlanRequests: Array<{
     experiments: string[];
@@ -2041,6 +2246,11 @@ export function installFetchMock(
   };
   const tagsByRun = options.logTagsByRun ?? logTagsByRun;
   const scalarSeries = options.logScalarSeries ?? logScalarSeries;
+
+  function checkpointsForRun(runId: string) {
+    const run = logResponse.runs.find((candidate) => candidate.id === runId);
+    return run ? fallbackCheckpointsForRun(run, options.logCheckpointsByRun) : [];
+  }
 
   function uniqueSorted(values: string[]) {
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
@@ -2131,6 +2341,20 @@ export function installFetchMock(
     }
     if (url.endsWith("/models")) {
       return jsonResponse(modelsResponse);
+    }
+    if (url.endsWith("/config-snapshots/library")) {
+      return jsonResponse(
+        options.configSnapshotLibraryResponse ?? configSnapshotLibraryResponse,
+      );
+    }
+    if (url.includes("/config-snapshots?")) {
+      const parsedUrl = new URL(url);
+      const model = parsedUrl.searchParams.get("model") ?? "linear";
+      const response = options.configSnapshotsResponse ?? {
+        ...configSnapshotsResponse,
+        model,
+      };
+      return jsonResponse(response);
     }
     if (endsWithAny(["/models/linear/presets", "/models/linears/linear/presets"])) {
       return jsonResponse(presetsResponse);
@@ -2404,6 +2628,24 @@ export function installFetchMock(
     if (url.endsWith("/logs/runs")) {
       return jsonResponse(logResponse);
     }
+    if (url.endsWith("/logs/checkpoints")) {
+      const body = JSON.parse(String(init?.body)) as { runIds: string[] };
+      logCheckpointRequests.push(body);
+      return jsonResponse({
+        checkpoints: body.runIds.flatMap((runId) => checkpointsForRun(runId)),
+      });
+    }
+    if (url.includes("/logs/runs/") && url.endsWith("/artifacts")) {
+      const runId = decodeURIComponent(
+        url.split("/logs/runs/")[1]?.split("/artifacts")[0] ?? "",
+      );
+      logArtifactRequests.push(runId);
+      const run = logResponse.runs.find((candidate) => candidate.id === runId);
+      if (!run) {
+        return jsonResponse({ detail: `Unknown log run id: ${runId}` }, 400);
+      }
+      return jsonResponse(defaultArtifactsForRun(run, checkpointsForRun(runId)));
+    }
     if (url.includes("/logs/runs/") && url.includes("/monitor-data")) {
       const parsedUrl = new URL(url);
       const runId = decodeURIComponent(
@@ -2505,6 +2747,8 @@ export function installFetchMock(
     inspectBodies,
     trainingBodies,
     logScalarRequests,
+    logCheckpointRequests,
+    logArtifactRequests,
     deleteExperimentRequests,
     deleteRunPlanRequests,
     deleteRunRequests,
@@ -2524,19 +2768,16 @@ export function renderViewer() {
   );
 }
 
-export async function waitForOpenFullConfigButton() {
+export async function waitForOpenFullConfigButton(
+  user: ReturnType<typeof userEvent.setup> = userEvent.setup(),
+) {
+  if (!screen.queryByRole("button", { name: /open full config/i })) {
+    await expandTrainingPanel(user);
+  }
   await waitFor(() =>
     expect(screen.getByRole("button", { name: /open full config/i })).toBeEnabled(),
   );
   return screen.getByRole("button", { name: /open full config/i });
-}
-
-export async function openDatasetSelector(user: ReturnType<typeof userEvent.setup>) {
-  const trigger = await screen.findByRole("button", {
-    name: /datasets\s+\d+\s*\/\s*\d+/i,
-  });
-  await user.click(trigger);
-  return screen.findByRole("dialog", { name: /dataset selector/i });
 }
 
 export async function findTargetCombobox(label: "model" | "preset") {
@@ -2582,7 +2823,7 @@ export async function selectTargetOption(
 }
 
 export async function openFullConfig(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await waitForOpenFullConfigButton());
+  await user.click(await waitForOpenFullConfigButton(user));
   return screen.findByRole("dialog", { name: /full configuration/i });
 }
 

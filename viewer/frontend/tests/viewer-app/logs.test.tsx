@@ -61,7 +61,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(within(detailsPanel as HTMLElement).getByText("Experiment")).toBeInTheDocument();
     expect(within(detailsPanel as HTMLElement).getByText("test_model_2")).toBeInTheDocument();
     expect(screen.getAllByText("No result.json").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /start training/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start training/i })).toBeInTheDocument();
   });
 
   it("collapses logs metric groups without changing selected tags or refetching scalars", async () => {
@@ -108,6 +108,39 @@ describe("ViewerApp Logs Workspace", () => {
     expect(await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }))
       .toBeInTheDocument();
     expect(logScalarRequests).toHaveLength(1);
+  });
+
+  it("shows checkpoints, params, and artifacts in run details", async () => {
+    const { logArtifactRequests, logCheckpointRequests } = installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    expect(detailsPanel).not.toBeNull();
+    await waitFor(() => {
+      expect(logArtifactRequests).toEqual(["log-mnist"]);
+    });
+    await waitFor(() => {
+      expect(logCheckpointRequests.at(-1)).toEqual({
+        runIds: ["log-mnist", "log-cifar"],
+      });
+    });
+
+    expect(
+      await within(detailsPanel as HTMLElement).findByText("epoch=0-step=2.ckpt"),
+    ).toBeInTheDocument();
+    expect(within(detailsPanel as HTMLElement).getByText(/epoch 0.*step 2/))
+      .toBeInTheDocument();
+    expect(within(detailsPanel as HTMLElement).getByText("batch_size"))
+      .toBeInTheDocument();
+    expect(within(detailsPanel as HTMLElement).getByText("learning_rate"))
+      .toBeInTheDocument();
+    expect(within(detailsPanel as HTMLElement).getByText("checkpoints/epoch=0-step=2.ckpt"))
+      .toBeInTheDocument();
+    expect(within(detailsPanel as HTMLElement).getByText(/event_file/))
+      .toBeInTheDocument();
   });
 
   it("renders non-standard scalar tags in the Other metric group", async () => {
@@ -213,12 +246,20 @@ describe("ViewerApp Logs Workspace", () => {
     await waitFor(() => {
       expect(logScalarRequests).toHaveLength(1);
     });
-    expect(fullTab).toHaveAttribute("aria-selected", "true");
-    expect(twoColumnTab).toHaveAttribute("aria-selected", "false");
+    expect(fullTab).toHaveAttribute("aria-selected", "false");
+    expect(twoColumnTab).toHaveAttribute("aria-selected", "true");
     expect(threeColumnTab).toHaveAttribute("aria-selected", "false");
     expect(chartGrid).toHaveClass("grid", "gap-4");
+    expect(chartGrid).toHaveClass("xl:grid-cols-2");
+    expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
+
+    await user.click(fullTab);
+
+    expect(fullTab).toHaveAttribute("aria-selected", "true");
+    expect(twoColumnTab).toHaveAttribute("aria-selected", "false");
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
+    expect(logScalarRequests).toHaveLength(1);
 
     await user.click(twoColumnTab);
 
@@ -292,6 +333,57 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(within(experimentSection as HTMLElement).getByRole("button", { name: /^none$/i }));
 
     expect(await screen.findByText("No runs selected")).toBeInTheDocument();
+  });
+
+  it("requests checkpoint markers only for visible log runs", async () => {
+    const { logCheckpointRequests } = installFetchMock({
+      logCheckpointsByRun: {
+        "log-mnist": [
+          {
+            id: "ckpt-mnist",
+            runId: "log-mnist",
+            filename: "epoch=0-step=2.ckpt",
+            relativePath:
+              "test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0/checkpoints/epoch=0-step=2.ckpt",
+            epoch: 0,
+            step: 2,
+            sizeBytes: 2048,
+            modifiedAt: "2026-06-01T01:03:00Z",
+          },
+        ],
+        "log-cifar": [
+          {
+            id: "ckpt-cifar",
+            runId: "log-cifar",
+            filename: "epoch=0-step=2.ckpt",
+            relativePath:
+              "test_model_2/linear/BASELINE/Cifar10/bbb_20260601_020304/version_0/checkpoints/epoch=0-step=2.ckpt",
+            epoch: 0,
+            step: 2,
+            sizeBytes: 2048,
+            modifiedAt: "2026-06-01T02:04:00Z",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+
+    await waitFor(() => {
+      expect(logCheckpointRequests.at(-1)).toEqual({
+        runIds: ["log-mnist", "log-cifar"],
+      });
+    });
+
+    await user.click(screen.getByLabelText("Experiments test_model"));
+
+    await waitFor(() => {
+      expect(logCheckpointRequests.at(-1)).toEqual({ runIds: ["log-cifar"] });
+    });
+    expect(screen.queryByText(/test_model · Mnist · linear · BASELINE/))
+      .not.toBeInTheDocument();
   });
 
   it("deletes a log experiment after exact-name confirmation", async () => {

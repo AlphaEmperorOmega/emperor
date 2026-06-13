@@ -20,6 +20,14 @@ export type ScalarLine = {
   points: ScalarLinePoint[];
 };
 
+export type ScalarCheckpointMarker = {
+  runId: string;
+  runLabel: string;
+  filename: string;
+  epoch: number | null;
+  step: number | null;
+};
+
 export type ScalarLineOptions = {
   xMode?: ScalarXMode;
   yScale?: ScalarYScale;
@@ -29,6 +37,7 @@ export type ScalarLineOptions = {
   dataZoom?: boolean;
   /** Fix axis extents so comparison charts share a scale. */
   domain?: Partial<ScalarDomain>;
+  checkpointMarkers?: readonly ScalarCheckpointMarker[];
 };
 
 function toAxisX(point: ScalarLinePoint, xMode: ScalarXMode): number {
@@ -65,6 +74,39 @@ function formatAxisTooltip(params: TooltipComponentFormatterCallbackParams): str
   return [header, ...rows].join("<br/>");
 }
 
+function checkpointTooltipLabel(marker: ScalarCheckpointMarker) {
+  const details = [
+    marker.epoch === null ? null : `epoch ${marker.epoch}`,
+    marker.step === null ? null : `step ${marker.step}`,
+  ].filter(Boolean);
+  return `${marker.runLabel}: ${marker.filename}${
+    details.length > 0 ? ` (${details.join(", ")})` : ""
+  }`;
+}
+
+function checkpointMarkLineData(markers: readonly ScalarCheckpointMarker[]) {
+  const byStep = new Map<number, ScalarCheckpointMarker[]>();
+  for (const marker of markers) {
+    if (typeof marker.step !== "number" || !Number.isFinite(marker.step)) {
+      continue;
+    }
+    byStep.set(marker.step, [...(byStep.get(marker.step) ?? []), marker]);
+  }
+
+  return Array.from(byStep, ([step, stepMarkers]) => ({
+    name: stepMarkers.map(checkpointTooltipLabel).join("\n"),
+    xAxis: step,
+  })).sort((left, right) => left.xAxis - right.xAxis);
+}
+
+function formatCheckpointTooltip(params: unknown): string {
+  const name =
+    typeof params === "object" && params !== null && "name" in params
+      ? String((params as { name?: unknown }).name ?? "")
+      : "";
+  return name.split("\n").join("<br/>");
+}
+
 /**
  * Builds a line-chart option for one or more overlaid run series. When smoothing
  * is active each multi-point line is drawn twice: a faint raw line behind a bold
@@ -80,6 +122,7 @@ export function buildScalarLineOption(
     smoothing = 0,
     dataZoom = false,
     domain,
+    checkpointMarkers = [],
   } = options;
 
   const series: LineSeriesOption[] = [];
@@ -122,6 +165,30 @@ export function buildScalarLineOption(
         lineStyle: { color: line.color, width: 2 },
         itemStyle: { color: line.color },
       });
+    }
+  }
+
+  if (xMode === "step" && series.length > 0) {
+    const markerData = checkpointMarkLineData(checkpointMarkers);
+    if (markerData.length > 0) {
+      series[0] = {
+        ...series[0],
+        markLine: {
+          animation: false,
+          symbol: "none",
+          silent: false,
+          lineStyle: {
+            color: "rgba(255,255,255,0.42)",
+            type: "dashed",
+            width: 1,
+          },
+          label: { show: false },
+          tooltip: {
+            formatter: formatCheckpointTooltip,
+          },
+          data: markerData,
+        },
+      };
     }
   }
 

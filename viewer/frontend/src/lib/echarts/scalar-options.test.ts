@@ -24,6 +24,14 @@ function seriesOf(option: ReturnType<typeof buildScalarLineOption>): LineSeriesO
   return (option.series ?? []) as LineSeriesOption[];
 }
 
+function markLineData(option: ReturnType<typeof buildScalarLineOption>) {
+  const firstSeries = seriesOf(option)[0] as LineSeriesOption | undefined;
+  return (firstSeries?.markLine?.data ?? []) as Array<{
+    name?: string;
+    xAxis?: number;
+  }>;
+}
+
 describe("buildScalarLineOption", () => {
   it("uses a value x-axis in step mode and a time x-axis in wallTime mode", () => {
     expect(axis(buildScalarLineOption([multiPoint], { xMode: "step" }), "xAxis").type).toBe(
@@ -76,5 +84,58 @@ describe("buildScalarLineOption", () => {
       domain: { minValue: -1, maxValue: 5 },
     });
     expect(axis(option, "yAxis").min).toBe(-1);
+  });
+
+  it("draws aggregated checkpoint mark lines in step mode", () => {
+    const option = buildScalarLineOption([multiPoint], {
+      xMode: "step",
+      checkpointMarkers: [
+        {
+          runId: "run-a",
+          runLabel: "Run A",
+          filename: "epoch=0-step=2.ckpt",
+          epoch: 0,
+          step: 2,
+        },
+        {
+          runId: "run-b",
+          runLabel: "Run B",
+          filename: "epoch=1-step=2.ckpt",
+          epoch: 1,
+          step: 2,
+        },
+        {
+          runId: "run-a",
+          runLabel: "Run A",
+          filename: "last.ckpt",
+          epoch: null,
+          step: null,
+        },
+      ],
+    });
+
+    const data = markLineData(option);
+    expect(data).toHaveLength(1);
+    expect(data[0].xAxis).toBe(2);
+    expect(data[0].name).toContain("Run A: epoch=0-step=2.ckpt (epoch 0, step 2)");
+    expect(data[0].name).toContain("Run B: epoch=1-step=2.ckpt (epoch 1, step 2)");
+    expect(data[0].name).not.toContain("last.ckpt");
+  });
+
+  it("suppresses checkpoint mark lines in wall-time mode", () => {
+    const option = buildScalarLineOption([multiPoint], {
+      xMode: "wallTime",
+      checkpointMarkers: [
+        {
+          runId: "run-a",
+          runLabel: "Run A",
+          filename: "epoch=0-step=2.ckpt",
+          epoch: 0,
+          step: 2,
+        },
+      ],
+    });
+
+    expect(markLineData(option)).toHaveLength(0);
   });
 });
