@@ -1,13 +1,10 @@
 import { useCallback, useMemo } from "react";
-import { ChevronRight, Database } from "lucide-react";
-import { EChart, type EChartEventHandlers } from "@/features/viewer/components/charts/echart";
-import { EmptyState } from "@/features/viewer/components/empty-state";
+import { ChevronRight } from "lucide-react";
 import { type InspectResponse } from "@/lib/api";
 import {
-  buildParameterTreemapData,
-  buildParameterTreemapOption,
-  type ParameterTreemapItem,
-  type ParameterTreemapNodeSummary,
+  buildParameterFocusData,
+  type ParameterFocusData,
+  type ParameterFocusNodeSummary,
 } from "@/lib/echarts/parameter-treemap-options";
 import {
   formatCompactCount,
@@ -15,22 +12,6 @@ import {
   formatModelSize,
 } from "@/lib/graph";
 import { cn } from "@/lib/utils";
-
-type EChartClickParams = {
-  data?: Partial<ParameterTreemapItem>;
-};
-
-function clickedTreemapItem(params: unknown) {
-  const data = (params as EChartClickParams | undefined)?.data;
-  const nodeId = data?.nodeId;
-  if (typeof nodeId !== "string" || nodeId.length === 0) {
-    return null;
-  }
-  return {
-    nodeId,
-    canDrill: data?.isDirectParameterBucket ? false : data?.canDrill === true,
-  };
-}
 
 function metricTitle(value: number, suffix: string) {
   return `${formatExactCount(value)} ${suffix}`;
@@ -60,7 +41,7 @@ function StatCell({
   );
 }
 
-function RolePill({ role }: { role: ParameterTreemapNodeSummary["graphRole"] }) {
+function RolePill({ role }: { role: ParameterFocusNodeSummary["graphRole"] }) {
   const roleClassName =
     role === "architecture"
       ? "border-violet/35 bg-violet/15 text-violet-text"
@@ -86,9 +67,9 @@ function Breadcrumbs({
   focusedNode,
   onFocusNode,
 }: {
-  ancestors: ParameterTreemapNodeSummary[];
+  ancestors: ParameterFocusNodeSummary[];
   focusNodeId: string | null;
-  focusedNode: ParameterTreemapNodeSummary | null;
+  focusedNode: ParameterFocusNodeSummary | null;
   onFocusNode: (nodeId: string | null) => void;
 }) {
   const showFocusedCrumb = Boolean(focusNodeId && focusedNode);
@@ -143,9 +124,9 @@ function ChildButton({
   selected,
   onSelect,
 }: {
-  child: ParameterTreemapNodeSummary;
+  child: ParameterFocusNodeSummary;
   selected: boolean;
-  onSelect: (child: ParameterTreemapNodeSummary) => void;
+  onSelect: (child: ParameterFocusNodeSummary) => void;
 }) {
   return (
     <button
@@ -193,9 +174,9 @@ function ChildSection({
   onSelectChild,
 }: {
   label: string;
-  items: ParameterTreemapNodeSummary[];
+  items: ParameterFocusNodeSummary[];
   selectedNodeId: string | null;
-  onSelectChild: (child: ParameterTreemapNodeSummary) => void;
+  onSelectChild: (child: ParameterFocusNodeSummary) => void;
 }) {
   if (items.length === 0) {
     return null;
@@ -209,7 +190,7 @@ function ChildSection({
         </h3>
         <span className="font-mono text-[10px] text-ink-faint">{items.length}</span>
       </div>
-      <div className="grid gap-1.5">
+      <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {items.map((child) => (
           <ChildButton
             key={child.id}
@@ -223,90 +204,66 @@ function ChildSection({
   );
 }
 
-function ParameterInspector({
+function FocusDetails({
   data,
-  selectedNodeId,
-  onSelectChild,
 }: {
-  data: ReturnType<typeof buildParameterTreemapData>;
-  selectedNodeId: string | null;
-  onSelectChild: (child: ParameterTreemapNodeSummary) => void;
+  data: ParameterFocusData;
 }) {
   const focusedNode = data.focusedNode;
-  const parameterChildren = data.immediateChildren.filter((child) => child.hasParameters);
   const memoryText = formatModelSize(focusedNode?.parameterSizeBytes) ?? "0 MB";
 
   return (
-    <aside
-      data-testid="parameter-treemap-inspector"
-      className="min-h-0 overflow-y-auto border-t border-white/[0.08] bg-black/[0.14] p-3 xl:border-l xl:border-t-0"
-    >
-      <div className="grid gap-4">
-        <section className="grid gap-2">
-          <div className="flex min-w-0 items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-ink-faint">
-                Focus
-              </div>
-              <div
-                data-testid="parameter-treemap-focus"
-                className="mt-1 truncate text-[14px] font-bold text-ink"
-                title={focusedNode?.path}
-              >
-                {focusedNode?.label ?? "Root"}
-              </div>
-              <div className="mt-0.5 truncate font-mono text-[11px] text-ink-dim">
-                {focusedNode?.path ?? "root"}
-              </div>
-            </div>
-            {focusedNode && <RolePill role={focusedNode.graphRole} />}
+    <section className="grid gap-2">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-ink-faint">
+            Focus
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <StatCell
-              label="Params"
-              value={formatCompactCount(data.focusedParameterCount)}
-              title={metricTitle(data.focusedParameterCount, "parameters")}
-            />
-            <StatCell label="Memory" value={memoryText} />
-            <StatCell label="Type" value={focusedNode?.typeName ?? "Root"} />
-            <StatCell label="Children" value={String(data.immediateChildren.length)} />
+          <div
+            data-testid="parameter-browser-focus"
+            className="mt-1 truncate text-[14px] font-bold text-ink"
+            title={focusedNode?.path}
+          >
+            {focusedNode?.label ?? "Root"}
           </div>
-          {focusedNode?.dimText && (
-            <div className="rounded-[7px] border border-white/[0.07] bg-black/20 px-2.5 py-2 font-mono text-[11px] text-ink-dim">
-              dims: <span className="text-ink">{focusedNode.dimText}</span>
-            </div>
-          )}
-          {focusedNode && focusedNode.badges.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {focusedNode.badges.map((badge) => (
-                <span
-                  key={`${badge.key}-${badge.value}`}
-                  className="rounded-[5px] border border-white/[0.08] bg-white/[0.04] px-1.5 py-1 font-mono text-[10px] text-ink-dim"
-                >
-                  {badge.key}: <span className="text-ink">{badge.value}</span>
-                </span>
-              ))}
-            </div>
-          )}
-        </section>
-        <ChildSection
-          label="Children"
-          items={parameterChildren}
-          selectedNodeId={selectedNodeId}
-          onSelectChild={onSelectChild}
-        />
-        <ChildSection
-          label="No params"
-          items={data.zeroParameterChildren}
-          selectedNodeId={selectedNodeId}
-          onSelectChild={onSelectChild}
-        />
+          <div className="mt-0.5 truncate font-mono text-[11px] text-ink-dim">
+            {focusedNode?.path ?? "root"}
+          </div>
+        </div>
+        {focusedNode && <RolePill role={focusedNode.graphRole} />}
       </div>
-    </aside>
+      <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
+        <StatCell
+          label="Params"
+          value={formatCompactCount(data.focusedParameterCount)}
+          title={metricTitle(data.focusedParameterCount, "parameters")}
+        />
+        <StatCell label="Memory" value={memoryText} />
+        <StatCell label="Type" value={focusedNode?.typeName ?? "Root"} />
+        <StatCell label="Children" value={String(data.immediateChildren.length)} />
+      </div>
+      {focusedNode?.dimText && (
+        <div className="rounded-[7px] border border-white/[0.07] bg-black/20 px-2.5 py-2 font-mono text-[11px] text-ink-dim">
+          dims: <span className="text-ink">{focusedNode.dimText}</span>
+        </div>
+      )}
+      {focusedNode && focusedNode.badges.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {focusedNode.badges.map((badge) => (
+            <span
+              key={`${badge.key}-${badge.value}`}
+              className="rounded-[5px] border border-white/[0.08] bg-white/[0.04] px-1.5 py-1 font-mono text-[10px] text-ink-dim"
+            >
+              {badge.key}: <span className="text-ink">{badge.value}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
-export function ParameterTreemapPanel({
+export function ParameterBrowserPanel({
   graph,
   selectedNodeId,
   focusNodeId,
@@ -320,39 +277,20 @@ export function ParameterTreemapPanel({
   onRevealNode: (nodeId: string) => void;
 }) {
   const data = useMemo(
-    () => buildParameterTreemapData(graph, focusNodeId),
+    () => buildParameterFocusData(graph, focusNodeId),
     [focusNodeId, graph],
   );
-  const option = useMemo(
-    () => buildParameterTreemapOption(data, { selectedNodeId }),
-    [data, selectedNodeId],
-  );
-  const selectAndMaybeDrill = useCallback((
-    nodeId: string,
-    canDrill: boolean,
-  ) => {
-    onRevealNode(nodeId);
-    if (canDrill) {
-      onFocusNode(nodeId);
+  const parameterChildren = data.immediateChildren.filter((child) => child.hasParameters);
+  const handleChild = useCallback((child: ParameterFocusNodeSummary) => {
+    onRevealNode(child.id);
+    if (child.childCount > 0) {
+      onFocusNode(child.id);
     }
   }, [onFocusNode, onRevealNode]);
-  const handleChartClick = useCallback((params: unknown) => {
-    const item = clickedTreemapItem(params);
-    if (item) {
-      selectAndMaybeDrill(item.nodeId, item.canDrill);
-    }
-  }, [selectAndMaybeDrill]);
-  const handleInspectorChild = useCallback((child: ParameterTreemapNodeSummary) => {
-    selectAndMaybeDrill(child.id, child.childCount > 0);
-  }, [selectAndMaybeDrill]);
-  const events = useMemo<EChartEventHandlers>(
-    () => ({ click: handleChartClick }),
-    [handleChartClick],
-  );
 
   return (
     <div
-      data-testid="parameter-treemap-panel"
+      data-testid="parameter-browser-panel"
       className="grid h-full min-h-0 w-full grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[linear-gradient(180deg,rgba(13,15,24,0.88),rgba(6,7,12,0.98))]"
     >
       <div className="flex min-w-0 items-center justify-between gap-3 border-b border-white/[0.08] bg-black/[0.18] px-3 py-2 backdrop-blur">
@@ -369,27 +307,26 @@ export function ParameterTreemapPanel({
           {formatCompactCount(data.totalParameterCount)}
         </div>
       </div>
-      <div className="grid min-h-0 grid-rows-[minmax(260px,1fr)_minmax(180px,auto)] xl:grid-cols-[minmax(0,1fr)_320px] xl:grid-rows-1">
-        <div className="relative min-h-0 min-w-0">
-          <EChart option={option} onEvents={events} className="h-full w-full bg-transparent" />
-          {!data.hasChartParameters && (
-            <EmptyState
-              title={data.hasParameters ? "Focus has no params" : "No parameters"}
-              detail={
-                data.hasParameters
-                  ? "No positive-parameter children in this focus."
-                  : "Selected graph detail has no positive-parameter modules."
-              }
-              icon={<Database className="h-4 w-4" aria-hidden />}
-            />
-          )}
+      <main
+        data-testid="parameter-browser-inspector"
+        className="min-h-0 overflow-y-auto bg-black/[0.14] p-3"
+      >
+        <div className="grid gap-4">
+          <FocusDetails data={data} />
+          <ChildSection
+            label="Children"
+            items={parameterChildren}
+            selectedNodeId={selectedNodeId}
+            onSelectChild={handleChild}
+          />
+          <ChildSection
+            label="No params"
+            items={data.zeroParameterChildren}
+            selectedNodeId={selectedNodeId}
+            onSelectChild={handleChild}
+          />
         </div>
-        <ParameterInspector
-          data={data}
-          selectedNodeId={selectedNodeId}
-          onSelectChild={handleInspectorChild}
-        />
-      </div>
+      </main>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { createContext, memo, useContext, type ReactNode } from "react";
 import { ChevronRight, LineChart } from "lucide-react";
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { GraphIconButton } from "@/features/viewer/components/graph/graph-icon-button";
@@ -12,6 +12,7 @@ import {
   StackDiagramView,
 } from "@/features/viewer/components/graph/graph-node-diagrams";
 import { GraphNodeParameterShapes } from "@/features/viewer/components/graph/graph-node-parameter-shapes";
+import { OperationGraphNodeView } from "@/features/viewer/components/graph/operation-graph-node-view";
 import {
   type ViewerNodeData,
   formatModelSize,
@@ -22,27 +23,59 @@ import {
 } from "@/lib/graph";
 import { cn } from "@/lib/utils";
 
+const GraphNodeViewportMovingContext = createContext(false);
+
+export function GraphNodeRenderModeProvider({
+  children,
+  isViewportMoving,
+}: {
+  children: ReactNode;
+  isViewportMoving: boolean;
+}) {
+  return (
+    <GraphNodeViewportMovingContext.Provider value={isViewportMoving}>
+      {children}
+    </GraphNodeViewportMovingContext.Provider>
+  );
+}
+
 const GraphNodeView = memo(function GraphNodeView({
   data,
   selected,
 }: NodeProps<Node<ViewerNodeData>>) {
+  const isViewportMoving = useContext(GraphNodeViewportMovingContext);
   const isSimpleMode = data.graphDetailMode === "simple";
-  const entries = nodeDetailEntries(data.details, data.config);
-  const parameterShapes = parameterShapeEntries(data.details);
-  const hasMetadata = entries.length > 0;
   const simpleParamText = isSimpleMode ? simpleGraphParamText(data.parameterCount) : undefined;
   const modelSizeText = data.isRootNode ? formatModelSize(data.parameterSizeBytes) : undefined;
   const simpleDimsText = isSimpleMode
     ? nodeDimsText(data.details, data.config) ?? data.stackDiagram?.dims
     : undefined;
-  const detailToggleLabel = data.config ? "Config options" : "Details";
-  const detailsId = `graph-node-details-${data.nodeId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const activateLabel = data.canToggleExpansion
     ? `Select and ${data.isExpanded ? "collapse" : "expand"} ${data.path}`
     : `Select ${data.path}`;
   const handleActivate = () => {
     data.onActivateNode();
   };
+
+  if (isViewportMoving) {
+    return (
+      <MovingGraphNodeShell
+        data={data}
+        selected={selected}
+        activateLabel={activateLabel}
+        onActivate={handleActivate}
+        modelSizeText={modelSizeText}
+        simpleParamText={simpleParamText}
+        simpleDimsText={simpleDimsText}
+      />
+    );
+  }
+
+  const entries = nodeDetailEntries(data.details, data.config);
+  const parameterShapes = parameterShapeEntries(data.details);
+  const hasMetadata = entries.length > 0;
+  const detailToggleLabel = data.config ? "Config options" : "Details";
+  const detailsId = `graph-node-details-${data.nodeId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const expansionButton = data.canToggleExpansion ? (
     <GraphIconButton
       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-line bg-white/[0.03] text-ink-dim transition hover:border-white/20 hover:bg-white/[0.07] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
@@ -134,6 +167,69 @@ const GraphNodeView = memo(function GraphNodeView({
   );
 });
 
+function MovingGraphNodeShell({
+  data,
+  selected,
+  activateLabel,
+  onActivate,
+  modelSizeText,
+  simpleParamText,
+  simpleDimsText,
+}: {
+  data: ViewerNodeData;
+  selected: boolean;
+  activateLabel: string;
+  onActivate: () => void;
+  modelSizeText?: string;
+  simpleParamText?: string;
+  simpleDimsText?: string;
+}) {
+  const parameterText = simpleParamText ?? simpleGraphParamText(data.parameterCount);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={activateLabel}
+      aria-expanded={data.canToggleExpansion ? data.isExpanded : undefined}
+      data-testid={`graph-node-moving-${data.nodeId}`}
+      onClick={onActivate}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        onActivate();
+      }}
+      className={cn(
+        "nodrag nopan edge flex w-full flex-col justify-center overflow-hidden rounded-card px-5 py-4 transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+        selected && "edge-sel",
+      )}
+      style={{ height: data.height }}
+    >
+      <Handle type="target" position={Position.Left} />
+      <div className="min-w-0 truncate text-[16px] font-bold leading-5 text-ink">
+        {data.label}
+      </div>
+      <div className="mt-1 min-w-0 truncate font-mono text-[11px] leading-4 text-ink-dim">
+        {data.path}
+      </div>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5 overflow-hidden font-mono text-[10px] font-semibold text-ink-faint">
+        {parameterText && <span className="shrink-0">{parameterText}</span>}
+        {modelSizeText && <span className="shrink-0">{modelSizeText}</span>}
+        {simpleDimsText && <span className="shrink-0">{simpleDimsText}</span>}
+        {data.childCount > 0 && (
+          <span className="shrink-0">
+            {data.childCount} {data.childCount === 1 ? "child" : "children"}
+          </span>
+        )}
+      </div>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+
 export const nodeTypes = {
   viewerNode: GraphNodeView,
+  operationNode: OperationGraphNodeView,
 };

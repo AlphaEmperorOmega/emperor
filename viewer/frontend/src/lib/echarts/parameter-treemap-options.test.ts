@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, InspectResponse } from "@/lib/api";
 import {
-  buildParameterTreemapData,
-  buildParameterTreemapOption,
-  fallbackParameterTreemapFocusNodeId,
-  type ParameterTreemapItem,
+  buildParameterFocusData,
+  fallbackParameterFocusNodeId,
 } from "@/lib/echarts/parameter-treemap-options";
 import { filterGraphByDetail } from "@/lib/graph/filtering";
 
@@ -47,18 +45,15 @@ function graph(
   };
 }
 
-function series(option: ReturnType<typeof buildParameterTreemapOption>) {
-  return (option.series as Array<{ data?: ParameterTreemapItem[] }>)[0];
+function parameterChildIds(data: ReturnType<typeof buildParameterFocusData>) {
+  return data.immediateChildren
+    .filter((child) => child.hasParameters)
+    .map((child) => child.id);
 }
 
-function firstChild(item: ParameterTreemapItem, nodeId: string) {
-  return item.children?.find((child) => child.nodeId === nodeId);
-}
-
-describe("buildParameterTreemapData", () => {
+describe("buildParameterFocusData", () => {
   it("returns empty focused data for missing or empty graphs", () => {
     const emptyData = {
-      chartRoots: [],
       focusedNode: null,
       focusNodeId: null,
       ancestors: [],
@@ -67,15 +62,14 @@ describe("buildParameterTreemapData", () => {
       totalParameterCount: 0,
       focusedParameterCount: 0,
       hasParameters: false,
-      hasChartParameters: false,
     };
 
-    expect(buildParameterTreemapData(undefined)).toEqual(emptyData);
-    expect(buildParameterTreemapData(graph([], []))).toEqual(emptyData);
+    expect(buildParameterFocusData(undefined)).toEqual(emptyData);
+    expect(buildParameterFocusData(graph([], []))).toEqual(emptyData);
   });
 
-  it("opens at the root overview with immediate parameter-bearing chart roots", () => {
-    const data = buildParameterTreemapData(
+  it("opens at the root overview with immediate child summaries", () => {
+    const data = buildParameterFocusData(
       graph(
         [
           node("model", {
@@ -115,7 +109,7 @@ describe("buildParameterTreemapData", () => {
       parameterCount: 100,
       childCount: 3,
     });
-    expect(data.chartRoots.map((root) => root.nodeId)).toEqual(["layer", "head"]);
+    expect(parameterChildIds(data)).toEqual(["layer", "head"]);
     expect(data.immediateChildren.map((child) => child.id)).toEqual([
       "layer",
       "empty",
@@ -125,7 +119,7 @@ describe("buildParameterTreemapData", () => {
   });
 
   it("focuses a child into its subtree and derives breadcrumbs from edges", () => {
-    const data = buildParameterTreemapData(
+    const data = buildParameterFocusData(
       graph(
         [
           node("model", { typeName: "Model", path: "model", parameterCount: 100 }),
@@ -168,24 +162,19 @@ describe("buildParameterTreemapData", () => {
       label: "0: Layer",
       path: "main_model.0",
     });
+    expect(data.focusedParameterCount).toBe(80);
     expect(data.ancestors.map((ancestor) => ancestor.id)).toEqual(["model"]);
-    expect(data.chartRoots.map((root) => root.nodeId)).toEqual([
+    expect(data.immediateChildren.map((child) => child.id)).toEqual([
       "linear",
+      "norm",
       "projection",
-      "block",
     ]);
-    expect(data.chartRoots.at(-1)).toMatchObject({
-      id: "block::__direct_params",
-      nodeId: "block",
-      isDirectParameterBucket: true,
-      canDrill: false,
-      parameterCount: 10,
-    });
+    expect(parameterChildIds(data)).toEqual(["linear", "projection"]);
     expect(data.zeroParameterChildren.map((child) => child.id)).toEqual(["norm"]);
   });
 
   it("makes repeated sibling labels unique by adding parent path segments", () => {
-    const data = buildParameterTreemapData(
+    const data = buildParameterFocusData(
       graph(
         [
           node("parent", { typeName: "Container", path: "main_model", parameterCount: 20 }),
@@ -208,15 +197,14 @@ describe("buildParameterTreemapData", () => {
       ),
     );
 
-    expect(data.chartRoots.map((child) => child.name)).toEqual([
+    expect(data.immediateChildren.map((child) => child.label)).toEqual([
       "0.model: LinearLayer",
       "1.model: LinearLayer",
-      "Direct parameters",
     ]);
   });
 
-  it("keeps zero-parameter immediate children in inspector data, not chart roots", () => {
-    const data = buildParameterTreemapData(
+  it("keeps zero-parameter immediate children separate from parameter-bearing children", () => {
+    const data = buildParameterFocusData(
       graph(
         [
           node("parent", { parameterCount: 10 }),
@@ -231,88 +219,13 @@ describe("buildParameterTreemapData", () => {
       ),
     );
 
-    expect(data.chartRoots.map((root) => root.nodeId)).toEqual(["kept", "parent"]);
+    expect(data.immediateChildren.map((child) => child.id)).toEqual(["empty", "kept"]);
+    expect(parameterChildIds(data)).toEqual(["kept"]);
     expect(data.zeroParameterChildren.map((child) => child.id)).toEqual(["empty"]);
-    expect(data.chartRoots.some((root) => root.nodeId === "empty")).toBe(false);
   });
 
-  it("normalizes layout values when shared child totals exceed parent totals", () => {
-    const data = buildParameterTreemapData(
-      graph(
-        [
-          node("parent", { parameterCount: 100 }),
-          node("left", { parameterCount: 80 }),
-          node("right", { parameterCount: 70 }),
-        ],
-        [
-          ["parent", "left"],
-          ["parent", "right"],
-        ],
-        { parameterCount: 100 },
-      ),
-    );
-
-    const left = data.chartRoots.find((root) => root.nodeId === "left");
-    const right = data.chartRoots.find((root) => root.nodeId === "right");
-    expect(left?.parameterCount).toBe(80);
-    expect(right?.parameterCount).toBe(70);
-    expect(left?.value).toBeCloseTo(53.333, 3);
-    expect(right?.value).toBeCloseTo(46.667, 3);
-    expect(data.chartRoots.find((root) => root.id === "parent::__direct_params"))
-      .toBeUndefined();
-  });
-
-  it("does not infer direct buckets when shared child totals hide direct ownership", () => {
-    const data = buildParameterTreemapData(
-      graph(
-        [
-          node("parent", { parameterCount: 100 }),
-          node("sharedLeft", { parameterCount: 80 }),
-          node("sharedRight", { parameterCount: 80 }),
-        ],
-        [
-          ["parent", "sharedLeft"],
-          ["parent", "sharedRight"],
-        ],
-        { parameterCount: 100 },
-      ),
-    );
-
-    expect(data.chartRoots.find((root) => root.id === "parent::__direct_params"))
-      .toBeUndefined();
-    expect(data.chartRoots.find((root) => root.nodeId === "sharedLeft")?.value).toBe(50);
-    expect(data.chartRoots.find((root) => root.nodeId === "sharedRight")?.value).toBe(50);
-  });
-
-  it("adds direct-parameter buckets that select their owner and do not drill", () => {
-    const data = buildParameterTreemapData(
-      graph(
-        [
-          node("parent", { parameterCount: 100, parameterSizeBytes: 400 }),
-          node("child", { parameterCount: 30, parameterSizeBytes: 120 }),
-        ],
-        [["parent", "child"]],
-        { parameterCount: 100, parameterSizeBytes: 400 },
-      ),
-    );
-
-    const directBucket = data.chartRoots.find((root) => root.id === "parent::__direct_params");
-    expect(directBucket).toMatchObject({
-      name: "Direct parameters",
-      nodeId: "parent",
-      path: "model.parent",
-      typeName: "DirectParameters",
-      graphRole: "architecture",
-      parameterCount: 70,
-      parameterSizeBytes: 280,
-      value: 70,
-      canDrill: false,
-      isDirectParameterBucket: true,
-    });
-  });
-
-  it("terminates cycles in focused subtree rendering", () => {
-    const data = buildParameterTreemapData(
+  it("terminates cycles while deriving focused children and ancestors", () => {
+    const data = buildParameterFocusData(
       graph(
         [
           node("a", { parameterCount: 10 }),
@@ -327,8 +240,8 @@ describe("buildParameterTreemapData", () => {
       "a",
     );
 
-    expect(data.chartRoots.map((root) => root.nodeId)).toEqual(["b", "a"]);
-    expect(firstChild(data.chartRoots[0], "a")).toBeUndefined();
+    expect(data.ancestors).toEqual([]);
+    expect(data.immediateChildren.map((child) => child.id)).toEqual(["b"]);
   });
 
   it("uses caller-filtered detail graphs for simple/basic and full visibility", () => {
@@ -359,13 +272,13 @@ describe("buildParameterTreemapData", () => {
       { parameterCount: 12 },
     );
 
-    const basicData = buildParameterTreemapData(filterGraphByDetail(fullGraph, "basic"));
-    const simpleData = buildParameterTreemapData(filterGraphByDetail(fullGraph, "simple"));
-    const fullData = buildParameterTreemapData(filterGraphByDetail(fullGraph, "full"));
+    const basicData = buildParameterFocusData(filterGraphByDetail(fullGraph, "basic"));
+    const simpleData = buildParameterFocusData(filterGraphByDetail(fullGraph, "simple"));
+    const fullData = buildParameterFocusData(filterGraphByDetail(fullGraph, "full"));
 
-    expect(basicData.chartRoots.map((child) => child.nodeId)).not.toContain("internal");
-    expect(simpleData.chartRoots.map((child) => child.nodeId)).not.toContain("runtime");
-    expect(fullData.chartRoots.map((child) => child.nodeId)).toEqual([
+    expect(parameterChildIds(basicData)).not.toContain("internal");
+    expect(parameterChildIds(simpleData)).not.toContain("runtime");
+    expect(parameterChildIds(fullData)).toEqual([
       "architecture",
       "internal",
       "runtime",
@@ -387,118 +300,10 @@ describe("buildParameterTreemapData", () => {
     const basicGraph = filterGraphByDetail(fullGraph, "basic");
 
     expect(
-      fallbackParameterTreemapFocusNodeId("internal", basicGraph, fullGraph),
+      fallbackParameterFocusNodeId("internal", basicGraph, fullGraph),
     ).toBe("model");
     expect(
-      fallbackParameterTreemapFocusNodeId("missing", basicGraph, fullGraph),
+      fallbackParameterFocusNodeId("missing", basicGraph, fullGraph),
     ).toBeNull();
-  });
-});
-
-describe("buildParameterTreemapOption", () => {
-  it("builds one fixed non-interactive treemap series on a transparent background", () => {
-    const data = buildParameterTreemapData(
-      graph([node("root", { parameterCount: 5 })], [], { parameterCount: 5 }),
-    );
-    const option = buildParameterTreemapOption(data);
-    const treemapSeries = series(option);
-
-    expect(option.animation).toBe(false);
-    expect(option.backgroundColor).toBe("transparent");
-    expect(treemapSeries).toMatchObject({
-      type: "treemap",
-      animation: false,
-      roam: false,
-      nodeClick: false,
-      breadcrumb: { show: false },
-    });
-    expect(treemapSeries.data).toHaveLength(1);
-  });
-
-  it("uses restrained treemap labels, group headers, and dark gutters", () => {
-    const data = buildParameterTreemapData(
-      graph(
-        [
-          node("root", { parameterCount: 10 }),
-          node("group", { parameterCount: 6 }),
-          node("leaf", { parameterCount: 4 }),
-        ],
-        [
-          ["root", "group"],
-          ["group", "leaf"],
-        ],
-        { parameterCount: 10 },
-      ),
-    );
-    const option = buildParameterTreemapOption(data);
-    const treemapSeries = series(option) as {
-      left?: number;
-      top?: number;
-      emphasis?: { label?: { show?: boolean } };
-      itemStyle?: { gapWidth?: number; borderWidth?: number };
-      levels?: Array<{ upperLabel?: { show?: boolean; height?: number } }>;
-      data?: ParameterTreemapItem[];
-    };
-
-    expect(treemapSeries.left).toBe(10);
-    expect(treemapSeries.top).toBe(10);
-    expect(treemapSeries.emphasis?.label?.show).toBe(false);
-    expect(treemapSeries.itemStyle).toMatchObject({
-      gapWidth: 4,
-      borderWidth: 2,
-    });
-    expect(treemapSeries.levels?.[1].upperLabel).toMatchObject({
-      show: true,
-      height: 18,
-    });
-    expect(treemapSeries.data?.[0].label?.show).toBe(false);
-    expect(treemapSeries.data?.[0].children?.[0].label?.show).toBe(true);
-  });
-
-  it("applies selected-node border and highlight styling", () => {
-    const data = buildParameterTreemapData(
-      graph([node("root", { parameterCount: 5 })], [], { parameterCount: 5 }),
-    );
-    const option = buildParameterTreemapOption(data, { selectedNodeId: "root" });
-
-    expect(series(option).data?.[0].itemStyle).toMatchObject({
-      borderColor: "#f8fafc",
-      borderWidth: 3,
-      shadowBlur: 14,
-    });
-  });
-
-  it("formats tooltips with identity, counts, memory, and focus/model shares", () => {
-    const data = buildParameterTreemapData(
-      graph(
-        [node("root", { typeName: "Root", parameterCount: 1500 })],
-        [],
-        { parameterCount: 1500 },
-      ),
-    );
-    const option = buildParameterTreemapOption(data);
-    const formatter = option.tooltip as unknown as {
-      formatter: (params: { data: ParameterTreemapItem }) => string;
-    };
-    const tooltip = formatter.formatter({ data: series(option).data?.[0] as ParameterTreemapItem });
-
-    expect(tooltip).toContain("<strong>root: Root</strong>");
-    expect(tooltip).toContain("Path: model.root");
-    expect(tooltip).toContain("Type: Root");
-    expect(tooltip).toContain("Exact params: 1,500");
-    expect(tooltip).toContain("Compact params: 1.5K");
-    expect(tooltip).toContain("Memory:");
-    expect(tooltip).toContain("Share of focus: 100%");
-    expect(tooltip).toContain("Share of model: 100%");
-  });
-
-  it("ignores partial ECharts tooltip payloads without crashing", () => {
-    const option = buildParameterTreemapOption(buildParameterTreemapData(undefined));
-    const formatter = option.tooltip as unknown as {
-      formatter: (params: { data: unknown }) => string;
-    };
-
-    expect(() => formatter.formatter({ data: { value: 1 } })).not.toThrow();
-    expect(formatter.formatter({ data: { value: 1 } })).toBe("");
   });
 });

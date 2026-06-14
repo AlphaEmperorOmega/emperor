@@ -7,6 +7,7 @@ export type {
   ExpertDiagram,
   ExpertDiagramCell,
   GraphDetailMode,
+  GraphKind,
   GraphNavigation,
   GraphParameterActivity,
   GraphParameterActivityChannel,
@@ -22,10 +23,19 @@ export type {
   TerminalReachLocationSummary,
   TerminalReachPlane,
   ViewerNodeData,
+  OperationFlowNodeData,
   ClusterLocationSummary,
   GraphCoordinate,
   GraphLocationSummary,
 } from "@/lib/graph/types";
+export type {
+  Cluster3DCell,
+  Cluster3DCellCategory,
+  Cluster3DCellSource,
+  Cluster3DNodeMatch,
+  Cluster3DReach,
+  Cluster3DSceneModel,
+} from "@/lib/graph/cluster-3d";
 export type {
   LinearMonitorComparisonCandidateGroups,
   LinearMonitorComparisonScope,
@@ -69,7 +79,12 @@ export {
   parseTerminalReachDetails,
 } from "@/lib/graph/terminal-reach";
 export { buildGraphLocationSummaries } from "@/lib/graph/locations";
+export { buildCluster3DSceneModel } from "@/lib/graph/cluster-3d";
 export { layoutGraph } from "@/lib/graph/layout";
+export {
+  OPERATION_GROUP_NODE_PREFIX,
+  layoutOperationGraph,
+} from "@/lib/graph/operation-layout";
 export {
   buildMonitorComparisonCandidateGroups,
   buildMonitorComparisonCandidates,

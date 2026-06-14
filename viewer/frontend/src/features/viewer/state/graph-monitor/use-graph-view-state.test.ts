@@ -71,22 +71,22 @@ describe("useGraphViewState selection", () => {
     expect(result.current.edges).toBe(edgesBefore);
   });
 
-  it("preserves parameter treemap focus across preview tab switches", () => {
+  it("preserves parameter focus across preview tab switches", () => {
     const { result } = renderHook(() => useGraphViewState(graph));
 
     act(() => {
-      result.current.setParameterTreemapFocusNodeId("n1");
+      result.current.setParameterFocusNodeId("n1");
       result.current.setPreviewVisualizationMode("parameters");
     });
 
-    expect(result.current.parameterTreemapFocusNodeId).toBe("n1");
+    expect(result.current.parameterFocusNodeId).toBe("n1");
 
     act(() => result.current.setPreviewVisualizationMode("graph"));
 
-    expect(result.current.parameterTreemapFocusNodeId).toBe("n1");
+    expect(result.current.parameterFocusNodeId).toBe("n1");
   });
 
-  it("resets parameter treemap focus when the inspected graph changes", async () => {
+  it("resets parameter focus when the inspected graph changes", async () => {
     const nextGraph: InspectResponse = {
       ...graph,
       preset: "next",
@@ -98,17 +98,17 @@ describe("useGraphViewState selection", () => {
       { initialProps: { inputGraph: graph } },
     );
 
-    act(() => result.current.setParameterTreemapFocusNodeId("n1"));
-    expect(result.current.parameterTreemapFocusNodeId).toBe("n1");
+    act(() => result.current.setParameterFocusNodeId("n1"));
+    expect(result.current.parameterFocusNodeId).toBe("n1");
 
     rerender({ inputGraph: nextGraph });
 
     await waitFor(() => {
-      expect(result.current.parameterTreemapFocusNodeId).toBeNull();
+      expect(result.current.parameterFocusNodeId).toBeNull();
     });
   });
 
-  it("falls parameter treemap focus back to a visible ancestor on detail changes", async () => {
+  it("falls parameter focus back to a visible ancestor on detail changes", async () => {
     const fullGraph: InspectResponse = {
       model: "m",
       preset: "p",
@@ -127,13 +127,13 @@ describe("useGraphViewState selection", () => {
     const { result } = renderHook(() => useGraphViewState(fullGraph));
 
     act(() => result.current.setGraphDetailMode("full"));
-    act(() => result.current.setParameterTreemapFocusNodeId("internal"));
-    expect(result.current.parameterTreemapFocusNodeId).toBe("internal");
+    act(() => result.current.setParameterFocusNodeId("internal"));
+    expect(result.current.parameterFocusNodeId).toBe("internal");
 
     act(() => result.current.setGraphDetailMode("basic"));
 
     await waitFor(() => {
-      expect(result.current.parameterTreemapFocusNodeId).toBe("model");
+      expect(result.current.parameterFocusNodeId).toBe("model");
     });
   });
 });

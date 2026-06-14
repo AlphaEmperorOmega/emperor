@@ -7,6 +7,7 @@ import { PreviewPanel } from "@/features/viewer/components/screen/preview-panel"
 import { PreviewToolbar } from "@/features/viewer/components/screen/preview-toolbar";
 import { ViewerModelSidebar } from "@/features/viewer/components/viewer-model-sidebar";
 import { ViewerWorkspaceNav } from "@/features/viewer/components/viewer-workspace-nav";
+import { useGraphView } from "@/features/viewer/providers/viewer-providers";
 import {
   type FullConfigDialogControls,
   type ViewerDialogControls,
@@ -45,6 +46,13 @@ const ConnectedLogRunDetailsPanel = dynamic(
   () =>
     import("@/features/viewer/components/logs/log-run-details-panel").then(
       (module) => module.ConnectedLogRunDetailsPanel,
+    ),
+  { ssr: false },
+);
+const ConnectedNeuronCluster3DPopup = dynamic(
+  () =>
+    import("@/features/viewer/components/graph/neuron-cluster-3d-popup").then(
+      (module) => module.ConnectedNeuronCluster3DPopup,
     ),
   { ssr: false },
 );
@@ -125,6 +133,7 @@ export function ViewerWorkspaceOverlays({
   featureListDialog: ViewerDialogControls;
 }) {
   const isModelWorkspace = activeWorkspace === "model";
+  const { cluster3dNodeId } = useGraphView();
 
   return (
     <>
@@ -138,6 +147,7 @@ export function ViewerWorkspaceOverlays({
         <FeatureListDialog onClose={featureListDialog.close} />
       )}
       {isModelWorkspace && <ConnectedMonitorChartsModal />}
+      {isModelWorkspace && cluster3dNodeId && <ConnectedNeuronCluster3DPopup />}
       <ConnectedTrainingPanel onOpenFullConfig={fullConfigDialog.open} />
     </>
   );

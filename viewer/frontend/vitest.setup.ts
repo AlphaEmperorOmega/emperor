@@ -91,6 +91,56 @@ vi.mock("@/features/viewer/components/charts/echart", () => ({
     ),
 }));
 
+vi.mock("@/features/viewer/components/graph/neuron-cluster-3d-scene", () => ({
+  NeuronCluster3DScene: ({
+    scene,
+    visibleX,
+    visibleY,
+    visibleZ,
+    selectedKey,
+    onSelectCell,
+  }: {
+    scene: {
+      activeCells: Array<{
+        key: string;
+        coordinate: [number, number, number];
+        category: string;
+      }>;
+    };
+    visibleX: Set<number>;
+    visibleY: Set<number>;
+    visibleZ: Set<number>;
+    selectedKey: string | null;
+    onSelectCell: (cell: {
+      key: string;
+      coordinate: [number, number, number];
+      category: string;
+    }) => void;
+  }) =>
+    createElement(
+      "div",
+      {
+        "data-testid": "mock-cluster-3d-scene",
+        "data-visible-x": String(visibleX.size),
+        "data-visible-y": String(visibleY.size),
+        "data-visible-z": String(visibleZ.size),
+        "data-selected-key": selectedKey ?? "",
+      },
+      scene.activeCells.map((cell) =>
+        createElement(
+          "button",
+          {
+            key: cell.key,
+            type: "button",
+            "aria-label": `3D coordinate (${cell.coordinate.join(", ")}) ${cell.category}`,
+            onClick: () => onSelectCell(cell),
+          },
+          `${cell.coordinate.join(",")} ${cell.category}`,
+        ),
+      ),
+    ),
+}));
+
 // jsdom has no canvas implementation; ECharts needs a 2D context to initialise.
 // Component tests mock the <EChart> wrapper, so this stub only guards against a
 // stray real mount throwing "getContext is not a function".

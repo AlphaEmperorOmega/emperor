@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { nodeTypes } from "@/features/viewer/components/graph/graph-node-view";
+import {
+  GraphNodeRenderModeProvider,
+  nodeTypes,
+} from "@/features/viewer/components/graph/graph-node-view";
 import { SelectedNodeDetails } from "@/features/viewer/components/graph/selected-node-details";
 import type { GraphNode } from "@/lib/api";
 import type { ViewerNodeData } from "@/lib/graph";
@@ -21,38 +24,45 @@ vi.mock("@xyflow/react", async (importOriginal) => {
   };
 });
 
-function renderGraphNode(data: Partial<ViewerNodeData> = {}) {
+function renderGraphNode(
+  data: Partial<ViewerNodeData> = {},
+  options: { isViewportMoving?: boolean } = {},
+) {
   const GraphNode = nodeTypes.viewerNode as unknown as React.ComponentType<{
     data: ViewerNodeData;
     selected: boolean;
   }>;
 
   return render(
-    <GraphNode
-      selected={false}
-      data={{
-        nodeId: "main_model.0",
-        label: "Layer",
-        subtitle: "main_model.0",
-        path: "main_model.0",
-        parameterCount: 0,
-        parameterSizeBytes: 0,
-        details: {},
-        config: null,
-        childCount: 1,
-        childSummaries: [{ label: "LinearLayer", kind: "child" }],
-        graphDetailMode: "basic",
-        height: 148,
-        isRootNode: false,
-        isExpanded: false,
-        canToggleExpansion: true,
-        isDetailsExpanded: false,
-        onActivateNode: () => {},
-        onToggleExpansion: () => {},
-        onToggleDetails: () => {},
-        ...data,
-      }}
-    />,
+    <GraphNodeRenderModeProvider
+      isViewportMoving={options.isViewportMoving ?? false}
+    >
+      <GraphNode
+        selected={false}
+        data={{
+          nodeId: "main_model.0",
+          label: "Layer",
+          subtitle: "main_model.0",
+          path: "main_model.0",
+          parameterCount: 0,
+          parameterSizeBytes: 0,
+          details: {},
+          config: null,
+          childCount: 1,
+          childSummaries: [{ label: "LinearLayer", kind: "child" }],
+          graphDetailMode: "basic",
+          height: 148,
+          isRootNode: false,
+          isExpanded: false,
+          canToggleExpansion: true,
+          isDetailsExpanded: false,
+          onActivateNode: () => {},
+          onToggleExpansion: () => {},
+          onToggleDetails: () => {},
+          ...data,
+        }}
+      />
+    </GraphNodeRenderModeProvider>,
   );
 }
 
@@ -171,6 +181,38 @@ describe("GraphNodeView", () => {
     renderGraphNode({ onActivateNode });
 
     fireEvent.click(screen.getByRole("button", { name: /select and expand main_model\.0/i }));
+
+    expect(onActivateNode).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses a lightweight card shell while the graph viewport is moving", () => {
+    const onActivateNode = vi.fn();
+    renderGraphNode(
+      {
+        onActivateNode,
+        parameterCount: 12500,
+        details: { weightShape: "128 x 128" },
+        config: {
+          typeName: "Layer",
+          fields: [{ key: "activation", value: "GELU" }],
+        },
+        childSummaries: [{ label: "LinearLayer", kind: "child", dims: "128 -> 128" }],
+        height: 180,
+      },
+      { isViewportMoving: true },
+    );
+
+    const shell = screen.getByTestId("graph-node-moving-main_model.0");
+    expect(shell).toHaveTextContent("Layer");
+    expect(shell).toHaveTextContent("12.5K params");
+    expect(screen.queryByTestId("graph-node-title-row-main_model.0"))
+      .not.toBeInTheDocument();
+    expect(screen.queryByTestId("child-summaries-main_model.0"))
+      .not.toBeInTheDocument();
+    expect(screen.queryByTestId("parameter-shapes-main_model.0"))
+      .not.toBeInTheDocument();
+
+    fireEvent.click(shell);
 
     expect(onActivateNode).toHaveBeenCalledTimes(1);
   });

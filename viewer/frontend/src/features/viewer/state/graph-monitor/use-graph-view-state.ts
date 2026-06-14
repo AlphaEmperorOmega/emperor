@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type GraphNode, type InspectResponse } from "@/lib/api";
-import { fallbackParameterTreemapFocusNodeId } from "@/lib/echarts/parameter-treemap-options";
+import { fallbackParameterFocusNodeId } from "@/lib/echarts/parameter-treemap-options";
 import {
   type GraphDetailMode,
   type GraphParameterActivity,
@@ -42,10 +42,16 @@ export function useGraphViewState(
   const [expandedGraphNodeIds, setExpandedGraphNodeIds] = useState<Set<string>>(new Set());
   const [expandedDetailNodeIds, setExpandedDetailNodeIds] = useState<Set<string>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [parameterTreemapFocusNodeId, setParameterTreemapFocusNodeId] =
+  const [cluster3dNodeId, setCluster3dNodeId] = useState<string | null>(null);
+  const [parameterFocusNodeId, setParameterFocusNodeId] =
     useState<string | null>(null);
   const previousGraphRef = useRef<InspectResponse | undefined>(graph);
 
+  const fullGraphNavigation = useMemo(() => buildGraphNavigation(graph), [graph]);
+  const fullNodeIds = useMemo(
+    () => new Set((graph?.nodes ?? []).map((node) => node.id)),
+    [graph],
+  );
   const graphForDetail = useMemo(
     () => filterGraphByDetail(graph, graphDetailMode),
     [graph, graphDetailMode],
@@ -70,6 +76,15 @@ export function useGraphViewState(
   const detailNodeIds = useMemo(
     () => new Set((graphForDetail?.nodes ?? []).map((node) => node.id)),
     [graphForDetail],
+  );
+  const fullClusterNodeIds = useMemo(
+    () =>
+      new Set(
+        (graph?.nodes ?? [])
+          .filter((node) => node.typeName === "NeuronCluster")
+          .map((node) => node.id),
+      ),
+    [graph],
   );
 
   const activateGraphNode = useCallback((nodeId: string) => {
@@ -180,6 +195,44 @@ export function useGraphViewState(
     });
   }, [detailNodeIds, graphNavigation]);
 
+  const revealGraphNodeInFull = useCallback((nodeId: string) => {
+    if (!fullNodeIds.has(nodeId)) {
+      return;
+    }
+
+    setGraphDetailMode("full");
+    setSelectedNodeId(nodeId);
+    const ancestors = ancestorNodeIds(nodeId, fullGraphNavigation);
+    if (ancestors.length === 0) {
+      return;
+    }
+
+    setExpandedGraphNodeIds((current) => {
+      let changed = false;
+      const next = new Set(current);
+      for (const ancestorId of ancestors) {
+        if (!next.has(ancestorId)) {
+          next.add(ancestorId);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [fullGraphNavigation, fullNodeIds]);
+
+  const openCluster3d = useCallback((nodeId?: string) => {
+    const nextNodeId = nodeId ?? selectedNodeId;
+    if (!nextNodeId || !fullClusterNodeIds.has(nextNodeId)) {
+      return;
+    }
+    setSelectedNodeId(nextNodeId);
+    setCluster3dNodeId(nextNodeId);
+  }, [fullClusterNodeIds, selectedNodeId]);
+
+  const closeCluster3d = useCallback(() => {
+    setCluster3dNodeId(null);
+  }, []);
+
   const graphForDisplay = useMemo(
     () => filterGraphByExpansion(graphForDetail, graphNavigation, expandedGraphNodeIds, graphScope),
     [expandedGraphNodeIds, graphForDetail, graphNavigation, graphScope],
@@ -263,27 +316,48 @@ export function useGraphViewState(
   }, [graphForDisplay, selectedNodeId]);
 
   useEffect(() => {
+    if (!cluster3dNodeId) {
+      return;
+    }
+    if (!fullClusterNodeIds.has(cluster3dNodeId)) {
+      setCluster3dNodeId(null);
+      return;
+    }
+    if (!selectedNodeId) {
+      setCluster3dNodeId(null);
+      return;
+    }
+    if (
+      selectedNodeId !== cluster3dNodeId &&
+      !ancestorNodeIds(selectedNodeId, fullGraphNavigation).includes(cluster3dNodeId)
+    ) {
+      setCluster3dNodeId(null);
+    }
+  }, [cluster3dNodeId, fullClusterNodeIds, fullGraphNavigation, selectedNodeId]);
+
+  useEffect(() => {
     if (previousGraphRef.current !== graph) {
       previousGraphRef.current = graph;
-      setParameterTreemapFocusNodeId(null);
+      setParameterFocusNodeId(null);
       return;
     }
-    if (!parameterTreemapFocusNodeId) {
+    if (!parameterFocusNodeId) {
       return;
     }
-    const fallbackFocusNodeId = fallbackParameterTreemapFocusNodeId(
-      parameterTreemapFocusNodeId,
+    const fallbackFocusNodeId = fallbackParameterFocusNodeId(
+      parameterFocusNodeId,
       graphForDetail,
       graph,
     );
-    if (fallbackFocusNodeId !== parameterTreemapFocusNodeId) {
-      setParameterTreemapFocusNodeId(fallbackFocusNodeId);
+    if (fallbackFocusNodeId !== parameterFocusNodeId) {
+      setParameterFocusNodeId(fallbackFocusNodeId);
     }
-  }, [graph, graphForDetail, parameterTreemapFocusNodeId]);
+  }, [graph, graphForDetail, parameterFocusNodeId]);
 
   const collapseGraphNodes = useCallback(() => {
     setExpandedGraphNodeIds(new Set());
     setSelectedNodeId(null);
+    setCluster3dNodeId(null);
   }, []);
 
   const resetGraphExpansion = useCallback(() => {
@@ -293,7 +367,8 @@ export function useGraphViewState(
 
   const resetGraphSelectionAndExpansion = useCallback(() => {
     setSelectedNodeId(null);
-    setParameterTreemapFocusNodeId(null);
+    setCluster3dNodeId(null);
+    setParameterFocusNodeId(null);
     resetGraphExpansion();
   }, [resetGraphExpansion]);
 
@@ -307,8 +382,11 @@ export function useGraphViewState(
     expandedGraphNodeIds,
     selectedNodeId,
     setSelectedNodeId: setSelectedNodeId as (nodeId: string | null) => void,
-    parameterTreemapFocusNodeId,
-    setParameterTreemapFocusNodeId: setParameterTreemapFocusNodeId as (
+    cluster3dNodeId,
+    openCluster3d,
+    closeCluster3d,
+    parameterFocusNodeId,
+    setParameterFocusNodeId: setParameterFocusNodeId as (
       nodeId: string | null
     ) => void,
     graphForDetail,
@@ -316,6 +394,7 @@ export function useGraphViewState(
     edges,
     selectedNode: selectedNode as GraphNode | undefined,
     revealGraphNode,
+    revealGraphNodeInFull,
     collapseGraphNodes,
     resetGraphExpansion,
     resetGraphSelectionAndExpansion,

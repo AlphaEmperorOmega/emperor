@@ -1,5 +1,5 @@
 import * as echarts from "echarts/core";
-import { BarChart, CustomChart, LineChart, TreemapChart } from "echarts/charts";
+import { BarChart, CustomChart, LineChart } from "echarts/charts";
 import {
   AxisPointerComponent,
   DataZoomComponent,
@@ -17,7 +17,6 @@ echarts.use([
   LineChart,
   BarChart,
   CustomChart,
-  TreemapChart,
   GridComponent,
   TooltipComponent,
   AxisPointerComponent,

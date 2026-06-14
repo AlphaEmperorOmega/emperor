@@ -40,6 +40,7 @@ function layerTags(runId: string): LogRunTags {
     scalarTags: ["main_model.0.model/weights/mean"],
     histogramTags: [],
     imageTags: [],
+    textTags: [],
   };
 }
 
@@ -49,6 +50,7 @@ function performanceTags(runId: string): LogRunTags {
     scalarTags: ["epoch", "train/loss", "test/accuracy"],
     histogramTags: [],
     imageTags: [],
+    textTags: [],
   };
 }
 
@@ -326,6 +328,7 @@ describe("viewer state selectors", () => {
         scalarTags: ["main_model.0.model/weights/mean"],
         histogramTags: [],
         imageTags: [],
+        textTags: [],
       },
     ];
 

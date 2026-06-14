@@ -1,5 +1,6 @@
 import { type GraphNode } from "@/lib/api";
 
+export type GraphKind = "module" | "operation";
 export type GraphDetailMode = "simple" | "basic" | "full";
 export type GraphScope = "opened" | "entire";
 export type PreviewVisualizationMode = "graph" | "parameters";
@@ -59,6 +60,31 @@ export type ViewerNodeData = {
   onOpenMonitor?: () => void;
   onToggleDetails: () => void;
 };
+
+export type OperationFlowNodeData =
+  | {
+      kind: "group";
+      groupId: string;
+      label: string;
+      subtitle: string;
+      operationCount: number;
+      height: number;
+      isExpanded: boolean;
+      onActivateNode: () => void;
+      onToggleExpansion: () => void;
+    }
+  | {
+      kind: "operation";
+      nodeId: string;
+      label: string;
+      opKind: string;
+      target: string;
+      modulePath?: string | null;
+      groupId?: string | null;
+      details: GraphNode["details"];
+      height: number;
+      onActivateNode: () => void;
+    };
 
 export type HierarchyNode = {
   node: GraphNode;
