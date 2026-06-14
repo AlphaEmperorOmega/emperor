@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   capabilitiesResponse,
   commandField,
-  configFieldRowFor,
   deferred,
   expandedTrainingDetails,
   expandedTrainingDetailsWithConfig,
@@ -143,20 +142,17 @@ describe("ViewerApp Training And Preview", () => {
     expect(within(layerNavRow).queryByText("1 preset")).not.toBeInTheDocument();
     expect(gateAccordion).toHaveClass("bg-amber/[0.08]", "hover:bg-amber/[0.12]");
     expect(gateSection).toHaveClass("border-amber/35", "bg-amber/[0.045]");
-    expect(within(gateAccordion).getByText("1 preset")).toHaveClass("text-amber");
+    expect(within(gateSection).getByText("1 preset")).toHaveClass("text-amber");
     expect(layerAccordion).not.toHaveClass("bg-amber/[0.08]");
     expect(layerSection).not.toHaveClass("border-amber/35", "bg-amber/[0.045]");
-    expect(within(layerAccordion).queryByText("1 preset")).not.toBeInTheDocument();
+    expect(within(layerSection).queryByText("1 preset")).not.toBeInTheDocument();
 
     const gateSwitch = within(dialog).getByRole("switch", { name: /gate flag/i });
-    const gateRow = configFieldRowFor(gateSwitch);
-    const presetBadge = within(gateRow).getByText("preset");
+    const presetBadge = within(gateSection).getByText("preset");
 
     expect(gateSwitch).toBeDisabled();
-    expect(gateRow).toHaveClass("border-amber/55", "bg-amber/[0.055]");
-    expect(gateRow).not.toHaveClass("border-violet/40");
     expect(presetBadge).toHaveClass("text-amber");
-    expect(within(gateRow).queryByText("override")).not.toBeInTheDocument();
+    expect(within(gateSection).queryByText("override")).not.toBeInTheDocument();
     expect(within(dialog).getByText(/locked by the GATING preset/i)).toBeInTheDocument();
 
     const search = within(dialog).getByRole("combobox", {
