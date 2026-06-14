@@ -5,17 +5,46 @@ import {
   toggleSetValue as toggleSelectionSetValue,
   uniqueValidValues,
 } from "@/lib/selection";
+import {
+  isConfusionMatrixHeatmapTag,
+  isDefaultDiagnosticScalarTag,
+} from "@/features/viewer/state/logs/log-diagnostics";
 
 export { formatNumber };
 
 export const COMMON_SCALAR_TAGS = [
   "train/loss",
   "train/accuracy",
+  "train/loss_epoch",
+  "train/accuracy_epoch",
   "validation/loss",
   "validation/accuracy",
+  "validation/loss_epoch",
+  "validation/accuracy_epoch",
+  "gap/accuracy",
+  "gap/loss",
+  "best_validation/accuracy",
+  "best_validation/loss",
+  "best_validation/epoch",
+  "gradients/global_norm",
+  "parameters/global_norm",
+  "updates/update_to_weight_ratio",
+  "gradients/nan_count",
+  "gradients/inf_count",
+  "train/confidence/mean",
+  "train/calibration/ece",
+  "validation/confidence/mean",
+  "validation/calibration/ece",
   "test/loss",
   "test/accuracy",
 ];
+
+export function isDefaultScalarTag(tag: string) {
+  return (
+    COMMON_SCALAR_TAGS.includes(tag) ||
+    isDefaultDiagnosticScalarTag(tag)
+  );
+}
 
 export const LOG_METRIC_GROUPS = [
   { key: "train", label: "Train" },
@@ -135,6 +164,9 @@ export function groupRenderableLogMetrics({
   };
 
   for (const tag of selectedTagList) {
+    if (isConfusionMatrixHeatmapTag(tag)) {
+      continue;
+    }
     const series = seriesByTag.get(tag) ?? [];
     if (series.length === 0) {
       continue;

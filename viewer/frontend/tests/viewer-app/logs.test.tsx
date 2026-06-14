@@ -143,6 +143,127 @@ describe("ViewerApp Logs Workspace", () => {
       .toBeInTheDocument();
   });
 
+  it("contains long values in the logs run details sidebar", async () => {
+    const longRunName = `run_${"name".repeat(32)}`;
+    const longExperiment = `experiment_${"exp".repeat(36)}`;
+    const longDataset = `dataset_${"data".repeat(32)}`;
+    const longModel = `model_${"model".repeat(32)}`;
+    const longPreset = `preset_${"preset".repeat(24)}`;
+    const longVersion = `version_${"version".repeat(20)}`;
+    const longRelativePath = [
+      "logs",
+      longExperiment,
+      longModel,
+      longPreset,
+      longDataset,
+      longRunName,
+      longVersion,
+      "leaf_without_breakpoints",
+    ].join("/");
+    const longCheckpointFilename = `checkpoint_${"ckpt".repeat(34)}.ckpt`;
+    const longParamKey = `param_${"key".repeat(38)}`;
+    const longParamValue = `value_${"paramvalue".repeat(20)}`;
+    const longMetricKey = `metric_${"accuracy".repeat(22)}`;
+    const longArtifactLabel = `artifacts/${"artifact".repeat(24)}.json`;
+    const longRun = {
+      ...logRunsResponse.runs[0],
+      id: "log-overflow",
+      group: longExperiment,
+      experiment: longExperiment,
+      model: longModel,
+      preset: longPreset,
+      dataset: longDataset,
+      runName: longRunName,
+      version: longVersion,
+      relativePath: longRelativePath,
+      checkpointCount: 1,
+      metrics: { [longMetricKey]: 0.987654321 },
+    };
+    const longCheckpoint = {
+      id: "ckpt-overflow",
+      runId: longRun.id,
+      filename: longCheckpointFilename,
+      relativePath: `${longRelativePath}/checkpoints/${longCheckpointFilename}`,
+      epoch: 0,
+      step: 1000,
+      sizeBytes: 4096,
+      modifiedAt: "2026-06-01T01:03:00Z",
+    };
+
+    installFetchMock({
+      logRunsResponse: { runs: [longRun] },
+      logExperimentsResponse: {
+        experiments: [
+          { experiment: longExperiment, runCount: 1, relativePath: longExperiment },
+        ],
+      },
+      logTagsByRun: { [longRun.id]: [] },
+      logScalarSeries: [],
+      logCheckpointsByRun: { [longRun.id]: [longCheckpoint] },
+      logRunArtifactsByRun: {
+        [longRun.id]: {
+          params: { [longParamKey]: longParamValue },
+          metrics: { [longMetricKey]: 0.987654321 },
+          checkpoints: [longCheckpoint],
+          artifacts: [
+            {
+              id: "artifact-overflow",
+              kind: "result",
+              label: longArtifactLabel,
+              relativePath: `${longRelativePath}/${longArtifactLabel}`,
+              sizeBytes: 2048,
+              modifiedAt: "2026-06-01T01:04:00Z",
+            },
+          ],
+        },
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+
+    const detailsPanel = screen.getByRole("heading", { name: "Run Details" }).closest("aside");
+    expect(detailsPanel).not.toBeNull();
+    const panel = detailsPanel as HTMLElement;
+    expect(panel).toHaveClass("min-w-0", "overflow-x-hidden");
+
+    expect(within(panel).getByTitle(longRunName)).toHaveClass("min-w-0", "truncate");
+    const path = within(panel).getByTitle(longRelativePath);
+    expect(path).toHaveClass("min-w-0", "break-words");
+    expect(path.classList.contains("[overflow-wrap:anywhere]")).toBe(true);
+
+    for (const summaryValue of [
+      longExperiment,
+      longDataset,
+      longModel,
+      longPreset,
+      longVersion,
+    ]) {
+      expect(within(panel).getByTitle(summaryValue)).toHaveClass("min-w-0", "truncate");
+    }
+
+    const checkpointLabel = await within(panel).findByText(longCheckpointFilename);
+    const paramKey = await within(panel).findByText(longParamKey);
+    const paramValue = within(panel).getByText(longParamValue);
+    const metricKey = within(panel).getByText(longMetricKey);
+    const artifactLabel = await within(panel).findByText(longArtifactLabel);
+
+    for (const detailCell of [
+      checkpointLabel,
+      paramKey,
+      paramValue,
+      metricKey,
+      artifactLabel,
+    ]) {
+      expect(detailCell).toHaveClass("min-w-0", "whitespace-normal", "break-words");
+      expect(detailCell.classList.contains("[overflow-wrap:anywhere]")).toBe(true);
+      expect(detailCell.closest("div")).toHaveClass(
+        "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]",
+      );
+    }
+  });
+
   it("renders non-standard scalar tags in the Other metric group", async () => {
     installFetchMock();
     renderViewer();

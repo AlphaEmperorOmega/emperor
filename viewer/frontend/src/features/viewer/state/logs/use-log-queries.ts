@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   fetchLogCheckpoints,
   fetchLogExperiments,
+  fetchLogMedia,
   fetchLogRuns,
   fetchLogRunArtifacts,
   fetchLogScalars,
@@ -17,6 +18,7 @@ export {
   LOG_ARTIFACTS_QUERY_KEY,
   LOG_CHECKPOINTS_QUERY_KEY,
   LOG_EXPERIMENTS_QUERY_KEY,
+  LOG_MEDIA_QUERY_KEY,
   LOG_RUNS_QUERY_KEY,
   LOG_SCALARS_QUERY_KEY,
   LOG_TAGS_QUERY_KEY,
@@ -74,6 +76,27 @@ export function useLogScalarsQuery({
     queryKey,
     queryFn: () => fetchLogScalars({ runIds, tags }),
     enabled: enabled && runIds.length > 0 && tags.length > 0,
+    retry: false,
+  });
+}
+
+export function useLogMediaQuery({
+  runIds,
+  imageTags,
+  textTags,
+  enabled = true,
+  queryKey = logQueryKeys.mediaForRunsAndTags(runIds, imageTags, textTags),
+}: QueryOptions & {
+  runIds: string[];
+  imageTags: string[];
+  textTags: string[];
+  queryKey?: readonly unknown[];
+}) {
+  return useQuery({
+    queryKey,
+    queryFn: () => fetchLogMedia({ runIds, imageTags, textTags }),
+    enabled:
+      enabled && runIds.length > 0 && (imageTags.length > 0 || textTags.length > 0),
     retry: false,
   });
 }

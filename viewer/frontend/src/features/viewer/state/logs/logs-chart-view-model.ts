@@ -3,10 +3,17 @@ import { type LogCheckpoint, type LogRun, type LogScalarSeries } from "@/lib/api
 import { type ScalarXMode, type ScalarYScale } from "@/lib/echarts/scalar-options";
 import {
   useLogCheckpointsQuery,
+  useLogMediaQuery,
   useLogScalarsQuery,
 } from "@/features/viewer/state/logs/use-log-queries";
 import { logQueryKeys } from "@/lib/query-keys";
 import { type LogsWorkspaceState } from "@/features/viewer/state/logs/use-logs-workspace-state";
+import { groupRenderableLogMetrics } from "@/features/viewer/state/logs/logs-selectors";
+import {
+  buildConfusionMatrixHeatmaps,
+  pairValidationExampleMedia,
+  selectValidationExampleMediaTags,
+} from "@/features/viewer/state/logs/log-diagnostics";
 
 export type LogsChartEmptyState = {
   title: string;
@@ -145,6 +152,21 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     visibleRunIds: state.visibleRunIds,
   });
   const scalarQuery = useLogScalarsQuery(scalarQueryInput);
+  const mediaTags = useMemo(
+    () => selectValidationExampleMediaTags(state.tagsQuery.data),
+    [state.tagsQuery.data],
+  );
+  const mediaQuery = useLogMediaQuery({
+    runIds: state.visibleRunIds,
+    imageTags: mediaTags.imageTags,
+    textTags: mediaTags.textTags,
+    enabled: state.enabled,
+    queryKey: logQueryKeys.mediaForRunsAndTags(
+      state.visibleRunIds,
+      mediaTags.imageTags,
+      mediaTags.textTags,
+    ),
+  });
   const checkpointQuery = useLogCheckpointsQuery({
     runIds: state.visibleRunIds,
     enabled: state.enabled,
@@ -166,6 +188,32 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     [checkpoints],
   );
   const selectedSeriesCount = countGroupedLogScalarSeries(seriesByTag);
+  const metricsByGroup = useMemo(
+    () =>
+      groupRenderableLogMetrics({
+        selectedTagList: state.selectedTagList,
+        seriesByTag,
+      }),
+    [seriesByTag, state.selectedTagList],
+  );
+  const confusionHeatmaps = useMemo(
+    () =>
+      buildConfusionMatrixHeatmaps({
+        selectedTagList: state.selectedTagList,
+        seriesByTag,
+        runsById: visibleRunsById,
+        runOrder: state.visibleRunIds,
+      }),
+    [seriesByTag, state.selectedTagList, state.visibleRunIds, visibleRunsById],
+  );
+  const validationMedia = useMemo(
+    () =>
+      pairValidationExampleMedia({
+        images: mediaQuery.data?.images ?? [],
+        texts: mediaQuery.data?.texts ?? [],
+      }),
+    [mediaQuery.data?.images, mediaQuery.data?.texts],
+  );
   const emptyState = deriveLogsChartEmptyState({
     hasEventFiles: state.visibleRuns.some((run) => run.eventFileCount > 0),
     runsLoading: state.runsQuery.isLoading,
@@ -178,10 +226,12 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   });
 
   return {
-    selectedTagList: state.selectedTagList,
-    seriesByTag,
+    metricsByGroup,
+    confusionHeatmaps,
     runsById: visibleRunsById,
     checkpointsByRunId: visibleCheckpointsByRunId,
+    mediaImages: validationMedia.images,
+    mediaTexts: validationMedia.texts,
     runOrder: state.visibleRunIds,
     visibleRunCount: state.visibleRuns.length,
     selectedTagCount: state.selectedTagList.length,
@@ -195,11 +245,13 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     onXModeChange: setXMode,
     yScale,
     onYScaleChange: setYScale,
-    isFetching: scalarQuery.isFetching || checkpointQuery.isFetching,
+    isFetching:
+      scalarQuery.isFetching || checkpointQuery.isFetching || mediaQuery.isFetching,
     isRefreshDisabled: !scalarQuery.isSuccess && !scalarQuery.isError,
     onRefresh: () => {
       void scalarQuery.refetch();
       void checkpointQuery.refetch();
+      void mediaQuery.refetch();
     },
     isError: scalarQuery.isError,
     error: scalarQuery.error,

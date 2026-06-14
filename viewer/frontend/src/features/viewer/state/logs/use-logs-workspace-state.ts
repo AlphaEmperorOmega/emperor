@@ -17,6 +17,7 @@ import {
   COMMON_SCALAR_TAGS,
   buildCountOptions,
   buildExperimentOptions,
+  isDefaultScalarTag,
   type LogMetricGroupKey,
   runOption,
   selectedOptionsSet,
@@ -260,7 +261,9 @@ export function useLogsWorkspaceState({
     }
     const availableTags = new Set(tagOptions.map((option) => option.value));
     setSelectedTags(
-      new Set(COMMON_SCALAR_TAGS.filter((tag) => availableTags.has(tag))),
+      new Set(
+        Array.from(availableTags).filter((tag) => isDefaultScalarTag(tag)),
+      ),
     );
   }, [enabled, selectedTags, tagOptions, tagsQuery.isSuccess]);
 

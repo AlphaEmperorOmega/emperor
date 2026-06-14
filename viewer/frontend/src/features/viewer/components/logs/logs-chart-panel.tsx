@@ -12,16 +12,26 @@ import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
+import { LogConfusionMatrixHeatmaps } from "@/features/viewer/components/logs/log-confusion-matrix-heatmap";
 import { LogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
 import { LogTestLeaderboardTable } from "@/features/viewer/components/logs/log-test-leaderboard-table";
-import { type LogCheckpoint, type LogRun, type LogScalarSeries } from "@/lib/api";
+import { LogValidationExamplesPanel } from "@/features/viewer/components/logs/log-validation-examples-panel";
+import {
+  type LogCheckpoint,
+  type LogRun,
+  type LogTextSummary,
+} from "@/lib/api";
 import { type ScalarXMode, type ScalarYScale } from "@/lib/echarts/scalar-options";
 import {
   LOG_METRIC_GROUPS,
+  type LogMetricsByGroup,
   type LogMetricGroupKey,
-  groupRenderableLogMetrics,
   isTestMetricTag,
 } from "@/features/viewer/state/logs/logs-selectors";
+import {
+  type ConfusionMatrixHeatmap,
+  type LogValidationExampleImage,
+} from "@/features/viewer/state/logs/log-diagnostics";
 import { cn, errorMessage } from "@/lib/utils";
 
 export type ScalarChartGridMode = "full" | "two" | "three";
@@ -101,10 +111,12 @@ function ChartEmptyState({ title, detail, busy }: LogsChartEmptyState) {
 }
 
 export function LogsChartPanel({
-  selectedTagList,
-  seriesByTag,
+  metricsByGroup,
+  confusionHeatmaps,
   runsById,
   checkpointsByRunId,
+  mediaImages,
+  mediaTexts,
   runOrder,
   visibleRunCount,
   selectedTagCount,
@@ -126,10 +138,12 @@ export function LogsChartPanel({
   emptyState,
   onSelectRun,
 }: {
-  selectedTagList: string[];
-  seriesByTag: Map<string, LogScalarSeries[]>;
+  metricsByGroup: LogMetricsByGroup;
+  confusionHeatmaps: ConfusionMatrixHeatmap[];
   runsById: Map<string, LogRun>;
   checkpointsByRunId: Map<string, LogCheckpoint[]>;
+  mediaImages: LogValidationExampleImage[];
+  mediaTexts: LogTextSummary[];
   runOrder: string[];
   visibleRunCount: number;
   selectedTagCount: number;
@@ -151,8 +165,6 @@ export function LogsChartPanel({
   emptyState: LogsChartEmptyState | null;
   onSelectRun: (runId: string) => void;
 }) {
-  const metricsByGroup = groupRenderableLogMetrics({ selectedTagList, seriesByTag });
-
   return (
     <div className="grid min-h-0 grid-rows-[56px_minmax(0,1fr)]">
       <div className="flex min-w-0 items-center justify-between gap-3 border-b border-line bg-panel/45 px-4">
@@ -250,6 +262,12 @@ export function LogsChartPanel({
           <ChartEmptyState {...emptyState} />
         ) : (
           <div className="grid gap-5">
+            <LogValidationExamplesPanel
+              images={mediaImages}
+              texts={mediaTexts}
+              runsById={runsById}
+            />
+            <LogConfusionMatrixHeatmaps heatmaps={confusionHeatmaps} />
             {LOG_METRIC_GROUPS.map((group) => {
               const metrics = metricsByGroup[group.key];
               if (metrics.length === 0) {

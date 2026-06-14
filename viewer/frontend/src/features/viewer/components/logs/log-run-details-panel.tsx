@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { EdgeCard } from "@/components/ui/edge-card";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
@@ -10,6 +11,7 @@ import { useLogRunArtifactsQuery } from "@/features/viewer/state/logs/use-log-qu
 import { formatMetricValue } from "@/features/viewer/state/logs/logs-selectors";
 import { type LogsWorkspaceState } from "@/features/viewer/state/logs/use-logs-workspace-state";
 import { type LogRunArtifacts } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 function FilePresenceRow({
   label,
@@ -26,6 +28,41 @@ function FilePresenceRow({
       label={label}
       value={<Badge className={present ? "text-ink" : "text-ink-faint"}>{value}</Badge>}
     />
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  labelTitle,
+  valueTitle,
+}: {
+  label: ReactNode;
+  value: ReactNode;
+  labelTitle?: string;
+  valueTitle?: string;
+}) {
+  const textContainmentClasses =
+    "min-w-0 whitespace-normal break-words [overflow-wrap:anywhere]";
+
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-2 rounded-[9px] border border-line-soft bg-black/20 px-3 py-2 text-xs">
+      <span
+        className={cn("font-mono text-ink-dim", textContainmentClasses)}
+        title={labelTitle}
+      >
+        {label}
+      </span>
+      <span
+        className={cn(
+          "text-right font-mono font-semibold text-ink",
+          textContainmentClasses,
+        )}
+        title={valueTitle}
+      >
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -90,6 +127,7 @@ export function LogRunDetailsPanel({
 
   return (
     <SidePanel
+      className="min-w-0 overflow-x-hidden"
       title="Run Details"
       actions={
         run ? <Badge>{run.hasResult ? "result.json" : "No result.json"}</Badge> : undefined
@@ -103,10 +141,16 @@ export function LogRunDetailsPanel({
         <div className="grid gap-4">
           <EdgeCard className="rounded-[12px] px-3 py-3">
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-ink" title={run.runName}>
+              <div
+                className="min-w-0 truncate text-sm font-semibold text-ink"
+                title={run.runName}
+              >
                 {run.runName}
               </div>
-              <div className="mt-1 break-words font-mono text-xs leading-5 text-ink-faint">
+              <div
+                className="mt-1 min-w-0 break-words font-mono text-xs leading-5 text-ink-faint [overflow-wrap:anywhere]"
+                title={run.relativePath}
+              >
                 {run.relativePath}
               </div>
             </div>
@@ -116,27 +160,37 @@ export function LogRunDetailsPanel({
             <MetricCard
               label="Experiment"
               value={run.experiment}
-              valueClassName="mt-1.5 truncate text-sm font-bold"
+              className="min-w-0"
+              valueTitle={run.experiment}
+              valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
             <MetricCard
               label="Dataset"
               value={run.dataset}
-              valueClassName="mt-1.5 truncate text-sm font-bold"
+              className="min-w-0"
+              valueTitle={run.dataset}
+              valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
             <MetricCard
               label="Model"
               value={run.model}
-              valueClassName="mt-1.5 truncate text-sm font-bold"
+              className="min-w-0"
+              valueTitle={run.model}
+              valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
             <MetricCard
               label="Preset"
               value={run.preset}
-              valueClassName="mt-1.5 truncate text-sm font-bold"
+              className="min-w-0"
+              valueTitle={run.preset}
+              valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
             <MetricCard
               label="Version"
               value={run.version}
-              valueClassName="mt-1.5 truncate text-sm font-bold"
+              className="min-w-0"
+              valueTitle={run.version}
+              valueClassName="mt-1.5 min-w-0 truncate text-sm font-bold"
             />
           </div>
 
@@ -183,11 +237,12 @@ export function LogRunDetailsPanel({
             ) : (
               <div className="grid gap-2">
                 {checkpoints.map((checkpoint) => (
-                  <KeyValueRow
+                  <DetailRow
                     key={checkpoint.id}
-                    variant="card"
-                    label={<span className="font-mono">{checkpoint.filename}</span>}
+                    label={checkpoint.filename}
+                    labelTitle={checkpoint.filename}
                     value={checkpointDetail(checkpoint)}
+                    valueTitle={checkpointDetail(checkpoint)}
                   />
                 ))}
               </div>
@@ -211,11 +266,12 @@ export function LogRunDetailsPanel({
             ) : (
               <div className="grid gap-2">
                 {params.map(([key, value]) => (
-                  <KeyValueRow
+                  <DetailRow
                     key={key}
-                    variant="card"
-                    label={<span className="font-mono">{key}</span>}
+                    label={key}
+                    labelTitle={key}
                     value={formatMetricValue(value)}
+                    valueTitle={formatMetricValue(value)}
                   />
                 ))}
               </div>
@@ -235,11 +291,12 @@ export function LogRunDetailsPanel({
             ) : (
               <div className="grid gap-2">
                 {metrics.map(([key, value]) => (
-                  <KeyValueRow
+                  <DetailRow
                     key={key}
-                    variant="card"
-                    label={<span className="font-mono">{key}</span>}
+                    label={key}
+                    labelTitle={key}
                     value={formatMetricValue(value)}
+                    valueTitle={formatMetricValue(value)}
                   />
                 ))}
               </div>
@@ -263,11 +320,16 @@ export function LogRunDetailsPanel({
             ) : (
               <div className="grid gap-2">
                 {artifactFiles.map((artifact) => (
-                  <KeyValueRow
+                  <DetailRow
                     key={artifact.id}
-                    variant="card"
-                    label={<span className="font-mono">{artifact.label}</span>}
+                    label={artifact.label}
+                    labelTitle={artifact.label}
                     value={[
+                      artifact.kind,
+                      formatFileSize(artifact.sizeBytes),
+                      formatModifiedAt(artifact.modifiedAt),
+                    ].join(" · ")}
+                    valueTitle={[
                       artifact.kind,
                       formatFileSize(artifact.sizeBytes),
                       formatModifiedAt(artifact.modifiedAt),

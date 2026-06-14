@@ -4,8 +4,12 @@ import {
   deriveLogsChartEmptyState,
   groupLogScalarSeriesByTag,
 } from "@/features/viewer/state/logs/logs-chart-view-model";
-import { groupRenderableLogMetrics } from "@/features/viewer/state/logs/logs-selectors";
-import { type LogScalarSeries } from "@/lib/api";
+import {
+  isDefaultScalarTag,
+  groupRenderableLogMetrics,
+} from "@/features/viewer/state/logs/logs-selectors";
+import { buildConfusionMatrixHeatmaps } from "@/features/viewer/state/logs/log-diagnostics";
+import { type LogRun, type LogScalarSeries } from "@/lib/api";
 
 function scalarSeries({
   points,
@@ -16,6 +20,32 @@ function scalarSeries({
     runId,
     tag,
     points: points ?? [{ step: 1, wallTime: 100, value: 0.25 }],
+  };
+}
+
+function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
+  const experiment = overrides.experiment ?? "exp_a";
+  const dataset = overrides.dataset ?? "Cifar10";
+  const model = overrides.model ?? "linears/linear";
+  const preset = overrides.preset ?? "baseline";
+  return {
+    id: overrides.id,
+    group: overrides.group ?? null,
+    experiment,
+    model,
+    preset,
+    dataset,
+    runName: overrides.runName ?? overrides.id,
+    timestamp: overrides.timestamp ?? null,
+    version: overrides.version ?? "version_0",
+    relativePath:
+      overrides.relativePath ??
+      `${experiment}/${model}/${preset}/${dataset}/${overrides.id}/version_0`,
+    hasResult: overrides.hasResult ?? true,
+    eventFileCount: overrides.eventFileCount ?? 1,
+    checkpointCount: overrides.checkpointCount ?? 0,
+    hasHparams: overrides.hasHparams ?? true,
+    metrics: overrides.metrics ?? {},
   };
 }
 
@@ -100,6 +130,68 @@ describe("logs chart view model", () => {
     ]);
     expect(groups.test.map((metric) => metric.tag)).toEqual(["test/accuracy"]);
     expect(groups.other).toEqual([]);
+  });
+
+  it("treats classifier diagnostics as default scalar tags", () => {
+    expect(isDefaultScalarTag("gap/accuracy")).toBe(true);
+    expect(isDefaultScalarTag("gap/loss")).toBe(true);
+    expect(isDefaultScalarTag("best_validation/accuracy")).toBe(true);
+    expect(isDefaultScalarTag("gradients/global_norm")).toBe(true);
+    expect(isDefaultScalarTag("validation/confidence/mean")).toBe(true);
+    expect(isDefaultScalarTag("validation/per_class/class_3/f1")).toBe(true);
+    expect(
+      isDefaultScalarTag(
+        "validation/confusion_matrix/true_class_3/predicted_class_5/rate",
+      ),
+    ).toBe(true);
+    expect(
+      isDefaultScalarTag(
+        "validation/confusion_matrix/true_class_3/predicted_class_5/count",
+      ),
+    ).toBe(false);
+    expect(isDefaultScalarTag("main_model.0.model/weights/mean")).toBe(false);
+  });
+
+  it("routes confusion-matrix rates to heatmaps and counts to scalar groups", () => {
+    const confusionRateTag =
+      "validation/confusion_matrix/true_class_0/predicted_class_1/rate";
+    const confusionCountTag =
+      "validation/confusion_matrix/true_class_0/predicted_class_1/count";
+    const seriesByTag = groupLogScalarSeriesByTag([
+      scalarSeries({ runId: "run-1", tag: "train/loss" }),
+      scalarSeries({
+        runId: "run-1",
+        tag: confusionRateTag,
+        points: [{ step: 2, wallTime: 200, value: 0.42 }],
+      }),
+      scalarSeries({
+        runId: "run-1",
+        tag: confusionCountTag,
+        points: [{ step: 2, wallTime: 200, value: 5 }],
+      }),
+    ]);
+    const selectedTagList = ["train/loss", confusionRateTag, confusionCountTag];
+
+    const groups = groupRenderableLogMetrics({
+      selectedTagList,
+      seriesByTag,
+    });
+    const heatmaps = buildConfusionMatrixHeatmaps({
+      selectedTagList,
+      seriesByTag,
+      runsById: new Map([["run-1", logRun({ id: "run-1" })]]),
+      runOrder: ["run-1"],
+    });
+
+    expect(groups.train.map((metric) => metric.tag)).toEqual(["train/loss"]);
+    expect(groups.validation.map((metric) => metric.tag)).toEqual([confusionCountTag]);
+    expect(heatmaps).toHaveLength(1);
+    expect(heatmaps[0]).toMatchObject({
+      split: "validation",
+      runId: "run-1",
+      classCount: 2,
+      cells: [{ trueClass: 0, predictedClass: 1, value: 0.42 }],
+    });
   });
 
   it("derives empty states for selected tag and scalar point gaps", () => {
