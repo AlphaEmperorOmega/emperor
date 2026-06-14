@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { FullPageError } from "@/components/layout/page-error-status";
@@ -601,6 +601,69 @@ describe("TrainingProgressDialog", () => {
     };
   }
 
+  it("shows run statuses as icon tooltips", async () => {
+    const user = userEvent.setup();
+    const statuses = [
+      ["Pending", "Pending: this run has not started"],
+      ["Running", "Running: this run is currently training"],
+      ["Completed", "Completed: this run finished successfully"],
+      ["Failed", "Failed: this run stopped with an error"],
+      ["Cancelled", "Cancelled: this run was cancelled"],
+      ["Skipped", "Skipped: this run was skipped"],
+    ] as const;
+    const baseRun = progressPlan().runs[0];
+    const plan: TrainingRunPlan = {
+      ...progressPlan(),
+      runs: statuses.map(([status], index) => ({
+        ...baseRun,
+        id: `run-${status.toLowerCase()}`,
+        index: index + 1,
+        status,
+        snapshotId: null,
+        snapshotName: null,
+        changes: [],
+        error: null,
+        errorTraceback: null,
+      })),
+      summary: {
+        ...progressPlan().summary,
+        totalRuns: statuses.length,
+      },
+    };
+
+    render(
+      <TrainingProgressDialog
+        plan={plan}
+        isLoading={false}
+        error=""
+        canResample={false}
+        isResampling={false}
+        onResample={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    const table = screen.getByRole("table");
+    for (const [index, [status, tooltip]] of statuses.entries()) {
+      expect(within(table).queryByText(status)).not.toBeInTheDocument();
+
+      const statusIcon = within(table).getByRole("img", {
+        name: `Run ${index + 1} status: ${status}`,
+      });
+      fireEvent.focus(statusIcon);
+      expect(screen.getByRole("tooltip")).toHaveTextContent(tooltip);
+
+      fireEvent.blur(statusIcon);
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+      await user.hover(statusIcon);
+      expect(screen.getByRole("tooltip")).toHaveTextContent(tooltip);
+
+      await user.unhover(statusIcon);
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    }
+  });
+
   it("lets draft run rows exclude presets and snapshots from the Runs tab", async () => {
     const user = userEvent.setup();
     const onExcludePreset = vi.fn();
@@ -645,13 +708,58 @@ describe("TrainingProgressDialog", () => {
       screen.queryByRole("button", { name: /delete snapshot/i }),
     ).not.toBeInTheDocument();
 
+    const pendingStatus = screen.getAllByRole("img", {
+      name: /status: Pending$/,
+    })[0];
+    await user.hover(pendingStatus);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Pending: this run has not started",
+    );
+
+    await user.unhover(pendingStatus);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    const commandButton = screen.getByRole("button", {
+      name: "Command for run 1",
+    });
+    expect(commandButton).not.toHaveTextContent("Command");
+
+    await user.hover(commandButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Show command for this run",
+    );
+
+    await user.unhover(commandButton);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    fireEvent.focus(commandButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Show command for this run",
+    );
+
+    fireEvent.blur(commandButton);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    const removePresetButton = screen.getByRole("button", {
+      name: "Remove preset baseline from this run plan",
+    });
+    await user.hover(removePresetButton);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Remove from this run plan",
+    );
+
+    await user.unhover(removePresetButton);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
     await user.click(
-      screen.getByLabelText("Exclude preset baseline from training"),
+      removePresetButton,
     );
     expect(onExcludePreset).toHaveBeenCalledWith("baseline");
 
     await user.click(
-      screen.getByLabelText("Exclude snapshot Wide snapshot from training"),
+      screen.getByRole("button", {
+        name: "Remove snapshot Wide snapshot from this run plan",
+      }),
     );
     expect(onExcludeSnapshot).toHaveBeenCalledWith("snap-wide");
   });
@@ -828,7 +936,7 @@ describe("TrainingProgressDialog", () => {
   it("hides draft tabs when draft management is disabled", () => {
     render(
       <TrainingProgressDialog
-        plan={progressPlan()}
+        plan={draftRunsPlan()}
         isLoading={false}
         error=""
         canResample={false}
@@ -865,7 +973,14 @@ describe("TrainingProgressDialog", () => {
     expect(screen.queryByRole("tab", { name: "Presets" })).not.toBeInTheDocument();
     expect(screen.getByText("Wide snapshot")).toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Exclude snapshot Wide snapshot from training"),
+      screen.queryByRole("button", {
+        name: "Remove preset baseline from this run plan",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Remove snapshot Wide snapshot from this run plan",
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -924,6 +1039,17 @@ describe("TrainingProgressDialog", () => {
         onClose={() => {}}
       />,
     );
+
+    const failedStatus = screen.getByRole("img", {
+      name: "Run 1 status: Failed",
+    });
+    await user.hover(failedStatus);
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Failed: this run stopped with an error",
+    );
+
+    await user.unhover(failedStatus);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Full error for run 1" }));
 

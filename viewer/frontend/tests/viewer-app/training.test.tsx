@@ -716,7 +716,11 @@ describe("ViewerApp Training And Preview", () => {
     );
     expect(progressBody).toHaveClass("full-config-dialog-body");
     expect(progressDialog.querySelector("footer")).not.toBeInTheDocument();
-    expect(within(progressDialog).getByText("Pending")).toBeInTheDocument();
+    expect(
+      within(progressDialog).getByRole("img", {
+        name: "Run 1 status: Pending",
+      }),
+    ).toBeInTheDocument();
     expect(within(progressDialog).getAllByText("baseline").length).toBeGreaterThan(0);
     expect(within(progressDialog).getByText("Mnist")).toBeInTheDocument();
     expect(within(progressDialog).getByText("0 / 30")).toBeInTheDocument();
@@ -902,9 +906,9 @@ describe("ViewerApp Training And Preview", () => {
       name: /training progress/i,
     });
     await user.click(
-      within(progressDialog).getByLabelText(
-        "Exclude preset baseline from training",
-      ),
+      within(progressDialog).getByRole("button", {
+        name: "Remove preset baseline from this run plan",
+      }),
     );
 
     await waitFor(() => {
@@ -978,9 +982,9 @@ describe("ViewerApp Training And Preview", () => {
     expect(within(progressDialog).getAllByText("Wide snapshot")).toHaveLength(2);
 
     await user.click(
-      within(progressDialog).getAllByLabelText(
-        "Exclude snapshot Wide snapshot from training",
-      )[0],
+      within(progressDialog).getAllByRole("button", {
+        name: "Remove snapshot Wide snapshot from this run plan",
+      })[0],
     );
 
     await waitFor(() => {
@@ -1120,7 +1124,11 @@ describe("ViewerApp Training And Preview", () => {
     const progressDialog = await screen.findByRole("dialog", {
       name: /training progress/i,
     });
-    expect(within(progressDialog).getAllByText("Completed")).toHaveLength(2);
+    expect(
+      within(progressDialog).getAllByRole("img", {
+        name: /status: Completed$/,
+      }),
+    ).toHaveLength(2);
     expect(within(progressDialog).getAllByText("hidden_dim=128")).toHaveLength(2);
     expect(within(progressDialog).getByText("Cifar10")).toBeInTheDocument();
     expect(within(progressDialog).getByText("Mnist")).toBeInTheDocument();

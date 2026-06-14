@@ -1,7 +1,19 @@
-import { AlertTriangle, Terminal } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { type ReactNode, useId, useState } from "react";
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  CircleSlash,
+  Clock,
+  LoaderCircle,
+  Terminal,
+  X,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { IconButton } from "@/components/ui/icon-button";
+import { cn } from "@/lib/utils";
 import { type TrainingRun } from "@/lib/api";
 
 type TrainingProgressTableProps = {
@@ -13,21 +25,46 @@ type TrainingProgressTableProps = {
   onExcludeSnapshot?: (snapshotId: string) => void;
 };
 
-function statusClass(status: TrainingRun["status"]) {
-  if (status === "Completed") {
-    return "border-ok/30 bg-ok/10 text-ok";
-  }
-  if (status === "Running") {
-    return "border-violet/30 bg-violet/15 text-violet";
-  }
-  if (status === "Failed" || status === "Cancelled") {
-    return "border-danger-line bg-danger-soft text-danger-text";
-  }
-  if (status === "Skipped") {
-    return "border-amber/40 bg-amber/[0.12] text-amber";
-  }
-  return "";
-}
+type StatusMeta = {
+  className: string;
+  icon: LucideIcon;
+  iconClassName?: string;
+  tooltip: string;
+};
+
+const statusMeta: Record<TrainingRun["status"], StatusMeta> = {
+  Pending: {
+    className: "border-line bg-control text-ink-dim",
+    icon: Clock,
+    tooltip: "Pending: this run has not started",
+  },
+  Running: {
+    className: "border-violet/30 bg-violet/15 text-violet",
+    icon: LoaderCircle,
+    iconClassName: "animate-spin motion-reduce:animate-none",
+    tooltip: "Running: this run is currently training",
+  },
+  Completed: {
+    className: "border-ok/30 bg-ok/10 text-ok",
+    icon: CheckCircle2,
+    tooltip: "Completed: this run finished successfully",
+  },
+  Failed: {
+    className: "border-danger-line bg-danger-soft text-danger-text",
+    icon: XCircle,
+    tooltip: "Failed: this run stopped with an error",
+  },
+  Cancelled: {
+    className: "border-danger-line bg-danger-soft text-danger-text",
+    icon: Ban,
+    tooltip: "Cancelled: this run was cancelled",
+  },
+  Skipped: {
+    className: "border-amber/40 bg-amber/[0.12] text-amber",
+    icon: CircleSlash,
+    tooltip: "Skipped: this run was skipped",
+  },
+};
 
 function metricValue(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -55,6 +92,136 @@ const bodyCellClass = "border-b border-line-soft px-3 py-3 align-middle";
 const monoCellClass = `${bodyCellClass} font-mono text-xs text-ink`;
 const emptyCell = <span className="font-mono text-xs text-ink-dim">-</span>;
 
+function HoverTooltip({
+  children,
+  tooltip,
+  tooltipClassName,
+}: {
+  children: (props: {
+    "aria-describedby"?: string;
+    onBlur: () => void;
+    onFocus: () => void;
+    onMouseEnter: () => void;
+    onMouseLeave: () => void;
+  }) => ReactNode;
+  tooltip: string;
+  tooltipClassName?: string;
+}) {
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const tooltipId = useId();
+  const triggerProps = {
+    "aria-describedby": isTooltipVisible ? tooltipId : undefined,
+    onBlur: () => setIsTooltipVisible(false),
+    onFocus: () => setIsTooltipVisible(true),
+    onMouseEnter: () => setIsTooltipVisible(true),
+    onMouseLeave: () => setIsTooltipVisible(false),
+  };
+
+  return (
+    <span className="relative inline-flex">
+      {children(triggerProps)}
+      {isTooltipVisible && (
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className={cn(
+            "pointer-events-none absolute top-[calc(100%+6px)] z-30 whitespace-nowrap rounded-[7px] border border-line-soft bg-panel px-2 py-1 font-sans text-[11px] font-bold leading-none text-ink shadow-panel",
+            tooltipClassName,
+          )}
+        >
+          {tooltip}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function TooltipIconButton({
+  className,
+  icon,
+  label,
+  onClick,
+  tooltip,
+}: {
+  className?: string;
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  tooltip: string;
+}) {
+  return (
+    <HoverTooltip tooltip={tooltip} tooltipClassName="right-0">
+      {(triggerProps) => (
+        <IconButton
+          label={label}
+          icon={icon}
+          size="sm"
+          variant="edge"
+          className={cn("h-8 w-8 rounded-[7px] active:translate-y-px", className)}
+          onClick={onClick}
+          {...triggerProps}
+        />
+      )}
+    </HoverTooltip>
+  );
+}
+
+function TooltipIcon({
+  className,
+  icon,
+  label,
+  tooltip,
+}: {
+  className?: string;
+  icon: ReactNode;
+  label: string;
+  tooltip: string;
+}) {
+  return (
+    <HoverTooltip tooltip={tooltip} tooltipClassName="left-0">
+      {(triggerProps) => (
+        <span
+          aria-label={label}
+          role="img"
+          tabIndex={0}
+          className={cn(
+            "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+            className,
+          )}
+          {...triggerProps}
+        >
+          {icon}
+        </span>
+      )}
+    </HoverTooltip>
+  );
+}
+
+function RunStatusIcon({
+  runIndex,
+  status,
+}: {
+  runIndex: number;
+  status: TrainingRun["status"];
+}) {
+  const meta = statusMeta[status];
+  const Icon = meta.icon;
+
+  return (
+    <TooltipIcon
+      label={`Run ${runIndex} status: ${status}`}
+      tooltip={meta.tooltip}
+      className={meta.className}
+      icon={
+        <Icon
+          className={cn("h-3.5 w-3.5", meta.iconClassName)}
+          aria-hidden
+        />
+      }
+    />
+  );
+}
+
 function RunStatusCell({
   run,
   onFullError,
@@ -65,7 +232,7 @@ function RunStatusCell({
   const fullError = run.errorTraceback || run.error;
   return (
     <td className={bodyCellClass}>
-      <Badge className={statusClass(run.status)}>{run.status}</Badge>
+      <RunStatusIcon runIndex={run.index} status={run.status} />
       {run.error && (
         <div className="mt-1 grid max-w-48 gap-1.5 text-xs text-danger-text">
           <span>{run.error}</span>
@@ -183,35 +350,21 @@ function TrainingRunProgressRow({
   const canExcludePreset = Boolean(!snapshotId && onExcludePreset);
   const canExcludeRun =
     canManageDraftRuns && (canExcludeSnapshot || canExcludePreset);
-  const excludeLabel = snapshotId
-    ? `Exclude snapshot ${run.snapshotName ?? snapshotId} from training`
-    : `Exclude preset ${run.preset} from training`;
+  const removeLabel = snapshotId
+    ? `Remove snapshot ${run.snapshotName ?? snapshotId} from this run plan`
+    : `Remove preset ${run.preset} from this run plan`;
+  const excludeRun = () => {
+    if (snapshotId) {
+      onExcludeSnapshot?.(snapshotId);
+      return;
+    }
+    onExcludePreset?.(run.preset);
+  };
 
   return (
     <tr className="align-middle">
       <td className="border-b border-line-soft px-3 py-3 align-middle font-mono text-xs text-ink-dim">
-        {canExcludeRun ? (
-          <label className="inline-flex items-center gap-2">
-            <Checkbox
-              checked
-              onCheckedChange={(checked) => {
-                if (checked) {
-                  return;
-                }
-                if (snapshotId) {
-                  onExcludeSnapshot?.(snapshotId);
-                  return;
-                }
-                onExcludePreset?.(run.preset);
-              }}
-              aria-label={excludeLabel}
-              className="shrink-0"
-            />
-            <span>{run.index}</span>
-          </label>
-        ) : (
-          run.index
-        )}
+        {run.index}
       </td>
       <RunStatusCell run={run} onFullError={onFullError} />
       <td className={monoCellClass}>{run.preset}</td>
@@ -222,15 +375,23 @@ function TrainingRunProgressRow({
       <RunMetricsCell run={run} />
       <RunArtifactsCell run={run} />
       <td className={bodyCellClass}>
-        <Button
-          variant="secondary"
-          className="h-8 px-2.5 text-xs"
-          onClick={() => onCommand(run)}
-          aria-label={`Command for run ${run.index}`}
-        >
-          <Terminal className="h-3.5 w-3.5" aria-hidden />
-          Command
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <TooltipIconButton
+            label={`Command for run ${run.index}`}
+            tooltip="Show command for this run"
+            icon={<Terminal className="h-3.5 w-3.5" aria-hidden />}
+            onClick={() => onCommand(run)}
+          />
+          {canExcludeRun && (
+            <TooltipIconButton
+              label={removeLabel}
+              tooltip="Remove from this run plan"
+              icon={<X className="h-3.5 w-3.5" aria-hidden />}
+              className="bg-transparent text-ink-faint hover:border-danger-line hover:bg-danger-soft hover:text-danger-text"
+              onClick={excludeRun}
+            />
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -258,7 +419,7 @@ export function TrainingProgressTable({
             "Epochs",
             "Metrics",
             "Artifacts",
-            "Command",
+            "Actions",
           ].map((heading) => (
             <th
               key={heading}
