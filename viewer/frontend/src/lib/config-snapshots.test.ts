@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildConfigSnapshotRunPlan,
   createConfigSnapshot,
-  generateDefaultConfigSnapshotName,
+  validateConfigSnapshotCandidate,
+  validateConfigSnapshotName,
   type ConfigSnapshot,
 } from "@/lib/config-snapshots";
 import { type ConfigField } from "@/lib/api";
@@ -90,21 +91,6 @@ function makeSnapshot(overrides: Record<string, string>, name = "snapshot") {
 }
 
 describe("config snapshots", () => {
-  it("generates default names from changed fields in schema order", () => {
-    expect(
-      generateDefaultConfigSnapshotName({
-        preset: "baseline",
-        fields,
-        overrides: {
-          activation: "GELU",
-          num_epochs: "12",
-          hidden_dim: "128",
-          num_layers: "4",
-        },
-      }),
-    ).toBe("baseline hidden_dim=128 num_layers=4 activation=GELU +1");
-  });
-
   it("rejects default-equivalent snapshots", () => {
     const result = createConfigSnapshot({
       id: "snap-default",
@@ -123,7 +109,25 @@ describe("config snapshots", () => {
     });
   });
 
-  it("rejects duplicate config identity while allowing duplicate names", () => {
+  it("rejects empty snapshot names", () => {
+    const result = createConfigSnapshot({
+      id: "snap-empty-name",
+      name: "   ",
+      model: "linear",
+      preset: "baseline",
+      fields,
+      overrides: { hidden_dim: "128" },
+      snapshots: [],
+      createdAt: "2026-06-04T00:00:00.000Z",
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: "Config snapshot name cannot be empty.",
+    });
+  });
+
+  it("rejects duplicate config identity and duplicate names", () => {
     const existing = makeSnapshot({ hidden_dim: "128" }, "same name");
     const duplicate = createConfigSnapshot({
       id: "snap-dup",
@@ -135,9 +139,9 @@ describe("config snapshots", () => {
       snapshots: [existing],
       createdAt: "2026-06-04T00:00:00.000Z",
     });
-    const sameNameDifferentConfig = createConfigSnapshot({
-      id: "snap-name-ok",
-      name: "same name",
+    const duplicateNameDifferentConfig = createConfigSnapshot({
+      id: "snap-name-dup",
+      name: " Same Name ",
       model: "linear",
       preset: "baseline",
       fields,
@@ -150,7 +154,33 @@ describe("config snapshots", () => {
       ok: false,
       error: "A snapshot with these config values already exists.",
     });
-    expect(sameNameDifferentConfig.ok).toBe(true);
+    expect(duplicateNameDifferentConfig).toMatchObject({
+      ok: false,
+      error: "A snapshot with this name already exists.",
+    });
+  });
+
+  it("allows edit validation to exclude the snapshot being updated", () => {
+    const existing = makeSnapshot({ hidden_dim: "128" }, "existing");
+
+    const nameResult = validateConfigSnapshotName({
+      model: "linear",
+      preset: "baseline",
+      name: " existing ",
+      snapshots: [existing],
+      excludeSnapshotId: existing.id,
+    });
+    const configResult = validateConfigSnapshotCandidate({
+      model: "linear",
+      preset: "baseline",
+      fields,
+      overrides: { hidden_dim: "128" },
+      snapshots: [existing],
+      excludeSnapshotId: existing.id,
+    });
+
+    expect(nameResult).toMatchObject({ ok: true, name: "existing" });
+    expect(configResult.ok).toBe(true);
   });
 
   it("rejects locked-field overrides defensively", () => {

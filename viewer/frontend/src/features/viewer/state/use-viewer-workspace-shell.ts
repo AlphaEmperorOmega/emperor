@@ -12,7 +12,7 @@ export type ViewerDialogControls = {
   close: () => void;
 };
 
-export type FullConfigDialogMode = "default" | "snapshotDraft";
+export type FullConfigDialogMode = "default" | "snapshotDraft" | "snapshotEdit";
 
 export type FullConfigDialogControls = {
   isOpen: boolean;

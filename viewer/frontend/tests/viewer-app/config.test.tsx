@@ -25,6 +25,225 @@ import {
   waitForTargetValue,
 } from "./support";
 
+function accordionPanelFor(accordion: HTMLElement) {
+  const panelId = accordion.getAttribute("aria-controls");
+  const panel = panelId ? document.getElementById(panelId) : null;
+
+  if (!(panel instanceof HTMLElement)) {
+    throw new Error("Expected accordion panel to render");
+  }
+
+  return panel;
+}
+
+function directFieldGridFor(accordion: HTMLElement) {
+  const panel = accordionPanelFor(accordion);
+  const grid = Array.from(panel.children).find(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && child.classList.contains("md:grid-cols-2"),
+  );
+
+  if (!(grid instanceof HTMLElement)) {
+    throw new Error("Expected accordion body to contain a direct field grid");
+  }
+
+  return grid;
+}
+
+function expectHeaderControlBeforeMetric(
+  section: HTMLElement,
+  controlLabel: string,
+  metricLabel: string,
+) {
+  const label = within(section).getByText(controlLabel);
+  const switchControl = within(section).getByRole("switch", {
+    name: controlLabel,
+  });
+  const metric = within(section).getByLabelText(metricLabel);
+
+  expect(switchControl).toBeInTheDocument();
+  expect(
+    Boolean(label.compareDocumentPosition(metric) & Node.DOCUMENT_POSITION_FOLLOWING),
+  ).toBe(true);
+  expect(
+    Boolean(switchControl.compareDocumentPosition(metric) & Node.DOCUMENT_POSITION_FOLLOWING),
+  ).toBe(true);
+}
+
+function expectNoHeaderControlInAccordionBody(
+  accordion: HTMLElement,
+  controlLabel: string,
+) {
+  const panel = accordionPanelFor(accordion);
+
+  expect(within(panel).queryByRole("switch", { name: controlLabel }))
+    .not.toBeInTheDocument();
+  expect(within(panel).queryByText(controlLabel)).not.toBeInTheDocument();
+}
+
+function nestedControlledSchemaResponse() {
+  return {
+    ...schemaResponse,
+    fields: [
+      ...schemaResponse.fields,
+      {
+        key: "halting_flag",
+        configKey: "HALTING_FLAG",
+        flag: "--halting-flag",
+        label: "halting flag",
+        section: "Halting Options",
+        type: "bool",
+        default: false,
+        nullable: false,
+        choices: [true, false],
+      },
+      {
+        key: "halting_threshold",
+        configKey: "HALTING_THRESHOLD",
+        flag: "--halting-threshold",
+        label: "halting threshold",
+        section: "Halting Options",
+        type: "float",
+        default: 0.99,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "halting_stack_num_layers",
+        configKey: "HALTING_STACK_NUM_LAYERS",
+        flag: "--halting-stack-num-layers",
+        label: "halting stack num layers",
+        section: "Halting Options",
+        type: "int",
+        default: 2,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "halting_hidden_dim",
+        configKey: "HALTING_HIDDEN_DIM",
+        flag: "--halting-hidden-dim",
+        label: "halting hidden dim",
+        section: "Halting Options",
+        type: "int",
+        default: 64,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "halting_layer_norm_position",
+        configKey: "HALTING_LAYER_NORM_POSITION",
+        flag: "--halting-layer-norm-position",
+        label: "halting layer norm position",
+        section: "Halting Options",
+        type: "enum",
+        default: "BEFORE",
+        nullable: false,
+        choices: ["BEFORE", "AFTER"],
+      },
+      {
+        key: "recurrent_flag",
+        configKey: "RECURRENT_FLAG",
+        flag: "--recurrent-flag",
+        label: "recurrent flag",
+        section: "Recurrent Layer Options",
+        type: "bool",
+        default: false,
+        nullable: false,
+        choices: [true, false],
+      },
+      {
+        key: "recurrent_max_steps",
+        configKey: "RECURRENT_MAX_STEPS",
+        flag: "--recurrent-max-steps",
+        label: "recurrent max steps",
+        section: "Recurrent Layer Options",
+        type: "int",
+        default: 4,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "recurrent_gate_flag",
+        configKey: "RECURRENT_GATE_FLAG",
+        flag: "--recurrent-gate-flag",
+        label: "recurrent gate flag",
+        section: "Recurrent Layer Options",
+        type: "bool",
+        default: false,
+        nullable: false,
+        choices: [true, false],
+      },
+      {
+        key: "recurrent_gate_hidden_dim",
+        configKey: "RECURRENT_GATE_HIDDEN_DIM",
+        flag: "--recurrent-gate-hidden-dim",
+        label: "recurrent gate hidden dim",
+        section: "Recurrent Layer Options",
+        type: "int",
+        default: 128,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "recurrent_halting_flag",
+        configKey: "RECURRENT_HALTING_FLAG",
+        flag: "--recurrent-halting-flag",
+        label: "recurrent halting flag",
+        section: "Recurrent Layer Options",
+        type: "bool",
+        default: false,
+        nullable: false,
+        choices: [true, false],
+      },
+      {
+        key: "recurrent_halting_threshold",
+        configKey: "RECURRENT_HALTING_THRESHOLD",
+        flag: "--recurrent-halting-threshold",
+        label: "recurrent halting threshold",
+        section: "Recurrent Layer Options",
+        type: "float",
+        default: 0.95,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "recurrent_halting_stack_num_layers",
+        configKey: "RECURRENT_HALTING_STACK_NUM_LAYERS",
+        flag: "--recurrent-halting-stack-num-layers",
+        label: "recurrent halting stack num layers",
+        section: "Recurrent Layer Options",
+        type: "int",
+        default: 2,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "recurrent_halting_hidden_dim",
+        configKey: "RECURRENT_HALTING_HIDDEN_DIM",
+        flag: "--recurrent-halting-hidden-dim",
+        label: "recurrent halting hidden dim",
+        section: "Recurrent Layer Options",
+        type: "int",
+        default: 64,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "recurrent_halting_layer_norm_position",
+        configKey: "RECURRENT_HALTING_LAYER_NORM_POSITION",
+        flag: "--recurrent-halting-layer-norm-position",
+        label: "recurrent halting layer norm position",
+        section: "Recurrent Layer Options",
+        type: "enum",
+        default: "BEFORE",
+        nullable: false,
+        choices: ["BEFORE", "AFTER"],
+      },
+    ],
+  };
+}
+
 describe("ViewerApp Full Config", () => {
   beforeEach(resetViewerAppTestState);
 
@@ -73,6 +292,143 @@ describe("ViewerApp Full Config", () => {
     expect(screen.queryByText("Bert tuned")).not.toBeInTheDocument();
   });
 
+  it("opens snapshot draft config from the preset sidebar action", async () => {
+    installFetchMock();
+    renderViewer();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("preset", "baseline");
+    const createButton = await screen.findByRole("button", {
+      name: "Create Snapshot",
+    });
+    await waitFor(() => expect(createButton).toBeEnabled());
+    await user.click(createButton);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /full configuration/i,
+    });
+    expect(
+      within(dialog).getByRole("button", { name: "Save as Snapshot" }),
+    ).toBeInTheDocument();
+  });
+
+  it("duplicates the selected snapshot as a new snapshot", async () => {
+    const { configSnapshotCreateRequests, configSnapshotUpdateRequests } =
+      installFetchMock({
+        configSnapshotsResponse: {
+          model: "linear",
+          snapshots: [
+            {
+              id: "snapshot-wide",
+              model: "linear",
+              preset: "baseline",
+              name: "Wide",
+              overrides: { hidden_dim: "128" },
+              createdAt: "2026-06-01T00:00:00.000Z",
+              updatedAt: "2026-06-01T00:00:00.000Z",
+            },
+          ],
+        },
+      });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const snapshotsButton = await screen.findByRole("tab", {
+      name: /snapshots/i,
+    });
+    await waitFor(() => expect(snapshotsButton).toBeEnabled());
+    await user.click(snapshotsButton);
+    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
+      .toHaveTextContent("Wide");
+
+    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /full configuration/i,
+    });
+    await typeConfigFieldValue(user, dialog, /hidden dim/i, "192");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save as Snapshot" }),
+    );
+    const saveDialog = await screen.findByRole("dialog", {
+      name: "Save as Snapshot",
+    });
+    const saveButton = within(saveDialog).getByRole("button", {
+      name: "Save Snapshot",
+    });
+    expect(saveButton).toBeDisabled();
+    await user.type(
+      within(saveDialog).getByLabelText(/^name$/i),
+      "Wide copy",
+    );
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
+
+    await waitFor(() => expect(configSnapshotCreateRequests).toHaveLength(1));
+    expect(configSnapshotCreateRequests[0]).toMatchObject({
+      model: "linear",
+      preset: "baseline",
+      name: "Wide copy",
+      overrides: { hidden_dim: "192" },
+    });
+    expect(configSnapshotUpdateRequests).toHaveLength(0);
+  });
+
+  it("edits the selected snapshot with an update request", async () => {
+    const { configSnapshotCreateRequests, configSnapshotUpdateRequests } =
+      installFetchMock({
+        configSnapshotsResponse: {
+          model: "linear",
+          snapshots: [
+            {
+              id: "snapshot-wide",
+              model: "linear",
+              preset: "baseline",
+              name: "Wide",
+              overrides: { hidden_dim: "128" },
+              createdAt: "2026-06-01T00:00:00.000Z",
+              updatedAt: "2026-06-01T00:00:00.000Z",
+            },
+          ],
+        },
+      });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const snapshotsButton = await screen.findByRole("tab", {
+      name: /snapshots/i,
+    });
+    await waitFor(() => expect(snapshotsButton).toBeEnabled());
+    await user.click(snapshotsButton);
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /full configuration/i,
+    });
+    await typeConfigFieldValue(user, dialog, /hidden dim/i, "192");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Save Snapshot Changes" }),
+    );
+    const saveDialog = await screen.findByRole("dialog", {
+      name: "Save Snapshot Changes",
+    });
+    expect(within(saveDialog).getByLabelText(/^name$/i)).toHaveValue("Wide");
+    await user.click(
+      within(saveDialog).getByRole("button", {
+        name: "Save Snapshot Changes",
+      }),
+    );
+
+    await waitFor(() => expect(configSnapshotUpdateRequests).toHaveLength(1));
+    expect(configSnapshotUpdateRequests[0]).toEqual({
+      id: "snapshot-wide",
+      body: {
+        name: "Wide",
+        overrides: { hidden_dim: "192" },
+      },
+    });
+    expect(configSnapshotCreateRequests).toHaveLength(0);
+  });
+
   it("opens the full config popup with section accordions expanded by default", async () => {
     installFetchMock();
     renderViewer();
@@ -96,7 +452,7 @@ describe("ViewerApp Full Config", () => {
       name: /close layer stack options/i,
     });
     const gateNavToggle = within(sectionNav).getByRole("button", {
-      name: /close gate stack options/i,
+      name: /open gate stack options/i,
     });
     const layerSection = layerAccordion.closest("section");
     const gateSection = gateAccordion.closest("section");
@@ -108,7 +464,9 @@ describe("ViewerApp Full Config", () => {
     if (
       !(dialogHeader instanceof HTMLElement) ||
       !(dialogBody instanceof HTMLElement) ||
-      !(dialogFooter instanceof HTMLElement)
+      !(dialogFooter instanceof HTMLElement) ||
+      !(layerSection instanceof HTMLElement) ||
+      !(gateSection instanceof HTMLElement)
     ) {
       throw new Error("Expected full config dialog chrome to render");
     }
@@ -136,10 +494,15 @@ describe("ViewerApp Full Config", () => {
     expectFullConfigSectionGrid(sectionGrid);
     expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
     expect(layerAccordion).toHaveAttribute("aria-controls");
-    expect(gateAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
     expect(gateAccordion).toHaveAttribute("aria-controls");
+    expect(gateAccordion).toBeDisabled();
+    expect(layerAccordion.closest("h3")).toHaveClass("h-full");
+    expect(layerAccordion).toHaveClass("h-full");
+    expect(gateAccordion.closest("h3")).toHaveClass("h-full");
+    expect(gateAccordion).toHaveClass("h-full");
     expect(layerAccordion).toHaveClass("overflow-hidden", "bg-white/[0.055]");
-    expect(gateAccordion).toHaveClass("overflow-hidden", "bg-white/[0.055]");
+    expect(gateAccordion).toHaveClass("overflow-hidden", "bg-white/[0.025]");
     expect(layerSection).toHaveClass(
       "overflow-hidden",
       "rounded-[12px]",
@@ -152,19 +515,20 @@ describe("ViewerApp Full Config", () => {
       "overflow-hidden",
       "rounded-[12px]",
       "border",
-      "border-line",
-      "bg-panel/80",
-      "shadow-[0_16px_40px_-30px_rgba(0,0,0,0.95)]",
+      "border-line-soft",
+      "bg-panel/70",
+      "shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
     );
     expect(layerNavToggle).toHaveAttribute("aria-expanded", "true");
     expect(layerNavToggle).toHaveAttribute("aria-controls");
-    expect(gateNavToggle).toHaveAttribute("aria-expanded", "true");
+    expect(gateNavToggle).toHaveAttribute("aria-expanded", "false");
     expect(gateNavToggle).toHaveAttribute("aria-controls");
+    expect(gateNavToggle).toBeDisabled();
     expect(layerAccordion).not.toHaveTextContent(/3 fields|0 overrides/i);
-    expect(within(layerAccordion).getByLabelText("3 fields")).not.toHaveAttribute("tabindex");
-    expect(within(layerAccordion).getByLabelText("0 overrides")).not.toHaveAttribute("tabindex");
-    expect(within(gateAccordion).getByLabelText("1 field")).not.toHaveAttribute("tabindex");
-    expect(within(gateAccordion).getByLabelText("0 overrides")).not.toHaveAttribute("tabindex");
+    expect(within(layerSection).getByLabelText("3 fields")).not.toHaveAttribute("tabindex");
+    expect(within(layerSection).getByLabelText("0 overrides")).not.toHaveAttribute("tabindex");
+    expect(within(gateSection).getByLabelText("1 field")).not.toHaveAttribute("tabindex");
+    expect(within(gateSection).getByLabelText("0 overrides")).not.toHaveAttribute("tabindex");
     expect(within(dialog).getByLabelText("4 fields")).toHaveTextContent("4");
     expect(within(dialog).getByLabelText("4 fields")).not.toHaveTextContent("4 fields");
     const layerJump = within(sectionNav).getByRole("button", {
@@ -196,7 +560,433 @@ describe("ViewerApp Full Config", () => {
     expect(hiddenDimControl).toHaveClass("h-10", "px-3", "py-2");
     expect(within(dialog).getByLabelText(/stack activation/i)).toBeInTheDocument();
     expect(gateSwitch).toBeInTheDocument();
-    expect(gateSwitch.parentElement).toHaveClass("h-10", "px-3");
+    expect(gateAccordion).not.toContainElement(gateSwitch);
+    expect(gateSwitch.parentElement).toHaveClass("inline-flex", "items-center", "px-2.5");
+    expect(gateSwitch.parentElement).toHaveTextContent(/gate flag\s*Off/i);
+    expectHeaderControlBeforeMetric(gateSection, "gate flag", "1 field");
+    expect(within(dialog).queryByText("--hidden-dim")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
+  });
+
+  it("locks controlled config accordions until their header flag is enabled", async () => {
+    installFetchMock({
+      schemaResponse: {
+        ...schemaResponse,
+        fields: [
+          ...schemaResponse.fields,
+          {
+            key: "gate_hidden_dim",
+            configKey: "GATE_HIDDEN_DIM",
+            flag: "--gate-hidden-dim",
+            label: "gate hidden dim",
+            section: "Gate Stack Options",
+            type: "int",
+            default: 256,
+            nullable: false,
+            choices: [],
+          },
+          {
+            key: "halting_flag",
+            configKey: "HALTING_FLAG",
+            flag: "--halting-flag",
+            label: "halting flag",
+            section: "Halting Options",
+            type: "bool",
+            default: false,
+            nullable: false,
+            choices: [true, false],
+          },
+          {
+            key: "halting_threshold",
+            configKey: "HALTING_THRESHOLD",
+            flag: "--halting-threshold",
+            label: "halting threshold",
+            section: "Halting Options",
+            type: "float",
+            default: 0.99,
+            nullable: false,
+            choices: [],
+          },
+          {
+            key: "recurrent_flag",
+            configKey: "RECURRENT_FLAG",
+            flag: "--recurrent-flag",
+            label: "recurrent flag",
+            section: "Recurrent Layer Options",
+            type: "bool",
+            default: false,
+            nullable: false,
+            choices: [true, false],
+          },
+          {
+            key: "recurrent_max_steps",
+            configKey: "RECURRENT_MAX_STEPS",
+            flag: "--recurrent-max-steps",
+            label: "recurrent max steps",
+            section: "Recurrent Layer Options",
+            type: "int",
+            default: 4,
+            nullable: false,
+            choices: [],
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const gateAccordion = within(dialog).getByRole("button", {
+      name: /gate stack options section, 2 fields, 0 overrides/i,
+    });
+    const haltingAccordion = within(dialog).getByRole("button", {
+      name: /halting options section, 2 fields, 0 overrides/i,
+    });
+    const recurrentAccordion = within(dialog).getByRole("button", {
+      name: /recurrent layer options section, 2 fields, 0 overrides/i,
+    });
+    const gateSection = fullConfigSectionFor(gateAccordion);
+    const haltingSection = fullConfigSectionFor(haltingAccordion);
+    const recurrentSection = fullConfigSectionFor(recurrentAccordion);
+
+    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
+    expect(haltingAccordion).toHaveAttribute("aria-expanded", "false");
+    expect(recurrentAccordion).toHaveAttribute("aria-expanded", "false");
+    expect(gateAccordion).toBeDisabled();
+    expect(haltingAccordion).toBeDisabled();
+    expect(recurrentAccordion).toBeDisabled();
+    expectHeaderControlBeforeMetric(gateSection, "gate flag", "2 fields");
+    expectHeaderControlBeforeMetric(haltingSection, "halting flag", "2 fields");
+    expectHeaderControlBeforeMetric(recurrentSection, "recurrent flag", "2 fields");
+    expect(within(gateSection).getByLabelText("0 overrides")).toBeInTheDocument();
+    expect(within(haltingSection).getByLabelText("0 overrides")).toBeInTheDocument();
+    expect(within(recurrentSection).getByLabelText("0 overrides")).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/gate hidden dim/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/halting threshold/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/recurrent max steps/i)).not.toBeInTheDocument();
+
+    const search = within(dialog).getByRole("combobox", {
+      name: /search config fields/i,
+    });
+    await user.type(search, "gate hidden");
+    const searchPopup = fullConfigSearchPopup(dialog);
+    const gateHiddenSearchRow = fullConfigSearchResultRow(
+      searchPopup,
+      /gate hidden dim/i,
+    );
+    expect(
+      within(gateHiddenSearchRow).getByRole("spinbutton", {
+        name: /current value/i,
+      }),
+    ).toBeDisabled();
+    expect(gateHiddenSearchRow).toHaveTextContent(
+      /enable gate flag before editing gate stack options/i,
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: /clear config search/i }));
+    await user.click(within(dialog).getByRole("switch", { name: /gate flag/i }));
+    await user.click(within(dialog).getByRole("switch", { name: /halting flag/i }));
+    await user.click(within(dialog).getByRole("switch", { name: /recurrent flag/i }));
+
+    const enabledGateAccordion = within(dialog).getByRole("button", {
+      name: /gate stack options section, 2 fields, 1 override/i,
+    });
+    const enabledHaltingAccordion = within(dialog).getByRole("button", {
+      name: /halting options section, 2 fields, 1 override/i,
+    });
+    const enabledRecurrentAccordion = within(dialog).getByRole("button", {
+      name: /recurrent layer options section, 2 fields, 1 override/i,
+    });
+    const enabledGateSection = fullConfigSectionFor(enabledGateAccordion);
+    const enabledHaltingSection = fullConfigSectionFor(enabledHaltingAccordion);
+    const enabledRecurrentSection = fullConfigSectionFor(enabledRecurrentAccordion);
+
+    expect(enabledGateAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(enabledHaltingAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(enabledRecurrentAccordion).toHaveAttribute("aria-expanded", "true");
+    expectHeaderControlBeforeMetric(enabledGateSection, "gate flag", "2 fields");
+    expectHeaderControlBeforeMetric(enabledHaltingSection, "halting flag", "2 fields");
+    expectHeaderControlBeforeMetric(enabledRecurrentSection, "recurrent flag", "2 fields");
+    expect(within(enabledGateSection).getByLabelText("1 override")).toBeInTheDocument();
+    expect(within(enabledHaltingSection).getByLabelText("1 override")).toBeInTheDocument();
+    expect(within(enabledRecurrentSection).getByLabelText("1 override")).toBeInTheDocument();
+    expectNoHeaderControlInAccordionBody(enabledGateAccordion, "gate flag");
+    expectNoHeaderControlInAccordionBody(enabledHaltingAccordion, "halting flag");
+    expectNoHeaderControlInAccordionBody(enabledRecurrentAccordion, "recurrent flag");
+    expect(within(dialog).getByLabelText(/gate hidden dim/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/halting threshold/i)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/recurrent max steps/i)).toBeInTheDocument();
+  });
+
+  it("groups halting and recurrent stack prefixes into nested config accordions", async () => {
+    installFetchMock({ schemaResponse: nestedControlledSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const sectionNav = within(dialog).getByRole("navigation", {
+      name: /full config sections/i,
+    });
+    const haltingAccordion = within(dialog).getByRole("button", {
+      name: /halting options section, 5 fields, 0 overrides/i,
+    });
+    const recurrentAccordion = within(dialog).getByRole("button", {
+      name: /recurrent layer options section, 9 fields, 0 overrides/i,
+    });
+    const haltingSection = fullConfigSectionFor(haltingAccordion);
+    const recurrentSection = fullConfigSectionFor(recurrentAccordion);
+
+    expect(
+      within(sectionNav).queryByRole("button", {
+        name: /jump to halting stack options/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
+        name: /jump to recurrent gate stack options/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
+        name: /jump to recurrent halting options/i,
+      }),
+    ).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("switch", { name: /halting flag/i }));
+    await user.click(within(dialog).getByRole("switch", { name: /recurrent flag/i }));
+
+    const enabledHaltingAccordion = within(dialog).getByRole("button", {
+      name: /halting options section, 5 fields, 1 override/i,
+    });
+    const enabledRecurrentAccordion = within(dialog).getByRole("button", {
+      name: /recurrent layer options section, 9 fields, 1 override/i,
+    });
+    const haltingDirectGrid = directFieldGridFor(enabledHaltingAccordion);
+    const recurrentDirectGrid = directFieldGridFor(enabledRecurrentAccordion);
+    const haltingStackAccordion = within(haltingSection).getByRole("button", {
+      name: /halting stack options section, 3 fields, 0 overrides/i,
+    });
+    const recurrentGateAccordion = within(recurrentSection).getByRole("button", {
+      name: /recurrent gate stack options section, 2 fields, 0 overrides/i,
+    });
+    const recurrentHaltingAccordion = within(recurrentSection).getByRole("button", {
+      name: /recurrent halting options section, 5 fields, 0 overrides/i,
+    });
+
+    expect(haltingAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(recurrentAccordion).toHaveAttribute("aria-expanded", "true");
+    expectHeaderControlBeforeMetric(haltingSection, "halting flag", "5 fields");
+    expectHeaderControlBeforeMetric(recurrentSection, "recurrent flag", "9 fields");
+    expect(within(haltingDirectGrid).getByLabelText(/halting threshold/i))
+      .toBeInTheDocument();
+    expect(within(haltingDirectGrid).queryByLabelText(/halting hidden dim/i))
+      .not.toBeInTheDocument();
+    expect(within(haltingDirectGrid).queryByLabelText(/halting layer norm position/i))
+      .not.toBeInTheDocument();
+    expect(within(recurrentDirectGrid).getByLabelText(/recurrent max steps/i))
+      .toBeInTheDocument();
+    expect(within(recurrentDirectGrid).queryByLabelText(/recurrent gate hidden dim/i))
+      .not.toBeInTheDocument();
+    expect(within(recurrentDirectGrid).queryByLabelText(/recurrent halting threshold/i))
+      .not.toBeInTheDocument();
+    expect(fullConfigSectionGridFor(haltingStackAccordion)).not.toBe(
+      fullConfigSectionGridFor(enabledHaltingAccordion),
+    );
+    expect(fullConfigSectionGridFor(recurrentGateAccordion)).not.toBe(
+      fullConfigSectionGridFor(enabledRecurrentAccordion),
+    );
+
+    expect(
+      within(accordionPanelFor(haltingStackAccordion)).getByLabelText(
+        /halting hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(haltingStackAccordion)).getByLabelText(
+        /halting layer norm position/i,
+      ),
+    ).toBeInTheDocument();
+    expect(recurrentGateAccordion).toBeDisabled();
+    expect(recurrentHaltingAccordion).toBeDisabled();
+    expect(within(recurrentSection).getByRole("switch", {
+      name: /recurrent gate flag/i,
+    })).toBeInTheDocument();
+    expect(within(recurrentSection).getByRole("switch", {
+      name: /recurrent halting flag/i,
+    })).toBeInTheDocument();
+
+    await user.click(
+      within(recurrentSection).getByRole("switch", {
+        name: /recurrent gate flag/i,
+      }),
+    );
+    await user.click(
+      within(recurrentSection).getByRole("switch", {
+        name: /recurrent halting flag/i,
+      }),
+    );
+
+    const enabledRecurrentGateAccordion = within(recurrentSection).getByRole("button", {
+      name: /recurrent gate stack options section, 2 fields, 1 override/i,
+    });
+    const enabledRecurrentHaltingAccordion = within(recurrentSection).getByRole(
+      "button",
+      {
+        name: /recurrent halting options section, 5 fields, 1 override/i,
+      },
+    );
+    const recurrentHaltingStackAccordion = within(recurrentSection).getByRole(
+      "button",
+      {
+        name: /recurrent halting stack options section, 3 fields, 0 overrides/i,
+      },
+    );
+    const recurrentHaltingDirectGrid = directFieldGridFor(
+      enabledRecurrentHaltingAccordion,
+    );
+
+    expect(enabledRecurrentGateAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(enabledRecurrentHaltingAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(within(accordionPanelFor(enabledRecurrentGateAccordion)).getByLabelText(
+      /recurrent gate hidden dim/i,
+    )).toBeInTheDocument();
+    expect(
+      within(recurrentHaltingDirectGrid).getByLabelText(
+        /recurrent halting threshold/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(recurrentHaltingDirectGrid).queryByLabelText(
+        /recurrent halting stack num layers/i,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(recurrentHaltingDirectGrid).queryByLabelText(
+        /recurrent halting hidden dim/i,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(recurrentHaltingDirectGrid).queryByLabelText(
+        /recurrent halting layer norm position/i,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(recurrentHaltingStackAccordion)).getByLabelText(
+        /recurrent halting stack num layers/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(recurrentHaltingStackAccordion)).getByLabelText(
+        /recurrent halting hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(recurrentHaltingStackAccordion)).getByLabelText(
+        /recurrent halting layer norm position/i,
+      ),
+    ).toBeInTheDocument();
+    expectNoHeaderControlInAccordionBody(
+      enabledRecurrentGateAccordion,
+      "recurrent gate flag",
+    );
+    expectNoHeaderControlInAccordionBody(
+      enabledRecurrentHaltingAccordion,
+      "recurrent halting flag",
+    );
+  });
+
+  it("uses nested flag reasons for search results and auto-opens nested matches", async () => {
+    installFetchMock({ schemaResponse: nestedControlledSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const search = within(dialog).getByRole("combobox", {
+      name: /search config fields/i,
+    });
+
+    await user.type(search, "recurrent gate hidden");
+    let searchPopup = fullConfigSearchPopup(dialog);
+    let recurrentGateRow = fullConfigSearchResultRow(
+      searchPopup,
+      /recurrent gate hidden dim/i,
+    );
+
+    expect(
+      within(recurrentGateRow).getByRole("spinbutton", {
+        name: /current value/i,
+      }),
+    ).toBeDisabled();
+    expect(recurrentGateRow).toHaveTextContent(
+      /enable recurrent flag before editing recurrent layer options/i,
+    );
+
+    await user.click(within(dialog).getByRole("switch", { name: /recurrent flag/i }));
+    await user.click(search);
+
+    searchPopup = fullConfigSearchPopup(dialog);
+    recurrentGateRow = fullConfigSearchResultRow(
+      searchPopup,
+      /recurrent gate hidden dim/i,
+    );
+    expect(
+      within(recurrentGateRow).getByRole("spinbutton", {
+        name: /current value/i,
+      }),
+    ).toBeDisabled();
+    expect(recurrentGateRow).toHaveTextContent(
+      /enable recurrent gate flag before editing recurrent gate stack options/i,
+    );
+
+    const recurrentSection = fullConfigSectionFor(
+      within(dialog).getByRole("button", {
+        name: /recurrent layer options section, 3 fields, 1 override/i,
+      }),
+    );
+    const recurrentGateAccordion = within(recurrentSection).getByRole("button", {
+      name: /recurrent gate stack options section, 2 fields, 0 overrides/i,
+    });
+
+    expect(recurrentGateAccordion).toHaveAttribute("aria-expanded", "false");
+    expect(recurrentGateAccordion).toBeDisabled();
+    expect(within(recurrentSection).getByRole("switch", {
+      name: /recurrent gate flag/i,
+    })).toBeInTheDocument();
+
+    await user.click(
+      within(recurrentSection).getByRole("switch", {
+        name: /recurrent gate flag/i,
+      }),
+    );
+    await user.click(
+      within(dialog).getByRole("button", {
+        name: /recurrent layer options section, 3 fields, 2 overrides/i,
+      }),
+    );
+    await user.click(search);
+    recurrentGateRow = fullConfigSearchResultRow(
+      fullConfigSearchPopup(dialog),
+      /recurrent gate hidden dim/i,
+    );
+    await user.click(
+      within(recurrentGateRow).getByRole("button", {
+        name: /recurrent gate hidden dim/i,
+      }),
+    );
+
+    expect(search).toHaveValue("recurrent gate hidden dim");
+    expect(
+      within(dialog).getByRole("button", {
+        name: /recurrent layer options section, 3 fields, 2 overrides/i,
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(recurrentSection).getByRole("button", {
+        name: /recurrent gate stack options section, 2 fields, 1 override/i,
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(within(dialog).getByLabelText(/recurrent gate hidden dim/i))
+      .toBeInTheDocument();
   });
 
   it("shows an accessible full config field search", async () => {
@@ -282,6 +1072,7 @@ describe("ViewerApp Full Config", () => {
 
     expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
 
     await user.clear(search);
     await user.type(search, "gate_flag");
@@ -552,12 +1343,13 @@ describe("ViewerApp Full Config", () => {
     const layerAccordion = within(dialog).getByRole("button", {
       name: /layer stack options section, 1 field, 0 overrides/i,
     });
+    const layerSection = fullConfigSectionFor(layerAccordion);
 
     expect(layerAccordion).not.toHaveTextContent(/1 field|0 overrides/i);
-    expect(within(layerAccordion).getByLabelText("1 field")).toHaveTextContent("1");
-    expect(within(layerAccordion).getByLabelText("1 field")).not.toHaveAttribute("tabindex");
-    expect(within(layerAccordion).getByLabelText("0 overrides")).toHaveTextContent("0");
-    expect(within(layerAccordion).getByLabelText("0 overrides")).not.toHaveAttribute("tabindex");
+    expect(within(layerSection).getByLabelText("1 field")).toHaveTextContent("1");
+    expect(within(layerSection).getByLabelText("1 field")).not.toHaveAttribute("tabindex");
+    expect(within(layerSection).getByLabelText("0 overrides")).toHaveTextContent("0");
+    expect(within(layerSection).getByLabelText("0 overrides")).not.toHaveAttribute("tabindex");
   });
 
   it("shows popup config metric tooltips on hover and focus", async () => {
@@ -613,12 +1405,13 @@ describe("ViewerApp Full Config", () => {
     expect(within(sectionNav).getByRole("button", { name: /^open all$/i })).toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/stack activation/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByRole("switch", { name: /gate flag/i })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: /gate flag/i })).toBeInTheDocument();
 
     await user.click(within(sectionNav).getByRole("button", { name: /^open all$/i }));
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(gateAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
+    expect(gateAccordion).toBeDisabled();
     expect(within(sectionNav).getByRole("button", { name: /^close all$/i })).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/stack activation/i)).toBeInTheDocument();
@@ -644,13 +1437,14 @@ describe("ViewerApp Full Config", () => {
     await user.click(layerAccordion);
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
-    expect(gateAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
+    expect(gateAccordion).toBeDisabled();
     expect(within(sectionNav).getByRole("button", { name: /^open all$/i })).toBeInTheDocument();
 
     await user.click(within(sectionNav).getByRole("button", { name: /^open all$/i }));
 
     expect(layerAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(gateAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(gateAccordion).toHaveAttribute("aria-expanded", "false");
     expect(within(sectionNav).getByRole("button", { name: /^close all$/i })).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/stack activation/i)).toBeInTheDocument();
@@ -670,8 +1464,12 @@ describe("ViewerApp Full Config", () => {
 
     await user.click(layerAccordion);
 
+    const layerPanel = accordionPanelFor(layerAccordion);
+
     expect(layerAccordion).toHaveAttribute("aria-expanded", "false");
     expect(layerAccordion).toHaveClass("bg-white/[0.025]");
+    expect(layerPanel).toHaveAttribute("hidden");
+    expect(layerPanel).not.toHaveClass("grid", "px-3", "py-3");
     expect(layerAccordion.closest("section")).toHaveClass(
       "rounded-[12px]",
       "border-line-soft",
@@ -774,8 +1572,8 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).getAllByLabelText("1 override").length).toBeGreaterThan(0);
     expect(within(dialog).queryByText("1 override")).not.toBeInTheDocument();
     expect(layerAccordion).toHaveClass("bg-violet/[0.08]", "hover:bg-violet/[0.12]");
-    expect(within(layerAccordion).getByLabelText("1 override")).toHaveClass("text-violet");
-    expect(within(layerAccordion).queryByText("1 preset")).not.toBeInTheDocument();
+    expect(within(layerSection).getByLabelText("1 override")).toHaveClass("text-violet");
+    expect(within(layerSection).queryByText("1 preset")).not.toBeInTheDocument();
     expect(layerSection).toHaveClass("border-violet/35", "bg-violet/[0.06]");
     expect(layerSection).not.toHaveClass("border-amber/35", "bg-amber/[0.045]");
     expect(layerNavRow).toHaveClass(
@@ -835,8 +1633,8 @@ describe("ViewerApp Full Config", () => {
       "bg-[linear-gradient(90deg,rgba(255,209,102,0.12),rgba(167,139,250,0.13))]",
       "hover:bg-[linear-gradient(90deg,rgba(255,209,102,0.16),rgba(167,139,250,0.17))]",
     );
-    expect(within(layerAccordion).getByLabelText("1 override")).toHaveClass("text-violet");
-    expect(within(layerAccordion).getByText("1 preset")).toHaveClass("text-amber");
+    expect(within(layerSection).getByLabelText("1 override")).toHaveClass("text-violet");
+    expect(within(layerSection).getByText("1 preset")).toHaveClass("text-amber");
     expect(layerSection).toHaveClass(
       "border-amber/35",
       "bg-[linear-gradient(135deg,rgba(255,209,102,0.075),rgba(167,139,250,0.105))]",

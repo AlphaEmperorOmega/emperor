@@ -15,6 +15,7 @@ function ConfigSearchResultItem({
   overrides,
   isActive,
   isSelected,
+  disabledReason,
   onSelect,
   onFieldChange,
   onFieldReset,
@@ -24,6 +25,7 @@ function ConfigSearchResultItem({
   overrides: OverrideValues;
   isActive: boolean;
   isSelected: boolean;
+  disabledReason?: string;
   onSelect: (option: ConfigSearchOption) => void;
   onFieldChange: (key: string, value: string) => void;
   onFieldReset: (key: string) => void;
@@ -66,9 +68,6 @@ function ConfigSearchResultItem({
         <span className="min-w-0 truncate font-mono text-xs text-ink-dim">
           {option.key}
         </span>
-        <span className="min-w-0 truncate font-mono text-xs text-ink-dim">
-          {option.flag}
-        </span>
       </span>
       <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-dim">
         <span className="min-w-0 truncate">{option.sectionTitle}</span>
@@ -92,8 +91,12 @@ function ConfigSearchResultItem({
         resetTitle={`Reset ${option.label} override`}
         density="compact"
         hideDisabledReset={false}
+        disabled={Boolean(disabledReason)}
         className="mt-0"
       />
+      {disabledReason && (
+        <span className="text-xs font-medium text-ink-dim">{disabledReason}</span>
+      )}
     </div>
   );
 }
@@ -105,6 +108,7 @@ export function ConfigSearchResults({
   activeIndex,
   selectedFieldKey,
   overrides,
+  disabledFieldReasons,
   onSelect,
   onFieldChange,
   onFieldReset,
@@ -115,6 +119,7 @@ export function ConfigSearchResults({
   activeIndex: number;
   selectedFieldKey: string | null;
   overrides: OverrideValues;
+  disabledFieldReasons?: Map<string, string>;
   onSelect: (option: ConfigSearchOption) => void;
   onFieldChange: (key: string, value: string) => void;
   onFieldReset: (key: string) => void;
@@ -133,6 +138,7 @@ export function ConfigSearchResults({
           overrides={overrides}
           isActive={index === activeIndex}
           isSelected={option.key === selectedFieldKey}
+          disabledReason={disabledFieldReasons?.get(option.key)}
           onSelect={onSelect}
           onFieldChange={onFieldChange}
           onFieldReset={onFieldReset}

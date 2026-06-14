@@ -17,8 +17,8 @@ import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import {
   configSnapshotOverrideEntries,
   draftMatchesConfigSnapshot,
-  generateDefaultConfigSnapshotName,
   validateConfigSnapshotCandidate,
+  validateConfigSnapshotName,
   type ConfigSnapshot,
   type ConfigSnapshotCreateResult,
   type ConfigSnapshotGroup,
@@ -60,6 +60,8 @@ export function AddConfigSnapshotDialog({
   snapshots,
   title = "Add Config Snapshot",
   actionLabel = "Add Snapshot",
+  initialName,
+  excludeSnapshotId,
   onAdd,
   onClose,
 }: {
@@ -70,15 +72,25 @@ export function AddConfigSnapshotDialog({
   snapshots: ConfigSnapshot[];
   title?: string;
   actionLabel?: string;
+  initialName?: string;
+  excludeSnapshotId?: string;
   onAdd: (name: string) => ConfigSnapshotCreateResult;
   onClose: () => void;
 }) {
-  const defaultName = useMemo(
-    () => generateDefaultConfigSnapshotName({ preset, fields, overrides }),
-    [fields, overrides, preset],
-  );
+  const defaultName = useMemo(() => initialName ?? "", [initialName]);
   const [name, setName] = useState(defaultName);
   const [submittedError, setSubmittedError] = useState("");
+  const nameValidation = useMemo(
+    () =>
+      validateConfigSnapshotName({
+        model,
+        preset,
+        name,
+        snapshots,
+        excludeSnapshotId,
+      }),
+    [excludeSnapshotId, model, name, preset, snapshots],
+  );
   const candidate = useMemo(
     () =>
       validateConfigSnapshotCandidate({
@@ -87,14 +99,21 @@ export function AddConfigSnapshotDialog({
         fields,
         overrides,
         snapshots,
+        excludeSnapshotId,
       }),
-    [fields, model, overrides, preset, snapshots],
+    [excludeSnapshotId, fields, model, overrides, preset, snapshots],
   );
   const { entries } = useMemo(
     () => configSnapshotOverrideEntries(fields, overrides),
     [fields, overrides],
   );
-  const error = submittedError || (!candidate.ok ? candidate.error : "");
+  const error =
+    submittedError ||
+    (!nameValidation.ok
+      ? nameValidation.error
+      : !candidate.ok
+        ? candidate.error
+        : "");
 
   useEffect(() => {
     setName(defaultName);
@@ -148,6 +167,7 @@ export function AddConfigSnapshotDialog({
         </span>
         <Input
           value={name}
+          placeholder="Unique snapshot name"
           onChange={(event) => {
             setName(event.target.value);
             setSubmittedError("");
@@ -197,7 +217,11 @@ export function AddConfigSnapshotDialog({
         <Button variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={confirm} disabled={!candidate.ok}>
+        <Button
+          variant="primary"
+          onClick={confirm}
+          disabled={!nameValidation.ok || !candidate.ok}
+        >
           <FilePlus2 className="h-4 w-4" aria-hidden />
           {actionLabel}
         </Button>

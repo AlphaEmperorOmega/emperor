@@ -1,10 +1,24 @@
 import { useCallback, useState } from "react";
 import { type OverrideValues } from "@/lib/config";
 
-export function useTargetOverridesState() {
-  const [selectedModel, setSelectedModel] = useState("");
-  const [selectedPreset, setSelectedPreset] = useState("");
-  const [overrides, setOverrides] = useState<OverrideValues>({});
+type TargetOverridesInitialState = {
+  selectedModel?: string;
+  selectedPreset?: string;
+  overrides?: OverrideValues;
+};
+
+export function useTargetOverridesState(
+  initialState: TargetOverridesInitialState = {},
+) {
+  const [selectedModel, setSelectedModel] = useState(
+    initialState.selectedModel ?? "",
+  );
+  const [selectedPreset, setSelectedPreset] = useState(
+    initialState.selectedPreset ?? "",
+  );
+  const [overrides, setOverrides] = useState<OverrideValues>(
+    initialState.overrides ?? {},
+  );
 
   const selectModel = useCallback((model: string) => {
     setSelectedModel(model);

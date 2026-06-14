@@ -3,6 +3,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, vi } from "vitest";
 import { ViewerApp } from "@/features/viewer/components/viewer-app";
+import {
+  clearPersistedTargetSelection,
+} from "@/features/viewer/state/target/target-selection-storage";
 export { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
 export type MockNodeData = {
@@ -57,6 +60,37 @@ export type MockNodeData = {
   onOpenMonitor?: () => void;
   onToggleDetails: () => void;
 };
+
+export type MockOperationNodeData =
+  | {
+      kind: "group";
+      groupId: string;
+      label: string;
+      subtitle: string;
+      operationCount: number;
+      height: number;
+      isExpanded: boolean;
+      onActivateNode: () => void;
+      onToggleExpansion: () => void;
+    }
+  | {
+      kind: "operation";
+      nodeId: string;
+      label: string;
+      opKind: string;
+      target: string;
+      modulePath?: string | null;
+      groupId?: string | null;
+      details: Record<string, unknown>;
+      height: number;
+      onActivateNode: () => void;
+    };
+
+function isOperationNodeData(
+  data: MockNodeData | MockOperationNodeData,
+): data is MockOperationNodeData {
+  return "kind" in data;
+}
 
 export type MockConfigSnapshot = {
   id: string;
@@ -232,13 +266,16 @@ vi.mock("@xyflow/react", () => ({
     elementsSelectable,
     nodesFocusable,
     nodeClickDistance,
+    onlyRenderVisibleElements,
+    onMoveStart,
+    onMoveEnd,
     children,
   }: {
     nodes: Array<{
       id: string;
       position: { x: number; y: number };
       style?: { height?: number };
-      data: MockNodeData;
+      data: MockNodeData | MockOperationNodeData;
     }>;
     edges: Array<{ id: string; source: string; target: string }>;
     onNodeClick?: (event: unknown, node: { id: string }) => void;
@@ -247,6 +284,9 @@ vi.mock("@xyflow/react", () => ({
     elementsSelectable?: boolean;
     nodesFocusable?: boolean;
     nodeClickDistance?: number;
+    onlyRenderVisibleElements?: boolean;
+    onMoveStart?: () => void;
+    onMoveEnd?: () => void;
     children: React.ReactNode;
   }) => {
     expect(nodesDraggable).toBe(false);
@@ -256,7 +296,13 @@ vi.mock("@xyflow/react", () => ({
     expect(nodeClickDistance).toBe(4);
 
     return (
-      <div data-testid="flow">
+      <div
+        data-testid="flow"
+        data-only-render-visible-elements={
+          onlyRenderVisibleElements ? "true" : "false"
+        }
+        data-has-move-handlers={onMoveStart && onMoveEnd ? "true" : "false"}
+      >
         {nodes.map((node) => (
           <div
             key={node.id}
@@ -266,22 +312,83 @@ vi.mock("@xyflow/react", () => ({
             data-height={node.style?.height ?? node.data.height}
           >
             {(() => {
-              const isSimpleMode = node.data.graphDetailMode === "simple";
-              const parameterShapes = parameterShapeRows(node.data.details);
-              const detailRows = nodeDetailRows(node.data.details, node.data.config);
+              const data = node.data;
+
+              if (isOperationNodeData(data)) {
+                if (data.kind === "group") {
+                  return (
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Expand operation group ${data.subtitle}`}
+                      onClick={() => {
+                        data.onActivateNode();
+                        onNodeClick?.({}, node);
+                      }}
+                    >
+                      <span>{data.label}</span>
+                      <span>{data.subtitle}</span>
+                      <span>
+                        {data.operationCount}{" "}
+                        {data.operationCount === 1 ? "op" : "ops"}
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Select operation ${data.nodeId}`}
+                    onClick={() => {
+                      data.onActivateNode();
+                      onNodeClick?.({}, node);
+                    }}
+                  >
+                    <span>{data.label}</span>
+                    <span>{data.opKind}</span>
+                    <span>{data.target}</span>
+                    {data.modulePath && <span>{data.modulePath}</span>}
+                    {data.details.shape ? (
+                      <span>
+                        {Array.isArray(data.details.shape)
+                          ? data.details.shape.join(" x ")
+                          : String(data.details.shape)}
+                      </span>
+                    ) : null}
+                    {data.details.dtype ? (
+                      <span>{String(data.details.dtype)}</span>
+                    ) : null}
+                    {data.details.inputKind ? (
+                      <span>{String(data.details.inputKind)}</span>
+                    ) : null}
+                  </div>
+                );
+              }
+
+              const moduleData = data;
+              const isSimpleMode = moduleData.graphDetailMode === "simple";
+              const {
+                onOpenMonitor,
+                onToggleDetails,
+                onToggleExpansion,
+              } = moduleData;
+              const parameterShapes = parameterShapeRows(moduleData.details);
+              const detailRows = nodeDetailRows(moduleData.details, moduleData.config);
               const simpleParamText = isSimpleMode
-                ? simpleGraphParamText(node.data.parameterCount)
+                ? simpleGraphParamText(moduleData.parameterCount)
                 : undefined;
-              const modelSizeText = node.data.isRootNode
-                ? formatModelSize(node.data.parameterSizeBytes)
+              const modelSizeText = moduleData.isRootNode
+                ? formatModelSize(moduleData.parameterSizeBytes)
                 : undefined;
               const simpleDimsText = isSimpleMode
-                ? nodeDimsText(node.data.details, node.data.config) ?? node.data.stackDiagram?.dims
+                ? nodeDimsText(moduleData.details, moduleData.config) ?? moduleData.stackDiagram?.dims
                 : undefined;
-              const detailToggleLabel = node.data.config ? "Config options" : "Details";
-              const cardLabel = node.data.canToggleExpansion
-                ? `Select and ${node.data.isExpanded ? "collapse" : "expand"} ${node.data.path}`
-                : `Select ${node.data.path}`;
+              const detailToggleLabel = moduleData.config ? "Config options" : "Details";
+              const cardLabel = moduleData.canToggleExpansion
+                ? `Select and ${moduleData.isExpanded ? "collapse" : "expand"} ${moduleData.path}`
+                : `Select ${moduleData.path}`;
 
               return (
                 <>
@@ -302,23 +409,23 @@ vi.mock("@xyflow/react", () => ({
                     role="button"
                     tabIndex={0}
                     aria-label={cardLabel}
-                    aria-expanded={node.data.canToggleExpansion ? node.data.isExpanded : undefined}
+                    aria-expanded={moduleData.canToggleExpansion ? moduleData.isExpanded : undefined}
                     onClick={() => {
-                      node.data.onActivateNode();
+                      moduleData.onActivateNode();
                       onNodeClick?.({}, node);
                     }}
                   >
                     <div>
-                      <span>{node.data.label}</span>
+                      <span>{moduleData.label}</span>
                       {isSimpleMode && simpleParamText && (
-                        <span title={`${formatExactCount(node.data.parameterCount)} parameters`}>
+                        <span title={`${formatExactCount(moduleData.parameterCount)} parameters`}>
                           {simpleParamText}
                         </span>
                       )}
                       {isSimpleMode && modelSizeText && (
                         <span
                           title={`${formatExactCount(
-                            node.data.parameterSizeBytes,
+                            moduleData.parameterSizeBytes,
                           )} bytes of parameter tensors`}
                         >
                           {modelSizeText}
@@ -327,35 +434,35 @@ vi.mock("@xyflow/react", () => ({
                       {isSimpleMode && simpleDimsText && (
                         <span title={`input/output: ${simpleDimsText}`}>{simpleDimsText}</span>
                       )}
-                      {!isSimpleMode && node.data.childCount > 0 && (
+                      {!isSimpleMode && moduleData.childCount > 0 && (
                         <span>
-                          {node.data.childCount}{" "}
-                          {node.data.childCount === 1 ? "child" : "children"}
+                          {moduleData.childCount}{" "}
+                          {moduleData.childCount === 1 ? "child" : "children"}
                         </span>
                       )}
-                      {!isSimpleMode && node.data.parameterCount > 0 && (
-                        <span title={`${formatExactCount(node.data.parameterCount)} parameters`}>
-                          {formatCompactCount(node.data.parameterCount)}
+                      {!isSimpleMode && moduleData.parameterCount > 0 && (
+                        <span title={`${formatExactCount(moduleData.parameterCount)} parameters`}>
+                          {formatCompactCount(moduleData.parameterCount)}
                         </span>
                       )}
                       {!isSimpleMode && modelSizeText && (
                         <span
                           title={`${formatExactCount(
-                            node.data.parameterSizeBytes,
+                            moduleData.parameterSizeBytes,
                           )} bytes of parameter tensors`}
                         >
                           {modelSizeText}
                         </span>
                       )}
                     </div>
-                    {!isSimpleMode && <span>{node.data.subtitle}</span>}
-                    {!isSimpleMode && node.data.clusterDiagram ? (
+                    {!isSimpleMode && <span>{moduleData.subtitle}</span>}
+                    {!isSimpleMode && moduleData.clusterDiagram ? (
                       <div data-testid={`cluster-diagram-${node.id}`}>
                         <span>Cluster map</span>
                         <span>
-                          {node.data.clusterDiagram.instantiated} / {node.data.clusterDiagram.capacityTotal}
+                          {moduleData.clusterDiagram.instantiated} / {moduleData.clusterDiagram.capacityTotal}
                         </span>
-                        {node.data.clusterDiagram.planes.flatMap((plane) =>
+                        {moduleData.clusterDiagram.planes.flatMap((plane) =>
                           plane.cells.map((cell, index) => (
                             <span
                               key={`${plane.z}-${cell.title}-${index}`}
@@ -366,9 +473,9 @@ vi.mock("@xyflow/react", () => ({
                           )),
                         )}
                       </div>
-                    ) : !isSimpleMode && node.data.stackDiagram ? (
+                    ) : !isSimpleMode && moduleData.stackDiagram ? (
                       <div data-testid={`stack-diagram-${node.id}`}>
-                        {node.data.stackDiagram.cells.map((cell, index) => (
+                        {moduleData.stackDiagram.cells.map((cell, index) => (
                           <div
                             key={`${cell.kind}-${cell.label}-${index}`}
                             aria-label={cell.title}
@@ -381,7 +488,7 @@ vi.mock("@xyflow/react", () => ({
                       </div>
                     ) : !isSimpleMode && (
                       <div data-testid={`child-summaries-${node.id}`}>
-                        {node.data.childSummaries.map((summary, index) => {
+                        {moduleData.childSummaries.map((summary, index) => {
                           const summaryLabel = summary.nestedLabel
                             ? `${summary.label} ${summary.nestedLabel}`
                             : summary.label;
@@ -422,25 +529,25 @@ vi.mock("@xyflow/react", () => ({
                         })}
                       </div>
                     )}
-                    {node.data.canToggleExpansion && (
+                    {moduleData.canToggleExpansion && (
                       <button
                         type="button"
-                        aria-label={`${node.data.isExpanded ? "Collapse" : "Expand"} tree ${node.data.path}`}
+                        aria-label={`${moduleData.isExpanded ? "Collapse" : "Expand"} tree ${moduleData.path}`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          node.data.onToggleExpansion();
+                          onToggleExpansion();
                         }}
                       >
                         toggle
                       </button>
                     )}
-                    {!isSimpleMode && node.data.canOpenMonitor && node.data.onOpenMonitor && (
+                    {!isSimpleMode && moduleData.canOpenMonitor && moduleData.onOpenMonitor && (
                       <button
                         type="button"
-                        aria-label={`Open monitor charts for ${node.data.path}`}
+                        aria-label={`Open monitor charts for ${moduleData.path}`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          node.data.onOpenMonitor?.();
+                          onOpenMonitor?.();
                         }}
                       >
                         monitor
@@ -449,17 +556,17 @@ vi.mock("@xyflow/react", () => ({
                     {!isSimpleMode && detailRows.length > 0 && (
                       <button
                         type="button"
-                        aria-label={`${detailToggleLabel} for ${node.data.path}`}
-                        aria-expanded={node.data.isDetailsExpanded}
+                        aria-label={`${detailToggleLabel} for ${moduleData.path}`}
+                        aria-expanded={moduleData.isDetailsExpanded}
                         onClick={(event) => {
                           event.stopPropagation();
-                          node.data.onToggleDetails();
+                          onToggleDetails();
                         }}
                       >
                         {detailToggleLabel}
                       </button>
                     )}
-                    {!isSimpleMode && node.data.isDetailsExpanded && detailRows.length > 0 && (
+                    {!isSimpleMode && moduleData.isDetailsExpanded && detailRows.length > 0 && (
                       <div>
                         {detailRows.map((entry) => (
                           <div key={entry.key}>
@@ -512,6 +619,7 @@ vi.mock("@xyflow/react", () => ({
 }));
 
 export const modelsResponse = { models: ["linear", "bert_linear"] };
+export const neuronModelsResponse = { models: ["neuron/neuron_linear"] };
 export const presetsResponse = {
   model: "linear",
   presets: [
@@ -527,6 +635,10 @@ export const bertPresetsResponse = {
   model: "bert_linear",
   presets: [{ name: "bert-baseline", label: "BERT_BASELINE", description: "Bert baseline" }],
 };
+export const neuronPresetsResponse = {
+  model: "neuron/neuron_linear",
+  presets: [{ name: "baseline", label: "BASELINE", description: "Baseline" }],
+};
 export const datasetsResponse = {
   model: "linear",
   datasets: [
@@ -537,6 +649,12 @@ export const datasetsResponse = {
 export const bertDatasetsResponse = {
   model: "bert_linear",
   datasets: [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
+};
+export const neuronDatasetsResponse = {
+  model: "neuron/neuron_linear",
+  datasets: [
+    { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
+  ],
 };
 export const monitorsResponse = {
   model: "linear",
@@ -556,6 +674,16 @@ export const monitorsResponse = {
       defaultEnabled: false,
     },
   ],
+};
+export const neuronMonitorsResponse = {
+  model: "neuron/neuron_linear",
+  monitors: [] as Array<{
+    name: string;
+    label: string;
+    description: string;
+    kinds: string[];
+    defaultEnabled: boolean;
+  }>,
 };
 export const capabilitiesResponse = {
   authMode: "none",
@@ -627,6 +755,7 @@ export type MockLogTags =
       scalarTags?: string[];
       histogramTags?: string[];
       imageTags?: string[];
+      textTags?: string[];
     };
 
 export function logTagsPayload(tags: MockLogTags | undefined) {
@@ -635,12 +764,14 @@ export function logTagsPayload(tags: MockLogTags | undefined) {
       scalarTags: tags,
       histogramTags: [],
       imageTags: [],
+      textTags: [],
     };
   }
   return {
     scalarTags: tags?.scalarTags ?? [],
     histogramTags: tags?.histogramTags ?? [],
     imageTags: tags?.imageTags ?? [],
+    textTags: tags?.textTags ?? [],
   };
 }
 
@@ -739,6 +870,14 @@ export type MockLogArtifact = {
   modifiedAt: string;
 };
 
+type MockLogRunArtifacts = {
+  runId: string;
+  params: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+  artifacts: MockLogArtifact[];
+  checkpoints: MockLogCheckpoint[];
+};
+
 export const logCheckpointsByRun: Record<string, MockLogCheckpoint[]> = {
   "log-mnist": [
     {
@@ -785,7 +924,7 @@ function fallbackCheckpointsForRun(
 function defaultArtifactsForRun(
   run: (typeof logRunsResponse.runs)[number],
   checkpoints: MockLogCheckpoint[],
-) {
+): MockLogRunArtifacts {
   const artifacts: MockLogArtifact[] = [
     {
       id: `event-${run.id}`,
@@ -982,6 +1121,7 @@ export function buildHistoricalMonitorFixture(count = 6) {
           ],
           histogramTags: [],
           imageTags: [],
+          textTags: [],
         },
       ]),
     ) as Record<string, MockLogTags>,
@@ -1231,6 +1371,79 @@ export const inspectResponse = {
       target: "main_model.0.processor.projection",
     },
   ],
+};
+
+export const operationGraphResponse = {
+  model: "linear",
+  preset: "baseline",
+  source: "torch-export",
+  status: "ok",
+  warnings: [],
+  nodes: [
+    {
+      id: "op_0000",
+      label: "input x",
+      opKind: "placeholder",
+      target: "x",
+      modulePath: null,
+      groupId: "__inputs__",
+      details: {
+        inputKind: "user_input",
+        shape: [1, 1, 28, 28],
+        dtype: "float32",
+      },
+    },
+    {
+      id: "op_0001",
+      label: "parameter weight",
+      opKind: "placeholder",
+      target: "p_main_model_0_model_weight",
+      modulePath: "main_model.0.model",
+      groupId: "main_model.0.model",
+      details: {
+        inputKind: "parameter",
+        targetPath: "main_model.0.model.weight",
+        shape: [128, 128],
+        dtype: "float32",
+      },
+    },
+    {
+      id: "op_0002",
+      label: "linear",
+      opKind: "call_function",
+      target: "aten.linear.default",
+      modulePath: "main_model.0.model",
+      groupId: "main_model.0.model",
+      details: {
+        shape: [1, 128],
+        dtype: "float32",
+      },
+    },
+    {
+      id: "op_0003",
+      label: "output",
+      opKind: "output",
+      target: "output",
+      modulePath: null,
+      groupId: "__outputs__",
+      details: {
+        outputKinds: ["user_output"],
+      },
+    },
+  ],
+  edges: [
+    { id: "op_0000-op_0002", source: "op_0000", target: "op_0002" },
+    { id: "op_0001-op_0002", source: "op_0001", target: "op_0002" },
+    { id: "op_0002-op_0003", source: "op_0002", target: "op_0003" },
+  ],
+};
+
+export const unsupportedOperationGraphResponse = {
+  ...operationGraphResponse,
+  status: "unsupported",
+  nodes: [],
+  edges: [],
+  warnings: ["torch.export.export failed: unsupported control flow"],
 };
 
 export const parameterShapeInspectResponse = {
@@ -1791,8 +2004,30 @@ export const locationInspectResponse = {
       details: {
         cluster: {
           capacity: [2, 2, 1],
+          initial: [1, 1, 1],
+          initialStart: [1, 1, 1],
           instantiated: 1,
           coordinates: [[1, 1, 1]],
+          maxSteps: 2,
+          growthThreshold: 4,
+        },
+      },
+    },
+    {
+      id: "model.cluster.neuron_1_1_1",
+      label: "Neuron",
+      typeName: "Neuron",
+      path: "model.cluster.neuron_1_1_1",
+      graphRole: "internal",
+      parameterCount: 0,
+      details: {
+        terminalReach: {
+          position: [1, 1, 1],
+          connections: [
+            [1, 1, 1],
+            [2, 1, 1],
+          ],
+          total: 2,
         },
       },
     },
@@ -1825,6 +2060,11 @@ export const locationInspectResponse = {
       id: "model.cluster-model.cluster.terminal",
       source: "model.cluster",
       target: "model.cluster.terminal",
+    },
+    {
+      id: "model.cluster-model.cluster.neuron_1_1_1",
+      source: "model.cluster",
+      target: "model.cluster.neuron_1_1_1",
     },
   ],
 };
@@ -2175,16 +2415,39 @@ export function withParameterCounts(body: unknown) {
   };
 }
 
+function withPreviewIdentity(
+  body: unknown,
+  request: { model?: unknown; preset?: unknown },
+) {
+  if (typeof body !== "object" || body === null) {
+    return body;
+  }
+  return {
+    ...body,
+    ...(typeof request.model === "string" ? { model: request.model } : {}),
+    ...(typeof request.preset === "string" ? { preset: request.preset } : {}),
+  };
+}
+
 export function installFetchMock(
   options: {
     inspectError?: boolean;
     inspectResponse?: unknown;
     inspectResponseFactory?: (requestIndex: number) => unknown | Promise<unknown>;
+    operationGraphResponse?: unknown;
+    operationGraphResponseFactory?: (
+      requestIndex: number,
+    ) => unknown | Promise<unknown>;
+    modelsResponse?: typeof modelsResponse;
     logRunsResponse?: typeof logRunsResponse;
     logExperimentsResponse?: typeof logExperimentsResponse;
     logScalarSeries?: typeof logScalarSeries;
     logTagsByRun?: Record<string, MockLogTags>;
     logCheckpointsByRun?: Record<string, MockLogCheckpoint[]>;
+    logRunArtifactsByRun?: Record<
+      string,
+      Partial<Omit<MockLogRunArtifacts, "runId">>
+    >;
     deleteLogExperimentError?: string;
     deleteLogRunsError?: string;
     deleteLogRunsBlockers?: Array<{ id: string; logFolder: string; status: string }>;
@@ -2211,8 +2474,22 @@ export function installFetchMock(
   } = {},
 ) {
   const inspectBodies: unknown[] = [];
+  const operationGraphBodies: unknown[] = [];
   const trainingBodies: unknown[] = [];
   const logScalarRequests: Array<{ runIds: string[]; tags: string[] }> = [];
+  const configSnapshotCreateRequests: Array<{
+    model: string;
+    preset: string;
+    name: string;
+    overrides: Record<string, string>;
+  }> = [];
+  const configSnapshotUpdateRequests: Array<{
+    id: string;
+    body: {
+      name?: string;
+      overrides?: Record<string, string>;
+    };
+  }> = [];
   const logCheckpointRequests: Array<{ runIds: string[] }> = [];
   const logArtifactRequests: string[] = [];
   const deleteExperimentRequests: string[] = [];
@@ -2246,6 +2523,14 @@ export function installFetchMock(
   };
   const tagsByRun = options.logTagsByRun ?? logTagsByRun;
   const scalarSeries = options.logScalarSeries ?? logScalarSeries;
+  let configSnapshotResponse = {
+    ...(options.configSnapshotsResponse ?? configSnapshotsResponse),
+    snapshots: [
+      ...(
+        options.configSnapshotsResponse ?? configSnapshotsResponse
+      ).snapshots,
+    ],
+  };
 
   function checkpointsForRun(runId: string) {
     const run = logResponse.runs.find((candidate) => candidate.id === runId);
@@ -2340,21 +2625,99 @@ export function installFetchMock(
       return jsonResponse(options.capabilitiesResponse ?? capabilitiesResponse);
     }
     if (url.endsWith("/models")) {
-      return jsonResponse(modelsResponse);
+      return jsonResponse(options.modelsResponse ?? modelsResponse);
     }
     if (url.endsWith("/config-snapshots/library")) {
       return jsonResponse(
         options.configSnapshotLibraryResponse ?? configSnapshotLibraryResponse,
       );
     }
+    if (url.endsWith("/config-snapshots") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body)) as {
+        model: string;
+        preset: string;
+        name: string;
+        overrides: Record<string, string>;
+      };
+      configSnapshotCreateRequests.push(body);
+      const snapshot = {
+        id: `snapshot-created-${configSnapshotCreateRequests.length}`,
+        model: body.model,
+        preset: body.preset,
+        name: body.name,
+        overrides: body.overrides,
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      };
+      configSnapshotResponse = {
+        model: body.model,
+        snapshots: [...configSnapshotResponse.snapshots, snapshot],
+      };
+      return jsonResponse(snapshot);
+    }
+    if (url.includes("/config-snapshots/") && init?.method === "PATCH") {
+      const snapshotId = decodeURIComponent(
+        url.split("/config-snapshots/")[1] ?? "",
+      );
+      const body = JSON.parse(String(init.body)) as {
+        name?: string;
+        overrides?: Record<string, string>;
+      };
+      configSnapshotUpdateRequests.push({ id: snapshotId, body });
+      const existing = configSnapshotResponse.snapshots.find(
+        (snapshot) => snapshot.id === snapshotId,
+      );
+      const snapshot = {
+        ...(existing ?? {
+          id: snapshotId,
+          model: configSnapshotResponse.model,
+          preset: "baseline",
+          name: "Snapshot",
+          overrides: {},
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        }),
+        ...("name" in body ? { name: body.name ?? "" } : {}),
+        ...("overrides" in body ? { overrides: body.overrides ?? {} } : {}),
+        updatedAt: "2026-06-01T00:00:01.000Z",
+      };
+      configSnapshotResponse = {
+        model: snapshot.model,
+        snapshots: configSnapshotResponse.snapshots.map((candidate) =>
+          candidate.id === snapshotId ? snapshot : candidate,
+        ),
+      };
+      return jsonResponse(snapshot);
+    }
     if (url.includes("/config-snapshots?")) {
       const parsedUrl = new URL(url);
       const model = parsedUrl.searchParams.get("model") ?? "linear";
-      const response = options.configSnapshotsResponse ?? {
-        ...configSnapshotsResponse,
-        model,
-      };
-      return jsonResponse(response);
+      return jsonResponse({ ...configSnapshotResponse, model });
+    }
+    if (url.endsWith("/models/neuron/neuron_linear/presets")) {
+      return jsonResponse(neuronPresetsResponse);
+    }
+    if (url.endsWith("/models/neuron/neuron_linear/datasets")) {
+      return jsonResponse(neuronDatasetsResponse);
+    }
+    if (url.endsWith("/models/neuron/neuron_linear/monitors")) {
+      return jsonResponse(neuronMonitorsResponse);
+    }
+    if (url.includes("/models/neuron/neuron_linear/config-schema")) {
+      const schemaPayload = options.schemaResponse ?? schemaResponse;
+      return jsonResponse(
+        typeof schemaPayload === "object" && schemaPayload !== null
+          ? { ...schemaPayload, model: "neuron/neuron_linear" }
+          : schemaPayload,
+      );
+    }
+    if (url.includes("/models/neuron/neuron_linear/search-space")) {
+      const searchPayload = options.searchSpaceResponse ?? searchSpaceResponse;
+      return jsonResponse({
+        ...searchPayload,
+        model: "neuron/neuron_linear",
+        preset: "baseline",
+      });
     }
     if (endsWithAny(["/models/linear/presets", "/models/linears/linear/presets"])) {
       return jsonResponse(presetsResponse);
@@ -2434,8 +2797,26 @@ export function installFetchMock(
       const request = JSON.parse(String(init?.body)) as MockTrainingPlanRequest;
       return jsonResponse(mockTrainingRunPlan(request));
     }
+    if (url.endsWith("/inspect/operation-graph")) {
+      const operationGraphRequest = JSON.parse(String(init?.body)) as {
+        model?: unknown;
+        preset?: unknown;
+      };
+      operationGraphBodies.push(operationGraphRequest);
+      const requestIndex = operationGraphBodies.length - 1;
+      const responseBody = options.operationGraphResponseFactory
+        ? options.operationGraphResponseFactory(requestIndex)
+        : options.operationGraphResponse;
+      return Promise.resolve(responseBody ?? operationGraphResponse).then((body) =>
+        jsonResponse(withPreviewIdentity(body, operationGraphRequest)),
+      );
+    }
     if (url.endsWith("/inspect")) {
-      inspectBodies.push(JSON.parse(String(init?.body)));
+      const inspectRequest = JSON.parse(String(init?.body)) as {
+        model?: unknown;
+        preset?: unknown;
+      };
+      inspectBodies.push(inspectRequest);
       if (options.inspectError) {
         return jsonResponse({ detail: "invalid override value" }, 400);
       }
@@ -2444,7 +2825,7 @@ export function installFetchMock(
         ? options.inspectResponseFactory(inspectRequestIndex)
         : options.inspectResponse;
       return Promise.resolve(responseBody ?? inspectResponse).then((body) =>
-        jsonResponse(withParameterCounts(body)),
+        jsonResponse(withParameterCounts(withPreviewIdentity(body, inspectRequest))),
       );
     }
     if (url.endsWith("/training/jobs")) {
@@ -2644,7 +3025,12 @@ export function installFetchMock(
       if (!run) {
         return jsonResponse({ detail: `Unknown log run id: ${runId}` }, 400);
       }
-      return jsonResponse(defaultArtifactsForRun(run, checkpointsForRun(runId)));
+      const checkpoints = checkpointsForRun(runId);
+      return jsonResponse({
+        ...defaultArtifactsForRun(run, checkpoints),
+        ...(options.logRunArtifactsByRun?.[runId] ?? {}),
+        runId,
+      });
     }
     if (url.includes("/logs/runs/") && url.includes("/monitor-data")) {
       const parsedUrl = new URL(url);
@@ -2745,7 +3131,10 @@ export function installFetchMock(
   return {
     fetchMock,
     inspectBodies,
+    operationGraphBodies,
     trainingBodies,
+    configSnapshotCreateRequests,
+    configSnapshotUpdateRequests,
     logScalarRequests,
     logCheckpointRequests,
     logArtifactRequests,
@@ -3156,6 +3545,12 @@ export let scrollIntoViewMock: ReturnType<typeof vi.fn>;
 
 export function resetViewerAppTestState() {
   vi.restoreAllMocks();
+  clearPersistedTargetSelection();
+  try {
+    window.localStorage?.clear?.();
+  } catch {
+    // Storage cleanup is best-effort in test environments.
+  }
   scrollIntoViewMock = vi.fn();
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
     configurable: true,

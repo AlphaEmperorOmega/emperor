@@ -1,11 +1,15 @@
 import { type RefObject } from "react";
 import {
   Camera,
+  Copy,
   FlaskConical,
+  FilePlus2,
   Info,
+  Pencil,
   SlidersHorizontal,
   Target,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
@@ -27,7 +31,10 @@ export function TargetSelectorSection({
   selectedTargetMode,
   selectedPreset,
   selectedSnapshotId,
+  selectedSnapshotName,
   selectedExperimentRunId,
+  configSnapshotsEnabled,
+  isSchemaReady,
   modelTypeOptions,
   modelOptions,
   presetOptions,
@@ -48,6 +55,9 @@ export function TargetSelectorSection({
   onSelectPreset,
   onSelectSnapshot,
   onSelectExperimentRun,
+  onCreateSnapshot,
+  onEditSnapshot,
+  onDuplicateSnapshot,
   onTogglePresetDescription,
 }: {
   presetCount: number;
@@ -56,7 +66,10 @@ export function TargetSelectorSection({
   selectedTargetMode: TargetMode;
   selectedPreset: string;
   selectedSnapshotId: string;
+  selectedSnapshotName: string;
   selectedExperimentRunId: string;
+  configSnapshotsEnabled: boolean;
+  isSchemaReady: boolean;
   modelTypeOptions: SelectOption[];
   modelOptions: SelectOption[];
   presetOptions: SelectOption[];
@@ -75,8 +88,11 @@ export function TargetSelectorSection({
   onActivateSnapshotMode: () => void;
   onActivateExperimentMode: () => void;
   onSelectPreset: (preset: string) => void;
-  onSelectSnapshot: (snapshotId: string) => void;
+  onSelectSnapshot: (snapshotId: string) => boolean | void;
   onSelectExperimentRun: (runId: string) => void;
+  onCreateSnapshot: () => void;
+  onEditSnapshot: () => void;
+  onDuplicateSnapshot: () => void;
   onTogglePresetDescription: () => void;
 }) {
   const hasSnapshots = snapshotOptions.length > 0;
@@ -97,6 +113,11 @@ export function TargetSelectorSection({
     experimentOptions.some((option) => option.value === selectedExperimentRunId)
       ? selectedExperimentRunId
       : "";
+  const snapshotActionsDisabled =
+    !configSnapshotsEnabled ||
+    !isSchemaReady ||
+    !selectedModel ||
+    !selectedPreset;
 
   return (
     <section className="grid gap-3">
@@ -133,42 +154,41 @@ export function TargetSelectorSection({
           />
         </div>
       </div>
-      <SegmentedControl
-        aria-label="Target mode"
-        className="grid w-full grid-cols-3"
-      >
-        <ViewModeButton
-          active={activeTargetMode === "preset"}
-          onClick={onActivatePresetMode}
+      <div className="grid gap-1.5">
+        <span className="text-xs font-semibold tracking-[0.02em] text-ink-dim">
+          Configuration Source
+        </span>
+        <SegmentedControl
+          aria-label="Configuration Source"
+          className="grid w-full grid-cols-3"
         >
-          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-          Presets
-        </ViewModeButton>
-        <ViewModeButton
-          active={activeTargetMode === "snapshot"}
-          disabled={!hasSnapshots}
-          onClick={onActivateSnapshotMode}
-        >
-          <Camera className="h-3.5 w-3.5" aria-hidden />
-          Snapshots
-        </ViewModeButton>
-        <ViewModeButton
-          active={activeTargetMode === "experiment"}
-          disabled={!hasExperimentRuns}
-          onClick={onActivateExperimentMode}
-        >
-          <FlaskConical className="h-3.5 w-3.5" aria-hidden />
-          Experiments
-        </ViewModeButton>
-      </SegmentedControl>
-      {activeTargetMode === "preset" ? (
-        <div className="grid gap-1.5">
-          <label
-            htmlFor={presetSelectId}
-            className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
+          <ViewModeButton
+            active={activeTargetMode === "preset"}
+            onClick={onActivatePresetMode}
           >
-            Preset
-          </label>
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+            Presets
+          </ViewModeButton>
+          <ViewModeButton
+            active={activeTargetMode === "snapshot"}
+            disabled={!hasSnapshots}
+            onClick={onActivateSnapshotMode}
+          >
+            <Camera className="h-3.5 w-3.5" aria-hidden />
+            Snapshots
+          </ViewModeButton>
+          <ViewModeButton
+            active={activeTargetMode === "experiment"}
+            disabled={!hasExperimentRuns}
+            onClick={onActivateExperimentMode}
+          >
+            <FlaskConical className="h-3.5 w-3.5" aria-hidden />
+            Experiments
+          </ViewModeButton>
+        </SegmentedControl>
+      </div>
+      {activeTargetMode === "preset" ? (
+        <div className="grid gap-3">
           <div className="grid grid-cols-[minmax(0,1fr)_40px] gap-2">
             <SelectOnlyDropdown
               id={presetSelectId}
@@ -197,15 +217,18 @@ export function TargetSelectorSection({
               onClick={onTogglePresetDescription}
             />
           </div>
+          <Button
+            variant="secondary"
+            onClick={onCreateSnapshot}
+            disabled={snapshotActionsDisabled}
+            className="h-9 justify-center text-xs"
+          >
+            <FilePlus2 className="h-3.5 w-3.5" aria-hidden />
+            Create Snapshot
+          </Button>
         </div>
       ) : activeTargetMode === "snapshot" ? (
-        <div className="grid gap-1.5">
-          <label
-            htmlFor={snapshotSelectId}
-            className="text-xs font-semibold tracking-[0.02em] text-ink-dim"
-          >
-            Snapshot
-          </label>
+        <div className="grid gap-3">
           <SelectOnlyDropdown
             id={snapshotSelectId}
             label="snapshot"
@@ -215,6 +238,32 @@ export function TargetSelectorSection({
             placeholder="Select snapshot"
             className="min-w-0"
           />
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="secondary"
+              onClick={onEditSnapshot}
+              disabled={snapshotActionsDisabled || !snapshotValue}
+              className="h-9 justify-center text-xs"
+              title={selectedSnapshotName ? `Edit ${selectedSnapshotName}` : undefined}
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden />
+              Edit
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={onDuplicateSnapshot}
+              disabled={snapshotActionsDisabled || !snapshotValue}
+              className="h-9 justify-center text-xs"
+              title={
+                selectedSnapshotName
+                  ? `Duplicate ${selectedSnapshotName}`
+                  : undefined
+              }
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden />
+              Duplicate
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="grid gap-1.5">

@@ -14,6 +14,7 @@ export function SectionNavigation({
   sections,
   overrides,
   openSectionTitles,
+  disabledSectionTitles,
   areAllSectionsOpen,
   emptyMessage,
   variant = "sidebar",
@@ -27,6 +28,7 @@ export function SectionNavigation({
   sections: ConfigSection[];
   overrides: OverrideValues;
   openSectionTitles: Set<string>;
+  disabledSectionTitles?: Set<string>;
   areAllSectionsOpen: boolean;
   emptyMessage?: string;
   variant?: "sidebar" | "inline";
@@ -88,7 +90,9 @@ export function SectionNavigation({
                 : "";
           const sectionId = sectionElementId(index, section.title, sectionIdPrefix);
           const panelId = `${sectionId}-fields`;
-          const isSectionOpen = openSectionTitles.has(section.title);
+          const isSectionDisabled = disabledSectionTitles?.has(section.title) ?? false;
+          const isSectionOpen =
+            !isSectionDisabled && openSectionTitles.has(section.title);
           return (
             <div
               key={section.title}
@@ -97,6 +101,7 @@ export function SectionNavigation({
                 isInline
                   ? "rounded-[9px] border border-line-soft last:border-b"
                   : "lg:min-w-0",
+                isSectionDisabled && "opacity-70",
                 rowStateClass,
               )}
             >
@@ -146,8 +151,9 @@ export function SectionNavigation({
                 aria-label={`${isSectionOpen ? "Close" : "Open"} ${section.title}`}
                 aria-expanded={isSectionOpen}
                 aria-controls={panelId}
+                disabled={isSectionDisabled}
                 onClick={() => onToggleSection(section.title)}
-                className="flex min-h-full items-center justify-center border-l border-line-soft text-ink-faint transition hover:bg-white/[0.05] hover:text-ink focus:outline-none"
+                className="flex min-h-full items-center justify-center border-l border-line-soft text-ink-faint transition hover:bg-white/[0.05] hover:text-ink focus:outline-none disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-ink-faint"
               >
                 <ChevronDown
                   className={cn(

@@ -17,11 +17,13 @@ const mocks = vi.hoisted(() => ({
   fetchConfigSnapshotLibrary: vi.fn(),
   createConfigSnapshot: vi.fn(),
   renameConfigSnapshot: vi.fn(),
+  updateConfigSnapshot: vi.fn(),
   deleteConfigSnapshot: vi.fn(),
   fetchLogRuns: vi.fn(),
   fetchLogExperiments: vi.fn(),
   fetchLogTags: vi.fn(),
   inspectModel: vi.fn(),
+  inspectOperationGraph: vi.fn(),
   fetchTrainingRunPlan: vi.fn(),
   createTrainingJob: vi.fn(),
   fetchTrainingJob: vi.fn(),
@@ -35,6 +37,9 @@ import { useViewerState } from "@/features/viewer/state/use-viewer-state";
 import { ConnectedTrainingPanel } from "@/features/viewer/components/connected-training-panel";
 import { ViewerProviders } from "@/features/viewer/providers/viewer-providers";
 import { TargetPresetPanel } from "@/features/viewer/components/screen/target-preset-panel";
+import {
+  clearPersistedTargetSelection,
+} from "@/features/viewer/state/target/target-selection-storage";
 import {
   type GraphNode,
   type InspectResponse,
@@ -53,7 +58,7 @@ function renderViewerState() {
   });
 }
 
-function renderTargetPresetPanel() {
+function renderTargetPresetPanel(onOpenFullConfig = vi.fn()) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -61,7 +66,7 @@ function renderTargetPresetPanel() {
   return render(
     <QueryClientProvider client={client}>
       <ViewerProviders>
-        <TargetPresetPanel />
+        <TargetPresetPanel onOpenFullConfig={onOpenFullConfig} />
       </ViewerProviders>
     </QueryClientProvider>,
   );
@@ -89,7 +94,7 @@ function renderTrainingPanelWithExperiments() {
   return render(
     <QueryClientProvider client={client}>
       <ViewerProviders>
-        <TargetPresetPanel />
+        <TargetPresetPanel onOpenFullConfig={vi.fn()} />
         <ConnectedTrainingPanel onOpenFullConfig={vi.fn()} />
       </ViewerProviders>
     </QueryClientProvider>,
@@ -151,6 +156,70 @@ function monitorGraph(): InspectResponse {
     edges: [
       { id: "root-layer-0", source: root.id, target: wrapper.id },
       { id: "layer-0-linear-0", source: wrapper.id, target: linear.id },
+    ],
+  };
+}
+
+function linearPreviewGraph(request: {
+  model: string;
+  preset: string;
+}): InspectResponse {
+  const root = graphNode("__root__", "model", "Model");
+  const linear = graphNode(
+    "main_model.layers.0.model",
+    "main_model.layers.0.model",
+    "LinearLayer",
+  );
+
+  return {
+    model: request.model,
+    preset: request.preset,
+    parameterCount: 0,
+    parameterSizeBytes: 0,
+    nodes: [root, linear],
+    edges: [
+      {
+        id: "__root__-main_model.layers.0.model",
+        source: root.id,
+        target: linear.id,
+      },
+    ],
+  };
+}
+
+function expertsPreviewGraph(request: {
+  model: string;
+  preset: string;
+}): InspectResponse {
+  const root = graphNode("__root__", "model", "Model");
+  const experts = graphNode(
+    "main_model.layers.0.model",
+    "main_model.layers.0.model",
+    "MixtureOfExperts",
+  );
+  const expertsModel = graphNode(
+    "main_model.layers.0.model.experts",
+    "main_model.layers.0.model.experts",
+    "MixtureOfExpertsModel",
+  );
+
+  return {
+    model: request.model,
+    preset: request.preset,
+    parameterCount: 0,
+    parameterSizeBytes: 0,
+    nodes: [root, experts, expertsModel],
+    edges: [
+      {
+        id: "__root__-main_model.layers.0.model",
+        source: root.id,
+        target: experts.id,
+      },
+      {
+        id: "main_model.layers.0.model-main_model.layers.0.model.experts",
+        source: experts.id,
+        target: expertsModel.id,
+      },
     ],
   };
 }
@@ -279,9 +348,22 @@ function mockPublicModelCatalog() {
         edges: [],
       }),
   );
+  mocks.inspectOperationGraph.mockImplementation(
+    (request: { model: string; preset: string }) =>
+      Promise.resolve({
+        model: request.model,
+        preset: request.preset,
+        source: "torch-export",
+        status: "unsupported",
+        nodes: [],
+        edges: [],
+        warnings: [],
+      }),
+  );
 }
 
 beforeEach(() => {
+  clearPersistedTargetSelection();
   mocks.fetchHealth.mockReset().mockResolvedValue({ status: "ok" });
   mocks.fetchCapabilities.mockReset().mockResolvedValue({
     authMode: "none",
@@ -383,6 +465,24 @@ beforeEach(() => {
       updatedAt: "2026-06-01T00:00:00.000Z",
     }),
   );
+  mocks.updateConfigSnapshot.mockReset().mockImplementation(
+    (
+      id: string,
+      input: {
+        name?: string;
+        overrides?: Record<string, string>;
+      },
+    ) =>
+      Promise.resolve({
+        id,
+        model: "linear",
+        preset: "baseline",
+        name: input.name ?? "snapshot",
+        overrides: input.overrides ?? {},
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      }),
+  );
   mocks.deleteConfigSnapshot.mockReset().mockResolvedValue({
     model: "linear",
     snapshots: [],
@@ -400,6 +500,7 @@ beforeEach(() => {
           scalarTags: ["main_model.0.model/weights/mean"],
           histogramTags: [],
           imageTags: [],
+          textTags: [],
         })),
       }),
     );
@@ -410,6 +511,15 @@ beforeEach(() => {
     parameterSizeBytes: 0,
     nodes: [],
     edges: [],
+  });
+  mocks.inspectOperationGraph.mockReset().mockResolvedValue({
+    model: "linear",
+    preset: "baseline",
+    source: "torch-export",
+    status: "unsupported",
+    nodes: [],
+    edges: [],
+    warnings: [],
   });
   mocks.fetchTrainingRunPlan.mockReset().mockImplementation((request) =>
     Promise.resolve({
@@ -567,6 +677,52 @@ describe("useViewerState", () => {
         dataset: "ExpertToy",
         overrides: {},
       });
+  });
+
+  it("clears the experts graph and settles on the linear graph when changing model", async () => {
+    mockPublicModelCatalog();
+    mocks.inspectModel.mockImplementation(
+      (request: { model: string; preset: string }) =>
+        Promise.resolve(
+          request.model === "experts/experts_linear"
+            ? expertsPreviewGraph(request)
+            : linearPreviewGraph(request),
+        ),
+    );
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.graph.graph?.model).toBe("linears/linear");
+    });
+
+    act(() => {
+      result.current.target.selectModelType("experts");
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("experts/experts_linear");
+      expect(result.current.graph.graph?.model).toBe("experts/experts_linear");
+    });
+    expect(result.current.graph.graph?.nodes.map((node) => node.typeName))
+      .toEqual(expect.arrayContaining(["MixtureOfExperts"]));
+
+    act(() => {
+      result.current.target.selectModel("linears/linear");
+    });
+
+    expect(result.current.graph.graph).toBeUndefined();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.graph.graph?.model).toBe("linears/linear");
+    });
+    const latestNodeTypes =
+      result.current.graph.graph?.nodes.map((node) => node.typeName) ?? [];
+    expect(latestNodeTypes).toContain("LinearLayer");
+    expect(
+      latestNodeTypes.some((typeName) => typeName.startsWith("MixtureOfExperts")),
+    ).toBe(false);
   });
 
   it("clears historical run selection when switching model type", async () => {
@@ -841,6 +997,80 @@ describe("useViewerState", () => {
     });
   });
 
+  it("updates the selected config snapshot without detaching snapshot mode", async () => {
+    mocks.fetchConfigSnapshots.mockResolvedValue({
+      model: "linear",
+      snapshots: [
+        {
+          id: "snapshot-wide",
+          model: "linear",
+          preset: "baseline",
+          name: "Wide",
+          overrides: { hidden_size: "256" },
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    });
+    mocks.fetchConfigSchema.mockResolvedValue({
+      model: "linear",
+      fields: [
+        {
+          key: "hidden_size",
+          configKey: "HIDDEN_SIZE",
+          flag: "--hidden-size",
+          label: "Hidden size",
+          section: "Model",
+          type: "int",
+          default: 64,
+          nullable: false,
+          choices: [],
+        },
+      ],
+    });
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.allConfigSnapshotCount).toBe(1);
+    });
+
+    act(() => {
+      expect(result.current.target.selectTargetSnapshot("snapshot-wide")).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("snapshot");
+      expect(result.current.target.selectedSnapshotId).toBe("snapshot-wide");
+      expect(result.current.target.selectedConfigSnapshot?.name).toBe("Wide");
+    });
+
+    act(() => {
+      result.current.target.updateOverride("hidden_size", "512", {
+        preserveTargetSelection: true,
+      });
+    });
+
+    expect(result.current.target.selectedTargetMode).toBe("snapshot");
+    expect(result.current.target.selectedSnapshotId).toBe("snapshot-wide");
+    expect(result.current.target.overrides).toEqual({ hidden_size: "512" });
+
+    act(() => {
+      const resultValue =
+        result.current.target.updateSelectedConfigSnapshot("Wide edited");
+      expect(resultValue.ok).toBe(true);
+    });
+
+    await waitFor(() => {
+      expect(mocks.updateConfigSnapshot).toHaveBeenCalledWith("snapshot-wide", {
+        name: "Wide edited",
+        overrides: { hidden_size: "512" },
+      });
+    });
+    expect(mocks.createConfigSnapshot).not.toHaveBeenCalled();
+    expect(result.current.target.selectedTargetMode).toBe("snapshot");
+    expect(result.current.target.selectedSnapshotId).toBe("snapshot-wide");
+  });
+
   it("requests parameter status for the active linear training job", async () => {
     mocks.inspectModel.mockResolvedValue(monitorGraph());
     const { result } = renderViewerState();
@@ -1010,6 +1240,91 @@ describe("useViewerState", () => {
       expect(screen.getByRole("combobox", { name: /^preset$/i }))
         .toHaveTextContent("expert-baseline");
     });
+  });
+
+  it("renders preset snapshot creation under the active preset selector", async () => {
+    const onOpenFullConfig = vi.fn();
+    renderTargetPresetPanel(onOpenFullConfig);
+    const user = userEvent.setup();
+
+    const createButton = await screen.findByRole("button", {
+      name: "Create Snapshot",
+    });
+    await waitFor(() => expect(createButton).toBeEnabled());
+
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Duplicate" }))
+      .not.toBeInTheDocument();
+
+    await user.click(createButton);
+
+    expect(onOpenFullConfig).toHaveBeenCalledWith("snapshotDraft");
+  });
+
+  it("renders edit and duplicate actions under the active snapshot selector", async () => {
+    mocks.fetchConfigSnapshots.mockResolvedValue({
+      model: "linear",
+      snapshots: [
+        {
+          id: "snapshot-wide",
+          model: "linear",
+          preset: "baseline",
+          name: "Wide",
+          overrides: { hidden_size: "256" },
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const onOpenFullConfig = vi.fn();
+    renderTargetPresetPanel(onOpenFullConfig);
+    const user = userEvent.setup();
+
+    const snapshotsButton = await screen.findByRole("tab", {
+      name: /snapshots/i,
+    });
+    await waitFor(() => expect(snapshotsButton).toBeEnabled());
+    await user.click(snapshotsButton);
+
+    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
+      .toHaveTextContent("Wide");
+    expect(screen.queryByRole("button", { name: "Create Snapshot" }))
+      .not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Duplicate" }));
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(onOpenFullConfig).toHaveBeenCalledWith("snapshotDraft");
+    expect(onOpenFullConfig).toHaveBeenCalledWith("snapshotEdit");
+  });
+
+  it("does not render snapshot actions in experiment target mode", async () => {
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "linear-history",
+          preset: "baseline",
+          dataset: "Mnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    renderTargetPresetPanel();
+    const user = userEvent.setup();
+
+    const experimentsButton = await screen.findByRole("tab", {
+      name: /experiments/i,
+    });
+    await waitFor(() => expect(experimentsButton).toBeEnabled());
+    await user.click(experimentsButton);
+
+    expect(await screen.findByRole("combobox", { name: /^experiment run$/i }))
+      .toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Snapshot" }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Duplicate" }))
+      .not.toBeInTheDocument();
   });
 
   it("switches the training model dropdown without an update loop", async () => {

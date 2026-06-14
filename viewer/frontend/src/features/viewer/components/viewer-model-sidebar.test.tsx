@@ -71,7 +71,7 @@ function renderSidebarWithModelError(error: unknown) {
     schemaQuery: queryState(),
   });
 
-  render(<ViewerModelSidebar />);
+  render(<ViewerModelSidebar onOpenFullConfig={vi.fn()} />);
 }
 
 afterEach(() => {

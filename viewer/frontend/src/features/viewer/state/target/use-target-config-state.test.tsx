@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   useConfigSnapshots: vi.fn(),
   useConfigSnapshotLibrary: vi.fn(),
   requestPreview: vi.fn(),
+  clearPreview: vi.fn(),
   resetGraphSelectionAndExpansion: vi.fn(),
   resetGraphExpansion: vi.fn(),
 }));
@@ -33,6 +34,9 @@ vi.mock("@/features/viewer/state/target/use-config-snapshots", () => ({
 }));
 
 import { type ConfigSnapshotRecord, type LogRun } from "@/lib/api";
+import {
+  clearPersistedTargetSelection,
+} from "@/features/viewer/state/target/target-selection-storage";
 import {
   useTargetConfigState,
 } from "@/features/viewer/state/target/use-target-config-state";
@@ -89,6 +93,7 @@ function renderTargetState() {
   return renderHook(() =>
     useTargetConfigState({
       requestPreview: mocks.requestPreview,
+      clearPreview: mocks.clearPreview,
       resetGraphSelectionAndExpansion: mocks.resetGraphSelectionAndExpansion,
       resetGraphExpansion: mocks.resetGraphExpansion,
     }),
@@ -96,9 +101,11 @@ function renderTargetState() {
 }
 
 beforeEach(() => {
+  clearPersistedTargetSelection();
   snapshots = [];
   librarySnapshots = [];
   mocks.requestPreview.mockReset();
+  mocks.clearPreview.mockReset();
   mocks.resetGraphSelectionAndExpansion.mockReset();
   mocks.resetGraphExpansion.mockReset();
   mocks.useViewerQueries.mockReset().mockImplementation(
@@ -148,6 +155,7 @@ beforeEach(() => {
     snapshots,
     createMutation: { mutate: vi.fn() },
     renameMutation: { mutate: vi.fn() },
+    updateMutation: { mutate: vi.fn() },
     deleteMutation: { mutate: vi.fn() },
   }));
   mocks.useConfigSnapshotLibrary.mockReset().mockImplementation(() => ({

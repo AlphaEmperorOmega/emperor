@@ -25,6 +25,7 @@ export function ConfigFieldValueEditor({
   resetTitle,
   density = "comfortable",
   hideDisabledReset = true,
+  disabled = false,
   className,
 }: {
   field: ConfigField;
@@ -37,14 +38,16 @@ export function ConfigFieldValueEditor({
   resetTitle?: string;
   density?: ConfigFieldControlDensity;
   hideDisabledReset?: boolean;
+  disabled?: boolean;
   className?: string;
 }) {
   const value = fieldValue(field, overrides);
   const choices = field.choices;
   const isModified = hasOverride(overrides, field.key);
   const isLocked = field.locked;
+  const isControlDisabled = isLocked || disabled;
   const isCompact = density === "compact";
-  const isResetDisabled = !isModified || isLocked;
+  const isResetDisabled = !isModified || isControlDisabled;
 
   return (
     <div
@@ -67,7 +70,7 @@ export function ConfigFieldValueEditor({
           <Switch
             id={controlId}
             aria-label={controlLabel ?? field.label}
-            disabled={isLocked}
+            disabled={isControlDisabled}
             checked={value === "true"}
             onCheckedChange={(checked) => onChange(field.key, String(checked))}
           />
@@ -79,7 +82,7 @@ export function ConfigFieldValueEditor({
           aria-label={controlLabel}
           autoComplete="off"
           value={value}
-          disabled={isLocked}
+          disabled={isControlDisabled}
           onChange={(event) => onChange(field.key, event.target.value)}
           className={isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined}
         >
@@ -99,7 +102,7 @@ export function ConfigFieldValueEditor({
           step={field.type === "float" ? "any" : "1"}
           autoComplete="off"
           value={value}
-          disabled={isLocked}
+          disabled={isControlDisabled}
           onChange={(event) => onChange(field.key, event.target.value)}
           className={isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined}
         />
@@ -110,7 +113,7 @@ export function ConfigFieldValueEditor({
           aria-label={controlLabel}
           autoComplete="off"
           value={value}
-          disabled={isLocked}
+          disabled={isControlDisabled}
           onChange={(event) => onChange(field.key, event.target.value)}
           className={isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined}
         />
@@ -142,6 +145,8 @@ export function ConfigFieldControl({
   onReset,
   density = "comfortable",
   idPrefix = "field",
+  disabled = false,
+  disabledReason,
 }: {
   field: ConfigField;
   overrides: OverrideValues;
@@ -149,10 +154,13 @@ export function ConfigFieldControl({
   onReset: (key: string) => void;
   density?: ConfigFieldControlDensity;
   idPrefix?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   const id = `${idPrefix}-${field.key}`;
   const isModified = hasOverride(overrides, field.key);
   const isLocked = field.locked;
+  const isControlDisabled = disabled && !isLocked;
   const isCompact = density === "compact";
   const defaultBadgeClassName = isCompact
     ? "rounded-none border-0 bg-transparent px-0 py-0 font-mono text-xs leading-4"
@@ -167,6 +175,8 @@ export function ConfigFieldControl({
         isModified && "border-l-2 border-violet/40 pl-2",
         isLocked &&
           "rounded-[10px] border-l-2 border-amber/55 bg-amber/[0.055] pl-2 pr-2 shadow-[inset_0_0_0_1px_rgba(255,209,102,0.04)]",
+        isControlDisabled &&
+          "rounded-[10px] border-l-2 border-line bg-white/[0.025] pl-2 pr-2 opacity-65",
       )}
     >
       <label className={cn("grid", isCompact ? "gap-1" : "gap-1.5")} htmlFor={id}>
@@ -180,25 +190,10 @@ export function ConfigFieldControl({
               isCompact ? "gap-x-2 gap-y-1" : "gap-1",
             )}
           >
-            <span
-              className={cn(
-                "max-w-full truncate font-mono text-xs text-ink-dim",
-                isCompact
-                  ? "leading-4"
-                  : "rounded-[7px] border border-line bg-white/[0.035] px-1.5 py-1 leading-tight",
-              )}
-            >
-              {field.flag}
-            </span>
-            {isCompact && (
-              <span aria-hidden className="font-mono text-xs leading-4 text-ink-dim">
-                |
-              </span>
-            )}
             <Badge className={defaultBadgeClassName}>default {defaultLabel(field)}</Badge>
           </span>
         </span>
-        {(isModified || isLocked) && (
+        {(isModified || isLocked || isControlDisabled) && (
           <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs font-medium text-ink-faint">
             {isModified && (
               <Badge
@@ -220,6 +215,11 @@ export function ConfigFieldControl({
                 {field.lockedReason}
               </span>
             )}
+            {isControlDisabled && disabledReason && (
+              <span className="min-w-0 text-xs leading-4 text-ink-dim">
+                {disabledReason}
+              </span>
+            )}
           </span>
         )}
       </label>
@@ -230,6 +230,7 @@ export function ConfigFieldControl({
         onReset={onReset}
         controlId={id}
         density={density}
+        disabled={disabled}
         resetTitle={`Reset ${field.label}`}
       />
     </div>

@@ -17,6 +17,7 @@ export function ConfigFieldSearch({
   query,
   selectedFieldKey,
   overrides,
+  disabledFieldReasons,
   onQueryChange,
   onClear,
   onSelect,
@@ -27,6 +28,7 @@ export function ConfigFieldSearch({
   query: string;
   selectedFieldKey: string | null;
   overrides: OverrideValues;
+  disabledFieldReasons?: Map<string, string>;
   onQueryChange: (query: string) => void;
   onClear: () => void;
   onSelect: (option: ConfigSearchOption) => void;
@@ -122,7 +124,7 @@ export function ConfigFieldSearch({
           aria-expanded={isPopupOpen}
           aria-controls={popupId}
           autoComplete="off"
-          placeholder="Search fields, keys, flags, or sections"
+          placeholder="Search fields, keys, or sections"
           value={query}
           onChange={(event) => updateQuery(event.target.value)}
           onKeyDown={(event) => {
@@ -176,6 +178,7 @@ export function ConfigFieldSearch({
             activeIndex={activeIndex}
             selectedFieldKey={selectedFieldKey}
             overrides={overrides}
+            disabledFieldReasons={disabledFieldReasons}
             onSelect={selectOption}
             onFieldChange={onFieldChange}
             onFieldReset={onFieldReset}

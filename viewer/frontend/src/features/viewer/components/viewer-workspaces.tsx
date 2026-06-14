@@ -52,9 +52,11 @@ const ConnectedLogRunDetailsPanel = dynamic(
 export function ViewerWorkspaceSidebar({
   activeWorkspace,
   onChangeWorkspace,
+  onOpenFullConfig,
 }: {
   activeWorkspace: ViewerWorkspace;
   onChangeWorkspace: (workspace: ViewerWorkspace) => void;
+  onOpenFullConfig: FullConfigDialogControls["open"];
 }) {
   const isModelWorkspace = activeWorkspace === "model";
   const isLogsWorkspace = activeWorkspace === "logs";
@@ -68,7 +70,7 @@ export function ViewerWorkspaceSidebar({
         />
 
         {isModelWorkspace ? (
-          <ViewerModelSidebar />
+          <ViewerModelSidebar onOpenFullConfig={onOpenFullConfig} />
         ) : isLogsWorkspace ? (
           <ConnectedLogsSidebarPanel />
         ) : null}

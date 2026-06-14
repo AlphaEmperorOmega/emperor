@@ -1,10 +1,13 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FilePlus2, RotateCcw, Terminal, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import {
   type ConfigSearchOption,
+  controlledSectionState,
+  deriveNestedConfigSections,
+  disabledConfigFieldReasons,
   filterConfigSectionsForSearch,
   flattenConfigSearchOptions,
   presetOwnedCount,
@@ -48,6 +51,7 @@ export function FullConfigDialog({
     fieldCount,
     overrideCount,
     overrides,
+    selectedConfigSnapshot,
     selectedDatasets,
     allConfigSnapshots,
     allConfigSnapshotGroups,
@@ -58,15 +62,19 @@ export function FullConfigDialog({
     addConfigSnapshot,
     removeConfigSnapshot,
     renameConfigSnapshot,
+    updateSelectedConfigSnapshot,
     loadConfigSnapshot,
     toggleConfigSnapshotRunSelection,
-    updateOverride: onFieldChange,
-    clearOverride: onFieldReset,
-    resetOverrides: onResetOverrides,
+    updateOverride,
+    clearOverride,
+    resetOverrides,
+    resetOverridesPreservingTargetSelection,
     updatePreview: onUpdatePreview,
   } = useTargetConfig();
   const isLoading = schemaQuery.isLoading;
   const isSnapshotDraftMode = mode === "snapshotDraft";
+  const isSnapshotEditMode = mode === "snapshotEdit";
+  const isSnapshotSaveMode = isSnapshotDraftMode || isSnapshotEditMode;
   const canUpdate = Boolean(model && preset && selectedDatasets.length > 0);
   const [isTrainingCommandOpen, setIsTrainingCommandOpen] = useState(false);
   const [isAddSnapshotOpen, setIsAddSnapshotOpen] = useState(false);
@@ -97,23 +105,93 @@ export function FullConfigDialog({
       }),
     [sections, searchQuery, selectedFieldKey],
   );
+  const visibleRenderSections = useMemo(
+    () => deriveNestedConfigSections(visibleSections, sections),
+    [sections, visibleSections],
+  );
+  const sectionsByTitle = useMemo(
+    () => new Map(sections.map((section) => [section.title, section])),
+    [sections],
+  );
+  const disabledFieldReasons = useMemo(
+    () => disabledConfigFieldReasons(sections, overrides),
+    [sections, overrides],
+  );
+  const disabledSectionTitles = useMemo(() => {
+    const titles = new Set<string>();
+    for (const section of visibleSections) {
+      const sourceSection = sectionsByTitle.get(section.title) ?? section;
+      const state = controlledSectionState(sourceSection, overrides);
+      if (state.isControlled && !state.isEnabled) {
+        titles.add(section.title);
+      }
+    }
+    return titles;
+  }, [overrides, sectionsByTitle, visibleSections]);
   const searchOpenKey = isSearchActive
     ? `${selectedFieldKey ?? ""}\u0000${searchQuery.trim()}`
     : "all";
   const {
     openSectionTitles,
-    areAllSectionsOpen,
     sectionRefs,
     toggleSection,
     toggleAllSections,
     jumpToSection,
   } = useConfigDialogSections(visibleSections, searchOpenKey);
+  const effectiveOpenSectionTitles = useMemo(() => {
+    const titles = new Set<string>();
+    for (const title of openSectionTitles) {
+      if (!disabledSectionTitles.has(title)) {
+        titles.add(title);
+      }
+    }
+    return titles;
+  }, [disabledSectionTitles, openSectionTitles]);
+  const enabledVisibleSections = useMemo(
+    () =>
+      visibleSections.filter(
+        (section) => !disabledSectionTitles.has(section.title),
+      ),
+    [disabledSectionTitles, visibleSections],
+  );
+  const areAllEnabledSectionsOpen =
+    enabledVisibleSections.length > 0 &&
+    enabledVisibleSections.every((section) =>
+      effectiveOpenSectionTitles.has(section.title),
+    );
   const trainingCommand = useMemo(
     () => buildTrainingCommand({ model, preset, sections, overrides }),
     [model, preset, sections, overrides],
   );
   const { status: copyStatus, copy: copyTrainingCommand } =
     useCopyToClipboard(trainingCommand);
+  const handleFieldChange = useCallback(
+    (key: string, value: string) => {
+      updateOverride(key, value, {
+        preserveTargetSelection: isSnapshotEditMode,
+      });
+    },
+    [isSnapshotEditMode, updateOverride],
+  );
+  const handleFieldReset = useCallback(
+    (key: string) => {
+      clearOverride(key, {
+        preserveTargetSelection: isSnapshotEditMode,
+      });
+    },
+    [clearOverride, isSnapshotEditMode],
+  );
+  const handleResetOverrides = useCallback(() => {
+    if (isSnapshotEditMode) {
+      resetOverridesPreservingTargetSelection();
+      return;
+    }
+    resetOverrides();
+  }, [
+    isSnapshotEditMode,
+    resetOverrides,
+    resetOverridesPreservingTargetSelection,
+  ]);
 
   function handleSearchQueryChange(query: string) {
     setSearchQuery(query);
@@ -187,13 +265,13 @@ export function FullConfigDialog({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="secondary"
-              onClick={onResetOverrides}
+              onClick={handleResetOverrides}
               disabled={!model || overrideCount === 0}
             >
               <RotateCcw className="h-4 w-4" aria-hidden />
               Reset Overrides
             </Button>
-            {!isSnapshotDraftMode && (
+            {!isSnapshotSaveMode && (
               <Button
                 variant="secondary"
                 onClick={() => setIsAddSnapshotOpen(true)}
@@ -217,7 +295,7 @@ export function FullConfigDialog({
               <Terminal className="h-4 w-4" aria-hidden />
               Training Command
             </Button>
-            {isSnapshotDraftMode ? (
+            {isSnapshotSaveMode ? (
               <Button
                 variant="primary"
                 onClick={() => setIsAddSnapshotOpen(true)}
@@ -225,11 +303,12 @@ export function FullConfigDialog({
                   !model ||
                   !preset ||
                   fieldCount === 0 ||
-                  !capabilities.configSnapshotsEnabled
+                  !capabilities.configSnapshotsEnabled ||
+                  (isSnapshotEditMode && !selectedConfigSnapshot)
                 }
               >
                 <FilePlus2 className="h-4 w-4" aria-hidden />
-                Save as Snapshot
+                {isSnapshotEditMode ? "Save Snapshot Changes" : "Save as Snapshot"}
               </Button>
             ) : (
               <Button variant="primary" onClick={onUpdatePreview} disabled={!canUpdate}>
@@ -258,9 +337,31 @@ export function FullConfigDialog({
               fields={configFields}
               overrides={overrides}
               snapshots={allConfigSnapshots}
-              title={isSnapshotDraftMode ? "Save as Snapshot" : undefined}
-              actionLabel={isSnapshotDraftMode ? "Save Snapshot" : undefined}
-              onAdd={addConfigSnapshot}
+              title={
+                isSnapshotEditMode
+                  ? "Save Snapshot Changes"
+                  : isSnapshotDraftMode
+                    ? "Save as Snapshot"
+                    : undefined
+              }
+              actionLabel={
+                isSnapshotEditMode
+                  ? "Save Snapshot Changes"
+                  : isSnapshotDraftMode
+                    ? "Save Snapshot"
+                    : undefined
+              }
+              initialName={
+                isSnapshotEditMode ? selectedConfigSnapshot?.name : undefined
+              }
+              excludeSnapshotId={
+                isSnapshotEditMode ? selectedConfigSnapshot?.id : undefined
+              }
+              onAdd={
+                isSnapshotEditMode
+                  ? updateSelectedConfigSnapshot
+                  : addConfigSnapshot
+              }
               onClose={() => setIsAddSnapshotOpen(false)}
             />
           )}
@@ -300,18 +401,20 @@ export function FullConfigDialog({
                 query={searchQuery}
                 selectedFieldKey={selectedFieldKey}
                 overrides={overrides}
+                disabledFieldReasons={disabledFieldReasons}
                 onQueryChange={handleSearchQueryChange}
                 onClear={handleSearchClear}
                 onSelect={handleSearchSelect}
-                onFieldChange={onFieldChange}
-                onFieldReset={onFieldReset}
+                onFieldChange={handleFieldChange}
+                onFieldReset={handleFieldReset}
               />
             </div>
             <SectionNavigation
               sections={visibleSections}
               overrides={overrides}
-              openSectionTitles={openSectionTitles}
-              areAllSectionsOpen={areAllSectionsOpen}
+              openSectionTitles={effectiveOpenSectionTitles}
+              disabledSectionTitles={disabledSectionTitles}
+              areAllSectionsOpen={areAllEnabledSectionsOpen}
               emptyMessage={isSearchActive ? "No matching sections" : undefined}
               onJumpToSection={jumpToSection}
               onToggleSection={toggleSection}
@@ -319,8 +422,14 @@ export function FullConfigDialog({
             />
             <div className="grid auto-rows-max items-start gap-3">
               {visibleSections.length > 0 ? (
-                visibleSections.map((section, index) => {
+                visibleRenderSections.map((section, index) => {
                   const sectionId = sectionElementId(index, section.title);
+                  const sourceSection = sectionsByTitle.get(section.title) ?? section;
+                  const sectionState = controlledSectionState(
+                    sourceSection,
+                    overrides,
+                  );
+                  const isSectionOpen = effectiveOpenSectionTitles.has(section.title);
                   return (
                     <ConfigSectionAccordion
                       key={section.title}
@@ -330,11 +439,15 @@ export function FullConfigDialog({
                       }}
                       title={section.title}
                       fields={section.fields}
+                      childSections={section.children}
                       overrides={overrides}
-                      isOpen={openSectionTitles.has(section.title)}
+                      isOpen={isSectionOpen}
+                      controlField={sectionState.controlField}
+                      disabledReason={sectionState.disabledReason}
+                      autoOpenKey={searchOpenKey}
                       onToggle={() => toggleSection(section.title)}
-                      onFieldChange={onFieldChange}
-                      onFieldReset={onFieldReset}
+                      onFieldChange={handleFieldChange}
+                      onFieldReset={handleFieldReset}
                     />
                   );
                 })

@@ -36,6 +36,7 @@ function targetConfigCascadeRules(
 
   return {
     requestPreview: graphPreview.requestPreview,
+    clearPreview: graphPreview.clearPreview,
     resetGraphSelectionAndExpansion: graphPreview.resetGraphSelectionAndExpansion,
     resetGraphExpansion: graphPreview.resetGraphExpansion,
     onModelSelected: clearHistoricalSelection,
@@ -55,7 +56,7 @@ function graphPreviewCompositionInput({
   historicalRuns: HistoricalRunsState;
   activeTrainingJobState: ActiveTrainingJobState;
 }): Parameters<typeof useGraphPreviewOrchestration>[0] {
-  const { selectedPreset, selectedDatasets } = targetConfig.selection;
+  const { selectedModel, selectedPreset, selectedDatasets } = targetConfig.selection;
   const historicalGraphPreview = historicalRuns.graphPreview;
 
   return {
@@ -68,6 +69,7 @@ function graphPreviewCompositionInput({
     selectedHistoricalPreset: historicalGraphPreview.selectedHistoricalRunPreset,
     logRunTags: historicalGraphPreview.logRunTags,
     filteredHistoricalRunIds: historicalGraphPreview.filteredHistoricalRunIds,
+    targetModel: selectedModel,
     targetPreset: selectedPreset,
     targetDatasets: selectedDatasets,
   };

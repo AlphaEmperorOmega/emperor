@@ -1,0 +1,14 @@
+{
+  "created_at": "2026-06-13T15:50:44.713141+00:00",
+  "id": "b2170115fef84877a82a8afa0ae14aa4",
+  "model": "linears/linear",
+  "name": "linear_layer_test",
+  "overrides": {
+    "hidden_dim": "128",
+    "recurrent_flag": "true",
+    "stack_num_layers": "3",
+    "stack_residual_connection_option": "RESIDUAL"
+  },
+  "preset": "baseline",
+  "updated_at": "2026-06-13T15:50:44.713152+00:00"
+}

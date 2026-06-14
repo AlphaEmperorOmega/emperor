@@ -1,23 +1,124 @@
-import { ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { type ConfigField } from "@/lib/api";
 import {
+  type ConfigSection,
   type OverrideValues,
+  controlledSectionState,
+  fieldValue,
+  hasOverride as fieldHasOverride,
   modifiedCount,
   presetOwnedCount,
   sectionCountLabel,
+  sectionElementId,
+  sectionTitlesFromSignature,
 } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import { ConfigFieldControl } from "@/features/viewer/components/config/config-field-control";
 import { ConfigMetricBadge } from "@/features/viewer/components/config/config-metric-badge";
+
+const EMPTY_CONFIG_SECTIONS: ConfigSection[] = [];
+
+function isEnabledConfigValue(value: string) {
+  return ["true", "1", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+function SectionHeaderControl({
+  field,
+  overrides,
+  controlId,
+  onChange,
+  onReset,
+}: {
+  field: ConfigField;
+  overrides: OverrideValues;
+  controlId: string;
+  onChange: (key: string, value: string) => void;
+  onReset: (key: string) => void;
+}) {
+  const value = fieldValue(field, overrides);
+  const isEnabled = isEnabledConfigValue(value);
+  const isModified = fieldHasOverride(overrides, field.key);
+  const isLocked = Boolean(field.locked);
+  const isResetDisabled = !isModified || isLocked;
+
+  return (
+    <span
+      data-config-section-header-control={field.key}
+      className="inline-flex min-w-0 items-center gap-2 rounded-[9px] border border-line bg-black/25 px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]"
+    >
+      <span className="min-w-0 truncate text-xs font-semibold leading-5 text-ink-faint">
+        {field.label}
+      </span>
+      <span className="shrink-0 font-mono text-xs font-semibold leading-none text-ink">
+        {isEnabled ? "Enabled" : "Off"}
+      </span>
+      <Switch
+        id={controlId}
+        aria-label={field.label}
+        disabled={isLocked}
+        checked={isEnabled}
+        onCheckedChange={(checked) => onChange(field.key, String(checked))}
+      />
+      {isModified && (
+        <button
+          type="button"
+          aria-label={`Reset ${field.label}`}
+          title={`Reset ${field.label}`}
+          disabled={isResetDisabled}
+          onClick={() => onReset(field.key)}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-line bg-white/[0.035] text-ink-faint transition hover:bg-white/[0.07] hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white/[0.035] disabled:hover:text-ink-faint"
+        >
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      )}
+      {isModified && (
+        <Badge variant="override" className="px-1 py-0.5 text-xs">
+          override
+        </Badge>
+      )}
+      {isLocked && (
+        <Badge variant="preset" className="px-1 py-0.5 text-xs">
+          preset
+        </Badge>
+      )}
+      {field.lockedReason && <span className="sr-only">{field.lockedReason}</span>}
+    </span>
+  );
+}
+
+function descendantFieldKeys(sections: ConfigSection[]) {
+  const keys = new Set<string>();
+
+  function collect(section: ConfigSection) {
+    for (const field of section.fields) {
+      keys.add(field.key);
+    }
+    for (const child of section.children ?? []) {
+      collect(child);
+    }
+  }
+
+  for (const section of sections) {
+    collect(section);
+  }
+
+  return keys;
+}
 
 export function ConfigSectionAccordion({
   id,
   refCallback,
   title,
   fields,
+  childSections: childSectionsProp,
   overrides,
   isOpen,
+  controlField,
+  disabledReason,
+  autoOpenKey,
   onToggle,
   onFieldChange,
   onFieldReset,
@@ -26,32 +127,72 @@ export function ConfigSectionAccordion({
   refCallback: (element: HTMLElement | null) => void;
   title: string;
   fields: ConfigField[];
+  childSections?: ConfigSection[];
   overrides: OverrideValues;
   isOpen: boolean;
+  controlField?: ConfigField;
+  disabledReason?: string;
+  autoOpenKey?: string;
   onToggle: () => void;
   onFieldChange: (key: string, value: string) => void;
   onFieldReset: (key: string) => void;
 }) {
+  const childSections = childSectionsProp ?? EMPTY_CONFIG_SECTIONS;
   const sectionModifiedCount = modifiedCount(fields, overrides);
   const sectionPresetOwnedCount = presetOwnedCount(fields);
-  const hasOverride = sectionModifiedCount > 0;
+  const controlFieldId = controlField ? `${id}-control-${controlField.key}` : undefined;
+  const childFieldKeys = useMemo(
+    () => descendantFieldKeys(childSections),
+    [childSections],
+  );
+  const bodyFields = fields.filter(
+    (field) => field.key !== controlField?.key && !childFieldKeys.has(field.key),
+  );
+  const childSectionTitles = useMemo(
+    () => childSections.map((section) => section.title),
+    [childSections],
+  );
+  const childSectionTitleSignature = childSectionTitles.join(String.fromCharCode(0));
+  const [openChildSectionTitles, setOpenChildSectionTitles] = useState(
+    () => new Set(childSectionTitles),
+  );
+  const sectionHasOverride = sectionModifiedCount > 0;
   const hasPreset = sectionPresetOwnedCount > 0;
-  const hasBoth = hasOverride && hasPreset;
+  const hasBoth = sectionHasOverride && hasPreset;
+  const isDisabled = Boolean(disabledReason);
   const panelId = `${id}-fields`;
   const stateContainerClass = hasBoth
     ? "border-amber/35 bg-[linear-gradient(135deg,rgba(255,209,102,0.075),rgba(167,139,250,0.105))] shadow-[0_20px_46px_-32px_rgba(167,139,250,0.35)] ring-1 ring-violet/25 hover:border-violet/45"
-    : hasOverride
+    : sectionHasOverride
       ? "border-violet/35 bg-violet/[0.06] shadow-[0_18px_42px_-32px_rgba(167,139,250,0.35)] hover:border-violet/45"
       : hasPreset
         ? "border-amber/35 bg-amber/[0.045] shadow-[0_18px_42px_-32px_rgba(255,209,102,0.25)] hover:border-amber/45"
         : "";
   const stateHeaderClass = hasBoth
     ? "bg-[linear-gradient(90deg,rgba(255,209,102,0.12),rgba(167,139,250,0.13))] hover:bg-[linear-gradient(90deg,rgba(255,209,102,0.16),rgba(167,139,250,0.17))]"
-    : hasOverride
+    : sectionHasOverride
       ? "bg-violet/[0.08] hover:bg-violet/[0.12]"
       : hasPreset
         ? "bg-amber/[0.08] hover:bg-amber/[0.12]"
-        : "";
+    : "";
+
+  useEffect(() => {
+    setOpenChildSectionTitles(
+      new Set(sectionTitlesFromSignature(childSectionTitleSignature)),
+    );
+  }, [autoOpenKey, childSectionTitleSignature]);
+
+  function toggleChildSection(title: string) {
+    setOpenChildSectionTitles((current) => {
+      const next = new Set(current);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  }
 
   return (
     <section
@@ -61,65 +202,99 @@ export function ConfigSectionAccordion({
         isOpen
           ? "border-line bg-panel/80"
           : "border-line-soft bg-panel/70 shadow-[0_10px_28px_-26px_rgba(0,0,0,0.9)]",
+        isDisabled && "hover:translate-y-0",
         stateContainerClass,
       )}
     >
-      <h3>
-        <button
-          type="button"
-          aria-expanded={isOpen}
-          aria-controls={panelId}
-          aria-label={`${title} section, ${sectionCountLabel(
-            fields.length,
-            "field",
-          )}, ${sectionCountLabel(sectionModifiedCount, "override")}${
-            hasPreset
-              ? `, ${sectionCountLabel(sectionPresetOwnedCount, "preset")}`
-              : ""
-          }`}
-          onClick={onToggle}
+      <div
+        className={cn(
+          "grid min-h-12 grid-cols-[minmax(0,1fr)_auto] items-stretch overflow-hidden transition",
+          isOpen
+            ? "bg-white/[0.055] hover:bg-white/[0.075]"
+            : "bg-white/[0.025] hover:bg-white/[0.055]",
+          isDisabled && "hover:bg-white/[0.025]",
+          stateHeaderClass,
+        )}
+      >
+        <h3 className="h-full min-w-0">
+          <button
+            type="button"
+            aria-expanded={isOpen}
+            aria-controls={panelId}
+            aria-label={`${title} section, ${sectionCountLabel(
+              fields.length,
+              "field",
+            )}, ${sectionCountLabel(sectionModifiedCount, "override")}${
+              hasPreset
+                ? `, ${sectionCountLabel(sectionPresetOwnedCount, "preset")}`
+                : ""
+            }${isDisabled && controlField ? `, enable ${controlField.label} to open` : ""}`}
+            disabled={isDisabled}
+            onClick={onToggle}
+            className={cn(
+              "flex h-full min-h-12 w-full min-w-0 items-center gap-3 overflow-hidden px-3 py-2.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed",
+              isOpen
+                ? "bg-white/[0.055] hover:bg-white/[0.075]"
+                : "bg-white/[0.025] hover:bg-white/[0.055]",
+              isDisabled && "hover:bg-white/[0.025]",
+              stateHeaderClass,
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 shrink-0 text-ink-faint transition-transform",
+                  !isOpen && "-rotate-90",
+                )}
+                aria-hidden
+              />
+              <span className="min-w-0 truncate text-sm font-semibold text-ink">{title}</span>
+            </span>
+          </button>
+        </h3>
+        <div
           className={cn(
-            "flex min-h-12 w-full min-w-0 items-center justify-between gap-3 overflow-hidden px-3 py-2.5 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-focus",
-            isOpen
-              ? "bg-white/[0.055] hover:bg-white/[0.075]"
-              : "bg-white/[0.025] hover:bg-white/[0.055]",
-            stateHeaderClass,
+            controlField
+              ? "flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5 px-3 py-2 max-w-[min(100%,34rem)]"
+              : "flex shrink-0 flex-wrap items-center justify-end gap-1.5 px-3 py-2",
           )}
         >
-          <span className="flex min-w-0 items-center gap-2 overflow-hidden">
-            <ChevronDown
-              className={cn(
-                "h-4 w-4 shrink-0 text-ink-faint transition-transform",
-                !isOpen && "-rotate-90",
-              )}
-              aria-hidden
+          {controlField && controlFieldId && (
+            <SectionHeaderControl
+              field={controlField}
+              overrides={overrides}
+              onChange={onFieldChange}
+              onReset={onFieldReset}
+              controlId={controlFieldId}
             />
-            <span className="min-w-0 truncate text-sm font-semibold text-ink">{title}</span>
-          </span>
-          <span className="flex shrink-0 items-center justify-end gap-1">
-            <ConfigMetricBadge count={fields.length} kind="fields" focusable={false} />
-            <ConfigMetricBadge
-              count={sectionModifiedCount}
-              kind="overrides"
-              variant={sectionModifiedCount > 0 ? "override" : "default"}
-              focusable={false}
-            />
-            {hasPreset && (
-              <Badge variant="preset" className="h-[23px] items-center px-1.5 py-0">
-                {sectionPresetOwnedCount} preset
-              </Badge>
-            )}
-          </span>
-        </button>
-      </h3>
+          )}
+          <ConfigMetricBadge count={fields.length} kind="fields" focusable={false} />
+          <ConfigMetricBadge
+            count={sectionModifiedCount}
+            kind="overrides"
+            variant={sectionModifiedCount > 0 ? "override" : "default"}
+            focusable={false}
+          />
+          {hasPreset && (
+            <Badge variant="preset" className="h-[23px] items-center px-1.5 py-0">
+              {sectionPresetOwnedCount} preset
+            </Badge>
+          )}
+        </div>
+      </div>
       <div
         id={panelId}
         hidden={!isOpen}
-        className="border-t border-line-soft bg-black/[0.08] px-3 py-3"
+        className={
+          isOpen
+            ? "grid gap-3 border-t border-line-soft bg-black/[0.08] px-3 py-3"
+            : "hidden"
+        }
       >
-        <div className="grid gap-x-3 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
-          {isOpen &&
-            fields.map((field) => (
+        {bodyFields.length > 0 && (
+          <div className="grid gap-x-3 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
+            {isOpen &&
+            bodyFields.map((field) => (
               <ConfigFieldControl
                 key={field.key}
                 field={field}
@@ -130,7 +305,42 @@ export function ConfigSectionAccordion({
                 idPrefix={`${id}-field`}
               />
             ))}
-        </div>
+          </div>
+        )}
+        {isOpen && childSections.length > 0 && (
+          <div className="grid gap-3">
+            {childSections.map((childSection, index) => {
+              const childSectionId = sectionElementId(
+                index,
+                childSection.title,
+                `${id}-nested-section`,
+              );
+              const childState = controlledSectionState(childSection, overrides);
+              const childDisabledReason = disabledReason ?? childState.disabledReason;
+              const isChildOpen =
+                !childDisabledReason && openChildSectionTitles.has(childSection.title);
+
+              return (
+                <ConfigSectionAccordion
+                  key={childSection.title}
+                  id={childSectionId}
+                  refCallback={() => undefined}
+                  title={childSection.title}
+                  fields={childSection.fields}
+                  childSections={childSection.children}
+                  overrides={overrides}
+                  isOpen={isChildOpen}
+                  controlField={childState.controlField}
+                  disabledReason={childDisabledReason}
+                  autoOpenKey={autoOpenKey}
+                  onToggle={() => toggleChildSection(childSection.title)}
+                  onFieldChange={onFieldChange}
+                  onFieldReset={onFieldReset}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );

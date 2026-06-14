@@ -10,6 +10,7 @@ import {
   useHistoricalRuns,
   useTargetSelectorState,
 } from "@/features/viewer/providers/viewer-providers";
+import { type FullConfigDialogControls } from "@/features/viewer/state/use-viewer-workspace-shell";
 import { formatRunTimestamp } from "@/lib/format";
 import {
   modelNameForId,
@@ -17,7 +18,11 @@ import {
   modelTypeOptions as createModelTypeOptions,
 } from "@/lib/selection";
 
-export function TargetPresetPanel() {
+export function TargetPresetPanel({
+  onOpenFullConfig,
+}: {
+  onOpenFullConfig: FullConfigDialogControls["open"];
+}) {
   const {
     selectedModelType,
     selectedModel,
@@ -28,11 +33,16 @@ export function TargetPresetPanel() {
     selectedPreset,
     selectedPresetMeta,
     selectedSnapshotId,
+    selectedConfigSnapshot,
     selectedExperimentRunId,
+    configSnapshotsEnabled,
+    isSchemaReady,
     selectModelType: onSelectModelType,
     selectModel: onSelectModel,
     selectPreset: onSelectPreset,
     selectSnapshot: onSelectSnapshot,
+    preparePresetSnapshotDraft,
+    prepareSelectedSnapshotEdit,
     models,
     presets,
     snapshots,
@@ -60,21 +70,17 @@ export function TargetPresetPanel() {
     value: preset.name,
     label: preset.name,
   }));
-  const snapshotOptions = snapshots.map((snapshot) => {
-    const overrideCount = Object.keys(snapshot.overrides).length;
-    return {
-      value: snapshot.id,
-      label: `${snapshot.name} · ${snapshot.preset} · ${overrideCount} ${
-        overrideCount === 1 ? "override" : "overrides"
-      }`,
-    };
-  });
+  const snapshotOptions = snapshots.map((snapshot) => ({
+    value: snapshot.id,
+    label: snapshot.name,
+  }));
   const experimentOptions = visibleHistoricalRuns.map((run) => ({
     value: run.id,
     label: `${run.experiment} · ${run.preset} · ${run.dataset} · ${formatRunTimestamp(
       run.timestamp ?? run.version,
     )}`,
   }));
+  const selectedSnapshotName = selectedConfigSnapshot?.name ?? "";
   const {
     position: presetDescriptionPosition,
     updatePosition: updatePresetDescriptionPosition,
@@ -106,6 +112,24 @@ export function TargetPresetPanel() {
     });
   };
 
+  const createPresetSnapshot = () => {
+    if (preparePresetSnapshotDraft(selectedPreset)) {
+      onOpenFullConfig("snapshotDraft");
+    }
+  };
+
+  const editSelectedSnapshot = () => {
+    if (selectedSnapshotId && prepareSelectedSnapshotEdit(selectedSnapshotId)) {
+      onOpenFullConfig("snapshotEdit");
+    }
+  };
+
+  const duplicateSelectedSnapshot = () => {
+    if (selectedSnapshotId && onSelectSnapshot(selectedSnapshotId)) {
+      onOpenFullConfig("snapshotDraft");
+    }
+  };
+
   useEffect(() => {
     closePresetDescription();
   }, [closePresetDescription, selectedModel, selectedPreset, selectedTargetMode]);
@@ -133,7 +157,10 @@ export function TargetPresetPanel() {
         selectedTargetMode={selectedTargetMode}
         selectedPreset={selectedPreset}
         selectedSnapshotId={selectedSnapshotId}
+        selectedSnapshotName={selectedSnapshotName}
         selectedExperimentRunId={selectedLogRunId ?? selectedExperimentRunId}
+        configSnapshotsEnabled={configSnapshotsEnabled}
+        isSchemaReady={isSchemaReady}
         modelTypeOptions={modelTypeOptions}
         modelOptions={modelOptions}
         presetOptions={presetOptions}
@@ -154,6 +181,9 @@ export function TargetPresetPanel() {
         onSelectPreset={onSelectPreset}
         onSelectSnapshot={onSelectSnapshot}
         onSelectExperimentRun={selectLogRun}
+        onCreateSnapshot={createPresetSnapshot}
+        onEditSnapshot={editSelectedSnapshot}
+        onDuplicateSnapshot={duplicateSelectedSnapshot}
         onTogglePresetDescription={togglePresetDescription}
       />
 

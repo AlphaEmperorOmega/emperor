@@ -32,8 +32,6 @@ export type ConfigSnapshotCreateResult =
   | { ok: true; snapshot: ConfigSnapshot }
   | { ok: false; error: string };
 
-const MAX_DEFAULT_NAME_FIELDS = 3;
-
 function hasOwn(object: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(object, key);
 }
@@ -116,29 +114,6 @@ export function overridesFromSnapshotEntries(
   return Object.fromEntries(entries.map((entry) => [entry.key, entry.value]));
 }
 
-export function generateDefaultConfigSnapshotName({
-  preset,
-  fields,
-  overrides,
-}: {
-  preset: string;
-  fields: ConfigField[];
-  overrides: OverrideValues;
-}) {
-  const { entries } = configSnapshotOverrideEntries(fields, overrides);
-  if (entries.length === 0) {
-    return `${preset || "config"} snapshot`;
-  }
-  const visibleEntries = entries.slice(0, MAX_DEFAULT_NAME_FIELDS);
-  const suffix =
-    entries.length > MAX_DEFAULT_NAME_FIELDS
-      ? ` +${entries.length - MAX_DEFAULT_NAME_FIELDS}`
-      : "";
-  return `${preset} ${visibleEntries
-    .map((entry) => `${entry.key}=${entry.displayValue}`)
-    .join(" ")}${suffix}`;
-}
-
 function snapshotIdentity({
   model,
   preset,
@@ -170,18 +145,63 @@ export function configSnapshotIdentity({
   return snapshotIdentity({ model, preset, entries });
 }
 
+function normalizeSnapshotName(name: string) {
+  return name.trim().toLocaleLowerCase();
+}
+
+export function validateConfigSnapshotName({
+  model,
+  preset,
+  name,
+  snapshots,
+  excludeSnapshotId,
+}: {
+  model: string;
+  preset: string;
+  name: string;
+  snapshots: ConfigSnapshot[];
+  excludeSnapshotId?: string;
+}) {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return {
+      ok: false as const,
+      error: "Config snapshot name cannot be empty.",
+    };
+  }
+
+  const normalizedName = normalizeSnapshotName(trimmedName);
+  const duplicate = snapshots.some(
+    (snapshot) =>
+      snapshot.id !== excludeSnapshotId &&
+      snapshot.model === model &&
+      snapshot.preset === preset &&
+      normalizeSnapshotName(snapshot.name) === normalizedName,
+  );
+  if (duplicate) {
+    return {
+      ok: false as const,
+      error: "A snapshot with this name already exists.",
+    };
+  }
+
+  return { ok: true as const, name: trimmedName };
+}
+
 export function validateConfigSnapshotCandidate({
   model,
   preset,
   fields,
   overrides,
   snapshots,
+  excludeSnapshotId,
 }: {
   model: string;
   preset: string;
   fields: ConfigField[];
   overrides: OverrideValues;
   snapshots: ConfigSnapshot[];
+  excludeSnapshotId?: string;
 }) {
   if (!model || !preset) {
     return { ok: false as const, error: "Select a model and preset first." };
@@ -207,7 +227,11 @@ export function validateConfigSnapshotCandidate({
 
   const identity = snapshotIdentity({ model, preset, entries });
   const duplicate = snapshots.some((snapshot) => {
-    if (snapshot.model !== model || snapshot.preset !== preset) {
+    if (
+      snapshot.id === excludeSnapshotId ||
+      snapshot.model !== model ||
+      snapshot.preset !== preset
+    ) {
       return false;
     }
     return (
@@ -253,6 +277,16 @@ export function createConfigSnapshot({
   snapshots: ConfigSnapshot[];
   createdAt: string;
 }): ConfigSnapshotCreateResult {
+  const nameValidation = validateConfigSnapshotName({
+    model,
+    preset,
+    name,
+    snapshots,
+  });
+  if (!nameValidation.ok) {
+    return nameValidation;
+  }
+
   const validation = validateConfigSnapshotCandidate({
     model,
     preset,
@@ -268,9 +302,7 @@ export function createConfigSnapshot({
     ok: true,
     snapshot: {
       id,
-      name:
-        name.trim() ||
-        generateDefaultConfigSnapshotName({ preset, fields, overrides }),
+      name: nameValidation.name,
       model,
       preset,
       overrides: validation.overrides,

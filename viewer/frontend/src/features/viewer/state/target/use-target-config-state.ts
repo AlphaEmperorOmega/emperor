@@ -4,6 +4,8 @@ import { type OverrideValues } from "@/lib/config";
 import {
   createConfigSnapshot,
   type ConfigSnapshotCreateResult,
+  validateConfigSnapshotCandidate,
+  validateConfigSnapshotName,
 } from "@/lib/config-snapshots";
 import {
   resolveRunPresetName,
@@ -31,6 +33,10 @@ import {
 import { useLockedOverrideSync } from "@/features/viewer/state/target/use-locked-override-sync";
 import { useTargetOverridesState } from "@/features/viewer/state/target/use-target-overrides";
 import {
+  readPersistedTargetSelection,
+  writePersistedTargetSelection,
+} from "@/features/viewer/state/target/target-selection-storage";
+import {
   LOCAL_DEFAULT_CAPABILITIES,
   useViewerQueries,
 } from "@/features/viewer/state/use-viewer-queries";
@@ -44,6 +50,7 @@ type TargetMode = "preset" | "snapshot" | "experiment";
 
 type TargetConfigStateOptions = {
   requestPreview: (request: PreviewInspectionRequest) => void;
+  clearPreview: () => void;
   resetGraphSelectionAndExpansion: () => void;
   resetGraphExpansion: () => void;
   onModelSelected?: () => void;
@@ -53,6 +60,15 @@ type TargetConfigStateOptions = {
 
 function overridesAreEmpty(overrides: OverrideValues) {
   return Object.keys(overrides).length === 0;
+}
+
+function overrideValuesEqual(left: OverrideValues, right: OverrideValues) {
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  if (leftEntries.length !== rightEntries.length) {
+    return false;
+  }
+  return leftEntries.every(([key, value]) => right[key] === value);
 }
 
 function createSnapshotId() {
@@ -75,12 +91,14 @@ function previewTargetKey({
 
 export function useTargetConfigState({
   requestPreview,
+  clearPreview,
   resetGraphSelectionAndExpansion,
   resetGraphExpansion,
   onModelSelected,
   onTargetPresetSelected,
   onTargetSnapshotSelected,
 }: TargetConfigStateOptions) {
+  const initialTargetSelection = useMemo(readPersistedTargetSelection, []);
   const {
     selectedModel,
     selectedPreset,
@@ -92,22 +110,41 @@ export function useTargetConfigState({
     clearOverride,
     clearOverrides,
     selectModel: selectTargetModel,
-  } = useTargetOverridesState();
-  const [selectedModelType, setSelectedModelType] = useState("");
-  const [selectedTargetMode, setSelectedTargetMode] =
-    useState<TargetMode>("preset");
-  const [selectedSnapshotId, setSelectedSnapshotId] = useState("");
+  } = useTargetOverridesState({
+    selectedModel: initialTargetSelection?.selectedModel,
+    selectedPreset: initialTargetSelection?.selectedPreset,
+  });
+  const [selectedModelType, setSelectedModelType] = useState(
+    initialTargetSelection?.selectedModel
+      ? modelTypeForId(initialTargetSelection.selectedModel)
+      : "",
+  );
+  const [selectedTargetMode, setSelectedTargetMode] = useState<TargetMode>(
+    initialTargetSelection?.selectedTargetMode ?? "preset",
+  );
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState(
+    initialTargetSelection?.selectedTargetMode === "snapshot"
+      ? initialTargetSelection.selectedSnapshotId
+      : "",
+  );
   const [selectedExperimentRunId, setSelectedExperimentRunId] = useState("");
   const [selectedDatasets, setSelectedDatasets] = useState<string[]>([]);
-  const [selectedTrainingPresets, setSelectedTrainingPresets] = useState<string[]>([]);
+  const [selectedTrainingPresets, setSelectedTrainingPresets] = useState<string[]>(
+    initialTargetSelection?.selectedPreset
+      ? [initialTargetSelection.selectedPreset]
+      : [],
+  );
   const [selectedMonitors, setSelectedMonitors] = useState<string[]>([]);
   const lastRequestedPreviewTargetKeyRef = useRef("");
+  const [isRestoringTargetSelection, setIsRestoringTargetSelection] =
+    useState(Boolean(initialTargetSelection));
   const allowEmptyTrainingPresetDraftRef = useRef(false);
   const {
     query: configSnapshotsQuery,
     snapshots: configSnapshots,
     createMutation: createSnapshotMutation,
     renameMutation: renameSnapshotMutation,
+    updateMutation: updateSnapshotMutation,
     deleteMutation: deleteSnapshotMutation,
   } = useConfigSnapshots(selectedModel);
   const {
@@ -174,10 +211,18 @@ export function useTargetConfigState({
     presetOwnedFieldCount,
     fieldCount,
   } = targetSelectionState;
+  const selectedConfigSnapshot = useMemo(
+    () =>
+      modelConfigSnapshots.find(
+        (snapshot) => snapshot.id === selectedSnapshotId,
+      ),
+    [modelConfigSnapshots, selectedSnapshotId],
+  );
 
   const selectModel = useCallback(
     (model: string) => {
       lastRequestedPreviewTargetKeyRef.current = "";
+      clearPreview();
       setSelectedModelType(model ? modelTypeForId(model) : "");
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
@@ -190,7 +235,12 @@ export function useTargetConfigState({
       onModelSelected?.();
       resetGraphSelectionAndExpansion();
     },
-    [onModelSelected, resetGraphSelectionAndExpansion, selectTargetModel],
+    [
+      clearPreview,
+      onModelSelected,
+      resetGraphSelectionAndExpansion,
+      selectTargetModel,
+    ],
   );
 
   const selectModelType = useCallback(
@@ -244,12 +294,19 @@ export function useTargetConfigState({
   ]);
 
   useEffect(() => {
-    const firstPreset = presetsQuery.data?.presets[0]?.name;
+    const firstPreset = presetNames[0];
     const firstDataset = datasetNames[0];
-    if (firstPreset && firstDataset && !selectedPreset) {
-      setSelectedTargetMode("preset");
-      setSelectedSnapshotId("");
-      setSelectedExperimentRunId("");
+    if (!firstPreset || !firstDataset) {
+      return;
+    }
+    if (!selectedPreset || !presetNames.includes(selectedPreset)) {
+      const shouldKeepSnapshotTarget =
+        selectedTargetMode === "snapshot" && selectedSnapshotId.length > 0;
+      if (!shouldKeepSnapshotTarget) {
+        setSelectedTargetMode("preset");
+        setSelectedSnapshotId("");
+        setSelectedExperimentRunId("");
+      }
       setSelectedPreset(firstPreset);
       allowEmptyTrainingPresetDraftRef.current = false;
       setSelectedTrainingPresets([firstPreset]);
@@ -257,8 +314,10 @@ export function useTargetConfigState({
     }
   }, [
     datasetNames,
-    presetsQuery.data,
+    presetNames,
     selectedPreset,
+    selectedSnapshotId,
+    selectedTargetMode,
     setOverrides,
     setSelectedPreset,
   ]);
@@ -320,8 +379,145 @@ export function useTargetConfigState({
   ]);
 
   useEffect(() => {
+    if (!isRestoringTargetSelection) {
+      return;
+    }
+    if (!initialTargetSelection) {
+      setIsRestoringTargetSelection(false);
+      return;
+    }
+    if (!selectedModel) {
+      return;
+    }
+    if (selectedModel !== initialTargetSelection.selectedModel) {
+      setIsRestoringTargetSelection(false);
+      return;
+    }
+    if (
+      !presetsQuery.isSuccess ||
+      presetNames.length === 0 ||
+      datasetNames.length === 0
+    ) {
+      return;
+    }
+    if (!selectedPreset || !presetNames.includes(selectedPreset)) {
+      return;
+    }
+    if (initialTargetSelection.selectedTargetMode !== "snapshot") {
+      setIsRestoringTargetSelection(false);
+      return;
+    }
+    if (!initialTargetSelection.selectedSnapshotId) {
+      setSelectedTargetMode("preset");
+      setSelectedSnapshotId("");
+      setOverrides({});
+      setIsRestoringTargetSelection(false);
+      return;
+    }
+    if (configSnapshotsQuery.isError || schemaQuery.isError) {
+      setSelectedTargetMode("preset");
+      setSelectedSnapshotId("");
+      setSelectedExperimentRunId("");
+      setOverrides({});
+      setIsRestoringTargetSelection(false);
+      return;
+    }
+    if (!configSnapshotsQuery.isSuccess) {
+      return;
+    }
+
+    const snapshot = modelConfigSnapshots.find(
+      (candidate) => candidate.id === initialTargetSelection.selectedSnapshotId,
+    );
+    if (!snapshot || !presetNames.includes(snapshot.preset)) {
+      setSelectedTargetMode("preset");
+      setSelectedSnapshotId("");
+      setSelectedExperimentRunId("");
+      setOverrides({});
+      setIsRestoringTargetSelection(false);
+      return;
+    }
+    if (selectedPreset !== snapshot.preset) {
+      setSelectedPreset(snapshot.preset);
+      allowEmptyTrainingPresetDraftRef.current = false;
+      setSelectedTrainingPresets((current) =>
+        normalizePrimarySelection(
+          [...current, snapshot.preset],
+          presetNames,
+          snapshot.preset || undefined,
+        ),
+      );
+      setOverrides({});
+      return;
+    }
+    if (!schemaQuery.isSuccess) {
+      return;
+    }
+
+    allowEmptyTrainingPresetDraftRef.current = false;
+    setSelectedTargetMode("snapshot");
+    setSelectedSnapshotId(snapshot.id);
+    setSelectedExperimentRunId("");
+    setSelectedTrainingPresets((current) =>
+      normalizePrimarySelection(
+        [...current, snapshot.preset],
+        presetNames,
+        snapshot.preset || undefined,
+      ),
+    );
+    setOverrides((current) =>
+      overrideValuesEqual(current, snapshot.overrides)
+        ? current
+        : { ...snapshot.overrides },
+    );
+    lastRequestedPreviewTargetKeyRef.current = "";
+    setIsRestoringTargetSelection(false);
+  }, [
+    configSnapshotsQuery.isSuccess,
+    configSnapshotsQuery.isError,
+    datasetNames.length,
+    initialTargetSelection,
+    isRestoringTargetSelection,
+    modelConfigSnapshots,
+    presetNames,
+    presetsQuery.isSuccess,
+    schemaQuery.isSuccess,
+    schemaQuery.isError,
+    selectedModel,
+    selectedPreset,
+    setOverrides,
+    setSelectedPreset,
+  ]);
+
+  useEffect(() => {
+    if (isRestoringTargetSelection || !selectedModel || !selectedPreset) {
+      return;
+    }
+    const persistedTargetMode =
+      selectedTargetMode === "snapshot" && selectedSnapshotId
+        ? "snapshot"
+        : "preset";
+    writePersistedTargetSelection({
+      selectedModel,
+      selectedPreset,
+      selectedTargetMode: persistedTargetMode,
+      selectedSnapshotId:
+        persistedTargetMode === "snapshot" ? selectedSnapshotId : "",
+    });
+  }, [
+    isRestoringTargetSelection,
+    selectedModel,
+    selectedPreset,
+    selectedSnapshotId,
+    selectedTargetMode,
+  ]);
+
+  useEffect(() => {
     const previewDataset = selectedDatasets[0];
     if (!selectedModel || !selectedPreset || !previewDataset) {
+      return;
+    }
+    if (isRestoringTargetSelection) {
       return;
     }
     if (
@@ -329,6 +525,14 @@ export function useTargetConfigState({
       selectedModel === pendingConfigSnapshot.model
     ) {
       return;
+    }
+    if (selectedTargetMode === "snapshot" && selectedSnapshotId) {
+      if (!selectedConfigSnapshot) {
+        return;
+      }
+      if (!overrideValuesEqual(overrides, selectedConfigSnapshot.overrides)) {
+        return;
+      }
     }
 
     if (lastRequestedPreviewTargetKeyRef.current !== "") {
@@ -361,10 +565,12 @@ export function useTargetConfigState({
       overrides: { ...overrides },
     });
   }, [
+    isRestoringTargetSelection,
     overrides,
     pendingConfigSnapshot,
     requestPreview,
     resetGraphSelectionAndExpansion,
+    selectedConfigSnapshot,
     selectedDatasets,
     selectedModel,
     selectedPreset,
@@ -551,13 +757,77 @@ export function useTargetConfigState({
 
   const renameConfigSnapshot = useCallback(
     (snapshotId: string, name: string) => {
-      const nextName = name.trim();
-      if (!nextName) {
+      const snapshot = configSnapshots.find(
+        (candidate) => candidate.id === snapshotId,
+      );
+      if (!snapshot) {
         return;
       }
-      renameSnapshotMutation.mutate({ id: snapshotId, name: nextName });
+      const validation = validateConfigSnapshotName({
+        model: snapshot.model,
+        preset: snapshot.preset,
+        name,
+        snapshots: configSnapshots,
+        excludeSnapshotId: snapshotId,
+      });
+      if (!validation.ok) {
+        return;
+      }
+      renameSnapshotMutation.mutate({
+        id: snapshotId,
+        name: validation.name,
+      });
     },
-    [renameSnapshotMutation],
+    [configSnapshots, renameSnapshotMutation],
+  );
+
+  const updateSelectedConfigSnapshot = useCallback(
+    (name: string): ConfigSnapshotCreateResult => {
+      if (!selectedConfigSnapshot) {
+        return { ok: false, error: "Select a snapshot first." };
+      }
+      const nameValidation = validateConfigSnapshotName({
+        model: selectedConfigSnapshot.model,
+        preset: selectedConfigSnapshot.preset,
+        name,
+        snapshots: configSnapshots,
+        excludeSnapshotId: selectedConfigSnapshot.id,
+      });
+      if (!nameValidation.ok) {
+        return nameValidation;
+      }
+      const validation = validateConfigSnapshotCandidate({
+        model: selectedConfigSnapshot.model,
+        preset: selectedConfigSnapshot.preset,
+        fields: configFields,
+        overrides,
+        snapshots: configSnapshots,
+        excludeSnapshotId: selectedConfigSnapshot.id,
+      });
+      if (!validation.ok) {
+        return validation;
+      }
+      const snapshot = {
+        ...selectedConfigSnapshot,
+        name: nameValidation.name,
+        overrides: validation.overrides,
+      };
+      updateSnapshotMutation.mutate({
+        id: selectedConfigSnapshot.id,
+        input: {
+          name: nameValidation.name,
+          overrides: validation.overrides,
+        },
+      });
+      return { ok: true, snapshot };
+    },
+    [
+      configFields,
+      configSnapshots,
+      overrides,
+      selectedConfigSnapshot,
+      updateSnapshotMutation,
+    ],
   );
 
   const includeConfigSnapshot = useCallback(
@@ -758,6 +1028,11 @@ export function useTargetConfigState({
     ],
   );
 
+  const prepareSelectedSnapshotEdit = useCallback(
+    (snapshotId: string) => selectTargetSnapshot(snapshotId),
+    [selectTargetSnapshot],
+  );
+
   const activateTargetPresetMode = useCallback(() => {
     if (!selectedPreset) {
       setSelectedTargetMode("preset");
@@ -922,7 +1197,6 @@ export function useTargetConfigState({
       if (!presetNames.includes(preset)) {
         return false;
       }
-      const shouldClearOverrides = selectedPreset !== preset;
       selectPreset(preset);
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
@@ -935,15 +1209,12 @@ export function useTargetConfigState({
           preset || undefined,
         ),
       );
-      if (shouldClearOverrides) {
-        setOverrides({});
-      }
+      setOverrides({});
       return true;
     },
     [
       presetNames,
       selectPreset,
-      selectedPreset,
       setOverrides,
     ],
   );
@@ -1043,41 +1314,69 @@ export function useTargetConfigState({
     selectedTargetMode,
   ]);
 
+  const resetTargetOverrides = useCallback(
+    (preserveTargetSelection: boolean) => {
+      if (!preserveTargetSelection) {
+        setSelectedTargetMode("preset");
+        setSelectedSnapshotId("");
+        setSelectedExperimentRunId("");
+        onTargetPresetSelected?.();
+      }
+      clearOverrides();
+      resetGraphExpansion();
+      const previewDataset = selectedDatasets[0];
+      if (selectedModel && selectedPreset && previewDataset) {
+        const targetMode =
+          preserveTargetSelection &&
+          selectedTargetMode === "snapshot" &&
+          selectedSnapshotId
+            ? "snapshot"
+            : "preset";
+        lastRequestedPreviewTargetKeyRef.current = previewTargetKey({
+          model: selectedModel,
+          dataset: previewDataset,
+          mode: targetMode,
+          target: targetMode === "snapshot" ? selectedSnapshotId : selectedPreset,
+        });
+        requestPreview({
+          model: selectedModel,
+          preset: selectedPreset,
+          dataset: previewDataset,
+          overrides: {},
+        });
+      }
+    },
+    [
+      clearOverrides,
+      requestPreview,
+      resetGraphExpansion,
+      selectedDatasets,
+      selectedModel,
+      selectedPreset,
+      selectedSnapshotId,
+      selectedTargetMode,
+      onTargetPresetSelected,
+    ],
+  );
+
   const resetOverrides = useCallback(() => {
-    setSelectedTargetMode("preset");
-    setSelectedSnapshotId("");
-    setSelectedExperimentRunId("");
-    onTargetPresetSelected?.();
-    clearOverrides();
-    resetGraphExpansion();
-    const previewDataset = selectedDatasets[0];
-    if (selectedModel && selectedPreset && previewDataset) {
-      lastRequestedPreviewTargetKeyRef.current = previewTargetKey({
-        model: selectedModel,
-        dataset: previewDataset,
-        mode: "preset",
-        target: selectedPreset,
-      });
-      requestPreview({
-        model: selectedModel,
-        preset: selectedPreset,
-        dataset: previewDataset,
-        overrides: {},
-      });
-    }
-  }, [
-    clearOverrides,
-    requestPreview,
-    resetGraphExpansion,
-    selectedDatasets,
-    selectedModel,
-    selectedPreset,
-    onTargetPresetSelected,
-  ]);
+    resetTargetOverrides(false);
+  }, [resetTargetOverrides]);
+
+  const resetOverridesPreservingTargetSelection = useCallback(() => {
+    resetTargetOverrides(true);
+  }, [resetTargetOverrides]);
 
   const updateTargetOverride = useCallback(
-    (key: string, value: string) => {
-      if (selectedTargetMode === "snapshot" || selectedTargetMode === "experiment") {
+    (
+      key: string,
+      value: string,
+      options?: { preserveTargetSelection?: boolean },
+    ) => {
+      if (
+        !options?.preserveTargetSelection &&
+        (selectedTargetMode === "snapshot" || selectedTargetMode === "experiment")
+      ) {
         setSelectedTargetMode("preset");
         setSelectedSnapshotId("");
         setSelectedExperimentRunId("");
@@ -1089,8 +1388,11 @@ export function useTargetConfigState({
   );
 
   const clearTargetOverride = useCallback(
-    (key: string) => {
-      if (selectedTargetMode === "snapshot" || selectedTargetMode === "experiment") {
+    (key: string, options?: { preserveTargetSelection?: boolean }) => {
+      if (
+        !options?.preserveTargetSelection &&
+        (selectedTargetMode === "snapshot" || selectedTargetMode === "experiment")
+      ) {
         setSelectedTargetMode("preset");
         setSelectedSnapshotId("");
         setSelectedExperimentRunId("");
@@ -1117,8 +1419,10 @@ export function useTargetConfigState({
       selectPreset: selectTrainingPrimaryPreset,
       selectTargetPreset,
       selectedSnapshotId,
+      selectedConfigSnapshot,
       selectedExperimentRunId,
       selectTargetSnapshot,
+      prepareSelectedSnapshotEdit,
       selectedPresetMeta,
       selectedTrainingPresets,
       setTrainingPresetSelection,
@@ -1157,6 +1461,7 @@ export function useTargetConfigState({
       addConfigSnapshot,
       removeConfigSnapshot,
       renameConfigSnapshot,
+      updateSelectedConfigSnapshot,
       loadConfigSnapshot,
       includeConfigSnapshot,
       excludeConfigSnapshot,
@@ -1166,6 +1471,7 @@ export function useTargetConfigState({
       clearOverride: clearTargetOverride,
       updatePreview,
       resetOverrides,
+      resetOverridesPreservingTargetSelection,
       modelsQuery,
       capabilitiesQuery,
       presetsQuery,

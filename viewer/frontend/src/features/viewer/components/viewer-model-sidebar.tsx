@@ -3,6 +3,7 @@ import { TargetPresetPanel } from "@/features/viewer/components/screen/target-pr
 import {
   useTargetQueryStatusState,
 } from "@/features/viewer/providers/viewer-providers";
+import { type FullConfigDialogControls } from "@/features/viewer/state/use-viewer-workspace-shell";
 import { isUnauthorizedApiError } from "@/lib/api";
 import { errorMessage } from "@/lib/utils";
 
@@ -10,7 +11,11 @@ function errorPanelTitle(defaultTitle: string, error: unknown) {
   return isUnauthorizedApiError(error) ? "Authentication required" : defaultTitle;
 }
 
-export function ViewerModelSidebar() {
+export function ViewerModelSidebar({
+  onOpenFullConfig,
+}: {
+  onOpenFullConfig: FullConfigDialogControls["open"];
+}) {
   const { modelsQuery, presetsQuery, datasetsQuery, schemaQuery } =
     useTargetQueryStatusState();
 
@@ -23,7 +28,7 @@ export function ViewerModelSidebar() {
         />
       )}
 
-      <TargetPresetPanel />
+      <TargetPresetPanel onOpenFullConfig={onOpenFullConfig} />
 
       {presetsQuery.isError && (
         <ErrorPanel

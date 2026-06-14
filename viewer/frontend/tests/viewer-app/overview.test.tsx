@@ -17,6 +17,9 @@ import {
   typeConfigFieldValue,
   waitForTargetValue,
 } from "./support";
+import {
+  readPersistedTargetSelection,
+} from "@/features/viewer/state/target/target-selection-storage";
 
 describe("ViewerApp Overview", () => {
   beforeEach(resetViewerAppTestState);
@@ -237,9 +240,7 @@ describe("ViewerApp Overview", () => {
     const snapshotControl = await screen.findByRole("combobox", {
       name: /^snapshot$/i,
     });
-    expect(snapshotControl).toHaveTextContent(
-      "Wide snapshot · baseline · 2 overrides",
-    );
+    expect(snapshotControl).toHaveTextContent("Wide snapshot");
 
     await user.click(snapshotControl);
     const snapshotOptions = await screen.findByRole("listbox", {
@@ -247,12 +248,12 @@ describe("ViewerApp Overview", () => {
     });
     expect(
       within(snapshotOptions).getByRole("option", {
-        name: "Wide snapshot · baseline · 2 overrides",
+        name: "Wide snapshot",
       }),
     ).toBeInTheDocument();
     expect(
       within(snapshotOptions).queryByRole("option", {
-        name: "Bert snapshot · bert-baseline · 1 override",
+        name: "Bert snapshot",
       }),
     ).not.toBeInTheDocument();
   });
@@ -301,7 +302,7 @@ describe("ViewerApp Overview", () => {
       within(
         await screen.findByRole("listbox", { name: /^snapshot options$/i }),
       ).getByRole("option", {
-        name: "Recurrent snapshot · recurrent-gating-halting · 1 override",
+        name: "Recurrent snapshot",
       }),
     );
 
@@ -318,9 +319,75 @@ describe("ViewerApp Overview", () => {
         .toBeGreaterThan(0);
     });
     expect(screen.getByRole("combobox", { name: /^snapshot$/i }))
-      .toHaveTextContent(
-        "Recurrent snapshot · recurrent-gating-halting · 1 override",
-      );
+      .toHaveTextContent("Recurrent snapshot");
+  });
+
+  it("restores the selected model and snapshot target after a refresh", async () => {
+    const { inspectBodies } = installFetchMock({
+      configSnapshotsResponse: {
+        model: "linear",
+        snapshots: [
+          {
+            id: "linear-wide",
+            model: "linear",
+            preset: "baseline",
+            name: "Wide snapshot",
+            overrides: { hidden_dim: "128" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+          {
+            id: "bert-wide",
+            model: "bert_linear",
+            preset: "bert-baseline",
+            name: "Bert snapshot",
+            overrides: { hidden_dim: "64" },
+            createdAt: "2026-06-01T00:00:00.000Z",
+            updatedAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    const firstRender = renderViewer();
+    const user = userEvent.setup();
+
+    await waitForTargetValue("model", "linear");
+    await selectTargetOption(user, "model", "bert_linear");
+    await waitForTargetValue("model", "bert_linear");
+    await waitForTargetValue("preset", "bert-baseline");
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: "Snapshots" })).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("tab", { name: "Snapshots" }));
+    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
+      .toHaveTextContent("Bert snapshot");
+    await waitFor(() => {
+      expect(readPersistedTargetSelection()).toMatchObject({
+        selectedModel: "bert_linear",
+        selectedPreset: "bert-baseline",
+        selectedTargetMode: "snapshot",
+        selectedSnapshotId: "bert-wide",
+      });
+    });
+
+    firstRender.unmount();
+    inspectBodies.length = 0;
+    renderViewer();
+
+    expect(await waitForTargetValue("model", "bert_linear"))
+      .toHaveTextContent("bert_linear");
+    expect(screen.getByRole("tab", { name: "Snapshots" }))
+      .toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
+      .toHaveTextContent("Bert snapshot");
+    await waitFor(() => {
+      expect(inspectBodies.at(-1)).toEqual({
+        model: "bert_linear",
+        preset: "bert-baseline",
+        dataset: "ToyText",
+        overrides: { hidden_dim: "64" },
+      });
+    });
   });
 
   it("switches from a snapshot target back to Presets with empty overrides", async () => {
@@ -411,9 +478,7 @@ describe("ViewerApp Overview", () => {
     const snapshotControl = await screen.findByRole("combobox", {
       name: /^snapshot$/i,
     });
-    expect(snapshotControl).toHaveTextContent(
-      "Bert snapshot · bert-baseline · 1 override",
-    );
+    expect(snapshotControl).toHaveTextContent("Bert snapshot");
 
     await user.click(snapshotControl);
     const snapshotOptions = await screen.findByRole("listbox", {
@@ -421,12 +486,12 @@ describe("ViewerApp Overview", () => {
     });
     expect(
       within(snapshotOptions).getByRole("option", {
-        name: "Bert snapshot · bert-baseline · 1 override",
+        name: "Bert snapshot",
       }),
     ).toBeInTheDocument();
     expect(
       within(snapshotOptions).queryByRole("option", {
-        name: "Wide snapshot · baseline · 1 override",
+        name: "Wide snapshot",
       }),
     ).not.toBeInTheDocument();
   });
