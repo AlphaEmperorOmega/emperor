@@ -20,6 +20,7 @@ from viewer.backend.schemas._config_snapshots import (
     ConfigSnapshotRenameRequest,
     ConfigSnapshotResponse,
     ConfigSnapshotsResponse,
+    ConfigSnapshotUpdateRequest,
 )
 from viewer.backend.schemas._health import HealthResponse
 from viewer.backend.schemas._inspection import (
@@ -29,6 +30,9 @@ from viewer.backend.schemas._inspection import (
     GraphNodeResponse,
     InspectRequest,
     InspectResponse,
+    OperationGraphEdgeResponse,
+    OperationGraphNodeResponse,
+    OperationGraphResponse,
 )
 from viewer.backend.schemas._logs import (
     LogCheckpointResponse,
@@ -37,6 +41,9 @@ from viewer.backend.schemas._logs import (
     LogExperimentDeleteResponse,
     LogExperimentResponse,
     LogExperimentsResponse,
+    LogImageSummaryResponse,
+    LogMediaRequest,
+    LogMediaResponse,
     LogRunArtifactResponse,
     LogRunArtifactsResponse,
     LogRunDeleteAffectedValuesResponse,
@@ -54,6 +61,7 @@ from viewer.backend.schemas._logs import (
     LogScalarsResponse,
     LogTagsRequest,
     LogTagsResponse,
+    LogTextSummaryResponse,
 )
 from viewer.backend.schemas._models import (
     ConfigFieldResponse,
@@ -113,6 +121,7 @@ __all__ = [
     "ConfigSnapshotLibraryResponse",
     "ConfigSnapshotCreateRequest",
     "ConfigSnapshotRenameRequest",
+    "ConfigSnapshotUpdateRequest",
     "HealthResponse",
     "ModelsResponse",
     "PresetResponse",
@@ -131,6 +140,9 @@ __all__ = [
     "GraphEdgeResponse",
     "InspectRequest",
     "InspectResponse",
+    "OperationGraphNodeResponse",
+    "OperationGraphEdgeResponse",
+    "OperationGraphResponse",
     "TrainingJobCreateRequest",
     "TrainingRunPlanCreateRequest",
     "TrainingSearchResponse",
@@ -169,6 +181,10 @@ __all__ = [
     "LogExperimentResponse",
     "LogExperimentsResponse",
     "LogExperimentDeleteResponse",
+    "LogMediaRequest",
+    "LogImageSummaryResponse",
+    "LogTextSummaryResponse",
+    "LogMediaResponse",
     "LogRunDeleteFiltersRequest",
     "LogRunDeleteCandidateResponse",
     "LogRunDeleteAffectedValuesResponse",

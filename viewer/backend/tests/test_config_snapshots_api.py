@@ -83,15 +83,22 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         *,
         model: str = "linears/linear",
         preset: str = "baseline",
+        name: str | None = None,
         **overrides: str,
     ):
+        snapshot_name = name
+        if snapshot_name is None:
+            override_name = "_".join(
+                f"{key}_{value}" for key, value in sorted(overrides.items())
+            )
+            snapshot_name = f"{preset}_{override_name or 'snapshot'}"
         return self._request(
             "POST",
             "/config-snapshots",
             json={
                 "model": model,
                 "preset": preset,
-                "name": "",
+                "name": snapshot_name,
                 "overrides": overrides,
             },
         )
@@ -128,7 +135,10 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         library = self._request("GET", "/config-snapshots/library")
         self.assertEqual(library.status_code, 200, library.text)
         self.assertEqual(
-            [(snapshot["model"], snapshot["id"]) for snapshot in library.json()["snapshots"]],
+            [
+                (snapshot["model"], snapshot["id"])
+                for snapshot in library.json()["snapshots"]
+            ],
             [
                 ("linears/linear", linear_snapshot["id"]),
                 ("linears/linear_adaptive", adaptive_snapshot["id"]),
@@ -141,7 +151,10 @@ class ConfigSnapshotApiTests(unittest.TestCase):
             params={"model": "linears/linear"},
         )
         self.assertEqual(
-            [(snapshot["model"], snapshot["id"]) for snapshot in scoped.json()["snapshots"]],
+            [
+                (snapshot["model"], snapshot["id"])
+                for snapshot in scoped.json()["snapshots"]
+            ],
             [("linears/linear", linear_snapshot["id"])],
         )
 
@@ -157,7 +170,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
             json={
                 "model": "../outside",
                 "preset": "baseline",
-                "name": "",
+                "name": "unsafe",
                 "overrides": {"learning_rate": "0.01"},
             },
         )
@@ -172,6 +185,11 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("non-default", response.json()["detail"])
 
+    def test_create_rejects_empty_name(self) -> None:
+        response = self._create(name="   ", learning_rate="0.01")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("name cannot be empty", response.json()["detail"])
+
     def test_create_rejects_locked_field(self) -> None:
         response = self._create(seed="7")
         self.assertEqual(response.status_code, 400)
@@ -179,9 +197,18 @@ class ConfigSnapshotApiTests(unittest.TestCase):
 
     def test_create_rejects_duplicate(self) -> None:
         self.assertEqual(self._create(learning_rate="0.01").status_code, 200)
-        duplicate = self._create(learning_rate="0.01")
+        duplicate = self._create(name="same values", learning_rate="0.01")
         self.assertEqual(duplicate.status_code, 400)
         self.assertIn("already exists", duplicate.json()["detail"])
+
+    def test_create_rejects_duplicate_name(self) -> None:
+        self.assertEqual(
+            self._create(name="Tuned LR", learning_rate="0.01").status_code,
+            200,
+        )
+        duplicate = self._create(name=" tuned lr ", batch_size="128")
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("name already exists", duplicate.json()["detail"])
 
     def test_rename_updates_name(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]
@@ -191,12 +218,102 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         self.assertEqual(renamed.status_code, 200)
         self.assertEqual(renamed.json()["name"], "tuned lr")
 
+    def test_update_snapshot_changes_name_and_overrides_in_place(self) -> None:
+        snapshot = self._create(learning_rate="0.01").json()
+        with mock.patch(
+            "viewer.backend.services.config_snapshots._now",
+            return_value="2026-06-02T00:00:00+00:00",
+        ):
+            updated = self._request(
+                "PATCH",
+                f"/config-snapshots/{snapshot['id']}",
+                json={
+                    "name": "larger batch",
+                    "overrides": {
+                        "learning_rate": "0.001",
+                        "batch_size": "128",
+                    },
+                },
+            )
+
+        self.assertEqual(updated.status_code, 200, updated.text)
+        body = updated.json()
+        self.assertEqual(body["id"], snapshot["id"])
+        self.assertEqual(body["model"], snapshot["model"])
+        self.assertEqual(body["preset"], snapshot["preset"])
+        self.assertEqual(body["createdAt"], snapshot["createdAt"])
+        self.assertEqual(body["updatedAt"], "2026-06-02T00:00:00+00:00")
+        self.assertEqual(body["name"], "larger batch")
+        self.assertEqual(body["overrides"], {"batch_size": "128"})
+
     def test_rename_rejects_empty_name(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]
         renamed = self._request(
             "PATCH", f"/config-snapshots/{snapshot_id}", json={"name": "   "}
         )
         self.assertEqual(renamed.status_code, 400)
+
+    def test_rename_rejects_duplicate_name(self) -> None:
+        first = self._create(name="Tuned LR", learning_rate="0.01").json()
+        second = self._create(name="Large Batch", batch_size="128").json()
+        renamed = self._request(
+            "PATCH",
+            f"/config-snapshots/{second['id']}",
+            json={"name": first["name"].lower()},
+        )
+        self.assertEqual(renamed.status_code, 400)
+        self.assertIn("name already exists", renamed.json()["detail"])
+
+    def test_update_rejects_default_only_override(self) -> None:
+        snapshot_id = self._create(learning_rate="0.01").json()["id"]
+        updated = self._request(
+            "PATCH",
+            f"/config-snapshots/{snapshot_id}",
+            json={"overrides": {"learning_rate": "0.001"}},
+        )
+
+        self.assertEqual(updated.status_code, 400)
+        self.assertIn("non-default", updated.json()["detail"])
+
+    def test_update_rejects_locked_field(self) -> None:
+        snapshot_id = self._create(learning_rate="0.01").json()["id"]
+        updated = self._request(
+            "PATCH",
+            f"/config-snapshots/{snapshot_id}",
+            json={"overrides": {"seed": "7"}},
+        )
+
+        self.assertEqual(updated.status_code, 400)
+        self.assertIn("preset-locked", updated.json()["detail"])
+
+    def test_update_rejects_duplicate_other_snapshot(self) -> None:
+        first = self._create(learning_rate="0.01").json()
+        second = self._create(batch_size="128").json()
+
+        unchanged_self = self._request(
+            "PATCH",
+            f"/config-snapshots/{first['id']}",
+            json={"name": "same values", "overrides": {"learning_rate": "0.01"}},
+        )
+        duplicate = self._request(
+            "PATCH",
+            f"/config-snapshots/{second['id']}",
+            json={"overrides": {"learning_rate": "0.01"}},
+        )
+
+        self.assertEqual(unchanged_self.status_code, 200, unchanged_self.text)
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("already exists", duplicate.json()["detail"])
+
+    def test_update_unknown_snapshot_is_rejected(self) -> None:
+        response = self._request(
+            "PATCH",
+            "/config-snapshots/missing",
+            json={"name": "missing", "overrides": {"learning_rate": "0.01"}},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unknown config snapshot", response.json()["detail"])
 
     def test_delete_returns_remaining_snapshots(self) -> None:
         snapshot_id = self._create(learning_rate="0.01").json()["id"]

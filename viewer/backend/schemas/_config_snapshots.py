@@ -35,3 +35,8 @@ class ConfigSnapshotCreateRequest(ApiResponseModel):
 
 class ConfigSnapshotRenameRequest(ApiResponseModel):
     name: str
+
+
+class ConfigSnapshotUpdateRequest(ApiResponseModel):
+    name: str | None = None
+    overrides: dict[str, str] | None = None

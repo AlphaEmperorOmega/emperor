@@ -20,6 +20,7 @@ import {
   fetchLogRunArtifacts,
   fetchLogRunMonitorData,
   fetchLogRuns,
+  fetchLogMedia,
   fetchLogScalars,
   fetchLogTags,
   fetchModels,
@@ -31,15 +32,18 @@ import {
   fetchTrainingJob,
   fetchTrainingJobEvents,
   fetchTrainingRunPlan,
+  inspectOperationGraph,
   inspectModel,
   isUnauthorizedApiError,
   jsonObjectSchema,
   jsonValueSchema,
+  operationGraphResponseSchema,
   renameConfigSnapshot,
   trainingJobSchema,
   trainingJobEventsSchema,
   trainingProgressEventSchema,
   trainingRunPlanSchema,
+  updateConfigSnapshot,
 } from "@/lib/api";
 import { setSessionAuthToken } from "@/lib/auth-token";
 
@@ -343,6 +347,50 @@ const successfulInspectResponse = {
     },
   ],
   edges: [{ id: "input-classifier", source: "input", target: "classifier" }],
+};
+
+const successfulOperationGraphResponse = {
+  model: "linear",
+  preset: "baseline",
+  source: "torch-export",
+  status: "ok",
+  nodes: [
+    {
+      id: "op_0000",
+      label: "input x",
+      opKind: "placeholder",
+      target: "x",
+      modulePath: null,
+      groupId: "__inputs__",
+      details: {
+        inputKind: "user_input",
+        shape: [1, 1, 28, 28],
+        dtype: "float32",
+      },
+    },
+    {
+      id: "op_0001",
+      label: "linear",
+      opKind: "call_function",
+      target: "aten.linear.default",
+      modulePath: "classifier",
+      groupId: "classifier",
+      details: {
+        shape: [1, 10],
+        dtype: "float32",
+      },
+    },
+  ],
+  edges: [{ id: "op_0000-op_0001", source: "op_0000", target: "op_0001" }],
+  warnings: [],
+};
+
+const unsupportedOperationGraphResponse = {
+  ...successfulOperationGraphResponse,
+  status: "unsupported",
+  nodes: [],
+  edges: [],
+  warnings: ["torch.export.export failed: unsupported fixture"],
 };
 
 const successfulTrainingRunFixture = {
@@ -665,6 +713,7 @@ const successfulLogTagsResponse = {
       scalarTags: ["train/loss", "validation/accuracy"],
       histogramTags: ["weights/classifier"],
       imageTags: ["activations/classifier"],
+      textTags: ["validation/examples/predictions/text_summary"],
     },
   ],
 };
@@ -768,6 +817,51 @@ describe("successful API fixtures", () => {
     );
 
     expect(result.nodes[1].config?.fields).toHaveLength(2);
+  });
+
+  it("accepts operation graph success and unsupported fixtures", async () => {
+    const result = await validateSuccessfulFixture(
+      successfulOperationGraphResponse,
+      () =>
+        inspectOperationGraph({
+          model: "linear",
+          preset: "baseline",
+          overrides: {},
+          dataset: "Mnist",
+        }),
+    );
+
+    expect(result.status).toBe("ok");
+    expect(result.nodes[1].target).toBe("aten.linear.default");
+    expect(operationGraphResponseSchema.parse(unsupportedOperationGraphResponse))
+      .toMatchObject({
+        status: "unsupported",
+        warnings: ["torch.export.export failed: unsupported fixture"],
+      });
+  });
+
+  it("rejects extra operation graph contract fields", () => {
+    const node = successfulOperationGraphResponse.nodes[0];
+    const edge = successfulOperationGraphResponse.edges[0];
+
+    expect(() =>
+      operationGraphResponseSchema.parse({
+        ...successfulOperationGraphResponse,
+        extra: true,
+      }),
+    ).toThrow();
+    expect(() =>
+      operationGraphResponseSchema.parse({
+        ...successfulOperationGraphResponse,
+        nodes: [{ ...node, extra: true }],
+      }),
+    ).toThrow();
+    expect(() =>
+      operationGraphResponseSchema.parse({
+        ...successfulOperationGraphResponse,
+        edges: [{ ...edge, extra: true }],
+      }),
+    ).toThrow();
   });
 
   it("accepts a training job creation response fixture", async () => {
@@ -1854,6 +1948,22 @@ describe("POST requests", () => {
     expect((init as RequestInit).body).toBe(JSON.stringify(input));
   });
 
+  it("posts the operation graph inspect body as JSON", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () => Promise.resolve(unsupportedOperationGraphResponse),
+      }),
+    );
+
+    const input = { model: "linear", preset: "base", overrides: {}, dataset: "mnist" };
+    await inspectOperationGraph(input);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/inspect/operation-graph`);
+    expect((init as RequestInit).method).toBe("POST");
+    expect((init as RequestInit).body).toBe(JSON.stringify(input));
+  });
+
   it("posts log tag and scalar requests as JSON", async () => {
     const tagFetchMock = stubFetch(
       fakeResponse({
@@ -1865,6 +1975,7 @@ describe("POST requests", () => {
                 scalarTags: ["train/loss"],
                 histogramTags: [],
                 imageTags: [],
+                textTags: [],
               },
             ],
           }),
@@ -1905,6 +2016,53 @@ describe("POST requests", () => {
       JSON.stringify({ runIds: ["run-1"], tags: ["train/loss"] }),
     );
     expect(scalars.series[0].points[0].value).toBe(0.25);
+  });
+
+  it("posts log media requests as JSON", async () => {
+    const mediaFetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            images: [
+              {
+                runId: "run-1",
+                tag: "validation/examples/predictions",
+                step: 3,
+                wallTime: 1000,
+                mimeType: "image/png",
+                dataUrl: "data:image/png;base64,AAAA",
+              },
+            ],
+            texts: [
+              {
+                runId: "run-1",
+                tag: "validation/examples/predictions/text_summary",
+                step: 3,
+                wallTime: 1000,
+                text: "cat -> dog",
+              },
+            ],
+          }),
+      }),
+    );
+
+    const media = await fetchLogMedia({
+      runIds: ["run-1"],
+      imageTags: ["validation/examples/predictions"],
+      textTags: ["validation/examples/predictions/text_summary"],
+    });
+
+    expect(mediaFetchMock.mock.calls[0][0]).toBe(`${BASE}/logs/media`);
+    expect((mediaFetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
+    expect((mediaFetchMock.mock.calls[0][1] as RequestInit).body).toBe(
+      JSON.stringify({
+        runIds: ["run-1"],
+        imageTags: ["validation/examples/predictions"],
+        textTags: ["validation/examples/predictions/text_summary"],
+      }),
+    );
+    expect(media.images[0].dataUrl).toBe("data:image/png;base64,AAAA");
+    expect(media.texts[0].text).toBe("cat -> dog");
   });
 
   it("fetches checkpoint metadata and run artifacts", async () => {
@@ -2399,6 +2557,23 @@ describe("config snapshots", () => {
     expect(url).toBe(`${BASE}/config-snapshots/snap-1`);
     expect((init as RequestInit).method).toBe("PATCH");
     expect((init as RequestInit).body).toBe(JSON.stringify({ name: "new name" }));
+  });
+
+  it("patches snapshot updates with optional name and overrides", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({ json: () => Promise.resolve(snapshot) }),
+    );
+    const input = {
+      name: "new name",
+      overrides: { learning_rate: "0.02" },
+    };
+
+    await updateConfigSnapshot("snap-1", input);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/config-snapshots/snap-1`);
+    expect((init as RequestInit).method).toBe("PATCH");
+    expect((init as RequestInit).body).toBe(JSON.stringify(input));
   });
 
   it("deletes a snapshot by id and returns the remaining list", async () => {

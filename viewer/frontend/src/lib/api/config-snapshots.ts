@@ -30,6 +30,11 @@ export type ConfigSnapshotCreateInput = {
   overrides: Record<string, string>;
 };
 
+export type ConfigSnapshotUpdateInput = {
+  name?: string;
+  overrides?: Record<string, string>;
+};
+
 export function fetchConfigSnapshots(model: string) {
   return requestJson(
     `/config-snapshots?model=${encodeURIComponent(model)}`,
@@ -49,12 +54,19 @@ export function createConfigSnapshot(input: ConfigSnapshotCreateInput) {
 }
 
 export function renameConfigSnapshot(snapshotId: string, name: string) {
+  return updateConfigSnapshot(snapshotId, { name });
+}
+
+export function updateConfigSnapshot(
+  snapshotId: string,
+  input: ConfigSnapshotUpdateInput,
+) {
   return requestJson(
     `/config-snapshots/${encodeURIComponent(snapshotId)}`,
     configSnapshotSchema,
     {
       method: "PATCH",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(input),
     },
   );
 }

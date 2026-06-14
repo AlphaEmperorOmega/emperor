@@ -417,6 +417,24 @@ class InspectorGraphTests(unittest.TestCase):
                 self.assertEqual(node["details"]["numExperts"], 4)
                 self.assertEqual(node["details"]["routingMode"], "LAYER")
 
+    def test_inspect_experts_then_linear_keeps_linear_graph_identity(self) -> None:
+        experts_result = inspect_model("experts/experts_linear", "baseline")
+        experts_type_names = {node["typeName"] for node in experts_result["nodes"]}
+        self.assertIn("MixtureOfExperts", experts_type_names)
+
+        linear_result = inspect_model("linears/linear", "baseline")
+        linear_type_names = {node["typeName"] for node in linear_result["nodes"]}
+
+        self.assertEqual(linear_result["model"], "linears/linear")
+        self.assertEqual(linear_result["preset"], "baseline")
+        self.assertIn("LinearLayer", linear_type_names)
+        self.assertFalse(
+            any(
+                type_name.startswith("MixtureOfExperts")
+                for type_name in linear_type_names
+            )
+        )
+
     def test_graph_serializer_reports_neuron_cluster_grid(self) -> None:
         result = inspect_model(
             "neuron/neuron_linear",
@@ -437,6 +455,7 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertEqual(cluster_node["id"], "neuron_cluster")
         self.assertEqual(cluster["capacity"], [3, 3, 1])
         self.assertEqual(cluster["initial"], [2, 2, 1])
+        self.assertEqual(cluster["initialStart"], [1, 1, 1])
         self.assertEqual(cluster["instantiated"], 4)
         self.assertEqual(
             cluster["coordinates"],
@@ -451,8 +470,13 @@ class InspectorGraphTests(unittest.TestCase):
         )
         reach = terminal_node["details"]["terminalReach"]
 
-        self.assertEqual(reach["position"], [3, 3, 1])
+        self.assertEqual(
+            terminal_node["id"],
+            "neuron_cluster.cluster.neuron_4_4_1.terminal",
+        )
+        self.assertEqual(reach["position"], [4, 4, 1])
         self.assertEqual(reach["total"], len(reach["connections"]))
+        self.assertIn([4, 4, 1], reach["connections"])
         self.assertIn([3, 3, 1], reach["connections"])
         self.assertTrue(
             all(len(coordinate) == 3 for coordinate in reach["connections"])

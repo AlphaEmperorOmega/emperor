@@ -11,9 +11,9 @@ from viewer.backend.dependencies import get_config_snapshot_service
 from viewer.backend.schemas import (
     ConfigSnapshotCreateRequest,
     ConfigSnapshotLibraryResponse,
-    ConfigSnapshotRenameRequest,
     ConfigSnapshotResponse,
     ConfigSnapshotsResponse,
+    ConfigSnapshotUpdateRequest,
 )
 from viewer.backend.services.config_snapshots import ConfigSnapshotService
 
@@ -76,16 +76,20 @@ async def create_config_snapshot(
 @router.patch(
     "/{snapshot_id}",
     response_model=ConfigSnapshotResponse,
-    summary="Rename a config snapshot",
-    response_description="The renamed config snapshot.",
+    summary="Update a config snapshot",
+    response_description="The updated config snapshot.",
 )
-async def rename_config_snapshot(
+async def update_config_snapshot(
     snapshot_id: str,
-    request: ConfigSnapshotRenameRequest,
+    request: ConfigSnapshotUpdateRequest,
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
 ) -> ConfigSnapshotResponse:
     return ConfigSnapshotResponse.model_validate(
-        service.rename_snapshot(snapshot_id, request.name)
+        service.update_snapshot(
+            snapshot_id,
+            name=request.name,
+            overrides=request.overrides,
+        )
     )
 
 

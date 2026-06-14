@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import importlib
 import os
+import sys
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -9,6 +15,60 @@ from viewer.backend.inspector.schema import config_schema, search_space_schema
 
 
 class InspectorSchemaTests(unittest.TestCase):
+    def test_config_schema_sections_imported_trainer_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            shared_module_name = "shared_trainer_config_fixture"
+            model_module_name = "model_config_fixture"
+            (temp_path / f"{shared_module_name}.py").write_text(
+                "\n".join(
+                    [
+                        '"""Shared trainer defaults for schema tests."""',
+                        "TRAINER_MAX_STEPS: int = -1",
+                        "TRAINER_PRECISION: str = '32-true'",
+                        "CALLBACK_CHECKPOINT_FLAG: bool = False",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (temp_path / f"{model_module_name}.py").write_text(
+                "\n".join(
+                    [
+                        f"from {shared_module_name} import *",
+                        "",
+                        "# Trainer",
+                        "TRAINER_ACCELERATOR: str = 'cpu'",
+                        "",
+                        "# Model",
+                        "HIDDEN_DIM: int = 128",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            sys.path.insert(0, temp_dir)
+            try:
+                importlib.invalidate_caches()
+                config_module = importlib.import_module(model_module_name)
+                parts = SimpleNamespace(config_module=config_module)
+                with patch(
+                    "viewer.backend.inspector.schema.load_model_parts",
+                    return_value=parts,
+                ):
+                    fields = {
+                        field["key"]: field
+                        for field in config_schema("test/model")["fields"]
+                    }
+            finally:
+                sys.path.remove(temp_dir)
+                sys.modules.pop(model_module_name, None)
+                sys.modules.pop(shared_module_name, None)
+
+        self.assertEqual(fields["trainer_accelerator"]["section"], "Trainer")
+        self.assertEqual(fields["trainer_max_steps"]["section"], "Trainer")
+        self.assertEqual(fields["trainer_precision"]["section"], "Trainer")
+        self.assertEqual(fields["callback_checkpoint_flag"]["section"], "Callback")
+        self.assertEqual(fields["hidden_dim"]["section"], "Model")
+
     def test_config_schema_exposes_supported_field_types(self) -> None:
         linear_fields = {
             field["key"]: field for field in config_schema("linears/linear")["fields"]

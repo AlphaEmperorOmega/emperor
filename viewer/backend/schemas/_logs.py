@@ -156,6 +156,7 @@ class LogRunTagsResponse(ApiResponseModel):
     scalarTags: list[str]
     histogramTags: list[str]
     imageTags: list[str]
+    textTags: list[str] = Field(default_factory=list)
 
 
 class LogTagsResponse(ApiResponseModel):
@@ -175,3 +176,31 @@ class LogScalarSeriesResponse(ApiResponseModel):
 
 class LogScalarsResponse(ApiResponseModel):
     series: list[LogScalarSeriesResponse]
+
+
+class LogMediaRequest(ApiResponseModel):
+    runIds: list[str] = Field(default_factory=list)
+    imageTags: list[str] = Field(default_factory=list)
+    textTags: list[str] = Field(default_factory=list)
+
+
+class LogImageSummaryResponse(ApiResponseModel):
+    runId: str
+    tag: str
+    step: int
+    wallTime: float
+    mimeType: str
+    dataUrl: str
+
+
+class LogTextSummaryResponse(ApiResponseModel):
+    runId: str
+    tag: str
+    step: int
+    wallTime: float
+    text: str
+
+
+class LogMediaResponse(ApiResponseModel):
+    images: list[LogImageSummaryResponse]
+    texts: list[LogTextSummaryResponse]

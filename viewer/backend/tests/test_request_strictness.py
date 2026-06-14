@@ -46,6 +46,14 @@ REQUEST_BODY_ENDPOINT_CASES = (
         },
     ),
     (
+        "/inspect/operation-graph",
+        {
+            "model": "linears/linear",
+            "preset": "baseline",
+            "overrides": {},
+        },
+    ),
+    (
         "/logs/runs/delete-plan",
         {
             "experiments": [],

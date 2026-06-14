@@ -139,6 +139,11 @@ def _neuron_cluster_details(module: Module) -> dict[str, Any] | None:
             getattr(module, "initial_y_axis_total_neurons", None),
             getattr(module, "initial_z_axis_total_neurons", None),
         ],
+        "initialStart": [
+            getattr(module, "initial_x_axis_start", 1),
+            getattr(module, "initial_y_axis_start", 1),
+            getattr(module, "initial_z_axis_start", 1),
+        ],
         "instantiated": len(coordinates),
         "coordinates": coordinates,
         "maxSteps": getattr(module, "max_steps", None),

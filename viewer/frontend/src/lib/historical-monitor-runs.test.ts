@@ -212,12 +212,14 @@ describe("historical monitor run helpers", () => {
             scalarTags: ["other/output/mean"],
             histogramTags: [],
             imageTags: [],
+            textTags: [],
           },
           {
             runId: "run-b",
             scalarTags: [],
             histogramTags: ["main_model.0.model/histogram/usage_fraction"],
             imageTags: [],
+            textTags: [],
           },
         ],
         ["run-a", "run-b"],
@@ -265,12 +267,14 @@ describe("historical monitor run helpers", () => {
         scalarTags: ["main_model.0.model/weights/mean"],
         histogramTags: [],
         imageTags: [],
+        textTags: [],
       },
       {
         runId: "perf-run",
         scalarTags: ["epoch", "train/loss"],
         histogramTags: [],
         imageTags: [],
+        textTags: [],
       },
     ];
 

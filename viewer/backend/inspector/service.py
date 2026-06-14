@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from viewer.backend.inspector.discovery import (
+    ModelParts,
     load_model_parts,
     option_cli_name,
     resolve_dataset,
@@ -12,6 +14,15 @@ from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.graph import serialize_graph
 from viewer.backend.inspector.overrides import parse_override_mapping
 from viewer.backend.inspector.schema import preset_locks
+
+
+@dataclass(frozen=True)
+class InspectionTarget:
+    parts: ModelParts
+    option: Any
+    cfg: Any
+    model: Any
+    dataset_type: type
 
 
 def reject_locked_overrides(
@@ -36,6 +47,24 @@ def build_config(
     config_overrides: dict[str, Any] | None = None,
 ):
     parts = load_model_parts(model_name)
+    option, cfg, _dataset_type = _build_config_from_parts(
+        parts,
+        model_name,
+        preset_name,
+        dataset_name=dataset_name,
+        config_overrides=config_overrides,
+    )
+    return parts, option, cfg
+
+
+def _build_config_from_parts(
+    parts: ModelParts,
+    model_name: str,
+    preset_name: str,
+    *,
+    dataset_name: str | None = None,
+    config_overrides: dict[str, Any] | None = None,
+) -> tuple[Any, Any, type]:
     try:
         option = parts.experiment_options.get_option(preset_name)
     except Exception as exc:
@@ -59,17 +88,17 @@ def build_config(
         raise InspectorError(
             f"Preset '{preset_name}' for model '{model_name}' did not produce configs."
         )
-    return parts, option, configs[0]
+    return option, configs[0], dataset
 
 
-def inspect_model(
+def build_inspection_target(
     model_name: str,
     preset_name: str,
     overrides: Mapping[str, Any] | None = None,
     dataset: str | None = None,
     *,
     parsed_overrides: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> InspectionTarget:
     parts = load_model_parts(model_name)
     config_overrides = (
         parsed_overrides
@@ -77,7 +106,8 @@ def inspect_model(
         else parse_override_mapping(parts.config_module, overrides)
     )
     reject_locked_overrides(model_name, preset_name, config_overrides)
-    _parts, option, cfg = build_config(
+    option, cfg, dataset_type = _build_config_from_parts(
+        parts,
         model_name,
         preset_name,
         dataset_name=dataset,
@@ -91,10 +121,34 @@ def inspect_model(
             f"Failed to instantiate model '{model_name}' preset '{preset_name}': {exc}"
         ) from exc
 
-    nodes, edges = serialize_graph(model)
+    return InspectionTarget(
+        parts=parts,
+        option=option,
+        cfg=cfg,
+        model=model,
+        dataset_type=dataset_type,
+    )
+
+
+def inspect_model(
+    model_name: str,
+    preset_name: str,
+    overrides: Mapping[str, Any] | None = None,
+    dataset: str | None = None,
+    *,
+    parsed_overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    target = build_inspection_target(
+        model_name,
+        preset_name,
+        overrides,
+        dataset=dataset,
+        parsed_overrides=parsed_overrides,
+    )
+    nodes, edges = serialize_graph(target.model)
     return {
         "model": model_name,
-        "preset": option_cli_name(parts.experiment_options, option),
+        "preset": option_cli_name(target.parts.experiment_options, target.option),
         "parameterCount": nodes[0]["parameterCount"] if nodes else 0,
         "parameterSizeBytes": nodes[0]["parameterSizeBytes"] if nodes else 0,
         "nodes": nodes,

@@ -98,6 +98,18 @@ export const logQueryKeys = {
       normalizedStringSet(runIds),
       normalizedStringSet(tags),
     ] as const,
+  media: () => ["log-media"] as const,
+  mediaForRunsAndTags: (
+    runIds: StringList,
+    imageTags: StringList,
+    textTags: StringList,
+  ) =>
+    [
+      "log-media",
+      normalizedStringSet(runIds),
+      normalizedStringSet(imageTags),
+      normalizedStringSet(textTags),
+    ] as const,
   checkpoints: () => ["log-checkpoints"] as const,
   checkpointsForRuns: (runIds: StringList) =>
     ["log-checkpoints", normalizedStringSet(runIds)] as const,
@@ -184,5 +196,6 @@ export const LOG_RUNS_QUERY_KEY = logQueryKeys.runs();
 export const LOG_EXPERIMENTS_QUERY_KEY = logQueryKeys.experiments();
 export const LOG_TAGS_QUERY_KEY = logQueryKeys.tags();
 export const LOG_SCALARS_QUERY_KEY = logQueryKeys.scalars();
+export const LOG_MEDIA_QUERY_KEY = logQueryKeys.media();
 export const LOG_CHECKPOINTS_QUERY_KEY = logQueryKeys.checkpoints();
 export const LOG_ARTIFACTS_QUERY_KEY = logQueryKeys.artifacts();

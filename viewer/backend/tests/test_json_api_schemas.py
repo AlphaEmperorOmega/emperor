@@ -11,6 +11,7 @@ from viewer.backend.schemas import (
     JsonValue,
     LogRunArtifactsResponse,
     LogRunResponse,
+    OperationGraphNodeResponse,
     TrainingRunResponse,
 )
 
@@ -47,6 +48,18 @@ class JsonApiSchemaTests(unittest.TestCase):
                     "parameterSizeBytes": 0,
                     "details": {"bad": object()},
                     "config": None,
+                }
+            )
+        with self.assertRaises(ValidationError):
+            OperationGraphNodeResponse.model_validate(
+                {
+                    "id": "op_0001",
+                    "label": "linear",
+                    "opKind": "call_function",
+                    "target": "aten.linear.default",
+                    "modulePath": "head",
+                    "groupId": "head",
+                    "details": {"bad": object()},
                 }
             )
         with self.assertRaises(ValidationError):

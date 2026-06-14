@@ -16,11 +16,20 @@ from models.config_overrides import (
 )
 
 from viewer.backend.inspector.config_classes import abstract_config_class_error
-from viewer.backend.inspector.discovery import load_model_parts
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.values import serialize_config_value
 
 DEFAULT_SECTION = "General"
+PREFIX_SECTIONS = {
+    "CALLBACK_": "Callback",
+    "TRAINER_": "Trainer",
+}
+
+
+def load_model_parts(model_name: str):
+    from viewer.backend.inspector.discovery import load_model_parts as load_parts
+
+    return load_parts(model_name)
 
 
 def _assignment_key(node: ast.AST) -> str | None:
@@ -100,6 +109,16 @@ def _source_metadata(
         for key in assignments_by_line.get(line_number, []):
             metadata[key] = {"line": line_number, "section": current_section}
     return metadata
+
+
+def _field_section(key: str, field_metadata: dict[str, int | str]) -> str:
+    section = field_metadata.get("section")
+    if isinstance(section, str) and section:
+        return section
+    for prefix, prefix_section in PREFIX_SECTIONS.items():
+        if key.startswith(prefix):
+            return prefix_section
+    return DEFAULT_SECTION
 
 
 def _annotation_classes(annotation: Any) -> list[type]:
@@ -244,7 +263,7 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                 "configKey": key,
                 "flag": config_key_to_flag(key),
                 "label": key.lower().replace("_", " "),
-                "section": field_metadata.get("section", DEFAULT_SECTION),
+                "section": _field_section(key, field_metadata),
                 "type": kind,
                 "default": serialize_config_value(value),
                 "nullable": value is None or _annotation_is_nullable(annotation),

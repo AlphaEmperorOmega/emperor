@@ -44,7 +44,9 @@ EXPECTED_BUSINESS_ROUTES = [
     (("PATCH",), "/config-snapshots/{snapshot_id}"),
     (("POST",), "/config-snapshots"),
     (("POST",), "/inspect"),
+    (("POST",), "/inspect/operation-graph"),
     (("POST",), "/logs/checkpoints"),
+    (("POST",), "/logs/media"),
     (("POST",), "/logs/parameter-status"),
     (("POST",), "/logs/runs/delete"),
     (("POST",), "/logs/runs/delete-plan"),
@@ -75,9 +77,9 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         frontend_response_schema="configSnapshotLibrarySchema",
     ),
     (("PATCH",), "/config-snapshots/{snapshot_id}"): EndpointSchemaMapping(
-        backend_body_request_schemas=(schemas.ConfigSnapshotRenameRequest,),
+        backend_body_request_schemas=(schemas.ConfigSnapshotUpdateRequest,),
         backend_response_schema=schemas.ConfigSnapshotResponse,
-        frontend_api_function="renameConfigSnapshot",
+        frontend_api_function="updateConfigSnapshot",
         frontend_response_schema="configSnapshotSchema",
     ),
     (("POST",), "/config-snapshots"): EndpointSchemaMapping(
@@ -197,11 +199,23 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         frontend_api_function="inspectModel",
         frontend_response_schema="inspectResponseSchema",
     ),
+    (("POST",), "/inspect/operation-graph"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.InspectRequest,),
+        backend_response_schema=schemas.OperationGraphResponse,
+        frontend_api_function="inspectOperationGraph",
+        frontend_response_schema="operationGraphResponseSchema",
+    ),
     (("POST",), "/logs/checkpoints"): EndpointSchemaMapping(
         backend_body_request_schemas=(schemas.LogCheckpointsRequest,),
         backend_response_schema=schemas.LogCheckpointsResponse,
         frontend_api_function="fetchLogCheckpoints",
         frontend_response_schema="logCheckpointsSchema",
+    ),
+    (("POST",), "/logs/media"): EndpointSchemaMapping(
+        backend_body_request_schemas=(schemas.LogMediaRequest,),
+        backend_response_schema=schemas.LogMediaResponse,
+        frontend_api_function="fetchLogMedia",
+        frontend_response_schema="logMediaSchema",
     ),
     (("POST",), "/logs/runs/delete"): EndpointSchemaMapping(
         backend_body_request_schemas=(schemas.LogRunDeleteFiltersRequest,),
@@ -364,6 +378,24 @@ GRAPH_NODE_FIELDS = (
     "parameterSizeBytes",
     "details",
     "config",
+)
+OPERATION_GRAPH_NODE_FIELDS = (
+    "id",
+    "label",
+    "opKind",
+    "target",
+    "modulePath",
+    "groupId",
+    "details",
+)
+OPERATION_GRAPH_RESPONSE_FIELDS = (
+    "model",
+    "preset",
+    "source",
+    "status",
+    "nodes",
+    "edges",
+    "warnings",
 )
 TRAINING_SEARCH_FIELDS = ("mode", "values", "randomSamples")
 TRAINING_SEARCH_REQUIRED_FIELDS = ("mode", "values")
@@ -648,10 +680,10 @@ SCHEMA_PARITY_CASES = (
         ("model", "preset"),
     ),
     SchemaParityCase(
-        schemas.ConfigSnapshotRenameRequest,
-        "renameConfigSnapshot input",
-        ("name",),
-        ("name",),
+        schemas.ConfigSnapshotUpdateRequest,
+        "updateConfigSnapshot input",
+        ("name", "overrides"),
+        (),
     ),
     SchemaParityCase(
         schemas.CapabilitiesResponse,
@@ -757,6 +789,24 @@ SCHEMA_PARITY_CASES = (
         "inspectResponseSchema",
         ("model", "preset", "parameterCount", "parameterSizeBytes", "nodes", "edges"),
         ("model", "preset", "parameterCount", "parameterSizeBytes", "nodes", "edges"),
+    ),
+    SchemaParityCase(
+        schemas.OperationGraphNodeResponse,
+        "operationGraphNodeSchema",
+        OPERATION_GRAPH_NODE_FIELDS,
+        OPERATION_GRAPH_NODE_FIELDS,
+    ),
+    SchemaParityCase(
+        schemas.OperationGraphEdgeResponse,
+        "operationGraphEdgeSchema",
+        ("id", "source", "target"),
+        ("id", "source", "target"),
+    ),
+    SchemaParityCase(
+        schemas.OperationGraphResponse,
+        "operationGraphResponseSchema",
+        OPERATION_GRAPH_RESPONSE_FIELDS,
+        OPERATION_GRAPH_RESPONSE_FIELDS,
     ),
     SchemaParityCase(
         schemas.TrainingJobCreateRequest,
@@ -1044,8 +1094,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.LogRunTagsResponse,
         "logRunTagsSchema",
-        ("runId", "scalarTags", "histogramTags", "imageTags"),
-        ("runId", "scalarTags", "histogramTags", "imageTags"),
+        ("runId", "scalarTags", "histogramTags", "imageTags", "textTags"),
+        ("runId", "scalarTags", "histogramTags", "imageTags", "textTags"),
     ),
     SchemaParityCase(
         schemas.LogTagsResponse,
@@ -1058,6 +1108,30 @@ SCHEMA_PARITY_CASES = (
         "fetchLogScalars input",
         ("runIds", "tags"),
         ("runIds", "tags"),
+    ),
+    SchemaParityCase(
+        schemas.LogMediaRequest,
+        "fetchLogMedia input",
+        ("runIds", "imageTags", "textTags"),
+        ("runIds", "imageTags", "textTags"),
+    ),
+    SchemaParityCase(
+        schemas.LogImageSummaryResponse,
+        "logImageSummarySchema",
+        ("runId", "tag", "step", "wallTime", "mimeType", "dataUrl"),
+        ("runId", "tag", "step", "wallTime", "mimeType", "dataUrl"),
+    ),
+    SchemaParityCase(
+        schemas.LogTextSummaryResponse,
+        "logTextSummarySchema",
+        ("runId", "tag", "step", "wallTime", "text"),
+        ("runId", "tag", "step", "wallTime", "text"),
+    ),
+    SchemaParityCase(
+        schemas.LogMediaResponse,
+        "logMediaSchema",
+        ("images", "texts"),
+        ("images", "texts"),
     ),
     SchemaParityCase(
         schemas.LogParameterStatusRequest,
@@ -1118,7 +1192,7 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.ConfigSnapshotsResponse,
         schemas.ConfigSnapshotLibraryResponse,
         schemas.ConfigSnapshotCreateRequest,
-        schemas.ConfigSnapshotRenameRequest,
+        schemas.ConfigSnapshotUpdateRequest,
     ),
     "model config/search": (
         schemas.ConfigFieldResponse,
@@ -1188,6 +1262,10 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.LogScalarsRequest,
         schemas.LogScalarSeriesResponse,
         schemas.LogScalarsResponse,
+        schemas.LogMediaRequest,
+        schemas.LogImageSummaryResponse,
+        schemas.LogTextSummaryResponse,
+        schemas.LogMediaResponse,
         schemas.LogParameterStatusRequest,
         schemas.LogParameterStatusResponse,
     ),
@@ -1367,6 +1445,7 @@ class ApiSchemaContractTests(unittest.TestCase):
         expected_refs = {
             ("GraphConfigFieldResponse", "value"): "JsonValue-Output",
             ("GraphNodeResponse", "details"): "JsonObject-Output",
+            ("OperationGraphNodeResponse", "details"): "JsonObject-Output",
             ("LogRunResponse", "metrics"): "JsonObject-Output",
             ("LogRunArtifactsResponse", "params"): "JsonObject-Output",
             ("LogRunArtifactsResponse", "metrics"): "JsonObject-Output",
@@ -1583,13 +1662,10 @@ class ApiIntegrationContractTests(unittest.TestCase):
         import httpx
 
         from viewer.backend.api import app
+        from viewer.backend.api.v1.routers.inspection import inspect
+        from viewer.backend.services.inspection import InspectionService
 
-        async def call_api() -> tuple[
-            httpx.Response,
-            httpx.Response,
-            httpx.Response,
-            httpx.Response,
-        ]:
+        async def call_api() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(
                 transport=transport,
@@ -1600,19 +1676,21 @@ class ApiIntegrationContractTests(unittest.TestCase):
                 search_space = await client.get(
                     "/models/linears/linear/search-space?preset=baseline"
                 )
-                inspect_response = await client.post(
-                    "/inspect",
-                    json={
-                        "model": "linears/linear",
-                        "preset": "baseline",
-                        "dataset": "Mnist",
-                        "overrides": {"hidden_dim": "128"},
-                    },
-                )
-                return health, monitors, search_space, inspect_response
+                return health, monitors, search_space
 
-        health_response, monitors_response, search_space_response, response = (
-            asyncio.run(call_api())
+        health_response, monitors_response, search_space_response = asyncio.run(
+            call_api()
+        )
+        response = asyncio.run(
+            inspect(
+                schemas.InspectRequest(
+                    model="linears/linear",
+                    preset="baseline",
+                    dataset="Mnist",
+                    overrides={"hidden_dim": "128"},
+                ),
+                InspectionService(),
+            )
         )
         self.assertEqual(health_response.json(), {"status": "ok"})
         self.assertEqual(monitors_response.status_code, 200)
@@ -1622,8 +1700,7 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertIn(
             "hidden_dim", {axis["key"] for axis in search_space_payload["axes"]}
         )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
+        payload = response.model_dump(mode="json")
         self.assertEqual(payload["model"], "linears/linear")
         self.assertTrue(payload["nodes"])
         self.assertTrue(payload["edges"])
@@ -1633,32 +1710,27 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertIn("parameterSizeBytes", payload["nodes"][0])
 
     def test_inspect_rejects_path_like_dataset_input(self) -> None:
-        import httpx
+        from viewer.backend.api.v1.routers.inspection import inspect
+        from viewer.backend.inspector.errors import InspectorError
+        from viewer.backend.services.inspection import InspectionService
 
-        from viewer.backend.api import app
+        with self.assertRaises(InspectorError) as raised:
+            asyncio.run(
+                inspect(
+                    schemas.InspectRequest(
+                        model="linears/linear",
+                        preset="baseline",
+                        dataset="./Mnist",
+                        overrides={},
+                    ),
+                    InspectionService(),
+                ),
+            )
 
-        async def call_api() -> httpx.Response:
-            transport = httpx.ASGITransport(app=app)
-            async with httpx.AsyncClient(
-                transport=transport,
-                base_url="http://testserver",
-            ) as client:
-                return await client.post(
-                    "/inspect",
-                    json={
-                        "model": "linears/linear",
-                        "preset": "baseline",
-                        "dataset": "./Mnist",
-                        "overrides": {},
-                    },
-                )
-
-        response = asyncio.run(call_api())
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("./Mnist", response.json()["detail"])
-        self.assertIn("filesystem path", response.json()["detail"])
-        self.assertIn("server-known dataset name", response.json()["detail"])
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertIn("./Mnist", raised.exception.detail)
+        self.assertIn("filesystem path", raised.exception.detail)
+        self.assertIn("server-known dataset name", raised.exception.detail)
 
     def test_api_dependency_overrides_can_replace_route_services(self) -> None:
         import httpx

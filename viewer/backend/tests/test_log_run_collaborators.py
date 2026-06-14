@@ -109,8 +109,14 @@ class StubLogRunQueryService(LogRunQueryService):
                 "scalars": ["accuracy", "loss"],
                 "histograms": ["weights"],
                 "images": [],
+                "texts": ["notes/text_summary"],
             }
-        return {"scalars": ["loss"], "histograms": [], "images": ["sample"]}
+        return {
+            "scalars": ["loss"],
+            "histograms": [],
+            "images": ["sample"],
+            "texts": [],
+        }
 
     def read_scalar_points(self, run_dir: Path, tag: str) -> list[dict[str, Any]]:
         self.scalar_requests.append((run_dir, tag))
@@ -153,6 +159,7 @@ class LogRunQueryServiceTests(unittest.TestCase):
                     "scalarTags": ["accuracy", "loss"],
                     "histogramTags": ["weights"],
                     "imageTags": [],
+                    "textTags": ["notes/text_summary"],
                 }
             ],
         )

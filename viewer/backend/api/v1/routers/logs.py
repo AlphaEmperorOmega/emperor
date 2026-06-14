@@ -14,6 +14,9 @@ from viewer.backend.schemas import (
     LogCheckpointsResponse,
     LogExperimentDeleteResponse,
     LogExperimentsResponse,
+    LogImageSummaryResponse,
+    LogMediaRequest,
+    LogMediaResponse,
     LogParameterStatusRequest,
     LogParameterStatusResponse,
     LogRunArtifactResponse,
@@ -28,6 +31,7 @@ from viewer.backend.schemas import (
     LogScalarsResponse,
     LogTagsRequest,
     LogTagsResponse,
+    LogTextSummaryResponse,
     MonitorDataResponse,
     ParameterStatusResponse,
 )
@@ -39,10 +43,9 @@ router = APIRouter(
     tags=["logs"],
     dependencies=[Depends(require_bearer_auth)],
 )
-# Read endpoints are sync handlers on purpose: FastAPI dispatches them to the
-# worker threadpool, keeping TensorBoard reads and log scans off the event
-# loop. Delete endpoints stay async because they share mutable
-# TrainingJobManager state with the training routes.
+# Read endpoints are async at the API boundary so ASGI clients do not rely on
+# FastAPI sync-route dispatch. Delete endpoints share mutable TrainingJobManager
+# state with the training routes.
 DEFAULT_LOG_PAGE_LIMIT = 500
 MAX_LOG_PAGE_LIMIT = 2000
 
@@ -57,7 +60,7 @@ def active_job_payloads(service: TrainingJobService) -> list[dict[str, str]]:
     summary="List log runs",
     response_description="Historical TensorBoard runs indexed from the logs root.",
 )
-def logs_runs(
+async def logs_runs(
     service: Annotated[LogRunService, Depends(get_log_run_service)],
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
@@ -73,7 +76,7 @@ def logs_runs(
     summary="List log experiments",
     response_description="Log experiment folders indexed from the logs root.",
 )
-def logs_experiments(
+async def logs_experiments(
     service: Annotated[LogRunService, Depends(get_log_run_service)],
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
@@ -89,14 +92,15 @@ def logs_experiments(
     summary="Read log-run checkpoints",
     response_description="Checkpoint file metadata for requested historical runs.",
 )
-def logs_checkpoints(
+async def logs_checkpoints(
     request: LogCheckpointsRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogCheckpointsResponse:
+    checkpoints = service.checkpoints_for_runs(request.runIds)
     return LogCheckpointsResponse(
         checkpoints=[
             LogCheckpointResponse.model_validate(checkpoint)
-            for checkpoint in service.checkpoints_for_runs(request.runIds)
+            for checkpoint in checkpoints
         ]
     )
 
@@ -179,16 +183,19 @@ async def delete_log_runs(
     "/tags",
     response_model=LogTagsResponse,
     summary="Read log-run tags",
-    response_description="Scalar, histogram, and image tags for requested runs.",
+    response_description=(
+        "Scalar, histogram, image, and text tags for requested runs."
+    ),
 )
-def logs_tags(
+async def logs_tags(
     request: LogTagsRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogTagsResponse:
+    tags_for_runs = service.tags_for_runs(request.runIds)
     return LogTagsResponse(
         runs=[
             LogRunTagsResponse.model_validate(tags)
-            for tags in service.tags_for_runs(request.runIds)
+            for tags in tags_for_runs
         ]
     )
 
@@ -199,18 +206,46 @@ def logs_tags(
     summary="Read log-run scalar series",
     response_description="Requested scalar series from historical TensorBoard runs.",
 )
-def logs_scalars(
+async def logs_scalars(
     request: LogScalarsRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogScalarsResponse:
+    scalar_series = service.scalars_for_runs(
+        run_ids=request.runIds,
+        tags=request.tags,
+    )
     return LogScalarsResponse(
         series=[
             LogScalarSeriesResponse.model_validate(series)
-            for series in service.scalars_for_runs(
-                run_ids=request.runIds,
-                tags=request.tags,
-            )
+            for series in scalar_series
         ]
+    )
+
+
+@router.post(
+    "/media",
+    response_model=LogMediaResponse,
+    summary="Read log-run media summaries",
+    response_description="Requested TensorBoard image and text summaries.",
+)
+async def logs_media(
+    request: LogMediaRequest,
+    service: Annotated[LogRunService, Depends(get_log_run_service)],
+) -> LogMediaResponse:
+    media = service.media_for_runs(
+        run_ids=request.runIds,
+        image_tags=request.imageTags,
+        text_tags=request.textTags,
+    )
+    return LogMediaResponse(
+        images=[
+            LogImageSummaryResponse.model_validate(image)
+            for image in media["images"]
+        ],
+        texts=[
+            LogTextSummaryResponse.model_validate(text)
+            for text in media["texts"]
+        ],
     )
 
 
@@ -220,14 +255,15 @@ def logs_scalars(
     summary="Read log-run parameter status",
     response_description="Weight and bias update status for requested historical runs.",
 )
-def logs_parameter_status(
+async def logs_parameter_status(
     request: LogParameterStatusRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogParameterStatusResponse:
+    statuses = service.parameter_status_for_runs(request.runIds)
     return LogParameterStatusResponse(
         runs=[
             ParameterStatusResponse.model_validate(status)
-            for status in service.parameter_status_for_runs(request.runIds)
+            for status in statuses
         ]
     )
 
@@ -238,7 +274,7 @@ def logs_parameter_status(
     summary="Read historical run artifacts",
     response_description="Result, hparams, event, and checkpoint file metadata.",
 )
-def log_run_artifacts(
+async def log_run_artifacts(
     run_id: str,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogRunArtifactsResponse:
@@ -264,7 +300,7 @@ def log_run_artifacts(
     summary="Read historical monitor data",
     response_description="Monitor scalars, histograms, and images for a log run.",
 )
-def log_run_monitor_data(
+async def log_run_monitor_data(
     run_id: str,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
     node_path: str = Query(..., alias="nodePath"),

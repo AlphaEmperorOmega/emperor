@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,8 +21,10 @@ from viewer.backend.monitor_data import (
 )
 from viewer.backend.tensorboard_reader import (
     event_dirs,
+    image_summary,
     load_event_accumulator,
     scalar_points,
+    text_summary,
 )
 
 RUN_TIMESTAMP_RE = re.compile(r"(?P<timestamp>\d{8}_\d{6})$")
@@ -722,6 +725,7 @@ class LogRunQueryService:
                 "scalarTags": tags["scalars"],
                 "histogramTags": tags["histograms"],
                 "imageTags": tags["images"],
+                "textTags": tags["texts"],
             }
             for run in runs
             for tags in [self.read_tags(run.path)]
@@ -748,6 +752,38 @@ class LogRunQueryService:
                 if points:
                     series.append({"runId": run.id, "tag": tag, "points": points})
         return series
+
+    def media_for_runs(
+        self,
+        *,
+        run_ids: list[str],
+        image_tags: list[str],
+        text_tags: list[str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        runs = self.scanner.resolve_runs(run_ids)
+        requested_image_tags = list(dict.fromkeys(image_tags))
+        requested_text_tags = list(dict.fromkeys(text_tags))
+        images: list[dict[str, Any]] = []
+        texts: list[dict[str, Any]] = []
+
+        for run in runs:
+            run_tags = self.read_tags(run.path)
+            image_tag_set = set(run_tags["images"])
+            text_tag_set = set(run_tags["texts"])
+            for tag in requested_image_tags:
+                if tag not in image_tag_set:
+                    continue
+                summary = self.read_image_summary(run.path, tag)
+                if summary is not None:
+                    images.append({"runId": run.id, **summary})
+            for tag in requested_text_tags:
+                if tag not in text_tag_set:
+                    continue
+                summary = self.read_text_summary(run.path, tag)
+                if summary is not None:
+                    texts.append({"runId": run.id, **summary})
+
+        return {"images": images, "texts": texts}
 
     def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
         run = self.scanner.resolve_runs([run_id])[0]
@@ -883,7 +919,7 @@ class LogRunQueryService:
         )
 
     def read_tags(self, run_dir: Path) -> dict[str, list[str]]:
-        tags = {"scalars": set(), "histograms": set(), "images": set()}
+        tags = {"scalars": set(), "histograms": set(), "images": set(), "texts": set()}
         for event_dir in event_dirs(run_dir):
             accumulator = load_event_accumulator(event_dir)
             if accumulator is None:
@@ -895,6 +931,11 @@ class LogRunQueryService:
             tags["scalars"].update(accumulator_tags.get("scalars", []))
             tags["histograms"].update(accumulator_tags.get("histograms", []))
             tags["images"].update(accumulator_tags.get("images", []))
+            tags["texts"].update(
+                tag
+                for tag in accumulator_tags.get("tensors", [])
+                if tag.endswith("/text_summary")
+            )
         return {key: sorted(value) for key, value in tags.items()}
 
     def read_scalar_points(self, run_dir: Path, tag: str) -> list[dict[str, Any]]:
@@ -910,6 +951,34 @@ class LogRunQueryService:
 
         points.sort(key=lambda point: (point["step"], point["wallTime"]))
         return points[-self.scalar_point_limit :]
+
+    def read_image_summary(self, run_dir: Path, tag: str) -> dict[str, Any] | None:
+        return self._read_latest_summary(run_dir, tag, image_summary)
+
+    def read_text_summary(self, run_dir: Path, tag: str) -> dict[str, Any] | None:
+        return self._read_latest_summary(run_dir, tag, text_summary)
+
+    def _read_latest_summary(
+        self,
+        run_dir: Path,
+        tag: str,
+        summary_reader: Callable[[Any, str], dict[str, Any] | None],
+    ) -> dict[str, Any] | None:
+        summaries: list[dict[str, Any]] = []
+        for event_dir in event_dirs(run_dir):
+            accumulator = load_event_accumulator(event_dir)
+            if accumulator is None:
+                continue
+            try:
+                summary = summary_reader(accumulator, tag)
+            except Exception:
+                continue
+            if summary is not None:
+                summaries.append(summary)
+        if not summaries:
+            return None
+        summaries.sort(key=lambda item: (item["step"], item["wallTime"]))
+        return summaries[-1]
 
 
 class LogRunDeletionPlanner:
@@ -1097,6 +1166,19 @@ class LogRunIndex:
         tags: list[str],
     ) -> list[dict[str, Any]]:
         return self.query_service.scalars_for_runs(run_ids=run_ids, tags=tags)
+
+    def media_for_runs(
+        self,
+        *,
+        run_ids: list[str],
+        image_tags: list[str],
+        text_tags: list[str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        return self.query_service.media_for_runs(
+            run_ids=run_ids,
+            image_tags=image_tags,
+            text_tags=text_tags,
+        )
 
     def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
         return self.query_service.monitor_data_for_run(

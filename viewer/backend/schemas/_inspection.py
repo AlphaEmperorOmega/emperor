@@ -56,3 +56,36 @@ class InspectResponse(ApiResponseModel):
     parameterSizeBytes: int
     nodes: list[GraphNodeResponse]
     edges: list[GraphEdgeResponse]
+
+
+class OperationGraphNodeResponse(ApiResponseModel):
+    id: str
+    label: str
+    opKind: Literal[
+        "placeholder",
+        "call_function",
+        "call_module",
+        "call_method",
+        "get_attr",
+        "output",
+    ]
+    target: str
+    modulePath: str | None = None
+    groupId: str | None = None
+    details: JsonObject = Field(default_factory=dict)
+
+
+class OperationGraphEdgeResponse(ApiResponseModel):
+    id: str
+    source: str
+    target: str
+
+
+class OperationGraphResponse(ApiResponseModel):
+    model: str
+    preset: str
+    source: Literal["torch-export"]
+    status: Literal["ok", "unsupported"]
+    nodes: list[OperationGraphNodeResponse]
+    edges: list[OperationGraphEdgeResponse]
+    warnings: list[str] = Field(default_factory=list)

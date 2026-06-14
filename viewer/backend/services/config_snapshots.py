@@ -17,11 +17,15 @@ from typing import Any
 
 from viewer.backend.config_snapshots import ConfigSnapshotRecord
 from viewer.backend.inspector.errors import InspectorError
-from viewer.backend.inspector.schema import config_schema
 from viewer.backend.repositories.config_snapshots import ConfigSnapshotRepository
 
-MAX_DEFAULT_NAME_FIELDS = 3
 IDENTITY_SEPARATOR = "\x00"
+
+
+def config_schema(model: str, preset: str | None = None) -> dict[str, Any]:
+    from viewer.backend.inspector.schema import config_schema as load_config_schema
+
+    return load_config_schema(model, preset)
 
 
 class ConfigSnapshotService:
@@ -50,47 +54,58 @@ class ConfigSnapshotService:
     ) -> dict[str, Any]:
         if not model or not preset:
             raise InspectorError("Select a model and preset first.")
+        snapshot_name = self._validated_snapshot_name(
+            model=model,
+            preset=preset,
+            name=name,
+        )
 
         fields = config_schema(model, preset)["fields"]
-        entries, locked_fields = _override_entries(fields, overrides)
-        if locked_fields:
-            locked_names = ", ".join(
-                str(field.get("label") or field["key"]) for field in locked_fields[:3]
-            )
-            raise InspectorError(
-                f"Snapshots cannot include preset-locked fields: {locked_names}."
-            )
-        if not entries:
-            raise InspectorError(
-                "Change at least one non-default field before adding a snapshot."
-            )
-
-        identity = _identity(model, preset, entries)
-        for existing in self._list_snapshot_records(model):
-            if existing.preset != preset:
-                continue
-            existing_entries, _ = _override_entries(fields, existing.overrides)
-            if _identity(model, preset, existing_entries) == identity:
-                raise InspectorError(
-                    "A snapshot with these config values already exists."
-                )
+        entries = self._validated_override_entries(
+            model=model,
+            preset=preset,
+            fields=fields,
+            overrides=overrides,
+        )
 
         snapshot = ConfigSnapshotRecord(
             id=uuid.uuid4().hex,
             model=model,
             preset=preset,
-            name=name.strip() or _default_name(preset, entries),
+            name=snapshot_name,
             overrides={entry["key"]: entry["value"] for entry in entries},
         )
         self._save_snapshot_record(snapshot)
         return _snapshot_to_api(snapshot)
 
     def rename_snapshot(self, snapshot_id: str, name: str) -> dict[str, Any]:
+        return self.update_snapshot(snapshot_id, name=name)
+
+    def update_snapshot(
+        self,
+        snapshot_id: str,
+        *,
+        name: str | None = None,
+        overrides: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         snapshot = self._require_snapshot(snapshot_id)
-        new_name = name.strip()
-        if not new_name:
-            raise InspectorError("Config snapshot name cannot be empty.")
-        snapshot.name = new_name
+        if name is not None:
+            snapshot.name = self._validated_snapshot_name(
+                model=snapshot.model,
+                preset=snapshot.preset,
+                name=name,
+                exclude_snapshot_id=snapshot.id,
+            )
+        if overrides is not None:
+            fields = config_schema(snapshot.model, snapshot.preset)["fields"]
+            entries = self._validated_override_entries(
+                model=snapshot.model,
+                preset=snapshot.preset,
+                fields=fields,
+                overrides=overrides,
+                exclude_snapshot_id=snapshot.id,
+            )
+            snapshot.overrides = {entry["key"]: entry["value"] for entry in entries}
         snapshot.updated_at = _now()
         self._save_snapshot_record(snapshot)
         return _snapshot_to_api(snapshot)
@@ -141,6 +156,58 @@ class ConfigSnapshotService:
             return self._repository.delete_snapshot(snapshot_id)
         except ValueError as exc:
             raise InspectorError("Invalid config snapshot storage path.") from exc
+
+    def _validated_snapshot_name(
+        self,
+        *,
+        model: str,
+        preset: str,
+        name: str,
+        exclude_snapshot_id: str | None = None,
+    ) -> str:
+        snapshot_name = name.strip()
+        if not snapshot_name:
+            raise InspectorError("Config snapshot name cannot be empty.")
+        normalized_name = _normalize_snapshot_name(snapshot_name)
+        for existing in self._list_snapshot_records(model):
+            if existing.id == exclude_snapshot_id or existing.preset != preset:
+                continue
+            if _normalize_snapshot_name(existing.name) == normalized_name:
+                raise InspectorError("A snapshot with this name already exists.")
+        return snapshot_name
+
+    def _validated_override_entries(
+        self,
+        *,
+        model: str,
+        preset: str,
+        fields: list[dict[str, Any]],
+        overrides: dict[str, str],
+        exclude_snapshot_id: str | None = None,
+    ) -> list[dict[str, str]]:
+        entries, locked_fields = _override_entries(fields, overrides)
+        if locked_fields:
+            locked_names = ", ".join(
+                str(field.get("label") or field["key"]) for field in locked_fields[:3]
+            )
+            raise InspectorError(
+                f"Snapshots cannot include preset-locked fields: {locked_names}."
+            )
+        if not entries:
+            raise InspectorError(
+                "Change at least one non-default field before adding a snapshot."
+            )
+
+        identity = _identity(model, preset, entries)
+        for existing in self._list_snapshot_records(model):
+            if existing.id == exclude_snapshot_id or existing.preset != preset:
+                continue
+            existing_entries, _ = _override_entries(fields, existing.overrides)
+            if _identity(model, preset, existing_entries) == identity:
+                raise InspectorError(
+                    "A snapshot with these config values already exists."
+                )
+        return entries
 
 
 def _now() -> str:
@@ -209,21 +276,10 @@ def _to_number(raw: str) -> float | None:
         return None
 
 
+def _normalize_snapshot_name(name: str) -> str:
+    return name.strip().casefold()
+
+
 def _identity(model: str, preset: str, entries: list[dict[str, str]]) -> str:
     parts = [model, preset, *(f"{entry['key']}={entry['value']}" for entry in entries)]
     return IDENTITY_SEPARATOR.join(parts)
-
-
-def _default_name(preset: str, entries: list[dict[str, str]]) -> str:
-    if not entries:
-        return f"{preset or 'config'} snapshot"
-    visible = entries[:MAX_DEFAULT_NAME_FIELDS]
-    suffix = (
-        f" +{len(entries) - MAX_DEFAULT_NAME_FIELDS}"
-        if len(entries) > MAX_DEFAULT_NAME_FIELDS
-        else ""
-    )
-    body = " ".join(
-        f"{entry['key']}={entry['value'] or 'None'}" for entry in visible
-    )
-    return f"{preset} {body}{suffix}"

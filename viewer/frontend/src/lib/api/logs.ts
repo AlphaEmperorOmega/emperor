@@ -46,6 +46,7 @@ export const logRunTagsSchema = z.object({
   scalarTags: z.array(z.string()),
   histogramTags: z.array(z.string()),
   imageTags: z.array(z.string()),
+  textTags: z.array(z.string()),
 });
 
 export const logScalarPointSchema = z.object({
@@ -58,6 +59,23 @@ export const logScalarSeriesSchema = z.object({
   runId: z.string(),
   tag: z.string(),
   points: z.array(logScalarPointSchema),
+});
+
+export const logImageSummarySchema = z.object({
+  runId: z.string(),
+  tag: z.string(),
+  step: z.number(),
+  wallTime: z.number(),
+  mimeType: z.string(),
+  dataUrl: z.string(),
+});
+
+export const logTextSummarySchema = z.object({
+  runId: z.string(),
+  tag: z.string(),
+  step: z.number(),
+  wallTime: z.number(),
+  text: z.string(),
 });
 
 export const logExperimentSchema = z.object({
@@ -101,6 +119,10 @@ export const logRunArtifactSchema = z.object({
 
 const logTagsSchema = z.object({ runs: z.array(logRunTagsSchema) });
 const logScalarsSchema = z.object({ series: z.array(logScalarSeriesSchema) });
+const logMediaSchema = z.object({
+  images: z.array(logImageSummarySchema),
+  texts: z.array(logTextSummarySchema),
+});
 export const logCheckpointsSchema = z.object({
   checkpoints: z.array(logCheckpointSchema),
 });
@@ -117,6 +139,9 @@ export type LogExperiment = z.infer<typeof logExperimentSchema>;
 export type LogRunTags = z.infer<typeof logRunTagsSchema>;
 export type LogScalarPoint = z.infer<typeof logScalarPointSchema>;
 export type LogScalarSeries = z.infer<typeof logScalarSeriesSchema>;
+export type LogImageSummary = z.infer<typeof logImageSummarySchema>;
+export type LogTextSummary = z.infer<typeof logTextSummarySchema>;
+export type LogMedia = z.infer<typeof logMediaSchema>;
 export type LogCheckpoint = z.infer<typeof logCheckpointSchema>;
 export type LogRunArtifact = z.infer<typeof logRunArtifactSchema>;
 export type LogRunArtifacts = z.infer<typeof logRunArtifactsSchema>;
@@ -251,6 +276,17 @@ export function fetchLogTags(input: { runIds: string[] }) {
 
 export function fetchLogScalars(input: { runIds: string[]; tags: string[] }) {
   return requestJson("/logs/scalars", logScalarsSchema, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function fetchLogMedia(input: {
+  runIds: string[];
+  imageTags: string[];
+  textTags: string[];
+}) {
+  return requestJson("/logs/media", logMediaSchema, {
     method: "POST",
     body: JSON.stringify(input),
   });

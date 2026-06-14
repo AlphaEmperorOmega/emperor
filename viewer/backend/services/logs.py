@@ -162,6 +162,19 @@ class LogRunService:
     ) -> list[dict[str, Any]]:
         return self._repository.scalars_for_runs(run_ids=run_ids, tags=tags)
 
+    def media_for_runs(
+        self,
+        *,
+        run_ids: list[str],
+        image_tags: list[str],
+        text_tags: list[str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        return self._repository.media_for_runs(
+            run_ids=run_ids,
+            image_tags=image_tags,
+            text_tags=text_tags,
+        )
+
     def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
         return self._repository.monitor_data_for_run(run_id, node_path=node_path)
 

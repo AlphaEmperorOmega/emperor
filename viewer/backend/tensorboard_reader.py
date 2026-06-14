@@ -7,6 +7,7 @@ helpers are the single implementation of that access so the two stay in step.
 
 from __future__ import annotations
 
+import base64
 import math
 from pathlib import Path
 from typing import Any
@@ -58,9 +59,51 @@ def load_event_accumulator(run_dir: Path):
                 event_accumulator.SCALARS: 0,
                 event_accumulator.HISTOGRAMS: 0,
                 event_accumulator.IMAGES: 0,
+                event_accumulator.TENSORS: 0,
             },
         )
         accumulator.Reload()
     except Exception:
         return None
     return accumulator
+
+
+def image_summary(accumulator, tag: str) -> dict[str, Any] | None:
+    """Read the latest image summary for ``tag`` as a data URL payload."""
+    events = accumulator.Images(tag)
+    if not events:
+        return None
+    event = events[-1]
+    encoded = event.encoded_image_string
+    if isinstance(encoded, str):
+        encoded = encoded.encode("latin1")
+    data = base64.b64encode(encoded).decode("ascii")
+    return {
+        "tag": tag,
+        "step": int(event.step),
+        "wallTime": finite_float(event.wall_time),
+        "mimeType": "image/png",
+        "dataUrl": f"data:image/png;base64,{data}",
+    }
+
+
+def text_summary(accumulator, tag: str) -> dict[str, Any] | None:
+    """Read the latest TensorBoard text summary for ``tag``."""
+    events = accumulator.Tensors(tag)
+    if not events:
+        return None
+    event = events[-1]
+    values = list(getattr(event.tensor_proto, "string_val", []))
+    if not values:
+        return None
+    value = values[0]
+    if isinstance(value, bytes):
+        text = value.decode("utf-8", errors="replace")
+    else:
+        text = str(value)
+    return {
+        "tag": tag,
+        "step": int(event.step),
+        "wallTime": finite_float(event.wall_time),
+        "text": text,
+    }

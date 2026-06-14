@@ -1915,6 +1915,80 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertEqual(raw_path_response.status_code, 400)
         self.assertIn("Unknown log run id", raw_path_response.json()["detail"])
 
+    def test_log_run_index_reads_tensorboard_media_summaries(self) -> None:
+        import torch
+        from torch.utils.tensorboard import SummaryWriter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            run_dir = logs_root.joinpath(
+                "linear",
+                "BASELINE",
+                "Cifar10",
+                "diagnostics_20260613_120000",
+                "version_0",
+            )
+            writer = SummaryWriter(log_dir=str(run_dir))
+            writer.add_scalar("gap/accuracy", 0.12, 1)
+            writer.add_image(
+                "validation/examples/predictions",
+                torch.zeros(3, 8, 8),
+                1,
+            )
+            writer.add_text(
+                "validation/examples/predictions",
+                "true=cat predicted=dog confidence=0.91",
+                1,
+            )
+            writer.flush()
+            writer.close()
+
+            index = LogRunIndex(logs_root=logs_root)
+            run = index.list_runs()[0]
+            tags = index.tags_for_runs([run.id])[0]
+            media = index.media_for_runs(
+                run_ids=[run.id],
+                image_tags=["validation/examples/predictions"],
+                text_tags=["validation/examples/predictions/text_summary"],
+            )
+
+        self.assertEqual(tags["scalarTags"], ["gap/accuracy"])
+        self.assertEqual(tags["imageTags"], ["validation/examples/predictions"])
+        self.assertEqual(
+            tags["textTags"],
+            ["validation/examples/predictions/text_summary"],
+        )
+        self.assertEqual(media["images"][0]["runId"], run.id)
+        self.assertTrue(
+            media["images"][0]["dataUrl"].startswith("data:image/png;base64,")
+        )
+        self.assertEqual(media["texts"][0]["runId"], run.id)
+        self.assertIn("true=cat", media["texts"][0]["text"])
+
+    def test_log_run_query_service_reads_latest_summary_across_event_dirs(self) -> None:
+        from torch.utils.tensorboard import SummaryWriter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            early_writer = SummaryWriter(log_dir=str(run_dir / "early"))
+            early_writer.add_text("validation/examples/predictions", "early", 1)
+            early_writer.flush()
+            early_writer.close()
+            late_writer = SummaryWriter(log_dir=str(run_dir / "late"))
+            late_writer.add_text("validation/examples/predictions", "late", 2)
+            late_writer.flush()
+            late_writer.close()
+
+            index = LogRunIndex(logs_root=Path(tmp))
+            summary = index.query_service.read_text_summary(
+                run_dir,
+                "validation/examples/predictions/text_summary",
+            )
+
+        self.assertIsNotNone(summary)
+        self.assertEqual(summary["step"], 2)
+        self.assertEqual(summary["text"], "late")
+
 
 if __name__ == "__main__":
     unittest.main()
