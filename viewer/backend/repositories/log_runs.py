@@ -59,8 +59,15 @@ class LogRunRepository:
         *,
         run_ids: list[str],
         tags: list[str],
+        max_points: int,
+        sampling: str,
     ) -> list[dict[str, Any]]:
-        return self._index.scalars_for_runs(run_ids=run_ids, tags=tags)
+        return self._index.scalars_for_runs(
+            run_ids=run_ids,
+            tags=tags,
+            max_points=max_points,
+            sampling=sampling,
+        )
 
     def media_for_runs(
         self,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -50,6 +52,26 @@ DEFAULT_LOG_PAGE_LIMIT = 500
 MAX_LOG_PAGE_LIMIT = 2000
 
 
+async def run_read_only(callable_object, *args, **kwargs):
+    done = threading.Event()
+    result: dict[str, object] = {}
+
+    def target() -> None:
+        try:
+            result["value"] = callable_object(*args, **kwargs)
+        except BaseException as exc:  # pragma: no cover - re-raised in caller
+            result["error"] = exc
+        finally:
+            done.set()
+
+    threading.Thread(target=target, name="viewer-log-read", daemon=True).start()
+    while not done.is_set():
+        await asyncio.sleep(0.002)
+    if "error" in result:
+        raise result["error"]  # type: ignore[misc]
+    return result.get("value")
+
+
 def active_job_payloads(service: TrainingJobService) -> list[dict[str, str]]:
     return [job.to_api_payload() for job in service.active_jobs()]
 
@@ -64,9 +86,23 @@ async def logs_runs(
     service: Annotated[LogRunService, Depends(get_log_run_service)],
     limit: int = Query(DEFAULT_LOG_PAGE_LIMIT, ge=1, le=MAX_LOG_PAGE_LIMIT),
     offset: int = Query(0, ge=0),
+    experiment: list[str] | None = Query(default=None),
+    model: list[str] | None = Query(default=None),
+    preset: list[str] | None = Query(default=None),
+    dataset: list[str] | None = Query(default=None),
+    has_event_files: bool | None = Query(default=None, alias="hasEventFiles"),
 ) -> LogRunsResponse:
     return LogRunsResponse.model_validate(
-        service.list_runs(limit=limit, offset=offset)
+        await run_read_only(
+            service.list_runs,
+            limit=limit,
+            offset=offset,
+            experiment=experiment,
+            model=model,
+            preset=preset,
+            dataset=dataset,
+            has_event_files=has_event_files,
+        )
     )
 
 
@@ -82,7 +118,7 @@ async def logs_experiments(
     offset: int = Query(0, ge=0),
 ) -> LogExperimentsResponse:
     return LogExperimentsResponse.model_validate(
-        service.list_experiments(limit=limit, offset=offset)
+        await run_read_only(service.list_experiments, limit=limit, offset=offset)
     )
 
 
@@ -96,7 +132,7 @@ async def logs_checkpoints(
     request: LogCheckpointsRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogCheckpointsResponse:
-    checkpoints = service.checkpoints_for_runs(request.runIds)
+    checkpoints = await run_read_only(service.checkpoints_for_runs, request.runIds)
     return LogCheckpointsResponse(
         checkpoints=[
             LogCheckpointResponse.model_validate(checkpoint)
@@ -191,7 +227,7 @@ async def logs_tags(
     request: LogTagsRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogTagsResponse:
-    tags_for_runs = service.tags_for_runs(request.runIds)
+    tags_for_runs = await run_read_only(service.tags_for_runs, request.runIds)
     return LogTagsResponse(
         runs=[
             LogRunTagsResponse.model_validate(tags)
@@ -210,9 +246,12 @@ async def logs_scalars(
     request: LogScalarsRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogScalarsResponse:
-    scalar_series = service.scalars_for_runs(
+    scalar_series = await run_read_only(
+        service.scalars_for_runs,
         run_ids=request.runIds,
         tags=request.tags,
+        max_points=request.maxPoints,
+        sampling=request.sampling,
     )
     return LogScalarsResponse(
         series=[
@@ -232,7 +271,8 @@ async def logs_media(
     request: LogMediaRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogMediaResponse:
-    media = service.media_for_runs(
+    media = await run_read_only(
+        service.media_for_runs,
         run_ids=request.runIds,
         image_tags=request.imageTags,
         text_tags=request.textTags,
@@ -259,7 +299,10 @@ async def logs_parameter_status(
     request: LogParameterStatusRequest,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogParameterStatusResponse:
-    statuses = service.parameter_status_for_runs(request.runIds)
+    statuses = await run_read_only(
+        service.parameter_status_for_runs,
+        request.runIds,
+    )
     return LogParameterStatusResponse(
         runs=[
             ParameterStatusResponse.model_validate(status)
@@ -278,7 +321,7 @@ async def log_run_artifacts(
     run_id: str,
     service: Annotated[LogRunService, Depends(get_log_run_service)],
 ) -> LogRunArtifactsResponse:
-    payload = service.artifacts_for_run(run_id)
+    payload = await run_read_only(service.artifacts_for_run, run_id)
     return LogRunArtifactsResponse(
         runId=str(payload["runId"]),
         params=dict(payload["params"]),
@@ -306,5 +349,9 @@ async def log_run_monitor_data(
     node_path: str = Query(..., alias="nodePath"),
 ) -> MonitorDataResponse:
     return MonitorDataResponse.model_validate(
-        service.monitor_data_for_run(run_id, node_path=node_path)
+        await run_read_only(
+            service.monitor_data_for_run,
+            run_id,
+            node_path=node_path,
+        )
     )

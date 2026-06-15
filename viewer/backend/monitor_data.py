@@ -6,6 +6,7 @@ from typing import Any
 
 from viewer.backend.tensorboard_reader import (
     event_dirs,
+    event_file_total_size,
     finite_float,
     load_event_accumulator,
     scalar_points,
@@ -13,6 +14,7 @@ from viewer.backend.tensorboard_reader import (
 
 DEFAULT_SCALAR_POINT_LIMIT = 500
 DEFAULT_BUCKET_LIMIT = 128
+DEFAULT_MONITOR_EVENT_READ_MAX_BYTES = 96 * 1024 * 1024
 RELATIVE_DELTA_EPSILON = 1e-12
 ABSOLUTE_DELTA_EPSILON = 1e-9
 PARAMETER_CHANNELS = ("weights", "bias")
@@ -60,9 +62,11 @@ class TensorBoardMonitorReader:
         *,
         scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
         bucket_limit: int = DEFAULT_BUCKET_LIMIT,
+        max_event_bytes: int = DEFAULT_MONITOR_EVENT_READ_MAX_BYTES,
     ) -> None:
         self.scalar_point_limit = scalar_point_limit
         self.bucket_limit = bucket_limit
+        self.max_event_bytes = max(0, int(max_event_bytes))
 
     def read(
         self,
@@ -82,6 +86,11 @@ class TensorBoardMonitorReader:
             return response
         root = Path(log_dir)
         if not root.exists():
+            return response
+        if (
+            self.max_event_bytes > 0
+            and event_file_total_size(root) > self.max_event_bytes
+        ):
             return response
 
         prefix = f"{node_path}/"
@@ -202,6 +211,13 @@ class TensorBoardMonitorReader:
 
 
 class TensorBoardParameterStatusReader:
+    def __init__(
+        self,
+        *,
+        max_event_bytes: int = DEFAULT_MONITOR_EVENT_READ_MAX_BYTES,
+    ) -> None:
+        self.max_event_bytes = max(0, int(max_event_bytes))
+
     def read(
         self,
         *,
@@ -220,6 +236,11 @@ class TensorBoardParameterStatusReader:
             return response
         root = Path(log_dir)
         if not root.exists():
+            return response
+        if (
+            self.max_event_bytes > 0
+            and event_file_total_size(root) > self.max_event_bytes
+        ):
             return response
 
         scalars_by_node = self._read_parameter_scalars(root)

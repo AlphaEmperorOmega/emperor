@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -99,6 +100,83 @@ class AppFactoryTests(unittest.TestCase):
             EXPECTED_ASYNC_BOUNDARY_ROUTE_PAIRS - async_route_pairs
         )
         self.assertEqual(missing_async_handlers, [])
+
+    def test_health_responds_while_log_scalars_read_is_blocked(self) -> None:
+        async def run_blocking(callable_object, *args, **kwargs) -> object:
+            import threading
+
+            done = threading.Event()
+            result: dict[str, object] = {}
+
+            def target() -> None:
+                try:
+                    result["value"] = callable_object(*args, **kwargs)
+                finally:
+                    done.set()
+
+            threading.Thread(target=target, daemon=True).start()
+            while not done.is_set():
+                await asyncio.sleep(0.002)
+            return result.get("value")
+
+        def slow_scalars(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
+            time.sleep(0.2)
+            return []
+
+        async def call_api() -> tuple[httpx.Response, httpx.Response, bool]:
+            api = FastAPI()
+
+            @api.get("/health")
+            async def health() -> dict[str, str]:
+                return {"status": "ok"}
+
+            @api.post("/logs/scalars")
+            async def scalars() -> dict[str, list[object]]:
+                await run_blocking(slow_scalars)
+                return {"series": []}
+
+            transport = httpx.ASGITransport(app=api)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as scalar_client, httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as health_client:
+                scalar_task = asyncio.create_task(
+                    scalar_client.post(
+                        "/logs/scalars",
+                        json={"runIds": ["run-1"], "tags": ["train/loss"]},
+                    )
+                )
+                await asyncio.sleep(0.02)
+                scalar_pending_before_health = not scalar_task.done()
+                health_started_at = time.perf_counter()
+                health_response = await asyncio.wait_for(
+                    health_client.get("/health"),
+                    1,
+                )
+                health_elapsed = time.perf_counter() - health_started_at
+                scalar_response = await scalar_task
+                return (
+                    health_response,
+                    scalar_response,
+                    scalar_pending_before_health,
+                    health_elapsed,
+                )
+
+        (
+            health_response,
+            scalar_response,
+            scalar_pending_before_health,
+            health_elapsed,
+        ) = asyncio.run(call_api())
+
+        self.assertTrue(scalar_pending_before_health)
+        self.assertLess(health_elapsed, 0.15)
+        self.assertEqual(health_response.status_code, 200)
+        self.assertEqual(health_response.json(), {"status": "ok"})
+        self.assertEqual(scalar_response.status_code, 200)
 
     def test_public_api_app_reexports_main_asgi_target(self) -> None:
         api = importlib.import_module("viewer.backend.api")

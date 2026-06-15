@@ -1106,8 +1106,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.LogScalarsRequest,
         "fetchLogScalars input",
-        ("runIds", "tags"),
-        ("runIds", "tags"),
+        ("runIds", "tags", "maxPoints", "sampling"),
+        ("runIds", "tags", "maxPoints", "sampling"),
     ),
     SchemaParityCase(
         schemas.LogMediaRequest,
@@ -1148,8 +1148,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.LogScalarSeriesResponse,
         "logScalarSeriesSchema",
-        ("runId", "tag", "points"),
-        ("runId", "tag", "points"),
+        ("runId", "tag", "points", "sourcePointCount", "truncated"),
+        ("runId", "tag", "points", "sourcePointCount", "truncated"),
     ),
     SchemaParityCase(
         schemas.LogScalarsResponse,

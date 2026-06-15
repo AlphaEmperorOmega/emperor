@@ -109,7 +109,34 @@ class TensorBoardReaderTests(unittest.TestCase):
         self.assertIs(loaded, created[0])
         self.assertEqual(created[0].path, str(run_dir))
         self.assertTrue(created[0].reloaded)
-        self.assertTrue(all(value == 0 for value in created[0].size_guidance.values()))
+        self.assertEqual(
+            created[0].size_guidance,
+            tensorboard_reader.DEFAULT_TENSORBOARD_SIZE_GUIDANCE,
+        )
+
+    def test_load_event_accumulator_accepts_custom_size_guidance(self) -> None:
+        assert tensorboard_reader is not None
+        created: list[object] = []
+
+        class ReloadingAccumulator:
+            def __init__(self, path: str, size_guidance: dict[int, int]) -> None:
+                self.size_guidance = size_guidance
+                created.append(self)
+
+            def Reload(self) -> None:
+                pass
+
+        custom_guidance = {1: 2}
+        with patch(
+            "viewer.backend.tensorboard_reader.event_accumulator.EventAccumulator",
+            ReloadingAccumulator,
+        ):
+            tensorboard_reader.load_event_accumulator(
+                Path("run"),
+                size_guidance=custom_guidance,
+            )
+
+        self.assertEqual(created[0].size_guidance, custom_guidance)
 
     def test_load_event_accumulator_returns_none_when_load_or_reload_fails(
         self,

@@ -109,6 +109,24 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
 
         self.assert_empty_monitor_payload(data, log_dir)
 
+    def test_oversized_event_files_skip_monitor_tensorboard_load(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            event_file = log_dir / "events.out.tfevents.large"
+            event_file.write_text("large-event-payload", encoding="utf-8")
+            reader = TensorBoardMonitorReader(max_event_bytes=4)
+
+            with patch("viewer.backend.monitor_data.load_event_accumulator") as load:
+                data = reader.read(
+                    job_id="job-1",
+                    node_path="main_model.0.model",
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+
+        self.assert_empty_monitor_payload(data, log_dir)
+        load.assert_not_called()
+
     def test_tags_failure_returns_empty_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             log_dir = Path(tmp)
@@ -242,6 +260,33 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
                 "nodes": [],
             },
         )
+
+    def test_oversized_event_files_skip_parameter_status_tensorboard_load(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            event_file = log_dir / "events.out.tfevents.large"
+            event_file.write_text("large-event-payload", encoding="utf-8")
+            reader = TensorBoardParameterStatusReader(max_event_bytes=4)
+
+            with patch("viewer.backend.monitor_data.load_event_accumulator") as load:
+                data = reader.read(
+                    source_id="job-1",
+                    preset=None,
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+
+        self.assertEqual(
+            data,
+            {
+                "sourceId": "job-1",
+                "preset": None,
+                "dataset": "Mnist",
+                "logDir": str(log_dir),
+                "nodes": [],
+            },
+        )
+        load.assert_not_called()
 
 
 class HistoricalMonitorDataFailureTests(unittest.TestCase):

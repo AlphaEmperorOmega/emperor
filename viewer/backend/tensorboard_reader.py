@@ -14,6 +14,19 @@ from typing import Any
 
 from tensorboard.backend.event_processing import event_accumulator
 
+DEFAULT_TENSORBOARD_SIZE_GUIDANCE = {
+    event_accumulator.SCALARS: 500,
+    event_accumulator.HISTOGRAMS: 1,
+    event_accumulator.IMAGES: 1,
+    event_accumulator.TENSORS: 1,
+}
+TENSORBOARD_TAG_SIZE_GUIDANCE = {
+    event_accumulator.SCALARS: 1,
+    event_accumulator.HISTOGRAMS: 1,
+    event_accumulator.IMAGES: 1,
+    event_accumulator.TENSORS: 1,
+}
+
 
 def finite_float(value: Any) -> float:
     """Coerce ``value`` to a float, mapping non-finite values to ``0.0``."""
@@ -50,17 +63,29 @@ def event_dirs(root: Path) -> list[Path]:
     return sorted({path.parent for path in event_files})
 
 
-def load_event_accumulator(run_dir: Path):
+def event_file_total_size(root: Path) -> int:
+    """Return total bytes for TensorBoard event files below ``root``."""
+    total = 0
+    for path in root.rglob("events.out.tfevents.*"):
+        if not path.is_file():
+            continue
+        try:
+            total += path.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def load_event_accumulator(
+    run_dir: Path,
+    *,
+    size_guidance: dict[int, int] | None = None,
+):
     """Load and reload an ``EventAccumulator``, or ``None`` if it cannot be read."""
     try:
         accumulator = event_accumulator.EventAccumulator(
             str(run_dir),
-            size_guidance={
-                event_accumulator.SCALARS: 0,
-                event_accumulator.HISTOGRAMS: 0,
-                event_accumulator.IMAGES: 0,
-                event_accumulator.TENSORS: 0,
-            },
+            size_guidance=dict(size_guidance or DEFAULT_TENSORBOARD_SIZE_GUIDANCE),
         )
         accumulator.Reload()
     except Exception:

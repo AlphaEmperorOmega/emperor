@@ -54,8 +54,21 @@ class RecordingLogRunIndex(RecordingDelegate):
     def tags_for_runs(self, run_ids: object) -> object:
         return self._record("tags_for_runs", run_ids)
 
-    def scalars_for_runs(self, *, run_ids: object, tags: object) -> object:
-        return self._record("scalars_for_runs", run_ids=run_ids, tags=tags)
+    def scalars_for_runs(
+        self,
+        *,
+        run_ids: object,
+        tags: object,
+        max_points: object,
+        sampling: object,
+    ) -> object:
+        return self._record(
+            "scalars_for_runs",
+            run_ids=run_ids,
+            tags=tags,
+            max_points=max_points,
+            sampling=sampling,
+        )
 
     def monitor_data_for_run(self, run_id: object, *, node_path: object) -> object:
         return self._record("monitor_data_for_run", run_id, node_path=node_path)
@@ -249,9 +262,16 @@ class LogRunRepositoryTests(unittest.TestCase):
                 lambda repository: repository.scalars_for_runs(  # type: ignore[arg-type]
                     run_ids=run_ids,
                     tags=tags,
+                    max_points=500,
+                    sampling="tail",
                 ),
                 (),
-                {"run_ids": run_ids, "tags": tags},
+                {
+                    "run_ids": run_ids,
+                    "tags": tags,
+                    "max_points": 500,
+                    "sampling": "tail",
+                },
             ),
             (
                 "monitor_data_for_run",

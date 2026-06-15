@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 import shutil
-from collections import Counter
+from collections import Counter, OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -20,7 +20,9 @@ from viewer.backend.monitor_data import (
     TensorBoardParameterStatusReader,
 )
 from viewer.backend.tensorboard_reader import (
+    TENSORBOARD_TAG_SIZE_GUIDANCE,
     event_dirs,
+    event_file_total_size,
     image_summary,
     load_event_accumulator,
     scalar_points,
@@ -36,6 +38,9 @@ HPARAM_FLOAT_RE = re.compile(
     r"^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+))(?:[eE][+-]?\d+)$"
     r"|^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+))$"
 )
+LOG_EVENT_CACHE_MAX_ENTRIES = 256
+LOG_TAG_READ_MAX_EVENT_BYTES = 96 * 1024 * 1024
+EventFingerprint = tuple[tuple[str, int, int], ...]
 
 
 def is_valid_log_experiment_name(name: str) -> bool:
@@ -218,6 +223,19 @@ def _safe_artifact_files(run_dir: Path, root: Path, pattern: str) -> list[Path]:
         if resolved is not None:
             files.append(resolved)
     return files
+
+
+def _event_file_fingerprint(run_dir: Path) -> EventFingerprint:
+    files: list[tuple[str, int, int]] = []
+    for path in sorted(run_dir.rglob("events.out.tfevents.*")):
+        if not path.is_file():
+            continue
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        files.append((path.as_posix(), stat.st_size, stat.st_mtime_ns))
+    return tuple(files)
 
 
 def _file_id(run_id: str, relative_path: str) -> str:
@@ -705,16 +723,82 @@ class LogRunQueryService:
         *,
         scanner: LogRunScanner,
         scalar_point_limit: int = DEFAULT_SCALAR_POINT_LIMIT,
+        max_tag_event_bytes: int = LOG_TAG_READ_MAX_EVENT_BYTES,
         monitor_reader: TensorBoardMonitorReader | None = None,
         parameter_status_reader: TensorBoardParameterStatusReader | None = None,
     ) -> None:
         self.scanner = scanner
         self.scalar_point_limit = scalar_point_limit
+        self.max_tag_event_bytes = max(0, int(max_tag_event_bytes))
         self.monitor_reader = monitor_reader or TensorBoardMonitorReader(
             scalar_point_limit=scalar_point_limit,
         )
         self.parameter_status_reader = (
             parameter_status_reader or TensorBoardParameterStatusReader()
+        )
+        self._tags_cache: OrderedDict[
+            tuple[str, EventFingerprint],
+            dict[str, list[str]],
+        ] = OrderedDict()
+        self._scalar_cache: OrderedDict[
+            tuple[str, EventFingerprint, str, int, str],
+            dict[str, Any],
+        ] = OrderedDict()
+
+    def _cache_get(
+        self,
+        cache: OrderedDict[Any, Any],
+        key: Any,
+    ) -> Any | None:
+        if key not in cache:
+            return None
+        cache.move_to_end(key)
+        return cache[key]
+
+    def _cache_set(
+        self,
+        cache: OrderedDict[Any, Any],
+        key: Any,
+        value: Any,
+    ) -> None:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > LOG_EVENT_CACHE_MAX_ENTRIES:
+            cache.popitem(last=False)
+
+    def clear_cache(self) -> None:
+        self._tags_cache.clear()
+        self._scalar_cache.clear()
+
+    def _tags_cache_key(
+        self,
+        run_dir: Path,
+    ) -> tuple[str, EventFingerprint]:
+        return (run_dir.as_posix(), _event_file_fingerprint(run_dir))
+
+    def _cached_tags_if_current(
+        self,
+        run_dir: Path,
+    ) -> dict[str, list[str]] | None:
+        cached = self._cache_get(self._tags_cache, self._tags_cache_key(run_dir))
+        if cached is None:
+            return None
+        return {key: list(value) for key, value in cached.items()}
+
+    def _scalar_cache_key(
+        self,
+        run_dir: Path,
+        *,
+        tag: str,
+        max_points: int,
+        sampling: str,
+    ) -> tuple[str, EventFingerprint, str, int, str]:
+        return (
+            run_dir.as_posix(),
+            _event_file_fingerprint(run_dir),
+            tag,
+            max_points,
+            sampling,
         )
 
     def tags_for_runs(self, run_ids: list[str]) -> list[dict[str, Any]]:
@@ -736,6 +820,8 @@ class LogRunQueryService:
         *,
         run_ids: list[str],
         tags: list[str],
+        max_points: int | None = None,
+        sampling: str = "tail",
     ) -> list[dict[str, Any]]:
         runs = self.scanner.resolve_runs(run_ids)
         requested_tags = list(dict.fromkeys(tags))
@@ -744,13 +830,29 @@ class LogRunQueryService:
 
         series: list[dict[str, Any]] = []
         for run in runs:
-            run_tags = set(self.read_tags(run.path)["scalars"])
+            cached_tags = self._cached_tags_if_current(run.path)
+            run_tags = set(
+                cached_tags["scalars"]
+                if cached_tags is not None
+                else self.read_tags(run.path)["scalars"],
+            )
             for tag in requested_tags:
                 if tag not in run_tags:
                     continue
-                points = self.read_scalar_points(run.path, tag)
-                if points:
-                    series.append({"runId": run.id, "tag": tag, "points": points})
+                scalar_series = self.read_scalar_series(
+                    run.path,
+                    tag,
+                    max_points=max_points,
+                    sampling=sampling,
+                )
+                if scalar_series["points"]:
+                    series.append(
+                        {
+                            "runId": run.id,
+                            "tag": tag,
+                            **scalar_series,
+                        }
+                    )
         return series
 
     def media_for_runs(
@@ -919,9 +1021,24 @@ class LogRunQueryService:
         )
 
     def read_tags(self, run_dir: Path) -> dict[str, list[str]]:
+        cache_key = self._tags_cache_key(run_dir)
+        cached = self._cache_get(self._tags_cache, cache_key)
+        if cached is not None:
+            return {key: list(value) for key, value in cached.items()}
+
         tags = {"scalars": set(), "histograms": set(), "images": set(), "texts": set()}
+        if (
+            self.max_tag_event_bytes > 0
+            and event_file_total_size(run_dir) > self.max_tag_event_bytes
+        ):
+            result = {key: sorted(value) for key, value in tags.items()}
+            self._cache_set(self._tags_cache, cache_key, result)
+            return {key: list(value) for key, value in result.items()}
         for event_dir in event_dirs(run_dir):
-            accumulator = load_event_accumulator(event_dir)
+            accumulator = load_event_accumulator(
+                event_dir,
+                size_guidance=TENSORBOARD_TAG_SIZE_GUIDANCE,
+            )
             if accumulator is None:
                 continue
             try:
@@ -936,9 +1053,33 @@ class LogRunQueryService:
                 for tag in accumulator_tags.get("tensors", [])
                 if tag.endswith("/text_summary")
             )
-        return {key: sorted(value) for key, value in tags.items()}
+        result = {key: sorted(value) for key, value in tags.items()}
+        self._cache_set(self._tags_cache, cache_key, result)
+        return {key: list(value) for key, value in result.items()}
 
-    def read_scalar_points(self, run_dir: Path, tag: str) -> list[dict[str, Any]]:
+    def read_scalar_series(
+        self,
+        run_dir: Path,
+        tag: str,
+        *,
+        max_points: int | None = None,
+        sampling: str = "tail",
+    ) -> dict[str, Any]:
+        point_limit = max_points if max_points is not None else self.scalar_point_limit
+        cache_key = self._scalar_cache_key(
+            run_dir,
+            tag=tag,
+            max_points=point_limit,
+            sampling=sampling,
+        )
+        cached = self._cache_get(self._scalar_cache, cache_key)
+        if cached is not None:
+            return {
+                "points": [dict(point) for point in cached["points"]],
+                "sourcePointCount": cached["sourcePointCount"],
+                "truncated": cached["truncated"],
+            }
+
         points: list[dict[str, Any]] = []
         for event_dir in event_dirs(run_dir):
             accumulator = load_event_accumulator(event_dir)
@@ -950,7 +1091,37 @@ class LogRunQueryService:
                 continue
 
         points.sort(key=lambda point: (point["step"], point["wallTime"]))
-        return points[-self.scalar_point_limit :]
+        source_point_count = len(points)
+        if sampling == "tail":
+            sampled_points = points[-point_limit:]
+        else:
+            sampled_points = points[-point_limit:]
+        result = {
+            "points": sampled_points,
+            "sourcePointCount": source_point_count,
+            "truncated": source_point_count > len(sampled_points),
+        }
+        self._cache_set(self._scalar_cache, cache_key, result)
+        return {
+            "points": [dict(point) for point in sampled_points],
+            "sourcePointCount": result["sourcePointCount"],
+            "truncated": result["truncated"],
+        }
+
+    def read_scalar_points(
+        self,
+        run_dir: Path,
+        tag: str,
+        *,
+        max_points: int | None = None,
+        sampling: str = "tail",
+    ) -> list[dict[str, Any]]:
+        return self.read_scalar_series(
+            run_dir,
+            tag,
+            max_points=max_points,
+            sampling=sampling,
+        )["points"]
 
     def read_image_summary(self, run_dir: Path, tag: str) -> dict[str, Any] | None:
         return self._read_latest_summary(run_dir, tag, image_summary)
@@ -1164,8 +1335,15 @@ class LogRunIndex:
         *,
         run_ids: list[str],
         tags: list[str],
+        max_points: int | None = None,
+        sampling: str = "tail",
     ) -> list[dict[str, Any]]:
-        return self.query_service.scalars_for_runs(run_ids=run_ids, tags=tags)
+        return self.query_service.scalars_for_runs(
+            run_ids=run_ids,
+            tags=tags,
+            max_points=max_points,
+            sampling=sampling,
+        )
 
     def media_for_runs(
         self,
@@ -1199,7 +1377,9 @@ class LogRunIndex:
         self,
         experiment: str,
     ) -> LogExperimentDeleteResult:
-        return self.deletion_executor.delete_experiment(experiment)
+        result = self.deletion_executor.delete_experiment(experiment)
+        self.query_service.clear_cache()
+        return result
 
     def create_delete_plan(
         self,
@@ -1219,7 +1399,9 @@ class LogRunIndex:
         active_jobs: list[dict[str, Any]],
     ) -> LogRunDeleteResult:
         plan = self.create_delete_plan(filters, active_jobs=active_jobs)
-        return self.deletion_executor.delete_runs(plan)
+        result = self.deletion_executor.delete_runs(plan)
+        self.query_service.clear_cache()
+        return result
 
     def _resolved_root(self) -> Path:
         return self.scanner.resolved_root()

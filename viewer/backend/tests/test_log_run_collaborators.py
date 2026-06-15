@@ -118,9 +118,21 @@ class StubLogRunQueryService(LogRunQueryService):
             "texts": [],
         }
 
-    def read_scalar_points(self, run_dir: Path, tag: str) -> list[dict[str, Any]]:
+    def read_scalar_series(
+        self,
+        run_dir: Path,
+        tag: str,
+        *,
+        max_points: int | None = None,
+        sampling: str = "tail",
+    ) -> dict[str, Any]:
+        del max_points, sampling
         self.scalar_requests.append((run_dir, tag))
-        return [{"step": 1, "wallTime": 10.0, "value": 0.5}]
+        return {
+            "points": [{"step": 1, "wallTime": 10.0, "value": 0.5}],
+            "sourcePointCount": 1,
+            "truncated": False,
+        }
 
 
 class LogRunQueryServiceTests(unittest.TestCase):
@@ -170,16 +182,22 @@ class LogRunQueryServiceTests(unittest.TestCase):
                     "runId": "run-1",
                     "tag": "loss",
                     "points": [{"step": 1, "wallTime": 10.0, "value": 0.5}],
+                    "sourcePointCount": 1,
+                    "truncated": False,
                 },
                 {
                     "runId": "run-1",
                     "tag": "accuracy",
                     "points": [{"step": 1, "wallTime": 10.0, "value": 0.5}],
+                    "sourcePointCount": 1,
+                    "truncated": False,
                 },
                 {
                     "runId": "run-2",
                     "tag": "loss",
                     "points": [{"step": 1, "wallTime": 10.0, "value": 0.5}],
+                    "sourcePointCount": 1,
+                    "truncated": False,
                 },
             ],
         )

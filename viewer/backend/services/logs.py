@@ -45,6 +45,19 @@ def _paginated_response(
     }
 
 
+def _selected_values(values: list[str] | None) -> set[str]:
+    return set(values or [])
+
+
+def _matches_model_filter(run_model: str, selected_models: set[str]) -> bool:
+    if not selected_models:
+        return True
+    if run_model in selected_models:
+        return True
+    run_model_leaf = run_model.rsplit("/", 1)[-1]
+    return any(model.rsplit("/", 1)[-1] == run_model_leaf for model in selected_models)
+
+
 def _delete_filters_from_fields(
     *,
     experiments: list[str],
@@ -76,8 +89,36 @@ class LogRunService:
     def __init__(self, repository: LogRunRepository) -> None:
         self._repository = repository
 
-    def list_runs(self, *, limit: int, offset: int) -> dict[str, Any]:
-        runs = [run.to_response() for run in self._repository.list_runs()]
+    def list_runs(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        experiment: list[str] | None = None,
+        model: list[str] | None = None,
+        preset: list[str] | None = None,
+        dataset: list[str] | None = None,
+        has_event_files: bool | None = None,
+    ) -> dict[str, Any]:
+        experiment_set = _selected_values(experiment)
+        model_set = _selected_values(model)
+        preset_set = _selected_values(preset)
+        dataset_set = _selected_values(dataset)
+        runs = []
+        for run in self._repository.list_runs():
+            if experiment_set and run.experiment not in experiment_set:
+                continue
+            if not _matches_model_filter(run.model, model_set):
+                continue
+            if preset_set and run.preset not in preset_set:
+                continue
+            if dataset_set and run.dataset not in dataset_set:
+                continue
+            if has_event_files is not None and (
+                run.eventFileCount > 0
+            ) != has_event_files:
+                continue
+            runs.append(run.to_response())
         return _paginated_response(
             runs,
             collection_key="runs",
@@ -159,8 +200,15 @@ class LogRunService:
         *,
         run_ids: list[str],
         tags: list[str],
+        max_points: int,
+        sampling: str,
     ) -> list[dict[str, Any]]:
-        return self._repository.scalars_for_runs(run_ids=run_ids, tags=tags)
+        return self._repository.scalars_for_runs(
+            run_ids=run_ids,
+            tags=tags,
+            max_points=max_points,
+            sampling=sampling,
+        )
 
     def media_for_runs(
         self,

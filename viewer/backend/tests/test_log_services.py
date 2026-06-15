@@ -22,6 +22,12 @@ class _ResponseItem:
     def __init__(self, payload: dict[str, object]) -> None:
         self._payload = payload
 
+    def __getattr__(self, name: str) -> object:
+        try:
+            return self._payload[name]
+        except KeyError:
+            raise AttributeError(name) from None
+
     def to_response(self) -> dict[str, object]:
         return dict(self._payload)
 
@@ -100,6 +106,43 @@ class LogRunServiceListResponseTests(unittest.TestCase):
         self.assertEqual(result["offset"], 1)
         self.assertTrue(result["hasMore"])
         self.assertEqual([run.id for run in response.runs], ["run-2"])
+
+    def test_list_runs_filters_before_paginating(self) -> None:
+        first = {
+            **_run_payload("run-1", 0),
+            "model": "linear",
+            "preset": "BASELINE",
+            "dataset": "Mnist",
+            "eventFileCount": 1,
+        }
+        second = {
+            **_run_payload("run-2", 1),
+            "model": "linear",
+            "preset": "BASELINE",
+            "dataset": "Cifar10",
+            "eventFileCount": 1,
+        }
+        third = {
+            **_run_payload("run-3", 2),
+            "model": "linear",
+            "preset": "GATING",
+            "dataset": "Mnist",
+            "eventFileCount": 0,
+        }
+        repository = ListingLogRunRepository(runs=[first, second, third])
+        service = LogRunService(repository)  # type: ignore[arg-type]
+
+        result = service.list_runs(
+            limit=5,
+            offset=0,
+            model=["linear"],
+            preset=["BASELINE"],
+            dataset=["Mnist"],
+            has_event_files=True,
+        )
+
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["runs"][0]["id"], "run-1")
 
     def test_list_experiments_returns_response_ready_page(self) -> None:
         repository = ListingLogRunRepository(

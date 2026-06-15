@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import (
@@ -15,6 +16,8 @@ from viewer.backend.log_runs import (
     LogRunDeletePlan,
     LogRunDeleteResult,
     LogRunIndex,
+    LogRunQueryService,
+    LogRunScanner,
     is_valid_log_experiment_name,
     validate_log_experiment_name,
 )
@@ -24,6 +27,32 @@ from viewer.backend.tests.helpers import (
     write_tensorboard_run,
 )
 from viewer.backend.training_jobs import TrainingJobManager
+
+
+class FakeScalarEvent:
+    def __init__(self, step: int, value: float, wall_time: float | None = None) -> None:
+        self.step = step
+        self.value = value
+        self.wall_time = float(step if wall_time is None else wall_time)
+
+
+class FakeTensorBoardAccumulator:
+    def Tags(self) -> dict[str, list[str]]:
+        return {
+            "scalars": ["train/loss"],
+            "histograms": ["weights"],
+            "images": ["validation/examples/predictions"],
+            "tensors": ["validation/examples/predictions/text_summary"],
+        }
+
+    def Scalars(self, tag: str) -> list[FakeScalarEvent]:
+        if tag != "train/loss":
+            raise KeyError(tag)
+        return [
+            FakeScalarEvent(step=1, value=0.5),
+            FakeScalarEvent(step=2, value=0.25),
+            FakeScalarEvent(step=3, value=0.125),
+        ]
 
 
 class LogExperimentNameTests(unittest.TestCase):
@@ -1988,6 +2017,227 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         self.assertIsNotNone(summary)
         self.assertEqual(summary["step"], 2)
         self.assertEqual(summary["text"], "late")
+
+    def test_log_run_query_service_caches_tags_and_scalar_tails_until_event_changes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            event_file = run_dir / "events.out.tfevents.cache"
+            event_file.write_text("first", encoding="utf-8")
+            service = LogRunQueryService(
+                scanner=LogRunScanner(logs_root=Path(tmp)),
+            )
+            load_calls: list[Path] = []
+
+            def load_accumulator(
+                event_dir: Path,
+                **_kwargs,
+            ) -> FakeTensorBoardAccumulator:
+                load_calls.append(event_dir)
+                return FakeTensorBoardAccumulator()
+
+            with patch(
+                "viewer.backend.log_runs.load_event_accumulator",
+                load_accumulator,
+            ):
+                first_tags = service.read_tags(run_dir)
+                second_tags = service.read_tags(run_dir)
+                first_scalars = service.read_scalar_series(
+                    run_dir,
+                    "train/loss",
+                    max_points=2,
+                )
+                second_scalars = service.read_scalar_series(
+                    run_dir,
+                    "train/loss",
+                    max_points=2,
+                )
+                event_file.write_text("first-second", encoding="utf-8")
+                changed_tags = service.read_tags(run_dir)
+
+        self.assertEqual(first_tags, second_tags)
+        self.assertEqual(first_tags, changed_tags)
+        self.assertEqual(first_scalars, second_scalars)
+        self.assertEqual(first_scalars["sourcePointCount"], 3)
+        self.assertTrue(first_scalars["truncated"])
+        self.assertEqual(
+            [point["step"] for point in first_scalars["points"]],
+            [2, 3],
+        )
+        self.assertEqual(len(load_calls), 3)
+
+    def test_log_run_query_service_skips_tag_scan_for_oversized_event_files(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "run"
+            run_dir.mkdir()
+            event_file = run_dir / "events.out.tfevents.large"
+            event_file.write_text("large-event-payload", encoding="utf-8")
+            service = LogRunQueryService(
+                scanner=LogRunScanner(logs_root=Path(tmp)),
+                max_tag_event_bytes=4,
+            )
+
+            with patch("viewer.backend.log_runs.load_event_accumulator") as load:
+                tags = service.read_tags(run_dir)
+
+        self.assertEqual(
+            tags,
+            {
+                "scalars": [],
+                "histograms": [],
+                "images": [],
+                "texts": [],
+            },
+        )
+        load.assert_not_called()
+
+    def test_log_api_filters_runs_before_pagination(self) -> None:
+        import httpx
+
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            write_tensorboard_run(
+                logs_root,
+                [
+                    "test_model",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
+            )
+            write_tensorboard_run(
+                logs_root,
+                [
+                    "test_model",
+                    "linear",
+                    "BASELINE",
+                    "Cifar10",
+                    "bbb_20260601_020304",
+                    "version_0",
+                ],
+            )
+            write_tensorboard_run(
+                logs_root,
+                [
+                    "test_model",
+                    "linear",
+                    "GATING",
+                    "Mnist",
+                    "ccc_20260601_030405",
+                    "version_0",
+                ],
+            )
+            no_event_run = logs_root.joinpath(
+                "test_model",
+                "linear",
+                "BASELINE",
+                "Mnist",
+                "no_events_20260601_040506",
+                "version_0",
+            )
+            no_event_run.mkdir(parents=True)
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(
+                    app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    scoped_response = await client.get(
+                        "/logs/runs",
+                        params=[
+                            ("model", "linear"),
+                            ("preset", "BASELINE"),
+                            ("dataset", "Mnist"),
+                            ("hasEventFiles", "true"),
+                            ("limit", "5"),
+                        ],
+                    )
+                    no_event_response = await client.get(
+                        "/logs/runs",
+                        params={
+                            "model": "linear",
+                            "preset": "BASELINE",
+                            "dataset": "Mnist",
+                            "hasEventFiles": "false",
+                        },
+                    )
+                    return scoped_response, no_event_response
+
+            scoped_response, no_event_response = asyncio.run(call_api())
+
+        self.assertEqual(scoped_response.status_code, 200)
+        scoped_payload = scoped_response.json()
+        self.assertEqual(scoped_payload["total"], 1)
+        self.assertEqual(len(scoped_payload["runs"]), 1)
+        self.assertEqual(scoped_payload["runs"][0]["dataset"], "Mnist")
+        self.assertGreater(scoped_payload["runs"][0]["eventFileCount"], 0)
+
+        self.assertEqual(no_event_response.status_code, 200)
+        no_event_payload = no_event_response.json()
+        self.assertEqual(no_event_payload["total"], 1)
+        self.assertEqual(no_event_payload["runs"][0]["eventFileCount"], 0)
+
+    def test_log_api_scalar_request_limits_and_metadata(self) -> None:
+        import httpx
+
+        from viewer.backend.api import ViewerApiSettings, create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            write_tensorboard_run(
+                logs_root,
+                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                scalars={"train/loss": [(1, 0.5), (2, 0.25), (3, 0.125)]},
+            )
+
+            async def call_api() -> tuple[httpx.Response, httpx.Response]:
+                transport = httpx.ASGITransport(
+                    app=create_app(ViewerApiSettings(logs_root=str(logs_root)))
+                )
+                async with httpx.AsyncClient(
+                    transport=transport,
+                    base_url="http://testserver",
+                ) as client:
+                    runs_response = await client.get("/logs/runs")
+                    run_id = runs_response.json()["runs"][0]["id"]
+                    scalars_response = await client.post(
+                        "/logs/scalars",
+                        json={
+                            "runIds": [run_id],
+                            "tags": ["train/loss"],
+                            "maxPoints": 2,
+                            "sampling": "tail",
+                        },
+                    )
+                    invalid_response = await client.post(
+                        "/logs/scalars",
+                        json={
+                            "runIds": [run_id],
+                            "tags": ["train/loss"],
+                            "maxPoints": 2001,
+                        },
+                    )
+                    return scalars_response, invalid_response
+
+            scalars_response, invalid_response = asyncio.run(call_api())
+
+        self.assertEqual(scalars_response.status_code, 200)
+        series = scalars_response.json()["series"][0]
+        self.assertEqual([point["step"] for point in series["points"]], [2, 3])
+        self.assertEqual(series["sourcePointCount"], 3)
+        self.assertTrue(series["truncated"])
+        self.assertEqual(invalid_response.status_code, 422)
 
 
 if __name__ == "__main__":

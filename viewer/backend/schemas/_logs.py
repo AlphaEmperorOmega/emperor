@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from viewer.backend.schemas._base import ApiResponseModel, JsonObject
 from viewer.backend.schemas._monitor_data import ScalarPointResponse
+
+MAX_LOG_REQUEST_RUN_IDS = 50
+MAX_LOG_SCALAR_TAGS = 50
+DEFAULT_LOG_SCALAR_MAX_POINTS = 500
+MAX_LOG_SCALAR_MAX_POINTS = 2000
+LogScalarSampling = Literal["tail"]
 
 
 class LogRunResponse(ApiResponseModel):
@@ -35,7 +43,10 @@ class LogRunsResponse(ApiResponseModel):
 
 
 class LogCheckpointsRequest(ApiResponseModel):
-    runIds: list[str] = Field(default_factory=list)
+    runIds: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_REQUEST_RUN_IDS,
+    )
 
 
 class LogCheckpointResponse(ApiResponseModel):
@@ -148,7 +159,10 @@ class LogRunDeleteResponse(LogRunDeletePlanResponse):
 
 
 class LogTagsRequest(ApiResponseModel):
-    runIds: list[str] = Field(default_factory=list)
+    runIds: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_REQUEST_RUN_IDS,
+    )
 
 
 class LogRunTagsResponse(ApiResponseModel):
@@ -164,14 +178,25 @@ class LogTagsResponse(ApiResponseModel):
 
 
 class LogScalarsRequest(ApiResponseModel):
-    runIds: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
+    runIds: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_REQUEST_RUN_IDS,
+    )
+    tags: list[str] = Field(default_factory=list, max_length=MAX_LOG_SCALAR_TAGS)
+    maxPoints: int = Field(
+        default=DEFAULT_LOG_SCALAR_MAX_POINTS,
+        ge=1,
+        le=MAX_LOG_SCALAR_MAX_POINTS,
+    )
+    sampling: LogScalarSampling = "tail"
 
 
 class LogScalarSeriesResponse(ApiResponseModel):
     runId: str
     tag: str
     points: list[ScalarPointResponse]
+    sourcePointCount: int | None = None
+    truncated: bool | None = None
 
 
 class LogScalarsResponse(ApiResponseModel):
@@ -179,7 +204,10 @@ class LogScalarsResponse(ApiResponseModel):
 
 
 class LogMediaRequest(ApiResponseModel):
-    runIds: list[str] = Field(default_factory=list)
+    runIds: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_LOG_REQUEST_RUN_IDS,
+    )
     imageTags: list[str] = Field(default_factory=list)
     textTags: list[str] = Field(default_factory=list)
 
