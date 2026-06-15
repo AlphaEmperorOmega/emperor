@@ -17,7 +17,6 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 ROUTE_AUTH_TOKEN = "server-secret"
 
 PROTECTED_ROUTE_CASES = (
-    ("capabilities", "GET", "/capabilities", None),
     ("models", "GET", "/models", None),
     (
         "inspection",
@@ -283,7 +282,13 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                 )
 
         class FakeLogRunService:
-            def list_runs(self, *, limit: int, offset: int) -> dict[str, object]:
+            def list_runs(
+                self,
+                *,
+                limit: int,
+                offset: int,
+                **_filters: object,
+            ) -> dict[str, object]:
                 return {
                     "total": 0,
                     "limit": limit,
@@ -352,6 +357,15 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json(), {"status": "ok"})
 
+    def test_capabilities_remains_open_without_token_in_bearer_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            app = self.create_test_app(Path(tmp), auth_mode="bearer")
+
+            response = asyncio.run(self.request(app, "GET", "/capabilities"))
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["authMode"], "bearer")
+
     def test_bearer_mode_rejects_missing_and_invalid_tokens_on_non_health_routes(
         self,
     ) -> None:
@@ -414,6 +428,7 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         self.assertEqual(bearer_scheme["type"], "http")
         self.assertEqual(bearer_scheme["scheme"], "bearer")
         self.assertNotIn("security", openapi["paths"]["/health"]["get"])
+        self.assertNotIn("security", openapi["paths"]["/capabilities"]["get"])
 
         for route_name, method, path, _payload in PROTECTED_ROUTE_CASES:
             with self.subTest(route=route_name):

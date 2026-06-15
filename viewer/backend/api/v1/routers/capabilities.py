@@ -7,13 +7,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from viewer.backend.core.config import ViewerApiSettings
-from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_viewer_settings
 from viewer.backend.schemas import CapabilitiesResponse
 
 router = APIRouter(
     tags=["capabilities"],
-    dependencies=[Depends(require_bearer_auth)],
 )
 
 
