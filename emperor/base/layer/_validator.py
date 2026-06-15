@@ -1,50 +1,26 @@
+from __future__ import annotations
+
 from dataclasses import fields
 
 from emperor.base.utils import ConfigBase
 from emperor.base.options import LayerNormPositionOptions
 from emperor.base.validator import ValidatorBase
-from emperor.base.layer.config import (
-    LayerConfig,
-    LayerStackConfig,
-    RecurrentLayerConfig,
-)
+from .residual import ResidualConnectionOptions
+from .gate._validator import LayerGateValidator
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from torch import Tensor
-    from emperor.base.layer.state import LayerState
     from emperor.halting.config import HaltingConfig
 
-
-def _validate_gate_config(
-    gate_config: "LayerStackConfig | None",
-    owner_name: str | None = None,
-) -> None:
-    if gate_config is None:
-        return
-    if not isinstance(gate_config, LayerStackConfig):
-        owner_context = f" for {owner_name}" if owner_name is not None else ""
-        raise TypeError(
-            f"gate_config must be an instance of LayerStackConfig{owner_context}, "
-            f"got {type(gate_config).__name__}"
-        )
-    layer_config = gate_config.layer_config
-    if layer_config is None:
-        return
-
-    if layer_config.gate_config is not None:
-        raise ValueError(
-            "gate_config.layer_config.gate_config must be None, nested gates are not allowed"
-        )
-    if layer_config.halting_config is not None:
-        raise ValueError(
-            "gate_config.layer_config.halting_config must be None, halting is not allowed in gates"
-        )
-    if layer_config.shared_halting_flag:
-        raise ValueError(
-            "gate_config.layer_config.shared_halting_flag must be False, halting is not allowed in gates"
-        )
+    from .config import (
+        GateConfig,
+        LayerConfig,
+        LayerStackConfig,
+        RecurrentLayerConfig,
+    )
+    from .state import LayerState
 
 
 class LayerValidator(ValidatorBase):
@@ -65,15 +41,13 @@ class LayerValidator(ValidatorBase):
         )
         LayerValidator.__validate_dropout_probability(cfg.dropout_probability)
         LayerValidator.__validate_residual_dimensions(
-            cfg.input_dim, cfg.output_dim, cfg.residual_flag
+            cfg.input_dim, cfg.output_dim, cfg.residual_connection_option
         )
+        LayerValidator.__validate_gate_config(cfg.gate_config)
         LayerValidator.__validate_model_config(cfg.layer_model_config)
         LayerValidator.__validate_layer_norm_with_spatial_model(cfg)
         LayerValidator.__validate_residual_with_strided_model(cfg)
-        LayerValidator.__validate_gate_config(cfg.gate_config)
-        LayerValidator.__validate_halting_config(
-            cfg.halting_config, cfg.shared_halting_flag
-        )
+        LayerValidator.__validate_halting_config(cfg.halting_config)
         LayerValidator.__validate_memory_config(cfg.memory_config)
         LayerValidator.__validate_halting_dimensions(
             cfg.input_dim, cfg.output_dim, cfg.halting_config
@@ -88,11 +62,17 @@ class LayerValidator(ValidatorBase):
 
     @staticmethod
     def __validate_residual_dimensions(
-        input_dim: int, output_dim: int, residual_flag: bool | None
+        input_dim: int,
+        output_dim: int,
+        residual_connection_option: ResidualConnectionOptions,
     ) -> None:
-        if residual_flag and input_dim != output_dim:
+        if (
+            residual_connection_option != ResidualConnectionOptions.DISABLED
+            and input_dim != output_dim
+        ):
             raise ValueError(
-                f"input_dim and output_dim must be equal when residual_flag is True, "
+                "input_dim and output_dim must be equal when "
+                f"residual_connection_option is {residual_connection_option}, "
                 f"got input_dim={input_dim} and output_dim={output_dim}."
             )
 
@@ -134,27 +114,25 @@ class LayerValidator(ValidatorBase):
         stride = getattr(layer_model_config, "stride", None)
         if stride is None or stride <= 1:
             return
-        if not cfg.residual_flag:
+        if cfg.residual_connection_option == ResidualConnectionOptions.DISABLED:
             return
         raise ValueError(
-            f"residual_flag cannot be True when layer_model_config has "
+            f"residual_connection_option cannot be "
+            f"{cfg.residual_connection_option} when layer_model_config has "
             f"stride > 1 (received stride={stride}). Spatial reduction "
-            f"breaks the residual addition shape contract."
+            f"breaks the residual connection shape contract."
         )
 
     @staticmethod
-    def __validate_gate_config(gate_config: "LayerStackConfig | None") -> None:
-        _validate_gate_config(gate_config)
+    def __validate_gate_config(gate_config: "GateConfig | None") -> None:
+        LayerGateValidator.validate_layer_gate_config(
+            gate_config, owner_name="LayerConfig.gate_config"
+        )
 
     @staticmethod
     def __validate_halting_config(
         halting_config: "HaltingConfig | None",
-        shared_halting_flag: bool | None,
     ) -> None:
-        if halting_config is None and shared_halting_flag:
-            raise ValueError(
-                "shared_halting_flag must be False when no halting_config is provided"
-            )
         if halting_config is not None:
             from emperor.halting.config import HaltingConfig
 
@@ -165,7 +143,9 @@ class LayerValidator(ValidatorBase):
                 )
 
     @staticmethod
-    def __validate_memory_config(memory_config) -> None:
+    def __validate_memory_config(
+        memory_config,
+    ) -> None:
         if memory_config is None:
             return
         from emperor.memory.config import DynamicMemoryConfig
@@ -193,6 +173,9 @@ class LayerValidator(ValidatorBase):
 class LayerStackValidator(ValidatorBase):
     OPTIONAL_FIELDS = {
         "layer_type",
+        "shared_gate_config",
+        "shared_halting_config",
+        "shared_memory_config",
         "override_config",
     }
 
@@ -208,7 +191,9 @@ class LayerStackValidator(ValidatorBase):
         )
         LayerStackValidator.__validate_num_layers(cfg.num_layers)
         LayerStackValidator.__validate_layer_config(cfg.layer_config)
+        LayerStackValidator.__validate_gate_config(cfg)
         LayerStackValidator.__validate_halting_config(cfg)
+        LayerStackValidator.__validate_memory_config(cfg)
 
     @staticmethod
     def __validate_num_layers(num_layers: int) -> None:
@@ -217,6 +202,8 @@ class LayerStackValidator(ValidatorBase):
 
     @staticmethod
     def __validate_layer_config(layer_config: "LayerConfig | None") -> None:
+        from .config import LayerConfig
+
         if layer_config is None:
             raise ValueError(f"layer_config is required, received None")
         if not isinstance(layer_config, LayerConfig):
@@ -226,16 +213,58 @@ class LayerStackValidator(ValidatorBase):
             )
 
     @staticmethod
+    def __validate_gate_config(cfg: "LayerStackConfig") -> None:
+        if cfg.layer_config is None:
+            return
+        LayerGateValidator.validate_shared_gate_config_type(cfg.shared_gate_config)
+        if (
+            LayerGateValidator.is_gate_config_active(cfg.shared_gate_config)
+            and LayerGateValidator.is_gate_config_active(cfg.layer_config.gate_config)
+        ):
+            raise ValueError(
+                "shared_gate_config and layer_config.gate_config are mutually "
+                "exclusive. Put shared gate controllers on LayerStackConfig and "
+                "per-layer gate controllers on LayerConfig."
+            )
+        LayerGateValidator.validate_layer_gate_config(
+            cfg.layer_config.gate_config,
+            owner_name="LayerStackConfig.layer_config",
+        )
+        LayerGateValidator.validate_layer_gate_config(
+            cfg.shared_gate_config,
+            owner_name="LayerStackConfig.shared_gate_config",
+        )
+        if LayerGateValidator.is_gate_config_active(cfg.shared_gate_config):
+            LayerStackValidator.__validate_shared_gate_dimensions(cfg)
+
+    @staticmethod
     def __validate_halting_config(cfg: "LayerStackConfig") -> None:
         if cfg.layer_config is None:
             return
-        if cfg.layer_config.halting_config is not None and cfg.num_layers < 2:
+        LayerStackValidator.__validate_shared_halting_config_type(
+            cfg.shared_halting_config
+        )
+        if (
+            cfg.shared_halting_config is not None
+            and cfg.layer_config.halting_config is not None
+        ):
+            raise ValueError(
+                "shared_halting_config and layer_config.halting_config are mutually "
+                "exclusive. Put shared halting controllers on LayerStackConfig and "
+                "per-layer halting controllers on LayerConfig."
+            )
+        halting_config = (
+            cfg.shared_halting_config
+            if cfg.shared_halting_config is not None
+            else cfg.layer_config.halting_config
+        )
+        if halting_config is not None and cfg.num_layers < 2:
             raise ValueError(
                 f"num_layers must be at least 2 when halting_config is provided, "
                 f"got {cfg.num_layers}. The halting mechanism requires multiple steps to accumulate "
                 f"halting probabilities across layers."
             )
-        if cfg.layer_config.halting_config is not None and (
+        if halting_config is not None and (
             cfg.input_dim != cfg.hidden_dim or cfg.hidden_dim != cfg.output_dim
         ):
             raise ValueError(
@@ -244,11 +273,76 @@ class LayerStackValidator(ValidatorBase):
                 f"Halting accumulates hidden states across steps, which requires consistent dimensions."
             )
 
+    @staticmethod
+    def __validate_memory_config(cfg: "LayerStackConfig") -> None:
+        if cfg.layer_config is None:
+            return
+        LayerStackValidator.__validate_shared_memory_config_type(
+            cfg.shared_memory_config
+        )
+        if (
+            cfg.shared_memory_config is not None
+            and cfg.layer_config.memory_config is not None
+        ):
+            raise ValueError(
+                "shared_memory_config and layer_config.memory_config are mutually "
+                "exclusive. Put shared memory controllers on LayerStackConfig and "
+                "per-layer memory controllers on LayerConfig."
+            )
+        if cfg.shared_memory_config is not None and (
+            cfg.input_dim != cfg.hidden_dim or cfg.hidden_dim != cfg.output_dim
+        ):
+            raise ValueError(
+                f"input_dim, hidden_dim, and output_dim must all be equal when "
+                f"shared_memory_config is provided, got input_dim={cfg.input_dim}, "
+                f"hidden_dim={cfg.hidden_dim}, output_dim={cfg.output_dim}. "
+                f"Shared memory uses one module across all layers and requires "
+                f"consistent dimensions."
+            )
+
+    @staticmethod
+    def __validate_shared_gate_dimensions(cfg: "LayerStackConfig") -> None:
+        if cfg.hidden_dim != cfg.output_dim:
+            raise ValueError(
+                f"hidden_dim and output_dim must be equal when "
+                f"shared_gate_config is provided, got "
+                f"hidden_dim={cfg.hidden_dim} and output_dim={cfg.output_dim}. "
+                f"Shared gates use one module across all layer outputs and "
+                f"require one gate dimension."
+            )
+
+    @staticmethod
+    def __validate_shared_halting_config_type(shared_halting_config) -> None:
+        if shared_halting_config is None:
+            return
+
+        from emperor.halting.config import HaltingConfig
+
+        if not isinstance(shared_halting_config, HaltingConfig):
+            raise TypeError(
+                "shared_halting_config must be an instance of HaltingConfig for "
+                f"LayerStackConfig, got {type(shared_halting_config).__name__}"
+            )
+
+    @staticmethod
+    def __validate_shared_memory_config_type(shared_memory_config) -> None:
+        if shared_memory_config is None:
+            return
+
+        from emperor.memory.config import DynamicMemoryConfig
+
+        if not isinstance(shared_memory_config, DynamicMemoryConfig):
+            raise TypeError(
+                "shared_memory_config must be an instance of DynamicMemoryConfig "
+                f"for LayerStackConfig, got {type(shared_memory_config).__name__}"
+            )
+
 
 class RecurrentLayerValidator(ValidatorBase):
     OPTIONAL_FIELDS = {
         "gate_config",
         "halting_config",
+        "memory_config",
         "override_config",
     }
 
@@ -276,13 +370,20 @@ class RecurrentLayerValidator(ValidatorBase):
             cfg.input_dim,
             cfg.output_dim,
         )
+        RecurrentLayerValidator.__validate_recurrent_layer_norm_position(
+            cfg.recurrent_layer_norm_position
+        )
         RecurrentLayerValidator.__validate_block_config(cfg.block_config)
+        RecurrentLayerValidator.__validate_residual_connection_option(
+            cfg.residual_connection_option
+        )
         RecurrentLayerValidator.__validate_gate_config(cfg.gate_config)
         RecurrentLayerValidator.__validate_halting_config(cfg.halting_config)
+        RecurrentLayerValidator.__validate_memory_config(cfg.memory_config)
 
     @staticmethod
     def validate_state(state: "LayerState", expected_feature_dim: int) -> None:
-        from emperor.base.layer.state import LayerState
+        from .state import LayerState
 
         if not isinstance(state, LayerState):
             raise TypeError(
@@ -364,8 +465,43 @@ class RecurrentLayerValidator(ValidatorBase):
             )
 
     @staticmethod
-    def __validate_gate_config(gate_config: "LayerStackConfig | None") -> None:
-        _validate_gate_config(gate_config, owner_name="RecurrentLayerConfig")
+    def __validate_recurrent_layer_norm_position(
+        recurrent_layer_norm_position: LayerNormPositionOptions | None,
+    ) -> None:
+        if recurrent_layer_norm_position is None:
+            raise ValueError(
+                "recurrent_layer_norm_position is required for "
+                "RecurrentLayerConfig, received None"
+            )
+        if not isinstance(recurrent_layer_norm_position, LayerNormPositionOptions):
+            raise TypeError(
+                "recurrent_layer_norm_position must be a "
+                "LayerNormPositionOptions value for RecurrentLayerConfig, "
+                f"got {type(recurrent_layer_norm_position).__name__}"
+            )
+
+    @staticmethod
+    def __validate_gate_config(gate_config: "GateConfig | None") -> None:
+        LayerGateValidator.validate_recurrent_gate_config(
+            gate_config,
+            owner_name="RecurrentLayerConfig.gate_config",
+        )
+
+    @staticmethod
+    def __validate_residual_connection_option(
+        residual_connection_option: ResidualConnectionOptions | None,
+    ) -> None:
+        if residual_connection_option is None:
+            raise ValueError(
+                "residual_connection_option is required for RecurrentLayerConfig, "
+                "received None"
+            )
+        if not isinstance(residual_connection_option, ResidualConnectionOptions):
+            raise TypeError(
+                "residual_connection_option must be a ResidualConnectionOptions "
+                f"value for RecurrentLayerConfig, got "
+                f"{type(residual_connection_option).__name__}"
+            )
 
     @staticmethod
     def __validate_halting_config(
@@ -395,4 +531,17 @@ class RecurrentLayerValidator(ValidatorBase):
                 f"halting_config {type(halting_config).__name__} builds "
                 f"{owner.__name__}, which does not expose "
                 "finalize_weighted_accumulation required by RecurrentLayer"
+            )
+
+    @staticmethod
+    def __validate_memory_config(memory_config) -> None:
+        if memory_config is None:
+            return
+
+        from emperor.memory.config import DynamicMemoryConfig
+
+        if not isinstance(memory_config, DynamicMemoryConfig):
+            raise TypeError(
+                f"memory_config must be an instance of DynamicMemoryConfig for "
+                f"RecurrentLayerConfig, got {type(memory_config).__name__}"
             )

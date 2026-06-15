@@ -1,13 +1,16 @@
 from copy import deepcopy
 
 from torch.nn import ModuleList
-from emperor.base.utils import Module
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
+
+from .base import LayerModuleBase
+from .residual import ResidualConnectionOptions
 from .config import LayerConfig, LayerStackConfig
+from .gate import GateConfig
 from .layer import Layer
 from ._validator import LayerStackValidator
 
@@ -15,10 +18,12 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from emperor.halting.config import HaltingConfig
+    from emperor.memory.config import DynamicMemoryConfig
     from .state import LayerState
 
 
-class LayerStack(Module):
+class LayerStack(LayerModuleBase):
     SHARED_INPUT_OUTPUT_DIM = 1
     SEPARATE_INPUT_OUTPUT_DIM = 2
 
@@ -36,28 +41,19 @@ class LayerStack(Module):
         self.hidden_dim: int = self.cfg.hidden_dim
         self.output_dim: int = self.cfg.output_dim
         self.num_layers: int = self.cfg.num_layers
+        self.apply_output_pipeline_flag: bool = self.cfg.apply_output_pipeline_flag
         self.last_layer_bias_option: "LastLayerBiasOptions" = (
             self.cfg.last_layer_bias_option
         )
-        self.apply_output_pipeline_flag: bool = self.cfg.apply_output_pipeline_flag
         self.layer_config: LayerConfig = self.cfg.layer_config
-
+        self.shared_gate_config: "GateConfig | None" = self.cfg.shared_gate_config
+        self.shared_halting_config: "HaltingConfig | None" = (
+            self.cfg.shared_halting_config
+        )
+        self.shared_memory_config: "DynamicMemoryConfig | None" = (
+            self.cfg.shared_memory_config
+        )
         self.layers = self.__build_layer_stack()
-
-    def __build_layer_stack(self) -> ModuleList:
-        layers = []
-        layer_adjustment = self.__add_initial_layer(layers)
-        self.__add_hidden_layers(layers, layer_adjustment)
-        self.__add_output_layer(layers)
-        self.__maybe_share_halting_model(layers)
-
-        self._initialize_parameters(*layers)
-        return ModuleList(layers)
-
-    def forward(self, state: "LayerState") -> "LayerState":
-        for layer in self.layers:
-            state = layer(state)
-        return state
 
     def __iter__(self):
         return iter(self.layers)
@@ -67,6 +63,18 @@ class LayerStack(Module):
 
     def __len__(self) -> int:
         return len(self.layers)
+
+    def __build_layer_stack(self) -> ModuleList:
+        layers = []
+        layer_adjustment = self.__add_initial_layer(layers)
+        self.__add_hidden_layers(layers, layer_adjustment)
+        self.__add_output_layer(layers)
+        self.__maybe_share_gate_model(layers)
+        self.__maybe_share_halting_model(layers)
+        self.__maybe_share_memory_model(layers)
+
+        self._initialize_parameters(*layers)
+        return ModuleList(layers)
 
     def __add_initial_layer(self, layers: list) -> int:
         if self.input_dim != self.hidden_dim and self.num_layers > 1:
@@ -92,13 +100,12 @@ class LayerStack(Module):
         if not self.apply_output_pipeline_flag:
             overrides = LayerConfig(
                 activation=ActivationOptions.DISABLED,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
             )
-        overrides = self.__merge_layer_override(
-            overrides, self.__resolve_last_layer_bias_override()
-        )
+        last_layer_bias = self.__resolve_last_layer_bias_override()
+        overrides = self.__merge_layer_override(overrides, last_layer_bias)
         return overrides
 
     def __merge_layer_override(
@@ -132,29 +139,56 @@ class LayerStack(Module):
         output_dim: int,
         overrides: LayerConfig | None = None,
     ) -> Layer:
-        residual_flag = False if input_dim != output_dim else None
-        dim_overrides = LayerConfig(
+        has_stable_dimension = input_dim == output_dim
+        residual_connection_option = (
+            None if has_stable_dimension else ResidualConnectionOptions.DISABLED
+        )
+        dim_overrides = self._resolve_config_overrides(
+            self.layer_config,
             input_dim=input_dim,
             output_dim=output_dim,
-            residual_flag=residual_flag,
+            residual_connection_option=residual_connection_option,
         )
         if overrides is not None:
             dim_overrides = self._override_config(dim_overrides, overrides)
-        return self._override_config(self.layer_config, dim_overrides).build()
+        layer_config = self._override_config(self.layer_config, dim_overrides)
+        if not has_stable_dimension:
+            layer_config.gate_config = None
+        return layer_config.build()
+
+    def __maybe_share_gate_model(self, layers: list[Layer]) -> None:
+        if self.shared_gate_config is None:
+            return
+        shared_gate = self._build_from_config(
+            self.shared_gate_config,
+            gate_dim=self.output_dim,
+        )
+        for layer in layers:
+            layer.gate_config = self.shared_gate_config
+            layer.gate_model = shared_gate
 
     def __maybe_share_halting_model(self, layers: list[Layer]) -> None:
-        if not self.layer_config.shared_halting_flag:
+        if self.shared_halting_config is None:
             return
-
-        shared_halting_model = None
+        shared_halting_model = self._build_from_config(
+            self.shared_halting_config,
+            input_dim=self.output_dim,
+        )
         for layer in layers:
-            if layer.halting_model is not None:
-                shared_halting_model = layer.halting_model
-                break
+            layer.halting_model = shared_halting_model
 
-        if shared_halting_model is None:
+    def __maybe_share_memory_model(self, layers: list[Layer]) -> None:
+        if self.shared_memory_config is None:
             return
-
+        shared_memory_model = self._build_from_config(
+            self.shared_memory_config,
+            input_dim=self.input_dim,
+            output_dim=self.output_dim,
+        )
         for layer in layers:
-            if layer.halting_model is not None:
-                layer.halting_model = shared_halting_model
+            layer.memory_model = shared_memory_model
+
+    def forward(self, state: "LayerState") -> "LayerState":
+        for layer in self.layers:
+            state = layer(state)
+        return state

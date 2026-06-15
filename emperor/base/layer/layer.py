@@ -1,27 +1,30 @@
 import torch.nn as nn
 
-from dataclasses import fields, replace
-from torch.types import Tensor
-from emperor.base.utils import ConfigBase, Module
+from torch import Tensor
+from emperor.base.utils import ConfigBase
 from emperor.base.options import (
     ActivationOptions,
     LayerNormPositionOptions,
 )
-from emperor.base.layer.state import LayerState
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.layer._validator import LayerValidator
+
+from .base import LayerModuleBase
+from .state import LayerState
+from .config import LayerConfig
+from ._validator import LayerValidator
+from .residual import ResidualConnection, ResidualConnectionOptions
+from .gate import GateConfig, LayerGate
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.base.layer.stack import LayerStack
+    from emperor.base.utils import Module
     from emperor.halting.config import HaltingConfig
-    from emperor.halting.utils.options.base import HaltingBase
+    from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
     from emperor.memory.config import DynamicMemoryConfig
     from emperor.memory.core.base import DynamicMemoryAbstract
 
 
-class Layer(Module):
+class Layer(LayerModuleBase):
     def __init__(
         self,
         cfg: LayerConfig,
@@ -29,6 +32,7 @@ class Layer(Module):
     ):
         super().__init__()
         self.cfg: LayerConfig = self._override_config(cfg, overrides)
+        LayerValidator.validate(self.cfg)
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
@@ -37,23 +41,20 @@ class Layer(Module):
         )
         self.activation_function: ActivationOptions = self.cfg.activation
         self.layer_norm_dim: int | None = self.__resolve_layer_norm_dim()
-        self.residual_flag: bool = self.cfg.residual_flag
+        self.residual_connection_option: ResidualConnectionOptions = (
+            self.cfg.residual_connection_option
+        )
         self.dropout_probability: float = self.cfg.dropout_probability
-        self.gate_config: "LayerStackConfig | None" = self.cfg.gate_config
+        self.gate_config: "GateConfig | None" = self.cfg.gate_config
         self.halting_config: "HaltingConfig | None" = self.cfg.halting_config
         self.memory_config: "DynamicMemoryConfig | None" = self.cfg.memory_config
-        self.shared_halting_flag: bool = self.cfg.shared_halting_flag
         self.layer_model_config: "ConfigBase" = self.cfg.layer_model_config
-        LayerValidator.validate(self.cfg)
 
         self.model = self.__build_model()
-        self.gate_model = self.__build_gate_model()
+        self.gate_model: LayerGate | None = self.__build_gate()
         self.halting_model = self.__build_halting_model()
         self.memory_model = self.__build_memory_model()
-
-        self.has_activation = self.activation_function != ActivationOptions.DISABLED
-        self.has_dropout = self.dropout_probability > 0.0
-
+        self.residual_connection = self.__build_residual_connection()
         self.dropout_module = self.__init_dropout_module()
         self.layer_norm_module = self.__init_layer_norm_module()
         self.last_layer_flag = False
@@ -66,42 +67,38 @@ class Layer(Module):
         return self.output_dim
 
     def __build_model(self) -> "Module | None":
-        return self.__build_from_config(
+        return self._build_from_config(
             self.layer_model_config,
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
 
-    def __build_gate_model(self) -> "Layer | LayerStack | None":
-        return self.__build_from_config(
-            self.gate_config, input_dim=self.output_dim, output_dim=self.output_dim
+    def __build_gate(self) -> LayerGate | None:
+        return self._build_from_config(
+            self.gate_config,
+            gate_dim=self.output_dim,
         )
 
     def __build_halting_model(self) -> "HaltingBase | None":
-        return self.__build_from_config(self.halting_config, input_dim=self.output_dim)
+        return self._build_from_config(self.halting_config, input_dim=self.output_dim)
 
     def __build_memory_model(self) -> "DynamicMemoryAbstract | None":
-        return self.__build_from_config(
-            self.memory_config,
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
+        return self._build_from_config(
+            self.memory_config, input_dim=self.input_dim, output_dim=self.output_dim
         )
 
-    def __build_from_config(
-        self, config: "ConfigBase | None", **kwargs
-    ) -> "Module | None":
-        if config is None:
+    def __build_residual_connection(self) -> ResidualConnection | None:
+        if self.residual_connection_option == ResidualConnectionOptions.DISABLED:
             return None
-        declared_fields = {field.name for field in fields(config)}
-        kwargs = {
-            name: value for name, value in kwargs.items() if name in declared_fields
-        }
-        return config.build(overrides=type(config)(**kwargs))
+        return ResidualConnection(self.residual_connection_option)
 
     def __init_dropout_module(self) -> nn.Module | None:
-        if self.has_dropout:
+        if self.__should_apply_dropout():
             return nn.Dropout(self.dropout_probability)
         return None
+
+    def __should_apply_dropout(self) -> bool:
+        return self.dropout_probability > 0.0
 
     def __init_layer_norm_module(self) -> nn.Module | None:
         if self.layer_norm_dim is None:
@@ -133,25 +130,33 @@ class Layer(Module):
         X = self.__maybe_apply_memory_after(X)
         X = self.__maybe_apply_layer_norm_default(X)
         X = self.__maybe_apply_activation(X)
-        X = self.__maybe_apply_gates(X, state)
+        X = self.__maybe_apply_gates(X)
         X = self.__maybe_apply_dropout(X)
         X = self.__maybe_apply_residual_connection(X, residual)
         X = self.__maybe_apply_layer_norm_after(X)
-        state = self.__maybe_apply_halting(X, state)
+        X, halting_state, loss = self.__maybe_apply_halting(
+            X, state.halting_state, state.loss
+        )
+        state = self.__update_output_state(state, X, halting_state, loss)
         return self._handle_model_output(state)
 
     def __should_skip_halted_state(self, state: LayerState) -> bool:
         if not self.__has_halting_state(state):
             return False
 
-        halt_mask = getattr(state.halting_state, "halt_mask", None)
-        if halt_mask is None:
-            return False
-
-        return bool(halt_mask.all().item())
+        return self.__is_halting_state_complete(state.halting_state)
 
     def __has_halting_state(self, state: LayerState) -> bool:
         return self.halting_model is not None and state.halting_state is not None
+
+    def __is_halting_state_complete(
+        self,
+        halting_state: "HaltingStateBase | None",
+    ) -> bool:
+        halt_mask = getattr(halting_state, "halt_mask", None)
+        if halt_mask is None:
+            return False
+        return bool(halt_mask.all().item())
 
     def _handle_model_input(self, input: Tensor) -> Tensor:
         return input
@@ -162,24 +167,11 @@ class Layer(Module):
         return input
 
     def __maybe_apply_memory_before(self, input: Tensor) -> Tensor:
-        return self.__maybe_apply_memory_by_position(input, "BEFORE_AFFINE")
-
-    def __maybe_apply_memory_after(self, input: Tensor) -> Tensor:
-        return self.__maybe_apply_memory_by_position(input, "AFTER_AFFINE")
-
-    def __maybe_apply_memory_by_position(
-        self,
-        input: Tensor,
-        position_name: str,
-    ) -> Tensor:
-        if self.memory_model is None:
-            return input
         from emperor.memory.options import MemoryPositionOptions
 
-        position = getattr(MemoryPositionOptions, position_name)
-        if self.memory_config.memory_position_option == position:
-            return self.memory_model(input)
-        return input
+        return self._maybe_apply_memory_by_position(
+            input, MemoryPositionOptions.BEFORE_AFFINE
+        )
 
     def _handle_model_processing(
         self,
@@ -188,75 +180,89 @@ class Layer(Module):
     ) -> tuple[Tensor, tuple | None]:
         return self.model(main_model_input)
 
+    def __maybe_apply_memory_after(self, input: Tensor) -> Tensor:
+        from emperor.memory.options import MemoryPositionOptions
+
+        return self._maybe_apply_memory_by_position(
+            input, MemoryPositionOptions.AFTER_AFFINE
+        )
+
     def __maybe_apply_layer_norm_default(self, input: Tensor):
         if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
             return self.layer_norm_module(input)
         return input
 
     def __maybe_apply_activation(self, input: Tensor):
-        if self.has_activation:
+        if self.__should_apply_activation():
             return self.activation_function(input)
         return input
+
+    def __should_apply_activation(self) -> bool:
+        return self.activation_function != ActivationOptions.DISABLED
 
     def __maybe_apply_gates(
         self,
         input: Tensor,
-        state: LayerState | None = None,
     ) -> Tensor:
-        if self.gate_model is not None:
-            if state is None:
-                gate_state = LayerState(hidden=input)
-            else:
-                gate_state = replace(
-                    state,
-                    hidden=input,
-                    loss=None,
-                    halting_state=None,
-                )
-
-            return self.gate_model(gate_state).hidden * input
-        return input
+        if self.gate_model is None:
+            return input
+        return self.gate_model(input)
 
     def __maybe_apply_dropout(self, input: Tensor):
-        if self.has_dropout:
+        if self.__should_apply_dropout():
             return self.dropout_module(input)
         return input
 
     def __maybe_apply_residual_connection(self, input: Tensor, prev_input: Tensor):
-        if self.residual_flag:
-            return input + prev_input
-        return input
+        if self.residual_connection is None:
+            return input
+        return self.residual_connection(input, prev_input)
 
     def __maybe_apply_layer_norm_after(self, input: Tensor):
         if self.layer_norm_position == LayerNormPositionOptions.AFTER:
             return self.layer_norm_module(input)
         return input
 
-    def __maybe_apply_halting(self, input: Tensor, state: LayerState) -> LayerState:
-        if self.halting_model is not None:
-            state.halting_state, halting_output = (
-                self.halting_model.update_halting_state(state.halting_state, input)
-            )
-            if self.last_layer_flag or self.__should_skip_halted_state(state):
-                return self.__maybe_finalize_halted_state(state, input)
-            state.hidden = halting_output
-            return state
-        state.hidden = input
-        return state
+    def __maybe_apply_halting(
+        self,
+        input: Tensor,
+        halting_state: "HaltingStateBase | None",
+        loss: Tensor | None,
+    ) -> tuple[Tensor, "HaltingStateBase | None", Tensor | None]:
+        if self.halting_model is None:
+            return input, halting_state, loss
 
-    def __maybe_finalize_halted_state(
+        halting_state, halting_output = self.halting_model.update_halting_state(
+            halting_state, input
+        )
+        if self.last_layer_flag or self.__is_halting_state_complete(halting_state):
+            return self.__maybe_finalize_halted_output(input, halting_state, loss)
+        return halting_output, halting_state, loss
+
+    def __maybe_finalize_halted_output(
+        self,
+        input: Tensor,
+        halting_state: "HaltingStateBase | None",
+        loss: Tensor | None,
+    ) -> tuple[Tensor, "HaltingStateBase | None", Tensor | None]:
+        if self.halting_model is None or halting_state is None:
+            return input, halting_state, loss
+        hidden, halting_loss = self.halting_model.finalize_weighted_accumulation(
+            halting_state, input
+        )
+        auxiliary_loss = self._reduce_auxiliary_loss(halting_loss)
+        loss = self._accumulate_auxiliary_loss(loss, auxiliary_loss)
+        return hidden, halting_state, loss
+
+    def __update_output_state(
         self,
         state: LayerState,
-        input: Tensor,
+        hidden: Tensor,
+        halting_state: "HaltingStateBase | None",
+        loss: Tensor | None,
     ) -> LayerState:
-        if not self.__has_halting_state(state):
-            return state
-        hidden, loss = self.halting_model.finalize_weighted_accumulation(
-            state.halting_state, input
-        )
-        loss = loss if loss.dim() == 0 else loss.mean()
-        loss = loss if state.loss is None else state.loss + loss
         state.hidden = hidden
+        state.halting_state = halting_state
         state.loss = loss
         return state
 
