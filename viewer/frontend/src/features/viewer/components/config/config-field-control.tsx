@@ -57,7 +57,22 @@ export function ConfigFieldValueEditor({
         className,
       )}
     >
-      {field.type === "bool" ? (
+      {field.type === "bool" && field.nullable ? (
+        <Select
+          id={controlId}
+          name={field.key}
+          aria-label={controlLabel}
+          autoComplete="off"
+          value={value}
+          disabled={isControlDisabled}
+          onChange={(event) => onChange(field.key, event.target.value)}
+          className={isCompact ? "h-10 px-3 py-2 text-[13.5px]" : undefined}
+        >
+          <option value="">None</option>
+          <option value="true">Enabled</option>
+          <option value="false">Off</option>
+        </Select>
+      ) : field.type === "bool" ? (
         <div
           className={cn(
             "flex items-center justify-between rounded-[10px] border border-line bg-black/25",

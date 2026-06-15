@@ -24,6 +24,12 @@ PREFIX_SECTIONS = {
     "CALLBACK_": "Callback",
     "TRAINER_": "Trainer",
 }
+PRIMITIVE_ANNOTATION_KINDS = {
+    bool: "bool",
+    int: "int",
+    float: "float",
+    str: "string",
+}
 
 
 def load_model_parts(model_name: str):
@@ -144,6 +150,14 @@ def _annotation_is_nullable(annotation: Any) -> bool:
     return False
 
 
+def _annotation_primitive_kind(annotation: Any) -> str | None:
+    classes = _annotation_classes(annotation)
+    for primitive_type, kind in PRIMITIVE_ANNOTATION_KINDS.items():
+        if primitive_type in classes:
+            return kind
+    return None
+
+
 def _value_kind(value: Any, annotation: Any) -> str:
     annotation_classes = _annotation_classes(annotation)
     if isinstance(value, bool):
@@ -159,9 +173,15 @@ def _value_kind(value: Any, annotation: Any) -> str:
     if inspect.isclass(value):
         return "class"
     if value is None:
+        primitive_kind = _annotation_primitive_kind(annotation)
+        if primitive_kind is not None:
+            return primitive_kind
         if any(issubclass(cls, Enum) for cls in annotation_classes):
             return "enum"
-        if annotation_classes:
+        if any(
+            cls not in PRIMITIVE_ANNOTATION_KINDS
+            for cls in annotation_classes
+        ):
             return "class"
         return "unknown"
     if isinstance(value, list):
@@ -185,7 +205,9 @@ def _class_choices(
     config_module: ModuleType, annotation: Any, current_value: Any
 ) -> list[str]:
     expected_classes = [
-        cls for cls in _annotation_classes(annotation) if not issubclass(cls, Enum)
+        cls
+        for cls in _annotation_classes(annotation)
+        if not issubclass(cls, Enum) and cls not in PRIMITIVE_ANNOTATION_KINDS
     ]
     if inspect.isclass(current_value):
         expected_classes.append(current_value)

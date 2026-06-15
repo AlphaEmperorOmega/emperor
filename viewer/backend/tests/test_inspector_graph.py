@@ -11,8 +11,12 @@ import torch
 from emperor.augmentations.adaptive_parameters.config import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import Layer, LayerStack
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
+from emperor.base.layer import (
+    Layer,
+    LayerStack,
+)
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.layer.config import LayerConfig, LayerStackConfig, RecurrentLayerConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
@@ -139,6 +143,14 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertIn("main_model.layers.0.model", node_ids)
         self.assertIn("main_model-main_model.layers", edge_ids)
         self.assertIn("main_model.layers-main_model.layers.0", edge_ids)
+
+    def test_inspector_builds_memory_linear_graph(self) -> None:
+        graph = inspect_model("memory/memory_linear", "gated-residual")
+
+        self.assertEqual(graph["model"], "memory/memory_linear")
+        self.assertEqual(graph["preset"], "gated-residual")
+        self.assertGreater(len(graph["nodes"]), 0)
+        self.assertGreater(len(graph["edges"]), 0)
 
     def test_graph_serializer_marks_internal_modules(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.Dropout(), nn.LayerNorm(4)))
@@ -323,6 +335,100 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertIsNone(config_fields(root)["halting_config"])
         self.assertIsNone(config_fields(root)["memory_config"])
 
+    def test_graph_serializer_reports_layer_gate_option_details(self) -> None:
+        gate_model_config = LayerStackConfig(
+            input_dim=4,
+            hidden_dim=4,
+            output_dim=4,
+            num_layers=1,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                input_dim=4,
+                output_dim=4,
+                activation=ActivationOptions.DISABLED,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=4,
+                    output_dim=4,
+                    bias_flag=True,
+                ),
+            ),
+        )
+        cfg = LayerConfig(
+            input_dim=4,
+            output_dim=4,
+            activation=ActivationOptions.DISABLED,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.0,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            gate_config=GateConfig(
+                model_config=gate_model_config,
+                option=LayerGateOptions.MULTIPLIER,
+            ),
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=LinearLayerConfig(
+                input_dim=4,
+                output_dim=4,
+                bias_flag=True,
+            ),
+        )
+
+        nodes, _edges = serialize_graph(Layer(cfg))
+        root = nodes[0]
+
+        self.assertEqual(root["details"]["gateOption"], "MULTIPLIER")
+        self.assertTrue(root["details"]["gate"])
+
+    def test_graph_serializer_reports_recurrent_gate_option_details(self) -> None:
+        block_config = LayerConfig(
+            input_dim=4,
+            output_dim=4,
+            activation=ActivationOptions.DISABLED,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            dropout_probability=0.0,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=LinearLayerConfig(
+                input_dim=4,
+                output_dim=4,
+                bias_flag=True,
+            ),
+        )
+        cfg = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            max_steps=2,
+            block_config=block_config,
+            gate_config=GateConfig(
+                model_config=LayerStackConfig(
+                    input_dim=4,
+                    hidden_dim=4,
+                    output_dim=4,
+                    num_layers=1,
+                    last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                    apply_output_pipeline_flag=False,
+                    layer_config=block_config,
+                ),
+                option=LayerGateOptions.MULTIPLIER,
+            ),
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
+        )
+
+        nodes, _edges = serialize_graph(cfg.build())
+        root = nodes[0]
+
+        self.assertEqual(root["details"]["recurrent"]["gateOption"], "MULTIPLIER")
+        self.assertTrue(root["details"]["recurrent"]["gate"])
+
     def test_graph_serializer_omits_disabled_layer_residual_module(self) -> None:
         def layer_config(
             residual_connection_option: ResidualConnectionOptions,
@@ -398,7 +504,73 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertEqual(config_fields(root)["num_layers"], 2)
         self.assertEqual(config_fields(root)["last_layer_bias_option"], "DISABLED")
         self.assertTrue(config_fields(root)["apply_output_pipeline_flag"])
+        self.assertIsNone(config_fields(root)["shared_gate_config"])
         self.assertEqual(config_fields(root)["layer_config"], "LayerConfig")
+
+    def test_graph_serializer_reports_shared_gate_on_layer_details(self) -> None:
+        gate_config = LayerStackConfig(
+            input_dim=4,
+            hidden_dim=4,
+            output_dim=4,
+            num_layers=1,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                input_dim=4,
+                output_dim=4,
+                activation=ActivationOptions.DISABLED,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=4,
+                    output_dim=4,
+                    bias_flag=True,
+                ),
+            ),
+        )
+        stack_config = LayerStackConfig(
+            input_dim=5,
+            hidden_dim=4,
+            output_dim=4,
+            num_layers=3,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=True,
+            shared_gate_config=GateConfig(
+                model_config=gate_config,
+                option=LayerGateOptions.MULTIPLIER,
+            ),
+            layer_config=LayerConfig(
+                input_dim=5,
+                output_dim=4,
+                activation=ActivationOptions.DISABLED,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=5,
+                    output_dim=4,
+                    bias_flag=True,
+                ),
+            ),
+        )
+
+        nodes, _edges = serialize_graph(stack_config.build())
+        node_by_id = nodes_by_id(nodes)
+
+        self.assertEqual(
+            config_fields(node_by_id["__root__"])["shared_gate_config"],
+            "GateConfig",
+        )
+        for node_id in ("layers.0", "layers.1", "layers.2"):
+            with self.subTest(node_id=node_id):
+                self.assertTrue(node_by_id[node_id]["details"]["gate"])
 
     def test_graph_serializer_reports_expert_metadata(self) -> None:
         result = inspect_model("experts/experts_linear", "baseline")

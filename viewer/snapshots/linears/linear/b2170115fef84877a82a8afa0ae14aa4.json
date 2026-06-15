@@ -4,11 +4,12 @@
   "model": "linears/linear",
   "name": "linear_layer_test",
   "overrides": {
-    "hidden_dim": "128",
+    "hidden_dim": "64",
     "recurrent_flag": "true",
-    "stack_num_layers": "3",
+    "recurrent_max_steps": "10",
+    "stack_num_layers": "10",
     "stack_residual_connection_option": "RESIDUAL"
   },
   "preset": "baseline",
-  "updated_at": "2026-06-13T15:50:44.713152+00:00"
+  "updated_at": "2026-06-15T00:10:37.555129+00:00"
 }

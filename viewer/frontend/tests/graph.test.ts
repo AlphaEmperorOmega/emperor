@@ -117,6 +117,40 @@ describe("nodeDetailEntries", () => {
     ]);
   });
 
+  it("keeps gate option details visible when config is available", () => {
+    expect(
+      nodeDetailEntries(
+        {
+          weightShape: "3 x 4",
+          gateOption: "MULTIPLIER",
+          recurrent: {
+            maxSteps: 4,
+            gateOption: "MULTIPLIER",
+          },
+        },
+        {
+          typeName: "LayerConfig",
+          fields: [
+            { key: "gate_config", value: "GateConfig" },
+            { key: "activation", value: "RELU" },
+          ],
+        },
+      ),
+    ).toEqual([
+      { key: "gate_config", value: "GateConfig", source: "config" },
+      { key: "activation", value: "RELU", source: "config" },
+      { key: "gateOption", value: "MULTIPLIER", source: "details" },
+      {
+        key: "recurrent",
+        value: {
+          maxSteps: 4,
+          gateOption: "MULTIPLIER",
+        },
+        source: "details",
+      },
+    ]);
+  });
+
   it("filters preview-only raw details when no config is available", () => {
     expect(
       nodeDetailEntries({
@@ -129,6 +163,28 @@ describe("nodeDetailEntries", () => {
         activation: "GELU",
       }),
     ).toEqual([{ key: "activation", value: "GELU", source: "details" }]);
+  });
+
+  it("keeps layer and recurrent gate option details visible without config", () => {
+    expect(
+      nodeDetailEntries({
+        gateOption: "MULTIPLIER",
+        recurrent: {
+          maxSteps: 4,
+          gateOption: "MULTIPLIER",
+        },
+      }),
+    ).toEqual([
+      { key: "gateOption", value: "MULTIPLIER", source: "details" },
+      {
+        key: "recurrent",
+        value: {
+          maxSteps: 4,
+          gateOption: "MULTIPLIER",
+        },
+        source: "details",
+      },
+    ]);
   });
 });
 

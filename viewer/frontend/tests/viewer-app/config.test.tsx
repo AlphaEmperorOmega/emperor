@@ -142,6 +142,108 @@ function nestedControlledSchemaResponse() {
         choices: ["BEFORE", "AFTER"],
       },
       {
+        key: "memory_flag",
+        configKey: "MEMORY_FLAG",
+        flag: "--memory-flag",
+        label: "memory flag",
+        section: "Memory Options",
+        type: "bool",
+        default: false,
+        nullable: false,
+        choices: [true, false],
+      },
+      {
+        key: "memory_option",
+        configKey: "MEMORY_OPTION",
+        flag: "--memory-option",
+        label: "memory option",
+        section: "Memory Options",
+        type: "class",
+        default: "GatedResidualDynamicMemoryConfig",
+        nullable: false,
+        choices: [
+          "GatedResidualDynamicMemoryConfig",
+          "WeightedDynamicMemoryConfig",
+        ],
+      },
+      {
+        key: "memory_position_option",
+        configKey: "MEMORY_POSITION_OPTION",
+        flag: "--memory-position-option",
+        label: "memory position option",
+        section: "Memory Options",
+        type: "enum",
+        default: "AFTER_AFFINE",
+        nullable: false,
+        choices: ["BEFORE_AFFINE", "AFTER_AFFINE"],
+      },
+      {
+        key: "memory_test_time_training_learning_rate",
+        configKey: "MEMORY_TEST_TIME_TRAINING_LEARNING_RATE",
+        flag: "--memory-test-time-training-learning-rate",
+        label: "memory test time training learning rate",
+        section: "Memory Options",
+        type: "float",
+        default: null,
+        nullable: true,
+        choices: [],
+      },
+      {
+        key: "memory_hidden_dim",
+        configKey: "MEMORY_HIDDEN_DIM",
+        flag: "--memory-hidden-dim",
+        label: "memory hidden dim",
+        section: "Memory Options",
+        type: "int",
+        default: 128,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "memory_layer_norm_position",
+        configKey: "MEMORY_LAYER_NORM_POSITION",
+        flag: "--memory-layer-norm-position",
+        label: "memory layer norm position",
+        section: "Memory Options",
+        type: "enum",
+        default: "BEFORE",
+        nullable: false,
+        choices: ["BEFORE", "AFTER"],
+      },
+      {
+        key: "memory_stack_num_layers",
+        configKey: "MEMORY_STACK_NUM_LAYERS",
+        flag: "--memory-stack-num-layers",
+        label: "memory stack num layers",
+        section: "Memory Options",
+        type: "int",
+        default: 2,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "memory_stack_activation",
+        configKey: "MEMORY_STACK_ACTIVATION",
+        flag: "--memory-stack-activation",
+        label: "memory stack activation",
+        section: "Memory Options",
+        type: "enum",
+        default: "GELU",
+        nullable: false,
+        choices: ["GELU", "SILU"],
+      },
+      {
+        key: "memory_stack_dropout_probability",
+        configKey: "MEMORY_STACK_DROPOUT_PROBABILITY",
+        flag: "--memory-stack-dropout-probability",
+        label: "memory stack dropout probability",
+        section: "Memory Options",
+        type: "float",
+        default: 0,
+        nullable: false,
+        choices: [],
+      },
+      {
         key: "recurrent_flag",
         configKey: "RECURRENT_FLAG",
         flag: "--recurrent-flag",
@@ -168,7 +270,7 @@ function nestedControlledSchemaResponse() {
         configKey: "RECURRENT_GATE_FLAG",
         flag: "--recurrent-gate-flag",
         label: "recurrent gate flag",
-        section: "Recurrent Layer Options",
+        section: "Recurrent Gate Stack Options",
         type: "bool",
         default: false,
         nullable: false,
@@ -179,7 +281,7 @@ function nestedControlledSchemaResponse() {
         configKey: "RECURRENT_GATE_HIDDEN_DIM",
         flag: "--recurrent-gate-hidden-dim",
         label: "recurrent gate hidden dim",
-        section: "Recurrent Layer Options",
+        section: "Recurrent Gate Stack Options",
         type: "int",
         default: 128,
         nullable: false,
@@ -190,7 +292,7 @@ function nestedControlledSchemaResponse() {
         configKey: "RECURRENT_HALTING_FLAG",
         flag: "--recurrent-halting-flag",
         label: "recurrent halting flag",
-        section: "Recurrent Layer Options",
+        section: "Recurrent Halting Options",
         type: "bool",
         default: false,
         nullable: false,
@@ -201,7 +303,7 @@ function nestedControlledSchemaResponse() {
         configKey: "RECURRENT_HALTING_THRESHOLD",
         flag: "--recurrent-halting-threshold",
         label: "recurrent halting threshold",
-        section: "Recurrent Layer Options",
+        section: "Recurrent Halting Options",
         type: "float",
         default: 0.95,
         nullable: false,
@@ -212,7 +314,7 @@ function nestedControlledSchemaResponse() {
         configKey: "RECURRENT_HALTING_STACK_NUM_LAYERS",
         flag: "--recurrent-halting-stack-num-layers",
         label: "recurrent halting stack num layers",
-        section: "Recurrent Layer Options",
+        section: "Recurrent Halting Options",
         type: "int",
         default: 2,
         nullable: false,
@@ -223,7 +325,7 @@ function nestedControlledSchemaResponse() {
         configKey: "RECURRENT_HALTING_HIDDEN_DIM",
         flag: "--recurrent-halting-hidden-dim",
         label: "recurrent halting hidden dim",
-        section: "Recurrent Layer Options",
+        section: "Recurrent Halting Options",
         type: "int",
         default: 64,
         nullable: false,
@@ -234,11 +336,163 @@ function nestedControlledSchemaResponse() {
         configKey: "RECURRENT_HALTING_LAYER_NORM_POSITION",
         flag: "--recurrent-halting-layer-norm-position",
         label: "recurrent halting layer norm position",
-        section: "Recurrent Layer Options",
+        section: "Recurrent Halting Options",
         type: "enum",
         default: "BEFORE",
         nullable: false,
         choices: ["BEFORE", "AFTER"],
+      },
+    ],
+  };
+}
+
+function gateOptionSchemaResponse() {
+  return {
+    ...schemaResponse,
+    fields: [
+      ...schemaResponse.fields,
+      {
+        key: "gate_option",
+        configKey: "GATE_OPTION",
+        flag: "--gate-option",
+        label: "gate option",
+        section: "Gate Stack Options",
+        type: "enum",
+        default: "MULTIPLIER",
+        nullable: true,
+        choices: ["MULTIPLIER", "ADDITION"],
+      },
+      {
+        key: "gate_activation",
+        configKey: "GATE_ACTIVATION",
+        flag: "--gate-activation",
+        label: "gate activation",
+        section: "Gate Stack Options",
+        type: "enum",
+        default: "SIGMOID",
+        nullable: true,
+        choices: ["None", "SIGMOID", "TANH"],
+      },
+      {
+        key: "gate_hidden_dim",
+        configKey: "GATE_HIDDEN_DIM",
+        flag: "--gate-hidden-dim",
+        label: "gate hidden dim",
+        section: "Gate Stack Options",
+        type: "int",
+        default: 128,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "gate_layer_norm_position",
+        configKey: "GATE_LAYER_NORM_POSITION",
+        flag: "--gate-layer-norm-position",
+        label: "gate layer norm position",
+        section: "Gate Stack Options",
+        type: "enum",
+        default: "BEFORE",
+        nullable: false,
+        choices: ["BEFORE", "AFTER"],
+      },
+      {
+        key: "gate_bias_flag",
+        configKey: "GATE_BIAS_FLAG",
+        flag: "--gate-bias-flag",
+        label: "gate bias flag",
+        section: "Gate Stack Options",
+        type: "bool",
+        default: true,
+        nullable: false,
+        choices: [true, false],
+      },
+      {
+        key: "gate_stack_num_layers",
+        configKey: "GATE_STACK_NUM_LAYERS",
+        flag: "--gate-stack-num-layers",
+        label: "gate stack num layers",
+        section: "Gate Stack Options",
+        type: "int",
+        default: 2,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "recurrent_gate_flag",
+        configKey: "RECURRENT_GATE_FLAG",
+        flag: "--recurrent-gate-flag",
+        label: "recurrent gate flag",
+        section: "Recurrent Gate Stack Options",
+        type: "bool",
+        default: false,
+        nullable: false,
+        choices: [true, false],
+      },
+      {
+        key: "recurrent_gate_option",
+        configKey: "RECURRENT_GATE_OPTION",
+        flag: "--recurrent-gate-option",
+        label: "recurrent gate option",
+        section: "Recurrent Gate Stack Options",
+        type: "enum",
+        default: "MULTIPLIER",
+        nullable: true,
+        choices: ["MULTIPLIER", "ADDITION"],
+      },
+      {
+        key: "recurrent_gate_activation",
+        configKey: "RECURRENT_GATE_ACTIVATION",
+        flag: "--recurrent-gate-activation",
+        label: "recurrent gate activation",
+        section: "Recurrent Gate Stack Options",
+        type: "enum",
+        default: "SIGMOID",
+        nullable: true,
+        choices: ["None", "SIGMOID", "TANH"],
+      },
+      {
+        key: "recurrent_gate_hidden_dim",
+        configKey: "RECURRENT_GATE_HIDDEN_DIM",
+        flag: "--recurrent-gate-hidden-dim",
+        label: "recurrent gate hidden dim",
+        section: "Recurrent Gate Stack Options",
+        type: "int",
+        default: 128,
+        nullable: false,
+        choices: [],
+      },
+      {
+        key: "recurrent_gate_layer_norm_position",
+        configKey: "RECURRENT_GATE_LAYER_NORM_POSITION",
+        flag: "--recurrent-gate-layer-norm-position",
+        label: "recurrent gate layer norm position",
+        section: "Recurrent Gate Stack Options",
+        type: "enum",
+        default: "BEFORE",
+        nullable: false,
+        choices: ["BEFORE", "AFTER"],
+      },
+      {
+        key: "recurrent_gate_bias_flag",
+        configKey: "RECURRENT_GATE_BIAS_FLAG",
+        flag: "--recurrent-gate-bias-flag",
+        label: "recurrent gate bias flag",
+        section: "Recurrent Gate Stack Options",
+        type: "bool",
+        default: true,
+        nullable: false,
+        choices: [true, false],
+      },
+      {
+        key: "recurrent_gate_stack_num_layers",
+        configKey: "RECURRENT_GATE_STACK_NUM_LAYERS",
+        flag: "--recurrent-gate-stack-num-layers",
+        label: "recurrent gate stack num layers",
+        section: "Recurrent Gate Stack Options",
+        type: "int",
+        default: 2,
+        nullable: false,
+        choices: [],
       },
     ],
   };
@@ -568,6 +822,60 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
   });
 
+  it("shows shared layer stack submodule defaults as a top-level accordion", async () => {
+    installFetchMock({
+      schemaResponse: {
+        ...schemaResponse,
+        fields: [
+          ...schemaResponse.fields,
+          {
+            key: "submodule_hidden_dim",
+            configKey: "SUBMODULE_HIDDEN_DIM",
+            flag: "--submodule-hidden-dim",
+            label: "submodule hidden dim",
+            section: "Layer Stack Submodule Options",
+            type: "int",
+            default: 256,
+            nullable: false,
+            choices: [],
+          },
+          {
+            key: "submodule_stack_activation",
+            configKey: "SUBMODULE_STACK_ACTIVATION",
+            flag: "--submodule-stack-activation",
+            label: "submodule stack activation",
+            section: "Layer Stack Submodule Options",
+            type: "enum",
+            default: "GELU",
+            nullable: false,
+            choices: ["GELU", "MISH"],
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const sectionNav = within(dialog).getByRole("navigation", {
+      name: /full config sections/i,
+    });
+    const submoduleAccordion = within(dialog).getByRole("button", {
+      name: /layer stack submodule options section, 2 fields, 0 overrides/i,
+    });
+
+    expect(submoduleAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to layer stack submodule options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/submodule hidden dim/i))
+      .toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/submodule stack activation/i))
+      .toBeInTheDocument();
+  });
+
   it("locks controlled config accordions until their header flag is enabled", async () => {
     installFetchMock({
       schemaResponse: {
@@ -718,7 +1026,145 @@ describe("ViewerApp Full Config", () => {
     expect(within(dialog).getByLabelText(/recurrent max steps/i)).toBeInTheDocument();
   });
 
-  it("groups halting and recurrent stack prefixes into nested config accordions", async () => {
+  it("renders gate option enum selects in controlled gate sections", async () => {
+    installFetchMock({ schemaResponse: gateOptionSchemaResponse() });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    const sectionNav = within(dialog).getByRole("navigation", {
+      name: /full config sections/i,
+    });
+    const gateAccordion = within(dialog).getByRole("button", {
+      name: /^gate stack options section, 7 fields, 0 overrides/i,
+    });
+    const recurrentGateAccordion = within(dialog).getByRole("button", {
+      name: /^recurrent gate stack options section, 7 fields, 0 overrides/i,
+    });
+
+    expect(
+      within(sectionNav).getByRole("button", {
+        name: /jump to recurrent layer options/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
+        name: /jump to recurrent gate stack options/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(gateAccordion).toBeDisabled();
+    expect(recurrentGateAccordion).toBeDisabled();
+    expect(within(dialog).queryByLabelText(/gate option/i))
+      .not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/gate activation/i))
+      .not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Gate Model Stack"))
+      .not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/recurrent gate option/i))
+      .not.toBeInTheDocument();
+    expect(within(dialog).queryByLabelText(/recurrent gate activation/i))
+      .not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("switch", { name: /^gate flag$/i }));
+
+    const enabledGateAccordion = within(dialog).getByRole("button", {
+      name: /^gate stack options section, 7 fields, 1 override/i,
+    });
+    if (enabledGateAccordion.getAttribute("aria-expanded") !== "true") {
+      await user.click(enabledGateAccordion);
+    }
+    const gateDirectGrid = directFieldGridFor(enabledGateAccordion);
+    const gateModelStackAccordion = within(
+      fullConfigSectionFor(enabledGateAccordion),
+    ).getByRole("button", {
+      name: /gate model stack section, 4 fields, 0 overrides/i,
+    });
+    const gateOption = within(gateDirectGrid).getByLabelText(/gate option/i);
+    expect(gateOption).toHaveValue("MULTIPLIER");
+    expect(gateOption).toHaveTextContent("MULTIPLIER");
+    const gateActivation = within(gateDirectGrid).getByLabelText(/gate activation/i);
+    expect(gateActivation).toHaveValue("SIGMOID");
+    expect(gateActivation).toHaveTextContent("TANH");
+    expect(within(gateDirectGrid).queryByLabelText(/gate hidden dim/i))
+      .not.toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
+        /gate hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
+        /gate layer norm position/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(gateModelStackAccordion)).getByRole("switch", {
+        name: /gate bias flag/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(gateModelStackAccordion)).getByLabelText(
+        /gate stack num layers/i,
+      ),
+    ).toBeInTheDocument();
+
+    await user.selectOptions(gateOption, "ADDITION");
+    expect(gateOption).toHaveValue("ADDITION");
+
+    await user.click(
+      within(dialog).getByRole("switch", { name: /^recurrent gate flag$/i }),
+    );
+
+    const enabledRecurrentGateAccordion = within(dialog).getByRole("button", {
+      name: /^recurrent gate stack options section, 7 fields, 1 override/i,
+    });
+    if (enabledRecurrentGateAccordion.getAttribute("aria-expanded") !== "true") {
+      await user.click(enabledRecurrentGateAccordion);
+    }
+    const recurrentGateDirectGrid = directFieldGridFor(
+      enabledRecurrentGateAccordion,
+    );
+    const recurrentGateModelStackAccordion = within(dialog).getByRole("button", {
+      name: /recurrent gate model stack section, 4 fields, 0 overrides/i,
+    });
+    const recurrentGateOption = within(recurrentGateDirectGrid).getByLabelText(
+      /recurrent gate option/i,
+    );
+    const recurrentGateActivation = within(
+      recurrentGateDirectGrid,
+    ).getByLabelText(/recurrent gate activation/i);
+    expect(recurrentGateOption).toHaveValue("MULTIPLIER");
+    expect(recurrentGateOption).toHaveTextContent("MULTIPLIER");
+    expect(recurrentGateActivation).toHaveValue("SIGMOID");
+    expect(recurrentGateActivation).toHaveTextContent("TANH");
+    expect(
+      within(recurrentGateDirectGrid).queryByLabelText(
+        /recurrent gate hidden dim/i,
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
+        /recurrent gate hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
+        /recurrent gate layer norm position/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(recurrentGateModelStackAccordion)).getByRole("switch", {
+        name: /recurrent gate bias flag/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
+        /recurrent gate stack num layers/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("groups halting, memory, and recurrent stack prefixes into nested config accordions", async () => {
     installFetchMock({ schemaResponse: nestedControlledSchemaResponse() });
     renderViewer();
     const user = userEvent.setup();
@@ -730,15 +1176,24 @@ describe("ViewerApp Full Config", () => {
     const haltingAccordion = within(dialog).getByRole("button", {
       name: /halting options section, 5 fields, 0 overrides/i,
     });
+    const memoryAccordion = within(dialog).getByRole("button", {
+      name: /memory options section, 9 fields, 0 overrides/i,
+    });
     const recurrentAccordion = within(dialog).getByRole("button", {
       name: /recurrent layer options section, 9 fields, 0 overrides/i,
     });
     const haltingSection = fullConfigSectionFor(haltingAccordion);
+    const memorySection = fullConfigSectionFor(memoryAccordion);
     const recurrentSection = fullConfigSectionFor(recurrentAccordion);
 
     expect(
       within(sectionNav).queryByRole("button", {
         name: /jump to halting stack options/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sectionNav).queryByRole("button", {
+        name: /jump to memory stack options/i,
       }),
     ).not.toBeInTheDocument();
     expect(
@@ -753,18 +1208,26 @@ describe("ViewerApp Full Config", () => {
     ).not.toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("switch", { name: /halting flag/i }));
+    await user.click(within(dialog).getByRole("switch", { name: /memory flag/i }));
     await user.click(within(dialog).getByRole("switch", { name: /recurrent flag/i }));
 
     const enabledHaltingAccordion = within(dialog).getByRole("button", {
       name: /halting options section, 5 fields, 1 override/i,
     });
+    const enabledMemoryAccordion = within(dialog).getByRole("button", {
+      name: /memory options section, 9 fields, 1 override/i,
+    });
     const enabledRecurrentAccordion = within(dialog).getByRole("button", {
       name: /recurrent layer options section, 9 fields, 1 override/i,
     });
     const haltingDirectGrid = directFieldGridFor(enabledHaltingAccordion);
+    const memoryDirectGrid = directFieldGridFor(enabledMemoryAccordion);
     const recurrentDirectGrid = directFieldGridFor(enabledRecurrentAccordion);
     const haltingStackAccordion = within(haltingSection).getByRole("button", {
       name: /halting stack options section, 3 fields, 0 overrides/i,
+    });
+    const memoryStackAccordion = within(memorySection).getByRole("button", {
+      name: /memory stack options section, 5 fields, 0 overrides/i,
     });
     const recurrentGateAccordion = within(recurrentSection).getByRole("button", {
       name: /recurrent gate stack options section, 2 fields, 0 overrides/i,
@@ -774,14 +1237,31 @@ describe("ViewerApp Full Config", () => {
     });
 
     expect(haltingAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(memoryAccordion).toHaveAttribute("aria-expanded", "true");
     expect(recurrentAccordion).toHaveAttribute("aria-expanded", "true");
     expectHeaderControlBeforeMetric(haltingSection, "halting flag", "5 fields");
+    expectHeaderControlBeforeMetric(memorySection, "memory flag", "9 fields");
     expectHeaderControlBeforeMetric(recurrentSection, "recurrent flag", "9 fields");
     expect(within(haltingDirectGrid).getByLabelText(/halting threshold/i))
       .toBeInTheDocument();
     expect(within(haltingDirectGrid).queryByLabelText(/halting hidden dim/i))
       .not.toBeInTheDocument();
     expect(within(haltingDirectGrid).queryByLabelText(/halting layer norm position/i))
+      .not.toBeInTheDocument();
+    expect(within(memoryDirectGrid).getByLabelText(/memory option/i))
+      .toBeInTheDocument();
+    expect(within(memoryDirectGrid).getByLabelText(/memory position option/i))
+      .toBeInTheDocument();
+    expect(
+      within(memoryDirectGrid).getByLabelText(
+        /memory test time training learning rate/i,
+      ),
+    ).toBeInTheDocument();
+    expect(within(memoryDirectGrid).queryByLabelText(/memory hidden dim/i))
+      .not.toBeInTheDocument();
+    expect(within(memoryDirectGrid).queryByLabelText(/memory stack num layers/i))
+      .not.toBeInTheDocument();
+    expect(within(memoryDirectGrid).queryByLabelText(/memory stack activation/i))
       .not.toBeInTheDocument();
     expect(within(recurrentDirectGrid).getByLabelText(/recurrent max steps/i))
       .toBeInTheDocument();
@@ -791,6 +1271,9 @@ describe("ViewerApp Full Config", () => {
       .not.toBeInTheDocument();
     expect(fullConfigSectionGridFor(haltingStackAccordion)).not.toBe(
       fullConfigSectionGridFor(enabledHaltingAccordion),
+    );
+    expect(fullConfigSectionGridFor(memoryStackAccordion)).not.toBe(
+      fullConfigSectionGridFor(enabledMemoryAccordion),
     );
     expect(fullConfigSectionGridFor(recurrentGateAccordion)).not.toBe(
       fullConfigSectionGridFor(enabledRecurrentAccordion),
@@ -804,6 +1287,31 @@ describe("ViewerApp Full Config", () => {
     expect(
       within(accordionPanelFor(haltingStackAccordion)).getByLabelText(
         /halting layer norm position/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
+        /memory hidden dim/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
+        /memory layer norm position/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
+        /memory stack num layers/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
+        /memory stack activation/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(accordionPanelFor(memoryStackAccordion)).getByLabelText(
+        /memory stack dropout probability/i,
       ),
     ).toBeInTheDocument();
     expect(recurrentGateAccordion).toBeDisabled();
@@ -841,15 +1349,24 @@ describe("ViewerApp Full Config", () => {
         name: /recurrent halting stack options section, 3 fields, 0 overrides/i,
       },
     );
+    const recurrentGateModelStackAccordion = within(recurrentSection).getByRole(
+      "button",
+      {
+        name: /recurrent gate model stack section, 1 field, 0 overrides/i,
+      },
+    );
     const recurrentHaltingDirectGrid = directFieldGridFor(
       enabledRecurrentHaltingAccordion,
     );
 
     expect(enabledRecurrentGateAccordion).toHaveAttribute("aria-expanded", "true");
     expect(enabledRecurrentHaltingAccordion).toHaveAttribute("aria-expanded", "true");
-    expect(within(accordionPanelFor(enabledRecurrentGateAccordion)).getByLabelText(
-      /recurrent gate hidden dim/i,
-    )).toBeInTheDocument();
+    expect(recurrentGateModelStackAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
+        /recurrent gate hidden dim/i,
+      ),
+    ).toBeInTheDocument();
     expect(
       within(recurrentHaltingDirectGrid).getByLabelText(
         /recurrent halting threshold/i,
@@ -892,6 +1409,71 @@ describe("ViewerApp Full Config", () => {
     expectNoHeaderControlInAccordionBody(
       enabledRecurrentHaltingAccordion,
       "recurrent halting flag",
+    );
+  });
+
+  it("renders nullable boolean stack overrides as a tri-state control", async () => {
+    installFetchMock({
+      schemaResponse: {
+        ...schemaResponse,
+        fields: [
+          ...schemaResponse.fields,
+          {
+            key: "memory_flag",
+            configKey: "MEMORY_FLAG",
+            flag: "--memory-flag",
+            label: "memory flag",
+            section: "Memory Options",
+            type: "bool",
+            default: false,
+            nullable: false,
+            choices: [true, false],
+          },
+          {
+            key: "memory_stack_apply_output_pipeline_flag",
+            configKey: "MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+            flag: "--memory-stack-apply-output-pipeline-flag",
+            label: "memory stack apply output pipeline flag",
+            section: "Memory Options",
+            type: "bool",
+            default: null,
+            nullable: true,
+            choices: [true, false],
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    const dialog = await openFullConfig(user);
+    await user.click(within(dialog).getByRole("switch", { name: /memory flag/i }));
+
+    const memoryStackAccordion = within(dialog).getByRole("button", {
+      name: /memory stack options section, 1 field, 0 overrides/i,
+    });
+    const nullableBoolean = within(
+      accordionPanelFor(memoryStackAccordion),
+    ).getByRole("combobox", {
+      name: /memory stack apply output pipeline flag/i,
+    });
+
+    expect(nullableBoolean).toHaveValue("");
+    expect(within(nullableBoolean).getByRole("option", { name: "None" }))
+      .toHaveValue("");
+    expect(within(nullableBoolean).getByRole("option", { name: "Enabled" }))
+      .toHaveValue("true");
+    expect(within(nullableBoolean).getByRole("option", { name: "Off" }))
+      .toHaveValue("false");
+
+    await user.selectOptions(nullableBoolean, "true");
+    expect(nullableBoolean).toHaveValue("true");
+    await user.selectOptions(nullableBoolean, "");
+    expect(nullableBoolean).toHaveValue("");
+
+    const commandDialog = await openTrainingCommand(user, dialog);
+    expect(commandField(commandDialog)).toHaveValue(
+      "source experiment.sh linear --preset baseline --config --memory-flag true --memory-stack-apply-output-pipeline-flag None",
     );
   });
 
@@ -985,8 +1567,21 @@ describe("ViewerApp Full Config", () => {
         name: /recurrent gate stack options section, 2 fields, 1 override/i,
       }),
     ).toHaveAttribute("aria-expanded", "true");
-    expect(within(dialog).getByLabelText(/recurrent gate hidden dim/i))
-      .toBeInTheDocument();
+    const recurrentGateModelStackAccordion = within(recurrentSection).getByRole(
+      "button",
+      {
+        name: /recurrent gate model stack section, 1 field, 0 overrides/i,
+      },
+    );
+    expect(recurrentGateModelStackAccordion).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(
+      within(accordionPanelFor(recurrentGateModelStackAccordion)).getByLabelText(
+        /recurrent gate hidden dim/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows an accessible full config field search", async () => {

@@ -245,9 +245,18 @@ def _layer_behavior_details(module: Module) -> dict[str, Any]:
     if dropout is not None:
         details["dropout"] = dropout
 
-    gate = _bool_from_optional_model(module, "gate_model")
-    if gate is not None:
-        details["gate"] = gate
+    gate = getattr(module, "gate_model", None)
+    gate_option = getattr(gate, "option", None)
+    if gate_option is None:
+        gate_config = getattr(module, "gate_config", None)
+        gate_option = getattr(gate_config, "option", None)
+    gate_option_name = _display_value(gate_option) if gate_option is not None else None
+    if gate_option_name is not None:
+        details["gateOption"] = gate_option_name
+
+    gate_model = _bool_from_optional_model(module, "gate_model")
+    if gate_model is not None:
+        details["gate"] = gate_model and gate is not None
 
     halting = _bool_from_optional_model(module, "halting_model")
     if halting is not None:
@@ -270,10 +279,21 @@ def _recurrent_details(
     max_steps = getattr(module, "max_steps", None)
     if max_steps is None or cluster is not None:
         return {}
+    recurrent_gate = getattr(module, "recurrent_gate", None)
+    gate_option = getattr(recurrent_gate, "option", None)
+    if gate_option is None:
+        gate_config = getattr(module, "gate_config", None)
+        gate_option = getattr(gate_config, "option", None)
+    gate_option_name = _display_value(gate_option) if gate_option is not None else None
+    gate = (
+        recurrent_gate is not None
+        and getattr(recurrent_gate, "model", None) is not None
+    )
     return {
         "recurrent": {
             "maxSteps": max_steps,
-            "gate": bool(getattr(module, "gate_model", None) is not None),
+            "gate": gate,
+            "gateOption": gate_option_name,
             "halting": bool(getattr(module, "halting_model", None) is not None),
         }
     }

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from types import NoneType
+from typing import Any, get_args
 
 from models.config_overrides import (
     config_key_to_model_param,
@@ -36,6 +37,45 @@ def _legacy_residual_flag_value(raw_value: Any) -> str:
     return "" if raw_value is None else str(raw_value)
 
 
+def _annotation_accepts_none(annotation: Any) -> bool:
+    if annotation is None:
+        return False
+    if annotation is NoneType:
+        return True
+    if isinstance(annotation, str):
+        return "None" in annotation or "Optional" in annotation
+    if NoneType in get_args(annotation):
+        return True
+    return any(_annotation_accepts_none(arg) for arg in get_args(annotation))
+
+
+def _config_value_accepts_none(config_module: Any, config_key: str) -> bool:
+    current_value = getattr(config_module, config_key, None)
+    if current_value is None:
+        return True
+    if isinstance(current_value, list) and any(
+        value is None for value in current_value
+    ):
+        return True
+    annotation = getattr(config_module, "__annotations__", {}).get(config_key)
+    return _annotation_accepts_none(annotation)
+
+
+def _override_parse_value(
+    config_module: Any,
+    config_key: str,
+    raw_value: Any,
+) -> str:
+    if raw_value is None:
+        if _config_value_accepts_none(config_module, config_key):
+            return "None"
+        return ""
+    value = str(raw_value)
+    if value == "" and _config_value_accepts_none(config_module, config_key):
+        return "None"
+    return value
+
+
 def parse_override_mapping(
     config_module, overrides: Mapping[str, Any] | None
 ) -> dict[str, Any]:
@@ -62,7 +102,7 @@ def parse_override_mapping(
             parse_value = (
                 _legacy_residual_flag_value(raw_value)
                 if legacy_residual_flag
-                else "" if raw_value is None else str(raw_value)
+                else _override_parse_value(config_module, config_key, raw_value)
             )
             parsed_value = parse_config_value(
                 config_module,

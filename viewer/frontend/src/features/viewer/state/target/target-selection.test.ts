@@ -120,4 +120,49 @@ describe("target selection", () => {
       { preset: "rare", snapshots: [snapshot({ id: "other-preset", preset: "rare" })] },
     ]);
   });
+
+  it("normalizes recurrent controller schema sections for viewer display", () => {
+    const state = deriveTargetSelectionState({
+      datasets: [],
+      presets: [],
+      schemaFields: [
+        field({
+          key: "recurrent_flag",
+          section: "Recurrent Layer Options",
+          type: "bool",
+        }),
+        field({
+          key: "recurrent_gate_hidden_dim",
+          section: "Recurrent Gate Stack Options",
+        }),
+        field({
+          key: "recurrent_halting_threshold",
+          section: "Recurrent Halting Options",
+          type: "float",
+        }),
+      ],
+      configSnapshots: [],
+      selectedModel: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: [],
+      overrides: {},
+    });
+
+    expect(state.configSections.map((section) => section.title)).toEqual([
+      "Recurrent Layer Options",
+    ]);
+    expect(state.configSections[0].fields.map((configField) => configField.key))
+      .toEqual([
+        "recurrent_flag",
+        "recurrent_gate_hidden_dim",
+        "recurrent_halting_threshold",
+      ]);
+    expect(
+      state.configSections[0].fields.map((configField) => configField.section),
+    ).toEqual([
+      "Recurrent Layer Options",
+      "Recurrent Layer Options",
+      "Recurrent Layer Options",
+    ]);
+  });
 });

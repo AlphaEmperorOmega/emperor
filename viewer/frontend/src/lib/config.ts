@@ -29,6 +29,7 @@ export type ConfigSearchState = {
 const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
   ["Gate Stack Options", "gate_flag"],
   ["Halting Options", "halting_flag"],
+  ["Memory Options", "memory_flag"],
   ["Recurrent Layer Options", "recurrent_flag"],
   ["Recurrent Gate Stack Options", "recurrent_gate_flag"],
   ["Recurrent Halting Options", "recurrent_halting_flag"],
@@ -37,8 +38,28 @@ const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
 const FALLBACK_CONTROLLED_SECTION_FLAG_KEYS = new Set([
   "gate_flag",
   "halting_flag",
+  "memory_flag",
   "recurrent_flag",
 ]);
+
+const GENERAL_CONFIG_SECTION = "General";
+const RECURRENT_LAYER_CONFIG_SECTION = "Recurrent Layer Options";
+const RECURRENT_LAYER_FIELD_PREFIXES = [
+  "recurrent_gate_",
+  "recurrent_halting_",
+];
+
+export function displayConfigFieldSection(field: ConfigField) {
+  if (RECURRENT_LAYER_FIELD_PREFIXES.some((prefix) => field.key.startsWith(prefix))) {
+    return RECURRENT_LAYER_CONFIG_SECTION;
+  }
+  return field.section || GENERAL_CONFIG_SECTION;
+}
+
+export function normalizeConfigFieldForDisplay(field: ConfigField): ConfigField {
+  const section = displayConfigFieldSection(field);
+  return field.section === section ? field : { ...field, section };
+}
 
 export function fieldValue(field: ConfigField, overrides: OverrideValues) {
   const value = field.locked ? field.lockedValue : (overrides[field.key] ?? field.default);
@@ -250,13 +271,15 @@ function fieldsWithPrefix(fields: ConfigField[], prefix: string) {
 }
 
 const STACK_SCOPE_FIELD_SUFFIXES = ["hidden_dim", "layer_norm_position"];
+const STACK_SCOPE_FLAG_SUFFIXES = ["bias_flag"];
 
 function stackScopedFields(fields: ConfigField[], prefix: string) {
   const stackPrefix = `${prefix}stack_`;
   return fields.filter(
     (field) =>
       field.key.startsWith(stackPrefix) ||
-      STACK_SCOPE_FIELD_SUFFIXES.some((suffix) => field.key === `${prefix}${suffix}`),
+      STACK_SCOPE_FIELD_SUFFIXES.some((suffix) => field.key === `${prefix}${suffix}`) ||
+      STACK_SCOPE_FLAG_SUFFIXES.some((suffix) => field.key === `${prefix}${suffix}`),
   );
 }
 
@@ -278,6 +301,27 @@ function deriveHaltingChildren(section: ConfigSection) {
   ].filter((child): child is ConfigSection => Boolean(child));
 }
 
+function deriveMemoryChildren(section: ConfigSection) {
+  const memoryStackFields = stackScopedFields(section.fields, "memory_");
+  return [
+    sectionWithFields("Memory Stack Options", memoryStackFields),
+  ].filter((child): child is ConfigSection => Boolean(child));
+}
+
+function deriveGateChildren(section: ConfigSection) {
+  const gateStackFields = stackScopedFields(section.fields, "gate_");
+  return [
+    sectionWithFields("Gate Model Stack", gateStackFields),
+  ].filter((child): child is ConfigSection => Boolean(child));
+}
+
+function deriveRecurrentGateChildren(fields: ConfigField[]) {
+  const recurrentGateStackFields = stackScopedFields(fields, "recurrent_gate_");
+  return [
+    sectionWithFields("Recurrent Gate Model Stack", recurrentGateStackFields),
+  ].filter((child): child is ConfigSection => Boolean(child));
+}
+
 function deriveRecurrentChildren(section: ConfigSection) {
   const recurrentGateFields = fieldsWithPrefix(section.fields, "recurrent_gate_");
   const recurrentHaltingFields = fieldsWithPrefix(
@@ -294,6 +338,7 @@ function deriveRecurrentChildren(section: ConfigSection) {
 
   return [
     sectionWithFields("Recurrent Gate Stack Options", recurrentGateFields, {
+      children: deriveRecurrentGateChildren(recurrentGateFields),
       controlFieldKey: "recurrent_gate_flag",
     }),
     sectionWithFields("Recurrent Halting Options", recurrentHaltingFields, {
@@ -305,11 +350,27 @@ function deriveRecurrentChildren(section: ConfigSection) {
 
 function deriveNestedConfigSectionsFromFields(sections: ConfigSection[]) {
   return sections.map((section) => {
+    if (section.title === "Gate Stack Options") {
+      return {
+        ...section,
+        children: deriveGateChildren(section),
+        controlFieldKey: "gate_flag",
+      };
+    }
+
     if (section.title === "Halting Options") {
       return {
         ...section,
         children: deriveHaltingChildren(section),
         controlFieldKey: "halting_flag",
+      };
+    }
+
+    if (section.title === "Memory Options") {
+      return {
+        ...section,
+        children: deriveMemoryChildren(section),
+        controlFieldKey: "memory_flag",
       };
     }
 

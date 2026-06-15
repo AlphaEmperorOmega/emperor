@@ -6,8 +6,12 @@ import unittest
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import models.neuron.neuron_linear.config as neuron_linear_config
+import models.linears.linear.config as linear_config
+import models.transformer_encoder.vit_linear.config as vit_linear_config
+from emperor.base.layer.gate import LayerGateOptions
 
 from viewer.backend.inspector.errors import InspectorError
+from viewer.backend.inspector.overrides import parse_override_mapping
 from viewer.backend.inspector.service import inspect_model
 
 
@@ -119,6 +123,30 @@ class InspectorServiceTests(unittest.TestCase):
         self.assertTrue(
             any(node["details"].get("gate") is True for node in result["nodes"])
         )
+
+    def test_gate_option_overrides_parse_to_builder_parameter_names(self) -> None:
+        parsed = parse_override_mapping(
+            linear_config,
+            {
+                "gate_option": "ADDITION",
+                "recurrent_gate_option": "MULTIPLIER",
+            },
+        )
+
+        self.assertIs(parsed["gate_option"], LayerGateOptions.ADDITION)
+        self.assertIs(parsed["recurrent_gate_option"], LayerGateOptions.MULTIPLIER)
+
+    def test_nullable_empty_string_override_parses_as_none(self) -> None:
+        parsed = parse_override_mapping(
+            vit_linear_config,
+            {"positional_embedding_padding_idx": ""},
+        )
+
+        self.assertIsNone(parsed["positional_embedding_padding_idx"])
+
+    def test_empty_string_override_still_rejects_non_nullable_fields(self) -> None:
+        with self.assertRaises(InspectorError):
+            parse_override_mapping(vit_linear_config, {"hidden_dim": ""})
 
     def test_legacy_residual_flag_override_maps_to_connection_option(self) -> None:
         cases = (

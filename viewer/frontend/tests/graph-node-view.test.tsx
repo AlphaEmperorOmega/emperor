@@ -1233,4 +1233,41 @@ describe("SelectedNodeDetails", () => {
     expect(screen.queryByText("biasShape")).not.toBeInTheDocument();
     expect(screen.queryByText("shapeTransition")).not.toBeInTheDocument();
   });
+
+  it("displays layer and recurrent gate option details", () => {
+    const node: GraphNode = {
+      id: "main_model.0",
+      label: "RecurrentLayer",
+      typeName: "RecurrentLayer",
+      path: "main_model.0",
+      graphRole: "architecture",
+      parameterCount: 0,
+      parameterSizeBytes: 0,
+      details: {
+        gateOption: "MULTIPLIER",
+        recurrent: {
+          maxSteps: 4,
+          gateOption: "MULTIPLIER",
+        },
+      },
+      config: {
+        typeName: "LayerConfig",
+        fields: [
+          { key: "gate_config", value: "GateConfig" },
+          { key: "activation", value: "RELU" },
+        ],
+      },
+    };
+
+    render(<SelectedNodeDetails node={node} activeTrainingJob={undefined} />);
+
+    expect(screen.getByText("gate_config")).toBeInTheDocument();
+    expect(screen.getByText("GateConfig")).toBeInTheDocument();
+    expect(screen.getByText("gateOption")).toBeInTheDocument();
+    expect(screen.getByText("MULTIPLIER")).toBeInTheDocument();
+    expect(screen.getByText("recurrent")).toBeInTheDocument();
+    expect(
+      screen.getByText('{"maxSteps":4,"gateOption":"MULTIPLIER"}'),
+    ).toBeInTheDocument();
+  });
 });

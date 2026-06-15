@@ -1,5 +1,10 @@
 import { type ConfigField, type Dataset, type Preset } from "@/lib/api";
-import { presetOwnedCount, type ConfigSection, type OverrideValues } from "@/lib/config";
+import {
+  normalizeConfigFieldForDisplay,
+  presetOwnedCount,
+  type ConfigSection,
+  type OverrideValues,
+} from "@/lib/config";
 import {
   groupConfigSnapshotsByPreset,
   selectedConfigSnapshots,
@@ -44,8 +49,11 @@ export function deriveTargetSelectionState(
 
   const groups = new Map<string, ConfigField[]>();
   for (const field of input.schemaFields ?? []) {
-    const section = field.section || "General";
-    groups.set(section, [...(groups.get(section) ?? []), field]);
+    const displayField = normalizeConfigFieldForDisplay(field);
+    groups.set(displayField.section, [
+      ...(groups.get(displayField.section) ?? []),
+      displayField,
+    ]);
   }
   const configSections = Array.from(groups, ([title, fields]) => ({ title, fields }));
   const configFields = configSections.flatMap((section) => section.fields);

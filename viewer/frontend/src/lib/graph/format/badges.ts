@@ -16,6 +16,8 @@ const PREVIEW_ONLY_DETAIL_KEYS = new Set([
   "terminalReach",
 ]);
 
+const CONFIG_SUPPLEMENT_DETAIL_KEYS = new Set(["gateOption", "recurrent"]);
+
 export function nodeBadges(details: GraphNode["details"]) {
   const badges: Array<[string, unknown]> = [];
   if (typeof details.dims === "string") {
@@ -72,11 +74,16 @@ export function nodeDetailEntries(
   config?: GraphNode["config"],
 ): NodeDetailEntry[] {
   if (config) {
-    return config.fields.map((field) => ({
-      key: field.key,
-      value: field.value,
-      source: "config" as const,
-    }));
+    return [
+      ...config.fields.map((field) => ({
+        key: field.key,
+        value: field.value,
+        source: "config" as const,
+      })),
+      ...Object.entries(details)
+        .filter(([key]) => CONFIG_SUPPLEMENT_DETAIL_KEYS.has(key))
+        .map(([key, value]) => ({ key, value, source: "details" as const })),
+    ];
   }
 
   return Object.entries(details)
