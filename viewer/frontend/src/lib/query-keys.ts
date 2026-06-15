@@ -81,8 +81,17 @@ function trainingRunPlanInputKey({
   };
 }
 
+type LogScalarQueryKeyOptions = {
+  maxPoints?: number;
+  sampling?: string;
+  group?: string;
+};
+
 export const logQueryKeys = {
-  runs: () => ["log-runs"] as const,
+  runs: (input?: unknown) =>
+    input === undefined
+      ? (["log-runs"] as const)
+      : (["log-runs", normalizedQueryValue(input)] as const),
   experiments: () => ["log-experiments"] as const,
   tags: () => ["log-tags"] as const,
   tagsForRuns: (runIds: StringList) =>
@@ -92,11 +101,16 @@ export const logQueryKeys = {
   modelRunTags: (runIds: StringList) =>
     ["log-tags", "model-runs", normalizedStringSet(runIds)] as const,
   scalars: () => ["log-scalars"] as const,
-  scalarsForRunsAndTags: (runIds: StringList, tags: StringList) =>
+  scalarsForRunsAndTags: (
+    runIds: StringList,
+    tags: StringList,
+    options?: LogScalarQueryKeyOptions,
+  ) =>
     [
       "log-scalars",
       normalizedStringSet(runIds),
       normalizedStringSet(tags),
+      normalizedQueryValue(options ?? null),
     ] as const,
   media: () => ["log-media"] as const,
   mediaForRunsAndTags: (

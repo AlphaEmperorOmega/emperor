@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  DEFAULT_LOG_SCALAR_MAX_POINTS,
+  LOG_SCALAR_SAMPLING,
   fetchLogCheckpoints,
   fetchLogExperiments,
   fetchLogMedia,
@@ -7,10 +9,10 @@ import {
   fetchLogRunArtifacts,
   fetchLogScalars,
   fetchLogTags,
+  type FetchLogRunsInput,
 } from "@/lib/api";
 import {
   LOG_EXPERIMENTS_QUERY_KEY,
-  LOG_RUNS_QUERY_KEY,
   logQueryKeys,
 } from "@/lib/query-keys";
 
@@ -28,10 +30,15 @@ type QueryOptions = {
   enabled?: boolean;
 };
 
-export function useLogRunsQuery({ enabled = true }: QueryOptions = {}) {
+export function useLogRunsQuery({
+  enabled = true,
+  filters,
+  pagination,
+  includeAllPages,
+}: QueryOptions & FetchLogRunsInput = {}) {
   return useQuery({
-    queryKey: LOG_RUNS_QUERY_KEY,
-    queryFn: fetchLogRuns,
+    queryKey: logQueryKeys.runs({ filters, pagination, includeAllPages }),
+    queryFn: () => fetchLogRuns({ filters, pagination, includeAllPages }),
     enabled,
     retry: false,
   });
@@ -65,16 +72,26 @@ export function useLogTagsQuery({
 export function useLogScalarsQuery({
   runIds,
   tags,
+  maxPoints = DEFAULT_LOG_SCALAR_MAX_POINTS,
+  sampling = LOG_SCALAR_SAMPLING,
+  group,
   enabled = true,
-  queryKey = logQueryKeys.scalarsForRunsAndTags(runIds, tags),
+  queryKey = logQueryKeys.scalarsForRunsAndTags(runIds, tags, {
+    maxPoints,
+    sampling,
+    group,
+  }),
 }: QueryOptions & {
   runIds: string[];
   tags: string[];
+  maxPoints?: number;
+  sampling?: typeof LOG_SCALAR_SAMPLING;
+  group?: string;
   queryKey?: readonly unknown[];
 }) {
   return useQuery({
     queryKey,
-    queryFn: () => fetchLogScalars({ runIds, tags }),
+    queryFn: () => fetchLogScalars({ runIds, tags, maxPoints, sampling }),
     enabled: enabled && runIds.length > 0 && tags.length > 0,
     retry: false,
   });

@@ -47,12 +47,13 @@ import {
   type TrainingJob,
 } from "@/lib/api";
 
-function renderViewerState() {
+function renderViewerState(options: Parameters<typeof useViewerState>[0] = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  const viewerOptions = { activeWorkspace: "logs" as const, ...options };
 
-  return renderHook(() => useViewerState(), {
+  return renderHook(() => useViewerState(viewerOptions), {
     wrapper: ({ children }: { children: ReactNode }) =>
       createElement(QueryClientProvider, { client }, children),
   });
@@ -593,6 +594,36 @@ describe("useViewerState", () => {
         authMode: "bearer",
         trainingEnabled: false,
         logDeletionEnabled: false,
+      });
+    });
+  });
+
+  it("defers historical tag reads on the model workspace until experiment mode is active", async () => {
+    mocks.fetchLogRuns.mockResolvedValueOnce({
+      runs: [
+        logRun({
+          id: "linear-history",
+          preset: "Fast",
+          dataset: "FashionMnist",
+          timestamp: "2026-06-02 01:02:03",
+        }),
+      ],
+    });
+    const { result } = renderViewerState({ activeWorkspace: "model" });
+
+    await waitFor(() => {
+      expect(mocks.fetchLogRuns).toHaveBeenCalled();
+      expect(result.current.target.selectedModel).toBe("linear");
+    });
+    expect(mocks.fetchLogTags).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.target.activateTargetExperimentMode();
+    });
+
+    await waitFor(() => {
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith({
+        runIds: ["linear-history"],
       });
     });
   });

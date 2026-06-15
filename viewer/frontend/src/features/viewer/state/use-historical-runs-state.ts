@@ -24,6 +24,7 @@ type HistoricalRunSelectionState = {
 
 type HistoricalRunsStateInput = {
   selectedModel: string;
+  tagsEnabled?: boolean;
   syncSelectedLogRun: (selectedLogRun: LogRun) => void;
   selection: HistoricalRunSelectionState;
 };
@@ -86,6 +87,7 @@ export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
 
 export function useHistoricalRunsState({
   selectedModel,
+  tagsEnabled = true,
   syncSelectedLogRun,
   selection,
 }: HistoricalRunsStateInput): HistoricalRunsState {
@@ -107,6 +109,7 @@ export function useHistoricalRunsState({
   );
   const modelRunTagsQuery = useLogTagsQuery({
     runIds: modelLogRunIds,
+    enabled: tagsEnabled,
     queryKey: logQueryKeys.modelRunTags(modelLogRunIds),
   });
   const datasetSelectionState = useMemo(
@@ -138,6 +141,7 @@ export function useHistoricalRunsState({
   } = datasetSelectionState;
   const logRunTagsQuery = useLogTagsQuery({
     runIds: filteredHistoricalRunIds,
+    enabled: tagsEnabled && selectedLogRunId !== null,
     queryKey: logQueryKeys.filteredHistoricalRunTags(filteredHistoricalRunIds),
   });
 
@@ -186,8 +190,9 @@ export function useHistoricalRunsState({
       selectLogRun,
       logRunsQuery,
       logRunTagsQuery,
-      experimentsLoading: logRunsQuery.isLoading || modelRunTagsQuery.isLoading,
-      experimentsError: logRunsQuery.error ?? modelRunTagsQuery.error,
+      experimentsLoading:
+        logRunsQuery.isLoading || (tagsEnabled && modelRunTagsQuery.isLoading),
+      experimentsError: logRunsQuery.error ?? (tagsEnabled ? modelRunTagsQuery.error : null),
     },
     graphPreview: {
       historicalMonitorRuns,

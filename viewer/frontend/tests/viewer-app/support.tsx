@@ -2476,7 +2476,12 @@ export function installFetchMock(
   const inspectBodies: unknown[] = [];
   const operationGraphBodies: unknown[] = [];
   const trainingBodies: unknown[] = [];
-  const logScalarRequests: Array<{ runIds: string[]; tags: string[] }> = [];
+  const logScalarRequests: Array<{
+    runIds: string[];
+    tags: string[];
+    maxPoints?: number;
+    sampling?: string;
+  }> = [];
   const configSnapshotCreateRequests: Array<{
     model: string;
     preset: string;
@@ -3006,8 +3011,49 @@ export function installFetchMock(
         deletedRelativePaths: plan.candidates.map((run) => run.relativePath),
       });
     }
-    if (url.endsWith("/logs/runs")) {
-      return jsonResponse(logResponse);
+    if (url.endsWith("/logs/runs") || url.includes("/logs/runs?")) {
+      const parsedUrl = new URL(url, "http://testserver");
+      const selectedExperiments = parsedUrl.searchParams.getAll("experiment");
+      const selectedModels = parsedUrl.searchParams.getAll("model");
+      const selectedPresets = parsedUrl.searchParams.getAll("preset");
+      const selectedDatasets = parsedUrl.searchParams.getAll("dataset");
+      const hasEventFiles = parsedUrl.searchParams.get("hasEventFiles");
+      const offset = Number(parsedUrl.searchParams.get("offset") ?? 0);
+      const limit = Number(
+        parsedUrl.searchParams.get("limit") ?? logResponse.runs.length,
+      );
+      const filteredRuns = logResponse.runs.filter((run) => {
+        if (
+          selectedExperiments.length > 0 &&
+          !selectedExperiments.includes(run.experiment)
+        ) {
+          return false;
+        }
+        if (selectedModels.length > 0 && !selectedModels.includes(run.model)) {
+          return false;
+        }
+        if (selectedPresets.length > 0 && !selectedPresets.includes(run.preset)) {
+          return false;
+        }
+        if (selectedDatasets.length > 0 && !selectedDatasets.includes(run.dataset)) {
+          return false;
+        }
+        if (hasEventFiles === "true" && run.eventFileCount <= 0) {
+          return false;
+        }
+        if (hasEventFiles === "false" && run.eventFileCount > 0) {
+          return false;
+        }
+        return true;
+      });
+      return jsonResponse({
+        ...logResponse,
+        runs: filteredRuns.slice(offset, offset + limit),
+        total: filteredRuns.length,
+        limit,
+        offset,
+        hasMore: offset + limit < filteredRuns.length,
+      });
     }
     if (url.endsWith("/logs/checkpoints")) {
       const body = JSON.parse(String(init?.body)) as { runIds: string[] };
@@ -3100,6 +3146,8 @@ export function installFetchMock(
       const body = JSON.parse(String(init?.body)) as {
         runIds: string[];
         tags: string[];
+        maxPoints?: number;
+        sampling?: string;
       };
       logScalarRequests.push(body);
       return jsonResponse({
@@ -3375,6 +3423,7 @@ export async function selectTrainingTargetOption(
 
 export type TrainingMultiSelectLabel =
   | "Presets"
+  | "Config snapshots"
   | "Training datasets"
   | "Training monitors";
 

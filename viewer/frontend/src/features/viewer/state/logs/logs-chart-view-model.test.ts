@@ -65,7 +65,12 @@ describe("logs chart view model", () => {
       tags,
       enabled: true,
     });
-    expect(input.queryKey).toEqual(["log-scalars", runIds, tags]);
+    expect(input.queryKey).toEqual([
+      "log-scalars",
+      runIds,
+      tags,
+      { maxPoints: 500, sampling: "tail" },
+    ]);
     expect(input.queryKey[1]).not.toBe(runIds);
     expect(input.queryKey[2]).not.toBe(tags);
   });
@@ -132,18 +137,18 @@ describe("logs chart view model", () => {
     expect(groups.other).toEqual([]);
   });
 
-  it("treats classifier diagnostics as default scalar tags", () => {
+  it("defaults to compact common scalar tags without bulk classifier diagnostics", () => {
     expect(isDefaultScalarTag("gap/accuracy")).toBe(true);
     expect(isDefaultScalarTag("gap/loss")).toBe(true);
     expect(isDefaultScalarTag("best_validation/accuracy")).toBe(true);
     expect(isDefaultScalarTag("gradients/global_norm")).toBe(true);
     expect(isDefaultScalarTag("validation/confidence/mean")).toBe(true);
-    expect(isDefaultScalarTag("validation/per_class/class_3/f1")).toBe(true);
+    expect(isDefaultScalarTag("validation/per_class/class_3/f1")).toBe(false);
     expect(
       isDefaultScalarTag(
         "validation/confusion_matrix/true_class_3/predicted_class_5/rate",
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isDefaultScalarTag(
         "validation/confusion_matrix/true_class_3/predicted_class_5/count",
@@ -197,6 +202,7 @@ describe("logs chart view model", () => {
   it("derives empty states for selected tag and scalar point gaps", () => {
     expect(
       deriveLogsChartEmptyState({
+        expandedSelectedTagCount: 0,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: false,
@@ -210,6 +216,7 @@ describe("logs chart view model", () => {
 
     expect(
       deriveLogsChartEmptyState({
+        expandedSelectedTagCount: 1,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: false,
@@ -223,6 +230,7 @@ describe("logs chart view model", () => {
 
     expect(
       deriveLogsChartEmptyState({
+        expandedSelectedTagCount: 1,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: true,
@@ -238,6 +246,7 @@ describe("logs chart view model", () => {
   it("does not return an empty state when selected scalar series are renderable", () => {
     expect(
       deriveLogsChartEmptyState({
+        expandedSelectedTagCount: 1,
         hasEventFiles: true,
         runsLoading: false,
         scalarLoading: false,

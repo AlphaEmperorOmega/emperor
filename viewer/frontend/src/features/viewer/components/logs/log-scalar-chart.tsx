@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { EChart } from "@/features/viewer/components/charts/echart";
 import { type LogCheckpoint, type LogRun, type LogScalarSeries } from "@/lib/api";
@@ -17,6 +17,58 @@ import {
   formatRunLabel,
 } from "@/features/viewer/state/logs/logs-selectors";
 
+type LogScalarChartProps = {
+  tag: string;
+  series: LogScalarSeries[];
+  runsById: Map<string, LogRun>;
+  checkpointsByRunId: Map<string, LogCheckpoint[]>;
+  runOrder: string[];
+  onSelectRun: (runId: string) => void;
+  xMode?: ScalarXMode;
+  yScale?: ScalarYScale;
+  smoothing?: number;
+  group?: string;
+};
+
+export function LazyLogScalarChart(props: LogScalarChartProps) {
+  const chartRef = useRef<HTMLElement | null>(null);
+  const [hasEnteredView, setHasEnteredView] = useState(false);
+
+  useEffect(() => {
+    if (hasEnteredView) {
+      return;
+    }
+    const node = chartRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setHasEnteredView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setHasEnteredView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "360px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasEnteredView]);
+
+  if (!hasEnteredView) {
+    return (
+      <section
+        ref={chartRef}
+        className="edge min-h-[350px] rounded-card p-4"
+        aria-label={`${props.tag} scalar chart placeholder`}
+      />
+    );
+  }
+
+  return <LogScalarChart {...props} />;
+}
+
 export function LogScalarChart({
   tag,
   series,
@@ -28,28 +80,60 @@ export function LogScalarChart({
   yScale = "linear",
   smoothing = 0,
   group,
-}: {
-  tag: string;
-  series: LogScalarSeries[];
-  runsById: Map<string, LogRun>;
-  checkpointsByRunId: Map<string, LogCheckpoint[]>;
-  runOrder: string[];
-  onSelectRun: (runId: string) => void;
-  xMode?: ScalarXMode;
-  yScale?: ScalarYScale;
-  smoothing?: number;
-  group?: string;
-}) {
-  const colorFor = (runId: string) =>
-    scalarSeriesColors[Math.max(runOrder.indexOf(runId), 0) % scalarSeriesColors.length];
+}: LogScalarChartProps) {
+  const runIndex = useMemo(
+    () => new Map(runOrder.map((runId, index) => [runId, index])),
+    [runOrder],
+  );
+  const colorFor = useCallback(
+    (runId: string) =>
+      scalarSeriesColors[
+        Math.max(runIndex.get(runId) ?? 0, 0) % scalarSeriesColors.length
+      ],
+    [runIndex],
+  );
 
-  const allPoints = series.flatMap((entry) => entry.points);
-  const steps = allPoints.map((point) => point.step);
-  const values = allPoints.map((point) => point.value);
-  const minStep = steps.length ? Math.min(...steps) : 0;
-  const maxStep = steps.length ? Math.max(...steps) : 0;
-  const minValue = values.length ? Math.min(...values) : 0;
-  const maxValue = values.length ? Math.max(...values) : 0;
+  const scalarBounds = useMemo(() => {
+    let minStep = Number.POSITIVE_INFINITY;
+    let maxStep = Number.NEGATIVE_INFINITY;
+    let minValue = Number.POSITIVE_INFINITY;
+    let maxValue = Number.NEGATIVE_INFINITY;
+    let pointCount = 0;
+    for (const entry of series) {
+      for (const point of entry.points) {
+        minStep = Math.min(minStep, point.step);
+        maxStep = Math.max(maxStep, point.step);
+        minValue = Math.min(minValue, point.value);
+        maxValue = Math.max(maxValue, point.value);
+        pointCount += 1;
+      }
+    }
+    return {
+      minStep: pointCount ? minStep : 0,
+      maxStep: pointCount ? maxStep : 0,
+      minValue: pointCount ? minValue : 0,
+      maxValue: pointCount ? maxValue : 0,
+    };
+  }, [series]);
+
+  const legendEntries = useMemo(
+    () =>
+      series
+        .map((entry) => {
+          const run = runsById.get(entry.runId);
+          if (!run) {
+            return null;
+          }
+          return {
+            runId: entry.runId,
+            run,
+            color: colorFor(entry.runId),
+            latest: entry.points.at(-1),
+          };
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+    [colorFor, runsById, series],
+  );
 
   const option = useMemo(() => {
     const lines: ScalarLine[] = series.map((entry) => {
@@ -79,9 +163,15 @@ export function LogScalarChart({
       dataZoom: true,
       checkpointMarkers,
     });
-    // colorFor depends on runOrder; runsById/series cover the rest.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, runsById, checkpointsByRunId, runOrder, xMode, yScale, smoothing]);
+  }, [
+    colorFor,
+    series,
+    runsById,
+    checkpointsByRunId,
+    xMode,
+    yScale,
+    smoothing,
+  ]);
 
   return (
     <section className="edge grid min-w-0 gap-3 rounded-card p-4">
@@ -89,11 +179,12 @@ export function LogScalarChart({
         <div className="min-w-0">
           <h2 className="truncate text-sm font-bold text-ink">{tag}</h2>
           <div className="mt-0.5 font-mono text-xs text-ink-faint">
-            {series.length} lines · step {minStep} to {maxStep}
+            {series.length} lines · step {scalarBounds.minStep} to{" "}
+            {scalarBounds.maxStep}
           </div>
         </div>
         <Badge>
-          {formatNumber(minValue)} to {formatNumber(maxValue)}
+          {formatNumber(scalarBounds.minValue)} to {formatNumber(scalarBounds.maxValue)}
         </Badge>
       </div>
 
@@ -102,13 +193,7 @@ export function LogScalarChart({
       </div>
 
       <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
-        {series.map((entry) => {
-          const run = runsById.get(entry.runId);
-          if (!run) {
-            return null;
-          }
-          const color = colorFor(entry.runId);
-          const latest = entry.points.at(-1);
+        {legendEntries.map((entry) => {
           return (
             <button
               key={entry.runId}
@@ -118,12 +203,16 @@ export function LogScalarChart({
             >
               <span
                 className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: color }}
+                style={{ backgroundColor: entry.color }}
                 aria-hidden
               />
-              <span className="truncate text-ink-dim">{formatRunLabel(run)}</span>
-              {latest && (
-                <span className="font-mono text-ink-faint">{formatNumber(latest.value)}</span>
+              <span className="truncate text-ink-dim">
+                {formatRunLabel(entry.run)}
+              </span>
+              {entry.latest && (
+                <span className="font-mono text-ink-faint">
+                  {formatNumber(entry.latest.value)}
+                </span>
               )}
             </button>
           );

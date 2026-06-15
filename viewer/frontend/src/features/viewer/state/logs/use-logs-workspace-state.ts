@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   createLogRunDeletePlan,
@@ -23,7 +30,6 @@ import {
   selectedOptionsSet,
   setAllValues,
   setNoValues,
-  toggleSetValue,
 } from "@/features/viewer/state/logs/logs-selectors";
 import {
   addValueToInitializedSelection,
@@ -38,13 +44,44 @@ import {
   removeStartedExperiment,
   removeValueFromSelection,
   removeValuesFromSelection,
-  selectionSetOrEmpty,
   startedRunSelections,
 } from "@/features/viewer/state/logs/logs-selection-state";
+
+const TARGET_LOG_RUN_LIMIT = 5;
+const CUSTOM_LOG_RUN_LIMIT = 500;
+const DEFAULT_COLLAPSED_METRIC_GROUPS = new Set<LogMetricGroupKey>([
+  "train",
+  "test",
+  "other",
+]);
 
 function logDeletionDisabledError() {
   return new Error("Log deletion is disabled by backend capabilities.");
 }
+
+function toggleSetValueWithFallback(
+  setValues: Dispatch<SetStateAction<Set<string> | null>>,
+  fallbackValues: string[],
+  value: string,
+) {
+  setValues((previous) => {
+    const next = new Set(previous ?? fallbackValues);
+    if (next.has(value)) {
+      next.delete(value);
+    } else {
+      next.add(value);
+    }
+    return next;
+  });
+}
+
+export type LogsScopeMode = "target" | "custom";
+
+export type LogsTargetScope = {
+  model: string;
+  preset: string;
+  datasets: string[];
+};
 
 /**
  * Owns all state for the logs workspace: the run/experiment/tag queries, the
@@ -55,11 +92,25 @@ function logDeletionDisabledError() {
 export function useLogsWorkspaceState({
   enabled,
   logDeletionEnabled = true,
+  targetScope,
 }: {
   enabled: boolean;
   logDeletionEnabled?: boolean;
+  targetScope: LogsTargetScope;
 }) {
   const { invalidateLogLists, refreshAfterMutation } = useLogQueryCache();
+  const [scopeMode, setScopeMode] = useState<LogsScopeMode>("target");
+  const targetScopeKey = useMemo(
+    () =>
+      JSON.stringify({
+        model: targetScope.model,
+        preset: targetScope.preset,
+        datasets: [...targetScope.datasets].sort(),
+      }),
+    [targetScope.datasets, targetScope.model, targetScope.preset],
+  );
+  const [appliedTargetScopeKey, setAppliedTargetScopeKey] =
+    useState(targetScopeKey);
   const [startedExperiments, setStartedExperiments] = useState<Set<string>>(new Set());
   const [selectedExperiments, setSelectedExperiments] = useState<Set<string> | null>(null);
   const [selectedDatasets, setSelectedDatasets] = useState<Set<string> | null>(null);
@@ -70,9 +121,32 @@ export function useLogsWorkspaceState({
   const [selectedDetailRunId, setSelectedDetailRunId] = useState<string | null>(null);
   const [collapsedMetricGroups, setCollapsedMetricGroups] = useState<
     Set<LogMetricGroupKey>
-  >(new Set());
+  >(new Set(DEFAULT_COLLAPSED_METRIC_GROUPS));
 
-  const runsQuery = useLogRunsQuery({ enabled });
+  const hasTargetScope = Boolean(
+    targetScope.model && targetScope.preset && targetScope.datasets.length > 0,
+  );
+  const targetRunFilters = useMemo(
+    () =>
+      hasTargetScope
+        ? {
+            model: [targetScope.model],
+            preset: [targetScope.preset],
+            dataset: targetScope.datasets,
+            hasEventFiles: true,
+          }
+        : { hasEventFiles: true },
+    [hasTargetScope, targetScope.datasets, targetScope.model, targetScope.preset],
+  );
+  const isTargetScopeMode = scopeMode === "target";
+  const runsQuery = useLogRunsQuery({
+    enabled,
+    filters: isTargetScopeMode ? targetRunFilters : undefined,
+    pagination: {
+      limit: isTargetScopeMode ? TARGET_LOG_RUN_LIMIT : CUSTOM_LOG_RUN_LIMIT,
+      offset: 0,
+    },
+  });
   const experimentsQuery = useLogExperimentsQuery({ enabled });
 
   const runsData = runsQuery.data?.runs;
@@ -98,19 +172,43 @@ export function useLogsWorkspaceState({
     });
   }, []);
 
+  const resetLogSelections = useCallback(() => {
+    setSelectedExperiments(null);
+    setSelectedDatasets(null);
+    setSelectedModels(null);
+    setSelectedPresets(null);
+    setSelectedRunIds(null);
+    setSelectedTags(null);
+    setSelectedDetailRunId(null);
+    setCollapsedMetricGroups(new Set(DEFAULT_COLLAPSED_METRIC_GROUPS));
+  }, []);
+
+  const useCurrentTargetScope = useCallback(() => {
+    setScopeMode("target");
+    setAppliedTargetScopeKey(targetScopeKey);
+    resetLogSelections();
+  }, [resetLogSelections, targetScopeKey]);
+
+  const showAllRuns = useCallback(() => {
+    setScopeMode("custom");
+    resetLogSelections();
+  }, [resetLogSelections]);
+
+  const markCustomScope = useCallback(() => {
+    setScopeMode("custom");
+  }, []);
+
   useEffect(() => {
-    if (!enabled || !experimentsQuery.isSuccess || selectedExperiments !== null) {
+    if (scopeMode !== "target" || appliedTargetScopeKey === targetScopeKey) {
       return;
     }
-    setSelectedExperiments(
-      buildInitialExperimentSelection({ experimentOptions, startedExperiments }),
-    );
+    setAppliedTargetScopeKey(targetScopeKey);
+    resetLogSelections();
   }, [
-    enabled,
-    experimentOptions,
-    experimentsQuery.isSuccess,
-    selectedExperiments,
-    startedExperiments,
+    appliedTargetScopeKey,
+    resetLogSelections,
+    scopeMode,
+    targetScopeKey,
   ]);
 
   useEffect(() => {
@@ -162,57 +260,21 @@ export function useLogsWorkspaceState({
   );
   const runOptions = useMemo(() => experimentRuns.map(runOption), [experimentRuns]);
 
-  useEffect(() => {
-    if (!enabled || !runsQuery.isSuccess || selectedDatasets !== null) {
-      return;
-    }
-    setSelectedDatasets(
-      buildInitialRunFacetSelection(runs, "dataset"),
-    );
-  }, [enabled, runs, runsQuery.isSuccess, selectedDatasets]);
-
-  useEffect(() => {
-    if (!enabled || !runsQuery.isSuccess || selectedModels !== null) {
-      return;
-    }
-    setSelectedModels(buildInitialRunFacetSelection(runs, "model"));
-  }, [enabled, runs, runsQuery.isSuccess, selectedModels]);
-
-  useEffect(() => {
-    if (!enabled || !runsQuery.isSuccess || selectedPresets !== null) {
-      return;
-    }
-    setSelectedPresets(
-      buildInitialRunFacetSelection(runs, "preset"),
-    );
-  }, [enabled, runs, runsQuery.isSuccess, selectedPresets]);
-
-  useEffect(() => {
-    if (!enabled || !runsQuery.isSuccess || selectedRunIds !== null) {
-      return;
-    }
-    setSelectedRunIds(buildInitialRunIdSelection(runs));
-  }, [enabled, runs, runsQuery.isSuccess, selectedRunIds]);
-
   const datasetSet = useMemo(
-    () => selectionSetOrEmpty(selectedDatasets),
-    [selectedDatasets],
+    () => selectedDatasets ?? buildInitialRunFacetSelection(runs, "dataset"),
+    [runs, selectedDatasets],
   );
   const modelSet = useMemo(
-    () => selectionSetOrEmpty(selectedModels),
-    [selectedModels],
+    () => selectedModels ?? buildInitialRunFacetSelection(runs, "model"),
+    [runs, selectedModels],
   );
   const presetSet = useMemo(
-    () => selectionSetOrEmpty(selectedPresets),
-    [selectedPresets],
+    () => selectedPresets ?? buildInitialRunFacetSelection(runs, "preset"),
+    [runs, selectedPresets],
   );
   const runIdSet = useMemo(
-    () => selectionSetOrEmpty(selectedRunIds),
-    [selectedRunIds],
-  );
-  const selectedTagsSet = useMemo(
-    () => selectionSetOrEmpty(selectedTags),
-    [selectedTags],
+    () => selectedRunIds ?? buildInitialRunIdSelection(runs),
+    [runs, selectedRunIds],
   );
 
   const visibleRuns = useMemo(
@@ -255,17 +317,19 @@ export function useLogsWorkspaceState({
     });
   }, [tagsQuery.data]);
 
-  useEffect(() => {
-    if (!enabled || !tagsQuery.isSuccess || selectedTags !== null) {
-      return;
-    }
-    const availableTags = new Set(tagOptions.map((option) => option.value));
-    setSelectedTags(
+  const defaultSelectedTags = useMemo(
+    () =>
       new Set(
-        Array.from(availableTags).filter((tag) => isDefaultScalarTag(tag)),
+        tagOptions
+          .map((option) => option.value)
+          .filter((tag) => isDefaultScalarTag(tag)),
       ),
-    );
-  }, [enabled, selectedTags, tagOptions, tagsQuery.isSuccess]);
+    [tagOptions],
+  );
+  const selectedTagsSet = useMemo(
+    () => selectedTags ?? defaultSelectedTags,
+    [defaultSelectedTags, selectedTags],
+  );
 
   useEffect(() => {
     const nextDetailRunId = nextSelectedDetailRunId(selectedDetailRunId, visibleRuns);
@@ -418,27 +482,99 @@ export function useLogsWorkspaceState({
     resetDeleteExperiment: deleteExperimentMutation.reset,
     refreshLogLists: invalidateLogLists,
     includeStartedExperiment,
-    toggleExperiment: (value: string) => toggleSetValue(setSelectedExperiments, value),
-    toggleDataset: (value: string) => toggleSetValue(setSelectedDatasets, value),
-    toggleModel: (value: string) => toggleSetValue(setSelectedModels, value),
-    togglePreset: (value: string) => toggleSetValue(setSelectedPresets, value),
-    toggleRun: (value: string) => toggleSetValue(setSelectedRunIds, value),
-    toggleTag: (value: string) => toggleSetValue(setSelectedTags, value),
-    selectAllExperiments: () =>
-      setAllValues(setSelectedExperiments, experimentOptions.map((option) => option.value)),
-    selectNoExperiments: () => setNoValues(setSelectedExperiments),
-    selectAllDatasets: () =>
-      setAllValues(setSelectedDatasets, datasetOptions.map((option) => option.value)),
-    selectNoDatasets: () => setNoValues(setSelectedDatasets),
-    selectAllModels: () =>
-      setAllValues(setSelectedModels, modelOptions.map((option) => option.value)),
-    selectNoModels: () => setNoValues(setSelectedModels),
-    selectAllPresets: () =>
-      setAllValues(setSelectedPresets, presetOptions.map((option) => option.value)),
-    selectNoPresets: () => setNoValues(setSelectedPresets),
-    selectAllRuns: () =>
-      setAllValues(setSelectedRunIds, runOptions.map((option) => option.value)),
-    selectNoRuns: () => setNoValues(setSelectedRunIds),
+    scopeMode,
+    targetScope,
+    useCurrentTargetScope,
+    showAllRuns,
+    toggleExperiment: (value: string) => {
+      markCustomScope();
+      toggleSetValueWithFallback(
+        setSelectedExperiments,
+        experimentOptions.map((option) => option.value),
+        value,
+      );
+    },
+    toggleDataset: (value: string) => {
+      markCustomScope();
+      toggleSetValueWithFallback(
+        setSelectedDatasets,
+        datasetOptions.map((option) => option.value),
+        value,
+      );
+    },
+    toggleModel: (value: string) => {
+      markCustomScope();
+      toggleSetValueWithFallback(
+        setSelectedModels,
+        modelOptions.map((option) => option.value),
+        value,
+      );
+    },
+    togglePreset: (value: string) => {
+      markCustomScope();
+      toggleSetValueWithFallback(
+        setSelectedPresets,
+        presetOptions.map((option) => option.value),
+        value,
+      );
+    },
+    toggleRun: (value: string) => {
+      markCustomScope();
+      toggleSetValueWithFallback(
+        setSelectedRunIds,
+        runOptions.map((option) => option.value),
+        value,
+      );
+    },
+    toggleTag: (value: string) =>
+      toggleSetValueWithFallback(
+        setSelectedTags,
+        Array.from(defaultSelectedTags),
+        value,
+      ),
+    selectAllExperiments: () => {
+      markCustomScope();
+      setAllValues(
+        setSelectedExperiments,
+        experimentOptions.map((option) => option.value),
+      );
+    },
+    selectNoExperiments: () => {
+      markCustomScope();
+      setNoValues(setSelectedExperiments);
+    },
+    selectAllDatasets: () => {
+      markCustomScope();
+      setAllValues(setSelectedDatasets, datasetOptions.map((option) => option.value));
+    },
+    selectNoDatasets: () => {
+      markCustomScope();
+      setNoValues(setSelectedDatasets);
+    },
+    selectAllModels: () => {
+      markCustomScope();
+      setAllValues(setSelectedModels, modelOptions.map((option) => option.value));
+    },
+    selectNoModels: () => {
+      markCustomScope();
+      setNoValues(setSelectedModels);
+    },
+    selectAllPresets: () => {
+      markCustomScope();
+      setAllValues(setSelectedPresets, presetOptions.map((option) => option.value));
+    },
+    selectNoPresets: () => {
+      markCustomScope();
+      setNoValues(setSelectedPresets);
+    },
+    selectAllRuns: () => {
+      markCustomScope();
+      setAllValues(setSelectedRunIds, runOptions.map((option) => option.value));
+    },
+    selectNoRuns: () => {
+      markCustomScope();
+      setNoValues(setSelectedRunIds);
+    },
     selectAllTags: () =>
       setAllValues(setSelectedTags, tagOptions.map((option) => option.value)),
     selectNoTags: () => setNoValues(setSelectedTags),

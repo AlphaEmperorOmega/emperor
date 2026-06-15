@@ -5,10 +5,7 @@ import {
   toggleSetValue as toggleSelectionSetValue,
   uniqueValidValues,
 } from "@/lib/selection";
-import {
-  isConfusionMatrixHeatmapTag,
-  isDefaultDiagnosticScalarTag,
-} from "@/features/viewer/state/logs/log-diagnostics";
+import { isConfusionMatrixHeatmapTag } from "@/features/viewer/state/logs/log-diagnostics";
 
 export { formatNumber };
 
@@ -40,10 +37,7 @@ export const COMMON_SCALAR_TAGS = [
 ];
 
 export function isDefaultScalarTag(tag: string) {
-  return (
-    COMMON_SCALAR_TAGS.includes(tag) ||
-    isDefaultDiagnosticScalarTag(tag)
-  );
+  return COMMON_SCALAR_TAGS.includes(tag);
 }
 
 export const LOG_METRIC_GROUPS = [
@@ -68,6 +62,7 @@ export type RenderableLogMetric = {
 };
 
 export type LogMetricsByGroup = Record<LogMetricGroupKey, RenderableLogMetric[]>;
+export type LogMetricTagsByGroup = Record<LogMetricGroupKey, string[]>;
 
 export function buildCountOptions(
   runs: LogRun[],
@@ -174,6 +169,19 @@ export function groupRenderableLogMetrics({
     groups[metricGroupForTag(tag)].push({ tag, series });
   }
 
+  return groups;
+}
+
+export function groupLogMetricTags(tags: string[]): LogMetricTagsByGroup {
+  const groups: LogMetricTagsByGroup = {
+    train: [],
+    validation: [],
+    test: [],
+    other: [],
+  };
+  for (const tag of tags) {
+    groups[metricGroupForTag(tag)].push(tag);
+  }
   return groups;
 }
 

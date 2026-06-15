@@ -195,14 +195,34 @@ export function anyLogRunTagsMatchNodePath(
   );
 }
 
+const performanceTagRoots = new Set([
+  "best_validation",
+  "epoch",
+  "gap",
+  "gradients",
+  "parameters",
+  "test",
+  "train",
+  "validation",
+]);
+
+function tagLooksLikeLayerMonitorTag(tag: string) {
+  const [nodePath, group, metric] = tag.split("/");
+  if (!nodePath || !group || !metric) {
+    return false;
+  }
+  if (performanceTagRoots.has(nodePath)) {
+    return false;
+  }
+  return nodePath.includes(".") || nodePath.endsWith("_model") || nodePath === "model";
+}
+
 /**
  * Whether a run carries per-layer monitor data (as opposed to only flat
- * model-performance metrics such as `train/loss` or `epoch`). Shape-based and
- * monitor-type agnostic so it survives new monitor callbacks:
- * - any histogram or image tag implies layer monitoring (performance metrics
- *   never emit those), or
- * - a scalar tag with a node-path prefix, i.e. `node/group/stat` (>= 2 slashes).
- *   Flat performance tags have at most one slash (`train/loss`) or none (`epoch`).
+ * model-performance metrics such as `train/loss`, `validation/examples/*`, or
+ * confusion matrices. Shape-based and monitor-type agnostic so it survives new
+ * monitor callbacks, but the first path segment still has to look like a graph
+ * node path rather than a training metric namespace.
  */
 export function logRunHasLayerMonitorData(
   tags: Pick<LogRunTags, "scalarTags" | "histogramTags" | "imageTags"> | undefined,
@@ -210,10 +230,9 @@ export function logRunHasLayerMonitorData(
   if (!tags) {
     return false;
   }
-  if (tags.histogramTags.length > 0 || tags.imageTags.length > 0) {
-    return true;
-  }
-  return tags.scalarTags.some((tag) => tag.split("/").length >= 3);
+  return [...tags.scalarTags, ...tags.histogramTags, ...tags.imageTags].some(
+    tagLooksLikeLayerMonitorTag,
+  );
 }
 
 /**

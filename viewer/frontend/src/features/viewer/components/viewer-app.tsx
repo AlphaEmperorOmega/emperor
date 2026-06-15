@@ -10,8 +10,8 @@ export function ViewerApp() {
   const workspaceShell = useViewerWorkspaceShell();
 
   return (
-    <ViewerProviders onJobStarted={workspaceShell.onJobStarted}>
-      <LogsWorkspaceProvider state={workspaceShell.logsWorkspaceState}>
+    <ViewerProviders activeWorkspace={workspaceShell.screen.activeWorkspace}>
+      <LogsWorkspaceProvider enabled={workspaceShell.screen.activeWorkspace === "logs"}>
         <ViewerScreen shell={workspaceShell.screen} />
       </LogsWorkspaceProvider>
     </ViewerProviders>

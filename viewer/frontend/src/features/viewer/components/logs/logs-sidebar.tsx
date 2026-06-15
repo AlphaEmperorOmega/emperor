@@ -57,6 +57,10 @@ export type LogsSidebarProps = {
   selectedPresets: Set<string>;
   selectedRunIds: Set<string>;
   selectedTags: Set<string>;
+  scopeMode: LogsWorkspaceState["scopeMode"];
+  targetScope: LogsWorkspaceState["targetScope"];
+  onUseCurrentTarget: LogsWorkspaceState["useCurrentTargetScope"];
+  onShowAllRuns: LogsWorkspaceState["showAllRuns"];
   toggleExperiment: LogsWorkspaceState["toggleExperiment"];
   toggleDataset: LogsWorkspaceState["toggleDataset"];
   toggleModel: LogsWorkspaceState["toggleModel"];
@@ -329,6 +333,10 @@ export function LogsSidebar({
   selectedPresets,
   selectedRunIds,
   selectedTags,
+  scopeMode,
+  targetScope,
+  onUseCurrentTarget,
+  onShowAllRuns,
   toggleExperiment,
   toggleDataset,
   toggleModel,
@@ -374,6 +382,13 @@ export function LogsSidebar({
     selectedExperimentOptions.size === 1
       ? Array.from(selectedExperimentOptions)[0]
       : null;
+  const targetScopeLabel = [
+    targetScope.model,
+    targetScope.preset,
+    targetScope.datasets.join(", "),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   useEffect(() => {
     if (!subsetDeleteTarget || singleSelectedExperiment === subsetDeleteTarget.experiment) {
@@ -522,6 +537,30 @@ export function LogsSidebar({
             value={selectedOptionsSet(selectedTags, tagOptions).size}
             className="py-2.5"
           />
+        </div>
+        <div className="grid gap-2 rounded-[13px] border border-line-soft bg-white/[0.018] p-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant={scopeMode === "target" ? "secondary" : "ghost"}
+              className="h-8 border border-line bg-white/[0.025] text-xs"
+              onClick={onUseCurrentTarget}
+              disabled={scopeMode === "target"}
+            >
+              Current target
+            </Button>
+            <Button
+              variant={scopeMode === "custom" ? "secondary" : "ghost"}
+              className="h-8 border border-line bg-white/[0.025] text-xs"
+              onClick={onShowAllRuns}
+            >
+              All runs
+            </Button>
+          </div>
+          {targetScopeLabel && (
+            <div className="truncate font-mono text-[11px] text-ink-faint">
+              {targetScopeLabel}
+            </div>
+          )}
         </div>
       </section>
 

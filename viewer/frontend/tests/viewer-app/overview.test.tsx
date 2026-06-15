@@ -190,7 +190,7 @@ describe("ViewerApp Overview", () => {
       .not.toBeInTheDocument();
   });
 
-  it("disables the Experiments tab when the selected model has no eligible layer-monitor runs", async () => {
+  it("keeps the Experiments tab reachable when lazy tag reads find no eligible layer-monitor runs", async () => {
     installFetchMock({
       logTagsByRun: {
         "log-mnist": ["train/loss"],
@@ -198,11 +198,18 @@ describe("ViewerApp Overview", () => {
       },
     });
     renderViewer();
+    const user = userEvent.setup();
 
     await waitForTargetValue("preset", "baseline");
 
+    const experimentsTab = screen.getByRole("tab", { name: "Experiments" });
+    expect(experimentsTab).not.toBeDisabled();
+
+    await user.click(experimentsTab);
+
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "Experiments" })).toBeDisabled();
+      expect(screen.getByRole("combobox", { name: /^experiment run$/i }))
+        .toBeDisabled();
     });
   });
 

@@ -7,6 +7,7 @@ import {
   type TrainingContextValue,
 } from "@/features/viewer/state/use-viewer-state";
 import { createViewerContext } from "@/features/viewer/providers/create-context";
+import { type ViewerWorkspace } from "@/types/viewer";
 
 const [TargetConfigProvider, useTargetConfig] =
   createViewerContext<TargetConfigContextValue>("TargetConfigContext");
@@ -191,6 +192,7 @@ export function useCompareTargetState() {
 export type ViewerProvidersProps = {
   /** Wired to the logs workspace so a new job's folder appears in its run list. */
   onJobStarted?: (logFolder: string) => void;
+  activeWorkspace?: ViewerWorkspace;
   children: ReactNode;
 };
 
@@ -199,8 +201,15 @@ export type ViewerProvidersProps = {
  * slices through nested contexts, so panels read exactly the slice they need
  * instead of receiving it drilled down through props.
  */
-export function ViewerProviders({ onJobStarted, children }: ViewerProvidersProps) {
-  const { target, graph, history, training } = useViewerState({ onJobStarted });
+export function ViewerProviders({
+  activeWorkspace,
+  onJobStarted,
+  children,
+}: ViewerProvidersProps) {
+  const { target, graph, history, training } = useViewerState({
+    activeWorkspace,
+    onJobStarted,
+  });
   return (
     <TargetConfigProvider value={target}>
       <GraphViewProvider value={graph}>

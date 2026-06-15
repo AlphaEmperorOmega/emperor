@@ -25,6 +25,10 @@ export function LogsSidebarPanel({ state }: { state: LogsWorkspaceState }) {
       selectedPresets={state.selectedPresets}
       selectedRunIds={state.selectedRunIds}
       selectedTags={state.selectedTags}
+      scopeMode={state.scopeMode}
+      targetScope={state.targetScope}
+      onUseCurrentTarget={state.useCurrentTargetScope}
+      onShowAllRuns={state.showAllRuns}
       toggleExperiment={state.toggleExperiment}
       toggleDataset={state.toggleDataset}
       toggleModel={state.toggleModel}

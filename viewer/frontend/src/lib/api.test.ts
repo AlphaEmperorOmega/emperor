@@ -1663,7 +1663,7 @@ describe("URL and query construction", () => {
     });
   });
 
-  it("fetches all log run pages with limit and offset", async () => {
+  it("keeps log run pagination scoped by default", async () => {
     const firstRun = {
       id: "run-1",
       group: null,
@@ -1719,10 +1719,100 @@ describe("URL and query construction", () => {
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       `${BASE}/logs/runs`,
+    ]);
+    expect(result.runs.map((run) => run.id)).toEqual(["run-1"]);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it("fetches all log run pages when requested", async () => {
+    const firstRun = {
+      id: "run-1",
+      group: null,
+      experiment: "linear",
+      model: "linear",
+      preset: "BASELINE",
+      dataset: "Mnist",
+      runName: "aaa_20260601_010203",
+      timestamp: "2026-06-01 01:02:03",
+      version: "version_0",
+      relativePath: "linear/BASELINE/Mnist/aaa_20260601_010203/version_0",
+      hasResult: false,
+      eventFileCount: 1,
+      checkpointCount: 0,
+      hasHparams: true,
+      metrics: {},
+    };
+    const secondRun = {
+      ...firstRun,
+      id: "run-2",
+      runName: "bbb_20260601_020304",
+      relativePath: "linear/BASELINE/Mnist/bbb_20260601_020304/version_0",
+    };
+    const fetchMock = vi
+      .fn<FetchFn>()
+      .mockResolvedValueOnce(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              total: 2,
+              limit: 1,
+              offset: 0,
+              hasMore: true,
+              runs: [firstRun],
+            }),
+        }),
+      )
+      .mockResolvedValueOnce(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              total: 2,
+              limit: 1,
+              offset: 1,
+              hasMore: false,
+              runs: [secondRun],
+            }),
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchLogRuns({ includeAllPages: true });
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      `${BASE}/logs/runs`,
       `${BASE}/logs/runs?limit=1&offset=1`,
     ]);
     expect(result.runs.map((run) => run.id)).toEqual(["run-1", "run-2"]);
     expect(result.hasMore).toBe(false);
+  });
+
+  it("fetches scoped log run pages with filters and pagination", async () => {
+    const fetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            total: 0,
+            limit: 5,
+            offset: 0,
+            hasMore: false,
+            runs: [],
+          }),
+      }),
+    );
+
+    await fetchLogRuns({
+      filters: {
+        model: ["linear"],
+        preset: ["BASELINE"],
+        dataset: ["Mnist", "Cifar10"],
+        hasEventFiles: true,
+      },
+      pagination: { limit: 5, offset: 0 },
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      `${BASE}/logs/runs?model=linear&preset=BASELINE&dataset=Mnist&dataset=Cifar10&hasEventFiles=true&limit=5&offset=0`,
+    );
   });
 
   it("fetches log experiments with run counts", async () => {
@@ -2013,9 +2103,53 @@ describe("POST requests", () => {
     expect(scalarFetchMock.mock.calls[0][0]).toBe(`${BASE}/logs/scalars`);
     expect((scalarFetchMock.mock.calls[0][1] as RequestInit).method).toBe("POST");
     expect((scalarFetchMock.mock.calls[0][1] as RequestInit).body).toBe(
-      JSON.stringify({ runIds: ["run-1"], tags: ["train/loss"] }),
+      JSON.stringify({
+        maxPoints: 500,
+        sampling: "tail",
+        runIds: ["run-1"],
+        tags: ["train/loss"],
+      }),
     );
     expect(scalars.series[0].points[0].value).toBe(0.25);
+  });
+
+  it("chunks oversized log scalar tag requests to match backend limits", async () => {
+    const scalarFetchMock = stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            series: [],
+          }),
+      }),
+    );
+    const tags = Array.from({ length: 146 }, (_, index) => `validation/tag-${index}`);
+
+    await fetchLogScalars({
+      runIds: ["run-1"],
+      tags,
+    });
+
+    expect(scalarFetchMock).toHaveBeenCalledTimes(3);
+    expect(
+      scalarFetchMock.mock.calls.map(([, init]) => {
+        const body = JSON.parse(String((init as RequestInit).body)) as {
+          tags: string[];
+        };
+        return body.tags.length;
+      }),
+    ).toEqual([50, 50, 46]);
+    for (const [, init] of scalarFetchMock.mock.calls) {
+      const body = JSON.parse(String((init as RequestInit).body)) as {
+        maxPoints: number;
+        sampling: string;
+        runIds: string[];
+        tags: string[];
+      };
+      expect(body.maxPoints).toBe(500);
+      expect(body.sampling).toBe("tail");
+      expect(body.runIds).toEqual(["run-1"]);
+      expect(body.tags.length).toBeLessThanOrEqual(50);
+    }
   });
 
   it("posts log media requests as JSON", async () => {

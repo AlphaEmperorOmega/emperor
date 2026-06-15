@@ -12,6 +12,7 @@ import {
 import {
   useActiveTrainingJobState,
 } from "@/features/viewer/state/training/use-active-training-job-state";
+import { type ViewerWorkspace } from "@/types/viewer";
 
 type GraphPreviewControllerState = ReturnType<typeof useGraphPreviewController>;
 type GraphPreviewState = ReturnType<typeof useGraphPreviewOrchestration>;
@@ -25,6 +26,7 @@ type ActiveTrainingJobState = ReturnType<typeof useActiveTrainingJobState>;
 export type ViewerStateOptions = {
   /** Notifies the logs workspace when a training job starts writing to a folder. */
   onJobStarted?: (logFolder: string) => void;
+  activeWorkspace?: ViewerWorkspace;
 };
 
 function targetConfigCascadeRules(
@@ -106,7 +108,7 @@ function composeProviderSlices({
  * Cross-slice cascade rules are named here; domain state stays in extracted hooks.
  */
 export function useViewerState(options: ViewerStateOptions = {}) {
-  const { onJobStarted } = options;
+  const { activeWorkspace = "model", onJobStarted } = options;
 
   const graphPreview = useGraphPreviewController();
   const historicalRunSelection = useHistoricalRunSelectionState();
@@ -117,8 +119,13 @@ export function useViewerState(options: ViewerStateOptions = {}) {
   const { selectedModel } = targetConfig.selection;
 
   const activeTrainingJobState = useActiveTrainingJobState({ onJobStarted });
+  const historicalTagsEnabled =
+    activeWorkspace === "logs" ||
+    targetConfig.target.selectedTargetMode === "experiment" ||
+    historicalRunSelection.selectedLogRunId !== null;
   const historicalRuns = useHistoricalRunsState({
     selectedModel,
+    tagsEnabled: historicalTagsEnabled,
     syncSelectedLogRun: targetConfig.syncSelectedLogRun,
     selection: historicalRunSelection,
   });

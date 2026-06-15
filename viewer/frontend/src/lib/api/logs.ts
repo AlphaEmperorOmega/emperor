@@ -59,6 +59,8 @@ export const logScalarSeriesSchema = z.object({
   runId: z.string(),
   tag: z.string(),
   points: z.array(logScalarPointSchema),
+  sourcePointCount: z.number().optional().nullable(),
+  truncated: z.boolean().optional().nullable(),
 });
 
 export const logImageSummarySchema = z.object({
@@ -147,6 +149,9 @@ export type LogRunArtifact = z.infer<typeof logRunArtifactSchema>;
 export type LogRunArtifacts = z.infer<typeof logRunArtifactsSchema>;
 
 const DEFAULT_LOG_PAGE_LIMIT = 500;
+export const DEFAULT_LOG_SCALAR_MAX_POINTS = 500;
+export const LOG_SCALAR_TAG_REQUEST_LIMIT = 50;
+export const LOG_SCALAR_SAMPLING = "tail";
 
 type PaginatedPage = {
   total?: number;
@@ -155,12 +160,17 @@ type PaginatedPage = {
   hasMore?: boolean;
 };
 
-type PaginatedParams = Record<string, string | number | boolean | undefined>;
+type PaginatedParams = Record<
+  string,
+  string | number | boolean | readonly string[] | undefined
+>;
 
 type FetchPaginatedOptions<TPage extends PaginatedPage, TItem> = {
   endpoint: string;
   schema: z.ZodType<TPage, z.ZodTypeDef, unknown>;
   params?: PaginatedParams;
+  pagination?: { limit: number; offset?: number };
+  includeAllPages?: boolean;
   getItems(page: TPage): TItem[];
   getTotal?(page: TPage): number | undefined;
 };
@@ -180,7 +190,9 @@ function paginatedPath(
 ) {
   const searchParams = new URLSearchParams();
   Object.entries(params ?? {}).forEach(([key, value]) => {
-    if (value !== undefined) {
+    if (Array.isArray(value)) {
+      value.forEach((entry) => searchParams.append(key, entry));
+    } else if (value !== undefined) {
       searchParams.set(key, String(value));
     }
   });
@@ -196,12 +208,23 @@ async function fetchPaginated<TPage extends PaginatedPage, TItem>({
   endpoint,
   schema,
   params,
+  pagination,
+  includeAllPages = false,
   getItems,
   getTotal,
 }: FetchPaginatedOptions<TPage, TItem>): Promise<
   FetchPaginatedResult<TPage, TItem>
 > {
-  const firstPage = await requestJson(paginatedPath(endpoint, params), schema);
+  const firstPage = await requestJson(
+    paginatedPath(
+      endpoint,
+      params,
+      pagination
+        ? { limit: pagination.limit, offset: pagination.offset ?? 0 }
+        : undefined,
+    ),
+    schema,
+  );
   const items = [...getItems(firstPage)];
   let limit =
     firstPage.limit && firstPage.limit > 0
@@ -210,7 +233,7 @@ async function fetchPaginated<TPage extends PaginatedPage, TItem>({
   let offset = firstPage.offset ?? 0;
   let hasMore = firstPage.hasMore ?? false;
 
-  while (hasMore) {
+  while (includeAllPages && hasMore) {
     const nextOffset = offset + limit;
     const page = await requestJson(
       paginatedPath(endpoint, params, { limit, offset: nextOffset }),
@@ -231,10 +254,36 @@ async function fetchPaginated<TPage extends PaginatedPage, TItem>({
   };
 }
 
-export async function fetchLogRuns() {
+export type FetchLogRunsFilters = {
+  experiment?: readonly string[];
+  model?: readonly string[];
+  preset?: readonly string[];
+  dataset?: readonly string[];
+  hasEventFiles?: boolean;
+};
+
+export type FetchLogRunsInput = {
+  filters?: FetchLogRunsFilters;
+  pagination?: { limit: number; offset?: number };
+  includeAllPages?: boolean;
+};
+
+export async function fetchLogRuns(input: FetchLogRunsInput = {}) {
+  const filters = input.filters;
   const page = await fetchPaginated({
     endpoint: "/logs/runs",
     schema: logRunsSchema,
+    params: filters
+      ? {
+          experiment: filters.experiment,
+          model: filters.model,
+          preset: filters.preset,
+          dataset: filters.dataset,
+          hasEventFiles: filters.hasEventFiles,
+        }
+      : undefined,
+    pagination: input.pagination,
+    includeAllPages: input.includeAllPages,
     getItems: (logPage) => logPage.runs,
     getTotal: (logPage) => logPage.total,
   });
@@ -245,7 +294,7 @@ export async function fetchLogRuns() {
     total: page.total,
     limit: page.limit,
     offset: page.offset,
-    hasMore: false,
+    hasMore: input.includeAllPages ? false : page.firstPage.hasMore ?? false,
   };
 }
 
@@ -253,6 +302,7 @@ export async function fetchLogExperiments() {
   const page = await fetchPaginated({
     endpoint: "/logs/experiments",
     schema: logExperimentsSchema,
+    includeAllPages: true,
     getItems: (logPage) => logPage.experiments,
     getTotal: (logPage) => logPage.total,
   });
@@ -274,11 +324,46 @@ export function fetchLogTags(input: { runIds: string[] }) {
   });
 }
 
-export function fetchLogScalars(input: { runIds: string[]; tags: string[] }) {
-  return requestJson("/logs/scalars", logScalarsSchema, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+export function fetchLogScalars(input: {
+  runIds: string[];
+  tags: string[];
+  maxPoints?: number;
+  sampling?: typeof LOG_SCALAR_SAMPLING;
+}) {
+  const request = {
+    maxPoints: DEFAULT_LOG_SCALAR_MAX_POINTS,
+    sampling: LOG_SCALAR_SAMPLING,
+    ...input,
+  };
+  const tagChunks = Array.from(
+    { length: Math.ceil(input.tags.length / LOG_SCALAR_TAG_REQUEST_LIMIT) },
+    (_, index) =>
+      input.tags.slice(
+        index * LOG_SCALAR_TAG_REQUEST_LIMIT,
+        (index + 1) * LOG_SCALAR_TAG_REQUEST_LIMIT,
+      ),
+  );
+
+  if (tagChunks.length <= 1) {
+    return requestJson("/logs/scalars", logScalarsSchema, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  return Promise.all(
+    tagChunks.map((tags) =>
+      requestJson("/logs/scalars", logScalarsSchema, {
+        method: "POST",
+        body: JSON.stringify({
+          ...request,
+          tags,
+        }),
+      }),
+    ),
+  ).then((pages) => ({
+    series: pages.flatMap((page) => page.series),
+  }));
 }
 
 export function fetchLogMedia(input: {

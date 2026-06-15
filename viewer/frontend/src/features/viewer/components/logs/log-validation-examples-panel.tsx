@@ -1,4 +1,6 @@
 import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { type LogRun, type LogTextSummary } from "@/lib/api";
 import { type LogValidationExampleImage } from "@/features/viewer/state/logs/log-diagnostics";
 import { cn } from "@/lib/utils";
@@ -7,17 +9,67 @@ export function LogValidationExamplesPanel({
   images,
   texts,
   runsById,
+  enabled = true,
+  isLoading = false,
+  onVisible,
 }: {
   images: LogValidationExampleImage[];
   texts: LogTextSummary[];
   runsById: Map<string, LogRun>;
+  enabled?: boolean;
+  isLoading?: boolean;
+  onVisible?: () => void;
 }) {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [hasEnteredView, setHasEnteredView] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || hasEnteredView) {
+      return;
+    }
+    const node = sectionRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setHasEnteredView(true);
+      onVisible?.();
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setHasEnteredView(true);
+          onVisible?.();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "320px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [enabled, hasEnteredView, onVisible]);
+
+  if (!enabled) {
+    return null;
+  }
+
+  if (!hasEnteredView || isLoading) {
+    return (
+      <section
+        ref={sectionRef}
+        className="grid min-h-40 place-items-center rounded-[8px] border border-line-soft bg-white/[0.018] p-4"
+      >
+        {isLoading && (
+          <Loader2 className="h-5 w-5 animate-spin text-violet" aria-hidden />
+        )}
+      </section>
+    );
+  }
+
   if (images.length === 0 && texts.length === 0) {
     return null;
   }
 
   return (
-    <section className="grid gap-3">
+    <section ref={sectionRef} className="grid gap-3">
       <div className="min-w-0">
         <div className="text-sm font-bold text-ink">Validation Examples</div>
         <div className="text-xs text-ink-faint">

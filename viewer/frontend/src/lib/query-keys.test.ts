@@ -54,6 +54,7 @@ describe("query key factories", () => {
       "log-scalars",
       ["run-1", "run-2"],
       ["accuracy", "loss"],
+      null,
     ]);
     expect(logQueryKeys.checkpoints()).toEqual(["log-checkpoints"]);
     expect(logQueryKeys.checkpointsForRuns(runIds)).toEqual([

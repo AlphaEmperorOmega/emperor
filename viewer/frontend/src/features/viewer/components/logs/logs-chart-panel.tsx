@@ -13,7 +13,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import { LogConfusionMatrixHeatmaps } from "@/features/viewer/components/logs/log-confusion-matrix-heatmap";
-import { LogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
+import { LazyLogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
 import { LogTestLeaderboardTable } from "@/features/viewer/components/logs/log-test-leaderboard-table";
 import { LogValidationExamplesPanel } from "@/features/viewer/components/logs/log-validation-examples-panel";
 import {
@@ -25,6 +25,7 @@ import { type ScalarXMode, type ScalarYScale } from "@/lib/echarts/scalar-option
 import {
   LOG_METRIC_GROUPS,
   type LogMetricsByGroup,
+  type LogMetricTagsByGroup,
   type LogMetricGroupKey,
   isTestMetricTag,
 } from "@/features/viewer/state/logs/logs-selectors";
@@ -112,11 +113,15 @@ function ChartEmptyState({ title, detail, busy }: LogsChartEmptyState) {
 
 export function LogsChartPanel({
   metricsByGroup,
+  selectedTagsByGroup,
   confusionHeatmaps,
   runsById,
   checkpointsByRunId,
   mediaImages,
   mediaTexts,
+  hasValidationExampleMedia,
+  isValidationExampleMediaLoading,
+  onValidationExamplesVisible,
   runOrder,
   visibleRunCount,
   selectedTagCount,
@@ -139,11 +144,15 @@ export function LogsChartPanel({
   onSelectRun,
 }: {
   metricsByGroup: LogMetricsByGroup;
+  selectedTagsByGroup: LogMetricTagsByGroup;
   confusionHeatmaps: ConfusionMatrixHeatmap[];
   runsById: Map<string, LogRun>;
   checkpointsByRunId: Map<string, LogCheckpoint[]>;
   mediaImages: LogValidationExampleImage[];
   mediaTexts: LogTextSummary[];
+  hasValidationExampleMedia: boolean;
+  isValidationExampleMediaLoading: boolean;
+  onValidationExamplesVisible: () => void;
   runOrder: string[];
   visibleRunCount: number;
   selectedTagCount: number;
@@ -266,11 +275,15 @@ export function LogsChartPanel({
               images={mediaImages}
               texts={mediaTexts}
               runsById={runsById}
+              enabled={hasValidationExampleMedia}
+              isLoading={isValidationExampleMediaLoading}
+              onVisible={onValidationExamplesVisible}
             />
             <LogConfusionMatrixHeatmaps heatmaps={confusionHeatmaps} />
             {LOG_METRIC_GROUPS.map((group) => {
               const metrics = metricsByGroup[group.key];
-              if (metrics.length === 0) {
+              const selectedGroupTags = selectedTagsByGroup[group.key];
+              if (metrics.length === 0 && selectedGroupTags.length === 0) {
                 return null;
               }
               const isCollapsed = collapsedMetricGroups.has(group.key);
@@ -280,7 +293,7 @@ export function LogsChartPanel({
                 <section key={group.key} className="grid gap-3">
                   <LogsMetricGroupHeader
                     group={group}
-                    metricCount={metrics.length}
+                    metricCount={selectedGroupTags.length}
                     isCollapsed={isCollapsed}
                     controlsId={bodyId}
                     onToggle={onToggleMetricGroup}
@@ -301,7 +314,7 @@ export function LogsChartPanel({
                           );
                         }
                         return (
-                          <LogScalarChart
+                          <LazyLogScalarChart
                             key={tag}
                             tag={tag}
                             series={series}

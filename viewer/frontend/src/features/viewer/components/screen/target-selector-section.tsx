@@ -97,10 +97,11 @@ export function TargetSelectorSection({
 }) {
   const hasSnapshots = snapshotOptions.length > 0;
   const hasExperimentRuns = experimentOptions.length > 0;
+  const canActivateExperimentMode = Boolean(selectedModel) || hasExperimentRuns;
   const activeTargetMode =
     selectedTargetMode === "snapshot" && hasSnapshots
       ? "snapshot"
-      : selectedTargetMode === "experiment" && hasExperimentRuns
+      : selectedTargetMode === "experiment" && canActivateExperimentMode
         ? "experiment"
         : "preset";
   const snapshotValue =
@@ -179,7 +180,7 @@ export function TargetSelectorSection({
           </ViewModeButton>
           <ViewModeButton
             active={activeTargetMode === "experiment"}
-            disabled={!hasExperimentRuns}
+            disabled={!canActivateExperimentMode}
             onClick={onActivateExperimentMode}
           >
             <FlaskConical className="h-3.5 w-3.5" aria-hidden />

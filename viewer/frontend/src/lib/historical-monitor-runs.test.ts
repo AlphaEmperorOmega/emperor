@@ -237,7 +237,7 @@ describe("historical monitor run helpers", () => {
         imageTags: [],
       }),
     ).toBe(true);
-    // Histogram/image tags always imply monitoring.
+    // Histogram/image tags count only when they also have a graph-node prefix.
     expect(
       logRunHasLayerMonitorData({
         scalarTags: [],
@@ -251,6 +251,18 @@ describe("historical monitor run helpers", () => {
         scalarTags: ["epoch", "train/loss", "test/accuracy"],
         histogramTags: [],
         imageTags: [],
+      }),
+    ).toBe(false);
+    // Performance diagnostics can have deep paths and media, but do not target
+    // graph nodes.
+    expect(
+      logRunHasLayerMonitorData({
+        scalarTags: [
+          "train/confusion_matrix/class_0/class_1",
+          "validation/per_class/class_0/accuracy",
+        ],
+        histogramTags: [],
+        imageTags: ["validation/examples/predictions"],
       }),
     ).toBe(false);
     expect(logRunHasLayerMonitorData(undefined)).toBe(false);
@@ -271,9 +283,9 @@ describe("historical monitor run helpers", () => {
       },
       {
         runId: "perf-run",
-        scalarTags: ["epoch", "train/loss"],
+        scalarTags: ["epoch", "train/loss", "train/confusion_matrix/0/1"],
         histogramTags: [],
-        imageTags: [],
+        imageTags: ["validation/examples/predictions"],
         textTags: [],
       },
     ];
