@@ -8,6 +8,10 @@ const EMPTY_LOG_FOLDER_OPTIONS: LogExperiment[] = [];
 
 export type LogFolderMode = "existing" | "new";
 
+type TrainingLogFolderStateInput = {
+  enabled?: boolean;
+};
+
 type TrainingLogFolderViewInput = {
   mode: LogFolderMode;
   existingValue: string;
@@ -52,11 +56,15 @@ export function buildTrainingLogFolderView({
   };
 }
 
-export function useTrainingLogFolderState() {
+export function useTrainingLogFolderState({
+  enabled = true,
+}: TrainingLogFolderStateInput = {}) {
   const [mode, setMode] = useState<LogFolderMode>("existing");
   const [existingValue, setExistingValue] = useState("");
   const [newValue, setNewValue] = useState("");
-  const logExperimentsQuery = useLogExperimentsQuery();
+  const logExperimentsQuery = useLogExperimentsQuery({
+    enabled: enabled && mode === "existing",
+  });
   const options = logExperimentsQuery.data?.experiments ?? EMPTY_LOG_FOLDER_OPTIONS;
   const view = useMemo(
     () =>

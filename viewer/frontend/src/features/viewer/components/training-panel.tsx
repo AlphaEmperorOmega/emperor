@@ -50,11 +50,11 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     selectedModel,
     selectedPreset,
     selectedTrainingPresets,
+    selectedTrainingSnapshotIds,
     selectedDatasets,
     overrides,
     allConfigSnapshots,
     configSnapshotCount,
-    deselectedSnapshotIds,
     monitorOptions,
     selectedMonitors,
     monitorsLoading,
@@ -66,6 +66,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
     onSelectModel,
     onSelectPreset,
     onSetTrainingPresets,
+    onSetTrainingSnapshotSelection,
     onToggleTrainingPreset,
     onToggleDraftTrainingPreset,
     onMakeTrainingPresetPrimary,
@@ -378,12 +379,15 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 selectedModel={selectedModel}
                 selectedPreset={selectedPreset}
                 selectedTrainingPresets={selectedTrainingPresets}
+                configSnapshots={allConfigSnapshots}
+                selectedTrainingSnapshotIds={selectedTrainingSnapshotIds}
                 datasetOptions={datasetOptions}
                 selectedDatasets={selectedDatasets}
                 onSelectModelType={onSelectModelType}
                 onSelectModel={onSelectModel}
                 onSelectPreset={onSelectPreset}
                 onSetTrainingPresets={onSetTrainingPresets}
+                onSetTrainingSnapshotSelection={onSetTrainingSnapshotSelection}
                 onToggleTrainingPreset={onToggleTrainingPreset}
                 onMakeTrainingPresetPrimary={onMakeTrainingPresetPrimary}
                 onSelectAllTrainingPresets={onSelectAllTrainingPresets}
@@ -641,7 +645,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
             presetOptions,
             selectedPreset,
             selectedTrainingPresets,
-            deselectedSnapshotIds,
+            selectedTrainingSnapshotIds,
             onIncludeSnapshot: onIncludeConfigSnapshot,
             onExcludeSnapshot: onExcludeConfigSnapshot,
             onTogglePreset: onToggleDraftTrainingPreset,

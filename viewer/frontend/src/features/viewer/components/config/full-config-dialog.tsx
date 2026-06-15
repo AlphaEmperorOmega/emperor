@@ -46,17 +46,16 @@ export function FullConfigDialog({
   const {
     selectedModel: model,
     selectedPreset: preset,
-    selectedTrainingPresets,
     configSections: sections,
     fieldCount,
     overrideCount,
     overrides,
     selectedConfigSnapshot,
+    selectedTrainingSnapshotIds,
     selectedDatasets,
     allConfigSnapshots,
     allConfigSnapshotGroups,
     allConfigSnapshotCount,
-    deselectedSnapshotIds,
     capabilities,
     schemaQuery,
     addConfigSnapshot,
@@ -384,9 +383,8 @@ export function FullConfigDialog({
                 <ConfigSnapshotsTray
                   groups={allConfigSnapshotGroups}
                   selectedPreset={preset}
-                  selectedTrainingPresets={selectedTrainingPresets}
+                  selectedTrainingSnapshotIds={selectedTrainingSnapshotIds}
                   overrides={overrides}
-                  deselectedSnapshotIds={deselectedSnapshotIds}
                   canManage={capabilities.configSnapshotsEnabled}
                   onLoad={loadConfigSnapshot}
                   onRename={renameConfigSnapshot}

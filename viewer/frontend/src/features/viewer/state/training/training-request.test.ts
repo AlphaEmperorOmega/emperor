@@ -225,4 +225,43 @@ describe("training requests", () => {
       overrides: { hidden_size: "256" },
     });
   });
+
+  it("submits snapshot source presets even when the base preset is not selected", () => {
+    const snapshotRunPlan = buildConfigSnapshotRunPlan({
+      model: "linears/linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["baseline"],
+      selectedDatasets: ["Mnist"],
+      snapshots: [
+        snapshot({
+          id: "fast-wide",
+          name: "Fast wide",
+          preset: "fast",
+          overrides: { hidden_size: "256" },
+        }),
+      ],
+      fields: [field({ key: "hidden_size" })],
+      logFolder: "snapshots",
+    });
+
+    const request = buildTrainingJobRequest({
+      selectedModel: "linears/linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["baseline"],
+      selectedDatasets: ["Mnist"],
+      effectiveOverrides: {},
+      logFolder: "snapshots",
+      selectedMonitors: [],
+      runPlan: snapshotRunPlan,
+    });
+
+    expect(request?.preset).toBe("baseline");
+    expect(request?.presets).toEqual(["baseline", "fast"]);
+    expect(request?.runPlan?.presets).toEqual(["baseline", "fast"]);
+    expect(request?.runPlan?.runs[1]).toMatchObject({
+      preset: "fast",
+      snapshotId: "fast-wide",
+      snapshotName: "Fast wide",
+    });
+  });
 });

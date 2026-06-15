@@ -4,19 +4,25 @@ import { cn } from "@/lib/utils";
 export function ViewModeButton({
   active,
   children,
+  controls,
   disabled = false,
+  id,
   onClick,
 }: {
   active: boolean;
   children: ReactNode;
+  controls?: string;
   disabled?: boolean;
+  id?: string;
   onClick: () => void;
 }) {
   return (
     <button
+      id={id}
       type="button"
       role="tab"
       aria-selected={active}
+      aria-controls={controls}
       disabled={disabled}
       onClick={onClick}
       className={cn(

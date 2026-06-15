@@ -8,7 +8,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ export type TrainingProgressDraftManagement = {
   presetOptions: SelectOption[];
   selectedPreset: string;
   selectedTrainingPresets: string[];
-  deselectedSnapshotIds: string[];
+  selectedTrainingSnapshotIds: string[];
   onIncludeSnapshot: (snapshotId: string) => void;
   onExcludeSnapshot: (snapshotId: string) => void;
   onTogglePreset: (preset: string) => void;
@@ -83,10 +83,7 @@ function snapshotIncluded(
   snapshot: ConfigSnapshot,
   draft: TrainingProgressDraftManagement,
 ) {
-  return (
-    draft.selectedTrainingPresets.includes(snapshot.preset) &&
-    !draft.deselectedSnapshotIds.includes(snapshot.id)
-  );
+  return draft.selectedTrainingSnapshotIds.includes(snapshot.id);
 }
 
 function TrainingSnapshotsDraftPanel({
@@ -116,13 +113,17 @@ function TrainingSnapshotsDraftPanel({
   }
 
   return (
-    <div className="grid gap-3" role="tabpanel" aria-label="Snapshots">
-      {groups.map((group) => (
+    <div className="grid gap-3">
+      {groups.map((group) => {
+        const selectedSnapshotCount = group.snapshots.filter((snapshot) =>
+          draft.selectedTrainingSnapshotIds.includes(snapshot.id),
+        ).length;
+        return (
         <section
           key={group.preset}
           className={cn(
             "grid gap-2 rounded-[10px] border p-3",
-            draft.selectedTrainingPresets.includes(group.preset)
+            selectedSnapshotCount > 0
               ? "border-violet/35 bg-violet/[0.055]"
               : "border-line-soft bg-black/15",
           )}
@@ -133,12 +134,12 @@ function TrainingSnapshotsDraftPanel({
             </span>
             <Badge
               className={
-                draft.selectedTrainingPresets.includes(group.preset)
+                selectedSnapshotCount > 0
                   ? "border-violet/30 bg-violet/15 text-violet"
                   : undefined
               }
             >
-              {group.snapshots.length}
+              {selectedSnapshotCount} / {group.snapshots.length}
             </Badge>
           </div>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -213,7 +214,8 @@ function TrainingSnapshotsDraftPanel({
             })}
           </div>
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -232,11 +234,7 @@ function TrainingPresetsDraftPanel({
   }
 
   return (
-    <div
-      className="grid gap-2 md:grid-cols-2 xl:grid-cols-3"
-      role="tabpanel"
-      aria-label="Presets"
-    >
+    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
       {draft.presetOptions.map((preset) => {
         const selected = draft.selectedTrainingPresets.includes(preset.value);
         const snapshotCount = draft.snapshots.filter(
@@ -326,6 +324,13 @@ export function TrainingProgressDialog({
     name: string;
   } | null>(null);
   const [activeTab, setActiveTab] = useState<ProgressTab>("runs");
+  const progressTabsId = useId();
+  const runsTabId = `${progressTabsId}-runs-tab`;
+  const snapshotsTabId = `${progressTabsId}-snapshots-tab`;
+  const presetsTabId = `${progressTabsId}-presets-tab`;
+  const runsPanelId = `${progressTabsId}-runs-panel`;
+  const snapshotsPanelId = `${progressTabsId}-snapshots-panel`;
+  const presetsPanelId = `${progressTabsId}-presets-panel`;
   const command = commandRun?.command ?? "";
   const fullErrorText = errorRun?.errorTraceback || errorRun?.error || "";
   const { status: copyStatus, copy } = useCopyToClipboard(command);
@@ -537,6 +542,8 @@ export function TrainingProgressDialog({
             className="mb-3"
           >
             <ViewModeButton
+              id={runsTabId}
+              controls={runsPanelId}
               active={visibleTab === "runs"}
               onClick={() => setActiveTab("runs")}
             >
@@ -544,6 +551,8 @@ export function TrainingProgressDialog({
               Runs
             </ViewModeButton>
             <ViewModeButton
+              id={snapshotsTabId}
+              controls={snapshotsPanelId}
               active={visibleTab === "snapshots"}
               onClick={() => setActiveTab("snapshots")}
             >
@@ -551,6 +560,8 @@ export function TrainingProgressDialog({
               Snapshots
             </ViewModeButton>
             <ViewModeButton
+              id={presetsTabId}
+              controls={presetsPanelId}
               active={visibleTab === "presets"}
               onClick={() => setActiveTab("presets")}
             >
@@ -560,46 +571,107 @@ export function TrainingProgressDialog({
           </SegmentedControl>
         )}
 
-        {visibleTab === "runs" ? (
-          error ? (
+        {draftTabsEnabled ? (
+          <>
             <div
-              role="alert"
-              className="rounded-[10px] border border-danger-line bg-danger-soft p-3 text-sm text-danger-text"
+              id={runsPanelId}
+              role="tabpanel"
+              aria-labelledby={runsTabId}
+              aria-label="Runs"
+              hidden={visibleTab !== "runs"}
             >
-              {error}
+              {visibleTab !== "runs" ? null : error ? (
+                <div
+                  role="alert"
+                  className="rounded-[10px] border border-danger-line bg-danger-soft p-3 text-sm text-danger-text"
+                >
+                  {error}
+                </div>
+              ) : isLoading ? (
+                <InlineStatus>
+                  Planning training runs
+                </InlineStatus>
+              ) : !plan || plan.runs.length === 0 ? (
+                <InlineStatus>
+                  No training runs planned
+                </InlineStatus>
+              ) : (
+                <TrainingProgressTable
+                  runs={plan.runs}
+                  onCommand={setCommandRun}
+                  onFullError={setErrorRun}
+                  canManageDraftRuns={draftTabsEnabled}
+                  onExcludePreset={draftManagement?.onExcludePreset}
+                  onExcludeSnapshot={draftManagement?.onExcludeSnapshot}
+                />
+              )}
             </div>
-          ) : isLoading ? (
-            <InlineStatus>
-              Planning training runs
-            </InlineStatus>
-          ) : !plan || plan.runs.length === 0 ? (
-            <InlineStatus>
-              No training runs planned
-            </InlineStatus>
-          ) : (
-            <TrainingProgressTable
-              runs={plan.runs}
-              onCommand={setCommandRun}
-              onFullError={setErrorRun}
-              canManageDraftRuns={draftTabsEnabled}
-              onExcludePreset={draftManagement?.onExcludePreset}
-              onExcludeSnapshot={draftManagement?.onExcludeSnapshot}
-            />
-          )
-        ) : visibleTab === "snapshots" && draftManagementWithSnapshotHandoff ? (
-          <TrainingSnapshotsDraftPanel
-            draft={draftManagementWithSnapshotHandoff}
-            canRemoveSnapshots={canRemoveSnapshots && Boolean(onRemoveSnapshot)}
-            onDeleteSnapshot={(snapshotId, snapshotName) =>
-              setPendingDeleteSnapshot({ id: snapshotId, name: snapshotName })
-            }
-          />
-        ) : visibleTab === "presets" && draftManagementWithSnapshotHandoff ? (
-          <TrainingPresetsDraftPanel draft={draftManagementWithSnapshotHandoff} />
-        ) : (
+            <div
+              id={snapshotsPanelId}
+              role="tabpanel"
+              aria-labelledby={snapshotsTabId}
+              aria-label="Snapshots"
+              hidden={visibleTab !== "snapshots"}
+            >
+              {visibleTab !== "snapshots" ? null : draftManagementWithSnapshotHandoff ? (
+                <TrainingSnapshotsDraftPanel
+                  draft={draftManagementWithSnapshotHandoff}
+                  canRemoveSnapshots={
+                    canRemoveSnapshots && Boolean(onRemoveSnapshot)
+                  }
+                  onDeleteSnapshot={(snapshotId, snapshotName) =>
+                    setPendingDeleteSnapshot({
+                      id: snapshotId,
+                      name: snapshotName,
+                    })
+                  }
+                />
+              ) : (
+                <InlineStatus>
+                  No draft controls available
+                </InlineStatus>
+              )}
+            </div>
+            <div
+              id={presetsPanelId}
+              role="tabpanel"
+              aria-labelledby={presetsTabId}
+              aria-label="Presets"
+              hidden={visibleTab !== "presets"}
+            >
+              {visibleTab !== "presets" ? null : draftManagementWithSnapshotHandoff ? (
+                <TrainingPresetsDraftPanel
+                  draft={draftManagementWithSnapshotHandoff}
+                />
+              ) : (
+                <InlineStatus>
+                  No draft controls available
+                </InlineStatus>
+              )}
+            </div>
+          </>
+        ) : error ? (
+          <div
+            role="alert"
+            className="rounded-[10px] border border-danger-line bg-danger-soft p-3 text-sm text-danger-text"
+          >
+            {error}
+          </div>
+        ) : isLoading ? (
           <InlineStatus>
-            No draft controls available
+            Planning training runs
           </InlineStatus>
+        ) : !plan || plan.runs.length === 0 ? (
+          <InlineStatus>
+            No training runs planned
+          </InlineStatus>
+        ) : (
+          <TrainingProgressTable
+            runs={plan.runs}
+            onCommand={setCommandRun}
+            onFullError={setErrorRun}
+            canManageDraftRuns={false}
+          />
         )}
       </div>
     </DialogShell>

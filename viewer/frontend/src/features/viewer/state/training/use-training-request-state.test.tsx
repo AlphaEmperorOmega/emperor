@@ -66,17 +66,16 @@ const snapshots: ConfigSnapshot[] = [
 ];
 
 function renderRequestState({
-  deselectedSnapshotIds = [],
+  selectedTrainingSnapshots = snapshots,
 }: {
-  deselectedSnapshotIds?: string[];
+  selectedTrainingSnapshots?: ConfigSnapshot[];
 } = {}) {
   return renderHook(() =>
     useTrainingRequestState({
       configSections,
       overrides: { hidden_dim: "192", dropout: "0.2" },
-      configSnapshots: snapshots,
       configSnapshotCount: snapshots.length,
-      deselectedSnapshotIds,
+      selectedTrainingSnapshots,
       selectedModel: "linears/linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["baseline"],
@@ -118,7 +117,7 @@ describe("useTrainingRequestState", () => {
 
   it("falls back to normal overrides and search when all snapshots are unchecked", () => {
     const { result } = renderRequestState({
-      deselectedSnapshotIds: ["wide"],
+      selectedTrainingSnapshots: [],
     });
 
     expect(result.current.hasConfigSnapshots).toBe(true);

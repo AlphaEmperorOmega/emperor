@@ -201,6 +201,49 @@ describe("config snapshots", () => {
     });
   });
 
+  it("builds preset-only run plans when no snapshots are selected", () => {
+    const plan = buildConfigSnapshotRunPlan({
+      model: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["baseline", "fast"],
+      selectedDatasets: ["Mnist"],
+      snapshots: [],
+      fields,
+      logFolder: "presets",
+    });
+
+    expect(plan?.presets).toEqual(["baseline", "fast"]);
+    expect(plan?.summary.totalRuns).toBe(2);
+    expect(plan?.runs.map((run) => run.preset)).toEqual(["baseline", "fast"]);
+    expect(plan?.runs.every((run) => !("snapshotId" in run))).toBe(true);
+  });
+
+  it("builds snapshot-only run plans from selected snapshot records", () => {
+    const snapshots: ConfigSnapshot[] = [
+      makeSnapshot({ hidden_dim: "128", num_epochs: "3" }, "wide"),
+    ];
+
+    const plan = buildConfigSnapshotRunPlan({
+      model: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: [],
+      selectedDatasets: ["Mnist"],
+      snapshots,
+      fields,
+      logFolder: "snapshots",
+    });
+
+    expect(plan?.preset).toBe("baseline");
+    expect(plan?.presets).toEqual(["baseline"]);
+    expect(plan?.summary.totalRuns).toBe(1);
+    expect(plan?.runs[0]).toMatchObject({
+      preset: "baseline",
+      snapshotId: "snap-wide",
+      snapshotName: "wide",
+      overrides: { hidden_dim: "128", num_epochs: "3" },
+    });
+  });
+
   it("builds mixed default and snapshot run plans across selected datasets", () => {
     const snapshots: ConfigSnapshot[] = [
       makeSnapshot({ hidden_dim: "128", num_epochs: "3" }, "wide"),
@@ -257,6 +300,39 @@ describe("config snapshots", () => {
     expect(plan?.runs[2].command).toContain("--config --hidden-dim 128");
     expect(plan?.runs[2].command).not.toContain("wide");
     expect(plan?.runs[2].command).not.toContain("snap-wide");
+  });
+
+  it("keeps selected snapshots when their source preset is not selected", () => {
+    const snapshots: ConfigSnapshot[] = [
+      {
+        ...makeSnapshot({ hidden_dim: "128" }, "fast-wide"),
+        preset: "fast",
+      },
+    ];
+
+    const plan = buildConfigSnapshotRunPlan({
+      model: "linear",
+      selectedPreset: "baseline",
+      selectedTrainingPresets: ["baseline"],
+      selectedDatasets: ["Mnist"],
+      snapshots,
+      fields,
+      logFolder: "snapshots",
+    });
+
+    expect(plan?.preset).toBe("baseline");
+    expect(plan?.presets).toEqual(["baseline", "fast"]);
+    expect(plan?.summary.totalRuns).toBe(2);
+    expect(plan?.runs[0]).toMatchObject({
+      preset: "baseline",
+      overrides: {},
+    });
+    expect(plan?.runs[1]).toMatchObject({
+      preset: "fast",
+      snapshotId: "snap-fast-wide",
+      snapshotName: "fast-wide",
+      overrides: { hidden_dim: "128" },
+    });
   });
 
   it("uses the first selected training preset when the target primary is deselected", () => {

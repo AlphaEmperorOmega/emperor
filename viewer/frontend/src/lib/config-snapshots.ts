@@ -520,12 +520,11 @@ export function buildConfigSnapshotRunPlan({
   fields: ConfigField[];
   logFolder: string;
 }): TrainingRunPlan | undefined {
-  const selectedSnapshots = selectedConfigSnapshots(
-    snapshots,
-    model,
-    selectedTrainingPresets,
-  );
-  if (selectedSnapshots.length === 0 || selectedDatasets.length === 0) {
+  const selectedSnapshots = snapshots.filter((snapshot) => snapshot.model === model);
+  if (
+    selectedDatasets.length === 0 ||
+    (selectedTrainingPresets.length === 0 && selectedSnapshots.length === 0)
+  ) {
     return undefined;
   }
 
@@ -576,9 +575,12 @@ export function buildConfigSnapshotRunPlan({
     }
   }
 
-  const presets = selectedTrainingPresets.length
-    ? selectedTrainingPresets
-    : Array.from(new Set(selectedSnapshots.map((snapshot) => snapshot.preset)));
+  const presets = Array.from(
+    new Set([
+      ...selectedTrainingPresets,
+      ...selectedSnapshots.map((snapshot) => snapshot.preset),
+    ]),
+  );
   const primaryPreset = presets.includes(selectedPreset)
     ? selectedPreset
     : presets[0] || selectedPreset;

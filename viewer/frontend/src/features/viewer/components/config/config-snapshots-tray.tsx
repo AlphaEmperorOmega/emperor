@@ -288,9 +288,8 @@ function SnapshotNameEditor({
 export function ConfigSnapshotsTray({
   groups,
   selectedPreset,
-  selectedTrainingPresets,
+  selectedTrainingSnapshotIds,
   overrides,
-  deselectedSnapshotIds,
   canManage,
   onLoad,
   onRename,
@@ -299,9 +298,8 @@ export function ConfigSnapshotsTray({
 }: {
   groups: ConfigSnapshotGroup[];
   selectedPreset: string;
-  selectedTrainingPresets: string[];
+  selectedTrainingSnapshotIds: string[];
   overrides: OverrideValues;
-  deselectedSnapshotIds: string[];
   canManage: boolean;
   onLoad: (snapshotId: string) => void;
   onRename: (snapshotId: string, name: string) => void;
@@ -352,12 +350,16 @@ export function ConfigSnapshotsTray({
         </div>
 
         <div className="grid gap-2">
-          {groups.map((group) => (
+          {groups.map((group) => {
+            const selectedSnapshotCount = group.snapshots.filter((snapshot) =>
+              selectedTrainingSnapshotIds.includes(snapshot.id),
+            ).length;
+            return (
             <div
               key={group.preset}
               className={cn(
                 "grid gap-2 rounded-[10px] border p-2",
-                selectedTrainingPresets.includes(group.preset)
+                selectedSnapshotCount > 0
                   ? "border-violet/35 bg-violet/[0.06]"
                   : "border-line-soft bg-black/15",
               )}
@@ -368,21 +370,21 @@ export function ConfigSnapshotsTray({
                 </span>
                 <Badge
                   className={
-                    selectedTrainingPresets.includes(group.preset)
+                    selectedSnapshotCount > 0
                       ? "border-violet/30 bg-violet/15 text-violet"
                       : undefined
                   }
                 >
-                  {group.snapshots.length}
+                  {selectedSnapshotCount} / {group.snapshots.length}
                 </Badge>
               </div>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {group.snapshots.map((snapshot) => {
                   const isEditing = editingId === snapshot.id;
                   const overrideCount = Object.keys(snapshot.overrides).length;
-                  const isIncluded =
-                    selectedTrainingPresets.includes(snapshot.preset) &&
-                    !deselectedSnapshotIds.includes(snapshot.id);
+                  const isIncluded = selectedTrainingSnapshotIds.includes(
+                    snapshot.id,
+                  );
                   return (
                     <div
                       key={snapshot.id}
@@ -454,7 +456,8 @@ export function ConfigSnapshotsTray({
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
       {pendingLoadSnapshot && (

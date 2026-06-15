@@ -69,10 +69,13 @@ export function buildTrainingJobRequest({
   if (!runPlan) {
     return null;
   }
+  const presets = runPlan.presets.length > 0
+    ? runPlan.presets
+    : selectedTrainingPresets;
   return {
     model: selectedModel,
-    preset: selectedPreset,
-    presets: selectedTrainingPresets,
+    preset: runPlan.preset || selectedPreset,
+    presets,
     datasets: selectedDatasets,
     overrides: effectiveOverrides,
     logFolder,

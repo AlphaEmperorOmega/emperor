@@ -35,10 +35,9 @@ export type TrainingPanelViewModelInput = {
   selectedTrainingPresets: string[];
   selectedDatasets: string[];
   overrides: OverrideValues;
-  configSnapshots: ConfigSnapshot[];
   allConfigSnapshots: ConfigSnapshot[];
   configSnapshotCount: number;
-  deselectedSnapshotIds: string[];
+  selectedTrainingSnapshotIds: string[];
   monitorOptions: MonitorOption[];
   selectedMonitors: string[];
   monitorsLoading: boolean;
@@ -54,6 +53,7 @@ export type TrainingPanelViewModelInput = {
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
   onSetTrainingPresets: (presets: string[]) => void;
+  onSetTrainingSnapshotSelection: (snapshotIds: string[]) => void;
   onToggleTrainingPreset: (preset: string) => void;
   onToggleDraftTrainingPreset: (preset: string) => void;
   onExcludeDraftTrainingPreset: (preset: string) => void;
@@ -88,10 +88,9 @@ export function useTrainingPanelViewModel({
   selectedTrainingPresets,
   selectedDatasets,
   overrides,
-  configSnapshots,
   allConfigSnapshots,
   configSnapshotCount,
-  deselectedSnapshotIds,
+  selectedTrainingSnapshotIds,
   monitorOptions,
   selectedMonitors,
   monitorsLoading,
@@ -107,6 +106,7 @@ export function useTrainingPanelViewModel({
   onSelectModel,
   onSelectPreset,
   onSetTrainingPresets,
+  onSetTrainingSnapshotSelection,
   onToggleTrainingPreset,
   onToggleDraftTrainingPreset,
   onExcludeDraftTrainingPreset,
@@ -131,19 +131,29 @@ export function useTrainingPanelViewModel({
 }: TrainingPanelViewModelInput) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isProgressOpen, setIsProgressOpen] = useState(false);
-  const logFolder = useTrainingLogFolderState();
+  const logFolder = useTrainingLogFolderState({ enabled: isExpanded });
   const options = useTrainingPanelOptions({
     models,
     selectedModelType,
     presets,
     monitorOptions,
   });
+  const selectedTrainingSnapshotIdSet = useMemo(
+    () => new Set(selectedTrainingSnapshotIds),
+    [selectedTrainingSnapshotIds],
+  );
+  const selectedTrainingSnapshots = useMemo(
+    () =>
+      allConfigSnapshots.filter((snapshot) =>
+        selectedTrainingSnapshotIdSet.has(snapshot.id),
+      ),
+    [allConfigSnapshots, selectedTrainingSnapshotIdSet],
+  );
   const requestState = useTrainingRequestState({
     configSections,
     overrides,
-    configSnapshots,
-    configSnapshotCount,
-    deselectedSnapshotIds,
+    configSnapshotCount: allConfigSnapshots.length || configSnapshotCount,
+    selectedTrainingSnapshots,
     selectedModel,
     selectedPreset,
     selectedTrainingPresets,
@@ -235,11 +245,11 @@ export function useTrainingPanelViewModel({
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,
+      selectedTrainingSnapshotIds,
       selectedDatasets,
       overrides,
       allConfigSnapshots,
       configSnapshotCount,
-      deselectedSnapshotIds,
       monitorOptions,
       selectedMonitors,
       monitorsLoading,
@@ -251,6 +261,7 @@ export function useTrainingPanelViewModel({
       onSelectModel,
       onSelectPreset,
       onSetTrainingPresets,
+      onSetTrainingSnapshotSelection,
       onToggleTrainingPreset,
       onToggleDraftTrainingPreset,
       onExcludeDraftTrainingPreset,

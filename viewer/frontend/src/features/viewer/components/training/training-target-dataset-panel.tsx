@@ -1,21 +1,31 @@
-import { Database, Layers, SlidersHorizontal } from "lucide-react";
+import { useId, useState } from "react";
+import { Camera, Database, Layers, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { MultiSelectDropdown } from "@/features/viewer/components/screen/multi-select-dropdown";
 import { SelectOnlyDropdown } from "@/features/viewer/components/screen/select-only-dropdown";
 import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
 import { TrainingFooterField } from "@/features/viewer/components/training/training-footer-field";
+import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
 import { type Dataset } from "@/lib/api";
+import { type ConfigSnapshot } from "@/lib/config-snapshots";
 
 type SelectOption = {
   value: string;
   label: string;
 };
 
+type TrainingConfigTab = "presets" | "snapshots";
+
 const footerIconClass = "h-[15px] w-[15px] text-violet";
 const defaultFieldLabelClass =
   "text-xs font-semibold tracking-[0.02em] text-ink-dim";
+
+function overrideCountLabel(count: number) {
+  return `${count} override${count === 1 ? "" : "s"}`;
+}
 
 export function TrainingTargetDatasetPanel({
   modelTypeOptions = [],
@@ -25,12 +35,15 @@ export function TrainingTargetDatasetPanel({
   selectedModel,
   selectedPreset,
   selectedTrainingPresets = selectedPreset ? [selectedPreset] : [],
+  configSnapshots = [],
+  selectedTrainingSnapshotIds = [],
   datasetOptions,
   selectedDatasets,
   onSelectModelType,
   onSelectModel,
   onSelectPreset,
   onSetTrainingPresets,
+  onSetTrainingSnapshotSelection,
   onToggleTrainingPreset,
   onMakeTrainingPresetPrimary,
   onSelectAllTrainingPresets,
@@ -48,12 +61,15 @@ export function TrainingTargetDatasetPanel({
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets?: string[];
+  configSnapshots?: ConfigSnapshot[];
+  selectedTrainingSnapshotIds?: string[];
   datasetOptions: Dataset[];
   selectedDatasets: string[];
   onSelectModelType?: (modelType: string) => void;
   onSelectModel: (model: string) => void;
   onSelectPreset: (preset: string) => void;
   onSetTrainingPresets?: (presets: string[]) => void;
+  onSetTrainingSnapshotSelection?: (snapshotIds: string[]) => void;
   onToggleTrainingPreset?: (preset: string) => void;
   onMakeTrainingPresetPrimary?: (preset: string) => void;
   onSelectAllTrainingPresets?: () => void;
@@ -65,10 +81,20 @@ export function TrainingTargetDatasetPanel({
   presentation?: "default" | "footer";
 }) {
   const isFooterPresentation = presentation === "footer";
+  const [activeTrainingConfigTab, setActiveTrainingConfigTab] =
+    useState<TrainingConfigTab>("presets");
+  const trainingConfigTabsId = useId();
+  const presetsTabId = `${trainingConfigTabsId}-presets-tab`;
+  const snapshotsTabId = `${trainingConfigTabsId}-snapshots-tab`;
+  const presetsPanelId = `${trainingConfigTabsId}-presets-panel`;
+  const snapshotsPanelId = `${trainingConfigTabsId}-snapshots-panel`;
   const datasetCount = `${selectedDatasets.length} / ${datasetOptions.length}`;
   const trainingPresetCount = `${selectedTrainingPresets.length} / ${presetOptions.length}`;
+  const trainingSnapshotCount = `${selectedTrainingSnapshotIds.length} / ${configSnapshots.length}`;
   const trainingPresetDisabledValues =
-    selectedTrainingPresets.length === 1 ? selectedTrainingPresets : [];
+    selectedTrainingPresets.length === 1 && selectedTrainingSnapshotIds.length === 0
+      ? selectedTrainingPresets
+      : [];
   const datasetDisabledValues =
     selectedDatasets.length === 1 ? selectedDatasets : [];
   const trainingPresetOptions = presetOptions.map((preset) => ({
@@ -76,6 +102,15 @@ export function TrainingTargetDatasetPanel({
     label: preset.label,
     description: preset.value,
   }));
+  const trainingSnapshotOptions = configSnapshots.map((snapshot) => {
+    const overrideCount = Object.keys(snapshot.overrides).length;
+    return {
+      value: snapshot.id,
+      label: snapshot.name,
+      description: `${snapshot.preset} · ${overrideCountLabel(overrideCount)}`,
+      meta: <span>{snapshot.preset}</span>,
+    };
+  });
   const trainingDatasetOptions = datasetOptions.map((dataset) => ({
     value: dataset.name,
     label: dataset.label,
@@ -99,6 +134,10 @@ export function TrainingTargetDatasetPanel({
     if (changedPreset) {
       onToggleTrainingPreset?.(changedPreset.value);
     }
+  }
+
+  function changeTrainingSnapshots(nextSnapshotIds: string[]) {
+    onSetTrainingSnapshotSelection?.(nextSnapshotIds);
   }
 
   function makeTrainingPresetPrimary(preset: string) {
@@ -223,14 +262,84 @@ export function TrainingTargetDatasetPanel({
     </>
   );
 
+  const snapshotControls = (
+    <>
+      <MultiSelectDropdown
+        label="Config snapshots"
+        values={selectedTrainingSnapshotIds}
+        options={trainingSnapshotOptions}
+        onChange={changeTrainingSnapshots}
+        placeholder="Select snapshots"
+        emptyMessage="No config snapshots for this model"
+      />
+      {configSnapshots.length === 0 && (
+        <InlineStatus compact>
+          No config snapshots for this model
+        </InlineStatus>
+      )}
+    </>
+  );
+
+  const trainingConfigTabs = (
+    <SegmentedControl
+      aria-label="Training config selector"
+      className="grid w-full grid-cols-2"
+    >
+      <ViewModeButton
+        id={presetsTabId}
+        controls={presetsPanelId}
+        active={activeTrainingConfigTab === "presets"}
+        onClick={() => setActiveTrainingConfigTab("presets")}
+      >
+        <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+        Presets
+      </ViewModeButton>
+      <ViewModeButton
+        id={snapshotsTabId}
+        controls={snapshotsPanelId}
+        active={activeTrainingConfigTab === "snapshots"}
+        onClick={() => setActiveTrainingConfigTab("snapshots")}
+      >
+        <Camera className="h-3.5 w-3.5" aria-hidden />
+        Snapshots
+      </ViewModeButton>
+    </SegmentedControl>
+  );
+
   const presetsField = isFooterPresentation ? (
     <TrainingFooterField
       className="min-w-0"
       icon={<SlidersHorizontal className={footerIconClass} aria-hidden />}
       label="Presets"
-      detail={<StatChip>{trainingPresetCount}</StatChip>}
+      detail={
+        <StatChip>
+          {activeTrainingConfigTab === "snapshots"
+            ? trainingSnapshotCount
+            : trainingPresetCount}
+        </StatChip>
+      }
     >
-      {presetsControls}
+      {trainingConfigTabs}
+      <div
+        id={presetsPanelId}
+        role="tabpanel"
+        aria-labelledby={presetsTabId}
+        aria-label="Presets"
+        hidden={activeTrainingConfigTab !== "presets"}
+        className="grid gap-2"
+      >
+        {activeTrainingConfigTab === "presets" ? presetsControls : null}
+      </div>
+      <div
+        id={snapshotsPanelId}
+        role="tabpanel"
+        aria-labelledby={snapshotsTabId}
+        aria-label="Snapshots"
+        hidden={activeTrainingConfigTab !== "snapshots"}
+        className="grid gap-2"
+      >
+        {activeTrainingConfigTab === "snapshots" ? snapshotControls : null}
+      </div>
     </TrainingFooterField>
   ) : (
     <div className="grid min-w-0 gap-1.5">

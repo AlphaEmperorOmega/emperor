@@ -36,6 +36,7 @@ vi.mock("@/features/viewer/state/target/use-config-snapshots", () => ({
 import { type ConfigSnapshotRecord, type LogRun } from "@/lib/api";
 import {
   clearPersistedTargetSelection,
+  writePersistedTargetSelection,
 } from "@/features/viewer/state/target/target-selection-storage";
 import {
   useTargetConfigState,
@@ -56,12 +57,23 @@ const capabilities = {
 };
 let snapshots: ConfigSnapshotRecord[] = [];
 let librarySnapshots: ConfigSnapshotRecord[] = [];
+let configSnapshotsLoading = false;
 
 function query<TData>(data: TData) {
   return {
     data,
     isLoading: false,
     isSuccess: true,
+    isError: false,
+    error: null,
+  };
+}
+
+function loadingQuery<TData>(data: TData) {
+  return {
+    data,
+    isLoading: true,
+    isSuccess: false,
     isError: false,
     error: null,
   };
@@ -104,6 +116,7 @@ beforeEach(() => {
   clearPersistedTargetSelection();
   snapshots = [];
   librarySnapshots = [];
+  configSnapshotsLoading = false;
   mocks.requestPreview.mockReset();
   mocks.clearPreview.mockReset();
   mocks.resetGraphSelectionAndExpansion.mockReset();
@@ -151,7 +164,9 @@ beforeEach(() => {
     },
   );
   mocks.useConfigSnapshots.mockReset().mockImplementation(() => ({
-    query: query({ model: "linears/linear", snapshots }),
+    query: configSnapshotsLoading
+      ? loadingQuery({ model: "linears/linear", snapshots })
+      : query({ model: "linears/linear", snapshots }),
     snapshots,
     createMutation: { mutate: vi.fn() },
     renameMutation: { mutate: vi.fn() },
@@ -180,6 +195,36 @@ describe("useTargetConfigState", () => {
       dataset: "Mnist",
       overrides: {},
     });
+  });
+
+  it("requests a new preview when the selected preview dataset changes", async () => {
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
+    });
+
+    mocks.requestPreview.mockClear();
+    mocks.resetGraphSelectionAndExpansion.mockClear();
+
+    act(() => {
+      result.current.target.setDatasetSelection(["FashionMnist"]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.target.selectedDatasets).toEqual(["FashionMnist"]);
+    });
+    await waitFor(() => {
+      expect(mocks.requestPreview).toHaveBeenCalledWith({
+        model: "linears/linear",
+        preset: "baseline",
+        dataset: "FashionMnist",
+        overrides: {},
+      });
+    });
+    expect(mocks.resetGraphSelectionAndExpansion).toHaveBeenCalled();
   });
 
   it("syncs a selected historical run into the target without keeping overrides", async () => {
@@ -234,7 +279,7 @@ describe("useTargetConfigState", () => {
     expect(mocks.resetGraphSelectionAndExpansion).not.toHaveBeenCalled();
   });
 
-  it("includes a snapshot from an unselected preset by selecting its preset", async () => {
+  it("includes a snapshot from an unselected preset without selecting its preset", async () => {
     snapshots = [
       {
         id: "snapshot-fast",
@@ -256,14 +301,13 @@ describe("useTargetConfigState", () => {
       result.current.target.includeConfigSnapshot("snapshot-fast");
     });
 
-    expect(result.current.target.selectedTrainingPresets).toEqual([
-      "baseline",
-      "fast",
+    expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    expect(result.current.target.selectedTrainingSnapshotIds).toEqual([
+      "snapshot-fast",
     ]);
-    expect(result.current.target.deselectedSnapshotIds).toEqual([]);
   });
 
-  it("excludes one snapshot without removing its preset from the draft plan", async () => {
+  it("excludes one snapshot without changing selected presets", async () => {
     snapshots = [
       {
         id: "snapshot-fast",
@@ -288,11 +332,72 @@ describe("useTargetConfigState", () => {
       result.current.target.excludeConfigSnapshot("snapshot-fast");
     });
 
-    expect(result.current.target.selectedTrainingPresets).toEqual([
-      "baseline",
-      "fast",
+    expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    expect(result.current.target.selectedTrainingSnapshotIds).toEqual([]);
+  });
+
+  it("keeps a selected snapshot when its source preset is removed", async () => {
+    snapshots = [
+      {
+        id: "snapshot-fast",
+        name: "Fast tuned",
+        model: "linears/linear",
+        preset: "fast",
+        overrides: { hidden_size: "256" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    });
+
+    act(() => {
+      result.current.target.setTrainingPresetSelection(["baseline", "fast"]);
+      result.current.target.includeConfigSnapshot("snapshot-fast");
+    });
+    act(() => {
+      result.current.target.excludeDraftTrainingPreset("fast");
+    });
+
+    expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    expect(result.current.target.selectedTrainingSnapshotIds).toEqual([
+      "snapshot-fast",
     ]);
-    expect(result.current.target.deselectedSnapshotIds).toEqual(["snapshot-fast"]);
+  });
+
+  it("allows empty base preset selection after a snapshot is selected", async () => {
+    snapshots = [
+      {
+        id: "snapshot-baseline",
+        name: "Baseline tuned",
+        model: "linears/linear",
+        preset: "baseline",
+        overrides: { hidden_size: "256" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    const { result } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+    });
+
+    act(() => {
+      result.current.target.includeConfigSnapshot("snapshot-baseline");
+    });
+    act(() => {
+      result.current.target.setTrainingPresetSelection([]);
+    });
+
+    expect(result.current.target.selectedPreset).toBe("baseline");
+    expect(result.current.target.selectedTrainingPresets).toEqual([]);
+    expect(result.current.target.selectedTrainingSnapshotIds).toEqual([
+      "snapshot-baseline",
+    ]);
   });
 
   it("allows the progress draft to deselect the primary preset", async () => {
@@ -314,6 +419,48 @@ describe("useTargetConfigState", () => {
     });
 
     expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+  });
+
+  it("keeps restored snapshot targets snapshot-only while snapshots load", async () => {
+    configSnapshotsLoading = true;
+    writePersistedTargetSelection({
+      selectedModel: "linears/linear",
+      selectedPreset: "fast",
+      selectedTargetMode: "snapshot",
+      selectedSnapshotId: "snapshot-fast",
+    });
+
+    const { result, rerender } = renderTargetState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedPreset).toBe("fast");
+    });
+    expect(result.current.target.selectedTrainingPresets).toEqual([]);
+
+    snapshots = [
+      {
+        id: "snapshot-fast",
+        name: "Fast tuned",
+        model: "linears/linear",
+        preset: "fast",
+        overrides: { hidden_size: "256" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-01T00:00:00.000Z",
+      },
+    ];
+    configSnapshotsLoading = false;
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedTargetMode).toBe("snapshot");
+      expect(result.current.target.selectedSnapshotId).toBe("snapshot-fast");
+      expect(result.current.target.selectedTrainingSnapshotIds).toEqual([
+        "snapshot-fast",
+      ]);
+    });
+    expect(result.current.target.selectedTrainingPresets).toEqual([]);
+    expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
   });
 
   it("excludes a draft preset without changing the selected preview preset", async () => {
@@ -372,9 +519,9 @@ describe("useTargetConfigState", () => {
 
     await waitFor(() => {
       expect(result.current.target.selectedPreset).toBe("fast");
-      expect(result.current.target.selectedTrainingPresets).toEqual([
-        "fast",
-        "baseline",
+      expect(result.current.target.selectedTrainingPresets).toEqual(["baseline"]);
+      expect(result.current.target.selectedTrainingSnapshotIds).toEqual([
+        "snapshot-1",
       ]);
       expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
     });
@@ -405,9 +552,7 @@ describe("useTargetConfigState", () => {
     await waitFor(() => {
       expect(result.current.target.selectedModel).toBe("experts/experts_linear");
       expect(result.current.target.selectedPreset).toBe("expert-baseline");
-      expect(result.current.target.selectedTrainingPresets).toEqual([
-        "expert-baseline",
-      ]);
+      expect(result.current.target.selectedTrainingPresets).toEqual([]);
       expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
       expect(result.current.target.overrides).toEqual({ expert_width: "4" });
     });

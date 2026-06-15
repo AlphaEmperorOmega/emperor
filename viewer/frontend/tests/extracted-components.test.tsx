@@ -692,7 +692,7 @@ describe("TrainingProgressDialog", () => {
           presetOptions: [{ value: "baseline", label: "baseline" }],
           selectedPreset: "baseline",
           selectedTrainingPresets: ["baseline"],
-          deselectedSnapshotIds: [],
+          selectedTrainingSnapshotIds: ["snap-wide"],
           onIncludeSnapshot: () => {},
           onExcludeSnapshot,
           onTogglePreset: () => {},
@@ -793,7 +793,7 @@ describe("TrainingProgressDialog", () => {
           presetOptions: [{ value: "baseline", label: "baseline" }],
           selectedPreset: "baseline",
           selectedTrainingPresets: ["baseline"],
-          deselectedSnapshotIds: [],
+          selectedTrainingSnapshotIds: ["snap-wide"],
           onIncludeSnapshot: () => {},
           onExcludeSnapshot: () => {},
           onTogglePreset: () => {},
@@ -871,7 +871,7 @@ describe("TrainingProgressDialog", () => {
           ],
           selectedPreset: "baseline",
           selectedTrainingPresets: ["baseline"],
-          deselectedSnapshotIds: ["snap-fast"],
+          selectedTrainingSnapshotIds: ["snap-wide"],
           onIncludeSnapshot,
           onExcludeSnapshot,
           onTogglePreset,
@@ -887,9 +887,16 @@ describe("TrainingProgressDialog", () => {
       "aria-selected",
       "true",
     );
+    const runsTab = screen.getByRole("tab", { name: "Runs" });
+    const runsPanel = screen.getByRole("tabpanel", { name: "Runs" });
+    expect(runsTab).toHaveAttribute("aria-controls", runsPanel.id);
     await user.click(screen.getByRole("tab", { name: "Snapshots" }));
 
     const snapshotsPanel = screen.getByRole("tabpanel", { name: "Snapshots" });
+    expect(screen.getByRole("tab", { name: "Snapshots" })).toHaveAttribute(
+      "aria-controls",
+      snapshotsPanel.id,
+    );
     expect(within(snapshotsPanel).getByText("Wide snapshot")).toBeInTheDocument();
     expect(within(snapshotsPanel).getByText("Fast copy")).toBeInTheDocument();
     expect(within(snapshotsPanel).getByText("Included")).toBeInTheDocument();
@@ -913,6 +920,10 @@ describe("TrainingProgressDialog", () => {
 
     await user.click(screen.getByRole("tab", { name: "Presets" }));
     const presetsPanel = screen.getByRole("tabpanel", { name: "Presets" });
+    expect(screen.getByRole("tab", { name: "Presets" })).toHaveAttribute(
+      "aria-controls",
+      presetsPanel.id,
+    );
     expect(within(presetsPanel).getByText("Primary")).toBeInTheDocument();
 
     await user.click(
@@ -957,7 +968,7 @@ describe("TrainingProgressDialog", () => {
           presetOptions: [{ value: "baseline", label: "baseline" }],
           selectedPreset: "baseline",
           selectedTrainingPresets: ["baseline"],
-          deselectedSnapshotIds: [],
+          selectedTrainingSnapshotIds: ["snap-wide"],
           onIncludeSnapshot: () => {},
           onExcludeSnapshot: () => {},
           onTogglePreset: () => {},

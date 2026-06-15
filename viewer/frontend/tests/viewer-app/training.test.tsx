@@ -239,7 +239,12 @@ describe("ViewerApp Training And Preview", () => {
       return fieldBox;
     }
     function expectHeadingIcon(label: string) {
-      const heading = within(details).getByText(label);
+      const heading = within(details)
+        .getAllByText(label)
+        .find((element) => element.className.includes("uppercase"));
+      if (!heading) {
+        throw new Error(`Expected ${label} heading to render`);
+      }
       const icon = heading.querySelector("svg");
       if (!(icon instanceof SVGElement)) {
         throw new Error(`Expected ${label} heading to render an icon`);
@@ -269,6 +274,40 @@ describe("ViewerApp Training And Preview", () => {
     });
     const modelField = closestFooterFieldBox(modelSelector);
     const presetField = closestFooterFieldBox(presetSelector);
+    const trainingConfigSelector = within(presetField).getByRole("tablist", {
+      name: /training config selector/i,
+    });
+    const presetsTab = within(trainingConfigSelector).getByRole("tab", {
+      name: "Presets",
+    });
+    const snapshotsTab = within(trainingConfigSelector).getByRole("tab", {
+      name: "Snapshots",
+    });
+    expect(presetsTab).toHaveAttribute("aria-selected", "true");
+    expect(snapshotsTab).toHaveAttribute("aria-selected", "false");
+    const trainingConfigPanel = within(presetField).getByRole("tabpanel", {
+      name: "Presets",
+    });
+    const snapshotsTrainingConfigPanelId =
+      snapshotsTab.getAttribute("aria-controls");
+    if (!snapshotsTrainingConfigPanelId) {
+      throw new Error("Expected Snapshots tab to control a tabpanel");
+    }
+    const snapshotsTrainingConfigPanel = document.getElementById(
+      snapshotsTrainingConfigPanelId,
+    );
+    if (!(snapshotsTrainingConfigPanel instanceof HTMLElement)) {
+      throw new Error("Expected Snapshots tabpanel to render in the document");
+    }
+    expect(snapshotsTrainingConfigPanel).toHaveAttribute("role", "tabpanel");
+    expect(presetsTab).toHaveAttribute(
+      "aria-controls",
+      trainingConfigPanel.id,
+    );
+    expect(snapshotsTab).toHaveAttribute(
+      "aria-controls",
+      snapshotsTrainingConfigPanel.id,
+    );
     const datasetSelector = within(details).getByRole("combobox", {
       name: /^training datasets\s+1\s*\/\s*2 selected$/i,
     });
@@ -338,6 +377,11 @@ describe("ViewerApp Training And Preview", () => {
     expect(searchBox).toContainElement(searchModeControl);
     expect(fieldGrid).not.toContainElement(searchBox);
     expect(closestFooterFieldBox(logFolderModeControl)).toBe(logFolderField);
+    expect(closestFooterFieldBox(trainingConfigSelector)).toBe(presetField);
+    expect(presetField).toContainElement(trainingConfigSelector);
+    expect(presetField).toContainElement(trainingConfigPanel);
+    expect(presetField).toContainElement(snapshotsTrainingConfigPanel);
+    expect(trainingConfigPanel).toContainElement(presetSelector);
     expect(logFolderField).toContainElement(logFolderModeControl);
     expect(logFolderField).toContainElement(
       within(logFolderField).getByRole("combobox", {
@@ -737,7 +781,7 @@ describe("ViewerApp Training And Preview", () => {
   });
 
   it("shows and submits plain preset rows alongside checked config snapshots", async () => {
-    const { fetchMock, trainingBodies } = installFetchMock({
+    const { trainingBodies } = installFetchMock({
       schemaResponse: {
         ...schemaResponse,
         fields: [
@@ -773,8 +817,53 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await expandedTrainingDetailsWithConfig(user);
+    const details = await expandedTrainingDetailsWithConfig(user);
     await selectNewTrainingLogFolder(user, "mixed_snapshots");
+
+    expect(
+      await screen.findByRole("button", {
+        name: /0\s*\/\s*1 runs.*30 epochs left/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(details).getByRole("tab", { name: /^snapshots$/i }),
+    );
+    const { listbox: snapshotListbox } = await openTrainingMultiSelect(
+      user,
+      details,
+      "Config snapshots",
+    );
+    const snapshotOption = within(snapshotListbox).getByRole("option", {
+      name: /wide snapshot/i,
+    });
+    expect(snapshotOption).toHaveAttribute("aria-selected", "false");
+
+    await user.click(snapshotOption);
+    await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^config snapshots\s+1\s*\/\s*1 selected$/i,
+        }),
+      ).toHaveTextContent("Wide snapshot");
+    });
+
+    await user.click(snapshotOption);
+    await waitFor(() => {
+      expect(
+        within(details).getByRole("combobox", {
+          name: /^config snapshots\s+0\s*\/\s*1 selected$/i,
+        }),
+      ).toBeInTheDocument();
+    });
+    expect(
+      await screen.findByRole("button", {
+        name: /0\s*\/\s*1 runs.*30 epochs left/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(snapshotOption);
+    await user.keyboard("{Escape}");
 
     const progressButton = await screen.findByRole("button", {
       name: /0\s*\/\s*2 runs.*35 epochs left/i,
@@ -823,10 +912,6 @@ describe("ViewerApp Training And Preview", () => {
         name: /close training progress/i,
       }),
     );
-
-    expect(
-      fetchMock.mock.calls.some(([url]) => String(url).endsWith("/training/run-plan")),
-    ).toBe(false);
 
     await user.click(screen.getByRole("button", { name: /start training/i }));
 
@@ -895,7 +980,16 @@ describe("ViewerApp Training And Preview", () => {
     renderViewer();
     const user = userEvent.setup();
 
-    await expandedTrainingDetailsWithConfig(user);
+    const details = await expandedTrainingDetailsWithConfig(user);
+    await user.click(
+      within(details).getByRole("tab", { name: /^snapshots$/i }),
+    );
+    await setTrainingMultiSelectOption(
+      user,
+      details,
+      "Config snapshots",
+      /wide snapshot/i,
+    );
     await user.click(
       await screen.findByRole("button", {
         name: /0\s*\/\s*2 runs.*35 epochs left/i,
@@ -912,9 +1006,12 @@ describe("ViewerApp Training And Preview", () => {
     );
 
     await waitFor(() => {
+      expect(within(progressDialog).getByText("Wide snapshot")).toBeInTheDocument();
       expect(
-        within(progressDialog).getByText("No training runs planned"),
-      ).toBeInTheDocument();
+        within(progressDialog).getAllByRole("button", {
+          name: /command for run/i,
+        }),
+      ).toHaveLength(1);
     });
 
     await user.click(within(progressDialog).getByRole("tab", { name: "Presets" }));
@@ -924,6 +1021,16 @@ describe("ViewerApp Training And Preview", () => {
     expect(
       within(presetsPanel).getByLabelText("Include preset baseline in training"),
     ).not.toBeChecked();
+
+    await user.click(within(progressDialog).getByRole("tab", { name: "Snapshots" }));
+    const snapshotsPanel = within(progressDialog).getByRole("tabpanel", {
+      name: "Snapshots",
+    });
+    expect(
+      within(snapshotsPanel).getByLabelText(
+        "Include snapshot Wide snapshot in training",
+      ),
+    ).toBeChecked();
   });
 
   it("deselects a snapshot run across datasets and syncs the Snapshots tab", async () => {
@@ -969,6 +1076,15 @@ describe("ViewerApp Training And Preview", () => {
       details,
       "Training datasets",
       /Cifar 10/i,
+    );
+    await user.click(
+      within(details).getByRole("tab", { name: /^snapshots$/i }),
+    );
+    await setTrainingMultiSelectOption(
+      user,
+      details,
+      "Config snapshots",
+      /wide snapshot/i,
     );
     await user.click(
       await screen.findByRole("button", {
