@@ -1,0 +1,73 @@
+from torch import Tensor
+
+from emperor.base.options import ActivationOptions
+from emperor.base.utils import Module
+
+from ._validator import LayerGateValidator
+from .options import LayerGateOptions
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emperor.base.utils import Module as EmperorModule
+
+    from .config import GateConfig
+    from ..state import LayerState
+
+
+class LayerGate(Module):
+    def __init__(
+        self,
+        cfg: "GateConfig",
+        overrides: "GateConfig | None" = None,
+    ):
+        super().__init__()
+        self.cfg: "GateConfig" = self._override_config(cfg, overrides)
+
+        LayerGateValidator.validate(self.cfg)
+        self.option: LayerGateOptions = self.cfg.option
+        self.activation: ActivationOptions | None = self.cfg.activation
+        self.gate_dim: int | None = self.cfg.gate_dim
+        self.model = self.__build_model()
+
+    def __build_model(self) -> "EmperorModule":
+        return self._build_from_config(
+            self.cfg.model_config,
+            input_dim=self.gate_dim,
+            output_dim=self.gate_dim,
+        )
+
+    def effective_values(self, gate_output: Tensor) -> Tensor:
+        if self.activation is None or self.activation == ActivationOptions.DISABLED:
+            return gate_output
+        return self.activation(gate_output)
+
+    def forward(
+        self,
+        current: Tensor,
+    ) -> Tensor:
+        gate_output = self.__run_gate_model(current)
+        LayerGateValidator.validate_gate_output(gate_output, current, self.option)
+        gate = self.effective_values(gate_output)
+        if self.option == LayerGateOptions.MULTIPLIER:
+            return gate * current
+        if self.option == LayerGateOptions.ADDITION:
+            return current + gate
+        raise ValueError(f"Unsupported gate option {self.option} for LayerGate.")
+
+    def __run_gate_model(
+        self,
+        current: Tensor,
+    ) -> Tensor:
+        LayerGateValidator.validate_gate_model(self.model)
+        gate_state = self.__gate_state(current)
+        output = self.model(gate_state)
+        return output.hidden if hasattr(output, "hidden") else output
+
+    @staticmethod
+    def __gate_state(
+        current: Tensor,
+    ) -> "LayerState":
+        from ..state import LayerState
+
+        return LayerState(hidden=current)

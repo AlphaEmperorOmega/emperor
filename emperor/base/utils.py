@@ -13,7 +13,7 @@ from typing_extensions import Dict
 from dataclasses import dataclass, fields, field, asdict
 from torch.nn import Parameter, Linear, Sequential
 
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -304,7 +304,7 @@ class Module(LightningModule):
         defaultValue = self.inputs.get(configKey)
         return defaultValue if defaultValue is not None else configValue
 
-    def _get_config(self, cfg: Optional["Configuration"], configName: str) -> Any:
+    def _get_config(self, cfg: Any | None, configName: str) -> Any:
         return getattr(cfg, configName) if cfg is not None else None
 
     def _initialize_parameters(
@@ -341,6 +341,26 @@ class Module(LightningModule):
                     setattr(cfg, value, getattr(overrides, value))
 
         return cfg
+
+    def _resolve_config_overrides(
+        self,
+        config: "ConfigBase",
+        **kwargs,
+    ) -> "ConfigBase":
+        declared_fields = {field.name for field in fields(config)}
+        override_kwargs = {
+            name: value for name, value in kwargs.items() if name in declared_fields
+        }
+        return type(config)(**override_kwargs)
+
+    def _build_from_config(
+        self,
+        config: "ConfigBase | None",
+        **kwargs,
+    ) -> "Module | None":
+        if config is None:
+            return None
+        return config.build(overrides=self._resolve_config_overrides(config, **kwargs))
 
     def _validate_fields(self, config: "ConfigBase", config_type: "ConfigBase") -> None:
         for config_field in fields(config_type):
