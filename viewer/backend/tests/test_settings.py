@@ -20,6 +20,7 @@ SETTINGS_ENV_NAMES = (
     "VIEWER_API_TOKEN",
     "VIEWER_API_CORS_ORIGINS",
     "VIEWER_API_SNAPSHOTS_ROOT",
+    "VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS",
 )
 
 
@@ -56,6 +57,7 @@ class ViewerApiSettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.auth_mode, "none")
         self.assertIsNone(settings.token)
+        self.assertIs(settings.allow_unsafe_local_mutations, False)
 
     def test_defaults_keep_local_development_cors_origins(self) -> None:
         with isolated_settings_env():
@@ -101,6 +103,12 @@ class ViewerApiSettingsTests(unittest.TestCase):
 
         self.assertEqual(settings.auth_mode, "bearer")
         self.assertEqual(settings.token, "env-secret")
+
+    def test_env_parses_unsafe_local_mutation_opt_in(self) -> None:
+        with isolated_settings_env(VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="true"):
+            settings = ViewerApiSettings()
+
+        self.assertIs(settings.allow_unsafe_local_mutations, True)
 
     def test_env_parses_cors_origins_json_array(self) -> None:
         origins = [

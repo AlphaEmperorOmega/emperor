@@ -190,6 +190,143 @@ port_listening() {
   (: < "/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
 }
 
+listener_pids_for_port() {
+  local port="$1"
+
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null
+    return 0
+  fi
+
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -n tcp "$port" 2>/dev/null | tr ' ' '\n' | sed '/^$/d'
+    return 0
+  fi
+
+  return 0
+}
+
+process_command() {
+  local pid="$1"
+  ps -p "$pid" -o command= 2>/dev/null || true
+}
+
+process_group_id() {
+  local pid="$1"
+  ps -p "$pid" -o pgid= 2>/dev/null | tr -d ' ' || true
+}
+
+viewer_service_command_matches() {
+  local name="$1"
+  local command="$2"
+
+  case "$name" in
+    backend)
+      [[ "$command" == *"viewer.backend.api:app"* ]] ||
+        [[ "$command" == *"spawn_main"* && "$command" == *"--multiprocessing-fork"* ]]
+      ;;
+    frontend)
+      [[ "$command" == *"next dev"* && "$command" == *"-p $VIEWER_FRONTEND_PORT"* ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+viewer_service_group_command_matches() {
+  local name="$1"
+  local command="$2"
+
+  if viewer_service_command_matches "$name" "$command"; then
+    return 0
+  fi
+
+  case "$name" in
+    frontend)
+      [[ "$command" == *"npm run dev"* ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+viewer_service_pids_for_port() {
+  local name="$1"
+  local port="$2"
+  local pid
+  local command
+
+  while IFS= read -r pid; do
+    if [ -z "$pid" ]; then
+      continue
+    fi
+    command="$(process_command "$pid")"
+    if viewer_service_command_matches "$name" "$command"; then
+      echo "$pid"
+    fi
+  done < <(listener_pids_for_port "$port")
+}
+
+can_signal_viewer_process_group() {
+  local name="$1"
+  local pid="$2"
+  local pgid="$3"
+  local group_command
+
+  if [ -z "$pgid" ]; then
+    return 1
+  fi
+
+  if [ "$pgid" = "$pid" ]; then
+    return 0
+  fi
+
+  group_command="$(process_command "$pgid")"
+  viewer_service_group_command_matches "$name" "$group_command"
+}
+
+signal_viewer_pid() {
+  local name="$1"
+  local signal="$2"
+  local pid="$3"
+  local pgid
+
+  pgid="$(process_group_id "$pid")"
+  if can_signal_viewer_process_group "$name" "$pid" "$pgid"; then
+    kill "-$signal" -- "-$pgid" 2>/dev/null ||
+      kill "-$signal" "$pid" 2>/dev/null ||
+      true
+    return 0
+  fi
+
+  kill "-$signal" "$pid" 2>/dev/null || true
+}
+
+stop_discovered_viewer_service() {
+  local name="$1"
+  local port="$2"
+  local signal="${3:-TERM}"
+  local -a pids=()
+  local pid
+
+  mapfile -t pids < <(viewer_service_pids_for_port "$name" "$port")
+  if [ "${#pids[@]}" -eq 0 ]; then
+    echo "Viewer $name is listening on port $port, but no env.sh pid file was found and the listener was not recognized as a viewer process"
+    return 1
+  fi
+
+  for pid in "${pids[@]}"; do
+    signal_viewer_pid "$name" "$signal" "$pid"
+  done
+  if [ "$signal" = "KILL" ]; then
+    echo "Force-stopped viewer $name (${pids[*]}, discovered from port $port)"
+  else
+    echo "Stopped viewer $name (${pids[*]}, discovered from port $port)"
+  fi
+}
+
 wait_for_port() {
   local port="$1"
   local attempts="${2:-40}"
@@ -198,6 +335,24 @@ wait_for_port() {
 
   while [ "$attempt" -le "$attempts" ]; do
     if port_listening "$port"; then
+      return 0
+    fi
+
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
+wait_for_port_to_close() {
+  local port="$1"
+  local attempts="${2:-40}"
+  local delay="${3:-0.25}"
+  local attempt=1
+
+  while [ "$attempt" -le "$attempts" ]; do
+    if ! port_listening "$port"; then
       return 0
     fi
 
@@ -248,8 +403,8 @@ stop_viewer_service() {
   if ! pid_running "$pid_file"; then
     rm -f "$pid_file"
     if port_listening "$port"; then
-      echo "Viewer $name is listening on port $port, but no env.sh pid file was found"
-      return 0
+      stop_discovered_viewer_service "$name" "$port"
+      return $?
     fi
     echo "Viewer $name already stopped"
     return 0
@@ -267,6 +422,13 @@ stop_viewer() {
 }
 
 start_viewer_backend() {
+  local -a reload_args=(
+    --reload
+    --reload-dir "$PROJECT_ROOT/emperor"
+    --reload-dir "$PROJECT_ROOT/models"
+    --reload-dir "$PROJECT_ROOT/viewer/backend"
+  )
+
   if pid_running "$VIEWER_BACKEND_PID"; then
     if port_listening "$VIEWER_BACKEND_PORT"; then
       echo "Viewer backend already started; reusing existing server (pid $(cat "$VIEWER_BACKEND_PID"), port $VIEWER_BACKEND_PORT)"
@@ -281,8 +443,16 @@ start_viewer_backend() {
 
   rm -f "$VIEWER_BACKEND_PID"
   if port_listening "$VIEWER_BACKEND_PORT"; then
-    echo "Viewer backend already started; port $VIEWER_BACKEND_PORT is listening (no env.sh pid file)"
-    return 0
+    echo "Viewer backend is listening on port $VIEWER_BACKEND_PORT without a pid file; restarting it to apply current launcher settings."
+    stop_discovered_viewer_service "backend" "$VIEWER_BACKEND_PORT" || return 1
+    if ! wait_for_port_to_close "$VIEWER_BACKEND_PORT"; then
+      echo "Viewer backend port $VIEWER_BACKEND_PORT did not close after TERM; forcing the discovered viewer backend to stop." >&2
+      stop_discovered_viewer_service "backend" "$VIEWER_BACKEND_PORT" "KILL" || return 1
+      if ! wait_for_port_to_close "$VIEWER_BACKEND_PORT"; then
+        echo "Viewer backend port $VIEWER_BACKEND_PORT did not close after force-stopping the discovered process." >&2
+        return 1
+      fi
+    fi
   fi
 
   echo "Starting viewer backend in the background on port $VIEWER_BACKEND_PORT..."
@@ -290,13 +460,15 @@ start_viewer_backend() {
     cd "$PROJECT_ROOT" || exit 1
     if command -v setsid >/dev/null 2>&1; then
       MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}" \
+        VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="${VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS:-true}" \
         setsid nohup "$VENV_PATH/bin/python" -m uvicorn viewer.backend.api:app \
-          --reload --host 127.0.0.1 --port "$VIEWER_BACKEND_PORT" \
+          "${reload_args[@]}" --host 127.0.0.1 --port "$VIEWER_BACKEND_PORT" \
           </dev/null > "$VIEWER_BACKEND_LOG" 2>&1 &
     else
       MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp/matplotlib}" \
+        VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS="${VIEWER_API_ALLOW_UNSAFE_LOCAL_MUTATIONS:-true}" \
         nohup "$VENV_PATH/bin/python" -m uvicorn viewer.backend.api:app \
-          --reload --host 127.0.0.1 --port "$VIEWER_BACKEND_PORT" \
+          "${reload_args[@]}" --host 127.0.0.1 --port "$VIEWER_BACKEND_PORT" \
           </dev/null > "$VIEWER_BACKEND_LOG" 2>&1 &
     fi
     echo "$!" > "$VIEWER_BACKEND_PID"
@@ -365,12 +537,6 @@ if [ "$VIEWER_ACTION" = "status" ]; then
   return 0
 fi
 
-if [ -d "$VENV_PATH" ]; then
-  activate_venv
-  start_viewer || return 1
-  return 0
-fi
-
 ensure_mise || return 1
 
 echo "Installing tools from mise.toml..."
@@ -388,8 +554,7 @@ if [ ! -d "$VENV_PATH" ]; then
   create_venv || return 1
 fi
 
-source "$VENV_PATH/bin/activate"
-echo "Activated virtual environment at $VENV_PATH"
+activate_venv
 
 ensure_project_dependencies || return 1
 

@@ -50,6 +50,61 @@ class BackendTestEnvironmentTests(unittest.TestCase):
 
 
 class EnvScriptTests(unittest.TestCase):
+    def test_stale_existing_venv_is_recreated_before_starting_viewer(self) -> None:
+        with tempfile.TemporaryDirectory() as project_dir:
+            project_path = Path(project_dir)
+            venv_bin = project_path / "torchenv" / "bin"
+            venv_bin.mkdir(parents=True)
+            (venv_bin / "python").write_text(
+                "#!/usr/bin/env bash\nexit 0\n",
+                encoding="utf-8",
+            )
+            (venv_bin / "python").chmod(0o755)
+            script_path = project_path / "env.sh"
+            injection = textwrap.dedent(
+                """
+                ensure_mise() { echo ensure_mise; }
+                mise() { echo mise "$@"; }
+                mise_python_version() { echo 3.13; }
+                venv_python_version() { echo 3.12; }
+                create_venv() {
+                  echo create_venv;
+                  mkdir -p "$VENV_PATH/bin";
+                  printf '#!/usr/bin/env bash\\nexit 0\\n' > "$VENV_PATH/bin/python";
+                  chmod +x "$VENV_PATH/bin/python";
+                }
+                activate_venv() { echo activate_venv; }
+                ensure_project_dependencies() { echo ensure_project_dependencies; }
+                install_frontend_dependencies() { echo install_frontend_dependencies; }
+                start_viewer() { echo start_viewer; }
+                """
+            )
+            script_path.write_text(
+                ENV_SCRIPT.read_text(encoding="utf-8").replace(
+                    '\nif [ "$VIEWER_ACTION" = "stop" ]; then',
+                    f"\n{injection}\nif [ \"$VIEWER_ACTION\" = \"stop\" ]; then",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                ["bash", "-c", f"source {shlex.quote(str(script_path))}"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertIn(
+            "Recreating virtual environment for Python 3.13",
+            result.stdout,
+        )
+        self.assertIn("create_venv", result.stdout)
+        self.assertLess(
+            result.stdout.splitlines().index("create_venv"),
+            result.stdout.splitlines().index("start_viewer"),
+        )
+
     def test_dependency_marker_skips_current_installs_and_reinstalls_stale(
         self,
     ) -> None:
@@ -148,6 +203,284 @@ class EnvScriptTests(unittest.TestCase):
             calls.index("start_viewer_backend"),
             calls,
         )
+
+    def test_stop_viewer_discovers_known_backend_listener_without_pid_file(self) -> None:
+        with tempfile.TemporaryDirectory() as runtime_dir:
+            pid_file = Path(runtime_dir) / "backend.pid"
+            script = textwrap.dedent(
+                f"""
+                set -e
+                source {shlex.quote(str(ENV_SCRIPT))} --viewer-status >/dev/null
+                VIEWER_BACKEND_PORT=9999
+                port_listening() {{ return 0; }}
+                listener_pids_for_port() {{ echo 1234; }}
+                process_command() {{
+                  echo "$VENV_PATH/bin/python -m uvicorn viewer.backend.api:app --reload"
+                }}
+                process_group_id() {{ echo 1234; }}
+                kill() {{ echo "kill $*"; }}
+
+                stop_viewer_service "backend" {shlex.quote(str(pid_file))} "$VIEWER_BACKEND_PORT"
+                test ! -f {shlex.quote(str(pid_file))}
+                """
+            )
+
+            result = subprocess.run(
+                ["bash", "-c", script],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertIn("kill -TERM -- -1234", result.stdout)
+        self.assertIn(
+            "Stopped viewer backend (1234, discovered from port 9999)",
+            result.stdout,
+        )
+
+    def test_stop_viewer_signals_backend_group_for_reload_child_listener(self) -> None:
+        with tempfile.TemporaryDirectory() as runtime_dir:
+            pid_file = Path(runtime_dir) / "backend.pid"
+            script = textwrap.dedent(
+                f"""
+                set -e
+                source {shlex.quote(str(ENV_SCRIPT))} --viewer-status >/dev/null
+                VIEWER_BACKEND_PORT=9999
+                port_listening() {{ return 0; }}
+                listener_pids_for_port() {{ echo 5678; }}
+                process_command() {{
+                  if [ "$1" = "5678" ]; then
+                    echo "$VENV_PATH/bin/python -c from multiprocessing.spawn import spawn_main --multiprocessing-fork"
+                  else
+                    echo "$VENV_PATH/bin/python -m uvicorn viewer.backend.api:app --reload"
+                  fi
+                }}
+                process_group_id() {{ echo 1234; }}
+                kill() {{ echo "kill $*"; }}
+
+                stop_viewer_service "backend" {shlex.quote(str(pid_file))} "$VIEWER_BACKEND_PORT"
+                test ! -f {shlex.quote(str(pid_file))}
+                """
+            )
+
+            result = subprocess.run(
+                ["bash", "-c", script],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertIn("kill -TERM -- -1234", result.stdout)
+        self.assertIn(
+            "Stopped viewer backend (5678, discovered from port 9999)",
+            result.stdout,
+        )
+
+    def test_start_viewer_backend_restarts_no_pid_backend_listener(self) -> None:
+        with tempfile.TemporaryDirectory() as project_dir:
+            project_path = Path(project_dir)
+            venv_bin = project_path / "torchenv" / "bin"
+            runtime_path = project_path / "viewer" / ".runtime"
+            args_path = project_path / "backend-args.txt"
+            venv_bin.mkdir(parents=True)
+            runtime_path.mkdir(parents=True)
+            python_path = venv_bin / "python"
+            python_path.write_text(
+                "#!/usr/bin/env bash\n"
+                "{\n"
+                "  for arg in \"$@\"; do printf '%s\\n' \"$arg\"; done\n"
+                f"}} > {shlex.quote(str(args_path))}\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            python_path.chmod(0o755)
+
+            script = textwrap.dedent(
+                f"""
+                set -e
+                source {shlex.quote(str(ENV_SCRIPT))} --viewer-status >/dev/null
+                PROJECT_ROOT={shlex.quote(str(project_path))}
+                VENV_PATH={shlex.quote(str(project_path / "torchenv"))}
+                VIEWER_RUNTIME_PATH={shlex.quote(str(runtime_path))}
+                VIEWER_BACKEND_PID="$VIEWER_RUNTIME_PATH/backend.pid"
+                VIEWER_BACKEND_LOG="$VIEWER_RUNTIME_PATH/backend.log"
+                VIEWER_BACKEND_PORT=65533
+                PORT_OPEN=1
+                port_listening() {{ [ "$PORT_OPEN" = "1" ]; }}
+                listener_pids_for_port() {{ echo 1234; }}
+                process_command() {{
+                  echo "$VENV_PATH/bin/python -m uvicorn viewer.backend.api:app --reload"
+                }}
+                kill() {{ echo "kill $*"; PORT_OPEN=0; }}
+                wait_for_port() {{ return 0; }}
+
+                start_viewer_backend
+                for _attempt in $(seq 1 20); do
+                  if [ -f {shlex.quote(str(args_path))} ]; then
+                    break
+                  fi
+                  sleep 0.05
+                done
+                test -f {shlex.quote(str(args_path))}
+                """
+            )
+
+            result = subprocess.run(
+                ["bash", "-c", script],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            args = args_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertIn(
+            "Viewer backend is listening on port 65533 without a pid file; "
+            "restarting it to apply current launcher settings.",
+            result.stdout,
+        )
+        self.assertIn("kill -TERM 1234", result.stdout)
+        self.assertIn("--reload-dir", args)
+
+    def test_start_viewer_backend_force_stops_no_pid_backend_after_term_timeout(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as project_dir:
+            project_path = Path(project_dir)
+            venv_bin = project_path / "torchenv" / "bin"
+            runtime_path = project_path / "viewer" / ".runtime"
+            args_path = project_path / "backend-args.txt"
+            venv_bin.mkdir(parents=True)
+            runtime_path.mkdir(parents=True)
+            python_path = venv_bin / "python"
+            python_path.write_text(
+                "#!/usr/bin/env bash\n"
+                "{\n"
+                "  for arg in \"$@\"; do printf '%s\\n' \"$arg\"; done\n"
+                f"}} > {shlex.quote(str(args_path))}\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            python_path.chmod(0o755)
+
+            script = textwrap.dedent(
+                f"""
+                set -e
+                source {shlex.quote(str(ENV_SCRIPT))} --viewer-status >/dev/null
+                PROJECT_ROOT={shlex.quote(str(project_path))}
+                VENV_PATH={shlex.quote(str(project_path / "torchenv"))}
+                VIEWER_RUNTIME_PATH={shlex.quote(str(runtime_path))}
+                VIEWER_BACKEND_PID="$VIEWER_RUNTIME_PATH/backend.pid"
+                VIEWER_BACKEND_LOG="$VIEWER_RUNTIME_PATH/backend.log"
+                VIEWER_BACKEND_PORT=65533
+                FORCE_STOPPED=0
+                port_listening() {{ return 0; }}
+                listener_pids_for_port() {{ echo 1234; }}
+                process_command() {{
+                  echo "$VENV_PATH/bin/python -m uvicorn viewer.backend.api:app --reload"
+                }}
+                process_group_id() {{ echo 1234; }}
+                kill() {{
+                  echo "kill $*";
+                  if [ "$1" = "-KILL" ]; then
+                    FORCE_STOPPED=1;
+                  fi
+                }}
+                wait_for_port_to_close() {{
+                  [ "$FORCE_STOPPED" = "1" ];
+                }}
+                wait_for_port() {{ return 0; }}
+
+                start_viewer_backend
+                for _attempt in $(seq 1 20); do
+                  if [ -f {shlex.quote(str(args_path))} ]; then
+                    break
+                  fi
+                  sleep 0.05
+                done
+                test -f {shlex.quote(str(args_path))}
+                """
+            )
+
+            result = subprocess.run(
+                ["bash", "-c", script],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertIn("kill -TERM -- -1234", result.stdout)
+        self.assertIn("kill -KILL -- -1234", result.stdout)
+        self.assertIn("Force-stopped viewer backend", result.stdout)
+        self.assertIn("did not close after TERM", result.stderr)
+
+    def test_backend_reload_watches_source_dirs_not_mutable_runtime_state(self) -> None:
+        with tempfile.TemporaryDirectory() as project_dir:
+            project_path = Path(project_dir)
+            venv_bin = project_path / "torchenv" / "bin"
+            runtime_path = project_path / "viewer" / ".runtime"
+            args_path = project_path / "backend-args.txt"
+            venv_bin.mkdir(parents=True)
+            runtime_path.mkdir(parents=True)
+            python_path = venv_bin / "python"
+            python_path.write_text(
+                "#!/usr/bin/env bash\n"
+                "{\n"
+                "  for arg in \"$@\"; do printf '%s\\n' \"$arg\"; done\n"
+                f"}} > {shlex.quote(str(args_path))}\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            python_path.chmod(0o755)
+
+            script = textwrap.dedent(
+                f"""
+                set -e
+                source {shlex.quote(str(ENV_SCRIPT))} --viewer-status >/dev/null
+                PROJECT_ROOT={shlex.quote(str(project_path))}
+                VENV_PATH={shlex.quote(str(project_path / "torchenv"))}
+                VIEWER_RUNTIME_PATH={shlex.quote(str(runtime_path))}
+                VIEWER_BACKEND_PID="$VIEWER_RUNTIME_PATH/backend.pid"
+                VIEWER_BACKEND_LOG="$VIEWER_RUNTIME_PATH/backend.log"
+                VIEWER_BACKEND_PORT=65533
+                port_listening() {{ return 1; }}
+                wait_for_port() {{ return 0; }}
+
+                start_viewer_backend
+                for _attempt in $(seq 1 20); do
+                  if [ -f {shlex.quote(str(args_path))} ]; then
+                    break
+                  fi
+                  sleep 0.05
+                done
+                test -f {shlex.quote(str(args_path))}
+                """
+            )
+
+            subprocess.run(
+                ["bash", "-c", script],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            args = args_path.read_text(encoding="utf-8").splitlines()
+
+        reload_dirs = [
+            args[index + 1]
+            for index, arg in enumerate(args)
+            if arg == "--reload-dir"
+        ]
+        self.assertIn("--reload", args)
+        self.assertEqual(
+            reload_dirs,
+            [
+                str(project_path / "emperor"),
+                str(project_path / "models"),
+                str(project_path / "viewer" / "backend"),
+            ],
+        )
+        self.assertNotIn(str(project_path), reload_dirs)
+        self.assertNotIn(str(project_path / "logs"), reload_dirs)
+        self.assertNotIn(str(project_path / "viewer"), reload_dirs)
 
     def test_backend_start_failure_returns_nonzero_and_removes_pid(self) -> None:
         with tempfile.TemporaryDirectory() as project_dir:
