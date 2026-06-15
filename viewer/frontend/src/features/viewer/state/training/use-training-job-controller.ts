@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   cancelTrainingJob,
@@ -27,6 +27,53 @@ import {
 } from "@/features/viewer/state/training/training-request";
 
 const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
+
+type TrainingLogRefreshSnapshot = {
+  jobId: string | null;
+  logDir: string | null;
+  terminalStatus: string | null;
+};
+
+type TrainingLogRefreshAction = "none" | "lists" | "details";
+
+const emptyLogRefreshSnapshot: TrainingLogRefreshSnapshot = {
+  jobId: null,
+  logDir: null,
+  terminalStatus: null,
+};
+
+export function resolveTrainingLogRefresh(
+  previous: TrainingLogRefreshSnapshot,
+  job: TrainingJob | undefined,
+): {
+  action: TrainingLogRefreshAction;
+  snapshot: TrainingLogRefreshSnapshot;
+} {
+  if (!job) {
+    return { action: "none", snapshot: emptyLogRefreshSnapshot };
+  }
+  const terminalStatus = terminalStatuses.has(job.status) ? job.status : null;
+  const snapshot = {
+    jobId: job.id,
+    logDir: job.logDir ?? null,
+    terminalStatus,
+  };
+  const jobChanged = previous.jobId !== job.id;
+  const reachedTerminal = Boolean(
+    terminalStatus &&
+      (jobChanged || previous.terminalStatus !== terminalStatus),
+  );
+  if (reachedTerminal) {
+    return { action: "details", snapshot };
+  }
+  const gainedLogDir = Boolean(
+    snapshot.logDir && (jobChanged || previous.logDir !== snapshot.logDir),
+  );
+  return {
+    action: gainedLogDir ? "lists" : "none",
+    snapshot,
+  };
+}
 
 type UseTrainingJobControllerInput = {
   selectedModel: string;
@@ -70,7 +117,10 @@ export function useTrainingJobController({
   const [planNonce, setPlanNonce] = useState(0);
   const [pendingTrainingRequest, setPendingTrainingRequest] =
     useState<TrainingJobCreateInput | null>(null);
-  const { refreshAfterMutation } = useLogQueryCache();
+  const { invalidateLogLists, refreshAfterMutation } = useLogQueryCache();
+  const logRefreshSnapshotRef = useRef<TrainingLogRefreshSnapshot>(
+    emptyLogRefreshSnapshot,
+  );
   const createMutation = useMutation({
     mutationFn: createTrainingJob,
     onSuccess: (job) => {
@@ -103,13 +153,19 @@ export function useTrainingJobController({
     onJobChange(job);
   }, [job, onJobChange]);
   useEffect(() => {
-    if (!job) {
+    const { action, snapshot } = resolveTrainingLogRefresh(
+      logRefreshSnapshotRef.current,
+      job,
+    );
+    logRefreshSnapshotRef.current = snapshot;
+    if (action === "details") {
+      void refreshAfterMutation();
       return;
     }
-    if (job.logDir || terminalStatuses.has(job.status)) {
-      void refreshAfterMutation();
+    if (action === "lists") {
+      void invalidateLogLists();
     }
-  }, [job, refreshAfterMutation]);
+  }, [job, invalidateLogLists, refreshAfterMutation]);
 
   const planRequest = useMemo(
     () =>

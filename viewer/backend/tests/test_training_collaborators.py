@@ -9,6 +9,7 @@ from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import viewer.backend.training_job_projector as training_job_projector
 from viewer.backend.job_store import TrainingJobRecord
 from viewer.backend.training_job_projector import TrainingJobProjector
 from viewer.backend.training_monitor_locator import TrainingMonitorLocator
@@ -226,6 +227,29 @@ class TrainingJobProjectorTests(unittest.TestCase):
             ],
         )
         self.assertEqual(payload["logTail"], [f"log {index}" for index in range(2, 82)])
+
+    def test_projector_log_tail_reads_last_lines_across_small_chunks(self) -> None:
+        original_chunk_size = training_job_projector.TRAINING_JOB_LOG_TAIL_CHUNK_BYTES
+        training_job_projector.TRAINING_JOB_LOG_TAIL_CHUNK_BYTES = 32
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                job = make_job(Path(tmp) / "job-1")
+                job.root.mkdir(parents=True)
+                job.log_path.write_text(
+                    "\n".join(f"log {index} {'x' * 40}" for index in range(20)),
+                    encoding="utf-8",
+                )
+
+                tail = TrainingJobProjector().log_tail(job, line_count=3)
+        finally:
+            training_job_projector.TRAINING_JOB_LOG_TAIL_CHUNK_BYTES = (
+                original_chunk_size
+            )
+
+        self.assertEqual(
+            tail,
+            [f"log {index} {'x' * 40}" for index in range(17, 20)],
+        )
 
 
 if __name__ == "__main__":

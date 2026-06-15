@@ -10,6 +10,7 @@ from viewer.backend.training_monitor_locator import TrainingMonitorLocator
 from viewer.backend.training_run_progress import project_training_run_progress
 
 TRAINING_JOB_EVENT_TAIL_LIMIT = 100
+TRAINING_JOB_LOG_TAIL_CHUNK_BYTES = 8192
 
 
 @dataclass(frozen=True)
@@ -148,10 +149,28 @@ class TrainingJobProjector:
     ) -> list[str]:
         if not job.log_path.exists():
             return []
-        return job.log_path.read_text(
-            encoding="utf-8",
-            errors="replace",
-        ).splitlines()[-line_count:]
+        return _tail_lines(job.log_path, line_count)
+
+
+def _tail_lines(path, line_count: int) -> list[str]:
+    if line_count <= 0:
+        return []
+
+    chunks: list[bytes] = []
+    newline_count = 0
+    with path.open("rb") as handle:
+        handle.seek(0, 2)
+        position = handle.tell()
+        while position > 0 and newline_count <= line_count:
+            read_size = min(TRAINING_JOB_LOG_TAIL_CHUNK_BYTES, position)
+            position -= read_size
+            handle.seek(position)
+            chunk = handle.read(read_size)
+            chunks.append(chunk)
+            newline_count += chunk.count(b"\n")
+
+    data = b"".join(reversed(chunks))
+    return data.decode("utf-8", errors="replace").splitlines()[-line_count:]
 
 
 def _event_counts(events: list[dict[str, Any]]) -> dict[str, int]:

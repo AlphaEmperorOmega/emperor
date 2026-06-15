@@ -27,6 +27,7 @@ from viewer.backend.monitor_data import (
 from viewer.backend.runtime.job_status import (
     is_active_job_status,
     is_live_process_job_status,
+    is_terminal_job_status,
 )
 from viewer.backend.training_job_projector import (
     TRAINING_JOB_EVENT_TAIL_LIMIT,
@@ -60,6 +61,12 @@ from viewer.backend.training_worker_launcher import (
 # Grace period for a cancelled worker to exit after SIGTERM (and again after
 # the SIGKILL escalation) before cancellation is reported as failed.
 CANCEL_REAP_GRACE_SECONDS = 5.0
+_TERMINAL_EVENT_TYPE_STATUS: dict[str, str] = {
+    "completed": "completed",
+    "failed": "failed",
+    "error": "failed",
+    "cancelled": "cancelled",
+}
 
 
 def _now() -> str:
@@ -67,6 +74,46 @@ def _now() -> str:
 
 
 TrainingJob = TrainingJobRecord
+
+
+def _terminal_status_from_event(event: dict[str, Any]) -> str | None:
+    status = event.get("status")
+    if isinstance(status, str) and is_terminal_job_status(status):
+        return status
+    event_type = event.get("type")
+    if isinstance(event_type, str):
+        return _TERMINAL_EVENT_TYPE_STATUS.get(event_type)
+    return None
+
+
+def _latest_terminal_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return next(
+        (
+            event
+            for event in reversed(events)
+            if _terminal_status_from_event(event) is not None
+        ),
+        None,
+    )
+
+
+def _terminal_exit_code(
+    status: str,
+    event: dict[str, Any],
+    current_exit_code: int | None,
+) -> int | None:
+    explicit_exit_code = event.get("exitCode")
+    if isinstance(explicit_exit_code, int):
+        return explicit_exit_code
+    if current_exit_code is not None:
+        return current_exit_code
+    if status == "completed":
+        return 0
+    if status == "failed":
+        return 1
+    if status == "cancelled":
+        return -15
+    return None
 
 __all__ = [
     "ProcessHandle",
@@ -252,27 +299,35 @@ class TrainingJobManager:
             job_root=job_root,
             payload=payload,
         )
-        job = self._register_job(
-            job_id=job_id,
-            model=model,
-            payload=payload,
-            materialized_run_plan=materialized_run_plan,
-            validated_log_folder=validated_log_folder,
-            command=launch.command,
-            job_root=job_root,
-            process=launch.process,
-        )
-        self._write_event(
-            job,
-            {
-                "type": "job_started",
-                "status": "running",
-                "preset": job.preset,
-                "presets": job.presets,
-                "runTotal": planned_run_count,
-            },
-        )
-        return self.get_job(job_id)
+        try:
+            job = self._register_job(
+                job_id=job_id,
+                model=model,
+                payload=payload,
+                materialized_run_plan=materialized_run_plan,
+                validated_log_folder=validated_log_folder,
+                command=launch.command,
+                job_root=job_root,
+                process=launch.process,
+            )
+            self._write_event(
+                job,
+                {
+                    "type": "job_started",
+                    "status": "running",
+                    "preset": job.preset,
+                    "presets": job.presets,
+                    "runTotal": planned_run_count,
+                },
+            )
+            return self.get_job(job_id)
+        except Exception:
+            self._processes.pop(job_id, None)
+            try:
+                self._terminate_and_reap_process(job_id, launch.process)
+            except Exception:
+                pass
+            raise
 
     def _resolve_job_inputs(
         self,
@@ -404,8 +459,8 @@ class TrainingJobManager:
             root=job_root,
             pid=process.pid,
         )
-        self._processes[job_id] = process
         self.job_store.save(job)
+        self._processes[job_id] = process
         return job
 
     def get_job(self, job_id: str) -> dict[str, Any]:
@@ -570,12 +625,20 @@ class TrainingJobManager:
         process = self._processes.get(job.id)
         exit_code = process.poll() if process is not None else None
         events = events if events is not None else self._events(job)
-        latest_failed = next(
-            (event for event in reversed(events) if event.get("status") == "failed"),
-            None,
+        latest_terminal = _latest_terminal_event(events)
+        terminal_status = (
+            _terminal_status_from_event(latest_terminal)
+            if latest_terminal is not None
+            else None
         )
-        if latest_failed is not None:
-            job.status = "failed"
+        if latest_terminal is not None and terminal_status is not None:
+            job.status = terminal_status
+            job.exit_code = _terminal_exit_code(
+                terminal_status,
+                latest_terminal,
+                job.exit_code,
+            )
+            job.updated_at = str(latest_terminal.get("timestamp") or _now())
         elif process is None and is_live_process_job_status(job.status):
             job.status = "unknown"
             job.updated_at = _now()

@@ -20,6 +20,11 @@ from viewer.backend.tests.helpers import (
 from viewer.backend.training_jobs import TrainingJobManager
 
 
+class FailingTrainingJobStore(InMemoryTrainingJobStore):
+    def save(self, job) -> None:
+        raise RuntimeError("job store failed")
+
+
 class TrainingJobTests(unittest.TestCase):
     def _create_progress_projection_job(
         self,
@@ -128,6 +133,31 @@ class TrainingJobTests(unittest.TestCase):
         self.assertEqual(payload["pid"], 1234)
         for internal_key in ("command", "root", "process"):
             self.assertNotIn(internal_key, payload)
+
+    def test_create_job_reaps_worker_if_registration_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            process = FakeProcess()
+            manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(process),
+                job_store=FailingTrainingJobStore(),
+            )
+
+            with self.assertRaises(RuntimeError):
+                manager.create_job(
+                    model="linears/linear",
+                    preset="baseline",
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="registration_failure",
+                    monitors=[],
+                )
+
+        self.assertTrue(process.terminated)
+        self.assertFalse(process.killed)
+        self.assertEqual(manager._processes, {})
 
     def test_cancel_job_reaps_process_after_terminate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -952,6 +982,58 @@ class TrainingJobTests(unittest.TestCase):
         self.assertEqual(payload["logDir"], log_dir)
         self.assertEqual(payload["runPlan"]["runs"][0]["status"], "Running")
         self.assertEqual(payload["runPlan"]["summary"]["runningRuns"], 1)
+
+    def test_restart_fresh_manager_uses_completed_progress_event(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            original_manager, created_payload, _ = self._create_restart_limitation_job(
+                root,
+                log_folder="restart_completed_behavior",
+            )
+            job_id = str(created_payload["id"])
+            job = original_manager.jobs[job_id]
+            run = created_payload["runPlan"]["runs"][0]
+            log_dir = "logs/restart_completed_behavior/linear/baseline/Mnist/version_0"
+            original_manager._write_event(
+                job,
+                {
+                    "type": "dataset_completed",
+                    "status": "running",
+                    "dataset": "Mnist",
+                    "preset": "baseline",
+                    "runId": run["id"],
+                    "runIndex": 1,
+                    "metrics": {"validation/accuracy": 0.8},
+                    "logDir": log_dir,
+                },
+            )
+            original_manager._write_event(
+                job,
+                {
+                    "type": "completed",
+                    "status": "completed",
+                    "jobId": job_id,
+                    "preset": "baseline",
+                    "presets": ["baseline"],
+                },
+            )
+
+            fresh_manager = TrainingJobManager(
+                root=root / "jobs",
+                logs_root=root / "logs",
+                runner=FakeRunner(),
+            )
+            payload = fresh_manager.get_job(job_id)
+
+        self.assertEqual(payload["status"], "completed")
+        self.assertEqual(payload["exitCode"], 0)
+        self.assertEqual(payload["eventCounts"]["completed"], 1)
+        self.assertEqual(payload["runPlan"]["summary"]["completedRuns"], 1)
+        self.assertEqual(fresh_manager.active_jobs(), [])
+        self.assertEqual(fresh_manager.jobs[job_id].status, "completed")
+        self.assertEqual(fresh_manager.jobs[job_id].exit_code, 0)
 
     def test_restart_fresh_manager_lists_unknown_disk_job_as_active(
         self,
