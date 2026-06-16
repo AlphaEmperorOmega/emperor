@@ -15,8 +15,14 @@ import {
   expandableSubtreeNodeIds,
   filterGraphByDetail,
   filterGraphByExpansion,
-  layoutGraph,
 } from "@/lib/graph";
+
+// The dagre-backed layout is the only first-load dependency on `dagre`. Load it
+// lazily (on mount, in parallel with everything else) so `dagre` stays out of
+// the initial bundle. It resolves long before a model is inspected, so the graph
+// canvas still renders with laid-out nodes; until then the layout is empty.
+type LayoutGraphFn = typeof import("@/lib/graph/layout").layoutGraph;
+const EMPTY_GRAPH_LAYOUT: ReturnType<LayoutGraphFn> = { nodes: [], edges: [] };
 
 type GraphViewStateOptions = {
   canOpenMonitor?: (node: GraphNode) => boolean;
@@ -238,51 +244,66 @@ export function useGraphViewState(
     [expandedGraphNodeIds, graphForDetail, graphNavigation, graphScope],
   );
 
+  const [layoutGraph, setLayoutGraph] = useState<LayoutGraphFn | null>(null);
+  useEffect(() => {
+    let active = true;
+    void import("@/lib/graph/layout").then((module) => {
+      if (active) {
+        setLayoutGraph(() => module.layoutGraph);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Structural layout pass: runs the dagre layout. Deliberately excludes
   // selectedNodeId so that selecting a node does NOT trigger a relayout. The
   // per-node handlers are useCallback-stable (keyed on navigation/scope), so
   // keeping them here does not couple layout to selection.
-  const baseLayout = useMemo(
-    () =>
-      layoutGraph(graphForDisplay, {
-        graphDetailMode,
-        navigation: graphNavigation,
-        childSummariesById,
-        expertDiagramsById,
-        stackDiagramsById,
-        clusterDiagramsById,
-        expandedGraphNodeIds,
-        expandedDetailNodeIds,
-        enableExpansion: graphScope === "opened",
-        selectedNodeId: null,
-        canOpenMonitor: canOpenMonitor ? canOpenGraphNodeMonitor : undefined,
-        parameterActivityForNode,
-        onActivateNode: activateGraphNode,
-        onToggleExpansion: toggleGraphNodeExpansion,
-        onOpenMonitor: onOpenMonitor ? openGraphNodeMonitor : undefined,
-        onToggleDetails: toggleNodeDetails,
-      }),
-    [
-      activateGraphNode,
-      expandedDetailNodeIds,
-      expandedGraphNodeIds,
+  const baseLayout = useMemo(() => {
+    if (!layoutGraph) {
+      return EMPTY_GRAPH_LAYOUT;
+    }
+    return layoutGraph(graphForDisplay, {
       graphDetailMode,
-      graphForDisplay,
-      graphNavigation,
-      graphScope,
-      canOpenMonitor,
-      canOpenGraphNodeMonitor,
-      parameterActivityForNode,
-      openGraphNodeMonitor,
-      onOpenMonitor,
+      navigation: graphNavigation,
       childSummariesById,
-      clusterDiagramsById,
       expertDiagramsById,
       stackDiagramsById,
-      toggleGraphNodeExpansion,
-      toggleNodeDetails,
-    ],
-  );
+      clusterDiagramsById,
+      expandedGraphNodeIds,
+      expandedDetailNodeIds,
+      enableExpansion: graphScope === "opened",
+      selectedNodeId: null,
+      canOpenMonitor: canOpenMonitor ? canOpenGraphNodeMonitor : undefined,
+      parameterActivityForNode,
+      onActivateNode: activateGraphNode,
+      onToggleExpansion: toggleGraphNodeExpansion,
+      onOpenMonitor: onOpenMonitor ? openGraphNodeMonitor : undefined,
+      onToggleDetails: toggleNodeDetails,
+    });
+  }, [
+    layoutGraph,
+    activateGraphNode,
+    expandedDetailNodeIds,
+    expandedGraphNodeIds,
+    graphDetailMode,
+    graphForDisplay,
+    graphNavigation,
+    graphScope,
+    canOpenMonitor,
+    canOpenGraphNodeMonitor,
+    parameterActivityForNode,
+    openGraphNodeMonitor,
+    onOpenMonitor,
+    childSummariesById,
+    clusterDiagramsById,
+    expertDiagramsById,
+    stackDiagramsById,
+    toggleGraphNodeExpansion,
+    toggleNodeDetails,
+  ]);
 
   const edges = baseLayout.edges;
 

@@ -1,6 +1,6 @@
 import { createElement, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   useGraphPreviewController,
@@ -121,7 +121,7 @@ describe("useGraphPreviewOrchestration", () => {
     expect(result.current.graph.operationNodes).toEqual([]);
   });
 
-  it("exposes the graph when its identity matches the target", () => {
+  it("exposes the graph when its identity matches the target", async () => {
     const matchingGraph = graph("neuron/neuron_linear");
     const { result } = renderOrchestration({
       ...baseInput,
@@ -131,6 +131,7 @@ describe("useGraphPreviewOrchestration", () => {
     });
 
     expect(result.current.graph.graph).toBe(matchingGraph);
-    expect(result.current.graph.nodes).not.toEqual([]);
+    // Layout loads asynchronously (dagre is lazily imported); wait for nodes.
+    await waitFor(() => expect(result.current.graph.nodes).not.toEqual([]));
   });
 });

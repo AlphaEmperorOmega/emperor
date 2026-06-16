@@ -46,12 +46,17 @@ describe("useGraphViewState selection", () => {
     expect(result.current.previewVisualizationMode).toBe("parameters");
   });
 
-  it("applies selection without relayout (non-selected nodes keep their reference)", () => {
+  it("applies selection without relayout (non-selected nodes keep their reference)", async () => {
     const { result } = renderHook(() => useGraphViewState(graph));
+
+    // Layout loads asynchronously (dagre is lazily imported); wait for the
+    // structural pass before asserting on laid-out nodes.
+    await waitFor(() =>
+      expect(result.current.nodes.length).toBeGreaterThanOrEqual(2),
+    );
 
     const nodesBefore = result.current.nodes;
     const edgesBefore = result.current.edges;
-    expect(nodesBefore.length).toBeGreaterThanOrEqual(2);
 
     const n0Before = nodesBefore.find((candidate) => candidate.id === "n0")!;
 

@@ -3,8 +3,16 @@ import { type OperationGraphNode, type OperationGraphResponse } from "@/lib/api"
 import {
   type GraphScope,
   OPERATION_GROUP_NODE_PREFIX,
-  layoutOperationGraph,
 } from "@/lib/graph";
+
+// See use-graph-view-state: lazily load the dagre-backed operation layout so
+// `dagre` stays out of the first-load bundle.
+type LayoutOperationGraphFn =
+  typeof import("@/lib/graph/operation-layout").layoutOperationGraph;
+const EMPTY_OPERATION_LAYOUT: ReturnType<LayoutOperationGraphFn> = {
+  nodes: [],
+  edges: [],
+};
 
 export function useOperationGraphViewState(
   graph: OperationGraphResponse | undefined,
@@ -28,17 +36,38 @@ export function useOperationGraphViewState(
     });
   }, []);
 
-  const baseLayout = useMemo(
-    () =>
-      layoutOperationGraph(graph, {
-        scope: operationGraphScope,
-        expandedGroupIds: expandedOperationGroupIds,
-        selectedNodeId: null,
-        onSelectNode: setSelectedOperationNodeId,
-        onToggleGroup: toggleOperationGroup,
-      }),
-    [expandedOperationGroupIds, graph, operationGraphScope, toggleOperationGroup],
-  );
+  const [layoutOperationGraph, setLayoutOperationGraph] =
+    useState<LayoutOperationGraphFn | null>(null);
+  useEffect(() => {
+    let active = true;
+    void import("@/lib/graph/operation-layout").then((module) => {
+      if (active) {
+        setLayoutOperationGraph(() => module.layoutOperationGraph);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const baseLayout = useMemo(() => {
+    if (!layoutOperationGraph) {
+      return EMPTY_OPERATION_LAYOUT;
+    }
+    return layoutOperationGraph(graph, {
+      scope: operationGraphScope,
+      expandedGroupIds: expandedOperationGroupIds,
+      selectedNodeId: null,
+      onSelectNode: setSelectedOperationNodeId,
+      onToggleGroup: toggleOperationGroup,
+    });
+  }, [
+    layoutOperationGraph,
+    expandedOperationGroupIds,
+    graph,
+    operationGraphScope,
+    toggleOperationGroup,
+  ]);
 
   const operationNodes = useMemo(
     () =>

@@ -8,6 +8,7 @@ import {
   GRAPH_HORIZONTAL_CARD_GAP,
   GRAPH_VERTICAL_CARD_GAP,
 } from "@/lib/graph/constants";
+import { OPERATION_GROUP_NODE_PREFIX } from "@/lib/graph/operation-graph-constants";
 import {
   type GraphScope,
   type OperationFlowNodeData,
@@ -17,7 +18,6 @@ const OPERATION_GROUP_WIDTH = 260;
 const OPERATION_GROUP_HEIGHT = 92;
 const OPERATION_NODE_WIDTH = 292;
 const OPERATION_NODE_HEIGHT = 132;
-export const OPERATION_GROUP_NODE_PREFIX = "operation-group:";
 
 function operationGroupNodeId(groupId: string) {
   return `${OPERATION_GROUP_NODE_PREFIX}${groupId}`;
