@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import models.experts.experts_linear.config as config
 
 from emperor.base.options import (
@@ -5,8 +6,12 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.base.layer import LayerStackConfig
-from emperor.base.layer.config import LayerConfig, RecurrentLayerConfig
+from emperor.base.layer.config import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.config import (
@@ -41,7 +46,7 @@ class ExpertsLinearConfigBuilder:
         layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
-        stack_residual_flag: bool = config.STACK_RESIDUAL_FLAG,
+        stack_residual_connection_option: ResidualConnectionOptions = config.STACK_RESIDUAL_CONNECTION_OPTION,
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
         stack_last_layer_bias_option: LastLayerBiasOptions = config.STACK_LAST_LAYER_BIAS_OPTION,
         stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -55,7 +60,7 @@ class ExpertsLinearConfigBuilder:
         routing_initialization_mode: RoutingInitializationMode = config.EXPERT_ROUTING_INITIALIZATION_MODE,
         expert_stack_num_layers: int = config.EXPERT_STACK_NUM_LAYERS,
         expert_stack_activation: ActivationOptions = config.EXPERT_STACK_ACTIVATION,
-        expert_stack_residual_flag: bool = config.EXPERT_STACK_RESIDUAL_FLAG,
+        expert_stack_residual_connection_option: ResidualConnectionOptions = config.EXPERT_STACK_RESIDUAL_CONNECTION_OPTION,
         expert_stack_dropout_probability: float = config.EXPERT_STACK_DROPOUT_PROBABILITY,
         expert_stack_layer_norm_position: LayerNormPositionOptions = config.EXPERT_STACK_LAYER_NORM_POSITION,
         expert_stack_last_layer_bias_option: LastLayerBiasOptions = config.EXPERT_STACK_LAST_LAYER_BIAS_OPTION,
@@ -73,18 +78,20 @@ class ExpertsLinearConfigBuilder:
         router_noisy_topk_flag: bool = config.ROUTER_NOISY_TOPK_FLAG,
         sampler_stack_num_layers: int = config.SAMPLER_STACK_NUM_LAYERS,
         sampler_stack_activation: ActivationOptions = config.SAMPLER_STACK_ACTIVATION,
-        sampler_stack_residual_flag: bool = config.SAMPLER_STACK_RESIDUAL_FLAG,
+        sampler_stack_residual_connection_option: ResidualConnectionOptions = config.SAMPLER_STACK_RESIDUAL_CONNECTION_OPTION,
         sampler_stack_dropout_probability: float = config.SAMPLER_STACK_DROPOUT_PROBABILITY,
         sampler_stack_layer_norm_position: LayerNormPositionOptions = config.SAMPLER_STACK_LAYER_NORM_POSITION,
         sampler_stack_last_layer_bias_option: LastLayerBiasOptions = config.SAMPLER_STACK_LAST_LAYER_BIAS_OPTION,
         sampler_stack_apply_output_pipeline_flag: bool = config.SAMPLER_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         sampler_bias_flag: bool = config.SAMPLER_BIAS_FLAG,
         stack_gate_flag: bool = config.GATE_FLAG,
+        gate_option: LayerGateOptions | None = config.GATE_OPTION,
+        gate_activation: ActivationOptions | None = config.GATE_ACTIVATION,
         gate_hidden_dim: int = config.GATE_HIDDEN_DIM,
         gate_layer_norm_position: LayerNormPositionOptions = config.GATE_LAYER_NORM_POSITION,
         gate_stack_num_layers: int = config.GATE_STACK_NUM_LAYERS,
         gate_stack_activation: ActivationOptions = config.GATE_STACK_ACTIVATION,
-        gate_stack_residual_flag: bool = config.GATE_STACK_RESIDUAL_FLAG,
+        gate_stack_residual_connection_option: ResidualConnectionOptions = config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         gate_stack_dropout_probability: float = config.GATE_STACK_DROPOUT_PROBABILITY,
         gate_stack_last_layer_bias_option: LastLayerBiasOptions = config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
         gate_stack_apply_output_pipeline_flag: bool = config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -98,15 +105,19 @@ class ExpertsLinearConfigBuilder:
         halting_layer_norm_position: LayerNormPositionOptions = config.HALTING_LAYER_NORM_POSITION,
         halting_stack_num_layers: int = config.HALTING_STACK_NUM_LAYERS,
         halting_stack_activation: ActivationOptions = config.HALTING_STACK_ACTIVATION,
-        halting_stack_residual_flag: bool = config.HALTING_STACK_RESIDUAL_FLAG,
+        halting_stack_residual_connection_option: ResidualConnectionOptions = config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         halting_stack_dropout_probability: float = config.HALTING_STACK_DROPOUT_PROBABILITY,
         halting_stack_last_layer_bias_option: LastLayerBiasOptions = config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
         halting_stack_apply_output_pipeline_flag: bool = config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         halting_bias_flag: bool = config.HALTING_BIAS_FLAG,
         recurrent_flag: bool = config.RECURRENT_FLAG,
         recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
+        recurrent_layer_norm_position: LayerNormPositionOptions = config.RECURRENT_LAYER_NORM_POSITION,
         recurrent_gate_flag: bool = config.RECURRENT_GATE_FLAG,
+        recurrent_gate_option: LayerGateOptions | None = config.RECURRENT_GATE_OPTION,
+        recurrent_gate_activation: ActivationOptions | None = config.RECURRENT_GATE_ACTIVATION,
         recurrent_halting_flag: bool = config.RECURRENT_HALTING_FLAG,
+        shared_gate_config: GateConfig | None = None,
     ) -> None:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -117,7 +128,7 @@ class ExpertsLinearConfigBuilder:
         self.layer_norm_position = layer_norm_position
         self.stack_num_layers = stack_num_layers
         self.stack_activation = stack_activation
-        self.stack_residual_flag = stack_residual_flag
+        self.stack_residual_connection_option = stack_residual_connection_option
         self.stack_dropout_probability = stack_dropout_probability
         self.stack_last_layer_bias_option = stack_last_layer_bias_option
         self.stack_apply_output_pipeline_flag = stack_apply_output_pipeline_flag
@@ -131,7 +142,9 @@ class ExpertsLinearConfigBuilder:
         self.routing_initialization_mode = routing_initialization_mode
         self.expert_stack_num_layers = expert_stack_num_layers
         self.expert_stack_activation = expert_stack_activation
-        self.expert_stack_residual_flag = expert_stack_residual_flag
+        self.expert_stack_residual_connection_option = (
+            expert_stack_residual_connection_option
+        )
         self.expert_stack_dropout_probability = expert_stack_dropout_probability
         self.expert_stack_layer_norm_position = expert_stack_layer_norm_position
         self.expert_stack_last_layer_bias_option = expert_stack_last_layer_bias_option
@@ -155,7 +168,9 @@ class ExpertsLinearConfigBuilder:
         self.router_noisy_topk_flag = router_noisy_topk_flag
         self.sampler_stack_num_layers = sampler_stack_num_layers
         self.sampler_stack_activation = sampler_stack_activation
-        self.sampler_stack_residual_flag = sampler_stack_residual_flag
+        self.sampler_stack_residual_connection_option = (
+            sampler_stack_residual_connection_option
+        )
         self.sampler_stack_dropout_probability = sampler_stack_dropout_probability
         self.sampler_stack_layer_norm_position = sampler_stack_layer_norm_position
         self.sampler_stack_last_layer_bias_option = sampler_stack_last_layer_bias_option
@@ -164,17 +179,22 @@ class ExpertsLinearConfigBuilder:
         )
         self.sampler_bias_flag = sampler_bias_flag
         self.stack_gate_flag = stack_gate_flag
+        self.gate_option = gate_option
+        self.gate_activation = gate_activation
         self.gate_hidden_dim = gate_hidden_dim
         self.gate_layer_norm_position = gate_layer_norm_position
         self.gate_stack_num_layers = gate_stack_num_layers
         self.gate_stack_activation = gate_stack_activation
-        self.gate_stack_residual_flag = gate_stack_residual_flag
+        self.gate_stack_residual_connection_option = (
+            gate_stack_residual_connection_option
+        )
         self.gate_stack_dropout_probability = gate_stack_dropout_probability
         self.gate_stack_last_layer_bias_option = gate_stack_last_layer_bias_option
         self.gate_stack_apply_output_pipeline_flag = (
             gate_stack_apply_output_pipeline_flag
         )
         self.gate_bias_flag = gate_bias_flag
+        self.shared_gate_config = shared_gate_config
         self.stack_halting_flag = stack_halting_flag
         self.halting_threshold = halting_threshold
         self.halting_dropout = halting_dropout
@@ -184,7 +204,9 @@ class ExpertsLinearConfigBuilder:
         self.halting_layer_norm_position = halting_layer_norm_position
         self.halting_stack_num_layers = halting_stack_num_layers
         self.halting_stack_activation = halting_stack_activation
-        self.halting_stack_residual_flag = halting_stack_residual_flag
+        self.halting_stack_residual_connection_option = (
+            halting_stack_residual_connection_option
+        )
         self.halting_stack_dropout_probability = halting_stack_dropout_probability
         self.halting_stack_last_layer_bias_option = halting_stack_last_layer_bias_option
         self.halting_stack_apply_output_pipeline_flag = (
@@ -193,7 +215,10 @@ class ExpertsLinearConfigBuilder:
         self.halting_bias_flag = halting_bias_flag
         self.recurrent_flag = recurrent_flag
         self.recurrent_max_steps = recurrent_max_steps
+        self.recurrent_layer_norm_position = recurrent_layer_norm_position
         self.recurrent_gate_flag = recurrent_gate_flag
+        self.recurrent_gate_option = recurrent_gate_option
+        self.recurrent_gate_activation = recurrent_gate_activation
         self.recurrent_halting_flag = recurrent_halting_flag
 
     def build(self) -> "ModelConfig":
@@ -202,11 +227,10 @@ class ExpertsLinearConfigBuilder:
         input_model_config = LayerConfig(
             activation=self.stack_activation,
             layer_norm_position=self.layer_norm_position,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=self.stack_dropout_probability,
             gate_config=None,
             halting_config=None,
-            shared_halting_flag=False,
             layer_model_config=LinearLayerConfig(
                 bias_flag=self.bias_flag,
             ),
@@ -217,11 +241,10 @@ class ExpertsLinearConfigBuilder:
         output_model_config = LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
-            shared_halting_flag=False,
             layer_model_config=LinearLayerConfig(
                 bias_flag=self.bias_flag,
             ),
@@ -258,12 +281,16 @@ class ExpertsLinearConfigBuilder:
             return block_config
         return RecurrentLayerConfig(
             max_steps=self.recurrent_max_steps,
+            recurrent_layer_norm_position=self.recurrent_layer_norm_position,
             block_config=block_config,
-            gate_config=self._build_gate_config(self.recurrent_gate_flag),
+            gate_config=self._build_recurrent_gate_config(),
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             halting_config=self._build_halting_config(self.recurrent_halting_flag),
         )
 
     def _build_main_stack_config(self) -> LayerStackConfig:
+        gate_config = self._build_gate_config()
+        self._validate_shared_gate_config(gate_config)
         return LayerStackConfig(
             input_dim=self.hidden_dim,
             hidden_dim=self.hidden_dim,
@@ -271,17 +298,30 @@ class ExpertsLinearConfigBuilder:
             num_layers=self.stack_num_layers,
             last_layer_bias_option=self.stack_last_layer_bias_option,
             apply_output_pipeline_flag=self.stack_apply_output_pipeline_flag,
+            shared_gate_config=self.shared_gate_config,
             layer_config=MixtureOfExpertsLayerConfig(
                 activation=self.stack_activation,
                 layer_norm_position=self.layer_norm_position,
-                residual_flag=self.stack_residual_flag,
+                residual_connection_option=self.stack_residual_connection_option,
                 dropout_probability=self.stack_dropout_probability,
-                gate_config=self._build_gate_config(),
+                gate_config=gate_config,
                 halting_config=self._build_halting_config(),
-                shared_halting_flag=False,
                 layer_model_config=self._build_mixture_of_experts_config(),
             ),
         )
+
+    def _validate_shared_gate_config(self, gate_config: GateConfig | None) -> None:
+        if self._is_active_gate_config(
+            self.shared_gate_config
+        ) and self._is_active_gate_config(gate_config):
+            raise ValueError(
+                "shared_gate_config cannot be provided when stack_gate_flag "
+                "enables per-layer gate_config."
+            )
+
+    @staticmethod
+    def _is_active_gate_config(gate_config: GateConfig | None) -> bool:
+        return gate_config is not None
 
     def _build_mixture_of_experts_config(self) -> MixtureOfExpertsConfig:
         return MixtureOfExpertsConfig(
@@ -302,9 +342,32 @@ class ExpertsLinearConfigBuilder:
     def _build_gate_config(
         self,
         enabled: bool | None = None,
-    ) -> LayerStackConfig | None:
+    ) -> GateConfig | None:
         if enabled is None:
             enabled = self.stack_gate_flag
+        if not enabled:
+            return None
+        return GateConfig(
+            model_config=self._build_gate_model_config(enabled=enabled),
+            option=self.gate_option,
+            activation=self.gate_activation,
+        )
+
+    def _build_recurrent_gate_config(self) -> GateConfig | None:
+        if not self.recurrent_gate_flag:
+            return None
+        return GateConfig(
+            model_config=self._build_gate_model_config(
+                enabled=self.recurrent_gate_flag,
+            ),
+            option=self.recurrent_gate_option,
+            activation=self.recurrent_gate_activation,
+        )
+
+    def _build_gate_model_config(
+        self,
+        enabled: bool,
+    ) -> LayerStackConfig | None:
         if not enabled:
             return None
         return LayerStackConfig(
@@ -315,10 +378,9 @@ class ExpertsLinearConfigBuilder:
             layer_config=LayerConfig(
                 activation=self.gate_stack_activation,
                 layer_norm_position=self.gate_layer_norm_position,
-                residual_flag=self.gate_stack_residual_flag,
+                residual_connection_option=self.gate_stack_residual_connection_option,
                 dropout_probability=self.gate_stack_dropout_probability,
                 halting_config=None,
-                shared_halting_flag=False,
                 gate_config=None,
                 layer_model_config=LinearLayerConfig(
                     bias_flag=self.gate_bias_flag,
@@ -347,10 +409,9 @@ class ExpertsLinearConfigBuilder:
                 layer_config=LayerConfig(
                     activation=self.halting_stack_activation,
                     layer_norm_position=self.halting_layer_norm_position,
-                    residual_flag=self.halting_stack_residual_flag,
+                    residual_connection_option=self.halting_stack_residual_connection_option,
                     dropout_probability=self.halting_stack_dropout_probability,
                     halting_config=None,
-                    shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
                         bias_flag=self.halting_bias_flag,
@@ -368,11 +429,10 @@ class ExpertsLinearConfigBuilder:
             layer_config=LayerConfig(
                 activation=self.expert_stack_activation,
                 layer_norm_position=self.expert_stack_layer_norm_position,
-                residual_flag=self.expert_stack_residual_flag,
+                residual_connection_option=self.expert_stack_residual_connection_option,
                 dropout_probability=self.expert_stack_dropout_probability,
                 gate_config=None,
                 halting_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(
                     bias_flag=self.expert_bias_flag,
                 ),
@@ -408,11 +468,10 @@ class ExpertsLinearConfigBuilder:
                 layer_config=LayerConfig(
                     activation=self.sampler_stack_activation,
                     layer_norm_position=self.sampler_stack_layer_norm_position,
-                    residual_flag=self.sampler_stack_residual_flag,
+                    residual_connection_option=self.sampler_stack_residual_connection_option,
                     dropout_probability=self.sampler_stack_dropout_probability,
                     gate_config=None,
                     halting_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
                         bias_flag=self.sampler_bias_flag,
                     ),

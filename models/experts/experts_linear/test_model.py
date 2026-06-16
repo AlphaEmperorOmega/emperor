@@ -1,10 +1,21 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
 
 import models.experts.experts_linear.config as config
 
-from emperor.base.layer import RecurrentLayerConfig
+from emperor.base.layer import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from emperor.experts.config import MixtureOfExpertsModelConfig
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -12,6 +23,8 @@ from emperor.experts.core.options import (
     RoutingInitializationMode,
 )
 from emperor.experiments.base import RandomSearch
+from emperor.linears.core.config import LinearLayerConfig
+from models.experts.experts_linear.config_builder import ExpertsLinearConfigBuilder
 from models.experts.experts_linear.model import Model
 from models.experts.experts_linear.presets import ExperimentOptions, ExperimentPresets
 from models.training_test_utils import (
@@ -72,6 +85,36 @@ class TestExpertsLinearModel(unittest.TestCase):
             dataset.default_width,
         )
 
+    def shared_gate_config(self, dim: int = 16) -> GateConfig:
+        return GateConfig(
+            model_config=LayerStackConfig(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            num_layers=1,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                input_dim=dim,
+                output_dim=dim,
+                activation=ActivationOptions.DISABLED,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    bias_flag=True,
+                ),
+            ),
+            ),
+            option=LayerGateOptions.MULTIPLIER,
+            activation=ActivationOptions.SIGMOID,
+        )
+
     def test_preset_accepts_search_flags(self):
         configs = ExperimentPresets().get_config(
             ExperimentOptions.BASELINE,
@@ -80,6 +123,72 @@ class TestExpertsLinearModel(unittest.TestCase):
         )
 
         self.assertEqual(len(configs), 2)
+
+    def test_shared_gate_config_is_stored_on_stack_config(self):
+        shared_gate_config = self.shared_gate_config()
+        cfg = ExpertsLinearConfigBuilder(shared_gate_config=shared_gate_config).build()
+        stack_cfg = cfg.experiment_config.model_config.stack_config
+
+        self.assertIs(stack_cfg.shared_gate_config, shared_gate_config)
+        self.assertIsNone(stack_cfg.layer_config.gate_config)
+
+    def test_shared_gate_config_rejects_enabled_stack_gate(self):
+        with self.assertRaises(ValueError):
+            ExpertsLinearConfigBuilder(
+                stack_gate_flag=True,
+                shared_gate_config=self.shared_gate_config(),
+            ).build()
+
+    def test_shared_gate_config_allows_absent_stack_gate(self):
+        shared_gate_config = self.shared_gate_config()
+        cfg = ExpertsLinearConfigBuilder(
+            stack_gate_flag=False,
+            shared_gate_config=shared_gate_config,
+        ).build()
+        stack_cfg = cfg.experiment_config.model_config.stack_config
+
+        self.assertIs(stack_cfg.shared_gate_config, shared_gate_config)
+        self.assertIsNone(stack_cfg.layer_config.gate_config)
+
+    def test_gate_options_propagate_to_outer_stack_and_recurrent_wrapper(self):
+        cfg = ExpertsLinearConfigBuilder(
+            recurrent_flag=True,
+            stack_gate_flag=True,
+            recurrent_gate_flag=True,
+            gate_option=LayerGateOptions.MULTIPLIER,
+            recurrent_gate_option=LayerGateOptions.MULTIPLIER,
+        ).build()
+        recurrent_cfg = cfg.experiment_config.model_config
+        stack_cfg = recurrent_cfg.block_config.stack_config
+
+        self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+        self.assertEqual(
+            stack_cfg.layer_config.gate_config.option,
+            LayerGateOptions.MULTIPLIER,
+        )
+        self.assertEqual(recurrent_cfg.gate_config.option, LayerGateOptions.MULTIPLIER)
+
+    def test_recurrent_layer_norm_position_defaults_disabled_and_uses_override(self):
+        default_cfg = ExpertsLinearConfigBuilder(recurrent_flag=True).build()
+        default_recurrent_cfg = default_cfg.experiment_config.model_config
+
+        self.assertIsInstance(default_recurrent_cfg, RecurrentLayerConfig)
+        self.assertEqual(
+            default_recurrent_cfg.recurrent_layer_norm_position,
+            LayerNormPositionOptions.DISABLED,
+        )
+
+        cfg = ExpertsLinearConfigBuilder(
+            recurrent_flag=True,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DEFAULT,
+        ).build()
+        recurrent_cfg = cfg.experiment_config.model_config
+
+        self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+        self.assertEqual(
+            recurrent_cfg.recurrent_layer_norm_position,
+            LayerNormPositionOptions.DEFAULT,
+        )
 
     def test_recurrent_presets_wrap_full_moe_model(self):
         expected_controllers = {
@@ -182,7 +291,9 @@ class TestExpertsLinearModel(unittest.TestCase):
             moe_model_cfg.routing_initialization_mode,
             RoutingInitializationMode.SHARED,
         )
-        self.assertTrue(layer_cfg.residual_flag)
+        self.assertEqual(
+            layer_cfg.residual_connection_option, ResidualConnectionOptions.RESIDUAL
+        )
 
         cfg = presets.get_config(ExperimentOptions.POST_NORM_AFTER_WEIGHT)[0]
         moe_model_cfg = cfg.experiment_config.model_config

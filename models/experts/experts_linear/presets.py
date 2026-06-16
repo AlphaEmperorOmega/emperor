@@ -5,6 +5,7 @@ from models.experts.experts_linear.model import Model
 from emperor.experiments.base import SearchMode
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, PresetLock
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
 from emperor.experts.core.options import (
     DroppedTokenOptions,
@@ -22,8 +23,12 @@ class ExperimentOptions(BaseOptions):
     BASELINE = "Baseline mixture-of-experts with linear expert and sampler stacks."
     GATING = "Mixture-of-experts stack with per-layer gating enabled."
     HALTING = "Mixture-of-experts stack with per-layer halting enabled."
-    GATING_HALTING = "Mixture-of-experts stack with both per-layer gating and halting enabled."
-    RECURRENT = "Mixture-of-experts model applied recurrently for a fixed number of steps."
+    GATING_HALTING = (
+        "Mixture-of-experts stack with both per-layer gating and halting enabled."
+    )
+    RECURRENT = (
+        "Mixture-of-experts model applied recurrently for a fixed number of steps."
+    )
     RECURRENT_GATING = (
         "Mixture-of-experts model applied recurrently with a learned recurrent gate."
     )
@@ -34,28 +39,20 @@ class ExperimentOptions(BaseOptions):
         "Mixture-of-experts model applied recurrently with both learned recurrent "
         "gating and adaptive recurrent halting."
     )
-    SHARED_ROUTER_AFTER_WEIGHT = (
-        "Mixture-of-experts model with shared routing and expert weighting after experts."
-    )
+    SHARED_ROUTER_AFTER_WEIGHT = "Mixture-of-experts model with shared routing and expert weighting after experts."
     TOP1_SWITCH_AUX = (
         "Top-1 mixture-of-experts routing with switch auxiliary loss enabled."
     )
     TOP2_BALANCED_AUX = (
         "Top-2 mixture-of-experts routing with balance auxiliary loss enabled."
     )
-    CAPACITY_TOP1_ZERO = (
-        "Top-1 mixture-of-experts routing with capacity limiting and zeroed dropped tokens."
-    )
-    CAPACITY_TOP1_IDENTITY = (
-        "Top-1 mixture-of-experts routing with capacity limiting and identity dropped tokens."
-    )
+    CAPACITY_TOP1_ZERO = "Top-1 mixture-of-experts routing with capacity limiting and zeroed dropped tokens."
+    CAPACITY_TOP1_IDENTITY = "Top-1 mixture-of-experts routing with capacity limiting and identity dropped tokens."
     NOISY_SHARED_ROUTER = "Mixture-of-experts model with shared noisy top-k routing."
     RESIDUAL_SHARED_ROUTER = (
         "Mixture-of-experts model with residual outer layers and shared routing."
     )
-    POST_NORM_AFTER_WEIGHT = (
-        "Mixture-of-experts model with post-layer norm and expert weighting after experts."
-    )
+    POST_NORM_AFTER_WEIGHT = "Mixture-of-experts model with post-layer norm and expert weighting after experts."
 
 
 def _lock(option, value, behavior: str) -> PresetLock:
@@ -74,10 +71,14 @@ class ExperimentPresets(ExperimentPresetsBase):
             "stack_gate_flag": _lock(ExperimentOptions.GATING, True, "stack gating"),
         },
         ExperimentOptions.HALTING: {
-            "stack_halting_flag": _lock(ExperimentOptions.HALTING, True, "adaptive stack halting"),
+            "stack_halting_flag": _lock(
+                ExperimentOptions.HALTING, True, "adaptive stack halting"
+            ),
         },
         ExperimentOptions.GATING_HALTING: {
-            "stack_gate_flag": _lock(ExperimentOptions.GATING_HALTING, True, "stack gating"),
+            "stack_gate_flag": _lock(
+                ExperimentOptions.GATING_HALTING, True, "stack gating"
+            ),
             "stack_halting_flag": _lock(
                 ExperimentOptions.GATING_HALTING,
                 True,
@@ -85,7 +86,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.RECURRENT: {
-            "recurrent_flag": _lock(ExperimentOptions.RECURRENT, True, "recurrent execution"),
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT, True, "recurrent execution"
+            ),
         },
         ExperimentOptions.RECURRENT_GATING: {
             "recurrent_flag": _lock(
@@ -141,7 +144,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.TOP1_SWITCH_AUX: {
-            "top_k": _lock(ExperimentOptions.TOP1_SWITCH_AUX, 1, "top-1 expert routing"),
+            "top_k": _lock(
+                ExperimentOptions.TOP1_SWITCH_AUX, 1, "top-1 expert routing"
+            ),
             "sampler_normalize_probabilities_flag": _lock(
                 ExperimentOptions.TOP1_SWITCH_AUX,
                 False,
@@ -154,7 +159,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.TOP2_BALANCED_AUX: {
-            "top_k": _lock(ExperimentOptions.TOP2_BALANCED_AUX, 2, "top-2 expert routing"),
+            "top_k": _lock(
+                ExperimentOptions.TOP2_BALANCED_AUX, 2, "top-2 expert routing"
+            ),
             "sampler_coefficient_of_variation_loss_weight": _lock(
                 ExperimentOptions.TOP2_BALANCED_AUX,
                 0.1,
@@ -162,7 +169,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.CAPACITY_TOP1_ZERO: {
-            "top_k": _lock(ExperimentOptions.CAPACITY_TOP1_ZERO, 1, "top-1 capacity routing"),
+            "top_k": _lock(
+                ExperimentOptions.CAPACITY_TOP1_ZERO, 1, "top-1 capacity routing"
+            ),
             "capacity_factor": _lock(
                 ExperimentOptions.CAPACITY_TOP1_ZERO,
                 1.0,
@@ -180,7 +189,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.CAPACITY_TOP1_IDENTITY: {
-            "top_k": _lock(ExperimentOptions.CAPACITY_TOP1_IDENTITY, 1, "top-1 capacity routing"),
+            "top_k": _lock(
+                ExperimentOptions.CAPACITY_TOP1_IDENTITY, 1, "top-1 capacity routing"
+            ),
             "capacity_factor": _lock(
                 ExperimentOptions.CAPACITY_TOP1_IDENTITY,
                 1.0,
@@ -220,9 +231,9 @@ class ExperimentPresets(ExperimentPresetsBase):
                 RoutingInitializationMode.SHARED,
                 "shared expert routing",
             ),
-            "stack_residual_flag": _lock(
+            "stack_residual_connection_option": _lock(
                 ExperimentOptions.RESIDUAL_SHARED_ROUTER,
-                True,
+                ResidualConnectionOptions.RESIDUAL,
                 "stack residuals",
             ),
         },
@@ -397,7 +408,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         return self._preset(
             **{
                 "routing_initialization_mode": RoutingInitializationMode.SHARED,
-                "stack_residual_flag": True,
+                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
                 **kwargs,
             },
         )

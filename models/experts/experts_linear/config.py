@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 from models.trainer_config import *
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.datasets.image.classification.cifar_10 import Cifar10
@@ -10,6 +11,7 @@ from emperor.base.layer.monitor import (
     LayerControllerMonitorCallback,
     RecurrentLayerMonitorCallback,
 )
+from emperor.base.layer.gate import LayerGateOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -47,9 +49,7 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "openness, halted-state preservation, and step-delta visual summaries."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: RecurrentLayerMonitorCallback(
-            log_every_n_steps=100
-        ),
+        callback_factory=lambda: RecurrentLayerMonitorCallback(log_every_n_steps=100),
     ),
     MonitorOption(
         name="layer-controller",
@@ -59,9 +59,7 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "controller statistics without duplicating memory metrics."
         ),
         kinds=["scalar"],
-        callback_factory=lambda: LayerControllerMonitorCallback(
-            log_every_n_steps=100
-        ),
+        callback_factory=lambda: LayerControllerMonitorCallback(log_every_n_steps=100),
     ),
     MonitorOption(
         name="sampler",
@@ -95,7 +93,9 @@ HIDDEN_DIM: int = 256
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_FLAG: bool = False
+STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 STACK_DROPOUT_PROBABILITY: float = 0.2
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -104,11 +104,15 @@ STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 # GATE STACK OPTIONS (applied per outer MoE-layer in the main stack)
 # If GATE_FLAG is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
+GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
+GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 GATE_HIDDEN_DIM: int = HIDDEN_DIM
 GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
 GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
-GATE_STACK_RESIDUAL_FLAG: bool = STACK_RESIDUAL_FLAG
+GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    STACK_RESIDUAL_CONNECTION_OPTION
+)
 GATE_STACK_DROPOUT_PROBABILITY: float = 0.0
 GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = STACK_LAST_LAYER_BIAS_OPTION
 GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -130,7 +134,9 @@ HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 HALTING_STACK_NUM_LAYERS: int = 2
 HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-HALTING_STACK_RESIDUAL_FLAG: bool = False
+HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 HALTING_STACK_DROPOUT_PROBABILITY: float = 0.0
 HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED
@@ -143,7 +149,18 @@ HALTING_BIAS_FLAG: bool = BIAS_FLAG
 # If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
 RECURRENT_FLAG: bool = False
 RECURRENT_MAX_STEPS: int = 4
+RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    LayerNormPositionOptions.DISABLED
+)
+
+#########################################################################
+# RECURRENT GATE STACK OPTIONS
 RECURRENT_GATE_FLAG: bool = False
+RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
+RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
+
+#########################################################################
+# RECURRENT HALTING OPTIONS
 RECURRENT_HALTING_FLAG: bool = False
 
 #########################################################################
@@ -165,14 +182,14 @@ EXPERT_ROUTING_INITIALIZATION_MODE: RoutingInitializationMode = (
 # EXPERT STACK
 EXPERT_STACK_NUM_LAYERS: int = 2
 EXPERT_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-EXPERT_STACK_RESIDUAL_FLAG: bool = False
+EXPERT_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 EXPERT_STACK_DROPOUT_PROBABILITY: float = 0.0
 EXPERT_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
-EXPERT_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
-    LastLayerBiasOptions.DEFAULT
-)
+EXPERT_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 EXPERT_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 EXPERT_BIAS_FLAG: bool = BIAS_FLAG
 
@@ -196,7 +213,9 @@ ROUTER_NOISY_TOPK_FLAG: bool = False
 # SAMPLER ROUTER STACK
 SAMPLER_STACK_NUM_LAYERS: int = 2
 SAMPLER_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-SAMPLER_STACK_RESIDUAL_FLAG: bool = False
+SAMPLER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 SAMPLER_STACK_DROPOUT_PROBABILITY: float = 0.0
 SAMPLER_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
