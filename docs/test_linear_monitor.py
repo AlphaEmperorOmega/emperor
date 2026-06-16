@@ -134,6 +134,198 @@ class TestLinearMonitorCallback(unittest.TestCase):
         self.assertTrue(logged.logged_scalars)
         logged_callback.on_fit_end(logged_trainer, logged)
 
+    def test_logs_parameter_delta_metrics_after_second_sampled_step(self):
+        module = build_module()
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
+        baseline_names = {name for name, _ in module.logged_scalars}
+        self.assertNotIn("linear/weights/delta_norm", baseline_names)
+        self.assertNotIn("linear/bias/delta_norm", baseline_names)
+
+        module.logged_scalars.clear()
+        trainer.global_step = 1
+        module.linear.weight_params.data.add_(0.25)
+        module.linear.bias_params.data.add_(0.5)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=1)
+
+        scalars = dict(module.logged_scalars)
+        for name in (
+            "linear/weights/delta_norm",
+            "linear/weights/relative_delta_norm",
+            "linear/bias/delta_norm",
+            "linear/bias/relative_delta_norm",
+        ):
+            self.assertIn(name, scalars)
+            self.assertTrue(torch.isfinite(scalars[name]).all(), f"{name} not finite")
+            self.assertGreater(scalars[name].item(), 0.0)
+        callback.on_fit_end(trainer, module)
+
+    def test_does_not_log_bias_delta_metrics_when_bias_disabled(self):
+        module = build_module(bias_flag=False)
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
+        module.logged_scalars.clear()
+        trainer.global_step = 1
+        module.linear.weight_params.data.add_(0.25)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=1)
+
+        names = {name for name, _ in module.logged_scalars}
+        self.assertIn("linear/weights/delta_norm", names)
+        self.assertNotIn("linear/bias/delta_norm", names)
+        self.assertNotIn("linear/bias/relative_delta_norm", names)
+        callback.on_fit_end(trainer, module)
+
+    def test_delta_metrics_stay_finite_with_zero_parameters(self):
+        module = build_module(global_step=0)
+        module.linear.weight_params.data.zero_()
+        module.linear.bias_params.data.zero_()
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
+        module.logged_scalars.clear()
+        trainer.global_step = 1
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=1)
+
+        scalars = dict(module.logged_scalars)
+        for name in (
+            "linear/weights/delta_norm",
+            "linear/weights/relative_delta_norm",
+            "linear/bias/delta_norm",
+            "linear/bias/relative_delta_norm",
+        ):
+            self.assertIn(name, scalars)
+            self.assertTrue(torch.isfinite(scalars[name]).all(), f"{name} not finite")
+            self.assertEqual(scalars[name].item(), 0.0)
+        callback.on_fit_end(trainer, module)
+
+
+    def test_logs_weight_conditioning_metrics(self):
+        module = build_module(input_dim=2, output_dim=2, global_step=0)
+        with torch.no_grad():
+            module.linear.weight_params.copy_(
+                torch.tensor(
+                    [
+                        [3.0, 0.0],
+                        [0.0, 1.0],
+                    ]
+                )
+            )
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
+
+        scalars = dict(module.logged_scalars)
+        singular_values = torch.tensor([3.0, 1.0])
+        normalized_spectrum = singular_values / singular_values.sum()
+        expected_effective_rank = torch.exp(
+            -(normalized_spectrum * normalized_spectrum.log()).sum()
+        )
+
+        self.assertAlmostEqual(
+            scalars["linear/weights/spectral_norm"].item(), 3.0, places=5
+        )
+        self.assertAlmostEqual(
+            scalars["linear/weights/condition_number"].item(), 3.0, places=5
+        )
+        self.assertAlmostEqual(
+            scalars["linear/weights/effective_rank"].item(),
+            expected_effective_rank.item(),
+            places=5,
+        )
+        callback.on_fit_end(trainer, module)
+
+    def test_fit_end_removes_forward_hooks_and_clears_state(self):
+        module = build_module(global_step=0)
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        module.linear(torch.randn(2, 4))
+        self.assertTrue(module.logged_scalars)
+
+        module.logged_scalars.clear()
+        callback.on_fit_end(trainer, module)
+
+        self.assertEqual(callback._hooks, [])
+        self.assertEqual(callback._linear_modules, [])
+        self.assertEqual(callback._parameter_snapshots, {})
+        module.linear(torch.randn(2, 4))
+        self.assertEqual(module.logged_scalars, [])
+
+    def test_fit_start_replaces_existing_hooks_when_callback_is_reused(self):
+        module = build_module(global_step=0)
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        callback.on_fit_start(trainer, module)
+        module.linear(torch.randn(2, 4))
+
+        names = [name for name, _ in module.logged_scalars]
+        self.assertEqual(names.count("linear/input/mean"), 1)
+        self.assertEqual(names.count("linear/input/var"), 1)
+        self.assertEqual(names.count("linear/output/mean"), 1)
+        self.assertEqual(names.count("linear/output/var"), 1)
+        callback.on_fit_end(trainer, module)
+
+    def test_logs_dead_feature_fractions(self):
+        module = build_module(global_step=0)
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
+
+        names = {name for name, _ in module.logged_scalars}
+        self.assertIn("linear/weights/dead_input_fraction", names)
+        self.assertIn("linear/weights/dead_output_fraction", names)
+        callback.on_fit_end(trainer, module)
+
+    def test_dead_output_fraction_detects_zeroed_column(self):
+        module = build_module(input_dim=4, output_dim=4, global_step=0)
+        module.linear.weight_params.data.fill_(1.0)
+        module.linear.weight_params.data[:, 2] = 0.0
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
+
+        scalars = dict(module.logged_scalars)
+        self.assertAlmostEqual(
+            scalars["linear/weights/dead_output_fraction"].item(), 0.25, places=5
+        )
+        self.assertEqual(
+            scalars["linear/weights/dead_input_fraction"].item(), 0.0
+        )
+        callback.on_fit_end(trainer, module)
+
+    def test_weight_conditioning_can_be_disabled(self):
+        module = build_module(global_step=0)
+        callback = LinearMonitorCallback(
+            log_every_n_steps=1, log_weight_conditioning=False
+        )
+        trainer = FakeTrainer(global_step=0)
+
+        callback.on_fit_start(trainer, module)
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
+
+        names = {name for name, _ in module.logged_scalars}
+        self.assertNotIn("linear/weights/spectral_norm", names)
+        self.assertNotIn("linear/weights/condition_number", names)
+        self.assertIn("linear/weights/dead_output_fraction", names)
+        callback.on_fit_end(trainer, module)
+
 
 if __name__ == "__main__":
     unittest.main()
