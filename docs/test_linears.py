@@ -1,11 +1,11 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import unittest
-from types import SimpleNamespace
-from torch.nn import Sequential
 
 from emperor.base.layer import Layer
 from emperor.base.layer import LayerStack
 from emperor.base.layer.config import LayerConfig
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import (
@@ -16,6 +16,7 @@ from emperor.linears.core.layers import (
     AdaptiveLinearLayer,
     LinearLayer,
 )
+from emperor.linears.options import LinearOptions
 
 from emperor.base.layer import LayerStackConfig
 from emperor.base.options import (
@@ -40,22 +41,27 @@ from emperor.augmentations.adaptive_parameters.options import (
 
 
 def make_layer_stack_config(
-    hidden_dim: int = 16,
+    input_dim: int = 16,
+    output_dim: int | None = None,
+    hidden_dim: int | None = None,
     num_layers: int = 2,
 ) -> LayerStackConfig:
+    output_dim = input_dim if output_dim is None else output_dim
+    hidden_dim = max(input_dim, output_dim) if hidden_dim is None else hidden_dim
     return LayerStackConfig(
+        input_dim=input_dim,
         hidden_dim=hidden_dim,
+        output_dim=output_dim,
         num_layers=num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag=False,
         layer_config=LayerConfig(
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
-            shared_halting_flag=False,
             layer_model_config=LinearLayerConfig(
                 bias_flag=True,
             ),
@@ -95,15 +101,41 @@ def make_diagonal_config(
 
 
 def make_mask_config(
-    input_dim: int, output_dim: int
+    input_dim: int,
+    output_dim: int,
+    mask_threshold: float = 0.0,
 ) -> WeightInformedScoreAxisMaskConfig:
     return WeightInformedScoreAxisMaskConfig(
-        mask_threshold=0.5,
+        mask_threshold=mask_threshold,
         mask_surrogate_scale=10.0,
         mask_floor=0.0,
         mask_dimension_option=MaskDimensionOptions.COLUMN,
         model_config=make_layer_stack_config(input_dim, output_dim),
     )
+
+
+def assert_module_has_nonzero_grads(
+    test_case: unittest.TestCase,
+    module,
+    name: str,
+) -> None:
+    params = [p for p in module.parameters() if p.requires_grad]
+    test_case.assertTrue(params, f"{name} has no trainable parameters")
+    nonzero_grads = [
+        p.grad
+        for p in params
+        if p.grad is not None and torch.any(p.grad.abs() > 0)
+    ]
+    test_case.assertTrue(
+        nonzero_grads,
+        f"{name} did not receive a nonzero gradient",
+    )
+
+
+class TestLinearOptions(unittest.TestCase):
+    def test_public_enum_values_are_stable(self):
+        self.assertEqual(LinearOptions.LINEAR.value, 0)
+        self.assertEqual(LinearOptions.ADAPTIVE.value, 1)
 
 
 class TestLinearLayer(unittest.TestCase):
@@ -307,38 +339,47 @@ class TestLinearLayerStack(unittest.TestCase):
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_flag: bool = True,
+        stack_residual_connection_option: ResidualConnectionOptions = (
+            ResidualConnectionOptions.RESIDUAL
+        ),
         stack_dropout_probability: float = 0.2,
-        shared_halting_flag: bool = False,
+        shared_halting_config: "StickBreakingConfig | None" = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
-        gate_config: "LayerStackConfig | None" = None,
+        gate_config: "GateConfig | None" = None,
+        use_gate_config: bool = True,
     ) -> LayerStackConfig:
 
-        if gate_config is None:
-            gate_config = LayerStackConfig(
-                hidden_dim=hidden_dim,
-                num_layers=stack_num_layers,
-                last_layer_bias_option=last_layer_bias_option,
-                apply_output_pipeline_flag=apply_output_pipeline_flag,
-                layer_config=LayerConfig(
-                    activation=stack_activation,
-                    layer_norm_position=layer_norm_position,
-                    residual_flag=stack_residual_flag,
-                    dropout_probability=stack_dropout_probability,
-                    halting_config=None,
-                    shared_halting_flag=False,
-                    gate_config=None,
-                    layer_model_config=LinearLayerConfig(
-                        input_dim=input_dim,
-                        output_dim=output_dim,
-                        bias_flag=bias_flag,
+        if use_gate_config and gate_config is None:
+            gate_config = GateConfig(
+                model_config=LayerStackConfig(
+                    hidden_dim=hidden_dim,
+                    num_layers=stack_num_layers,
+                    last_layer_bias_option=last_layer_bias_option,
+                    apply_output_pipeline_flag=apply_output_pipeline_flag,
+                    layer_config=LayerConfig(
+                        activation=stack_activation,
+                        layer_norm_position=layer_norm_position,
+                        residual_connection_option=stack_residual_connection_option,
+                        dropout_probability=stack_dropout_probability,
+                        halting_config=None,
+                        gate_config=None,
+                        layer_model_config=LinearLayerConfig(
+                            input_dim=input_dim,
+                            output_dim=output_dim,
+                            bias_flag=bias_flag,
+                        ),
                     ),
                 ),
+                option=LayerGateOptions.MULTIPLIER,
             )
 
         halting_config = None
-        if stack_num_layers > 1 and input_dim == hidden_dim == output_dim:
+        if (
+            shared_halting_config is None
+            and stack_num_layers > 1
+            and input_dim == hidden_dim == output_dim
+        ):
             halting_config = StickBreakingConfig(
                 threshold=0.99,
                 halting_dropout=0.0,
@@ -352,10 +393,9 @@ class TestLinearLayerStack(unittest.TestCase):
                     layer_config=LayerConfig(
                         activation=ActivationOptions.DISABLED,
                         layer_norm_position=LayerNormPositionOptions.DISABLED,
-                        residual_flag=stack_residual_flag,
+                        residual_connection_option=stack_residual_connection_option,
                         dropout_probability=stack_dropout_probability,
                         halting_config=None,
-                        shared_halting_flag=False,
                         gate_config=None,
                         layer_model_config=LinearLayerConfig(
                             bias_flag=True,
@@ -371,14 +411,14 @@ class TestLinearLayerStack(unittest.TestCase):
             num_layers=stack_num_layers,
             last_layer_bias_option=last_layer_bias_option,
             apply_output_pipeline_flag=apply_output_pipeline_flag,
+            shared_halting_config=shared_halting_config,
             layer_config=LayerConfig(
                 activation=stack_activation,
                 layer_norm_position=layer_norm_position,
-                residual_flag=stack_residual_flag,
+                residual_connection_option=stack_residual_connection_option,
                 dropout_probability=stack_dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,
-                shared_halting_flag=shared_halting_flag,
                 layer_model_config=LinearLayerConfig(
                     bias_flag=bias_flag,
                 ),
@@ -391,12 +431,30 @@ class TestLinearLayerStack(unittest.TestCase):
         for num_layers in num_layer_options:
             with self.subTest(num_layers=num_layers):
                 cfg = self.preset(stack_num_layers=num_layers)
-                m = LayerStack(cfg).build()
+                m = LayerStack(cfg)
 
                 layers = [m] if isinstance(m, Layer) else list(m)
                 for i, layer in enumerate(layers):
                     with self.subTest(layer_index=i):
                         self.assertIsInstance(layer.model, LinearLayer)
+
+    def test_stack_can_build_plain_layers_without_gate_config(self):
+        cfg = self.preset(
+            input_dim=4,
+            hidden_dim=5,
+            output_dim=3,
+            stack_num_layers=2,
+            use_gate_config=False,
+        )
+        self.assertIsNone(cfg.layer_config.gate_config)
+
+        m = LayerStack(cfg)
+        input_batch = torch.randn(2, cfg.input_dim)
+        output = Layer.run_model_returning_hidden(m, input_batch)
+        self.assertEqual(output.shape, (2, cfg.output_dim))
+
+        for layer in list(m):
+            self.assertIsNone(layer.gate_model)
 
     def test_gradients_flow_through_linear_layer_stack(self):
         num_layer_options = [1, 2, 3]
@@ -410,10 +468,10 @@ class TestLinearLayerStack(unittest.TestCase):
                     input_dim=input_dim,
                     output_dim=output_dim,
                 )
-                m = LayerStack(cfg).build()
+                m = LayerStack(cfg)
 
                 input_batch = torch.randn(batch_size, input_dim, requires_grad=True)
-                output = Layer.forward_with_state(m, input_batch)
+                output = Layer.run_model_returning_hidden(m, input_batch)
                 output.sum().backward()
 
                 grads = [p.grad for p in m.parameters() if p.requires_grad]
@@ -457,6 +515,8 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
                 self.assertEqual(m.output_dim, cfg.output_dim)
                 self.assertEqual(m.bias_flag, bias_flag)
                 self.assertEqual(m.weight_params.shape, (cfg.input_dim, cfg.output_dim))
+                self.assertFalse(m.has_adaptive_augmentation)
+                self.assertIsNone(m.adaptive_behaviour)
                 if bias_flag:
                     self.assertEqual(m.bias_params.shape, (cfg.output_dim,))
                 else:
@@ -506,6 +566,126 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
             adaptive_layer.forward(input_batch),
             linear_layer.forward(input_batch),
         )
+
+    def test_adaptive_generator_configs_preserve_requested_dimensions(self):
+        cases = [
+            ("weight", make_weight_config(5, 3).model_config),
+            ("bias", make_bias_config(5, 3).model_config),
+            ("diagonal", make_diagonal_config(5, 3).model_config),
+            ("mask", make_mask_config(5, 3).model_config),
+        ]
+
+        for name, model_config in cases:
+            with self.subTest(name=name):
+                self.assertEqual(model_config.input_dim, 5)
+                self.assertEqual(model_config.output_dim, 3)
+                self.assertEqual(model_config.num_layers, 2)
+                self.assertEqual(model_config.hidden_dim, 5)
+
+    def test_per_sample_weight_callback_matches_manual_matrix_product(self):
+        cfg = self.preset(input_dim=2, output_dim=3, bias_flag=True)
+        m = AdaptiveLinearLayer(cfg)
+        input_batch = torch.tensor(
+            [
+                [1.0, 2.0],
+                [3.0, 4.0],
+            ]
+        )
+        weights = torch.tensor(
+            [
+                [
+                    [1.0, 0.0, 2.0],
+                    [0.0, 1.0, 3.0],
+                ],
+                [
+                    [2.0, 1.0, 0.0],
+                    [1.0, 0.0, -1.0],
+                ],
+            ]
+        )
+        bias = torch.tensor(
+            [
+                [0.5, -0.5, 1.0],
+                [1.0, 2.0, -1.0],
+            ]
+        )
+
+        expected = torch.stack(
+            [
+                input_batch[0].matmul(weights[0]),
+                input_batch[1].matmul(weights[1]),
+            ]
+        ) + bias
+        output = m._compute_affine_transformation_callback(
+            weights,
+            bias,
+            input_batch,
+        )
+
+        torch.testing.assert_close(output, expected)
+
+    def test_active_adaptive_components_change_output_and_receive_gradients(self):
+        input_dim = 4
+        output_dim = 3
+        input_batch = torch.tensor(
+            [
+                [0.1, -0.2, 0.3, -0.4],
+                [0.5, 0.6, -0.7, -0.8],
+            ],
+            requires_grad=True,
+        )
+        cases = [
+            (
+                "weight",
+                {"weight_config": make_weight_config(input_dim, output_dim)},
+                "weight_model",
+            ),
+            (
+                "bias",
+                {"bias_config": make_bias_config(input_dim, output_dim)},
+                "bias_model",
+            ),
+            (
+                "diagonal",
+                {"diagonal_config": make_diagonal_config(input_dim, output_dim)},
+                "diagonal_model",
+            ),
+            (
+                "mask",
+                {
+                    "mask_config": make_mask_config(
+                        input_dim,
+                        output_dim,
+                        mask_threshold=0.0,
+                    )
+                },
+                "mask_model",
+            ),
+        ]
+
+        for seed, (name, kwargs, component_name) in enumerate(cases):
+            with self.subTest(name=name):
+                torch.manual_seed(seed)
+                cfg = self.preset(
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    bias_flag=True,
+                    **kwargs,
+                )
+                m = AdaptiveLinearLayer(cfg)
+                batch = input_batch.detach().clone().requires_grad_(True)
+                baseline = m._compute_affine_transformation_callback(
+                    m.weight_params,
+                    m.bias_params,
+                    batch,
+                ).detach()
+
+                output = m.forward(batch)
+                self.assertFalse(torch.allclose(output.detach(), baseline, atol=1e-6))
+                output.sum().backward()
+
+                component = getattr(m.adaptive_behaviour, component_name)
+                assert_module_has_nonzero_grads(self, component, name)
 
     def test_init_with_different_sub_config_combinations(self):
         input_dim = 12
@@ -559,10 +739,27 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
                                     mask_config=mask_config,
                                 )
                                 m = AdaptiveLinearLayer(cfg)
+                                expected_has_adaptive_augmentation = any(
+                                    config is not None
+                                    for config in (
+                                        weight_config,
+                                        bias_config,
+                                        diagonal_config,
+                                        mask_config,
+                                    )
+                                )
 
                                 self.assertEqual(m.input_dim, cfg.input_dim)
                                 self.assertEqual(m.output_dim, cfg.output_dim)
+                                self.assertEqual(
+                                    m.has_adaptive_augmentation,
+                                    expected_has_adaptive_augmentation,
+                                )
                                 self.assertIsInstance(m.weight_params, torch.Tensor)
+                                if expected_has_adaptive_augmentation:
+                                    self.assertIsNotNone(m.adaptive_behaviour)
+                                else:
+                                    self.assertIsNone(m.adaptive_behaviour)
                                 if bias_flag:
                                     self.assertIsInstance(m.bias_params, torch.Tensor)
                                 else:
@@ -683,7 +880,9 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
         bias_flag: bool = True,
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_flag: bool = False,
+        stack_residual_connection_option: ResidualConnectionOptions = (
+            ResidualConnectionOptions.DISABLED
+        ),
         stack_dropout_probability: float = 0.0,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
@@ -702,11 +901,10 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
             layer_config=LayerConfig(
                 activation=stack_activation,
                 layer_norm_position=layer_norm_position,
-                residual_flag=stack_residual_flag,
+                residual_connection_option=stack_residual_connection_option,
                 dropout_probability=stack_dropout_probability,
                 gate_config=None,
                 halting_config=None,
-                shared_halting_flag=False,
                 layer_model_config=AdaptiveLinearLayerConfig(
                     bias_flag=bias_flag,
                     adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
@@ -726,14 +924,11 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
         for num_layers in num_layer_options:
             with self.subTest(num_layers=num_layers):
                 cfg = self.preset(stack_num_layers=num_layers)
-                m = LayerStack(cfg).build()
+                m = LayerStack(cfg)
 
-                if num_layers == 1:
-                    self.assertIsInstance(m, Layer)
-                else:
-                    self.assertIsInstance(m, Sequential)
+                self.assertIsInstance(m, LayerStack)
 
-                layers = [m] if isinstance(m, Layer) else list(m)
+                layers = list(m)
                 for i, layer in enumerate(layers):
                     with self.subTest(layer_index=i):
                         self.assertIsInstance(layer.model, AdaptiveLinearLayer)
@@ -792,10 +987,10 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                                     diagonal_config=diagonal_config,
                                     mask_config=mask_config,
                                 )
-                                m = LayerStack(cfg).build()
+                                m = LayerStack(cfg)
 
                                 input_batch = torch.randn(batch_size, input_dim)
-                                output = Layer.forward_with_state(m, input_batch)
+                                output = Layer.run_model_returning_hidden(m, input_batch)
                                 self.assertEqual(output.shape, (batch_size, output_dim))
 
     def test_gradients_flow_through_adaptive_linear_layer_stack(self):
@@ -854,12 +1049,12 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                                         diagonal_config=diagonal_config,
                                         mask_config=mask_config,
                                     )
-                                    m = LayerStack(cfg).build()
+                                    m = LayerStack(cfg)
 
                                     input_batch = torch.randn(
                                         batch_size, input_dim, requires_grad=True
                                     )
-                                    output = Layer.forward_with_state(m, input_batch)
+                                    output = Layer.run_model_returning_hidden(m, input_batch)
                                     output.sum().backward()
 
                                     grads = [
@@ -869,3 +1064,44 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                                     ]
                                     non_none_grads = [g for g in grads if g is not None]
                                     self.assertTrue(len(non_none_grads) > 0)
+
+    def test_active_adaptive_stack_components_receive_gradients(self):
+        input_dim = hidden_dim = output_dim = 4
+        cfg = self.preset(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            stack_num_layers=2,
+            bias_flag=True,
+            weight_config=make_weight_config(input_dim, output_dim),
+            bias_config=make_bias_config(input_dim, output_dim),
+            diagonal_config=make_diagonal_config(input_dim, output_dim),
+            mask_config=make_mask_config(
+                input_dim,
+                output_dim,
+                mask_threshold=0.0,
+            ),
+        )
+        m = LayerStack(cfg)
+
+        input_batch = torch.tensor(
+            [
+                [0.1, -0.2, 0.3, -0.4],
+                [0.5, 0.6, -0.7, -0.8],
+            ],
+            requires_grad=True,
+        )
+        output = Layer.run_model_returning_hidden(m, input_batch)
+        output.sum().backward()
+
+        for layer_index, layer in enumerate(list(m)):
+            adaptive = layer.model.adaptive_behaviour
+            for component_name in (
+                "weight_model",
+                "bias_model",
+                "diagonal_model",
+                "mask_model",
+            ):
+                with self.subTest(layer_index=layer_index, component=component_name):
+                    component = getattr(adaptive, component_name)
+                    assert_module_has_nonzero_grads(self, component, component_name)

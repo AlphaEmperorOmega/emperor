@@ -63,9 +63,25 @@ class AdaptiveLinearLayer(LinearAbstract):
     ):
         super().__init__(cfg, overrides)
         self.adaptive_augmentation_config = self.cfg.adaptive_augmentation_config
+        self.has_adaptive_augmentation: bool = self.__has_adaptive_augmentation()
         self.adaptive_behaviour = self.__init_behaviour()
 
+    def __has_adaptive_augmentation(self) -> bool:
+        cfg = self.adaptive_augmentation_config
+        return any(
+            config is not None
+            for config in (
+                cfg.diagonal_config,
+                cfg.weight_config,
+                cfg.bias_config,
+                cfg.mask_config,
+            )
+        )
+
     def __init_behaviour(self):
+        if not self.has_adaptive_augmentation:
+            return None
+
         from emperor.augmentations.adaptive_parameters import (
             AdaptiveParameterAugmentationConfig,
         )
@@ -78,6 +94,12 @@ class AdaptiveLinearLayer(LinearAbstract):
 
     def forward(self, X: Tensor) -> Tensor:
         LinearValidator.validate_input_is_2d(X)
+        if not self.has_adaptive_augmentation:
+            return self._compute_affine_transformation_callback(
+                self.weight_params,
+                self.bias_params,
+                X,
+            )
         return self.adaptive_behaviour(
             self._compute_affine_transformation_callback,
             self.weight_params,
