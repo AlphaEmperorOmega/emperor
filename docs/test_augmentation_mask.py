@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
@@ -93,11 +94,10 @@ class TestAxisMaskHandlers(unittest.TestCase):
                     output_dim=output_dim,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_flag=False,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
@@ -463,7 +463,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             batch_size, input_dim, output_dim
                                         )
 
-                                        mask_logits = Layer.forward_with_state(
+                                        mask_logits = Layer.run_model_returning_hidden(
                                             model.model, logits
                                         )
                                         output = model(weight_params, logits)
@@ -705,7 +705,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             batch_size, input_dim, output_dim
                                         )
 
-                                        mask_logits = Layer.forward_with_state(
+                                        mask_logits = Layer.run_model_returning_hidden(
                                             model.model, logits
                                         )
                                         output = model(weight_params, logits)
@@ -951,7 +951,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             batch_size, input_dim, output_dim
                                         )
 
-                                        mask_logits = Layer.forward_with_state(
+                                        mask_logits = Layer.run_model_returning_hidden(
                                             model.model, logits
                                         )
                                         output = model(weight_params, logits)
@@ -1061,7 +1061,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                         batch_size, input_dim, output_dim
                                     )
 
-                                    mask_logits = Layer.forward_with_state(
+                                    mask_logits = Layer.run_model_returning_hidden(
                                         model.model, logits
                                     )
                                     output = model(weight_params, logits)
@@ -1867,6 +1867,38 @@ class TestOuterProductMask(unittest.TestCase):
             mask_floor=mask_floor,
         )
         return cfg.build()
+
+    def test_outer_product_mask_matches_exact_sigmoid_and_floor_math(self):
+        batch_size = 2
+        input_dim = 2
+        output_dim = 3
+        threshold = 0.55
+        floor_value = 0.25
+        model = self._build_outer_product_model(
+            input_dim,
+            output_dim,
+            mask_threshold=threshold,
+            mask_surrogate_scale=0.0,
+            mask_floor=floor_value,
+        )
+        input_vectors = torch.tensor([[0.0, 1.0], [2.0, -1.0]])
+        output_vectors = torch.tensor([[1.0, -2.0, 0.5], [0.5, 1.0, -1.0]])
+        model.input_model = ConstantGenerator(input_vectors)
+        model.output_model = ConstantGenerator(output_vectors)
+        weight_params = torch.arange(
+            1,
+            batch_size * input_dim * output_dim + 1,
+            dtype=torch.float32,
+        ).view(batch_size, input_dim, output_dim)
+        logits = torch.zeros(batch_size, input_dim)
+
+        output = model(weight_params, logits)
+
+        scores = torch.sigmoid(torch.einsum("bi,bj->bij", input_vectors, output_vectors))
+        hard_mask = (scores >= threshold).to(dtype=scores.dtype)
+        adjusted_hard_mask = floor_value + (1.0 - floor_value) * hard_mask
+        expected = weight_params * adjusted_hard_mask * scores
+        torch.testing.assert_close(output, expected)
 
     def test_per_sample_mask_differs(self):
         batch_size = 2

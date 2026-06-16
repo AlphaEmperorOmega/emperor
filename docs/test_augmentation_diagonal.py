@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
@@ -9,7 +10,7 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer import LayerConfig, LayerStack, LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
 from emperor.augmentations.adaptive_parameters.core.diagonal import (
     AntiDynamicDiagonal,
@@ -47,11 +48,10 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
                     output_dim=output_dim,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_flag=False,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
@@ -73,7 +73,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
     def _set_generator_identity(self, generator_model) -> None:
         layers = (
             generator_model
-            if isinstance(generator_model, nn.Sequential)
+            if isinstance(generator_model, (nn.Sequential, LayerStack))
             else [generator_model]
         )
         for layer in layers:
@@ -200,20 +200,40 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         self.assertTrue(torch.allclose(output, expected, atol=1e-6))
 
     def test_compute_diagonal_matrix_pads_rectangular_shape(self):
-        cfg = self.preset(
-            config_cls=StandardDynamicDiagonalConfig,
-            input_dim=3,
-            output_dim=5,
-        )
-        model = StandardDynamicDiagonal(cfg)
-        self._set_generator_identity(model.model)
-        logits = torch.tensor([[1.0, 2.0, 3.0], [4.0, 0.5, 2.5]])
+        cases = [
+            (
+                "wide",
+                3,
+                5,
+                torch.tensor([[1.0, 2.0, 3.0], [4.0, 0.5, 2.5]]),
+                (0, 2, 0, 0),
+            ),
+            (
+                "tall",
+                5,
+                3,
+                torch.tensor(
+                    [[1.0, 2.0, 3.0, 9.0, 8.0], [4.0, 0.5, 2.5, 7.0, 6.0]]
+                ),
+                (0, 0, 0, 2),
+            ),
+        ]
 
-        output = model._compute_diagonal_matrix(logits)
-        expected = F.pad(torch.diag_embed(logits), (0, 2, 0, 0))
+        for name, input_dim, output_dim, logits, padding in cases:
+            with self.subTest(case=name):
+                cfg = self.preset(
+                    config_cls=StandardDynamicDiagonalConfig,
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                )
+                model = StandardDynamicDiagonal(cfg)
+                self._set_generator_identity(model.model)
+                output = model._compute_diagonal_matrix(logits)
+                diagonal_values = logits[:, : min(input_dim, output_dim)]
+                expected = F.pad(torch.diag_embed(diagonal_values), padding)
 
-        self.assertEqual(output.shape, (2, 3, 5))
-        self.assertTrue(torch.allclose(output, expected, atol=1e-6))
+                self.assertEqual(output.shape, (2, input_dim, output_dim))
+                self.assertTrue(torch.allclose(output, expected, atol=1e-6))
 
     def test_build_creates_model_for_each_leaf_config(self):
         input_dim = 8
@@ -236,7 +256,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
             cfg.build()
 
     def test_invalid_dimensions_raise(self):
-        cfg = DynamicDiagonalConfig(
+        cfg = StandardDynamicDiagonalConfig(
             input_dim=0,
             output_dim=4,
             model_config=self.preset().model_config,
