@@ -1,7 +1,11 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import unittest
 import torch.nn as nn
 
+import emperor.augmentations as augmentations
+import emperor.augmentations.adaptive_parameters as adaptive_parameters
+import emperor.augmentations.adaptive_parameters.core as adaptive_parameter_core
 from emperor.base.utils import Module
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.base.options import (
@@ -277,7 +281,9 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         bias_flag: bool = True,
         num_layers: int = 2,
         activation: ActivationOptions = ActivationOptions.RELU,
-        residual_flag: bool = False,
+        residual_connection_option: ResidualConnectionOptions = (
+            ResidualConnectionOptions.DISABLED
+        ),
         dropout_probability: float = 0.0,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
@@ -294,11 +300,10 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 output_dim=output_dim,
                 activation=activation,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_flag=residual_flag,
+                residual_connection_option=residual_connection_option,
                 dropout_probability=dropout_probability,
                 gate_config=None,
                 halting_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
@@ -339,6 +344,14 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         bias_params = Module()._init_parameter_bank((output_dim,), bias_initializer)
         return weight_params, bias_params
 
+    def test_public_exports_resolve(self):
+        self.assertEqual(set(augmentations.__all__), set(adaptive_parameters.__all__))
+
+        for module in (augmentations, adaptive_parameters, adaptive_parameter_core):
+            with self.subTest(module=module.__name__):
+                for name in module.__all__:
+                    self.assertTrue(hasattr(module, name), name)
+
     def test_init_all_disabled(self):
         cfg = self.preset()
         model = AdaptiveParameterAugmentation(cfg)
@@ -349,6 +362,20 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         self.assertIsNone(model.bias_config)
         self.assertIsNone(model.mask_config)
         self.assertIsNone(model.model_config)
+
+    def test_build_creates_adaptive_parameter_augmentation(self):
+        cfg = self.preset(input_dim=2, output_dim=3)
+
+        model = cfg.build()
+        self.assertIsInstance(model, AdaptiveParameterAugmentation)
+        self.assertEqual(model.input_dim, 2)
+        self.assertEqual(model.output_dim, 3)
+
+        overrides = AdaptiveParameterAugmentationConfig(input_dim=4, output_dim=5)
+        overridden_model = cfg.build(overrides)
+        self.assertIsInstance(overridden_model, AdaptiveParameterAugmentation)
+        self.assertEqual(overridden_model.input_dim, 4)
+        self.assertEqual(overridden_model.output_dim, 5)
 
     def test_init_with_weight_config(self):
         for config_cls, output_dim, bank_factor in self._weight_cases():
@@ -405,8 +432,6 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         for config_cls, output_dim, bank_factor in self._weight_cases():
-            if config_cls == SoftWeightedBankDynamicWeightConfig:
-                continue
             with self.subTest(weight=config_cls.__name__):
                 cfg = self.preset(
                     input_dim=input_dim,
@@ -948,8 +973,6 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         for config_cls, output_dim, bank_factor in self._weight_cases():
-            if config_cls == SoftWeightedBankDynamicWeightConfig:
-                continue
             with self.subTest(weight=config_cls.__name__):
                 cfg = self.preset(
                     input_dim=input_dim,
@@ -1045,6 +1068,58 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 ]
                 self.assertTrue(len(non_none_grads) > 0)
                 self.assertIsNotNone(input_tensor.grad)
+
+    def test_forward_applies_adjustments_in_weight_diagonal_bias_mask_order(self):
+        model = AdaptiveParameterAugmentation(self.preset(input_dim=2, output_dim=2))
+        observed_steps = []
+        base_weights = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        base_bias = torch.tensor([0.5, -1.0])
+        input_tensor = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
+
+        class WeightStep(nn.Module):
+            def forward(self, weights, X):
+                observed_steps.append("weight")
+                torch.testing.assert_close(weights, base_weights)
+                torch.testing.assert_close(X, input_tensor)
+                return weights + 1.0
+
+        class DiagonalStep(nn.Module):
+            def forward(self, weights, X):
+                observed_steps.append("diagonal")
+                torch.testing.assert_close(weights, base_weights + 1.0)
+                torch.testing.assert_close(X, input_tensor)
+                return weights * 2.0
+
+        class BiasStep(nn.Module):
+            def forward(self, bias, X):
+                observed_steps.append("bias")
+                torch.testing.assert_close(bias, base_bias)
+                torch.testing.assert_close(X, input_tensor)
+                return bias + 4.0
+
+        class MaskStep(nn.Module):
+            def forward(self, weights, X):
+                observed_steps.append("mask")
+                torch.testing.assert_close(weights, (base_weights + 1.0) * 2.0)
+                torch.testing.assert_close(X, input_tensor)
+                return weights - 3.0
+
+        def callback(weights, bias, X):
+            observed_steps.append("callback")
+            return X @ weights + bias
+
+        model.weight_model = WeightStep()
+        model.diagonal_model = DiagonalStep()
+        model.bias_model = BiasStep()
+        model.mask_model = MaskStep()
+
+        output = model(callback, base_weights, base_bias, input_tensor)
+
+        expected_weights = ((base_weights + 1.0) * 2.0) - 3.0
+        expected_bias = base_bias + 4.0
+        expected_output = input_tensor @ expected_weights + expected_bias
+        self.assertEqual(observed_steps, ["weight", "diagonal", "bias", "mask", "callback"])
+        torch.testing.assert_close(output, expected_output)
 
     def test_forward_full_pipeline(self):
         batch_size = 2
