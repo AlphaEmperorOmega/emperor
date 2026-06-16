@@ -9,6 +9,10 @@ from pydantic import Field
 from viewer.backend.schemas._base import ApiResponseModel
 
 
+def _is_none(value: object) -> bool:
+    return value is None
+
+
 class ScalarPointResponse(ApiResponseModel):
     step: int
     wallTime: float
@@ -19,6 +23,10 @@ class ScalarSeriesResponse(ApiResponseModel):
     tag: str
     label: str
     points: list[ScalarPointResponse]
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
 
 
 class HistogramBucketResponse(ApiResponseModel):
@@ -32,6 +40,10 @@ class HistogramResponse(ApiResponseModel):
     step: int
     wallTime: float
     buckets: list[HistogramBucketResponse]
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
 
 
 class ImageResponse(ApiResponseModel):
@@ -40,6 +52,11 @@ class ImageResponse(ApiResponseModel):
     wallTime: float
     mimeType: str
     dataUrl: str
+    eventBytes: int | None = Field(default=None, exclude_if=_is_none)
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
 
 
 class MonitorDataResponse(ApiResponseModel):
@@ -48,6 +65,12 @@ class MonitorDataResponse(ApiResponseModel):
     preset: str | None = None
     dataset: str | None = None
     logDir: str | None = None
+    eventBytes: int | None = Field(default=None, exclude_if=_is_none)
+    skippedEventFiles: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
     scalarSeries: list[ScalarSeriesResponse]
     histograms: list[HistogramResponse]
     images: list[ImageResponse]
@@ -74,6 +97,12 @@ class ParameterStatusResponse(ApiResponseModel):
     preset: str | None = None
     dataset: str | None = None
     logDir: str | None = None
+    eventBytes: int | None = Field(default=None, exclude_if=_is_none)
+    skippedEventFiles: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
     nodes: list[ParameterNodeStatusResponse]
 
 

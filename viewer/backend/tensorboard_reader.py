@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,16 @@ TENSORBOARD_TAG_SIZE_GUIDANCE = {
     event_accumulator.IMAGES: 1,
     event_accumulator.TENSORS: 1,
 }
+MAX_TENSORBOARD_TEXT_SUMMARY_CHARS = 20_000
+MAX_TENSORBOARD_IMAGE_SUMMARY_BYTES = 1_000_000
+EventFileFingerprint = tuple[tuple[str, int, int], ...]
+
+
+@dataclass(frozen=True)
+class EventFileIndex:
+    dirs: tuple[Path, ...]
+    fingerprint: EventFileFingerprint
+    total_size: int
 
 
 def finite_float(value: Any) -> float:
@@ -57,23 +68,39 @@ def scalar_points(
 
 def event_dirs(root: Path) -> list[Path]:
     """Return the sorted, de-duplicated directories under ``root`` holding events."""
-    event_files = list(root.rglob("events.out.tfevents.*"))
-    if not event_files:
-        return []
-    return sorted({path.parent for path in event_files})
+    return list(event_file_index(root).dirs)
 
 
 def event_file_total_size(root: Path) -> int:
     """Return total bytes for TensorBoard event files below ``root``."""
+    return event_file_index(root).total_size
+
+
+def event_file_fingerprint(root: Path) -> EventFileFingerprint:
+    """Return event-file identity data for cache invalidation."""
+    return event_file_index(root).fingerprint
+
+
+def event_file_index(root: Path) -> EventFileIndex:
+    """Return event-file dirs, bytes, and fingerprint in one tree walk."""
+    dirs: set[Path] = set()
+    fingerprint: list[tuple[str, int, int]] = []
     total = 0
     for path in root.rglob("events.out.tfevents.*"):
         if not path.is_file():
             continue
         try:
-            total += path.stat().st_size
+            stat = path.stat()
         except OSError:
             continue
-    return total
+        dirs.add(path.parent)
+        total += stat.st_size
+        fingerprint.append((path.as_posix(), stat.st_size, stat.st_mtime_ns))
+    return EventFileIndex(
+        dirs=tuple(sorted(dirs)),
+        fingerprint=tuple(sorted(fingerprint)),
+        total_size=total,
+    )
 
 
 def load_event_accumulator(
@@ -93,6 +120,21 @@ def load_event_accumulator(
     return accumulator
 
 
+def _truncated_payload_metadata(
+    *,
+    raw_bytes: int,
+    limit: int,
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "eventBytes": raw_bytes,
+        "truncated": True,
+        "truncationReason": f"{reason}: {raw_bytes} bytes exceeds {limit} byte cap",
+        "sourceItemCount": 1,
+        "returnedItemCount": 0,
+    }
+
+
 def image_summary(accumulator, tag: str) -> dict[str, Any] | None:
     """Read the latest image summary for ``tag`` as a data URL payload."""
     events = accumulator.Images(tag)
@@ -102,6 +144,20 @@ def image_summary(accumulator, tag: str) -> dict[str, Any] | None:
     encoded = event.encoded_image_string
     if isinstance(encoded, str):
         encoded = encoded.encode("latin1")
+    raw_bytes = len(encoded)
+    if raw_bytes > MAX_TENSORBOARD_IMAGE_SUMMARY_BYTES:
+        return {
+            "tag": tag,
+            "step": int(event.step),
+            "wallTime": finite_float(event.wall_time),
+            "mimeType": "image/png",
+            "dataUrl": "",
+            **_truncated_payload_metadata(
+                raw_bytes=raw_bytes,
+                limit=MAX_TENSORBOARD_IMAGE_SUMMARY_BYTES,
+                reason="image payload omitted",
+            ),
+        }
     data = base64.b64encode(encoded).decode("ascii")
     return {
         "tag": tag,
@@ -109,6 +165,10 @@ def image_summary(accumulator, tag: str) -> dict[str, Any] | None:
         "wallTime": finite_float(event.wall_time),
         "mimeType": "image/png",
         "dataUrl": f"data:image/png;base64,{data}",
+        "eventBytes": raw_bytes,
+        "truncated": False,
+        "sourceItemCount": 1,
+        "returnedItemCount": 1,
     }
 
 
@@ -126,9 +186,25 @@ def text_summary(accumulator, tag: str) -> dict[str, Any] | None:
         text = value.decode("utf-8", errors="replace")
     else:
         text = str(value)
+    source_chars = len(text)
+    source_bytes = len(text.encode("utf-8", errors="replace"))
+    truncated = source_chars > MAX_TENSORBOARD_TEXT_SUMMARY_CHARS
+    if truncated:
+        text = text[:MAX_TENSORBOARD_TEXT_SUMMARY_CHARS]
     return {
         "tag": tag,
         "step": int(event.step),
         "wallTime": finite_float(event.wall_time),
         "text": text,
+        "eventBytes": source_bytes,
+        "truncated": truncated,
+        "truncationReason": (
+            "text payload truncated: "
+            f"{source_chars} chars exceeds "
+            f"{MAX_TENSORBOARD_TEXT_SUMMARY_CHARS} char cap"
+            if truncated
+            else None
+        ),
+        "sourceItemCount": source_chars,
+        "returnedItemCount": len(text),
     }

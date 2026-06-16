@@ -11,9 +11,14 @@ from viewer.backend.schemas._monitor_data import ScalarPointResponse
 
 MAX_LOG_REQUEST_RUN_IDS = 50
 MAX_LOG_SCALAR_TAGS = 50
+MAX_LOG_MEDIA_TAGS = 20
 DEFAULT_LOG_SCALAR_MAX_POINTS = 500
 MAX_LOG_SCALAR_MAX_POINTS = 2000
 LogScalarSampling = Literal["tail"]
+
+
+def _is_none(value: object) -> bool:
+    return value is None
 
 
 class LogRunResponse(ApiResponseModel):
@@ -61,6 +66,10 @@ class LogCheckpointResponse(ApiResponseModel):
 
 
 class LogCheckpointsResponse(ApiResponseModel):
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
     checkpoints: list[LogCheckpointResponse]
 
 
@@ -77,6 +86,10 @@ class LogRunArtifactsResponse(ApiResponseModel):
     runId: str
     params: JsonObject
     metrics: JsonObject
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
     artifacts: list[LogRunArtifactResponse]
     checkpoints: list[LogCheckpointResponse]
 
@@ -145,6 +158,10 @@ class LogRunDeleteBlockerResponse(ApiResponseModel):
 
 class LogRunDeletePlanResponse(ApiResponseModel):
     candidateCount: int
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
     counts: LogRunDeleteCountsResponse
     affected: LogRunDeleteAffectedValuesResponse
     candidates: list[LogRunDeleteCandidateResponse]
@@ -167,6 +184,12 @@ class LogTagsRequest(ApiResponseModel):
 
 class LogRunTagsResponse(ApiResponseModel):
     runId: str
+    eventBytes: int | None = Field(default=None, exclude_if=_is_none)
+    skippedEventFiles: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
     scalarTags: list[str]
     histogramTags: list[str]
     imageTags: list[str]
@@ -195,8 +218,8 @@ class LogScalarSeriesResponse(ApiResponseModel):
     runId: str
     tag: str
     points: list[ScalarPointResponse]
-    sourcePointCount: int | None = None
-    truncated: bool | None = None
+    sourcePointCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
 
 
 class LogScalarsResponse(ApiResponseModel):
@@ -208,8 +231,8 @@ class LogMediaRequest(ApiResponseModel):
         default_factory=list,
         max_length=MAX_LOG_REQUEST_RUN_IDS,
     )
-    imageTags: list[str] = Field(default_factory=list)
-    textTags: list[str] = Field(default_factory=list)
+    imageTags: list[str] = Field(default_factory=list, max_length=MAX_LOG_MEDIA_TAGS)
+    textTags: list[str] = Field(default_factory=list, max_length=MAX_LOG_MEDIA_TAGS)
 
 
 class LogImageSummaryResponse(ApiResponseModel):
@@ -219,6 +242,11 @@ class LogImageSummaryResponse(ApiResponseModel):
     wallTime: float
     mimeType: str
     dataUrl: str
+    eventBytes: int | None = Field(default=None, exclude_if=_is_none)
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
 
 
 class LogTextSummaryResponse(ApiResponseModel):
@@ -227,8 +255,19 @@ class LogTextSummaryResponse(ApiResponseModel):
     step: int
     wallTime: float
     text: str
+    eventBytes: int | None = Field(default=None, exclude_if=_is_none)
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
 
 
 class LogMediaResponse(ApiResponseModel):
+    eventBytes: int | None = Field(default=None, exclude_if=_is_none)
+    skippedEventFiles: int | None = Field(default=None, exclude_if=_is_none)
+    sourceItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    returnedItemCount: int | None = Field(default=None, exclude_if=_is_none)
+    truncated: bool | None = Field(default=None, exclude_if=_is_none)
+    truncationReason: str | None = Field(default=None, exclude_if=_is_none)
     images: list[LogImageSummaryResponse]
     texts: list[LogTextSummaryResponse]

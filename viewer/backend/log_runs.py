@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import shutil
+import time
 from collections import Counter, OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -22,6 +23,8 @@ from viewer.backend.monitor_data import (
 from viewer.backend.tensorboard_reader import (
     TENSORBOARD_TAG_SIZE_GUIDANCE,
     event_dirs,
+    event_file_fingerprint,
+    event_file_index,
     event_file_total_size,
     image_summary,
     load_event_accumulator,
@@ -40,6 +43,8 @@ HPARAM_FLOAT_RE = re.compile(
 )
 LOG_EVENT_CACHE_MAX_ENTRIES = 256
 LOG_TAG_READ_MAX_EVENT_BYTES = 96 * 1024 * 1024
+LOG_RESPONSE_ITEM_LIMIT = 500
+LOG_TAG_KEYS = ("scalars", "histograms", "images", "texts")
 EventFingerprint = tuple[tuple[str, int, int], ...]
 
 
@@ -226,16 +231,7 @@ def _safe_artifact_files(run_dir: Path, root: Path, pattern: str) -> list[Path]:
 
 
 def _event_file_fingerprint(run_dir: Path) -> EventFingerprint:
-    files: list[tuple[str, int, int]] = []
-    for path in sorted(run_dir.rglob("events.out.tfevents.*")):
-        if not path.is_file():
-            continue
-        try:
-            stat = path.stat()
-        except OSError:
-            continue
-        files.append((path.as_posix(), stat.st_size, stat.st_mtime_ns))
-    return tuple(files)
+    return event_file_fingerprint(run_dir)
 
 
 def _file_id(run_id: str, relative_path: str) -> str:
@@ -555,8 +551,18 @@ def _delete_plan_response_fields(
     can_delete: bool,
 ) -> dict[str, Any]:
     affected = _affected_values(candidates)
+    returned_candidates = candidates[:LOG_RESPONSE_ITEM_LIMIT]
+    truncated = len(candidates) > len(returned_candidates)
     return {
         "candidateCount": len(candidates),
+        "sourceItemCount": len(candidates),
+        "returnedItemCount": len(returned_candidates),
+        "truncated": truncated,
+        "truncationReason": (
+            f"delete candidates capped at {LOG_RESPONSE_ITEM_LIMIT} rows"
+            if truncated
+            else None
+        ),
         "counts": {
             "runs": len(candidates),
             "experiments": len(affected["experiments"]),
@@ -565,7 +571,7 @@ def _delete_plan_response_fields(
             "presets": len(affected["presets"]),
         },
         "affected": affected,
-        "candidates": [candidate.to_response() for candidate in candidates],
+        "candidates": [candidate.to_response() for candidate in returned_candidates],
         "blockedByActiveJobs": [
             blocker.to_response() for blocker in blocked_by_active_jobs
         ],
@@ -590,10 +596,18 @@ class LogRunScanner:
         self,
         *,
         logs_root: Path | str = "logs",
+        cache_ttl_seconds: float = 1.0,
     ) -> None:
         self.logs_root = Path(logs_root)
+        self.cache_ttl_seconds = max(0.0, float(cache_ttl_seconds))
+        self._runs_cache: list[LogRun] | None = None
+        self._runs_cache_deadline = 0.0
 
     def list_runs(self) -> list[LogRun]:
+        now = time.monotonic()
+        if self._runs_cache is not None and now < self._runs_cache_deadline:
+            return list(self._runs_cache)
+
         root = self.resolved_root()
         if not root.exists():
             return []
@@ -608,7 +622,7 @@ class LogRunScanner:
             run = self.parse_run(root, resolved)
             if run is not None:
                 runs.append(run)
-        return sorted(
+        sorted_runs = sorted(
             runs,
             key=lambda run: (
                 run.timestamp or "",
@@ -621,6 +635,13 @@ class LogRunScanner:
             ),
             reverse=True,
         )
+        self._runs_cache = list(sorted_runs)
+        self._runs_cache_deadline = now + self.cache_ttl_seconds
+        return sorted_runs
+
+    def clear_cache(self) -> None:
+        self._runs_cache = None
+        self._runs_cache_deadline = 0.0
 
     def list_experiments(self) -> list[LogExperiment]:
         root = self.resolved_root()
@@ -738,7 +759,7 @@ class LogRunQueryService:
         )
         self._tags_cache: OrderedDict[
             tuple[str, EventFingerprint],
-            dict[str, list[str]],
+            dict[str, Any],
         ] = OrderedDict()
         self._scalar_cache: OrderedDict[
             tuple[str, EventFingerprint, str, int, str],
@@ -770,20 +791,38 @@ class LogRunQueryService:
         self._tags_cache.clear()
         self._scalar_cache.clear()
 
+    def clear_run_caches(self, run_paths: list[Path]) -> None:
+        roots = {path.as_posix() for path in run_paths}
+        if not roots:
+            return
+        for cache in (self._tags_cache, self._scalar_cache):
+            for key in list(cache):
+                if key and key[0] in roots:
+                    cache.pop(key, None)
+        self.monitor_reader.clear_roots(roots)
+        self.parameter_status_reader.clear_roots(roots)
+
     def _tags_cache_key(
         self,
         run_dir: Path,
     ) -> tuple[str, EventFingerprint]:
         return (run_dir.as_posix(), _event_file_fingerprint(run_dir))
 
+    def _copy_tags_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        copied = dict(payload)
+        for key in LOG_TAG_KEYS:
+            value = copied.get(key)
+            copied[key] = list(value) if isinstance(value, list) else []
+        return copied
+
     def _cached_tags_if_current(
         self,
         run_dir: Path,
-    ) -> dict[str, list[str]] | None:
+    ) -> dict[str, Any] | None:
         cached = self._cache_get(self._tags_cache, self._tags_cache_key(run_dir))
         if cached is None:
             return None
-        return {key: list(value) for key, value in cached.items()}
+        return self._copy_tags_payload(cached)
 
     def _scalar_cache_key(
         self,
@@ -810,6 +849,12 @@ class LogRunQueryService:
                 "histogramTags": tags["histograms"],
                 "imageTags": tags["images"],
                 "textTags": tags["texts"],
+                "eventBytes": tags.get("eventBytes"),
+                "skippedEventFiles": tags.get("skippedEventFiles"),
+                "truncated": tags.get("truncated"),
+                "truncationReason": tags.get("truncationReason"),
+                "sourceItemCount": tags.get("sourceItemCount"),
+                "returnedItemCount": tags.get("returnedItemCount"),
             }
             for run in runs
             for tags in [self.read_tags(run.path)]
@@ -861,15 +906,27 @@ class LogRunQueryService:
         run_ids: list[str],
         image_tags: list[str],
         text_tags: list[str],
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> dict[str, Any]:
         runs = self.scanner.resolve_runs(run_ids)
         requested_image_tags = list(dict.fromkeys(image_tags))
         requested_text_tags = list(dict.fromkeys(text_tags))
         images: list[dict[str, Any]] = []
         texts: list[dict[str, Any]] = []
+        source_item_count = len(runs) * (
+            len(requested_image_tags) + len(requested_text_tags)
+        )
+        skipped_event_files = 0
+        event_bytes = 0
+        skipped_reasons: list[str] = []
 
         for run in runs:
             run_tags = self.read_tags(run.path)
+            if run_tags.get("truncated"):
+                skipped_event_files += int(run_tags.get("skippedEventFiles") or 0)
+                event_bytes += int(run_tags.get("eventBytes") or 0)
+                reason = run_tags.get("truncationReason")
+                if isinstance(reason, str) and reason:
+                    skipped_reasons.append(reason)
             image_tag_set = set(run_tags["images"])
             text_tag_set = set(run_tags["texts"])
             for tag in requested_image_tags:
@@ -885,7 +942,31 @@ class LogRunQueryService:
                 if summary is not None:
                     texts.append({"runId": run.id, **summary})
 
-        return {"images": images, "texts": texts}
+        returned_item_count = len(images) + len(texts)
+        truncated_items = [
+            item
+            for item in [*images, *texts]
+            if bool(item.get("truncated"))
+        ]
+        truncated = skipped_event_files > 0 or bool(truncated_items)
+        reason = None
+        if skipped_reasons:
+            reason = skipped_reasons[0]
+        elif truncated_items:
+            reason = str(
+                truncated_items[0].get("truncationReason") or "media truncated"
+            )
+
+        return {
+            "sourceItemCount": source_item_count,
+            "returnedItemCount": returned_item_count,
+            "truncated": truncated,
+            "truncationReason": reason,
+            "eventBytes": event_bytes or None,
+            "skippedEventFiles": skipped_event_files or None,
+            "images": images,
+            "texts": texts,
+        }
 
     def monitor_data_for_run(self, run_id: str, node_path: str) -> dict[str, Any]:
         run = self.scanner.resolve_runs([run_id])[0]
@@ -962,13 +1043,32 @@ class LogRunQueryService:
             for checkpoint in checkpoints
         )
 
-        return LogRunArtifacts(
+        source_item_count = len(artifacts) + len(checkpoints)
+        returned_artifacts = artifacts[:LOG_RESPONSE_ITEM_LIMIT]
+        remaining_budget = max(0, LOG_RESPONSE_ITEM_LIMIT - len(returned_artifacts))
+        returned_checkpoints = checkpoints[:remaining_budget]
+        returned_item_count = len(returned_artifacts) + len(returned_checkpoints)
+        truncated = source_item_count > returned_item_count
+        response = LogRunArtifacts(
             runId=run.id,
             params={**hparams, **result_params},
             metrics=metrics,
-            artifacts=artifacts,
-            checkpoints=checkpoints,
+            artifacts=returned_artifacts,
+            checkpoints=returned_checkpoints,
         ).to_response()
+        response.update(
+            {
+                "sourceItemCount": source_item_count,
+                "returnedItemCount": returned_item_count,
+                "truncated": truncated,
+                "truncationReason": (
+                    f"artifact metadata capped at {LOG_RESPONSE_ITEM_LIMIT} rows"
+                    if truncated
+                    else None
+                ),
+            }
+        )
+        return response
 
     def read_checkpoints(self, run: LogRun) -> list[LogCheckpoint]:
         checkpoints = [
@@ -1020,20 +1120,35 @@ class LogRunQueryService:
             modifiedAt=_file_modified_at(path),
         )
 
-    def read_tags(self, run_dir: Path) -> dict[str, list[str]]:
+    def read_tags(self, run_dir: Path) -> dict[str, Any]:
         cache_key = self._tags_cache_key(run_dir)
         cached = self._cache_get(self._tags_cache, cache_key)
         if cached is not None:
-            return {key: list(value) for key, value in cached.items()}
+            return self._copy_tags_payload(cached)
 
         tags = {"scalars": set(), "histograms": set(), "images": set(), "texts": set()}
         if (
             self.max_tag_event_bytes > 0
             and event_file_total_size(run_dir) > self.max_tag_event_bytes
         ):
-            result = {key: sorted(value) for key, value in tags.items()}
+            index = event_file_index(run_dir)
+            result = {
+                key: sorted(value)
+                for key, value in tags.items()
+            } | {
+                "eventBytes": index.total_size,
+                "skippedEventFiles": len(index.fingerprint),
+                "truncated": True,
+                "truncationReason": (
+                    "event files skipped: "
+                    f"{index.total_size} bytes exceeds "
+                    f"{self.max_tag_event_bytes} byte tag-read cap"
+                ),
+                "sourceItemCount": len(index.fingerprint),
+                "returnedItemCount": 0,
+            }
             self._cache_set(self._tags_cache, cache_key, result)
-            return {key: list(value) for key, value in result.items()}
+            return self._copy_tags_payload(result)
         for event_dir in event_dirs(run_dir):
             accumulator = load_event_accumulator(
                 event_dir,
@@ -1053,9 +1168,17 @@ class LogRunQueryService:
                 for tag in accumulator_tags.get("tensors", [])
                 if tag.endswith("/text_summary")
             )
-        result = {key: sorted(value) for key, value in tags.items()}
+        returned_item_count = sum(len(value) for value in tags.values())
+        result = {
+            key: sorted(value)
+            for key, value in tags.items()
+        } | {
+            "truncated": False,
+            "sourceItemCount": returned_item_count,
+            "returnedItemCount": returned_item_count,
+        }
         self._cache_set(self._tags_cache, cache_key, result)
-        return {key: list(value) for key, value in result.items()}
+        return self._copy_tags_payload(result)
 
     def read_scalar_series(
         self,
@@ -1351,7 +1474,7 @@ class LogRunIndex:
         run_ids: list[str],
         image_tags: list[str],
         text_tags: list[str],
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> dict[str, Any]:
         return self.query_service.media_for_runs(
             run_ids=run_ids,
             image_tags=image_tags,
@@ -1377,8 +1500,12 @@ class LogRunIndex:
         self,
         experiment: str,
     ) -> LogExperimentDeleteResult:
+        affected_runs = [
+            run for run in self.scanner.list_runs() if run.experiment == experiment
+        ]
         result = self.deletion_executor.delete_experiment(experiment)
-        self.query_service.clear_cache()
+        self.scanner.clear_cache()
+        self.query_service.clear_run_caches([run.path for run in affected_runs])
         return result
 
     def create_delete_plan(
@@ -1399,8 +1526,10 @@ class LogRunIndex:
         active_jobs: list[dict[str, Any]],
     ) -> LogRunDeleteResult:
         plan = self.create_delete_plan(filters, active_jobs=active_jobs)
+        affected_run_paths = [candidate.path for candidate in plan.candidates]
         result = self.deletion_executor.delete_runs(plan)
-        self.query_service.clear_cache()
+        self.scanner.clear_cache()
+        self.query_service.clear_run_caches(affected_run_paths)
         return result
 
     def _resolved_root(self) -> Path:

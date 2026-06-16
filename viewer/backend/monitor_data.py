@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import base64
+import copy
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
+from tensorboard.backend.event_processing import event_accumulator
+
 from viewer.backend.tensorboard_reader import (
+    DEFAULT_TENSORBOARD_SIZE_GUIDANCE,
+    MAX_TENSORBOARD_IMAGE_SUMMARY_BYTES,
     event_dirs,
+    event_file_fingerprint,
+    event_file_index,
     event_file_total_size,
     finite_float,
     load_event_accumulator,
@@ -13,8 +21,10 @@ from viewer.backend.tensorboard_reader import (
 )
 
 DEFAULT_SCALAR_POINT_LIMIT = 500
+DEFAULT_PARAMETER_STATUS_SCALAR_POINT_LIMIT = 20
 DEFAULT_BUCKET_LIMIT = 128
 DEFAULT_MONITOR_EVENT_READ_MAX_BYTES = 96 * 1024 * 1024
+MONITOR_EVENT_CACHE_MAX_ENTRIES = 256
 RELATIVE_DELTA_EPSILON = 1e-12
 ABSOLUTE_DELTA_EPSILON = 1e-9
 PARAMETER_CHANNELS = ("weights", "bias")
@@ -56,6 +66,21 @@ def empty_parameter_status(
     }
 
 
+def skipped_event_metadata(root: Path, *, limit: int) -> dict[str, Any]:
+    index = event_file_index(root)
+    return {
+        "eventBytes": index.total_size,
+        "skippedEventFiles": len(index.fingerprint),
+        "truncated": True,
+        "truncationReason": (
+            "event files skipped: "
+            f"{index.total_size} bytes exceeds {limit} byte read cap"
+        ),
+        "sourceItemCount": len(index.fingerprint),
+        "returnedItemCount": 0,
+    }
+
+
 class TensorBoardMonitorReader:
     def __init__(
         self,
@@ -67,6 +92,24 @@ class TensorBoardMonitorReader:
         self.scalar_point_limit = scalar_point_limit
         self.bucket_limit = bucket_limit
         self.max_event_bytes = max(0, int(max_event_bytes))
+        self._cache: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+
+    def _cache_get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
+        if key not in self._cache:
+            return None
+        self._cache.move_to_end(key)
+        return copy.deepcopy(self._cache[key])
+
+    def _cache_set(self, key: tuple[Any, ...], value: dict[str, Any]) -> None:
+        self._cache[key] = copy.deepcopy(value)
+        self._cache.move_to_end(key)
+        while len(self._cache) > MONITOR_EVENT_CACHE_MAX_ENTRIES:
+            self._cache.popitem(last=False)
+
+    def clear_roots(self, roots: set[str]) -> None:
+        for key in list(self._cache):
+            if key and key[0] in roots:
+                self._cache.pop(key, None)
 
     def read(
         self,
@@ -91,7 +134,19 @@ class TensorBoardMonitorReader:
             self.max_event_bytes > 0
             and event_file_total_size(root) > self.max_event_bytes
         ):
+            response.update(skipped_event_metadata(root, limit=self.max_event_bytes))
             return response
+
+        cache_key = (
+            root.as_posix(),
+            event_file_fingerprint(root),
+            job_id,
+            node_path,
+            dataset,
+        )
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         prefix = f"{node_path}/"
         for run_dir in event_dirs(root):
@@ -115,6 +170,7 @@ class TensorBoardMonitorReader:
         response["scalarSeries"].sort(key=lambda series: series["tag"])
         response["histograms"].sort(key=lambda item: item["tag"])
         response["images"].sort(key=lambda item: item["tag"])
+        self._cache_set(cache_key, response)
         return response
 
     def _matching_tags(self, tags: list[str], prefix: str) -> list[str]:
@@ -197,6 +253,27 @@ class TensorBoardMonitorReader:
             encoded = event.encoded_image_string
             if isinstance(encoded, str):
                 encoded = encoded.encode("latin1")
+            raw_bytes = len(encoded)
+            if raw_bytes > MAX_TENSORBOARD_IMAGE_SUMMARY_BYTES:
+                images.append(
+                    {
+                        "tag": tag,
+                        "step": int(event.step),
+                        "wallTime": finite_float(event.wall_time),
+                        "mimeType": "image/png",
+                        "dataUrl": "",
+                        "eventBytes": raw_bytes,
+                        "sourceItemCount": 1,
+                        "returnedItemCount": 0,
+                        "truncated": True,
+                        "truncationReason": (
+                            "image payload omitted: "
+                            f"{raw_bytes} bytes exceeds "
+                            f"{MAX_TENSORBOARD_IMAGE_SUMMARY_BYTES} byte cap"
+                        ),
+                    }
+                )
+                continue
             data = base64.b64encode(encoded).decode("ascii")
             images.append(
                 {
@@ -205,6 +282,10 @@ class TensorBoardMonitorReader:
                     "wallTime": finite_float(event.wall_time),
                     "mimeType": "image/png",
                     "dataUrl": f"data:image/png;base64,{data}",
+                    "eventBytes": raw_bytes,
+                    "sourceItemCount": 1,
+                    "returnedItemCount": 1,
+                    "truncated": False,
                 }
             )
         return images
@@ -214,9 +295,33 @@ class TensorBoardParameterStatusReader:
     def __init__(
         self,
         *,
+        scalar_point_limit: int = DEFAULT_PARAMETER_STATUS_SCALAR_POINT_LIMIT,
         max_event_bytes: int = DEFAULT_MONITOR_EVENT_READ_MAX_BYTES,
     ) -> None:
+        self.scalar_point_limit = max(1, int(scalar_point_limit))
         self.max_event_bytes = max(0, int(max_event_bytes))
+        self._size_guidance = {
+            **DEFAULT_TENSORBOARD_SIZE_GUIDANCE,
+            event_accumulator.SCALARS: self.scalar_point_limit,
+        }
+        self._cache: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+
+    def _cache_get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
+        if key not in self._cache:
+            return None
+        self._cache.move_to_end(key)
+        return copy.deepcopy(self._cache[key])
+
+    def _cache_set(self, key: tuple[Any, ...], value: dict[str, Any]) -> None:
+        self._cache[key] = copy.deepcopy(value)
+        self._cache.move_to_end(key)
+        while len(self._cache) > MONITOR_EVENT_CACHE_MAX_ENTRIES:
+            self._cache.popitem(last=False)
+
+    def clear_roots(self, roots: set[str]) -> None:
+        for key in list(self._cache):
+            if key and key[0] in roots:
+                self._cache.pop(key, None)
 
     def read(
         self,
@@ -241,7 +346,19 @@ class TensorBoardParameterStatusReader:
             self.max_event_bytes > 0
             and event_file_total_size(root) > self.max_event_bytes
         ):
+            response.update(skipped_event_metadata(root, limit=self.max_event_bytes))
             return response
+
+        cache_key = (
+            root.as_posix(),
+            event_file_fingerprint(root),
+            source_id,
+            preset,
+            dataset,
+        )
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         scalars_by_node = self._read_parameter_scalars(root)
         response["nodes"] = [
@@ -260,6 +377,7 @@ class TensorBoardParameterStatusReader:
             }
             for node_path, channel_data in sorted(scalars_by_node.items())
         ]
+        self._cache_set(cache_key, response)
         return response
 
     def _read_parameter_scalars(
@@ -268,7 +386,10 @@ class TensorBoardParameterStatusReader:
     ) -> dict[str, dict[str, dict[str, Any]]]:
         scalars_by_node: dict[str, dict[str, dict[str, Any]]] = {}
         for run_dir in event_dirs(root):
-            accumulator = load_event_accumulator(run_dir)
+            accumulator = load_event_accumulator(
+                run_dir,
+                size_guidance=self._size_guidance,
+            )
             if accumulator is None:
                 continue
             try:
@@ -285,7 +406,11 @@ class TensorBoardParameterStatusReader:
                 )
                 channel_data["seen"].add(metric)
                 try:
-                    points = scalar_points(accumulator, tag, None)
+                    points = scalar_points(
+                        accumulator,
+                        tag,
+                        self.scalar_point_limit,
+                    )
                 except Exception:
                     continue
                 if points:
@@ -297,6 +422,7 @@ class TensorBoardParameterStatusReader:
                     metric_points.sort(
                         key=lambda point: (point["step"], point["wallTime"])
                     )
+                    del metric_points[: -self.scalar_point_limit]
         return scalars_by_node
 
     def _parameter_tag(self, tag: str) -> tuple[str, str, str] | None:

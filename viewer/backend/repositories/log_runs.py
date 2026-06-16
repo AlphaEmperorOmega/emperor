@@ -75,7 +75,7 @@ class LogRunRepository:
         run_ids: list[str],
         image_tags: list[str],
         text_tags: list[str],
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> dict[str, Any]:
         return self._index.media_for_runs(
             run_ids=run_ids,
             image_tags=image_tags,

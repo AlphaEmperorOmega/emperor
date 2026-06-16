@@ -9,6 +9,7 @@ from viewer.backend.schemas import (
     GraphNodeResponse,
     JsonObject,
     JsonValue,
+    LogMediaRequest,
     LogRunArtifactsResponse,
     LogRunResponse,
     OperationGraphNodeResponse,
@@ -107,5 +108,31 @@ class JsonApiSchemaTests(unittest.TestCase):
                     "metrics": {"bad": object()},
                     "logDir": None,
                     "error": None,
+                }
+            )
+
+    def test_log_media_request_caps_requested_tag_counts(self) -> None:
+        valid_payload = {
+            "runIds": ["run-1"],
+            "imageTags": [f"image/{index}" for index in range(20)],
+            "textTags": [f"text/{index}" for index in range(20)],
+        }
+        self.assertEqual(
+            LogMediaRequest.model_validate(valid_payload).imageTags,
+            valid_payload["imageTags"],
+        )
+
+        with self.assertRaises(ValidationError):
+            LogMediaRequest.model_validate(
+                {
+                    **valid_payload,
+                    "imageTags": [f"image/{index}" for index in range(21)],
+                }
+            )
+        with self.assertRaises(ValidationError):
+            LogMediaRequest.model_validate(
+                {
+                    **valid_payload,
+                    "textTags": [f"text/{index}" for index in range(21)],
                 }
             )

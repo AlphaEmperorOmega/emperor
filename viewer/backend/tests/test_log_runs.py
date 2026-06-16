@@ -10,6 +10,7 @@ from unittest.mock import patch
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import (
     LOG_EXPERIMENT_NAME_RE,
+    LOG_RESPONSE_ITEM_LIMIT,
     ActiveLogRunDeleteBlocker,
     LogRunDeleteCandidate,
     LogRunDeleteFilters,
@@ -127,6 +128,10 @@ class LogRunDeleteResponseTests(unittest.TestCase):
         )
         expected_common = {
             "candidateCount": 1,
+            "sourceItemCount": 1,
+            "returnedItemCount": 1,
+            "truncated": False,
+            "truncationReason": None,
             "counts": {
                 "runs": 1,
                 "experiments": 1,
@@ -192,6 +197,33 @@ class LogRunDeleteResponseTests(unittest.TestCase):
                 "canDelete": True,
             },
         )
+
+    def test_delete_plan_response_caps_candidate_preview(self) -> None:
+        candidates = [
+            LogRunDeleteCandidate(
+                id=f"run-{index}",
+                experiment="test_model",
+                model="linears/linear",
+                preset="BASELINE",
+                dataset="Mnist",
+                runName=f"run_{index:06d}_20260601_010203",
+                version="version_0",
+                relativePath=(
+                    "test_model/linear/BASELINE/Mnist/"
+                    f"run_{index:06d}_20260601_010203/version_0"
+                ),
+            )
+            for index in range(LOG_RESPONSE_ITEM_LIMIT + 3)
+        ]
+
+        payload = LogRunDeletePlan(candidates=candidates).to_response()
+
+        self.assertEqual(payload["candidateCount"], LOG_RESPONSE_ITEM_LIMIT + 3)
+        self.assertEqual(payload["sourceItemCount"], LOG_RESPONSE_ITEM_LIMIT + 3)
+        self.assertEqual(payload["returnedItemCount"], LOG_RESPONSE_ITEM_LIMIT)
+        self.assertEqual(len(payload["candidates"]), LOG_RESPONSE_ITEM_LIMIT)
+        self.assertTrue(payload["truncated"])
+        self.assertIn("capped", payload["truncationReason"])
 
 
 class LogRunIndexAndApiTests(unittest.TestCase):
@@ -365,6 +397,29 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             by_path,
         )
 
+    def test_log_run_scanner_reuses_recent_run_parse_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            write_tensorboard_run(
+                logs_root,
+                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+            )
+            write_tensorboard_run(
+                logs_root,
+                ["linear", "BASELINE", "Mnist", "bbb_20260601_020304", "version_0"],
+            )
+            scanner = LogRunScanner(logs_root=logs_root, cache_ttl_seconds=60)
+
+            with patch.object(scanner, "parse_run", wraps=scanner.parse_run) as parse:
+                first = scanner.list_runs()
+                second = scanner.list_runs()
+                scanner.clear_cache()
+                third = scanner.list_runs()
+
+        self.assertEqual([run.id for run in first], [run.id for run in second])
+        self.assertEqual([run.id for run in first], [run.id for run in third])
+        self.assertEqual(parse.call_count, 4)
+
     def test_log_run_index_reads_checkpoints_and_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
@@ -490,6 +545,32 @@ class LogRunIndexAndApiTests(unittest.TestCase):
         )
         self.assertEqual(malformed_artifacts["params"], {})
         self.assertEqual(malformed_artifacts["metrics"], {})
+
+    def test_log_run_index_caps_artifact_metadata_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp)
+            run_dir = write_tensorboard_run(
+                logs_root,
+                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+            )
+            checkpoint_dir = run_dir / "checkpoints"
+            checkpoint_dir.mkdir(exist_ok=True)
+            for index in range(LOG_RESPONSE_ITEM_LIMIT + 10):
+                (checkpoint_dir / f"epoch=0-step={index}.ckpt").write_text(
+                    "checkpoint",
+                    encoding="utf-8",
+                )
+
+            index = LogRunIndex(logs_root=logs_root)
+            run = index.list_runs()[0]
+            payload = index.artifacts_for_run(run.id)
+
+        returned_count = len(payload["artifacts"]) + len(payload["checkpoints"])
+        self.assertEqual(returned_count, LOG_RESPONSE_ITEM_LIMIT)
+        self.assertGreater(payload["sourceItemCount"], payload["returnedItemCount"])
+        self.assertEqual(payload["returnedItemCount"], LOG_RESPONSE_ITEM_LIMIT)
+        self.assertTrue(payload["truncated"])
+        self.assertIn("capped", payload["truncationReason"])
 
     def test_log_run_index_deletes_experiment_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2084,15 +2165,16 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             with patch("viewer.backend.log_runs.load_event_accumulator") as load:
                 tags = service.read_tags(run_dir)
 
-        self.assertEqual(
-            tags,
-            {
-                "scalars": [],
-                "histograms": [],
-                "images": [],
-                "texts": [],
-            },
-        )
+        self.assertEqual(tags["scalars"], [])
+        self.assertEqual(tags["histograms"], [])
+        self.assertEqual(tags["images"], [])
+        self.assertEqual(tags["texts"], [])
+        self.assertEqual(tags["eventBytes"], len("large-event-payload"))
+        self.assertEqual(tags["skippedEventFiles"], 1)
+        self.assertEqual(tags["sourceItemCount"], 1)
+        self.assertEqual(tags["returnedItemCount"], 0)
+        self.assertTrue(tags["truncated"])
+        self.assertIn("event files skipped", tags["truncationReason"])
         load.assert_not_called()
 
     def test_log_api_filters_runs_before_pagination(self) -> None:

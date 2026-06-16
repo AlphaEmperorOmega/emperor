@@ -10,6 +10,7 @@ from unittest.mock import patch
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import torch
+from tensorboard.backend.event_processing import event_accumulator
 from torch.utils.tensorboard import SummaryWriter
 
 from viewer.backend.inspector.errors import InspectorError
@@ -43,6 +44,63 @@ class ReadFailureAccumulator:
 
     def Images(self, tag):
         raise RuntimeError(f"broken image read: {tag}")
+
+
+class FakeScalarEvent:
+    def __init__(self, step: int, value: float) -> None:
+        self.step = step
+        self.value = value
+        self.wall_time = float(step)
+
+
+class NoMatchingMonitorAccumulator:
+    def Tags(self):
+        return {
+            "scalars": ["other_node/output/mean"],
+            "histograms": [],
+            "images": [],
+        }
+
+
+class ParameterStatusAccumulator:
+    def Tags(self):
+        return {
+            "scalars": ["main_model.0.model/weights/relative_delta_norm"],
+        }
+
+    def Scalars(self, tag):
+        if tag != "main_model.0.model/weights/relative_delta_norm":
+            raise KeyError(tag)
+        return [FakeScalarEvent(1, 0.0), FakeScalarEvent(2, 0.5)]
+
+
+class LargeParameterStatusAccumulator:
+    def Tags(self):
+        return {
+            "scalars": [
+                "main_model.0.model/weights/relative_delta_norm",
+                "main_model.0.model/bias/l2_norm",
+            ],
+        }
+
+    def Scalars(self, tag):
+        if tag == "main_model.0.model/weights/relative_delta_norm":
+            return [
+                FakeScalarEvent(1, 0.75),
+                FakeScalarEvent(2, 0.0),
+                FakeScalarEvent(3, 0.0),
+                FakeScalarEvent(4, 0.0),
+                FakeScalarEvent(5, 0.0),
+            ]
+        if tag == "main_model.0.model/bias/l2_norm":
+            return [
+                FakeScalarEvent(1, 1.0),
+                FakeScalarEvent(2, 2.0),
+                FakeScalarEvent(3, 2.0),
+                FakeScalarEvent(4, 2.0),
+                FakeScalarEvent(5, 2.0),
+            ]
+        raise KeyError(tag)
 
 
 class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
@@ -124,7 +182,26 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
                     log_dir=str(log_dir),
                 )
 
-        self.assert_empty_monitor_payload(data, log_dir)
+        self.assertEqual(
+            data,
+            {
+                "jobId": "job-1",
+                "nodePath": "main_model.0.model",
+                "dataset": "Mnist",
+                "logDir": str(log_dir),
+                "scalarSeries": [],
+                "histograms": [],
+                "images": [],
+                "eventBytes": len("large-event-payload"),
+                "skippedEventFiles": 1,
+                "truncated": True,
+                "truncationReason": (
+                    "event files skipped: 19 bytes exceeds 4 byte read cap"
+                ),
+                "sourceItemCount": 1,
+                "returnedItemCount": 0,
+            },
+        )
         load.assert_not_called()
 
     def test_tags_failure_returns_empty_payload(self) -> None:
@@ -140,6 +217,46 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             data = self.read_with_accumulators(log_dir, [ReadFailureAccumulator()])
 
         self.assert_empty_monitor_payload(data, log_dir)
+
+    def test_negative_monitor_results_are_cached_until_event_files_change(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            event_file = log_dir / "events.out.tfevents.cache"
+            event_file.write_text("first", encoding="utf-8")
+            reader = TensorBoardMonitorReader()
+
+            with (
+                patch("viewer.backend.monitor_data.event_dirs", return_value=[log_dir]),
+                patch(
+                    "viewer.backend.monitor_data.load_event_accumulator",
+                    return_value=NoMatchingMonitorAccumulator(),
+                ) as load,
+            ):
+                first = reader.read(
+                    job_id="job-1",
+                    node_path="main_model.0.model",
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+                second = reader.read(
+                    job_id="job-1",
+                    node_path="main_model.0.model",
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+                event_file.write_text("first-second", encoding="utf-8")
+                changed = reader.read(
+                    job_id="job-1",
+                    node_path="main_model.0.model",
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first, changed)
+        self.assertEqual(load.call_count, 2)
 
 
 class TensorBoardParameterStatusReaderTests(unittest.TestCase):
@@ -284,9 +401,115 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
                 "dataset": "Mnist",
                 "logDir": str(log_dir),
                 "nodes": [],
+                "eventBytes": len("large-event-payload"),
+                "skippedEventFiles": 1,
+                "truncated": True,
+                "truncationReason": (
+                    "event files skipped: 19 bytes exceeds 4 byte read cap"
+                ),
+                "sourceItemCount": 1,
+                "returnedItemCount": 0,
             },
         )
         load.assert_not_called()
+
+    def test_parameter_status_is_cached_until_event_files_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            event_file = log_dir / "events.out.tfevents.cache"
+            event_file.write_text("first", encoding="utf-8")
+            reader = TensorBoardParameterStatusReader()
+
+            with (
+                patch("viewer.backend.monitor_data.event_dirs", return_value=[log_dir]),
+                patch(
+                    "viewer.backend.monitor_data.load_event_accumulator",
+                    return_value=ParameterStatusAccumulator(),
+                ) as load,
+            ):
+                first = reader.read(
+                    source_id="job-1",
+                    preset=None,
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+                second = reader.read(
+                    source_id="job-1",
+                    preset=None,
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+                event_file.write_text("first-second", encoding="utf-8")
+                changed = reader.read(
+                    source_id="job-1",
+                    preset=None,
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first, changed)
+        self.assertEqual(load.call_count, 2)
+        node = first["nodes"][0]
+        self.assertEqual(node["nodePath"], "main_model.0.model")
+        self.assertEqual(node["weights"]["status"], "updated")
+
+    def test_parameter_status_uses_custom_scalar_size_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            (log_dir / "events.out.tfevents.cache").write_text(
+                "events",
+                encoding="utf-8",
+            )
+            reader = TensorBoardParameterStatusReader(scalar_point_limit=7)
+
+            with (
+                patch("viewer.backend.monitor_data.event_dirs", return_value=[log_dir]),
+                patch(
+                    "viewer.backend.monitor_data.load_event_accumulator",
+                    return_value=ParameterStatusAccumulator(),
+                ) as load,
+            ):
+                reader.read(
+                    source_id="job-1",
+                    preset=None,
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+
+        size_guidance = load.call_args.kwargs["size_guidance"]
+        self.assertEqual(size_guidance[event_accumulator.SCALARS], 7)
+
+    def test_parameter_status_classification_uses_bounded_scalar_tail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            log_dir = Path(tmp)
+            (log_dir / "events.out.tfevents.cache").write_text(
+                "events",
+                encoding="utf-8",
+            )
+            reader = TensorBoardParameterStatusReader(scalar_point_limit=3)
+
+            with (
+                patch("viewer.backend.monitor_data.event_dirs", return_value=[log_dir]),
+                patch(
+                    "viewer.backend.monitor_data.load_event_accumulator",
+                    return_value=LargeParameterStatusAccumulator(),
+                ),
+            ):
+                data = reader.read(
+                    source_id="job-1",
+                    preset=None,
+                    dataset="Mnist",
+                    log_dir=str(log_dir),
+                )
+
+        node = data["nodes"][0]
+        self.assertEqual(node["weights"]["status"], "unchanged")
+        self.assertEqual(node["weights"]["observedPoints"], 3)
+        self.assertEqual(node["weights"]["lastStep"], 5)
+        self.assertEqual(node["bias"]["status"], "unchanged")
+        self.assertEqual(node["bias"]["observedPoints"], 3)
+        self.assertEqual(node["bias"]["lastStep"], 5)
 
 
 class HistoricalMonitorDataFailureTests(unittest.TestCase):
