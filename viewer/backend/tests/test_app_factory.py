@@ -60,6 +60,11 @@ EXPECTED_ASYNC_BOUNDARY_ROUTE_PAIRS = {
     ("POST", "/training/jobs"),
     ("POST", "/training/jobs/{job_id}/cancel"),
     ("POST", "/training/run-plan"),
+    ("GET", "/config-snapshots"),
+    ("GET", "/config-snapshots/library"),
+    ("POST", "/config-snapshots"),
+    ("PATCH", "/config-snapshots/{snapshot_id}"),
+    ("DELETE", "/config-snapshots/{snapshot_id}"),
 }
 
 

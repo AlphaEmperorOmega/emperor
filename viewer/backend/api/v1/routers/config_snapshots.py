@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_config_snapshot_service
 from viewer.backend.schemas import (
@@ -35,7 +36,10 @@ async def list_config_snapshots(
     model: str = Query(...),
 ) -> ConfigSnapshotsResponse:
     return ConfigSnapshotsResponse.model_validate(
-        {"model": model, "snapshots": service.list_snapshots(model)}
+        {
+            "model": model,
+            "snapshots": await run_blocking_io(service.list_snapshots, model),
+        }
     )
 
 
@@ -49,7 +53,7 @@ async def list_config_snapshot_library(
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
 ) -> ConfigSnapshotLibraryResponse:
     return ConfigSnapshotLibraryResponse.model_validate(
-        {"snapshots": service.list_all_snapshots()}
+        {"snapshots": await run_blocking_io(service.list_all_snapshots)}
     )
 
 
@@ -64,7 +68,8 @@ async def create_config_snapshot(
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
 ) -> ConfigSnapshotResponse:
     return ConfigSnapshotResponse.model_validate(
-        service.create_snapshot(
+        await run_blocking_io(
+            service.create_snapshot,
             model=request.model,
             preset=request.preset,
             name=request.name,
@@ -85,7 +90,8 @@ async def update_config_snapshot(
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
 ) -> ConfigSnapshotResponse:
     return ConfigSnapshotResponse.model_validate(
-        service.update_snapshot(
+        await run_blocking_io(
+            service.update_snapshot,
             snapshot_id,
             name=request.name,
             overrides=request.overrides,
@@ -103,4 +109,6 @@ async def delete_config_snapshot(
     snapshot_id: str,
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
 ) -> ConfigSnapshotsResponse:
-    return ConfigSnapshotsResponse.model_validate(service.delete_snapshot(snapshot_id))
+    return ConfigSnapshotsResponse.model_validate(
+        await run_blocking_io(service.delete_snapshot, snapshot_id)
+    )
