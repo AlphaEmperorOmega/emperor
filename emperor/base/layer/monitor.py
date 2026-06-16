@@ -56,15 +56,10 @@ class RecurrentLayerMonitorCallback(Callback):
                 )
             self.__wrap_forward(name, module, pl_module)
             self.__wrap_recurrent_controllers(module)
-            if self.__should_track_recurrent_halting(module):
-                self.__wrap_preserve_methods(module)
 
     def __should_track_recurrent_gate(self, module: "Module") -> bool:
         recurrent_gate = getattr(module, "recurrent_gate", None)
         return getattr(recurrent_gate, "model", None) is not None
-
-    def __should_track_recurrent_halting(self, module: "Module") -> bool:
-        return getattr(module, "halting_model", None) is not None
 
     def __wrap_forward(
         self,
@@ -79,7 +74,6 @@ class RecurrentLayerMonitorCallback(Callback):
                 "name": name,
                 "step_deltas": [],
                 "gate_values": [],
-                "preserved_fractions": [],
             }
             self._traces[id(module)] = trace
             output = original(*args, **kwargs)
@@ -90,7 +84,7 @@ class RecurrentLayerMonitorCallback(Callback):
         self.__replace_method(module, "forward", original, wrapped)
 
     def __wrap_recurrent_controllers(self, module: "Module") -> None:
-        method_name = "_RecurrentLayer__run_recurrent_controllers"
+        method_name = "_RecurrentLayer__run_controllers"
         if not hasattr(module, method_name):
             return
         original = getattr(module, method_name)
@@ -147,27 +141,6 @@ class RecurrentLayerMonitorCallback(Callback):
         if recurrent_gate is None or not hasattr(recurrent_gate, "effective_values"):
             return torch.sigmoid(gate_logits)
         return recurrent_gate.effective_values(gate_logits)
-
-    def __wrap_preserve_methods(self, module: "Module") -> None:
-        for method_name in ("_RecurrentLayer__preserve_halted_hidden",):
-            if not hasattr(module, method_name):
-                continue
-            original = getattr(module, method_name)
-
-            def make_wrapped(original_method, name=method_name):
-                def wrapped(*args, **kwargs):
-                    halt_mask = args[2] if len(args) > 2 else kwargs.get("halt_mask")
-                    output = original_method(*args, **kwargs)
-                    if torch.is_tensor(halt_mask):
-                        trace = self._traces.setdefault(id(module), {})
-                        trace.setdefault("preserved_fractions", []).append(
-                            halt_mask.detach().float().mean()
-                        )
-                    return output
-
-                return wrapped
-
-            self.__replace_method(module, method_name, original, make_wrapped(original))
 
     def __make_gate_hook(self, module: "Module"):
         def hook(submodule: "Module", inputs: tuple, output: object) -> None:
@@ -253,17 +226,6 @@ class RecurrentLayerMonitorCallback(Callback):
             pl_module.log(
                 f"{prefix}/gate/saturation_fraction",
                 ((gates < 0.01) | (gates > 0.99)).float().mean(),
-            )
-
-        preserved = [
-            item.detach().float()
-            for item in trace.get("preserved_fractions", [])
-            if torch.is_tensor(item)
-        ]
-        if preserved:
-            pl_module.log(
-                f"{prefix}/preserved_halted_hidden_fraction",
-                torch.stack(preserved).mean(),
             )
 
         history_vector = step_delta_means.detach().float().cpu()
