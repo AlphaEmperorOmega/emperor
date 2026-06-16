@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
@@ -88,11 +89,10 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                     output_dim=output_dim,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_flag=False,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
@@ -602,6 +602,32 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         self.assertTrue(torch.equal(model.decay_step, baseline_decay_step))
         self.assertTrue(torch.equal(model.warmup_step, baseline_warmup_step))
 
+    def test_invalid_decay_parameters_raise(self):
+        invalid_cases = [
+            ("missing_rate", WeightDecayScheduleOptions.EXPONENTIAL, None, 0),
+            ("zero_rate", WeightDecayScheduleOptions.EXPONENTIAL, 0.0, 0),
+            ("negative_rate", WeightDecayScheduleOptions.EXPONENTIAL, -0.1, 0),
+            ("linear_rate_too_large", WeightDecayScheduleOptions.LINEAR, 1.0, 0),
+            (
+                "multiplicative_rate_too_large",
+                WeightDecayScheduleOptions.MULTIPLICATIVE,
+                1.0,
+                0,
+            ),
+            ("negative_warmup", WeightDecayScheduleOptions.EXPONENTIAL, 0.1, -1),
+        ]
+
+        for name, schedule, rate, warmup_batches in invalid_cases:
+            with self.subTest(case=name):
+                cfg = self.preset(
+                    config_cls=AdditiveDynamicBiasConfig,
+                    decay_schedule=schedule,
+                    decay_rate=rate,
+                    decay_warmup_batches=warmup_batches,
+                )
+                with self.assertRaises(ValueError):
+                    cfg.build()
+
     def test_bias_decay_warmup_delays_decay(self):
         output_dim = 4
         warmup_batches = 3
@@ -625,6 +651,40 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
         result = model._maybe_apply_bias_decay(bias_params)
         self.assertFalse(torch.equal(result, bias_params))
+
+    def test_bias_decay_counters_frozen_in_eval_mode(self):
+        output_dim = 4
+        warmup_batches = 2
+        bias_params = torch.randn(output_dim)
+        cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
+            output_dim=output_dim,
+            decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            decay_rate=0.1,
+            decay_warmup_batches=warmup_batches,
+        )
+        model = cfg.build()
+
+        model.eval()
+        for _ in range(3):
+            model._maybe_apply_bias_decay(bias_params)
+        self.assertEqual(model.warmup_step.item(), 0)
+        self.assertEqual(model.decay_step.item(), 0)
+
+        model.train()
+        for _ in range(warmup_batches):
+            model._maybe_apply_bias_decay(bias_params)
+        model._maybe_apply_bias_decay(bias_params)
+        frozen_decay_step = model.decay_step.clone()
+        frozen_warmup_step = model.warmup_step.clone()
+
+        model.eval()
+        baseline = model._maybe_apply_bias_decay(bias_params)
+        for _ in range(3):
+            result = model._maybe_apply_bias_decay(bias_params)
+            self.assertTrue(torch.equal(result, baseline))
+        self.assertTrue(torch.equal(model.decay_step, frozen_decay_step))
+        self.assertTrue(torch.equal(model.warmup_step, frozen_warmup_step))
 
     def test_bias_decay_schedule_raises_on_unknown_schedule(self):
         cfg = self.preset(

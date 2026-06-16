@@ -1,4 +1,6 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
+import torch.nn.functional as F
 import unittest
 
 from emperor.base.utils import Module
@@ -74,11 +76,10 @@ class TestWeightHandlerForward(unittest.TestCase):
                     output_dim=output_dim,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_flag=False,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
                     dropout_probability=0.1,
                     gate_config=None,
                     halting_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
@@ -618,6 +619,51 @@ class TestWeightHandlerForward(unittest.TestCase):
         self.assertTrue(torch.allclose(output, expected_update, atol=1e-6))
         self.assertFalse(torch.allclose(output, weight_params.expand_as(output)))
 
+    def test_layered_weighted_bank_forward_applies_depth_and_factor_reduction(self):
+        input_dim = 2
+        output_dim = 3
+        batch_size = 2
+        depth = DynamicDepthOptions.DEPTH_OF_ONE
+        bank_factor = BankExpansionFactorOptions.FACTOR_OF_TWO
+        cfg = self.preset(
+            config_cls=LayeredWeightedBankDynamicWeightConfig,
+            input_dim=input_dim,
+            output_dim=output_dim,
+            hidden_dim=6,
+            generator_depth=depth,
+            bank_expansion_factor=bank_factor,
+        )
+        model = LayeredWeightedBankDynamicWeight(cfg)
+        weight_params = torch.zeros(input_dim, output_dim)
+        input_tensor = torch.randn(batch_size, input_dim)
+        raw_logits = torch.tensor([[[2.0, -1.0, -0.5, 1.5]]])
+
+        class StaticDepthMapper(torch.nn.Module):
+            def __init__(self, logits: torch.Tensor):
+                super().__init__()
+                self.logits = logits
+
+            def forward(self, X: torch.Tensor) -> torch.Tensor:
+                return self.logits.expand(X.size(0), -1, -1)
+
+        model.model = StaticDepthMapper(raw_logits)
+        model.weight_bank.data = torch.tensor(
+            [[[[1.0, 2.0, 3.0], [10.0, 20.0, 30.0], [4.0, 5.0, 6.0], [40.0, 50.0, 60.0]]]]
+        )
+
+        output = model(weight_params, input_tensor)
+        bank_distribution = torch.softmax(model.model(input_tensor), dim=-1)
+        weighted_bank = model.weight_bank * bank_distribution.unsqueeze(-1)
+        expected = weighted_bank.view(
+            batch_size,
+            depth.value,
+            input_dim,
+            bank_factor.value,
+            output_dim,
+        ).sum(dim=(1, 3))
+
+        torch.testing.assert_close(output, expected)
+
     def test_decay_schedule_mathematical_correctness(self):
         input_dim = 12
         output_dim = 24
@@ -676,6 +722,31 @@ class TestWeightHandlerForward(unittest.TestCase):
 
         self.assertTrue(torch.equal(model.decay_step, baseline_decay_step))
         self.assertTrue(torch.equal(model.warmup_step, baseline_warmup_step))
+
+    def test_invalid_decay_parameters_raise(self):
+        invalid_cases = [
+            ("missing_rate", WeightDecayScheduleOptions.EXPONENTIAL, None, 0),
+            ("zero_rate", WeightDecayScheduleOptions.EXPONENTIAL, 0.0, 0),
+            ("negative_rate", WeightDecayScheduleOptions.EXPONENTIAL, -0.1, 0),
+            ("linear_rate_too_large", WeightDecayScheduleOptions.LINEAR, 1.0, 0),
+            (
+                "multiplicative_rate_too_large",
+                WeightDecayScheduleOptions.MULTIPLICATIVE,
+                1.0,
+                0,
+            ),
+            ("negative_warmup", WeightDecayScheduleOptions.EXPONENTIAL, 0.1, -1),
+        ]
+
+        for name, schedule, rate, warmup_batches in invalid_cases:
+            with self.subTest(case=name):
+                cfg = self.preset(
+                    decay_schedule=schedule,
+                    decay_rate=rate,
+                    decay_warmup_batches=warmup_batches,
+                )
+                with self.assertRaises(ValueError):
+                    cfg.build()
 
     def test_weight_decay_warmup_delays_decay(self):
         input_dim = 12
@@ -775,6 +846,35 @@ class TestWeightHandlerForward(unittest.TestCase):
                 if normalization == WeightNormalizationOptions.DISABLED:
                     self.assertTrue(torch.equal(result, vectors))
 
+    def test_apply_normalization_transform_exact_math(self):
+        cfg = self.preset(
+            normalization_option=WeightNormalizationOptions.DISABLED,
+        )
+        model = DualModelDynamicWeight(cfg)
+        vectors = torch.tensor([[[-2.0, -0.5, 0.5, 2.0]]])
+        model.scale.data.fill_(2.0)
+        model.clamp_limit.data.fill_(1.0)
+
+        expected_by_option = {
+            WeightNormalizationOptions.CLAMP: torch.clamp(vectors, -1.0, 1.0),
+            WeightNormalizationOptions.L2_SCALE: F.normalize(vectors, dim=-1) * 2.0,
+            WeightNormalizationOptions.SOFT_CLAMP: torch.tanh(vectors),
+            WeightNormalizationOptions.RMS: vectors
+            / (vectors.pow(2).mean(dim=-1, keepdim=True).sqrt() + 1e-8)
+            * 2.0,
+            WeightNormalizationOptions.SIGMOID_SCALE: (
+                torch.sigmoid(vectors) * 2.0 - 1.0
+            )
+            * 2.0,
+            WeightNormalizationOptions.DISABLED: vectors,
+        }
+
+        for option, expected in expected_by_option.items():
+            with self.subTest(option=option):
+                model.normalization_option = option
+                result = model._apply_normalization_transform(vectors)
+                torch.testing.assert_close(result, expected)
+
     def test_apply_normalization_transform_raises_on_unknown_option(self):
         batch_size = 2
         generator_depth = 1
@@ -802,6 +902,17 @@ class TestWeightHandlerForward(unittest.TestCase):
         self.assertIsInstance(generator, DepthMappingLayerStack)
         self.assertEqual(generator.input_dim, input_dim)
         self.assertEqual(generator.output_dim, output_dim)
+
+    def test_weighted_bank_requires_bank_expansion_factor_enum(self):
+        invalid_factors = [None, 0, -1]
+        for factor in invalid_factors:
+            with self.subTest(bank_expansion_factor=factor):
+                cfg = self.preset(
+                    config_cls=LayeredWeightedBankDynamicWeightConfig,
+                    bank_expansion_factor=factor,
+                )
+                with self.assertRaises(ValueError):
+                    cfg.build()
 
     def test_single_model_raises_when_dims_not_square(self):
         cfg = self.preset(input_dim=12, output_dim=24)
