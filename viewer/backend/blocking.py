@@ -57,13 +57,10 @@ async def run_blocking_io(
         await asyncio.wait_for(work_limiter.acquire(), timeout_seconds)
         acquired = True
         future = _blocking_work_executor.submit(call)
-        while not future.done():
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                future.cancel()
-                raise TimeoutError
-            await asyncio.sleep(min(0.01, remaining))
-        return future.result()
+        return await asyncio.wait_for(
+            asyncio.wrap_future(future),
+            deadline - loop.time(),
+        )
     except TimeoutError as exc:
         raise ApiError(
             BLOCKING_WORK_TIMEOUT_MESSAGE,
