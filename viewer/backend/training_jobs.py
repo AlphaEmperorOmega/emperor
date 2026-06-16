@@ -491,6 +491,11 @@ class TrainingJobManager:
     def active_jobs(self) -> list[dict[str, Any]]:
         active: list[dict[str, Any]] = []
         for job in self.job_store.list():
+            # Terminal jobs are final: `_refresh` can never move a terminal
+            # status back to active, so skip their progress-file read entirely.
+            # This keeps `active_jobs` cheap as terminal job history accumulates.
+            if is_terminal_job_status(job.status):
+                continue
             snapshot = self.progress_store.read_snapshot(job)
             self._refresh(job, events=snapshot.events)
             if not is_active_job_status(job.status):
