@@ -5,6 +5,7 @@ from models.linears.linear.model import Model
 from emperor.experiments.base import SearchMode
 from emperor.datasets.image.classification.mnist import Mnist
 from emperor.experiments.base import ExperimentBase, ExperimentPresetsBase, PresetLock
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import BaseOptions, LayerNormPositionOptions
 
 from typing import TYPE_CHECKING
@@ -58,10 +59,14 @@ class ExperimentPresets(ExperimentPresetsBase):
             "stack_gate_flag": _lock(ExperimentOptions.GATING, True, "stack gating"),
         },
         ExperimentOptions.HALTING: {
-            "stack_halting_flag": _lock(ExperimentOptions.HALTING, True, "adaptive stack halting"),
+            "stack_halting_flag": _lock(
+                ExperimentOptions.HALTING, True, "adaptive stack halting"
+            ),
         },
         ExperimentOptions.GATING_HALTING: {
-            "stack_gate_flag": _lock(ExperimentOptions.GATING_HALTING, True, "stack gating"),
+            "stack_gate_flag": _lock(
+                ExperimentOptions.GATING_HALTING, True, "stack gating"
+            ),
             "stack_halting_flag": _lock(
                 ExperimentOptions.GATING_HALTING,
                 True,
@@ -69,7 +74,11 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.RESIDUAL: {
-            "stack_residual_flag": _lock(ExperimentOptions.RESIDUAL, True, "stack residuals"),
+            "stack_residual_connection_option": _lock(
+                ExperimentOptions.RESIDUAL,
+                ResidualConnectionOptions.RESIDUAL,
+                "stack residuals",
+            ),
         },
         ExperimentOptions.POST_NORM: {
             "layer_norm_position": _lock(
@@ -79,9 +88,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.RESIDUAL_POST_NORM: {
-            "stack_residual_flag": _lock(
+            "stack_residual_connection_option": _lock(
                 ExperimentOptions.RESIDUAL_POST_NORM,
-                True,
+                ResidualConnectionOptions.RESIDUAL,
                 "stack residuals",
             ),
             "layer_norm_position": _lock(
@@ -91,9 +100,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.RESIDUAL_GATING: {
-            "stack_residual_flag": _lock(
+            "stack_residual_connection_option": _lock(
                 ExperimentOptions.RESIDUAL_GATING,
-                True,
+                ResidualConnectionOptions.RESIDUAL,
                 "stack residuals",
             ),
             "stack_gate_flag": _lock(
@@ -103,9 +112,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.RESIDUAL_HALTING: {
-            "stack_residual_flag": _lock(
+            "stack_residual_connection_option": _lock(
                 ExperimentOptions.RESIDUAL_HALTING,
-                True,
+                ResidualConnectionOptions.RESIDUAL,
                 "stack residuals",
             ),
             "stack_halting_flag": _lock(
@@ -115,7 +124,9 @@ class ExperimentPresets(ExperimentPresetsBase):
             ),
         },
         ExperimentOptions.RECURRENT: {
-            "recurrent_flag": _lock(ExperimentOptions.RECURRENT, True, "recurrent execution"),
+            "recurrent_flag": _lock(
+                ExperimentOptions.RECURRENT, True, "recurrent execution"
+            ),
         },
         ExperimentOptions.RECURRENT_GATING: {
             "recurrent_flag": _lock(
@@ -164,9 +175,9 @@ class ExperimentPresets(ExperimentPresetsBase):
                 True,
                 "recurrent execution",
             ),
-            "stack_residual_flag": _lock(
+            "stack_residual_connection_option": _lock(
                 ExperimentOptions.RECURRENT_RESIDUAL,
-                True,
+                ResidualConnectionOptions.RESIDUAL,
                 "stack residuals",
             ),
         },
@@ -262,7 +273,12 @@ class ExperimentPresets(ExperimentPresetsBase):
         )
 
     def _residual_preset(self, **kwargs) -> "ModelConfig":
-        return self._preset(**{"stack_residual_flag": True, **kwargs})
+        return self._preset(
+            **{
+                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+                **kwargs,
+            }
+        )
 
     def _post_norm_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(
@@ -272,7 +288,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     def _residual_post_norm_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(
             **{
-                "stack_residual_flag": True,
+                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
                 "layer_norm_position": LayerNormPositionOptions.AFTER,
                 **kwargs,
             },
@@ -281,7 +297,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     def _residual_gating_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(
             **{
-                "stack_residual_flag": True,
+                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
                 "stack_gate_flag": True,
                 **kwargs,
             },
@@ -290,7 +306,7 @@ class ExperimentPresets(ExperimentPresetsBase):
     def _residual_halting_preset(self, **kwargs) -> "ModelConfig":
         return self._preset(
             **{
-                "stack_residual_flag": True,
+                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
                 "stack_halting_flag": True,
                 **kwargs,
             },
@@ -331,7 +347,7 @@ class ExperimentPresets(ExperimentPresetsBase):
         return self._preset(
             **{
                 "recurrent_flag": True,
-                "stack_residual_flag": True,
+                "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
                 **kwargs,
             },
         )
