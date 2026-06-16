@@ -282,14 +282,20 @@ describe("nodeBadges", () => {
         layerNorm: "DISABLED",
         dropout: 0,
         gate: true,
-        recurrent: { maxSteps: 4 },
+        recurrent: { maxSteps: 4, layerNorm: "AFTER" },
       }),
     ).toEqual([
       ["dims", "128 -> 128"],
       ["act", "GELU"],
       ["gate", "on"],
       ["steps", 4],
+      ["r-norm", "AFTER"],
     ]);
+    expect(
+      nodeBadges({
+        recurrent: { maxSteps: 2, layerNorm: "DISABLED" },
+      }),
+    ).toEqual([["steps", 2]]);
   });
 });
 

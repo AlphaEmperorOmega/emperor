@@ -15,8 +15,12 @@ from emperor.base.layer import (
     Layer,
     LayerStack,
 )
+from emperor.base.layer.config import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.config import LayerConfig, LayerStackConfig, RecurrentLayerConfig
 from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.options import (
     ActivationOptions,
@@ -407,6 +411,7 @@ class InspectorGraphTests(unittest.TestCase):
             input_dim=4,
             output_dim=4,
             max_steps=2,
+            recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
             block_config=block_config,
             gate_config=GateConfig(
                 model_config=LayerStackConfig(
@@ -427,6 +432,7 @@ class InspectorGraphTests(unittest.TestCase):
         root = nodes[0]
 
         self.assertEqual(root["details"]["recurrent"]["gateOption"], "MULTIPLIER")
+        self.assertEqual(root["details"]["recurrent"]["layerNorm"], "AFTER")
         self.assertTrue(root["details"]["recurrent"]["gate"])
 
     def test_graph_serializer_omits_disabled_layer_residual_module(self) -> None:

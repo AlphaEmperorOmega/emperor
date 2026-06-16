@@ -14,8 +14,8 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import models.linears.linear.config as linear_config
 import models.linears.linear_adaptive.config as linear_adaptive_config
-from emperor.base.options import ActivationOptions
 from emperor.base.layer.gate import LayerGateOptions
+from emperor.base.options import ActivationOptions
 from emperor.memory.config import WeightedDynamicMemoryConfig
 from models.config_overrides import parse_config_value
 
@@ -174,6 +174,28 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertEqual(
             linear_fields["recurrent_gate_option"]["section"],
             "Recurrent Gate Stack Options",
+        )
+        self.assertEqual(linear_fields["recurrent_layer_norm_position"]["type"], "enum")
+        self.assertEqual(
+            linear_fields["recurrent_layer_norm_position"]["default"],
+            "DISABLED",
+        )
+        self.assertFalse(linear_fields["recurrent_layer_norm_position"]["nullable"])
+        self.assertIn(
+            "BEFORE",
+            linear_fields["recurrent_layer_norm_position"]["choices"],
+        )
+        self.assertIn(
+            "DEFAULT",
+            linear_fields["recurrent_layer_norm_position"]["choices"],
+        )
+        self.assertIn(
+            "AFTER",
+            linear_fields["recurrent_layer_norm_position"]["choices"],
+        )
+        self.assertEqual(
+            linear_fields["recurrent_layer_norm_position"]["section"],
+            "Recurrent Layer Options",
         )
         self.assertEqual(linear_fields["memory_option"]["type"], "class")
         self.assertIn(

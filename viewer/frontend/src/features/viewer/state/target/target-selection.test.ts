@@ -132,6 +132,13 @@ describe("target selection", () => {
           type: "bool",
         }),
         field({
+          key: "recurrent_layer_norm_position",
+          section: "Recurrent Layer Options",
+          type: "enum",
+          default: "DISABLED",
+          choices: ["DISABLED", "BEFORE", "DEFAULT", "AFTER"],
+        }),
+        field({
           key: "recurrent_gate_hidden_dim",
           section: "Recurrent Gate Stack Options",
         }),
@@ -154,12 +161,14 @@ describe("target selection", () => {
     expect(state.configSections[0].fields.map((configField) => configField.key))
       .toEqual([
         "recurrent_flag",
+        "recurrent_layer_norm_position",
         "recurrent_gate_hidden_dim",
         "recurrent_halting_threshold",
       ]);
     expect(
       state.configSections[0].fields.map((configField) => configField.section),
     ).toEqual([
+      "Recurrent Layer Options",
       "Recurrent Layer Options",
       "Recurrent Layer Options",
       "Recurrent Layer Options",

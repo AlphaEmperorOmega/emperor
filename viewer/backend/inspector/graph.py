@@ -289,13 +289,17 @@ def _recurrent_details(
         recurrent_gate is not None
         and getattr(recurrent_gate, "model", None) is not None
     )
+    recurrent: dict[str, Any] = {
+        "maxSteps": max_steps,
+        "gate": gate,
+        "gateOption": gate_option_name,
+        "halting": bool(getattr(module, "halting_model", None) is not None),
+    }
+    recurrent_layer_norm = getattr(module, "recurrent_layer_norm_position", None)
+    if recurrent_layer_norm is not None:
+        recurrent["layerNorm"] = _display_value(recurrent_layer_norm)
     return {
-        "recurrent": {
-            "maxSteps": max_steps,
-            "gate": gate,
-            "gateOption": gate_option_name,
-            "halting": bool(getattr(module, "halting_model", None) is not None),
-        }
+        "recurrent": recurrent,
     }
 
 

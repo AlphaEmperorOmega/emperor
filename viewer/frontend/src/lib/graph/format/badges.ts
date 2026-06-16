@@ -40,6 +40,12 @@ export function nodeBadges(details: GraphNode["details"]) {
   }
   if (isRecord(details.recurrent)) {
     badges.push(["steps", details.recurrent.maxSteps]);
+    if (
+      typeof details.recurrent.layerNorm === "string" &&
+      details.recurrent.layerNorm !== "DISABLED"
+    ) {
+      badges.push(["r-norm", details.recurrent.layerNorm]);
+    }
   }
   return badges;
 }
