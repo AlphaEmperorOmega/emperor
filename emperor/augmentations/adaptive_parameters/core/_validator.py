@@ -321,11 +321,7 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
 
 class DepthMappingValidator(ValidatorBase):
-    OPTIONAL_FIELDS = {
-        "model_type",
-        "override_config",
-        "adaptive_augmentation_config",
-    }
+    OPTIONAL_FIELDS: set[str] = set()
 
     @staticmethod
     def validate(model: "DepthMappingLayer") -> None:
@@ -387,15 +383,30 @@ class DepthMappingValidator(ValidatorBase):
                 "DepthMappingLayerStack does not support gate_config. "
                 "Set gate_config to None."
             )
+        if model_config.shared_gate_config is not None:
+            raise ValueError(
+                "DepthMappingLayerStack does not support shared_gate_config. "
+                "Set shared_gate_config to None."
+            )
         if layer_config.halting_config is not None:
             raise ValueError(
                 "DepthMappingLayerStack does not support halting_config. "
                 "Set halting_config to None."
             )
-        if layer_config.shared_halting_flag:
+        if model_config.shared_halting_config is not None:
             raise ValueError(
-                "DepthMappingLayerStack does not support shared_halting_flag. "
-                "Set shared_halting_flag to False."
+                "DepthMappingLayerStack does not support shared_halting_config. "
+                "Set shared_halting_config to None."
+            )
+        if layer_config.memory_config is not None:
+            raise ValueError(
+                "DepthMappingLayerStack does not support memory_config. "
+                "Set memory_config to None."
+            )
+        if model_config.shared_memory_config is not None:
+            raise ValueError(
+                "DepthMappingLayerStack does not support shared_memory_config. "
+                "Set shared_memory_config to None."
             )
 
 

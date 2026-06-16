@@ -1,9 +1,14 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
+from dataclasses import fields
 import torch
 import unittest
 
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
+from emperor.memory.config import GatedResidualDynamicMemoryConfig
+from emperor.memory.options import MemoryPositionOptions
 from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.augmentations.adaptive_parameters import DynamicDepthOptions
 from emperor.base.options import (
@@ -16,6 +21,9 @@ from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
     DepthMappingLayer,
     DepthMappingLayerConfig,
     DepthMappingLayerStack,
+)
+from emperor.augmentations.adaptive_parameters.core._validator import (
+    DepthMappingValidator,
 )
 
 
@@ -131,13 +139,18 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_flag: bool = False,
+        stack_residual_connection_option: ResidualConnectionOptions = (
+            ResidualConnectionOptions.DISABLED
+        ),
         stack_dropout_probability: float = 0.2,
-        shared_halting_flag: bool = False,
+        shared_halting_config: "StickBreakingConfig | None" = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
-        gate_config: "LayerStackConfig | None" = None,
+        shared_gate_config: "GateConfig | None" = None,
+        gate_config: "GateConfig | None" = None,
         halting_config: "StickBreakingConfig | None" = None,
+        memory_config: "GatedResidualDynamicMemoryConfig | None" = None,
+        shared_memory_config: "GatedResidualDynamicMemoryConfig | None" = None,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
     ) -> DepthMappingHandlerConfig:
         return DepthMappingHandlerConfig(
@@ -151,16 +164,19 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                 num_layers=stack_num_layers,
                 last_layer_bias_option=last_layer_bias_option,
                 apply_output_pipeline_flag=apply_output_pipeline_flag,
+                shared_gate_config=shared_gate_config,
+                shared_halting_config=shared_halting_config,
+                shared_memory_config=shared_memory_config,
                 layer_config=LayerConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
                     activation=stack_activation,
                     layer_norm_position=layer_norm_position,
-                    residual_flag=stack_residual_flag,
+                    residual_connection_option=stack_residual_connection_option,
                     dropout_probability=stack_dropout_probability,
                     gate_config=gate_config,
                     halting_config=halting_config,
-                    shared_halting_flag=shared_halting_flag,
+                    memory_config=memory_config,
                     layer_model_config=LinearLayerConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
@@ -169,6 +185,76 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                 ),
             ),
         )
+
+    def gate_config(self, dim: int = 12) -> GateConfig:
+        return GateConfig(
+            gate_dim=dim,
+            model_config=LayerStackConfig(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=dim,
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    activation=ActivationOptions.DISABLED,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    gate_config=None,
+                    halting_config=None,
+                    layer_model_config=LinearLayerConfig(
+                        input_dim=dim,
+                        output_dim=dim,
+                        bias_flag=True,
+                    ),
+                ),
+            ),
+            option=LayerGateOptions.ADDITION,
+            activation=ActivationOptions.DISABLED,
+        )
+
+    def memory_config(self, dim: int = 12) -> GatedResidualDynamicMemoryConfig:
+        return GatedResidualDynamicMemoryConfig(
+            input_dim=dim,
+            output_dim=dim,
+            memory_position_option=MemoryPositionOptions.AFTER_AFFINE,
+            test_time_training_learning_rate=None,
+            test_time_training_num_inner_steps=None,
+            model_config=LayerStackConfig(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=dim,
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    activation=ActivationOptions.DISABLED,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    gate_config=None,
+                    halting_config=None,
+                    layer_model_config=LinearLayerConfig(
+                        input_dim=dim,
+                        output_dim=dim,
+                        bias_flag=True,
+                    ),
+                ),
+            ),
+        )
+
+    def test_depth_mapping_validator_optional_fields_match_configs(self):
+        config_fields = {
+            field.name
+            for config_cls in (DepthMappingLayerConfig, DepthMappingHandlerConfig)
+            for field in fields(config_cls)
+        }
+        self.assertLessEqual(DepthMappingValidator.OPTIONAL_FIELDS, config_fields)
 
     def test_forward_shape(self):
         batch_size = 2
@@ -223,7 +309,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                             output_dim=dim,
                             generator_depth=depth,
                             stack_num_layers=num_layers,
-                            stack_residual_flag=True,
+                            stack_residual_connection_option=ResidualConnectionOptions.RESIDUAL,
                             apply_output_pipeline_flag=pipeline_flag,
                         )
                         model = DepthMappingLayerStack(cfg)
@@ -232,31 +318,12 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                         self.assertEqual(output.shape, (batch_size, depth.value, dim))
 
     def test_gate_config_raises_error(self):
-        gate_config = LayerStackConfig(
-            input_dim=12,
-            hidden_dim=24,
-            output_dim=12,
-            num_layers=2,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
-            layer_config=LayerConfig(
-                input_dim=12,
-                output_dim=12,
-                activation=ActivationOptions.RELU,
-                layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_flag=False,
-                dropout_probability=0.0,
-                gate_config=None,
-                halting_config=None,
-                shared_halting_flag=False,
-                layer_model_config=LinearLayerConfig(
-                    input_dim=12,
-                    output_dim=12,
-                    bias_flag=True,
-                ),
-            ),
-        )
-        cfg = self.preset(gate_config=gate_config)
+        cfg = self.preset(gate_config=self.gate_config())
+        with self.assertRaises(ValueError):
+            DepthMappingLayerStack(cfg)
+
+    def test_shared_gate_config_raises_error(self):
+        cfg = self.preset(shared_gate_config=self.gate_config())
         with self.assertRaises(ValueError):
             DepthMappingLayerStack(cfg)
 
@@ -278,11 +345,10 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                     output_dim=12,
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_flag=False,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
                         input_dim=12,
                         output_dim=12,
@@ -295,8 +361,48 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         with self.assertRaises(ValueError):
             DepthMappingLayerStack(cfg)
 
-    def test_shared_halting_flag_raises_error(self):
-        cfg = self.preset(shared_halting_flag=True)
+    def test_shared_halting_config_raises_error(self):
+        dim = 12
+        shared_halting_config = StickBreakingConfig(
+            input_dim=dim,
+            threshold=0.99,
+            halting_dropout=0.0,
+            hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            halting_gate_config=LayerStackConfig(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=2,
+                num_layers=2,
+                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    activation=ActivationOptions.DISABLED,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    gate_config=None,
+                    halting_config=None,
+                    layer_model_config=LinearLayerConfig(
+                        input_dim=dim,
+                        output_dim=dim,
+                        bias_flag=True,
+                    ),
+                ),
+            ),
+        )
+        cfg = self.preset(shared_halting_config=shared_halting_config)
+        with self.assertRaises(ValueError):
+            DepthMappingLayerStack(cfg)
+
+    def test_memory_config_raises_error(self):
+        cfg = self.preset(memory_config=self.memory_config())
+        with self.assertRaises(ValueError):
+            DepthMappingLayerStack(cfg)
+
+    def test_shared_memory_config_raises_error(self):
+        cfg = self.preset(shared_memory_config=self.memory_config())
         with self.assertRaises(ValueError):
             DepthMappingLayerStack(cfg)
 
@@ -324,6 +430,14 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         self.assertIs(
             model.model_config.layer_config.layer_model_config, depth_mapping_config
         )
+
+    def test_handler_config_build_creates_depth_mapping_layer_stack(self):
+        cfg = self.preset(input_dim=8, output_dim=4)
+        model = cfg.build()
+
+        self.assertIsInstance(model, DepthMappingLayerStack)
+        self.assertEqual(model.input_dim, 8)
+        self.assertEqual(model.output_dim, 4)
 
     def test_gradients_flow(self):
         batch_size = 2
