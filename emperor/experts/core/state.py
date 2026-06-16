@@ -9,3 +9,4 @@ from emperor.base.layer.state import LayerState
 class MixtureOfExpertsLayerState(LayerState):
     probabilities: Tensor | None = None
     indices: Tensor | None = None
+    skip_mask: Tensor | None = None

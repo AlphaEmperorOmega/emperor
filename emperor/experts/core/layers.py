@@ -280,7 +280,7 @@ class MixtureOfExperts(Module):
         )
 
         expert_model = self.expert_modules[expert_data.expert_index]
-        output = Layer.forward_with_state(expert_model, expert_samples)
+        output = Layer.run_model_returning_hidden(expert_model, expert_samples)
         return output, expert_samples.new_zeros(())
 
     def __append_expert_output(
