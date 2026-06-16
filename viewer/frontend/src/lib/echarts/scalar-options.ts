@@ -40,6 +40,9 @@ export type ScalarLineOptions = {
   checkpointMarkers?: readonly ScalarCheckpointMarker[];
 };
 
+export const MAX_SCALAR_OPTION_POINTS = 100_000;
+export const SCALAR_OPTION_DOWNSAMPLE_THRESHOLD = 5_000;
+
 function toAxisX(point: ScalarLinePoint, xMode: ScalarXMode): number {
   // TensorBoard wall time is epoch seconds; the time axis expects milliseconds.
   return xMode === "wallTime" ? point.wallTime * 1000 : point.step;
@@ -107,6 +110,53 @@ function formatCheckpointTooltip(params: unknown): string {
   return name.split("\n").join("<br/>");
 }
 
+function downsamplePoints(
+  points: readonly ScalarLinePoint[],
+  limit: number,
+): readonly ScalarLinePoint[] {
+  if (points.length <= limit) {
+    return points;
+  }
+  if (limit <= 1) {
+    return [points[points.length - 1]];
+  }
+  const sampled: ScalarLinePoint[] = [];
+  const lastIndex = points.length - 1;
+  for (let index = 0; index < limit; index += 1) {
+    const sourceIndex = Math.round((index * lastIndex) / (limit - 1));
+    sampled.push(points[sourceIndex]);
+  }
+  sampled[sampled.length - 1] = points[lastIndex];
+  return sampled;
+}
+
+function linePointLimit(lineCount: number) {
+  return Math.max(
+    1,
+    Math.min(
+      SCALAR_OPTION_DOWNSAMPLE_THRESHOLD,
+      Math.floor(MAX_SCALAR_OPTION_POINTS / Math.max(1, lineCount)),
+    ),
+  );
+}
+
+function dataForPoints(
+  points: readonly ScalarLinePoint[],
+  xMode: ScalarXMode,
+): Array<[number, number]> {
+  return points.map((point) => [toAxisX(point, xMode), point.value]);
+}
+
+function largeSeriesOptions(pointCount: number) {
+  return pointCount >= SCALAR_OPTION_DOWNSAMPLE_THRESHOLD
+    ? {
+        progressive: SCALAR_OPTION_DOWNSAMPLE_THRESHOLD,
+        progressiveThreshold: SCALAR_OPTION_DOWNSAMPLE_THRESHOLD,
+        sampling: "lttb" as const,
+      }
+    : {};
+}
+
 /**
  * Builds a line-chart option for one or more overlaid run series. When smoothing
  * is active each multi-point line is drawn twice: a faint raw line behind a bold
@@ -126,15 +176,21 @@ export function buildScalarLineOption(
   } = options;
 
   const series: LineSeriesOption[] = [];
+  const perLinePointLimit = linePointLimit(lines.length);
   for (const line of lines) {
-    const isSinglePoint = line.points.length === 1;
-    const rawData = line.points.map((point) => [toAxisX(point, xMode), point.value]);
+    const linePoints =
+      line.points.length > SCALAR_OPTION_DOWNSAMPLE_THRESHOLD
+        ? downsamplePoints(line.points, perLinePointLimit)
+        : line.points;
+    const isSinglePoint = linePoints.length === 1;
+    const rawData = dataForPoints(linePoints, xMode);
+    const largeOptions = largeSeriesOptions(rawData.length);
 
     if (smoothing > 0 && !isSinglePoint) {
-      const smoothedData = applyEmaSmoothing(line.points, smoothing).map((point) => [
-        toAxisX(point, xMode),
-        point.value,
-      ]);
+      const smoothedData = dataForPoints(
+        applyEmaSmoothing(linePoints, smoothing),
+        xMode,
+      );
       // Smoothed pushed first so the tooltip de-dupe keeps its full-color marker.
       series.push({
         type: "line",
@@ -144,6 +200,7 @@ export function buildScalarLineOption(
         lineStyle: { color: line.color, width: 2 },
         itemStyle: { color: line.color },
         z: 2,
+        ...largeOptions,
       });
       series.push({
         type: "line",
@@ -154,6 +211,7 @@ export function buildScalarLineOption(
         lineStyle: { color: line.color, width: 1, opacity: 0.25 },
         itemStyle: { color: line.color },
         z: 1,
+        ...largeOptions,
       });
     } else {
       series.push({
@@ -164,6 +222,7 @@ export function buildScalarLineOption(
         symbolSize: 6,
         lineStyle: { color: line.color, width: 2 },
         itemStyle: { color: line.color },
+        ...largeOptions,
       });
     }
   }

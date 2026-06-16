@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LineSeriesOption } from "echarts";
 import {
   buildScalarLineOption,
+  SCALAR_OPTION_DOWNSAMPLE_THRESHOLD,
   type ScalarLine,
 } from "@/lib/echarts/scalar-options";
 
@@ -137,5 +138,32 @@ describe("buildScalarLineOption", () => {
     });
 
     expect(markLineData(option)).toHaveLength(0);
+  });
+
+  it("downsamples large point arrays before building series data", () => {
+    const points = Array.from({ length: 100_001 }, (_, index) => ({
+      step: index,
+      wallTime: 1_000 + index,
+      value: index / 10,
+    }));
+    const option = buildScalarLineOption([lineWith(points)]);
+    const data = seriesOf(option)[0].data as number[][];
+
+    expect(data).toHaveLength(SCALAR_OPTION_DOWNSAMPLE_THRESHOLD);
+    expect(data.at(-1)).toEqual([100_000, 10_000]);
+  });
+
+  it("downsamples before smoothing so raw and smoothed series stay bounded", () => {
+    const points = Array.from({ length: 100_001 }, (_, index) => ({
+      step: index,
+      wallTime: 1_000 + index,
+      value: index,
+    }));
+    const option = buildScalarLineOption([lineWith(points)], { smoothing: 0.5 });
+    const [smoothed, raw] = seriesOf(option);
+
+    expect(smoothed.data).toHaveLength(SCALAR_OPTION_DOWNSAMPLE_THRESHOLD);
+    expect(raw.data).toHaveLength(SCALAR_OPTION_DOWNSAMPLE_THRESHOLD);
+    expect((raw.data as number[][]).at(-1)).toEqual([100_000, 100_000]);
   });
 });
