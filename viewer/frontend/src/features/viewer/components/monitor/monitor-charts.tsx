@@ -100,6 +100,26 @@ export function HistogramChart({
 }
 
 export function MonitorImage({ image }: { image: MonitorImageData }) {
+  if (image.truncated || !image.dataUrl) {
+    return (
+      <ChartFrame
+        title={image.tag.split("/").slice(-2).join("/")}
+        subtitle={image.tag}
+        badge={<Badge>step {image.step}</Badge>}
+      >
+        <div className="grid min-h-40 place-items-center rounded-[10px] border border-line-soft bg-black/25 p-4 text-center">
+          <div className="grid gap-1">
+            <div className="text-sm font-semibold text-ink">Payload omitted</div>
+            <div className="max-w-sm text-xs leading-5 text-ink-faint">
+              {image.truncationReason ??
+                "This image summary exceeded the viewer payload budget."}
+            </div>
+          </div>
+        </div>
+      </ChartFrame>
+    );
+  }
+
   return (
     <ChartFrame
       title={image.tag.split("/").slice(-2).join("/")}

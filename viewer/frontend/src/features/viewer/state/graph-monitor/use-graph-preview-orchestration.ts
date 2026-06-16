@@ -141,6 +141,7 @@ export function useGraphPreviewOrchestration({
     resolveMonitorTargetNode,
     canOpenGraphNodeMonitor,
     parameterActivityByNodePath,
+    isParameterStatusPartiallyLoading,
     deriveSelectedMonitorSourceState,
   } = monitorSource;
   const graphState = useGraphViewState(targetGraph, {
@@ -273,6 +274,7 @@ export function useGraphPreviewOrchestration({
       selectedOperationNode: operationGraphState.selectedOperationNode,
       selectedMonitorNode,
       selectedMonitorComparisonCandidateGroups,
+      isParameterStatusPartiallyLoading,
       collapseGraphNodes: graphState.collapseGraphNodes,
       collapseOperationGraphNodes:
         operationGraphState.collapseOperationGraphNodes,

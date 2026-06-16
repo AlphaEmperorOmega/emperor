@@ -622,9 +622,12 @@ describe("useViewerState", () => {
     });
 
     await waitFor(() => {
-      expect(mocks.fetchLogTags).toHaveBeenCalledWith({
-        runIds: ["linear-history"],
-      });
+      expect(mocks.fetchLogTags).toHaveBeenCalledWith(
+        {
+          runIds: ["linear-history"],
+        },
+        expect.any(Object),
+      );
     });
   });
 
@@ -1120,7 +1123,7 @@ describe("useViewerState", () => {
         jobId: "job-1",
         preset: "baseline",
         dataset: "Mnist",
-      });
+      }, expect.any(Object));
     });
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalled();
   });
@@ -1195,12 +1198,15 @@ describe("useViewerState", () => {
       expect(result.current.history.historicalMonitorRuns.map((run) => run.id))
         .toEqual(["run-new", "run-old"]);
       expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith({
-        runIds: ["run-new", "run-old"],
-      });
+        runIds: ["run-new"],
+      }, expect.any(Object));
+      expect(mocks.fetchLogParameterStatus).toHaveBeenCalledWith({
+        runIds: ["run-old"],
+      }, expect.any(Object));
     });
     expect(mocks.fetchLogParameterStatus).not.toHaveBeenCalledWith({
-      runIds: ["run-new", "run-fast", "run-old"],
-    });
+      runIds: ["run-fast"],
+    }, expect.any(Object));
     expect(mocks.fetchMonitorParameterStatus).not.toHaveBeenCalled();
   });
 

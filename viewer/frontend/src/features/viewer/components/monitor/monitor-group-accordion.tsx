@@ -61,10 +61,13 @@ export function MonitorGroupAccordion({
   );
 }
 
-export function useMonitorGroupAccordion(groupCounts: Record<MonitorGroup, number>) {
+export function useMonitorGroupAccordion(
+  groupCounts: Record<MonitorGroup, number>,
+  { startCollapsed = false }: { startCollapsed?: boolean } = {},
+) {
   const firstNonEmptyGroup = monitorGroupOrder.find((group) => groupCounts[group] > 0);
   const [openGroups, setOpenGroups] = useState<MonitorGroup[]>(
-    firstNonEmptyGroup ? [firstNonEmptyGroup] : [],
+    startCollapsed || !firstNonEmptyGroup ? [] : [firstNonEmptyGroup],
   );
   const countsKey = monitorGroupOrder
     .map((group) => `${group}:${groupCounts[group]}`)
@@ -78,12 +81,12 @@ export function useMonitorGroupAccordion(groupCounts: Record<MonitorGroup, numbe
     previousCountsKey.current = countsKey;
     setOpenGroups((currentGroups) => {
       const retainedGroups = currentGroups.filter((group) => groupCounts[group] > 0);
-      if (retainedGroups.length > 0 || !firstNonEmptyGroup) {
+      if (retainedGroups.length > 0 || startCollapsed || !firstNonEmptyGroup) {
         return retainedGroups;
       }
       return [firstNonEmptyGroup];
     });
-  }, [countsKey, firstNonEmptyGroup, groupCounts]);
+  }, [countsKey, firstNonEmptyGroup, groupCounts, startCollapsed]);
 
   return {
     isGroupOpen: (group: MonitorGroup) => openGroups.includes(group),

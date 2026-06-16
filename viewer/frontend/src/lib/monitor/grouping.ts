@@ -275,18 +275,29 @@ export function scalarDomainFor(
   primary: ScalarSeries | undefined,
   comparison: ScalarSeries | undefined,
 ): ScalarDomain {
-  const points = [...(primary?.points ?? []), ...(comparison?.points ?? [])];
-  if (points.length === 0) {
+  let minStep = Infinity;
+  let maxStep = -Infinity;
+  let minValue = Infinity;
+  let maxValue = -Infinity;
+  let pointCount = 0;
+  for (const series of [primary, comparison]) {
+    for (const point of series?.points ?? []) {
+      pointCount += 1;
+      minStep = Math.min(minStep, point.step);
+      maxStep = Math.max(maxStep, point.step);
+      minValue = Math.min(minValue, point.value);
+      maxValue = Math.max(maxValue, point.value);
+    }
+  }
+  if (pointCount === 0) {
     return { minStep: 0, maxStep: 1, minValue: 0, maxValue: 1 };
   }
 
-  const steps = points.map((point) => point.step);
-  const values = points.map((point) => point.value);
   return {
-    minStep: Math.min(...steps),
-    maxStep: Math.max(...steps),
-    minValue: Math.min(...values),
-    maxValue: Math.max(...values),
+    minStep,
+    maxStep,
+    minValue,
+    maxValue,
   };
 }
 
@@ -294,9 +305,11 @@ export function histogramMaxCountFor(
   primary: HistogramData | undefined,
   comparison: HistogramData | undefined,
 ) {
-  const counts = [
-    ...(primary?.buckets.map((bucket) => bucket.count) ?? []),
-    ...(comparison?.buckets.map((bucket) => bucket.count) ?? []),
-  ];
-  return Math.max(...counts, 1);
+  let maxCount = 1;
+  for (const histogram of [primary, comparison]) {
+    for (const bucket of histogram?.buckets ?? []) {
+      maxCount = Math.max(maxCount, bucket.count);
+    }
+  }
+  return maxCount;
 }

@@ -116,6 +116,16 @@ function monitorData(nodePath: string): MonitorData {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 function renderMonitorModalState({
   node = graphNode("main_model.0"),
   source,
@@ -176,7 +186,7 @@ describe("useMonitorChartsModalState", () => {
         nodePath: "main_model.0",
         preset: "wide",
         dataset: "FashionMnist",
-      }),
+      }, expect.any(Object)),
     );
 
     act(() => {
@@ -189,7 +199,7 @@ describe("useMonitorChartsModalState", () => {
         nodePath: "main_model.1",
         preset: "wide",
         dataset: "FashionMnist",
-      }),
+      }, expect.any(Object)),
     );
   });
 
@@ -234,11 +244,125 @@ describe("useMonitorChartsModalState", () => {
       expect(apiMocks.fetchLogRunMonitorData).toHaveBeenCalledWith({
         runId: "run-1",
         nodePath: "main_model.0",
-      }),
+      }, expect.any(Object)),
     );
     expect(apiMocks.fetchLogRunMonitorData).toHaveBeenCalledWith({
       runId: "run-2",
       nodePath: "main_model.0",
+    }, expect.any(Object));
+  });
+
+  it("loads historical monitor runs progressively with two requests in flight", async () => {
+    const runs = [
+      logRun({ id: "run-1" }),
+      logRun({ id: "run-2" }),
+      logRun({ id: "run-3" }),
+    ];
+    const delayedRun = createDeferred<MonitorData>();
+    apiMocks.fetchLogRunMonitorData.mockImplementation(({ runId, nodePath }) => {
+      if (runId === "run-3") {
+        return delayedRun.promise;
+      }
+      return Promise.resolve(monitorData(nodePath));
     });
+    const source: MonitorChartsSource = {
+      kind: "historical-run-group",
+      runs,
+      experiment: "exp",
+      dataset: "Mnist",
+      preset: "baseline",
+    };
+    const { result } = renderMonitorModalState({ source });
+
+    await waitFor(() => {
+      expect(result.current.query.historicalData).toHaveLength(2);
+    });
+    expect(result.current.query.hasData).toBe(true);
+    expect(result.current.query.isLoading).toBe(false);
+    expect(result.current.query.historicalProgress).toMatchObject({
+      loaded: 2,
+      total: 3,
+      isLoading: true,
+    });
+
+    delayedRun.resolve(monitorData("main_model.0"));
+
+    await waitFor(() => {
+      expect(result.current.query.historicalData).toHaveLength(3);
+    });
+    expect(result.current.query.historicalProgress).toMatchObject({
+      loaded: 3,
+      total: 3,
+      isLoading: false,
+    });
+  });
+
+  it("keeps primary historical charts visible while comparison runs load", async () => {
+    const runs = [logRun({ id: "run-1" }), logRun({ id: "run-2" })];
+    const comparisonRun = createDeferred<MonitorData>();
+    apiMocks.fetchLogRunMonitorData.mockImplementation(({ nodePath }) => {
+      if (nodePath === "main_model.1") {
+        return comparisonRun.promise;
+      }
+      return Promise.resolve(monitorData(nodePath));
+    });
+    const source: MonitorChartsSource = {
+      kind: "historical-run-group",
+      runs,
+      experiment: "exp",
+      dataset: "Mnist",
+      preset: "baseline",
+    };
+    const { result } = renderMonitorModalState({
+      source,
+      comparisonCandidateGroups: {
+        "same-stack": [graphNode("main_model.1")],
+        "all-layers": [graphNode("main_model.1")],
+      },
+    });
+
+    await waitFor(() => {
+      expect(result.current.query.historicalData).toHaveLength(2);
+    });
+
+    act(() => {
+      result.current.setComparisonPath("main_model.1");
+    });
+
+    await waitFor(() => {
+      expect(result.current.query.comparisonLoading).toBe(true);
+    });
+    expect(result.current.query.hasData).toBe(true);
+    expect(result.current.query.historicalData).toHaveLength(2);
+    expect(result.current.query.historicalComparisonData).toHaveLength(0);
+  });
+
+  it("does not discard successful historical runs when one run fails", async () => {
+    const runs = [logRun({ id: "run-ok" }), logRun({ id: "run-failed" })];
+    apiMocks.fetchLogRunMonitorData.mockImplementation(({ runId, nodePath }) => {
+      if (runId === "run-failed") {
+        return Promise.reject(new Error("event read failed"));
+      }
+      return Promise.resolve(monitorData(nodePath));
+    });
+    const source: MonitorChartsSource = {
+      kind: "historical-run-group",
+      runs,
+      experiment: "exp",
+      dataset: "Mnist",
+      preset: "baseline",
+    };
+    const { result } = renderMonitorModalState({ source });
+
+    await waitFor(() => {
+      expect(result.current.query.historicalData).toHaveLength(1);
+      expect(result.current.query.historicalProgress).toMatchObject({
+        loaded: 1,
+        failed: 1,
+        total: 2,
+        isLoading: false,
+      });
+    });
+    expect(result.current.query.hasData).toBe(true);
   });
 });

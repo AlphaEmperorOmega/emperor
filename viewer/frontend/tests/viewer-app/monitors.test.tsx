@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   buildHistoricalMonitorFixture,
+  defaultLogRunMonitorPayload,
+  deferred,
   installFetchMock,
   longSelectedNodeId,
   longSelectedNodeInspectResponse,
@@ -423,6 +425,64 @@ describe("ViewerApp Monitor Charts And Errors", () => {
       .toBeInTheDocument();
     expect(within(dialog).queryByText(/monitor_run_01_20260601_010000/))
       .not.toBeInTheDocument();
+  });
+
+  it("renders available historical monitor charts while later runs are still loading", async () => {
+    const fixture = buildHistoricalMonitorFixture(5);
+    const delayedRuns = new Map(
+      ["historical-03", "historical-02", "historical-01"].map((runId) => [
+        runId,
+        deferred<ReturnType<typeof defaultLogRunMonitorPayload>>(),
+      ]),
+    );
+    installFetchMock({
+      ...fixture,
+      logRunMonitorDataResponse: ({ jobId, nodePath }) => {
+        const delayed = delayedRuns.get(jobId);
+        if (delayed) {
+          return delayed.promise;
+        }
+        return defaultLogRunMonitorPayload(nodePath);
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await selectExperimentRun(
+      user,
+      "monitor_exp · BASELINE · Mnist · 2026-06-01 05:00:00",
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /^select main_model\.0\.model$/i }),
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled();
+    });
+    await user.click(screen.getByRole("button", { name: /^monitor charts$/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /monitor charts/i });
+    expect(
+      await within(dialog).findByRole("img", {
+        name: /output\/mean multi-run scalar chart/i,
+      }),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByText("Loading monitor data")).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/Primary: loaded 2 of 5 historical runs/i),
+    ).toBeInTheDocument();
+
+    for (const delayed of delayedRuns.values()) {
+      delayed.resolve(defaultLogRunMonitorPayload("main_model.0.model"));
+    }
+
+    await waitFor(() => {
+      expect(
+        within(dialog).queryByText(/Primary: loaded \d+ of 5 historical runs/i),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("compares historical monitor charts through log-run monitor-data requests", async () => {
