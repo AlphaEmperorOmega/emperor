@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
+from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_training_job_service
 from viewer.backend.schemas import (
@@ -62,7 +63,7 @@ async def create_training_job(
         ),
     )
     return TrainingJobResponse.model_validate(
-        service.create_job(command).to_api_payload()
+        (await run_blocking_io(service.create_job, command)).to_api_payload()
     )
 
 
@@ -90,7 +91,7 @@ async def create_training_run_plan(
         ),
     )
     return TrainingRunPlanResponse.model_validate(
-        service.create_run_plan(command).to_api_payload()
+        (await run_blocking_io(service.create_run_plan, command)).to_api_payload()
     )
 
 
@@ -105,7 +106,7 @@ async def training_job(
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingJobResponse:
     return TrainingJobResponse.model_validate(
-        service.get_job(job_id).to_api_payload()
+        (await run_blocking_io(service.get_job, job_id)).to_api_payload()
     )
 
 
@@ -122,7 +123,8 @@ async def training_job_events(
     limit: Annotated[int, Query(ge=1, le=5000)] = 500,
 ) -> TrainingProgressEventsResponse:
     return TrainingProgressEventsResponse.model_validate(
-        service.get_job_events(
+        await run_blocking_io(
+            service.get_job_events,
             job_id,
             offset=offset,
             limit=limit,
@@ -144,7 +146,8 @@ async def training_job_monitor_data(
     preset: str | None = None,
 ) -> MonitorDataResponse:
     return MonitorDataResponse.model_validate(
-        service.get_monitor_data(
+        await run_blocking_io(
+            service.get_monitor_data,
             job_id,
             node_path=node_path,
             dataset=dataset,
@@ -166,7 +169,8 @@ async def training_job_monitor_parameter_status(
     preset: str | None = None,
 ) -> ParameterStatusResponse:
     return ParameterStatusResponse.model_validate(
-        service.get_parameter_status(
+        await run_blocking_io(
+            service.get_parameter_status,
             job_id,
             dataset=dataset,
             preset=preset,
@@ -185,5 +189,5 @@ async def cancel_training_job(
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingJobResponse:
     return TrainingJobResponse.model_validate(
-        service.cancel_job(job_id).to_api_payload()
+        (await run_blocking_io(service.cancel_job, job_id)).to_api_payload()
     )

@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_inspection_service
 from viewer.backend.schemas import (
@@ -32,7 +33,8 @@ async def inspect(
     service: Annotated[InspectionService, Depends(get_inspection_service)],
 ) -> InspectResponse:
     return InspectResponse.model_validate(
-        service.inspect(
+        await run_blocking_io(
+            service.inspect,
             model=request.model,
             preset=request.preset,
             overrides=request.overrides,
@@ -55,7 +57,8 @@ async def inspect_operation_graph(
     service: Annotated[InspectionService, Depends(get_inspection_service)],
 ) -> OperationGraphResponse:
     return OperationGraphResponse.model_validate(
-        service.inspect_operation_graph(
+        await run_blocking_io(
+            service.inspect_operation_graph,
             model=request.model,
             preset=request.preset,
             overrides=request.overrides,

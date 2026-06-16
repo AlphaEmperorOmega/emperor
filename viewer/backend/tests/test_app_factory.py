@@ -47,6 +47,19 @@ EXPECTED_ASYNC_BOUNDARY_ROUTE_PAIRS = {
     ("POST", "/logs/parameter-status"),
     ("GET", "/logs/runs/{run_id}/artifacts"),
     ("GET", "/logs/runs/{run_id}/monitor-data"),
+    ("GET", "/models"),
+    ("GET", "/models/{model:path}/config-schema"),
+    ("GET", "/models/{model:path}/datasets"),
+    ("GET", "/models/{model:path}/monitors"),
+    ("GET", "/models/{model:path}/presets"),
+    ("GET", "/models/{model:path}/search-space"),
+    ("GET", "/training/jobs/{job_id}"),
+    ("GET", "/training/jobs/{job_id}/events"),
+    ("GET", "/training/jobs/{job_id}/monitor-data"),
+    ("GET", "/training/jobs/{job_id}/monitor-parameter-status"),
+    ("POST", "/training/jobs"),
+    ("POST", "/training/jobs/{job_id}/cancel"),
+    ("POST", "/training/run-plan"),
 }
 
 
@@ -102,22 +115,7 @@ class AppFactoryTests(unittest.TestCase):
         self.assertEqual(missing_async_handlers, [])
 
     def test_health_responds_while_log_scalars_read_is_blocked(self) -> None:
-        async def run_blocking(callable_object, *args, **kwargs) -> object:
-            import threading
-
-            done = threading.Event()
-            result: dict[str, object] = {}
-
-            def target() -> None:
-                try:
-                    result["value"] = callable_object(*args, **kwargs)
-                finally:
-                    done.set()
-
-            threading.Thread(target=target, daemon=True).start()
-            while not done.is_set():
-                await asyncio.sleep(0.002)
-            return result.get("value")
+        from viewer.backend.blocking import run_blocking_io
 
         def slow_scalars(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
             time.sleep(0.2)
@@ -132,7 +130,7 @@ class AppFactoryTests(unittest.TestCase):
 
             @api.post("/logs/scalars")
             async def scalars() -> dict[str, list[object]]:
-                await run_blocking(slow_scalars)
+                await run_blocking_io(slow_scalars)
                 return {"series": []}
 
             transport = httpx.ASGITransport(app=api)
@@ -177,6 +175,36 @@ class AppFactoryTests(unittest.TestCase):
         self.assertEqual(health_response.status_code, 200)
         self.assertEqual(health_response.json(), {"status": "ok"})
         self.assertEqual(scalar_response.status_code, 200)
+
+    def test_blocking_io_capacity_limiter_bounds_parallel_work(self) -> None:
+        import threading
+
+        from viewer.backend.blocking import run_blocking_io
+
+        active = 0
+        max_active = 0
+        lock = threading.Lock()
+
+        def slow_work() -> str:
+            nonlocal active, max_active
+            with lock:
+                active += 1
+                max_active = max(max_active, active)
+            time.sleep(0.03)
+            with lock:
+                active -= 1
+            return "ok"
+
+        async def run_many() -> list[str]:
+            limiter = asyncio.Semaphore(1)
+            return await asyncio.gather(
+                run_blocking_io(slow_work, limiter=limiter),
+                run_blocking_io(slow_work, limiter=limiter),
+                run_blocking_io(slow_work, limiter=limiter),
+            )
+
+        self.assertEqual(asyncio.run(run_many()), ["ok", "ok", "ok"])
+        self.assertEqual(max_active, 1)
 
     def test_public_api_app_reexports_main_asgi_target(self) -> None:
         api = importlib.import_module("viewer.backend.api")

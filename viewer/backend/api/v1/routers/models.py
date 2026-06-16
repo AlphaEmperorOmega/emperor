@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_model_catalog_service
 from viewer.backend.schemas import (
@@ -34,7 +35,7 @@ router = APIRouter(
 async def models(
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> ModelsResponse:
-    return ModelsResponse(models=service.list_models())
+    return ModelsResponse(models=await run_blocking_io(service.list_models))
 
 
 @router.get(
@@ -47,7 +48,10 @@ async def presets(
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> PresetsResponse:
-    return PresetsResponse(model=model, presets=service.list_presets(model))
+    return PresetsResponse(
+        model=model,
+        presets=await run_blocking_io(service.list_presets, model),
+    )
 
 
 @router.get(
@@ -60,7 +64,10 @@ async def datasets(
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> DatasetsResponse:
-    return DatasetsResponse(model=model, datasets=service.list_datasets(model))
+    return DatasetsResponse(
+        model=model,
+        datasets=await run_blocking_io(service.list_datasets, model),
+    )
 
 
 @router.get(
@@ -73,7 +80,10 @@ async def monitors(
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> MonitorsResponse:
-    return MonitorsResponse(model=model, monitors=service.list_monitors(model))
+    return MonitorsResponse(
+        model=model,
+        monitors=await run_blocking_io(service.list_monitors, model),
+    )
 
 
 @router.get(
@@ -87,7 +97,9 @@ async def schema(
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
     preset: str | None = None,
 ) -> ConfigSchemaResponse:
-    return ConfigSchemaResponse.model_validate(service.config_schema(model, preset))
+    return ConfigSchemaResponse.model_validate(
+        await run_blocking_io(service.config_schema, model, preset)
+    )
 
 
 @router.get(
@@ -102,5 +114,5 @@ async def search_space(
     preset: str | None = None,
 ) -> SearchSpaceResponse:
     return SearchSpaceResponse.model_validate(
-        service.search_space_schema(model, preset)
+        await run_blocking_io(service.search_space_schema, model, preset)
     )
