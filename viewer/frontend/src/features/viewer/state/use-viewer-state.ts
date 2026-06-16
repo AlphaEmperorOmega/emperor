@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   useGraphPreviewController,
   useGraphPreviewOrchestration,
@@ -15,7 +16,6 @@ import {
 import { type ViewerWorkspace } from "@/types/viewer";
 
 type GraphPreviewControllerState = ReturnType<typeof useGraphPreviewController>;
-type GraphPreviewState = ReturnType<typeof useGraphPreviewOrchestration>;
 type TargetConfigState = ReturnType<typeof useTargetConfigState>;
 type HistoricalRunSelectionState = ReturnType<
   typeof useHistoricalRunSelectionState
@@ -77,32 +77,6 @@ function graphPreviewCompositionInput({
   };
 }
 
-function composeProviderSlices({
-  targetConfig,
-  historicalRuns,
-  activeTrainingJobState,
-  graphPreviewState,
-}: {
-  targetConfig: TargetConfigState;
-  historicalRuns: HistoricalRunsState;
-  activeTrainingJobState: ActiveTrainingJobState;
-  graphPreviewState: GraphPreviewState;
-}) {
-  return {
-    target: targetConfig.target,
-    graph: graphPreviewState.graph,
-    history: {
-      ...historicalRuns.history,
-      selectedLogRunHasMonitorTags:
-        graphPreviewState.history.selectedLogRunHasMonitorTags,
-    },
-    training: {
-      ...activeTrainingJobState,
-      ...graphPreviewState.training,
-    },
-  };
-}
-
 /**
  * Composition module behind the viewer context providers.
  * Cross-slice cascade rules are named here; domain state stays in extracted hooks.
@@ -112,10 +86,12 @@ export function useViewerState(options: ViewerStateOptions = {}) {
 
   const graphPreview = useGraphPreviewController();
   const historicalRunSelection = useHistoricalRunSelectionState();
-
-  const targetConfig = useTargetConfigState(
-    targetConfigCascadeRules(graphPreview, historicalRunSelection),
+  const cascadeRules = useMemo(
+    () => targetConfigCascadeRules(graphPreview, historicalRunSelection),
+    [graphPreview, historicalRunSelection],
   );
+
+  const targetConfig = useTargetConfigState(cascadeRules);
   const { selectedModel } = targetConfig.selection;
 
   const activeTrainingJobState = useActiveTrainingJobState({ onJobStarted });
@@ -129,25 +105,53 @@ export function useViewerState(options: ViewerStateOptions = {}) {
     syncSelectedLogRun: targetConfig.syncSelectedLogRun,
     selection: historicalRunSelection,
   });
-  const graphPreviewState = useGraphPreviewOrchestration(
-    graphPreviewCompositionInput({
-      graphPreview,
-      targetConfig,
-      historicalRuns,
-      activeTrainingJobState,
-    }),
+  const graphPreviewInput = useMemo(
+    () =>
+      graphPreviewCompositionInput({
+        graphPreview,
+        targetConfig,
+        historicalRuns,
+        activeTrainingJobState,
+      }),
+    [activeTrainingJobState, graphPreview, historicalRuns, targetConfig],
   );
+  const graphPreviewState = useGraphPreviewOrchestration(graphPreviewInput);
 
-  return composeProviderSlices({
-    targetConfig,
-    historicalRuns,
-    activeTrainingJobState,
-    graphPreviewState,
-  });
+  const history = useMemo(
+    () => ({
+      ...historicalRuns.history,
+      selectedLogRunHasMonitorTags:
+        graphPreviewState.history.selectedLogRunHasMonitorTags,
+    }),
+    [
+      graphPreviewState.history.selectedLogRunHasMonitorTags,
+      historicalRuns.history,
+    ],
+  );
+  const activeJob = activeTrainingJobState;
+  const graphMonitor = graphPreviewState.graphMonitor;
+
+  return useMemo(
+    () => ({
+      target: targetConfig.target,
+      graph: graphPreviewState.graph,
+      history,
+      activeJob,
+      graphMonitor,
+    }),
+    [
+      activeJob,
+      graphMonitor,
+      graphPreviewState.graph,
+      history,
+      targetConfig.target,
+    ],
+  );
 }
 
 export type ViewerState = ReturnType<typeof useViewerState>;
 export type TargetConfigContextValue = ViewerState["target"];
 export type GraphViewContextValue = ViewerState["graph"];
 export type HistoricalRunsContextValue = ViewerState["history"];
-export type TrainingContextValue = ViewerState["training"];
+export type ActiveTrainingJobContextValue = ViewerState["activeJob"];
+export type GraphMonitorContextValue = ViewerState["graphMonitor"];

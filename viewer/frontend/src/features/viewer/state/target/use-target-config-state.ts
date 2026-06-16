@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type ConfigSnapshotRecord, type LogRun } from "@/lib/api";
+import {
+  type ConfigSnapshotRecord,
+  type Dataset,
+  type LogRun,
+  type MonitorOption,
+  type Preset,
+  type SearchAxis,
+} from "@/lib/api";
 import { type OverrideValues } from "@/lib/config";
 import {
   createConfigSnapshot,
@@ -45,6 +52,10 @@ import {
 } from "@/features/viewer/state/target/target-selection";
 
 const EMPTY_MODEL_IDS: string[] = [];
+const EMPTY_PRESETS: Preset[] = [];
+const EMPTY_DATASETS: Dataset[] = [];
+const EMPTY_MONITORS: MonitorOption[] = [];
+const EMPTY_SEARCH_AXES: SearchAxis[] = [];
 
 type TargetMode = "preset" | "snapshot" | "experiment";
 
@@ -153,6 +164,10 @@ export function useTargetConfigState({
     query: configSnapshotLibraryQuery,
     snapshots: configSnapshotLibrary,
   } = useConfigSnapshotLibrary();
+  const createSnapshotRecord = createSnapshotMutation.mutate;
+  const renameSnapshotRecord = renameSnapshotMutation.mutate;
+  const updateSnapshotRecord = updateSnapshotMutation.mutate;
+  const deleteSnapshotRecord = deleteSnapshotMutation.mutate;
   const [pendingConfigSnapshot, setPendingConfigSnapshot] =
     useState<ConfigSnapshotRecord | null>(null);
   const [selectedTrainingSnapshotIds, setSelectedTrainingSnapshotIds] =
@@ -171,7 +186,29 @@ export function useTargetConfigState({
     searchSpaceQuery,
   } = useViewerQueries(selectedModel, selectedPreset);
   const capabilities = capabilitiesQuery.data ?? LOCAL_DEFAULT_CAPABILITIES;
-  const catalogModels = modelsQuery.data?.models ?? EMPTY_MODEL_IDS;
+  const models = modelsQuery.data?.models ?? EMPTY_MODEL_IDS;
+  const modelsLoading = modelsQuery.isLoading;
+  const isModelsError = modelsQuery.isError;
+  const modelsError = modelsQuery.error;
+  const presets = presetsQuery.data?.presets ?? EMPTY_PRESETS;
+  const presetsReady = presetsQuery.isSuccess;
+  const isPresetsError = presetsQuery.isError;
+  const presetsError = presetsQuery.error;
+  const datasets = datasetsQuery.data?.datasets ?? EMPTY_DATASETS;
+  const isDatasetsError = datasetsQuery.isError;
+  const datasetsError = datasetsQuery.error;
+  const monitors = monitorsQuery.data?.monitors ?? EMPTY_MONITORS;
+  const monitorsLoading = monitorsQuery.isLoading;
+  const isSchemaReady = schemaQuery.isSuccess;
+  const schemaLoading = schemaQuery.isLoading;
+  const isSchemaError = schemaQuery.isError;
+  const schemaError = schemaQuery.error;
+  const searchAxes = searchSpaceQuery.data?.axes ?? EMPTY_SEARCH_AXES;
+  const searchAxesLoading = searchSpaceQuery.isLoading;
+  const libraryLoading = configSnapshotLibraryQuery.isLoading;
+  const isLibraryError = configSnapshotLibraryQuery.isError;
+  const libraryError = configSnapshotLibraryQuery.error;
+  const catalogModels = models;
   const availableModelTypeOptions = useMemo(
     () => modelTypeOptions(catalogModels),
     [catalogModels],
@@ -180,8 +217,8 @@ export function useTargetConfigState({
   const targetSelectionState = useMemo(
     () =>
       deriveTargetSelectionState({
-        datasets: datasetsQuery.data?.datasets,
-        presets: presetsQuery.data?.presets,
+        datasets,
+        presets,
         schemaFields: schemaQuery.data?.fields,
         configSnapshots,
         selectedModel,
@@ -191,9 +228,9 @@ export function useTargetConfigState({
       }),
     [
       configSnapshots,
-      datasetsQuery.data?.datasets,
+      datasets,
       overrides,
-      presetsQuery.data?.presets,
+      presets,
       schemaQuery.data?.fields,
       selectedModel,
       selectedPreset,
@@ -654,12 +691,12 @@ export function useTargetConfigState({
   }, [datasetNames]);
 
   useEffect(() => {
-    const monitorNames = (monitorsQuery.data?.monitors ?? []).map((monitor) => monitor.name);
+    const monitorNames = monitors.map((monitor) => monitor.name);
     setSelectedMonitors((current) => {
       const next = current.filter((monitor) => monitorNames.includes(monitor));
       return next.length === current.length ? current : next;
     });
-  }, [monitorsQuery.data]);
+  }, [monitors]);
 
   useLockedOverrideSync(schemaQuery.data, setOverrides);
 
@@ -670,7 +707,7 @@ export function useTargetConfigState({
       }
       const preset = resolveRunPresetName(
         selectedLogRun,
-        presetsQuery.data?.presets ?? [],
+        presets,
       );
       const dataset = datasetNames.includes(selectedLogRun.dataset)
         ? selectedLogRun.dataset
@@ -728,7 +765,7 @@ export function useTargetConfigState({
     [
       datasetNames,
       overrides,
-      presetsQuery.data,
+      presets,
       requestPreview,
       resetGraphSelectionAndExpansion,
       selectedDatasets,
@@ -759,7 +796,7 @@ export function useTargetConfigState({
         createdAt: new Date().toISOString(),
       });
       if (result.ok) {
-        createSnapshotMutation.mutate({
+        createSnapshotRecord({
           model: selectedModel,
           preset: selectedPreset,
           name: result.snapshot.name,
@@ -771,7 +808,7 @@ export function useTargetConfigState({
     [
       configFields,
       configSnapshots,
-      createSnapshotMutation,
+      createSnapshotRecord,
       overrides,
       selectedModel,
       selectedPreset,
@@ -783,9 +820,9 @@ export function useTargetConfigState({
       setSelectedTrainingSnapshotIds((current) =>
         current.filter((id) => id !== snapshotId),
       );
-      deleteSnapshotMutation.mutate(snapshotId);
+      deleteSnapshotRecord(snapshotId);
     },
-    [deleteSnapshotMutation],
+    [deleteSnapshotRecord],
   );
 
   const renameConfigSnapshot = useCallback(
@@ -806,12 +843,12 @@ export function useTargetConfigState({
       if (!validation.ok) {
         return;
       }
-      renameSnapshotMutation.mutate({
+      renameSnapshotRecord({
         id: snapshotId,
         name: validation.name,
       });
     },
-    [configSnapshots, renameSnapshotMutation],
+    [configSnapshots, renameSnapshotRecord],
   );
 
   const updateSelectedConfigSnapshot = useCallback(
@@ -845,7 +882,7 @@ export function useTargetConfigState({
         name: nameValidation.name,
         overrides: validation.overrides,
       };
-      updateSnapshotMutation.mutate({
+      updateSnapshotRecord({
         id: selectedConfigSnapshot.id,
         input: {
           name: nameValidation.name,
@@ -859,7 +896,7 @@ export function useTargetConfigState({
       configSnapshots,
       overrides,
       selectedConfigSnapshot,
-      updateSnapshotMutation,
+      updateSnapshotRecord,
     ],
   );
 
@@ -1458,8 +1495,8 @@ export function useTargetConfigState({
 
   const apiOnline = healthQuery.data?.status === "ok";
 
-  return {
-    target: {
+  const target = useMemo(
+    () => ({
       selectedModelType,
       selectModelType,
       selectedModel,
@@ -1512,7 +1549,6 @@ export function useTargetConfigState({
       configSnapshotCount: visibleConfigSnapshots.length,
       allConfigSnapshotCount: modelConfigSnapshots.length,
       configSnapshotLibraryCount: configSnapshotLibrary.length,
-      configSnapshotLibraryQuery,
       addConfigSnapshot,
       removeConfigSnapshot,
       renameConfigSnapshot,
@@ -1527,19 +1563,131 @@ export function useTargetConfigState({
       updatePreview,
       resetOverrides,
       resetOverridesPreservingTargetSelection,
-      modelsQuery,
-      capabilitiesQuery,
-      presetsQuery,
-      datasetsQuery,
-      monitorsQuery,
-      schemaQuery,
-      searchSpaceQuery,
-    },
-    selection: {
+      models,
+      modelsLoading,
+      isModelsError,
+      modelsError,
+      presets,
+      presetsReady,
+      isPresetsError,
+      presetsError,
+      datasets,
+      isDatasetsError,
+      datasetsError,
+      monitors,
+      monitorsLoading,
+      isSchemaReady,
+      schemaLoading,
+      isSchemaError,
+      schemaError,
+      searchAxes,
+      searchAxesLoading,
+      libraryLoading,
+      isLibraryError,
+      libraryError,
+    }),
+    [
+      activateTargetExperimentMode,
+      activateTargetPresetMode,
+      activateTargetSnapshotMode,
+      addConfigSnapshot,
+      apiOnline,
+      capabilities,
+      clearTargetOverride,
+      configSections,
+      configSnapshotGroups,
+      configSnapshotLibrary,
+      datasets,
+      datasetsError,
+      excludeConfigSnapshot,
+      excludeDraftTrainingPreset,
+      fieldCount,
+      includeConfigSnapshot,
+      isDatasetsError,
+      isLibraryError,
+      isModelsError,
+      isPresetsError,
+      isSchemaError,
+      isSchemaReady,
+      libraryError,
+      libraryLoading,
+      loadConfigSnapshot,
+      makeTrainingPresetPrimary,
+      modelConfigSnapshotGroups,
+      modelConfigSnapshots,
+      models,
+      modelsError,
+      modelsLoading,
+      monitors,
+      monitorsLoading,
+      overrideCount,
+      overrides,
+      preparePresetSnapshotDraft,
+      prepareSelectedSnapshotEdit,
+      presetOwnedFieldCount,
+      presets,
+      presetsError,
+      presetsReady,
+      removeConfigSnapshot,
+      renameConfigSnapshot,
+      resetOverrides,
+      resetOverridesPreservingTargetSelection,
+      schemaError,
+      schemaLoading,
+      searchAxes,
+      searchAxesLoading,
+      selectAllDatasets,
+      selectAllTrainingPresets,
+      selectFirstDataset,
+      selectModel,
+      selectModelType,
+      selectPrimaryTrainingPreset,
+      selectTargetPreset,
+      selectTargetSnapshot,
+      selectTrainingPrimaryPreset,
+      selectedConfigSnapshot,
+      selectedDatasets,
+      selectedExperimentRunId,
+      selectedModel,
+      selectedModelType,
+      selectedMonitors,
+      selectedPreset,
+      selectedPresetMeta,
+      selectedSnapshotId,
+      selectedTargetMode,
+      selectedTrainingPresets,
+      selectedTrainingSnapshotIds,
+      selectedTrainingSnapshots,
+      setDatasetSelection,
+      setTrainingPresetSelection,
+      setTrainingSnapshotSelection,
+      toggleConfigSnapshotRunSelection,
+      toggleDataset,
+      toggleDraftTrainingPreset,
+      toggleMonitor,
+      toggleTrainingPreset,
+      trainingSearch,
+      updatePreview,
+      updateSelectedConfigSnapshot,
+      updateTargetOverride,
+      visibleConfigSnapshots,
+    ],
+  );
+  const selection = useMemo(
+    () => ({
       selectedModel,
       selectedPreset,
       selectedDatasets,
-    },
-    syncSelectedLogRun,
-  };
+    }),
+    [selectedDatasets, selectedModel, selectedPreset],
+  );
+
+  return useMemo(
+    () => ({
+      target,
+      selection,
+      syncSelectedLogRun,
+    }),
+    [selection, syncSelectedLogRun, target],
+  );
 }

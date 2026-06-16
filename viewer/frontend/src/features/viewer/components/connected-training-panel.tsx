@@ -1,8 +1,9 @@
 import { TrainingPanel } from "@/features/viewer/components/training-panel";
 import {
+  useActiveTrainingJob,
+  useActiveTrainingJobProgressState,
   useHistoricalRuns,
   useTargetConfig,
-  useTraining,
 } from "@/features/viewer/providers/viewer-providers";
 import {
   useTrainingPanelViewModel,
@@ -17,15 +18,16 @@ export function ConnectedTrainingPanel({
   onOpenFullConfig: (mode?: FullConfigDialogMode) => void;
 }) {
   const target = useTargetConfig();
-  const training = useTraining();
+  const activeJob = useActiveTrainingJob();
+  const activeJobProgress = useActiveTrainingJobProgressState();
   const history = useHistoricalRuns();
   const canOpenFullConfig = Boolean(
-    target.selectedModel && target.selectedPreset && target.schemaQuery.isSuccess,
+    target.selectedModel && target.selectedPreset && target.isSchemaReady,
   );
   const viewModel = useTrainingPanelViewModel({
-    models: target.modelsQuery.data?.models ?? [],
-    presets: target.presetsQuery.data?.presets ?? [],
-    datasetOptions: target.datasetsQuery.data?.datasets ?? [],
+    models: target.models,
+    presets: target.presets,
+    datasetOptions: target.datasets,
     configSections: target.configSections,
     selectedModelType: target.selectedModelType,
     selectedModel: target.selectedModel,
@@ -36,11 +38,11 @@ export function ConnectedTrainingPanel({
     overrides: target.overrides,
     allConfigSnapshots: target.allConfigSnapshots,
     configSnapshotCount: target.allConfigSnapshotCount,
-    monitorOptions: target.monitorsQuery.data?.monitors ?? [],
+    monitorOptions: target.monitors,
     selectedMonitors: target.selectedMonitors,
-    monitorsLoading: target.monitorsQuery.isLoading,
-    searchAxes: target.searchSpaceQuery.data?.axes ?? [],
-    searchLoading: target.searchSpaceQuery.isLoading,
+    monitorsLoading: target.monitorsLoading,
+    searchAxes: target.searchAxes,
+    searchLoading: target.searchAxesLoading,
     trainingSearch: target.trainingSearch,
     trainingEnabled: target.capabilities.trainingEnabled,
     trainingLockedByHistoricalSelection: history.selectedLogRunId !== null,
@@ -78,9 +80,10 @@ export function ConnectedTrainingPanel({
     },
     onToggleMonitor: target.toggleMonitor,
     onTrainingSearchChange: target.setTrainingSearch,
-    activeJobId: training.activeJobId,
-    onActiveJobIdChange: training.setActiveJobId,
-    onJobChange: training.onJobChange,
+    activeTrainingJob: activeJob.activeTrainingJob,
+    progressError: activeJobProgress.progressError,
+    onActiveJobIdChange: activeJob.setActiveJobId,
+    onJobChange: activeJob.onJobChange,
   });
 
   return <TrainingPanel viewModel={viewModel} />;

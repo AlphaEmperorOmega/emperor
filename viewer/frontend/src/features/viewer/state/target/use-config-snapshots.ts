@@ -12,6 +12,8 @@ import {
 } from "@/lib/api";
 import { viewerQueryKeys } from "@/lib/query-keys";
 
+const EMPTY_CONFIG_SNAPSHOTS: ConfigSnapshotRecord[] = [];
+
 /**
  * Server-backed config snapshot library for a model. The backend is the single
  * source of truth (persisted JSON, reached only through the typed API); this hook
@@ -71,7 +73,7 @@ export function useConfigSnapshots(model: string) {
       Promise.all([invalidateModel(result.model), invalidateLibrary()]),
   });
 
-  const snapshots: ConfigSnapshotRecord[] = query.data?.snapshots ?? [];
+  const snapshots = query.data?.snapshots ?? EMPTY_CONFIG_SNAPSHOTS;
 
   return {
     query,
@@ -90,7 +92,7 @@ export function useConfigSnapshotLibrary() {
     retry: false,
   });
 
-  const snapshots: ConfigSnapshotRecord[] = query.data?.snapshots ?? [];
+  const snapshots = query.data?.snapshots ?? EMPTY_CONFIG_SNAPSHOTS;
 
   return { query, snapshots };
 }

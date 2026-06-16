@@ -259,6 +259,20 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
   };
 }
 
+function activeMonitorJob(job: TrainingJob) {
+  return {
+    id: job.id,
+    status: job.status,
+    monitors: job.monitors,
+    preset: job.preset,
+    presets: job.presets,
+    datasets: job.datasets,
+    logFolder: job.logFolder,
+    currentPreset: job.currentPreset,
+    currentDataset: job.currentDataset,
+  };
+}
+
 function mockPublicModelCatalog() {
   const presetsByModel = new Map([
     [
@@ -561,6 +575,43 @@ beforeEach(() => {
 });
 
 describe("useViewerState", () => {
+  it("keeps target and history context identities stable on unrelated rerenders", async () => {
+    const { result, rerender } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.history.experimentsLoading).toBe(false);
+    });
+    const target = result.current.target;
+    const history = result.current.history;
+
+    rerender();
+
+    expect(result.current.target).toBe(target);
+    expect(result.current.history).toBe(history);
+  });
+
+  it("keeps target and history context identities stable when only the active job changes", async () => {
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.target.selectedPreset).toBe("baseline");
+      expect(result.current.history.experimentsLoading).toBe(false);
+    });
+    const target = result.current.target;
+    const history = result.current.history;
+
+    act(() => {
+      result.current.activeJob.onJobChange(trainingJob({ step: 20 }));
+    });
+
+    expect(result.current.activeJob.activeTrainingJob?.step).toBe(20);
+    expect(result.current.target).toBe(target);
+    expect(result.current.history).toBe(history);
+  });
+
   it("uses enabled local defaults while loading capabilities", () => {
     mocks.fetchCapabilities.mockRejectedValueOnce(new Error("capabilities unavailable"));
 
@@ -1115,7 +1166,7 @@ describe("useViewerState", () => {
     });
 
     act(() => {
-      result.current.training.onJobChange(trainingJob());
+      result.current.activeJob.onJobChange(trainingJob());
     });
 
     await waitFor(() => {
@@ -1144,19 +1195,64 @@ describe("useViewerState", () => {
     const job = trainingJob();
 
     act(() => {
-      result.current.training.onJobChange(job);
+      result.current.activeJob.onJobChange(job);
     });
     act(() => {
-      result.current.training.openGraphNodeMonitor(linearNode as GraphNode);
+      result.current.graphMonitor.openGraphNodeMonitor(linearNode as GraphNode);
     });
 
     await waitFor(() => {
-      expect(result.current.training.graphMonitorNode?.id).toBe("linear-0");
-      expect(result.current.training.graphMonitorSource).toEqual({
+      expect(result.current.graphMonitor.graphMonitorNode?.id).toBe("linear-0");
+      expect(result.current.graphMonitor.graphMonitorSource).toEqual({
         kind: "active-job",
-        job,
+        job: activeMonitorJob(job),
       });
     });
+  });
+
+  it("keeps graph monitor identity stable across active job progress updates", async () => {
+    mocks.inspectModel.mockResolvedValue(monitorGraph());
+    const { result } = renderViewerState();
+
+    await waitFor(() => {
+      expect(result.current.graph.graph?.nodes.map((node) => node.id)).toContain(
+        "linear-0",
+      );
+    });
+    const linearNode = result.current.graph.graph?.nodes.find(
+      (node) => node.id === "linear-0",
+    );
+    expect(linearNode).toBeDefined();
+
+    act(() => {
+      result.current.activeJob.onJobChange(
+        trainingJob({ epoch: 1, step: 10, metrics: { loss: 1 } }),
+      );
+    });
+    act(() => {
+      result.current.graphMonitor.openGraphNodeMonitor(linearNode as GraphNode);
+    });
+
+    await waitFor(() => {
+      expect(result.current.graphMonitor.graphMonitorSource).toEqual({
+        kind: "active-job",
+        job: activeMonitorJob(trainingJob({ epoch: 1, step: 10 })),
+      });
+    });
+    const activeJob = result.current.activeJob;
+    const graphMonitor = result.current.graphMonitor;
+    const graphMonitorSource = result.current.graphMonitor.graphMonitorSource;
+
+    act(() => {
+      result.current.activeJob.onJobChange(
+        trainingJob({ epoch: 2, step: 20, metrics: { loss: 0.5 } }),
+      );
+    });
+
+    expect(result.current.activeJob).not.toBe(activeJob);
+    expect(result.current.activeJob.activeTrainingJob?.step).toBe(20);
+    expect(result.current.graphMonitor).toBe(graphMonitor);
+    expect(result.current.graphMonitor.graphMonitorSource).toBe(graphMonitorSource);
   });
 
   it("requests historical parameter status for the selected monitor run group", async () => {

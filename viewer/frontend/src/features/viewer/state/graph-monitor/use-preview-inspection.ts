@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   inspectModel,
@@ -177,6 +177,27 @@ export function usePreviewInspectionState() {
     [operationGraphFailedRequestKey, resetOperationGraphMutation],
   );
 
+  const previewInspection = useMemo(
+    () => ({
+      isBuilding: isPending,
+      isError,
+      error,
+    }),
+    [error, isError, isPending],
+  );
+  const operationInspection = useMemo(
+    () => ({
+      isBuilding: operationGraphInFlightRequestKey !== null,
+      isError: operationGraphFailedRequestKey !== null,
+      error: operationGraphError,
+    }),
+    [
+      operationGraphError,
+      operationGraphFailedRequestKey,
+      operationGraphInFlightRequestKey,
+    ],
+  );
+
   return {
     graph,
     operationGraph,
@@ -189,15 +210,7 @@ export function usePreviewInspectionState() {
     requestPreview,
     requestOperationGraph,
     resetOperationGraphFailure,
-    previewInspection: {
-      isBuilding: isPending,
-      isError,
-      error,
-    },
-    operationInspection: {
-      isBuilding: operationGraphInFlightRequestKey !== null,
-      isError: operationGraphFailedRequestKey !== null,
-      error: operationGraphError,
-    },
+    previewInspection,
+    operationInspection,
   };
 }

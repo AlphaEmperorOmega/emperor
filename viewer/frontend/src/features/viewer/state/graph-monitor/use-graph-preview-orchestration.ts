@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   type LogRun,
   type LogRunTags,
@@ -14,6 +21,7 @@ import {
 import {
   useMonitorSourceOrchestration,
 } from "@/features/viewer/state/graph-monitor/use-monitor-source-orchestration";
+import { type ActiveMonitorJob } from "@/types/monitor";
 
 type GraphResetHandlers = {
   resetGraphSelectionAndExpansion: () => void;
@@ -35,6 +43,54 @@ type GraphPreviewOrchestrationInput = {
   targetPreset: string;
   targetDatasets: string[];
 };
+
+type StableActiveMonitorJobRef = {
+  signature: string;
+  job: ActiveMonitorJob | undefined;
+};
+
+function activeMonitorJobSignature(job: TrainingJob | undefined) {
+  if (!job) {
+    return "inactive";
+  }
+  return JSON.stringify({
+    id: job.id,
+    status: job.status,
+    monitors: job.monitors,
+    preset: job.preset,
+    presets: job.presets,
+    datasets: job.datasets,
+    logFolder: job.logFolder,
+    currentPreset: job.currentPreset ?? null,
+    currentDataset: job.currentDataset ?? null,
+  });
+}
+
+function activeMonitorJobValue(job: TrainingJob): ActiveMonitorJob {
+  return {
+    id: job.id,
+    status: job.status,
+    monitors: job.monitors,
+    preset: job.preset,
+    presets: job.presets,
+    datasets: job.datasets,
+    logFolder: job.logFolder,
+    currentPreset: job.currentPreset,
+    currentDataset: job.currentDataset,
+  };
+}
+
+function useStableActiveMonitorJob(job: TrainingJob | undefined) {
+  const signature = activeMonitorJobSignature(job);
+  const stableJobRef = useRef<StableActiveMonitorJobRef | null>(null);
+  if (!stableJobRef.current || stableJobRef.current.signature !== signature) {
+    stableJobRef.current = {
+      signature,
+      job: job ? activeMonitorJobValue(job) : undefined,
+    };
+  }
+  return stableJobRef.current.job;
+}
 
 export function useGraphPreviewController() {
   const {
@@ -66,24 +122,44 @@ export function useGraphPreviewController() {
     graphResetHandlersRef.current = handlers;
   }, []);
 
-  return {
-    graph,
-    operationGraph,
-    previewRequest,
-    previewRequestKey,
-    operationGraphRequestKey,
-    operationGraphInFlightRequestKey,
-    operationGraphFailedRequestKey,
-    clearPreview,
-    requestPreview,
-    requestOperationGraph,
-    resetOperationGraphFailure,
-    previewInspection,
-    operationInspection,
-    resetGraphSelectionAndExpansion,
-    resetGraphExpansion,
-    bindGraphResetHandlers,
-  };
+  return useMemo(
+    () => ({
+      graph,
+      operationGraph,
+      previewRequest,
+      previewRequestKey,
+      operationGraphRequestKey,
+      operationGraphInFlightRequestKey,
+      operationGraphFailedRequestKey,
+      clearPreview,
+      requestPreview,
+      requestOperationGraph,
+      resetOperationGraphFailure,
+      previewInspection,
+      operationInspection,
+      resetGraphSelectionAndExpansion,
+      resetGraphExpansion,
+      bindGraphResetHandlers,
+    }),
+    [
+      bindGraphResetHandlers,
+      clearPreview,
+      graph,
+      operationGraph,
+      operationGraphFailedRequestKey,
+      operationGraphInFlightRequestKey,
+      operationGraphRequestKey,
+      operationInspection,
+      previewInspection,
+      previewRequest,
+      previewRequestKey,
+      requestOperationGraph,
+      requestPreview,
+      resetGraphExpansion,
+      resetGraphSelectionAndExpansion,
+      resetOperationGraphFailure,
+    ],
+  );
 }
 
 export function useGraphPreviewOrchestration({
@@ -122,9 +198,10 @@ export function useGraphPreviewOrchestration({
       ? operationGraph
       : undefined;
   const [graphKind, setGraphKind] = useState<"module" | "operation">("module");
+  const activeMonitorJob = useStableActiveMonitorJob(activeTrainingJob);
   const monitorSource = useMonitorSourceOrchestration({
     graph: targetGraph,
-    activeTrainingJob,
+    activeTrainingJob: activeMonitorJob,
     historicalMonitorRuns,
     selectedHistoricalExperiment,
     selectedHistoricalDataset,
@@ -239,8 +316,8 @@ export function useGraphPreviewOrchestration({
     graphMonitorSource,
   } = monitorSourceState;
 
-  return {
-    graph: {
+  const graphSlice = useMemo(
+    () => ({
       graph: targetGraph,
       graphKind,
       setGraphKind,
@@ -281,16 +358,77 @@ export function useGraphPreviewOrchestration({
       revealGraphNode: graphState.revealGraphNode,
       revealGraphNodeInFull: graphState.revealGraphNodeInFull,
       previewInspection,
-    },
-    history: {
+    }),
+    [
+      graphKind,
+      graphState.cluster3dNodeId,
+      graphState.closeCluster3d,
+      graphState.collapseGraphNodes,
+      graphState.edges,
+      graphState.expandedGraphNodeIds,
+      graphState.graphDetailMode,
+      graphState.graphForDetail,
+      graphState.graphScope,
+      graphState.nodes,
+      graphState.openCluster3d,
+      graphState.parameterFocusNodeId,
+      graphState.revealGraphNode,
+      graphState.revealGraphNodeInFull,
+      graphState.selectedNode,
+      graphState.selectedNodeId,
+      graphState.setGraphDetailMode,
+      graphState.setGraphScope,
+      graphState.setParameterFocusNodeId,
+      graphState.setPreviewVisualizationMode,
+      graphState.setSelectedNodeId,
+      isParameterStatusPartiallyLoading,
+      operationGraphState.collapseOperationGraphNodes,
+      operationGraphState.expandedOperationGroupIds,
+      operationGraphState.operationEdges,
+      operationGraphState.operationGraphScope,
+      operationGraphState.operationNodes,
+      operationGraphState.selectedOperationNode,
+      operationGraphState.selectedOperationNodeId,
+      operationGraphState.setOperationGraphScope,
+      operationGraphState.setSelectedOperationNodeId,
+      operationInspection,
+      previewInspection,
+      previewVisualizationMode,
+      selectedMonitorComparisonCandidateGroups,
+      selectedMonitorNode,
+      targetGraph,
+      targetOperationGraph,
+    ],
+  );
+  const historySlice = useMemo(
+    () => ({
       selectedLogRunHasMonitorTags,
-    },
-    training: {
+    }),
+    [selectedLogRunHasMonitorTags],
+  );
+  const graphMonitorSlice = useMemo(
+    () => ({
       graphMonitorNode,
       openGraphNodeMonitor,
       closeGraphNodeMonitor,
       graphMonitorSource,
       graphMonitorComparisonCandidateGroups,
-    },
-  };
+    }),
+    [
+      closeGraphNodeMonitor,
+      graphMonitorComparisonCandidateGroups,
+      graphMonitorNode,
+      graphMonitorSource,
+      openGraphNodeMonitor,
+    ],
+  );
+
+  return useMemo(
+    () => ({
+      graph: graphSlice,
+      history: historySlice,
+      graphMonitor: graphMonitorSlice,
+    }),
+    [graphMonitorSlice, graphSlice, historySlice],
+  );
 }

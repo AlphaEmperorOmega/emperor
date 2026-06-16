@@ -1,8 +1,21 @@
 import { type LogRun, type MonitorData, type TrainingJob } from "@/lib/api";
 
+export type ActiveMonitorJob = Pick<
+  TrainingJob,
+  | "id"
+  | "status"
+  | "monitors"
+  | "preset"
+  | "presets"
+  | "datasets"
+  | "logFolder"
+  | "currentPreset"
+  | "currentDataset"
+>;
+
 /** Where a monitor-charts view sources its TensorBoard data from. */
 export type MonitorChartsSource =
-  | { kind: "active-job"; job: TrainingJob }
+  | { kind: "active-job"; job: ActiveMonitorJob }
   | { kind: "historical-run"; run: LogRun }
   | {
       kind: "historical-run-group";

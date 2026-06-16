@@ -1,8 +1,8 @@
 import { type ReactNode, useEffect } from "react";
 import { createViewerContext } from "@/features/viewer/providers/create-context";
 import {
+  useActiveTrainingJob,
   useTargetConfig,
-  useTraining,
 } from "@/features/viewer/providers/viewer-providers";
 import {
   useLogsWorkspaceState,
@@ -28,7 +28,7 @@ export function LogsWorkspaceProvider({
     selectedDatasets,
     capabilities,
   } = useTargetConfig();
-  const { activeTrainingJob } = useTraining();
+  const { activeTrainingJob } = useActiveTrainingJob();
   const state = useLogsWorkspaceState({
     enabled,
     logDeletionEnabled: capabilities.logDeletionEnabled,

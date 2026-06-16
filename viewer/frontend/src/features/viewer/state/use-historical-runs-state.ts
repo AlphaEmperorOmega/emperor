@@ -42,8 +42,7 @@ type HistoricalRunsProviderSlice = {
   selectedHistoricalRunPreset: string;
   selectedLogRunId: string | null;
   selectLogRun: (runId: string) => void;
-  logRunsQuery: ReturnType<typeof useLogRunsQuery>;
-  logRunTagsQuery: ReturnType<typeof useLogTagsQuery>;
+  logRunTagsLoading: boolean;
   experimentsLoading: boolean;
   experimentsError: Error | null;
 };
@@ -75,14 +74,22 @@ export function useHistoricalRunSelectionState(): HistoricalRunSelectionState {
     setSelectedLogRunId((current) => (current === runId ? current : runId));
   }, []);
 
-  return {
-    selectedLogRunId,
-    selectedHistoricalPreset,
-    setSelectedHistoricalPreset,
-    setSelectedLogRunId,
-    clearHistoricalSelectionForTarget,
-    selectLogRun,
-  };
+  return useMemo(
+    () => ({
+      selectedLogRunId,
+      selectedHistoricalPreset,
+      setSelectedHistoricalPreset,
+      setSelectedLogRunId,
+      clearHistoricalSelectionForTarget,
+      selectLogRun,
+    }),
+    [
+      clearHistoricalSelectionForTarget,
+      selectLogRun,
+      selectedHistoricalPreset,
+      selectedLogRunId,
+    ],
+  );
 }
 
 export function useHistoricalRunsState({
@@ -176,8 +183,8 @@ export function useHistoricalRunsState({
     syncSelectedLogRun(selectedLogRun);
   }, [selectedLogRun, selectedModel, syncSelectedLogRun]);
 
-  return {
-    history: {
+  const history = useMemo(
+    () => ({
       visibleHistoricalRuns,
       historicalMonitorRuns,
       historicalPresetOptions,
@@ -188,19 +195,54 @@ export function useHistoricalRunsState({
       selectedHistoricalRunPreset,
       selectedLogRunId,
       selectLogRun,
-      logRunsQuery,
-      logRunTagsQuery,
+      logRunTagsLoading: logRunTagsQuery.isLoading,
       experimentsLoading:
         logRunsQuery.isLoading || (tagsEnabled && modelRunTagsQuery.isLoading),
       experimentsError: logRunsQuery.error ?? (tagsEnabled ? modelRunTagsQuery.error : null),
-    },
-    graphPreview: {
+    }),
+    [
+      historicalMonitorRuns,
+      historicalPresetOptions,
+      logRunTagsQuery.isLoading,
+      logRunsQuery.error,
+      logRunsQuery.isLoading,
+      modelRunTagsQuery.error,
+      modelRunTagsQuery.isLoading,
+      selectLogRun,
+      selectedHistoricalDataset,
+      selectedHistoricalExperiment,
+      selectedHistoricalPreset,
+      selectedHistoricalRunPreset,
+      selectedLogRunId,
+      setSelectedHistoricalPreset,
+      tagsEnabled,
+      visibleHistoricalRuns,
+    ],
+  );
+  const graphPreview = useMemo(
+    () => ({
       historicalMonitorRuns,
       selectedHistoricalExperiment,
       selectedHistoricalDataset,
       selectedHistoricalRunPreset,
       logRunTags: logRunTagsQuery.data?.runs,
       filteredHistoricalRunIds,
-    },
-  };
+    }),
+    [
+      filteredHistoricalRunIds,
+      historicalMonitorRuns,
+      logRunTagsQuery.data?.runs,
+      selectedHistoricalDataset,
+      selectedHistoricalExperiment,
+      selectedHistoricalRunPreset,
+    ],
+  );
+
+  return useMemo(
+    () => ({
+      history,
+      graphPreview,
+    }),
+    [graphPreview, history],
+  );
 }

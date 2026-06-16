@@ -75,6 +75,63 @@ export function resolveTrainingLogRefresh(
   };
 }
 
+type UseActiveTrainingJobProgressInput = {
+  activeJobId: string | null;
+  onJobChange: (job: TrainingJob | undefined) => void;
+};
+
+export function useActiveTrainingJobProgress({
+  activeJobId,
+  onJobChange,
+}: UseActiveTrainingJobProgressInput) {
+  const { invalidateLogLists, refreshAfterMutation } = useLogQueryCache();
+  const logRefreshSnapshotRef = useRef<TrainingLogRefreshSnapshot>(
+    emptyLogRefreshSnapshot,
+  );
+  const jobQuery = useQuery({
+    queryKey: trainingQueryKeys.job(activeJobId),
+    queryFn: () => fetchTrainingJob(activeJobId ?? ""),
+    enabled: activeJobId !== null,
+    refetchInterval: (query) => {
+      const status = (query.state.data as TrainingJob | undefined)?.status;
+      return status && terminalStatuses.has(status) ? false : 1000;
+    },
+  });
+  const job = jobQuery.data;
+
+  useEffect(() => {
+    if (job || activeJobId === null) {
+      onJobChange(job);
+    }
+  }, [activeJobId, job, onJobChange]);
+  useEffect(() => {
+    const { action, snapshot } = resolveTrainingLogRefresh(
+      logRefreshSnapshotRef.current,
+      job,
+    );
+    logRefreshSnapshotRef.current = snapshot;
+    if (action === "details") {
+      void refreshAfterMutation();
+      return;
+    }
+    if (action === "lists") {
+      void invalidateLogLists();
+    }
+  }, [job, invalidateLogLists, refreshAfterMutation]);
+
+  return useMemo(
+    () => ({
+      isPolling: jobQuery.isFetching,
+      progressError: jobQuery.isError ? errorMessage(jobQuery.error) : "",
+    }),
+    [jobQuery.error, jobQuery.isError, jobQuery.isFetching],
+  );
+}
+
+export type ActiveTrainingJobProgress = ReturnType<
+  typeof useActiveTrainingJobProgress
+>;
+
 type UseTrainingJobControllerInput = {
   selectedModel: string;
   selectedPreset: string;
@@ -89,7 +146,8 @@ type UseTrainingJobControllerInput = {
   canPlan: boolean;
   hasValidLogFolder: boolean;
   plannedRunCount: number;
-  activeJobId: string | null;
+  activeTrainingJob: TrainingJob | undefined;
+  progressError: string;
   onActiveJobIdChange: (jobId: string | null) => void;
   onJobChange: (job: TrainingJob | undefined) => void;
   onJobStarted: () => void;
@@ -109,7 +167,8 @@ export function useTrainingJobController({
   canPlan,
   hasValidLogFolder,
   plannedRunCount,
-  activeJobId,
+  activeTrainingJob,
+  progressError,
   onActiveJobIdChange,
   onJobChange,
   onJobStarted,
@@ -117,10 +176,7 @@ export function useTrainingJobController({
   const [planNonce, setPlanNonce] = useState(0);
   const [pendingTrainingRequest, setPendingTrainingRequest] =
     useState<TrainingJobCreateInput | null>(null);
-  const { invalidateLogLists, refreshAfterMutation } = useLogQueryCache();
-  const logRefreshSnapshotRef = useRef<TrainingLogRefreshSnapshot>(
-    emptyLogRefreshSnapshot,
-  );
+  const { refreshAfterMutation } = useLogQueryCache();
   const createMutation = useMutation({
     mutationFn: createTrainingJob,
     onSuccess: (job) => {
@@ -128,15 +184,6 @@ export function useTrainingJobController({
       onJobChange(job);
       onJobStarted();
       void refreshAfterMutation();
-    },
-  });
-  const jobQuery = useQuery({
-    queryKey: trainingQueryKeys.job(activeJobId),
-    queryFn: () => fetchTrainingJob(activeJobId ?? ""),
-    enabled: activeJobId !== null,
-    refetchInterval: (query) => {
-      const status = (query.state.data as TrainingJob | undefined)?.status;
-      return status && terminalStatuses.has(status) ? false : 1000;
     },
   });
   const cancelMutation = useMutation({
@@ -147,25 +194,7 @@ export function useTrainingJobController({
       void refreshAfterMutation();
     },
   });
-  const job = jobQuery.data ?? createMutation.data;
-
-  useEffect(() => {
-    onJobChange(job);
-  }, [job, onJobChange]);
-  useEffect(() => {
-    const { action, snapshot } = resolveTrainingLogRefresh(
-      logRefreshSnapshotRef.current,
-      job,
-    );
-    logRefreshSnapshotRef.current = snapshot;
-    if (action === "details") {
-      void refreshAfterMutation();
-      return;
-    }
-    if (action === "lists") {
-      void invalidateLogLists();
-    }
-  }, [job, invalidateLogLists, refreshAfterMutation]);
+  const job = activeTrainingJob ?? createMutation.data ?? cancelMutation.data;
 
   const planRequest = useMemo(
     () =>
@@ -262,9 +291,9 @@ export function useTrainingJobController({
       draftRunPlan,
   );
   const trainingError =
-    createMutation.isError || jobQuery.isError || cancelMutation.isError
+    createMutation.isError || progressError || cancelMutation.isError
       ? errorMessage(
-          createMutation.error ?? jobQuery.error ?? cancelMutation.error,
+          createMutation.error ?? cancelMutation.error ?? progressError,
         )
       : "";
 

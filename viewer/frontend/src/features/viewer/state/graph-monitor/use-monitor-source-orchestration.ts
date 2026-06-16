@@ -9,13 +9,13 @@ import {
   type LogRun,
   type LogRunTags,
   type ParameterStatus,
-  type TrainingJob,
 } from "@/lib/api";
 import { monitorQueryKeys } from "@/lib/query-keys";
 import {
   deriveMonitorSource,
   deriveParameterActivityByNodePath,
 } from "@/features/viewer/state/graph-monitor/graph-monitor-selectors";
+import { type ActiveMonitorJob } from "@/types/monitor";
 
 const runningTrainingStatuses = new Set(["running", "queued"]);
 const HISTORICAL_PARAMETER_STATUS_REQUEST_CONCURRENCY = 2;
@@ -51,7 +51,7 @@ function isQueryWindowLoading({
 
 export type MonitorSourceOrchestrationInput = {
   graph?: InspectResponse;
-  activeTrainingJob: TrainingJob | undefined;
+  activeTrainingJob: ActiveMonitorJob | undefined;
   historicalMonitorRuns: LogRun[];
   selectedHistoricalExperiment: string;
   selectedHistoricalDataset: string;

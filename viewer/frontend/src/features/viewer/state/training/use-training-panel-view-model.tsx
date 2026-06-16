@@ -72,7 +72,8 @@ export type TrainingPanelViewModelInput = {
   onEditPresetAsSnapshot: (preset: string) => void;
   onEditConfigSnapshotCopy: (snapshotId: string) => void;
   onTrainingSearchChange: Dispatch<SetStateAction<TrainingSearchState>>;
-  activeJobId: string | null;
+  activeTrainingJob: TrainingJob | undefined;
+  progressError: string;
   onActiveJobIdChange: (jobId: string | null) => void;
   onJobChange: (job: TrainingJob | undefined) => void;
 };
@@ -125,7 +126,8 @@ export function useTrainingPanelViewModel({
   onEditPresetAsSnapshot,
   onEditConfigSnapshotCopy,
   onTrainingSearchChange,
-  activeJobId,
+  activeTrainingJob,
+  progressError,
   onActiveJobIdChange,
   onJobChange,
 }: TrainingPanelViewModelInput) {
@@ -180,7 +182,8 @@ export function useTrainingPanelViewModel({
     canPlan: requestState.canPlan,
     hasValidLogFolder: logFolder.isValid,
     plannedRunCount: requestState.plannedRunCount,
-    activeJobId,
+    activeTrainingJob,
+    progressError,
     onActiveJobIdChange,
     onJobChange,
     onJobStarted: () => setIsExpanded(true),

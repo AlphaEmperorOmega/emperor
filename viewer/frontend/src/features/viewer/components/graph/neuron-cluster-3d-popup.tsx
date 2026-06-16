@@ -20,8 +20,8 @@ import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
 import {
+  useActiveTrainingJob,
   useGraphView,
-  useTraining,
 } from "@/features/viewer/providers/viewer-providers";
 import {
   buildCluster3DSceneModel,
@@ -445,7 +445,7 @@ export function ConnectedNeuronCluster3DPopup() {
     revealGraphNode,
     revealGraphNodeInFull,
   } = useGraphView();
-  const { activeTrainingJob } = useTraining();
+  const { activeTrainingJob } = useActiveTrainingJob();
   const scene = useMemo(
     () =>
       buildCluster3DSceneModel({

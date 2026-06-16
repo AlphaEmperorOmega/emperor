@@ -58,7 +58,7 @@ export function FullConfigDialog({
     allConfigSnapshotGroups,
     allConfigSnapshotCount,
     capabilities,
-    schemaQuery,
+    schemaLoading,
     addConfigSnapshot,
     removeConfigSnapshot,
     renameConfigSnapshot,
@@ -71,7 +71,7 @@ export function FullConfigDialog({
     resetOverridesPreservingTargetSelection,
     updatePreview: onUpdatePreview,
   } = useTargetConfig();
-  const isLoading = schemaQuery.isLoading;
+  const isLoading = schemaLoading;
   const isSnapshotDraftMode = mode === "snapshotDraft";
   const isSnapshotEditMode = mode === "snapshotEdit";
   const isSnapshotSaveMode = isSnapshotDraftMode || isSnapshotEditMode;

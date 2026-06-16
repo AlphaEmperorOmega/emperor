@@ -3,9 +3,9 @@ import { InlineStatus } from "@/features/viewer/components/shared/inline-status"
 import { MetricCard } from "@/features/viewer/components/shared/metric-card";
 import { SidePanel } from "@/features/viewer/components/shared/side-panel";
 import {
+  useActiveTrainingJob,
   useGraphView,
   useHistoricalRuns,
-  useTraining,
 } from "@/features/viewer/providers/viewer-providers";
 import { formatCompactCount, formatExactCount } from "@/lib/graph";
 
@@ -20,16 +20,15 @@ export function NodeDetailsPanel() {
     selectedMonitorNode,
     selectedMonitorComparisonCandidateGroups,
   } = useGraphView();
-  const { activeTrainingJob } = useTraining();
+  const { activeTrainingJob } = useActiveTrainingJob();
   const {
     historicalMonitorRuns: historicalRuns,
     selectedHistoricalExperiment: historicalExperiment,
     selectedHistoricalDataset: historicalDataset,
     selectedHistoricalRunPreset: historicalPreset,
     selectedLogRunHasMonitorTags: historicalRunHasMonitorTags,
-    logRunTagsQuery,
+    logRunTagsLoading: historicalRunTagsLoading,
   } = useHistoricalRuns();
-  const historicalRunTagsLoading = logRunTagsQuery.isLoading;
 
   if (previewVisualizationMode === "graph" && graphKind === "operation") {
     return (

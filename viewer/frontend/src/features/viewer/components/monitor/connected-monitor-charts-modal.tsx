@@ -1,5 +1,5 @@
 import dynamic from "next/dynamic";
-import { useTraining } from "@/features/viewer/providers/viewer-providers";
+import { useGraphMonitor } from "@/features/viewer/providers/viewer-providers";
 
 const MonitorChartsModal = dynamic(
   () =>
@@ -15,7 +15,7 @@ export function ConnectedMonitorChartsModal() {
     graphMonitorSource,
     graphMonitorComparisonCandidateGroups,
     closeGraphNodeMonitor,
-  } = useTraining();
+  } = useGraphMonitor();
 
   if (!graphMonitorNode || !graphMonitorSource) {
     return null;

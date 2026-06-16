@@ -6,7 +6,6 @@ import {
   type LogRunTags,
   type ParameterChannelStatus,
   type ParameterStatus,
-  type TrainingJob,
 } from "@/lib/api";
 import {
   anyLogRunTagsMatchNodePath,
@@ -31,7 +30,7 @@ import {
   type GraphParameterActivitySource,
 } from "@/lib/graph/types";
 import { expectedLinearParameterChannels } from "@/lib/parameter-summary";
-import { type MonitorChartsSource } from "@/types/monitor";
+import { type ActiveMonitorJob, type MonitorChartsSource } from "@/types/monitor";
 
 export type DatasetSelectionInput = {
   logRuns?: LogRun[];
@@ -58,7 +57,7 @@ export type MonitorSourceInput = {
   graph?: InspectResponse;
   selectedNode?: GraphNode;
   graphMonitorNode?: GraphNode;
-  activeTrainingJob?: TrainingJob;
+  activeTrainingJob?: ActiveMonitorJob;
   historicalMonitorRuns?: LogRun[];
   selectedHistoricalExperiment?: string;
   selectedHistoricalDataset?: string;

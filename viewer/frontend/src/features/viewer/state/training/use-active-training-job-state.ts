@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { type TrainingJob } from "@/lib/api";
 
 type ActiveTrainingJobStateInput = {
@@ -23,10 +23,13 @@ export function useActiveTrainingJobState({
     [onJobStarted],
   );
 
-  return {
-    activeJobId,
-    setActiveJobId,
-    activeTrainingJob,
-    onJobChange: handleTrainingJobChange,
-  };
+  return useMemo(
+    () => ({
+      activeJobId,
+      setActiveJobId,
+      activeTrainingJob,
+      onJobChange: handleTrainingJobChange,
+    }),
+    [activeJobId, activeTrainingJob, handleTrainingJobChange],
+  );
 }

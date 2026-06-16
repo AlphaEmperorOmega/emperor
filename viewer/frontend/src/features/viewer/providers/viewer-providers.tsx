@@ -1,12 +1,17 @@
 import { type ReactNode } from "react";
 import {
   useViewerState,
+  type ActiveTrainingJobContextValue,
   type GraphViewContextValue,
+  type GraphMonitorContextValue,
   type HistoricalRunsContextValue,
   type TargetConfigContextValue,
-  type TrainingContextValue,
 } from "@/features/viewer/state/use-viewer-state";
 import { createViewerContext } from "@/features/viewer/providers/create-context";
+import {
+  useActiveTrainingJobProgress,
+  type ActiveTrainingJobProgress,
+} from "@/features/viewer/state/training/use-training-job-controller";
 import { type ViewerWorkspace } from "@/types/viewer";
 
 const [TargetConfigProvider, useTargetConfig] =
@@ -15,10 +20,38 @@ const [GraphViewProvider, useGraphView] =
   createViewerContext<GraphViewContextValue>("GraphViewContext");
 const [HistoricalRunsProvider, useHistoricalRuns] =
   createViewerContext<HistoricalRunsContextValue>("HistoricalRunsContext");
-const [TrainingProvider, useTraining] =
-  createViewerContext<TrainingContextValue>("TrainingContext");
+const [ActiveTrainingJobProvider, useActiveTrainingJob] =
+  createViewerContext<ActiveTrainingJobContextValue>("ActiveTrainingJobContext");
+const [ActiveTrainingJobProgressProvider, useActiveTrainingJobProgressState] =
+  createViewerContext<ActiveTrainingJobProgress>(
+    "ActiveTrainingJobProgressContext",
+  );
+const [GraphMonitorProvider, useGraphMonitor] =
+  createViewerContext<GraphMonitorContextValue>("GraphMonitorContext");
 
-export { useTargetConfig, useGraphView, useHistoricalRuns, useTraining };
+export {
+  useTargetConfig,
+  useGraphView,
+  useHistoricalRuns,
+  useActiveTrainingJob,
+  useActiveTrainingJobProgressState,
+  useGraphMonitor,
+};
+
+function ActiveTrainingJobProgressController({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const { activeJobId, onJobChange } = useActiveTrainingJob();
+  const progress = useActiveTrainingJobProgress({ activeJobId, onJobChange });
+
+  return (
+    <ActiveTrainingJobProgressProvider value={progress}>
+      {children}
+    </ActiveTrainingJobProgressProvider>
+  );
+}
 
 export function useTargetHeaderState() {
   const {
@@ -67,10 +100,10 @@ export function useTargetSelectorState() {
     selectAllDatasets,
     selectFirstDataset,
     allConfigSnapshots,
-    modelsQuery,
-    presetsQuery,
-    datasetsQuery,
-    schemaQuery,
+    models,
+    presets,
+    datasets,
+    isSchemaReady,
   } = useTargetConfig();
 
   return {
@@ -87,7 +120,7 @@ export function useTargetSelectorState() {
     selectedExperimentRunId,
     selectedDatasets,
     configSnapshotsEnabled: capabilities.configSnapshotsEnabled,
-    isSchemaReady: schemaQuery.isSuccess,
+    isSchemaReady,
     selectModelType,
     selectModel,
     selectPreset: selectTargetPreset,
@@ -98,9 +131,9 @@ export function useTargetSelectorState() {
     selectAllDatasets,
     selectFirstDataset,
     snapshots: allConfigSnapshots,
-    models: modelsQuery.data?.models ?? [],
-    presets: presetsQuery.data?.presets ?? [],
-    datasets: datasetsQuery.data?.datasets ?? [],
+    models,
+    presets,
+    datasets,
   };
 }
 
@@ -111,7 +144,8 @@ export function useTargetConfigSummaryState() {
     allConfigSnapshotCount,
     selectedModel,
     selectedPreset,
-    schemaQuery,
+    isSchemaReady,
+    schemaLoading,
   } = useTargetConfig();
 
   return {
@@ -119,9 +153,9 @@ export function useTargetConfigSummaryState() {
     overrideCount,
     configSnapshotCount: allConfigSnapshotCount,
     canOpenFullConfig: Boolean(
-      selectedModel && selectedPreset && schemaQuery.isSuccess,
+      selectedModel && selectedPreset && isSchemaReady,
     ),
-    isSchemaLoading: schemaQuery.isLoading,
+    isSchemaLoading: schemaLoading,
   };
 }
 
@@ -129,39 +163,50 @@ export function useConfigSnapshotLibraryState() {
   const {
     configSnapshotLibrary,
     configSnapshotLibraryCount,
-    configSnapshotLibraryQuery,
+    libraryLoading,
+    isLibraryError,
+    libraryError,
     loadConfigSnapshot,
   } = useTargetConfig();
 
   return {
     snapshots: configSnapshotLibrary,
     snapshotCount: configSnapshotLibraryCount,
-    isLoading: configSnapshotLibraryQuery.isLoading,
-    isError: configSnapshotLibraryQuery.isError,
-    error: configSnapshotLibraryQuery.error,
+    isLoading: libraryLoading,
+    isError: isLibraryError,
+    error: libraryError,
     loadConfigSnapshot,
   };
 }
 
 export function useTargetQueryStatusState() {
-  const { modelsQuery, presetsQuery, datasetsQuery, schemaQuery } = useTargetConfig();
+  const {
+    isModelsError,
+    modelsError,
+    isPresetsError,
+    presetsError,
+    isDatasetsError,
+    datasetsError,
+    isSchemaError,
+    schemaError,
+  } = useTargetConfig();
 
   return {
     modelsQuery: {
-      isError: modelsQuery.isError,
-      error: modelsQuery.error,
+      isError: isModelsError,
+      error: modelsError,
     },
     presetsQuery: {
-      isError: presetsQuery.isError,
-      error: presetsQuery.error,
+      isError: isPresetsError,
+      error: presetsError,
     },
     datasetsQuery: {
-      isError: datasetsQuery.isError,
-      error: datasetsQuery.error,
+      isError: isDatasetsError,
+      error: datasetsError,
     },
     schemaQuery: {
-      isError: schemaQuery.isError,
-      error: schemaQuery.error,
+      isError: isSchemaError,
+      error: schemaError,
     },
   };
 }
@@ -172,7 +217,10 @@ export function useCompareTargetState() {
     selectedPreset,
     selectModel,
     selectPreset,
-    modelsQuery,
+    models,
+    modelsLoading,
+    isModelsError,
+    modelsError,
   } = useTargetConfig();
 
   return {
@@ -181,10 +229,10 @@ export function useCompareTargetState() {
     selectModel,
     selectPreset,
     catalog: {
-      models: modelsQuery.data?.models ?? [],
-      isLoading: modelsQuery.isLoading,
-      isError: modelsQuery.isError,
-      error: modelsQuery.error,
+      models,
+      isLoading: modelsLoading,
+      isError: isModelsError,
+      error: modelsError,
     },
   };
 }
@@ -206,7 +254,7 @@ export function ViewerProviders({
   onJobStarted,
   children,
 }: ViewerProvidersProps) {
-  const { target, graph, history, training } = useViewerState({
+  const { target, graph, history, activeJob, graphMonitor } = useViewerState({
     activeWorkspace,
     onJobStarted,
   });
@@ -214,7 +262,13 @@ export function ViewerProviders({
     <TargetConfigProvider value={target}>
       <GraphViewProvider value={graph}>
         <HistoricalRunsProvider value={history}>
-          <TrainingProvider value={training}>{children}</TrainingProvider>
+          <ActiveTrainingJobProvider value={activeJob}>
+            <ActiveTrainingJobProgressController>
+              <GraphMonitorProvider value={graphMonitor}>
+                {children}
+              </GraphMonitorProvider>
+            </ActiveTrainingJobProgressController>
+          </ActiveTrainingJobProvider>
         </HistoricalRunsProvider>
       </GraphViewProvider>
     </TargetConfigProvider>
