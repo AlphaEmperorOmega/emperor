@@ -864,12 +864,13 @@ describe("ViewerApp Full Config", () => {
       name: /layer stack submodule options section, 2 fields, 0 overrides/i,
     });
 
-    expect(submoduleAccordion).toHaveAttribute("aria-expanded", "true");
+    expect(submoduleAccordion).toHaveAttribute("aria-expanded", "false");
     expect(
       within(sectionNav).getByRole("button", {
         name: /jump to layer stack submodule options/i,
       }),
     ).toBeInTheDocument();
+    await user.click(submoduleAccordion);
     expect(within(dialog).getByLabelText(/submodule hidden dim/i))
       .toBeInTheDocument();
     expect(within(dialog).getByLabelText(/submodule stack activation/i))
@@ -1038,6 +1039,10 @@ describe("ViewerApp Full Config", () => {
     const gateAccordion = within(dialog).getByRole("button", {
       name: /^gate stack options section, 7 fields, 0 overrides/i,
     });
+    const recurrentLayerAccordion = within(dialog).getByRole("button", {
+      name: /^recurrent layer options section,/i,
+    });
+    await user.click(recurrentLayerAccordion);
     const recurrentGateAccordion = within(dialog).getByRole("button", {
       name: /^recurrent gate stack options section, 7 fields, 0 overrides/i,
     });

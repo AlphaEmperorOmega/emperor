@@ -39,6 +39,9 @@ type TrainingPanelProps = {
 const footerFieldLabelClass =
   "flex items-center gap-2 text-xs font-bold uppercase tracking-[0.08em] text-ink-faint";
 const footerIconClass = "h-[15px] w-[15px] text-violet";
+const TRAINING_REQUEST_FIELD_SUMMARY_LIMIT = 6;
+const TRAINING_LOG_TAIL_LINE_LIMIT = 200;
+const TRAINING_LOG_TAIL_CHAR_LIMIT = 20_000;
 
 export function TrainingPanel({ viewModel }: TrainingPanelProps) {
   const { actions, input, logFolder, options, request, status, training, ui } =
@@ -173,6 +176,17 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
       </ViewModeButton>
     </SegmentedControl>
   );
+  const visibleSelectedFieldSummary = selectedFieldSummary.slice(
+    0,
+    TRAINING_REQUEST_FIELD_SUMMARY_LIMIT,
+  );
+  const hiddenSelectedFieldCount =
+    selectedFieldSummary.length - visibleSelectedFieldSummary.length;
+  const logTailLines = job?.logTail.length ? job.logTail : ["No log output yet"];
+  const boundedLogTailLines = logTailLines.slice(-TRAINING_LOG_TAIL_LINE_LIMIT);
+  const boundedLogTailText = boundedLogTailLines
+    .join("\n")
+    .slice(-TRAINING_LOG_TAIL_CHAR_LIMIT);
 
   return (
     <section className="border-t border-line bg-[linear-gradient(0deg,rgba(14,12,24,0.7),rgba(8,8,14,0.4))] backdrop-blur-xl">
@@ -548,7 +562,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                 )}
               {selectedFieldSummary.length > 0 && (
                 <div className="grid max-h-24 gap-1 overflow-y-auto pr-1">
-                  {selectedFieldSummary.map((entry) => (
+                  {visibleSelectedFieldSummary.map((entry) => (
                     <div
                       key={entry.key}
                       className="flex min-w-0 items-center justify-between gap-2 rounded-[8px] border border-violet/30 bg-violet/10 px-2 py-1 text-xs"
@@ -559,6 +573,11 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
                       </span>
                     </div>
                   ))}
+                  {hiddenSelectedFieldCount > 0 && (
+                    <div className="rounded-[8px] border border-line bg-white/[0.025] px-2 py-1 text-xs text-ink-faint">
+                      +{hiddenSelectedFieldCount} more overrides
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -614,10 +633,7 @@ export function TrainingPanel({ viewModel }: TrainingPanelProps) {
             <div className="edge grid gap-2 rounded-card p-3">
               <SectionHeading title="Log Tail" />
               <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-[10px] border border-line bg-black/25 p-2 font-mono text-xs leading-5 text-ink-dim">
-                {(job?.logTail.length
-                  ? job.logTail
-                  : ["No log output yet"]
-                ).join("\n")}
+                {boundedLogTailText}
               </pre>
             </div>
 

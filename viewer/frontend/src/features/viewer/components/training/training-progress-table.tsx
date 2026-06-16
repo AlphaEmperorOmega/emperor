@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Ban,
@@ -91,6 +91,8 @@ function epochText(run: TrainingRun) {
 const bodyCellClass = "border-b border-line-soft px-3 py-3 align-middle";
 const monoCellClass = `${bodyCellClass} font-mono text-xs text-ink`;
 const emptyCell = <span className="font-mono text-xs text-ink-dim">-</span>;
+const TRAINING_PROGRESS_ROW_LIMIT = 100;
+const TRAINING_RUN_CHANGE_PILL_LIMIT = 6;
 
 function HoverTooltip({
   children,
@@ -257,11 +259,13 @@ function RunChangesCell({ run }: { run: TrainingRun }) {
   if (run.changes.length === 0) {
     return <td className={bodyCellClass}>{emptyCell}</td>;
   }
+  const visibleChanges = run.changes.slice(0, TRAINING_RUN_CHANGE_PILL_LIMIT);
+  const hiddenChangeCount = run.changes.length - visibleChanges.length;
 
   return (
     <td className={bodyCellClass}>
       <div className="flex max-w-[20rem] flex-wrap gap-1.5">
-        {run.changes.map((change) => (
+        {visibleChanges.map((change) => (
           <span
             key={`${change.source}-${change.key}-${String(change.value)}`}
             className={
@@ -274,6 +278,11 @@ function RunChangesCell({ run }: { run: TrainingRun }) {
             {change.key}={String(change.value)}
           </span>
         ))}
+        {hiddenChangeCount > 0 && (
+          <span className="rounded-[7px] border border-line bg-white/[0.035] px-2 py-0.5 font-mono text-xs text-ink-faint">
+            +{hiddenChangeCount}
+          </span>
+        )}
       </div>
     </td>
   );
@@ -405,45 +414,66 @@ export function TrainingProgressTable({
   onExcludePreset,
   onExcludeSnapshot,
 }: TrainingProgressTableProps) {
+  const visibleRuns = useMemo(() => {
+    const keep = new Set(
+      runs.slice(0, TRAINING_PROGRESS_ROW_LIMIT).map((run) => run.id),
+    );
+    for (const run of runs) {
+      if (run.status === "Running" || run.status === "Failed") {
+        keep.add(run.id);
+      }
+    }
+    return runs.filter((run) => keep.has(run.id));
+  }, [runs]);
+  const hiddenRunCount = Math.max(0, runs.length - visibleRuns.length);
+
   return (
-    <table className="min-w-[1080px] w-full border-separate border-spacing-0 text-left text-sm">
-      <thead className="sticky top-0 z-10 bg-bg-2/95 text-xs uppercase tracking-[0.08em] text-ink-faint">
-        <tr>
-          {[
-            "#",
-            "Status",
-            "Preset",
-            "Snapshot",
-            "Dataset",
-            "Search / Config",
-            "Epochs",
-            "Metrics",
-            "Artifacts",
-            "Actions",
-          ].map((heading) => (
-            <th
-              key={heading}
-              scope="col"
-              className="border-b border-line-soft px-3 py-2 font-bold"
-            >
-              {heading}
-            </th>
+    <div className="grid gap-2">
+      <table className="min-w-[1080px] w-full border-separate border-spacing-0 text-left text-sm">
+        <thead className="sticky top-0 z-10 bg-bg-2/95 text-xs uppercase tracking-[0.08em] text-ink-faint">
+          <tr>
+            {[
+              "#",
+              "Status",
+              "Preset",
+              "Snapshot",
+              "Dataset",
+              "Search / Config",
+              "Epochs",
+              "Metrics",
+              "Artifacts",
+              "Actions",
+            ].map((heading) => (
+              <th
+                key={heading}
+                scope="col"
+                className="border-b border-line-soft px-3 py-2 font-bold"
+              >
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {visibleRuns.map((run) => (
+            <TrainingRunProgressRow
+              key={run.id}
+              run={run}
+              onCommand={onCommand}
+              onFullError={onFullError}
+              canManageDraftRuns={canManageDraftRuns}
+              onExcludePreset={onExcludePreset}
+              onExcludeSnapshot={onExcludeSnapshot}
+            />
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {runs.map((run) => (
-          <TrainingRunProgressRow
-            key={run.id}
-            run={run}
-            onCommand={onCommand}
-            onFullError={onFullError}
-            canManageDraftRuns={canManageDraftRuns}
-            onExcludePreset={onExcludePreset}
-            onExcludeSnapshot={onExcludeSnapshot}
-          />
-        ))}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+      {hiddenRunCount > 0 && (
+        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
+          Showing {visibleRuns.length} of {runs.length} planned runs. Running and
+          failed rows stay visible outside the first {TRAINING_PROGRESS_ROW_LIMIT}.
+        </div>
+      )}
+    </div>
   );
 }

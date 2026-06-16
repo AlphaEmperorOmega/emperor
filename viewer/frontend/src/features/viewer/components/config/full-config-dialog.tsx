@@ -10,6 +10,7 @@ import {
   disabledConfigFieldReasons,
   filterConfigSectionsForSearch,
   flattenConfigSearchOptions,
+  modifiedCount,
   presetOwnedCount,
   sectionElementId,
 } from "@/lib/config";
@@ -130,13 +131,34 @@ export function FullConfigDialog({
   const searchOpenKey = isSearchActive
     ? `${selectedFieldKey ?? ""}\u0000${searchQuery.trim()}`
     : "all";
+  const defaultOpenSectionTitles = useMemo(() => {
+    if (isSearchActive) {
+      return visibleSections.map((section) => section.title);
+    }
+    const titles = new Set<string>();
+    const firstSection = visibleSections[0];
+    if (firstSection) {
+      titles.add(firstSection.title);
+    }
+    for (const section of visibleSections) {
+      const sourceSection = sectionsByTitle.get(section.title) ?? section;
+      if (modifiedCount(sourceSection.fields, overrides) > 0) {
+        titles.add(section.title);
+      }
+    }
+    return Array.from(titles);
+  }, [isSearchActive, overrides, sectionsByTitle, visibleSections]);
   const {
     openSectionTitles,
     sectionRefs,
     toggleSection,
-    toggleAllSections,
+    setOpenSections,
     jumpToSection,
-  } = useConfigDialogSections(visibleSections, searchOpenKey);
+  } = useConfigDialogSections(
+    visibleSections,
+    searchOpenKey,
+    defaultOpenSectionTitles,
+  );
   const effectiveOpenSectionTitles = useMemo(() => {
     const titles = new Set<string>();
     for (const title of openSectionTitles) {
@@ -159,9 +181,19 @@ export function FullConfigDialog({
       effectiveOpenSectionTitles.has(section.title),
     );
   const trainingCommand = useMemo(
-    () => buildTrainingCommand({ model, preset, sections, overrides }),
-    [model, preset, sections, overrides],
+    () =>
+      isTrainingCommandOpen
+        ? buildTrainingCommand({ model, preset, sections, overrides })
+        : "",
+    [isTrainingCommandOpen, model, preset, sections, overrides],
   );
+  const handleToggleAllSections = useCallback(() => {
+    setOpenSections(
+      areAllEnabledSectionsOpen
+        ? []
+        : enabledVisibleSections.map((section) => section.title),
+    );
+  }, [areAllEnabledSectionsOpen, enabledVisibleSections, setOpenSections]);
   const { status: copyStatus, copy: copyTrainingCommand } =
     useCopyToClipboard(trainingCommand);
   const handleFieldChange = useCallback(
@@ -416,7 +448,7 @@ export function FullConfigDialog({
               emptyMessage={isSearchActive ? "No matching sections" : undefined}
               onJumpToSection={jumpToSection}
               onToggleSection={toggleSection}
-              onToggleAllSections={toggleAllSections}
+              onToggleAllSections={handleToggleAllSections}
             />
             <div className="grid auto-rows-max items-start gap-3">
               {visibleSections.length > 0 ? (
