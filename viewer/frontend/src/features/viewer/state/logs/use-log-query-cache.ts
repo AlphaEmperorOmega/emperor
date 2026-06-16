@@ -11,7 +11,52 @@ import {
 
 type RefreshAfterMutationArgs = {
   runId?: string;
+  runIds?: string[];
 };
+
+type RunIdInput = string | string[] | undefined;
+
+function normalizeRunIds(runIds: RunIdInput) {
+  if (Array.isArray(runIds)) {
+    return runIds;
+  }
+  return runIds ? [runIds] : undefined;
+}
+
+function queryKeyRoot(queryKey: readonly unknown[]) {
+  return typeof queryKey[0] === "string" ? queryKey[0] : "";
+}
+
+function queryKeyContainsRunId(value: unknown, runIds: Set<string>): boolean {
+  if (typeof value === "string") {
+    return runIds.has(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => queryKeyContainsRunId(item, runIds));
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) => queryKeyContainsRunId(item, runIds));
+  }
+  return false;
+}
+
+function runScopedRemovalFilter({
+  root,
+  runIds,
+}: {
+  root: string;
+  runIds?: RunIdInput;
+}) {
+  const runIdSet = new Set((normalizeRunIds(runIds) ?? []).filter(Boolean));
+  if (runIdSet.size === 0) {
+    return { queryKey: [root] };
+  }
+  return {
+    predicate: (query: { queryKey: readonly unknown[] }) =>
+      queryKeyRoot(query.queryKey) === root &&
+      queryKeyContainsRunId(query.queryKey.slice(1), runIdSet),
+  };
+}
 
 export function useLogQueryCache() {
   const queryClient = useQueryClient();
@@ -26,29 +71,36 @@ export function useLogQueryCache() {
   );
 
   const invalidateRunDetails = useCallback(
-    (_runId?: string) => {
-      void _runId;
-      queryClient.removeQueries({ queryKey: LOG_TAGS_QUERY_KEY });
-      queryClient.removeQueries({ queryKey: LOG_CHECKPOINTS_QUERY_KEY });
-      queryClient.removeQueries({ queryKey: LOG_ARTIFACTS_QUERY_KEY });
+    (runIds?: RunIdInput) => {
+      queryClient.removeQueries(
+        runScopedRemovalFilter({ root: LOG_TAGS_QUERY_KEY[0], runIds }),
+      );
+      queryClient.removeQueries(
+        runScopedRemovalFilter({ root: LOG_CHECKPOINTS_QUERY_KEY[0], runIds }),
+      );
+      queryClient.removeQueries(
+        runScopedRemovalFilter({ root: LOG_ARTIFACTS_QUERY_KEY[0], runIds }),
+      );
       return Promise.resolve();
     },
     [queryClient],
   );
 
   const removeRunScalars = useCallback(
-    (_runId?: string) => {
-      void _runId;
-      queryClient.removeQueries({ queryKey: LOG_SCALARS_QUERY_KEY });
+    (runIds?: RunIdInput) => {
+      queryClient.removeQueries(
+        runScopedRemovalFilter({ root: LOG_SCALARS_QUERY_KEY[0], runIds }),
+      );
     },
     [queryClient],
   );
 
   const refreshAfterMutation = useCallback(
-    async ({ runId }: RefreshAfterMutationArgs = {}) => {
+    async ({ runId, runIds }: RefreshAfterMutationArgs = {}) => {
+      const affectedRunIds = runIds ?? runId;
       const listInvalidation = invalidateLogLists();
-      void invalidateRunDetails(runId);
-      removeRunScalars(runId);
+      void invalidateRunDetails(affectedRunIds);
+      removeRunScalars(affectedRunIds);
       await listInvalidation;
     },
     [invalidateLogLists, invalidateRunDetails, removeRunScalars],

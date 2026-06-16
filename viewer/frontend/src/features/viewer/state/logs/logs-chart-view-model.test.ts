@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildLogScalarQueryInput,
+  deriveLogMetricGroupScalarQueryStates,
   deriveLogsChartEmptyState,
   groupLogScalarSeriesByTag,
 } from "@/features/viewer/state/logs/logs-chart-view-model";
@@ -243,6 +244,22 @@ describe("logs chart view model", () => {
     ).toMatchObject({ title: "Loading scalar points", busy: true });
   });
 
+  it("does not show a global scalar loading state when loaded chart data remains visible", () => {
+    expect(
+      deriveLogsChartEmptyState({
+        expandedSelectedTagCount: 2,
+        hasEventFiles: true,
+        runsLoading: false,
+        scalarLoading: true,
+        selectedSeriesCount: 1,
+        selectedTagCount: 2,
+        tagOptionCount: 2,
+        tagsLoading: false,
+        visibleRunCount: 1,
+      }),
+    ).toBeNull();
+  });
+
   it("does not return an empty state when selected scalar series are renderable", () => {
     expect(
       deriveLogsChartEmptyState({
@@ -257,5 +274,56 @@ describe("logs chart view model", () => {
         visibleRunCount: 1,
       }),
     ).toBeNull();
+  });
+
+  it("scopes scalar query loading state to active metric groups", () => {
+    const hiddenError = new Error("hidden group failed");
+    const states = deriveLogMetricGroupScalarQueryStates({
+      train: {
+        active: true,
+        isInitialLoading: true,
+        isFetching: true,
+        isError: false,
+        error: null,
+      },
+      validation: {
+        active: true,
+        isInitialLoading: false,
+        isFetching: false,
+        isError: false,
+        error: null,
+      },
+      test: {
+        active: false,
+        isInitialLoading: true,
+        isFetching: true,
+        isError: true,
+        error: hiddenError,
+      },
+      other: {
+        active: false,
+        isInitialLoading: false,
+        isFetching: false,
+        isError: false,
+        error: null,
+      },
+    });
+
+    expect(states.train).toMatchObject({
+      isInitialLoading: true,
+      isFetching: true,
+      isError: false,
+    });
+    expect(states.validation).toMatchObject({
+      isInitialLoading: false,
+      isFetching: false,
+      isError: false,
+    });
+    expect(states.test).toEqual({
+      isInitialLoading: false,
+      isFetching: false,
+      isError: false,
+      error: null,
+    });
   });
 });

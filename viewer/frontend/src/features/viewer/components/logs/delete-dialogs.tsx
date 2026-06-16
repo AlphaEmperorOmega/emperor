@@ -248,6 +248,14 @@ export function DeleteSubsetRunsDialog({
                   <div className="mt-1 font-mono text-xs text-ink">{runCount}</div>
                 </div>
               </div>
+              {plan.truncated && (
+                <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-2 text-xs text-ink-faint">
+                  {plan.truncationReason ??
+                    `Showing ${plan.returnedItemCount ?? plan.candidates.length} of ${
+                      plan.sourceItemCount ?? plan.candidateCount
+                    } matched runs.`}
+                </div>
+              )}
               <div className="grid gap-3 rounded-[12px] border border-line-soft bg-black/20 p-3 sm:grid-cols-2">
                 <AffectedValueGroup label="Experiments" values={plan.affected.experiments} />
                 <AffectedValueGroup label="Datasets" values={plan.affected.datasets} />

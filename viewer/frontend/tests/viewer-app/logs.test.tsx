@@ -5,10 +5,12 @@ import {
   buildLargeLogFixture,
   buildSubsetDeleteFixture,
   capabilitiesResponse,
+  deferred,
   expectLogsChecklistRowSizing,
   installFetchMock,
   logMetricGroupToggle,
   logRunsResponse,
+  logScalarSeries,
   renderViewer,
   resetViewerAppTestState,
   scalarChartGridFor,
@@ -148,6 +150,131 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.queryByRole("table", { name: /test\/accuracy test leaderboard/i }))
       .not.toBeInTheDocument();
     expect(logScalarRequests).toHaveLength(3);
+  });
+
+  it("keeps loaded scalar groups visible while a newly opened group loads", async () => {
+    const trainScalarResponse = deferred<unknown>();
+    const { logScalarRequests } = installFetchMock({
+      logScalarResponseFactory: (body) => {
+        if (body.tags.includes("train/loss")) {
+          return trainScalarResponse.promise;
+        }
+        return undefined;
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    await user.click(logMetricGroupToggle("Train"));
+
+    await waitFor(() => {
+      expect(logScalarRequests).toHaveLength(2);
+    });
+    expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(screen.queryByText(/^Loading scalar points$/i)).not.toBeInTheDocument();
+    const trainBody = document.getElementById("logs-metric-group-train");
+    expect(trainBody).toBeInstanceOf(HTMLElement);
+    expect(within(trainBody as HTMLElement).getByText("Loading Train scalar points"))
+      .toBeInTheDocument();
+
+    trainScalarResponse.resolve({
+      series: logScalarSeries.filter(
+        (series) => series.runId === "log-mnist" && series.tag === "train/loss",
+      ),
+    });
+
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
+    expect(screen.queryByText("Loading Train scalar points")).not.toBeInTheDocument();
+  });
+
+  it("keeps existing charts visible while a later log tag chunk loads", async () => {
+    const extraRuns = buildLargeLogFixture(55).logRunsResponse.runs.map(
+      (run, index) => ({
+        ...run,
+        id: `extra-log-${index + 1}`,
+        model: "wide-linear",
+        dataset: "Cifar10",
+        preset: "ALT",
+        relativePath: run.relativePath
+          .replace("/linear/", "/wide-linear/")
+          .replace("/BASELINE/", "/ALT/")
+          .replace("/Mnist/", "/Cifar10/"),
+      }),
+    );
+    const runs = [...logRunsResponse.runs, ...extraRuns];
+    const delayedTagChunk = deferred<null>();
+    const { logTagRequests } = installFetchMock({
+      logRunsResponse: { runs },
+      logExperimentsResponse: {
+        experiments: runs.map((run) => ({
+          experiment: run.experiment,
+          runCount: 1,
+          relativePath: run.experiment,
+        })),
+      },
+      logTagsByRun: {
+        "log-mnist": ["train/loss", "validation/accuracy"],
+        "log-cifar": ["validation/accuracy"],
+        ...Object.fromEntries(
+          extraRuns.map((run) => [run.id, ["validation/accuracy"]]),
+        ),
+      },
+      logScalarSeries: [
+        ...logScalarSeries,
+        ...extraRuns.map((run, index) => ({
+          runId: run.id,
+          tag: "validation/accuracy",
+          points: [
+            { step: 1, wallTime: 1780000000 + index, value: 0.5 + index / 100 },
+            { step: 2, wallTime: 1780000100 + index, value: 0.6 + index / 100 },
+          ],
+        })),
+      ],
+      logTagsResponseFactory: (body) => {
+        if (!body.runIds.includes("extra-log-49")) {
+          return undefined;
+        }
+        return delayedTagChunk.promise.then(() => ({
+          runs: body.runIds.map((runId) => ({
+            runId,
+            scalarTags: ["validation/accuracy"],
+            histogramTags: [],
+            imageTags: [],
+            textTags: [],
+          })),
+        }));
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /all runs/i }));
+
+    await waitFor(() => {
+      expect(
+        logTagRequests.some((request) => request.runIds.includes("extra-log-49")),
+      ).toBe(true);
+    });
+    expect(screen.getByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+    expect(screen.getByText("Refreshing TensorBoard tags")).toBeInTheDocument();
+    expect(screen.queryByText("Reading TensorBoard tags")).not.toBeInTheDocument();
+
+    delayedTagChunk.resolve(null);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Refreshing TensorBoard tags")).not.toBeInTheDocument();
+    });
   });
 
   it("shows checkpoints, params, and artifacts in run details", async () => {

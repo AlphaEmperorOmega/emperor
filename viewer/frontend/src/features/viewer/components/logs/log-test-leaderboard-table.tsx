@@ -20,6 +20,8 @@ type TestLeaderboardRow = {
   sourceIndex: number;
 };
 
+const TEST_LEADERBOARD_ROW_LIMIT = 100;
+
 function testMetricSortDirection(tag: string): TestLeaderboardSortDirection {
   return tag.toLowerCase().includes("loss") ? "ascending" : "descending";
 }
@@ -103,6 +105,8 @@ export function LogTestLeaderboardTable({
     () => buildTestLeaderboardRows({ tag, series, runsById, runOrder }),
     [tag, series, runsById, runOrder],
   );
+  const visibleRows = rows.slice(0, TEST_LEADERBOARD_ROW_LIMIT);
+  const hiddenRowCount = Math.max(0, rows.length - visibleRows.length);
 
   return (
     <section className="edge grid min-w-0 gap-3 rounded-card p-4">
@@ -138,7 +142,7 @@ export function LogTestLeaderboardTable({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {visibleRows.length === 0 ? (
               <tr>
                 <td
                   className="border-b border-line-soft px-3 py-6 text-center text-ink-faint"
@@ -148,7 +152,7 @@ export function LogTestLeaderboardTable({
                 </td>
               </tr>
             ) : (
-              rows.map((row, index) => {
+              visibleRows.map((row, index) => {
                 const runLabel = formatRunLabel(row.run);
                 return (
                   <tr
@@ -196,6 +200,11 @@ export function LogTestLeaderboardTable({
           </tbody>
         </table>
       </div>
+      {hiddenRowCount > 0 && (
+        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-2 text-center text-xs text-ink-faint">
+          Showing top {visibleRows.length} of {rows.length} runs.
+        </div>
+      )}
     </section>
   );
 }

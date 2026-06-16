@@ -49,6 +49,8 @@ import {
 
 const TARGET_LOG_RUN_LIMIT = 5;
 const CUSTOM_LOG_RUN_LIMIT = 500;
+const LOG_SELECT_ALL_RUN_LIMIT = 100;
+const LOG_SELECT_ALL_TAG_LIMIT = 100;
 const DEFAULT_COLLAPSED_METRIC_GROUPS = new Set<LogMetricGroupKey>([
   "train",
   "test",
@@ -395,7 +397,7 @@ export function useLogsWorkspaceState({
       setStartedExperiments((previous) => {
         return removeStartedExperiment(previous, result.experiment);
       });
-      void refreshAfterMutation();
+      void refreshAfterMutation({ runIds: result.deletedRunIds });
     },
   });
   const runDeletePlanMutation = useMutation({
@@ -418,7 +420,7 @@ export function useLogsWorkspaceState({
           deletedRunIds,
         }),
       );
-      void refreshAfterMutation();
+      void refreshAfterMutation({ runIds: result.deletedRunIds });
     },
   });
 
@@ -569,14 +571,20 @@ export function useLogsWorkspaceState({
     },
     selectAllRuns: () => {
       markCustomScope();
-      setAllValues(setSelectedRunIds, runOptions.map((option) => option.value));
+      setAllValues(
+        setSelectedRunIds,
+        runOptions.slice(0, LOG_SELECT_ALL_RUN_LIMIT).map((option) => option.value),
+      );
     },
     selectNoRuns: () => {
       markCustomScope();
       setNoValues(setSelectedRunIds);
     },
     selectAllTags: () =>
-      setAllValues(setSelectedTags, tagOptions.map((option) => option.value)),
+      setAllValues(
+        setSelectedTags,
+        tagOptions.slice(0, LOG_SELECT_ALL_TAG_LIMIT).map((option) => option.value),
+      ),
     selectNoTags: () => setNoValues(setSelectedTags),
   };
 }

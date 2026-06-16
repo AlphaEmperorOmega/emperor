@@ -2442,6 +2442,19 @@ export function installFetchMock(
     logRunsResponse?: typeof logRunsResponse;
     logExperimentsResponse?: typeof logExperimentsResponse;
     logScalarSeries?: typeof logScalarSeries;
+    logScalarResponseFactory?: (
+      body: {
+        runIds: string[];
+        tags: string[];
+        maxPoints?: number;
+        sampling?: string;
+      },
+      requestIndex: number,
+    ) => unknown | Promise<unknown>;
+    logTagsResponseFactory?: (
+      body: { runIds: string[] },
+      requestIndex: number,
+    ) => unknown | Promise<unknown>;
     logTagsByRun?: Record<string, MockLogTags>;
     logCheckpointsByRun?: Record<string, MockLogCheckpoint[]>;
     logRunArtifactsByRun?: Record<
@@ -2455,8 +2468,12 @@ export function installFetchMock(
     schemaResponse?: unknown;
     searchSpaceResponse?: typeof searchSpaceResponse;
     datasetsResponse?: typeof datasetsResponse;
-    monitorDataResponse?: (context: MockMonitorRequestContext) => MockMonitorPayload;
-    logRunMonitorDataResponse?: (context: MockMonitorRequestContext) => MockMonitorPayload;
+    monitorDataResponse?: (
+      context: MockMonitorRequestContext,
+    ) => MockMonitorPayload | Promise<MockMonitorPayload>;
+    logRunMonitorDataResponse?: (
+      context: MockMonitorRequestContext,
+    ) => MockMonitorPayload | Promise<MockMonitorPayload>;
     parameterStatusResponse?: (context: {
       jobId: string;
       preset: string | null;
@@ -2482,6 +2499,7 @@ export function installFetchMock(
     maxPoints?: number;
     sampling?: string;
   }> = [];
+  const logTagRequests: Array<{ runIds: string[] }> = [];
   const configSnapshotCreateRequests: Array<{
     model: string;
     preset: string;
@@ -2928,14 +2946,16 @@ export function installFetchMock(
           dataset,
           logDir,
         }) ?? defaultMonitorPayload(nodePath);
-      return jsonResponse({
-        jobId: "job-1",
-        nodePath,
-        preset,
-        dataset,
-        logDir,
-        ...monitorPayload,
-      });
+      return Promise.resolve(monitorPayload).then((payload) =>
+        jsonResponse({
+          jobId: "job-1",
+          nodePath,
+          preset,
+          dataset,
+          logDir,
+          ...payload,
+        }),
+      );
     }
     if (url.includes("/training/jobs/job-1/monitor-parameter-status")) {
       const parsedUrl = new URL(url);
@@ -3098,13 +3118,15 @@ export function installFetchMock(
           dataset: run?.dataset ?? null,
           logDir,
         }) ?? defaultLogRunMonitorPayload(nodePath);
-      return jsonResponse({
-        jobId: runId,
-        nodePath,
-        dataset: run?.dataset ?? null,
-        logDir,
-        ...monitorPayload,
-      });
+      return Promise.resolve(monitorPayload).then((payload) =>
+        jsonResponse({
+          jobId: runId,
+          nodePath,
+          dataset: run?.dataset ?? null,
+          logDir,
+          ...payload,
+        }),
+      );
     }
     if (url.endsWith("/logs/experiments")) {
       return jsonResponse(experimentResponse);
@@ -3135,12 +3157,19 @@ export function installFetchMock(
     }
     if (url.endsWith("/logs/tags")) {
       const body = JSON.parse(String(init?.body)) as { runIds: string[] };
-      return jsonResponse({
+      logTagRequests.push(body);
+      const responseBody = {
         runs: body.runIds.map((runId) => ({
           runId,
           ...logTagsPayload(tagsByRun[runId]),
         })),
-      });
+      };
+      if (options.logTagsResponseFactory) {
+        return Promise.resolve(
+          options.logTagsResponseFactory(body, logTagRequests.length - 1),
+        ).then((payload) => jsonResponse(payload ?? responseBody));
+      }
+      return jsonResponse(responseBody);
     }
     if (url.endsWith("/logs/scalars")) {
       const body = JSON.parse(String(init?.body)) as {
@@ -3150,11 +3179,17 @@ export function installFetchMock(
         sampling?: string;
       };
       logScalarRequests.push(body);
-      return jsonResponse({
+      const responseBody = {
         series: scalarSeries.filter(
           (series) => body.runIds.includes(series.runId) && body.tags.includes(series.tag),
         ),
-      });
+      };
+      if (options.logScalarResponseFactory) {
+        return Promise.resolve(
+          options.logScalarResponseFactory(body, logScalarRequests.length - 1),
+        ).then((payload) => jsonResponse(payload ?? responseBody));
+      }
+      return jsonResponse(responseBody);
     }
     if (url.endsWith("/logs/parameter-status")) {
       const body = JSON.parse(String(init?.body)) as { runIds: string[] };
@@ -3183,6 +3218,7 @@ export function installFetchMock(
     trainingBodies,
     configSnapshotCreateRequests,
     configSnapshotUpdateRequests,
+    logTagRequests,
     logScalarRequests,
     logCheckpointRequests,
     logArtifactRequests,

@@ -26,8 +26,14 @@ function renderLogQueryCache() {
 }
 
 describe("useLogQueryCache", () => {
-  it("refreshes log lists and removes run detail cache families after mutations", async () => {
-    const { invalidateSpy, removeSpy, result } = renderLogQueryCache();
+  it("refreshes log lists and removes affected run detail caches after mutations", async () => {
+    const { client, invalidateSpy, removeSpy, result } = renderLogQueryCache();
+    client.setQueryData([...LOG_TAGS_QUERY_KEY, ["run-1"]], "run-1-tags");
+    client.setQueryData([...LOG_TAGS_QUERY_KEY, ["run-2"]], "run-2-tags");
+    client.setQueryData([...LOG_CHECKPOINTS_QUERY_KEY, ["run-1"]], "run-1-checkpoints");
+    client.setQueryData([...LOG_ARTIFACTS_QUERY_KEY, "run-1"], "run-1-artifacts");
+    client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-1"], ["loss"]], "run-1-loss");
+    client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-2"], ["loss"]], "run-2-loss");
 
     await act(async () => {
       await result.current.refreshAfterMutation({ runId: "run-1" });
@@ -41,18 +47,16 @@ describe("useLogQueryCache", () => {
       queryKey: LOG_RUNS_QUERY_KEY,
     });
     expect(removeSpy).toHaveBeenCalledTimes(4);
-    expect(removeSpy).toHaveBeenNthCalledWith(1, {
-      queryKey: LOG_TAGS_QUERY_KEY,
-    });
-    expect(removeSpy).toHaveBeenNthCalledWith(2, {
-      queryKey: LOG_CHECKPOINTS_QUERY_KEY,
-    });
-    expect(removeSpy).toHaveBeenNthCalledWith(3, {
-      queryKey: LOG_ARTIFACTS_QUERY_KEY,
-    });
-    expect(removeSpy).toHaveBeenNthCalledWith(4, {
-      queryKey: LOG_SCALARS_QUERY_KEY,
-    });
+    expect(client.getQueryData([...LOG_TAGS_QUERY_KEY, ["run-1"]])).toBeUndefined();
+    expect(client.getQueryData([...LOG_CHECKPOINTS_QUERY_KEY, ["run-1"]])).toBeUndefined();
+    expect(client.getQueryData([...LOG_ARTIFACTS_QUERY_KEY, "run-1"])).toBeUndefined();
+    expect(
+      client.getQueryData([...LOG_SCALARS_QUERY_KEY, ["run-1"], ["loss"]]),
+    ).toBeUndefined();
+    expect(client.getQueryData([...LOG_TAGS_QUERY_KEY, ["run-2"]])).toBe("run-2-tags");
+    expect(client.getQueryData([...LOG_SCALARS_QUERY_KEY, ["run-2"], ["loss"]])).toBe(
+      "run-2-loss",
+    );
     expect(invalidateSpy.mock.invocationCallOrder[1]).toBeLessThan(
       removeSpy.mock.invocationCallOrder[0],
     );
@@ -75,7 +79,7 @@ describe("useLogQueryCache", () => {
     expect(removeSpy).not.toHaveBeenCalled();
   });
 
-  it("removes all scalar-family caches with the existing broad prefix behavior", () => {
+  it("removes only affected scalar-family caches when a run id is supplied", () => {
     const { client, removeSpy, result } = renderLogQueryCache();
     client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-1"], ["loss"]], "loss");
     client.setQueryData([...LOG_SCALARS_QUERY_KEY, ["run-2"], ["accuracy"]], "accuracy");
@@ -86,11 +90,10 @@ describe("useLogQueryCache", () => {
     });
 
     expect(removeSpy).toHaveBeenCalledTimes(1);
-    expect(removeSpy).toHaveBeenCalledWith({ queryKey: LOG_SCALARS_QUERY_KEY });
     expect(client.getQueryData([...LOG_SCALARS_QUERY_KEY, ["run-1"], ["loss"]])).toBeUndefined();
     expect(
       client.getQueryData([...LOG_SCALARS_QUERY_KEY, ["run-2"], ["accuracy"]]),
-    ).toBeUndefined();
+    ).toBe("accuracy");
     expect(client.getQueryData([...LOG_TAGS_QUERY_KEY, ["run-1"]])).toBe("tags");
   });
 });

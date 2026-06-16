@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { ViewModeButton } from "@/features/viewer/components/view-mode-button";
+import { InlineStatus } from "@/features/viewer/components/shared/inline-status";
 import { LogConfusionMatrixHeatmaps } from "@/features/viewer/components/logs/log-confusion-matrix-heatmap";
 import { LazyLogScalarChart } from "@/features/viewer/components/logs/log-scalar-chart";
 import { LogTestLeaderboardTable } from "@/features/viewer/components/logs/log-test-leaderboard-table";
@@ -29,6 +30,7 @@ import {
   type LogMetricGroupKey,
   isTestMetricTag,
 } from "@/features/viewer/state/logs/logs-selectors";
+import { type LogMetricGroupScalarQueryStates } from "@/features/viewer/state/logs/logs-chart-view-model";
 import {
   type ConfusionMatrixHeatmap,
   type LogValidationExampleImage,
@@ -43,10 +45,17 @@ const SCALAR_CHART_GRID_CLASSES: Record<ScalarChartGridMode, string> = {
   three: "grid gap-4 xl:grid-cols-2 2xl:grid-cols-3",
 };
 
+const SCALAR_CHART_GRID_FULL_SPAN_CLASSES: Record<ScalarChartGridMode, string> = {
+  full: "",
+  two: "xl:col-span-2",
+  three: "xl:col-span-2 2xl:col-span-3",
+};
+
 // Charts that share an ECharts group keep their tooltip, crosshair, and dataZoom
 // in sync. All logs scalar charts belong to one group so hovering a step lights
 // up every metric at once, TensorBoard-style.
 const LOGS_SCALAR_GROUP = "logs-scalars";
+const LOG_METRIC_GROUP_RENDER_LIMIT = 100;
 
 export type LogsChartEmptyState = {
   title: string;
@@ -125,6 +134,8 @@ export function LogsChartPanel({
   runOrder,
   visibleRunCount,
   selectedTagCount,
+  scalarQueryStates,
+  isTagRefreshLoading,
   collapsedMetricGroups,
   onToggleMetricGroup,
   gridMode,
@@ -138,8 +149,6 @@ export function LogsChartPanel({
   isFetching,
   isRefreshDisabled,
   onRefresh,
-  isError,
-  error,
   emptyState,
   onSelectRun,
 }: {
@@ -156,6 +165,8 @@ export function LogsChartPanel({
   runOrder: string[];
   visibleRunCount: number;
   selectedTagCount: number;
+  scalarQueryStates: LogMetricGroupScalarQueryStates;
+  isTagRefreshLoading: boolean;
   collapsedMetricGroups: Set<LogMetricGroupKey>;
   onToggleMetricGroup: (group: LogMetricGroupKey) => void;
   gridMode: ScalarChartGridMode;
@@ -169,8 +180,6 @@ export function LogsChartPanel({
   isFetching: boolean;
   isRefreshDisabled: boolean;
   onRefresh: () => void;
-  isError: boolean;
-  error: unknown;
   emptyState: LogsChartEmptyState | null;
   onSelectRun: (runId: string) => void;
 }) {
@@ -261,16 +270,15 @@ export function LogsChartPanel({
       </div>
 
       <div className="min-h-0 overflow-y-auto p-4">
-        {isError && (
-          <div className="mb-4">
-            <ErrorPanel title="Scalar read failed" message={errorMessage(error)} />
-          </div>
-        )}
-
         {emptyState ? (
           <ChartEmptyState {...emptyState} />
         ) : (
           <div className="grid gap-5">
+            {isTagRefreshLoading && (
+              <InlineStatus busy compact role="status">
+                Refreshing TensorBoard tags
+              </InlineStatus>
+            )}
             <LogValidationExamplesPanel
               images={mediaImages}
               texts={mediaTexts}
@@ -287,7 +295,11 @@ export function LogsChartPanel({
                 return null;
               }
               const isCollapsed = collapsedMetricGroups.has(group.key);
+              const queryState = scalarQueryStates[group.key];
               const bodyId = `logs-metric-group-${group.key}`;
+              const visibleMetrics = metrics.slice(0, LOG_METRIC_GROUP_RENDER_LIMIT);
+              const hiddenMetricCount = Math.max(0, metrics.length - visibleMetrics.length);
+              const fullSpanClass = SCALAR_CHART_GRID_FULL_SPAN_CLASSES[gridMode];
 
               return (
                 <section key={group.key} className="grid gap-3">
@@ -299,37 +311,63 @@ export function LogsChartPanel({
                     onToggle={onToggleMetricGroup}
                   />
                   {!isCollapsed && (
-                    <div id={bodyId} className={SCALAR_CHART_GRID_CLASSES[gridMode]}>
-                      {metrics.map(({ tag, series }) => {
-                        if (isTestMetricTag(tag)) {
+                    <>
+                      <div id={bodyId} className={SCALAR_CHART_GRID_CLASSES[gridMode]}>
+                        {queryState.isError && (
+                          <div className={fullSpanClass}>
+                            <ErrorPanel
+                              title={`${group.label} scalar read failed`}
+                              message={errorMessage(queryState.error)}
+                            />
+                          </div>
+                        )}
+                        {queryState.isInitialLoading && metrics.length === 0 && (
+                          <InlineStatus
+                            busy
+                            compact
+                            role="status"
+                            className={fullSpanClass}
+                          >
+                            Loading {group.label} scalar points
+                          </InlineStatus>
+                        )}
+                        {visibleMetrics.map(({ tag, series }) => {
+                          if (isTestMetricTag(tag)) {
+                            return (
+                              <LogTestLeaderboardTable
+                                key={tag}
+                                tag={tag}
+                                series={series}
+                                runsById={runsById}
+                                runOrder={runOrder}
+                                onSelectRun={onSelectRun}
+                              />
+                            );
+                          }
                           return (
-                            <LogTestLeaderboardTable
+                            <LazyLogScalarChart
                               key={tag}
                               tag={tag}
                               series={series}
                               runsById={runsById}
+                              checkpointsByRunId={checkpointsByRunId}
                               runOrder={runOrder}
                               onSelectRun={onSelectRun}
+                              group={LOGS_SCALAR_GROUP}
+                              xMode={xMode}
+                              yScale={yScale}
+                              smoothing={smoothing}
                             />
                           );
-                        }
-                        return (
-                          <LazyLogScalarChart
-                            key={tag}
-                            tag={tag}
-                            series={series}
-                            runsById={runsById}
-                            checkpointsByRunId={checkpointsByRunId}
-                            runOrder={runOrder}
-                            onSelectRun={onSelectRun}
-                            group={LOGS_SCALAR_GROUP}
-                            xMode={xMode}
-                            yScale={yScale}
-                            smoothing={smoothing}
-                          />
-                        );
-                      })}
-                    </div>
+                        })}
+                      </div>
+                      {hiddenMetricCount > 0 && (
+                        <div className="rounded-[10px] border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
+                          Showing {visibleMetrics.length} of {metrics.length} charts in this
+                          group. Narrow selected tags to inspect the rest.
+                        </div>
+                      )}
+                    </>
                   )}
                 </section>
               );

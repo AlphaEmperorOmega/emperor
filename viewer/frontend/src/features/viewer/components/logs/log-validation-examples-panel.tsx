@@ -94,15 +94,27 @@ export function LogValidationExamplesPanel({
                   step {image.step} · {image.tag}
                 </div>
               </div>
-              <Image
-                src={image.dataUrl}
-                alt={`Most-confident wrong validation predictions for ${runName}`}
-                width={960}
-                height={540}
-                sizes="(min-width: 1280px) 50vw, 100vw"
-                unoptimized
-                className="w-full rounded-[6px] border border-line-soft bg-black/20 object-contain"
-              />
+              {image.truncated || !image.dataUrl ? (
+                <div className="grid min-h-44 place-items-center rounded-[6px] border border-line-soft bg-black/20 p-4 text-center">
+                  <div className="grid gap-1">
+                    <div className="text-sm font-semibold text-ink">Payload omitted</div>
+                    <div className="max-w-sm text-xs leading-5 text-ink-faint">
+                      {image.truncationReason ??
+                        "This validation image exceeded the viewer payload budget."}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <Image
+                  src={image.dataUrl}
+                  alt={`Most-confident wrong validation predictions for ${runName}`}
+                  width={960}
+                  height={540}
+                  sizes="(min-width: 1280px) 50vw, 100vw"
+                  unoptimized
+                  className="w-full rounded-[6px] border border-line-soft bg-black/20 object-contain"
+                />
+              )}
               {text && (
                 <pre
                   className={cn(
@@ -112,6 +124,12 @@ export function LogValidationExamplesPanel({
                 >
                   {text}
                 </pre>
+              )}
+              {image.textSummary?.truncated && (
+                <div className="rounded-[6px] border border-line-soft bg-white/[0.018] px-2 py-1 text-xs text-ink-faint">
+                  {image.textSummary.truncationReason ??
+                    "Text summary truncated for display."}
+                </div>
               )}
             </div>
           );

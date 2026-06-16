@@ -16,6 +16,7 @@ import { logQueryKeys } from "@/lib/query-keys";
 import { type LogsWorkspaceState } from "@/features/viewer/state/logs/use-logs-workspace-state";
 import {
   LOG_METRIC_GROUPS,
+  type LogMetricGroupKey,
   groupLogMetricTags,
   groupRenderableLogMetrics,
   isTestMetricTag,
@@ -42,6 +43,18 @@ export type LogScalarQueryInput = {
   queryKey: readonly unknown[];
 };
 
+export type LogMetricGroupScalarQueryState = {
+  isInitialLoading: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: unknown;
+};
+
+export type LogMetricGroupScalarQueryStates = Record<
+  LogMetricGroupKey,
+  LogMetricGroupScalarQueryState
+>;
+
 export function buildLogScalarQueryInput({
   enabled,
   group,
@@ -63,6 +76,37 @@ export function buildLogScalarQueryInput({
       maxPoints: DEFAULT_LOG_SCALAR_MAX_POINTS,
       sampling: LOG_SCALAR_SAMPLING,
     }),
+  };
+}
+
+export type LogMetricGroupScalarQuerySnapshot =
+  LogMetricGroupScalarQueryState & {
+    active: boolean;
+  };
+
+function scopedScalarQueryState({
+  active,
+  error,
+  isError,
+  isFetching,
+  isInitialLoading,
+}: LogMetricGroupScalarQuerySnapshot): LogMetricGroupScalarQueryState {
+  return {
+    isInitialLoading: active && isInitialLoading,
+    isFetching: active && isFetching,
+    isError: active && isError,
+    error: active && isError ? error : null,
+  };
+}
+
+export function deriveLogMetricGroupScalarQueryStates(
+  snapshots: Record<LogMetricGroupKey, LogMetricGroupScalarQuerySnapshot>,
+): LogMetricGroupScalarQueryStates {
+  return {
+    train: scopedScalarQueryState(snapshots.train),
+    validation: scopedScalarQueryState(snapshots.validation),
+    test: scopedScalarQueryState(snapshots.test),
+    other: scopedScalarQueryState(snapshots.other),
   };
 }
 
@@ -127,7 +171,7 @@ export function deriveLogsChartEmptyState({
     detail = "Select one or more scalar tags to draw historical charts.";
   } else if (expandedSelectedTagCount === 0) {
     return null;
-  } else if (scalarLoading) {
+  } else if (scalarLoading && selectedSeriesCount === 0) {
     title = "Loading scalar points";
     detail = "Reading TensorBoard scalar series for the selected runs.";
   } else if (selectedSeriesCount === 0 && hasEventFiles) {
@@ -164,6 +208,19 @@ function checkpointsByRunId(checkpoints: LogCheckpoint[]) {
   return byRunId;
 }
 
+function scalarQuerySnapshot(
+  query: ReturnType<typeof useLogScalarsQuery>,
+  active: boolean,
+): LogMetricGroupScalarQuerySnapshot {
+  return {
+    active,
+    isInitialLoading: query.isLoading,
+    isFetching: query.isFetching,
+    isError: query.isError,
+    error: query.error,
+  };
+}
+
 export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const [gridMode, setGridMode] = useState<ScalarChartGridMode>("two");
   const [smoothing, setSmoothing] = useState(0);
@@ -178,9 +235,34 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     () => groupLogMetricTags(state.selectedTagList),
     [state.selectedTagList],
   );
+  const tagsAreRefreshing = Boolean(state.tagsQuery.isPlaceholderData);
+  const trainScalarQueryActive =
+    state.enabled &&
+    !tagsAreRefreshing &&
+    !state.collapsedMetricGroups.has("train") &&
+    selectedTagsByGroup.train.length > 0 &&
+    state.visibleRunIds.length > 0;
+  const validationScalarQueryActive =
+    state.enabled &&
+    !tagsAreRefreshing &&
+    !state.collapsedMetricGroups.has("validation") &&
+    selectedTagsByGroup.validation.length > 0 &&
+    state.visibleRunIds.length > 0;
+  const testScalarQueryActive =
+    state.enabled &&
+    !tagsAreRefreshing &&
+    !state.collapsedMetricGroups.has("test") &&
+    selectedTagsByGroup.test.length > 0 &&
+    state.visibleRunIds.length > 0;
+  const otherScalarQueryActive =
+    state.enabled &&
+    !tagsAreRefreshing &&
+    !state.collapsedMetricGroups.has("other") &&
+    selectedTagsByGroup.other.length > 0 &&
+    state.visibleRunIds.length > 0;
   const trainScalarQuery = useLogScalarsQuery(
     buildLogScalarQueryInput({
-      enabled: state.enabled && !state.collapsedMetricGroups.has("train"),
+      enabled: trainScalarQueryActive,
       group: "train",
       selectedTagList: selectedTagsByGroup.train,
       visibleRunIds: state.visibleRunIds,
@@ -188,7 +270,7 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   );
   const validationScalarQuery = useLogScalarsQuery(
     buildLogScalarQueryInput({
-      enabled: state.enabled && !state.collapsedMetricGroups.has("validation"),
+      enabled: validationScalarQueryActive,
       group: "validation",
       selectedTagList: selectedTagsByGroup.validation,
       visibleRunIds: state.visibleRunIds,
@@ -196,7 +278,7 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   );
   const testScalarQuery = useLogScalarsQuery(
     buildLogScalarQueryInput({
-      enabled: state.enabled && !state.collapsedMetricGroups.has("test"),
+      enabled: testScalarQueryActive,
       group: "test",
       selectedTagList: selectedTagsByGroup.test,
       visibleRunIds: state.visibleRunIds,
@@ -204,7 +286,7 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   );
   const otherScalarQuery = useLogScalarsQuery(
     buildLogScalarQueryInput({
-      enabled: state.enabled && !state.collapsedMetricGroups.has("other"),
+      enabled: otherScalarQueryActive,
       group: "other",
       selectedTagList: selectedTagsByGroup.other,
       visibleRunIds: state.visibleRunIds,
@@ -213,37 +295,30 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const scalarQueryEntries = [
     {
       query: trainScalarQuery,
-      active:
-        state.enabled &&
-        !state.collapsedMetricGroups.has("train") &&
-        selectedTagsByGroup.train.length > 0 &&
-        state.visibleRunIds.length > 0,
+      active: trainScalarQueryActive,
     },
     {
       query: validationScalarQuery,
-      active:
-        state.enabled &&
-        !state.collapsedMetricGroups.has("validation") &&
-        selectedTagsByGroup.validation.length > 0 &&
-        state.visibleRunIds.length > 0,
+      active: validationScalarQueryActive,
     },
     {
       query: testScalarQuery,
-      active:
-        state.enabled &&
-        !state.collapsedMetricGroups.has("test") &&
-        selectedTagsByGroup.test.length > 0 &&
-        state.visibleRunIds.length > 0,
+      active: testScalarQueryActive,
     },
     {
       query: otherScalarQuery,
-      active:
-        state.enabled &&
-        !state.collapsedMetricGroups.has("other") &&
-        selectedTagsByGroup.other.length > 0 &&
-        state.visibleRunIds.length > 0,
+      active: otherScalarQueryActive,
     },
   ];
+  const scalarQueryStates = deriveLogMetricGroupScalarQueryStates({
+    train: scalarQuerySnapshot(trainScalarQuery, trainScalarQueryActive),
+    validation: scalarQuerySnapshot(
+      validationScalarQuery,
+      validationScalarQueryActive,
+    ),
+    test: scalarQuerySnapshot(testScalarQuery, testScalarQueryActive),
+    other: scalarQuerySnapshot(otherScalarQuery, otherScalarQueryActive),
+  });
   const scalarQueries = scalarQueryEntries.map((entry) => entry.query);
   const activeScalarQueries = scalarQueryEntries
     .filter((entry) => entry.active)
@@ -258,7 +333,7 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     runIds: state.visibleRunIds,
     imageTags: mediaTags.imageTags,
     textTags: mediaTags.textTags,
-    enabled: state.enabled && validationExamplesVisible,
+    enabled: state.enabled && validationExamplesVisible && !tagsAreRefreshing,
     queryKey: logQueryKeys.mediaForRunsAndTags(
       state.visibleRunIds,
       mediaTags.imageTags,
@@ -292,12 +367,23 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     () => checkpointsByRunId(checkpoints ?? []),
     [checkpoints],
   );
-  const selectedSeriesCount = countGroupedLogScalarSeries(seriesByTag);
   const expandedSelectedTagCount = LOG_METRIC_GROUPS.reduce((total, group) => {
     if (state.collapsedMetricGroups.has(group.key)) {
       return total;
     }
     return total + selectedTagsByGroup[group.key].length;
+  }, 0);
+  const expandedSelectedSeriesCount = LOG_METRIC_GROUPS.reduce((total, group) => {
+    if (state.collapsedMetricGroups.has(group.key)) {
+      return total;
+    }
+    return (
+      total +
+      selectedTagsByGroup[group.key].reduce(
+        (groupTotal, tag) => groupTotal + (seriesByTag.get(tag)?.length ?? 0),
+        0,
+      )
+    );
   }, 0);
   const metricsByGroup = useMemo(
     () =>
@@ -329,11 +415,11 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     expandedSelectedTagCount,
     hasEventFiles: state.visibleRuns.some((run) => run.eventFileCount > 0),
     runsLoading: state.runsQuery.isLoading,
-    scalarLoading: scalarQueries.some((query) => query.isLoading),
-    selectedSeriesCount,
+    scalarLoading: activeScalarQueries.some((query) => query.isLoading),
+    selectedSeriesCount: expandedSelectedSeriesCount,
     selectedTagCount: state.selectedTagList.length,
     tagOptionCount: state.tagOptions.length,
-    tagsLoading: state.tagsQuery.isLoading,
+    tagsLoading: state.tagsQuery.isLoading && state.tagOptions.length === 0,
     visibleRunCount: state.visibleRuns.length,
   });
 
@@ -347,6 +433,11 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     runOrder: state.visibleRunIds,
     visibleRunCount: state.visibleRuns.length,
     selectedTagCount: state.selectedTagList.length,
+    scalarQueryStates,
+    isTagRefreshLoading:
+      state.tagsQuery.isFetching &&
+      state.tagOptions.length > 0 &&
+      state.visibleRunIds.length > 0,
     collapsedMetricGroups: state.collapsedMetricGroups,
     onToggleMetricGroup: state.toggleMetricGroup,
     gridMode,
@@ -375,8 +466,6 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
         void mediaQuery.refetch();
       }
     },
-    isError: activeScalarQueries.some((query) => query.isError),
-    error: activeScalarQueries.find((query) => query.error)?.error,
     emptyState,
     selectedTagsByGroup,
     hasValidationExampleMedia,
