@@ -165,12 +165,26 @@ const trainingClusterInitializedEventSchema =
     count: z.number(),
     capacity: z.array(z.number()),
     coordinates: z.array(z.array(z.number())),
+    coordinateCount: z.number().nullable().optional(),
+    coordinatesTruncated: z.boolean().nullable().optional(),
   });
 
 const trainingNeuronAddedEventSchema = trainingProgressEventBaseSchema.extend({
   type: z.literal("neuron_added"),
   node: z.string(),
   coord: z.array(z.number()),
+  count: z.number(),
+  capacity: z.array(z.number()),
+  epoch: z.number().nullable().optional(),
+  step: z.number().nullable().optional(),
+});
+
+const trainingNeuronsAddedEventSchema = trainingProgressEventBaseSchema.extend({
+  type: z.literal("neurons_added"),
+  node: z.string(),
+  coordinates: z.array(z.array(z.number())),
+  coordinateCount: z.number(),
+  coordinatesTruncated: z.boolean().nullable().optional(),
   count: z.number(),
   capacity: z.array(z.number()),
   epoch: z.number().nullable().optional(),
@@ -188,6 +202,7 @@ export const trainingProgressEventSchema = z.union([
   trainingRunProgressEventSchema,
   trainingClusterInitializedEventSchema,
   trainingNeuronAddedEventSchema,
+  trainingNeuronsAddedEventSchema,
   trainingProgressEventBaseSchema,
 ]);
 

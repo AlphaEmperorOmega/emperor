@@ -803,7 +803,7 @@ class TrainingJobManager:
             return
 
         event_type = event.get("type")
-        if event_type not in {"cluster_initialized", "neuron_added"}:
+        if event_type not in {"cluster_initialized", "neuron_added", "neurons_added"}:
             return
 
         summary = cache.cluster_growth.setdefault(
@@ -816,7 +816,36 @@ class TrainingJobManager:
         if capacity_total:
             summary.capacity_total = capacity_total
 
-        if event_type != "neuron_added":
+        if event_type == "cluster_initialized":
+            return
+        if event_type == "neurons_added":
+            coordinates = event.get("coordinates")
+            if not isinstance(coordinates, list):
+                coordinates = []
+            coordinate_count = event.get("coordinateCount")
+            if not isinstance(coordinate_count, int):
+                coordinate_count = len(coordinates)
+            summary.addition_count += max(0, coordinate_count)
+            for coordinate_value in coordinates[-50:]:
+                coord = _coord(coordinate_value)
+                if coord is None:
+                    continue
+                summary.additions.append(
+                    {
+                        "coord": coord,
+                        "step": (
+                            event.get("step")
+                            if isinstance(event.get("step"), int)
+                            else None
+                        ),
+                        "epoch": (
+                            event.get("epoch")
+                            if isinstance(event.get("epoch"), int)
+                            else None
+                        ),
+                    }
+                )
+            summary.additions = summary.additions[-50:]
             return
         coord = _coord(event.get("coord"))
         if coord is None:

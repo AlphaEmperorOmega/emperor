@@ -5,6 +5,9 @@ from typing import Any
 
 from lightning.pytorch.callbacks import Callback
 
+CLUSTER_COORDINATE_SAMPLE_LIMIT = 100
+NEURON_ADDED_BURST_LIMIT = 100
+
 
 def _coordinate_from_neuron_name(name: str) -> list[int] | None:
     parts = name.split("_")
@@ -47,7 +50,7 @@ class NeuronClusterGrowthCallback(Callback):
                     "node": name,
                     "count": len(names),
                     "capacity": self.__capacity(cluster),
-                    "coordinates": self.__coordinates(names),
+                    **self.__coordinate_sample_payload(names),
                 }
             )
 
@@ -58,8 +61,36 @@ class NeuronClusterGrowthCallback(Callback):
             if not new_names:
                 continue
             self._known_names[name] = current
-            for new_name in sorted(new_names):
-                coordinate = _coordinate_from_neuron_name(new_name)
+            coordinates = [
+                coordinate
+                for coordinate in (
+                    _coordinate_from_neuron_name(new_name)
+                    for new_name in sorted(new_names)
+                )
+                if coordinate is not None
+            ]
+            if not coordinates:
+                continue
+            epoch = int(getattr(trainer, "current_epoch", 0))
+            step = int(getattr(trainer, "global_step", 0))
+            if len(coordinates) > NEURON_ADDED_BURST_LIMIT:
+                self._write_event(
+                    {
+                        "type": "neurons_added",
+                        "node": name,
+                        "coordinates": coordinates[:CLUSTER_COORDINATE_SAMPLE_LIMIT],
+                        "coordinateCount": len(coordinates),
+                        "coordinatesTruncated": (
+                            len(coordinates) > CLUSTER_COORDINATE_SAMPLE_LIMIT
+                        ),
+                        "count": len(current),
+                        "capacity": self.__capacity(cluster),
+                        "epoch": epoch,
+                        "step": step,
+                    }
+                )
+                continue
+            for coordinate in coordinates:
                 if coordinate is None:
                     continue
                 self._write_event(
@@ -69,8 +100,8 @@ class NeuronClusterGrowthCallback(Callback):
                         "coord": coordinate,
                         "count": len(current),
                         "capacity": self.__capacity(cluster),
-                        "epoch": int(getattr(trainer, "current_epoch", 0)),
-                        "step": int(getattr(trainer, "global_step", 0)),
+                        "epoch": epoch,
+                        "step": step,
                     }
                 )
 
@@ -86,6 +117,15 @@ class NeuronClusterGrowthCallback(Callback):
         return sorted(
             coordinate for coordinate in coordinates if coordinate is not None
         )
+
+    def __coordinate_sample_payload(self, names: set[str]) -> dict[str, Any]:
+        coordinates = self.__coordinates(names)
+        sampled = coordinates[:CLUSTER_COORDINATE_SAMPLE_LIMIT]
+        return {
+            "coordinates": sampled,
+            "coordinateCount": len(coordinates),
+            "coordinatesTruncated": len(coordinates) > len(sampled),
+        }
 
     def on_fit_end(self, trainer, pl_module) -> None:
         self._clusters = []

@@ -465,6 +465,36 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             self.assertEqual(events[1]["preset"], "wide")
             self.assertEqual(events[1]["presets"], ["baseline", "wide"])
 
+    def test_neuron_cluster_growth_callback_caps_coordinate_payloads(self) -> None:
+        events: list[dict[str, object]] = []
+        callback = NeuronClusterGrowthCallback(events.append)
+        initial_names = {"neuron_1_1_1"}
+        all_names = {
+            *initial_names,
+            *(f"neuron_{index}_1_1" for index in range(2, 128)),
+        }
+        cluster = SimpleNamespace(
+            cluster={name: object() for name in all_names},
+            x_axis_total_neurons=200,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+        )
+        callback._clusters = [("cluster", cluster)]
+        callback._known_names = {"cluster": set(initial_names)}
+        trainer = SimpleNamespace(current_epoch=3, global_step=42)
+
+        callback.on_train_batch_end(trainer, object(), None, None, 0)
+
+        self.assertEqual(len(events), 1)
+        event = events[0]
+        self.assertEqual(event["type"], "neurons_added")
+        self.assertEqual(event["node"], "cluster")
+        self.assertEqual(event["coordinateCount"], len(all_names) - len(initial_names))
+        self.assertEqual(len(event["coordinates"]), 100)
+        self.assertTrue(event["coordinatesTruncated"])
+        self.assertEqual(event["step"], 42)
+        self.assertEqual(event["epoch"], 3)
+
     def test_worker_uses_materialized_plan_instead_of_search_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             progress_path = Path(tmp) / "progress.jsonl"

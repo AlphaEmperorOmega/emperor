@@ -78,6 +78,39 @@ describe("buildClusterGrowth", () => {
     expect(buildClusterGrowth(undefined)).toEqual([]);
   });
 
+  it("counts summarized same-step neuron growth bursts", () => {
+    const summaries = buildClusterGrowth(
+      job([
+        {
+          type: "neurons_added",
+          node: "neuron_cluster",
+          coordinates: [
+            [2, 1, 1],
+            [3, 1, 1],
+          ],
+          coordinateCount: 125,
+          coordinatesTruncated: true,
+          count: 126,
+          capacity: [200, 1, 1],
+          step: 320,
+          epoch: 2,
+        },
+      ]),
+    );
+
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      node: "neuron_cluster",
+      count: 126,
+      capacityTotal: 200,
+      additionCount: 125,
+      additions: [
+        { coord: [2, 1, 1], step: 320, epoch: 2 },
+        { coord: [3, 1, 1], step: 320, epoch: 2 },
+      ],
+    });
+  });
+
   it("uses server-projected cluster growth before scanning event history", () => {
     const clusterGrowth: TrainingJob["clusterGrowth"] = [
       {

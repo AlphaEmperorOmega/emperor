@@ -225,12 +225,37 @@ def _cluster_growth_from_events(events: list[dict[str, Any]]) -> list[dict[str, 
             capacity_total = _capacity_total(event.get("capacity"))
             if capacity_total:
                 summary["capacityTotal"] = capacity_total
-        elif event_type == "neuron_added":
+        elif event_type in {"neuron_added", "neurons_added"}:
             if isinstance(event.get("count"), int):
                 summary["count"] = event["count"]
             capacity_total = _capacity_total(event.get("capacity"))
             if capacity_total:
                 summary["capacityTotal"] = capacity_total
+            if event_type == "neurons_added":
+                coordinates = event.get("coordinates")
+                if not isinstance(coordinates, list):
+                    coordinates = []
+                coordinate_count = event.get("coordinateCount")
+                if not isinstance(coordinate_count, int):
+                    coordinate_count = len(coordinates)
+                summary["additionCount"] += max(0, coordinate_count)
+                for coordinate_value in coordinates[-50:]:
+                    coord = _coord(coordinate_value)
+                    if coord is None:
+                        continue
+                    summary["additions"].append(
+                        {
+                            "coord": coord,
+                            "step": event.get("step")
+                            if isinstance(event.get("step"), int)
+                            else None,
+                            "epoch": event.get("epoch")
+                            if isinstance(event.get("epoch"), int)
+                            else None,
+                        }
+                    )
+                summary["additions"] = summary["additions"][-50:]
+                continue
             coord = _coord(event.get("coord"))
             if coord is not None:
                 summary["additionCount"] += 1

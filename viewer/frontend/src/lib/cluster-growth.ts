@@ -82,7 +82,7 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
       const summary = ensure(node);
       summary.count = typeof event.count === "number" ? event.count : summary.count;
       summary.capacityTotal = capacityTotal(event.capacity) || summary.capacityTotal;
-    } else if (event.type === "neuron_added") {
+    } else if (event.type === "neuron_added" || event.type === "neurons_added") {
       const summary = ensure(node);
       if (typeof event.count === "number") {
         summary.count = event.count;
@@ -90,6 +90,25 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
       const capacity = capacityTotal(event.capacity);
       if (capacity) {
         summary.capacityTotal = capacity;
+      }
+      if (event.type === "neurons_added") {
+        const coordinateCount =
+          typeof event.coordinateCount === "number" ? event.coordinateCount : 0;
+        const coordinates = Array.isArray(event.coordinates)
+          ? event.coordinates
+          : [];
+        summary.additionCount += Math.max(0, coordinateCount);
+        for (const coordinate of coordinates.slice(-50)) {
+          const coord = toCoord(coordinate);
+          if (coord) {
+            summary.additions.push({
+              coord,
+              step: numberOrNull(event.step),
+              epoch: numberOrNull(event.epoch),
+            });
+          }
+        }
+        continue;
       }
       const coord = toCoord(event.coord);
       if (coord) {

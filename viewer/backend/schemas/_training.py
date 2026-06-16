@@ -275,12 +275,26 @@ class TrainingClusterInitializedProgressEventResponse(
     count: int
     capacity: list[int]
     coordinates: list[list[int]]
+    coordinateCount: int | None = None
+    coordinatesTruncated: bool | None = None
 
 
 class TrainingNeuronAddedProgressEventResponse(TrainingProgressEventBaseResponse):
     type: Literal["neuron_added"]
     node: str
     coord: list[int]
+    count: int
+    capacity: list[int]
+    epoch: int | None = None
+    step: int | None = None
+
+
+class TrainingNeuronsAddedProgressEventResponse(TrainingProgressEventBaseResponse):
+    type: Literal["neurons_added"]
+    node: str
+    coordinates: list[list[int]]
+    coordinateCount: int
+    coordinatesTruncated: bool | None = None
     count: int
     capacity: list[int]
     epoch: int | None = None
@@ -302,6 +316,7 @@ TrainingProgressEventResponse: TypeAlias = (
     | TrainingRunProgressEventResponse
     | TrainingClusterInitializedProgressEventResponse
     | TrainingNeuronAddedProgressEventResponse
+    | TrainingNeuronsAddedProgressEventResponse
     | UnknownTrainingProgressEventResponse
 )
 
