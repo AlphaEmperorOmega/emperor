@@ -26,6 +26,14 @@ export const LOCAL_DEFAULT_CAPABILITIES: Capabilities = {
   dataSources: [],
 };
 
+// Model registry, presets, datasets, monitors, config schema, and search space
+// describe the backend's on-disk model definitions. They only change when
+// backend code is edited (which restarts the dev server). A long stale window
+// avoids refetching them every time a consumer remounts (e.g. switching
+// workspaces) while still picking up backend changes on the next remount past
+// this window.
+const STATIC_METADATA_STALE_TIME_MS = 5 * 60_000;
+
 export function useCapabilitiesQuery() {
   return useQuery({
     queryKey: viewerQueryKeys.capabilities(),
@@ -48,6 +56,7 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
     queryKey: viewerQueryKeys.models(),
     queryFn: fetchModels,
     retry: false,
+    staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const presetsQuery = useQuery({
@@ -55,6 +64,7 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
     queryFn: () => fetchPresets(selectedModel),
     enabled: selectedModel.length > 0,
     retry: false,
+    staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const datasetsQuery = useQuery({
@@ -62,6 +72,7 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
     queryFn: () => fetchDatasets(selectedModel),
     enabled: selectedModel.length > 0,
     retry: false,
+    staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const monitorsQuery = useQuery({
@@ -69,6 +80,7 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
     queryFn: () => fetchMonitors(selectedModel),
     enabled: selectedModel.length > 0,
     retry: false,
+    staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const schemaQuery = useQuery({
@@ -76,6 +88,7 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
     queryFn: () => fetchConfigSchema(selectedModel, selectedPreset),
     enabled: selectedModel.length > 0 && selectedPreset.length > 0,
     retry: false,
+    staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const searchSpaceQuery = useQuery({
@@ -83,6 +96,7 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
     queryFn: () => fetchSearchSpace(selectedModel, selectedPreset),
     enabled: selectedModel.length > 0 && selectedPreset.length > 0,
     retry: false,
+    staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   return {
