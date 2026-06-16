@@ -1,6 +1,8 @@
 import torch
+import torch.nn.functional as F
 
 from lightning.pytorch.callbacks import Callback
+from emperor.experiments.monitor_policy import MonitorEmissionPolicy
 from torch import Tensor
 from typing import TYPE_CHECKING
 
@@ -25,12 +27,14 @@ class AdaptiveParameterMonitorCallback(Callback):
         self._hooks = []
         self._adaptive_modules = []
         self._monitored_options = []
+        self._emission_policy = MonitorEmissionPolicy()
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         from emperor.augmentations.adaptive_parameters.model import (
             AdaptiveParameterAugmentation,
         )
 
+        self._emission_policy.clear()
         for name, module in pl_module.named_modules():
             if not isinstance(module, AdaptiveParameterAugmentation):
                 continue
@@ -78,6 +82,10 @@ class AdaptiveParameterMonitorCallback(Callback):
                     lightning_module, prefix, base_tensor, delta_tensor
                 )
 
+            self.__log_input_adaptivity_stats(
+                lightning_module, prefix, output_tensor, delta_tensor
+            )
+
             if self.log_internal_stats:
                 self.__log_internal_stats(
                     lightning_module,
@@ -117,6 +125,40 @@ class AdaptiveParameterMonitorCallback(Callback):
         module.log(f"{prefix}/{metric_prefix}_max", values.max())
         module.log(f"{prefix}/{metric_prefix}_l2_norm", values.norm())
         module.log(f"{prefix}/{metric_prefix}_max_abs", values.abs().max())
+
+    def __log_input_adaptivity_stats(
+        self,
+        module: "LightningModule",
+        prefix: str,
+        output_tensor: Tensor,
+        delta_tensor: Tensor | None,
+    ) -> None:
+        adaptivity_tensor = (
+            delta_tensor if delta_tensor is not None else output_tensor
+        )
+        if adaptivity_tensor.dim() == 0 or adaptivity_tensor.shape[0] < 2:
+            return
+        batch_size = adaptivity_tensor.shape[0]
+        per_sample = adaptivity_tensor.float().reshape(batch_size, -1)
+        centroid = per_sample.mean(dim=0)
+        centered = per_sample - centroid
+        cross_sample_std = centered.pow(2).mean().sqrt()
+        adaptivity_ratio = centered.norm() / per_sample.norm().clamp_min(1e-12)
+        module.log(f"{prefix}/cross_sample_std", cross_sample_std)
+        module.log(f"{prefix}/adaptivity_ratio", adaptivity_ratio)
+        module.log(
+            f"{prefix}/centroid_cosine_mean",
+            self.__mean_cosine_to_centroid(per_sample, centroid),
+        )
+
+    def __mean_cosine_to_centroid(
+        self,
+        per_sample: Tensor,
+        centroid: Tensor,
+    ) -> Tensor:
+        normalized_samples = F.normalize(per_sample, dim=1)
+        normalized_centroid = F.normalize(centroid, dim=0)
+        return (normalized_samples @ normalized_centroid).mean()
 
     def __log_base_and_delta_stats(
         self,
@@ -238,15 +280,15 @@ class AdaptiveParameterMonitorCallback(Callback):
         delta_tensor: Tensor | None,
     ) -> None:
         experiment = getattr(getattr(module, "logger", None), "experiment", None)
-        if experiment is None or not hasattr(experiment, "add_histogram"):
+        if experiment is None:
             return
         step = getattr(module, "global_step", 0)
-        experiment.add_histogram(
-            f"{prefix}/output", output_tensor.detach().float().cpu(), step
+        self._emission_policy.emit_histogram(
+            experiment, f"{prefix}/output", output_tensor, step
         )
         if delta_tensor is not None:
-            experiment.add_histogram(
-                f"{prefix}/delta", delta_tensor.detach().float().cpu(), step
+            self._emission_policy.emit_histogram(
+                experiment, f"{prefix}/delta", delta_tensor, step
             )
 
     def on_fit_end(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
@@ -255,3 +297,4 @@ class AdaptiveParameterMonitorCallback(Callback):
         self._hooks.clear()
         self._adaptive_modules.clear()
         self._monitored_options.clear()
+        self._emission_policy.clear()

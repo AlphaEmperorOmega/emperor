@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import unittest
 
@@ -82,6 +83,11 @@ class MaskOption(nn.Module):
         return parameters * mask
 
 
+class MultiplicativeDynamicBias(nn.Module):
+    def forward(self, parameters, logits):
+        return parameters * 2.0
+
+
 class ParentOption(nn.Module):
     def __init__(self):
         super().__init__()
@@ -89,6 +95,30 @@ class ParentOption(nn.Module):
 
     def forward(self, parameters, logits):
         return self.child(parameters, logits)
+
+
+class BatchedCollapsedOption(nn.Module):
+    """Emits an identical generated tensor for every sample (non-adaptive)."""
+
+    def forward(self, parameters, logits):
+        batch_size = logits.shape[0]
+        expanded = parameters.unsqueeze(0).expand(batch_size, *parameters.shape)
+        return expanded + 1.0
+
+
+class BatchedDiverseOption(nn.Module):
+    """Emits a different generated direction per sample (input-adaptive)."""
+
+    def forward(self, parameters, logits):
+        batch_size = logits.shape[0]
+        expanded = (
+            parameters.unsqueeze(0).expand(batch_size, *parameters.shape).clone()
+        )
+        per_sample_offsets = torch.zeros_like(expanded)
+        flat_offsets = per_sample_offsets.view(batch_size, -1)
+        for index in range(batch_size):
+            flat_offsets[index, index % flat_offsets.shape[1]] = float(index + 1)
+        return expanded + per_sample_offsets
 
 
 class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
@@ -150,11 +180,10 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
                 output_dim=output_dim,
                 activation=ActivationOptions.RELU,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 gate_config=None,
                 halting_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
@@ -312,6 +341,42 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
                 self.assertIn(f"adaptive/{slot}/batch/weight_bank_var", names)
                 self.assertIn(f"adaptive/{slot}/batch/weight_bank_l2_norm", names)
 
+    def test_internal_stats_can_be_disabled(self):
+        adaptive = self.build_adaptive(
+            weight_model=BankOption(),
+            bias_model=MultiplicativeDynamicBias(),
+            mask_model=MaskOption(),
+        )
+        module = FakeLightningModule(adaptive)
+        self.primed_callback(
+            module, log_every_n_steps=1, log_internal_stats=False
+        )
+
+        self.feed_adaptive(adaptive)
+
+        names = self.scalar_names(module)
+        self.assertIn("adaptive/weight/batch/output_mean", names)
+        self.assertNotIn("adaptive/weight/batch/weight_bank_mean", names)
+        self.assertNotIn("adaptive/bias/batch/effective_scale_mean", names)
+        self.assertNotIn("adaptive/mask/batch/relative_output_norm", names)
+
+    def test_effective_scale_logged_for_multiplicative_bias_options(self):
+        adaptive = self.build_adaptive(bias_model=MultiplicativeDynamicBias())
+        module = FakeLightningModule(adaptive)
+        self.primed_callback(module, log_every_n_steps=1)
+
+        self.feed_adaptive(adaptive)
+
+        scalars = dict(module.logged_scalars)
+        torch.testing.assert_close(
+            scalars["adaptive/bias/batch/effective_scale_mean"],
+            torch.tensor(2.0),
+        )
+        torch.testing.assert_close(
+            scalars["adaptive/bias/batch/effective_scale_var"],
+            torch.tensor(0.0),
+        )
+
     def test_mask_stats_are_logged_from_input_and_output_weights(self):
         adaptive = self.build_adaptive(mask_model=MaskOption())
         module = FakeLightningModule(adaptive)
@@ -365,6 +430,78 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
     def test_invalid_log_every_n_steps_raises(self):
         with self.assertRaises(ValueError):
             AdaptiveParameterMonitorCallback(log_every_n_steps=0)
+
+    def feed_adaptive_with_batch(
+        self, adaptive: AdaptiveParameterAugmentation, batch_size: int
+    ) -> None:
+        weights = torch.arange(1, 7, dtype=torch.float32).view(2, 3)
+        bias = torch.tensor([1.0, 2.0, 3.0])
+        logits = torch.ones(batch_size, 2)
+        adaptive(lambda weight, bias, input: weight, weights, bias, logits)
+
+    def test_input_adaptivity_metrics_logged_for_real_options(self):
+        adaptive = AdaptiveParameterAugmentation(self.real_adaptive_config())
+        module = FakeLightningModule(adaptive, global_step=0)
+        self.primed_callback(module, log_every_n_steps=1)
+
+        self.feed_adaptive(adaptive)
+
+        names = self.scalar_names(module)
+        for slot in ("weight", "bias", "mask"):
+            with self.subTest(slot=slot):
+                self.assertIn(f"adaptive/{slot}/batch/cross_sample_std", names)
+                self.assertIn(f"adaptive/{slot}/batch/adaptivity_ratio", names)
+                self.assertIn(f"adaptive/{slot}/batch/centroid_cosine_mean", names)
+        for name, value in module.logged_scalars:
+            self.assertTrue(torch.isfinite(value).all(), f"{name} not finite")
+
+    def test_input_adaptivity_zero_for_collapsed_delta(self):
+        adaptive = self.build_adaptive(weight_model=BatchedCollapsedOption())
+        module = FakeLightningModule(adaptive, global_step=0)
+        self.primed_callback(module, log_every_n_steps=1)
+
+        self.feed_adaptive(adaptive)
+
+        scalars = dict(module.logged_scalars)
+        self.assertEqual(
+            scalars["adaptive/weight/batch/cross_sample_std"].item(), 0.0
+        )
+        self.assertEqual(
+            scalars["adaptive/weight/batch/adaptivity_ratio"].item(), 0.0
+        )
+        self.assertAlmostEqual(
+            scalars["adaptive/weight/batch/centroid_cosine_mean"].item(),
+            1.0,
+            places=5,
+        )
+
+    def test_input_adaptivity_positive_for_per_sample_variation(self):
+        adaptive = self.build_adaptive(weight_model=BatchedDiverseOption())
+        module = FakeLightningModule(adaptive, global_step=0)
+        self.primed_callback(module, log_every_n_steps=1)
+
+        self.feed_adaptive(adaptive)
+
+        scalars = dict(module.logged_scalars)
+        self.assertGreater(
+            scalars["adaptive/weight/batch/cross_sample_std"].item(), 0.0
+        )
+        self.assertGreater(
+            scalars["adaptive/weight/batch/adaptivity_ratio"].item(), 0.0
+        )
+        self.assertLess(
+            scalars["adaptive/weight/batch/centroid_cosine_mean"].item(), 1.0
+        )
+
+    def test_input_adaptivity_skipped_for_single_sample(self):
+        adaptive = AdaptiveParameterAugmentation(self.real_adaptive_config())
+        module = FakeLightningModule(adaptive, global_step=0)
+        self.primed_callback(module, log_every_n_steps=1)
+
+        self.feed_adaptive_with_batch(adaptive, batch_size=1)
+
+        names = self.scalar_names(module)
+        self.assertNotIn("adaptive/weight/batch/cross_sample_std", names)
 
 
 if __name__ == "__main__":
