@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 from models.trainer_config import *
 from emperor.base.options import (
     ActivationOptions,
@@ -14,6 +15,7 @@ from emperor.base.layer.monitor import (
     LayerControllerMonitorCallback,
     RecurrentLayerMonitorCallback,
 )
+from emperor.base.layer.gate import LayerGateOptions
 from emperor.augmentations.adaptive_parameters.core.monitor import (
     AdaptiveParameterMonitorCallback,
 )
@@ -22,6 +24,14 @@ from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
 )
 from emperor.linears.core.config import AdaptiveLinearLayerConfig
 from emperor.linears.core.monitor import LinearMonitorCallback
+from emperor.memory.config import (
+    AttentionDynamicMemoryConfig,
+    DynamicMemoryConfig,
+    ElementWiseWeightedDynamicMemoryConfig,
+    GatedResidualDynamicMemoryConfig,
+    WeightedDynamicMemoryConfig,
+)
+from emperor.memory.options import MemoryPositionOptions
 from emperor.augmentations.adaptive_parameters.options import (
     DynamicDepthOptions,
     WeightNormalizationOptions,
@@ -82,9 +92,7 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "openness, halted-state preservation, and step-delta visual summaries."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: RecurrentLayerMonitorCallback(
-            log_every_n_steps=100
-        ),
+        callback_factory=lambda: RecurrentLayerMonitorCallback(log_every_n_steps=100),
     ),
     MonitorOption(
         name="layer-controller",
@@ -94,9 +102,7 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "controller statistics without duplicating memory metrics."
         ),
         kinds=["scalar"],
-        callback_factory=lambda: LayerControllerMonitorCallback(
-            log_every_n_steps=100
-        ),
+        callback_factory=lambda: LayerControllerMonitorCallback(log_every_n_steps=100),
     ),
     MonitorOption(
         name="adaptive",
@@ -146,24 +152,44 @@ HIDDEN_DIM: int = 256
 STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_FLAG: bool = False
+STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 STACK_DROPOUT_PROBABILITY: float = 0.2
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 
 #########################################################################
+# LAYER STACK SUBMODULE OPTIONS
+SUBMODULE_HIDDEN_DIM: int = HIDDEN_DIM
+SUBMODULE_LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
+SUBMODULE_STACK_NUM_LAYERS: int = 2
+SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
+SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
+SUBMODULE_STACK_DROPOUT_PROBABILITY: float = 0.0
+SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+    LastLayerBiasOptions.DEFAULT
+)
+SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+SUBMODULE_BIAS_FLAG: bool = BIAS_FLAG
+
+#########################################################################
 # GATE STACK OPTIONS
 # If `GATE_FLAG` is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
-GATE_HIDDEN_DIM: int = HIDDEN_DIM
-GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
-GATE_STACK_NUM_LAYERS: int = 2
-GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
-GATE_STACK_RESIDUAL_FLAG: bool = STACK_RESIDUAL_FLAG
-GATE_STACK_DROPOUT_PROBABILITY: float = 0.0
-GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = STACK_LAST_LAYER_BIAS_OPTION
-GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
-GATE_BIAS_FLAG: bool = True
+GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
+GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
+GATE_HIDDEN_DIM: int | None = None
+GATE_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+GATE_STACK_NUM_LAYERS: int | None = None
+GATE_STACK_ACTIVATION: ActivationOptions | None = ActivationOptions.TANH
+GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+GATE_STACK_DROPOUT_PROBABILITY: float | None = None
+GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
+GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
+GATE_BIAS_FLAG: bool | None = True
 
 #########################################################################
 # HALTING OPTIONS
@@ -174,27 +200,56 @@ HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
 )
-HALTING_HIDDEN_DIM: int = HIDDEN_DIM
+HALTING_HIDDEN_DIM: int | None = None
 HALTING_OUTPUT_DIM: int = 2
-HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
     LayerNormPositionOptions.DISABLED
 )
-HALTING_STACK_NUM_LAYERS: int = 2
-HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-HALTING_STACK_RESIDUAL_FLAG: bool = False
-HALTING_STACK_DROPOUT_PROBABILITY: float = 0.0
-HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+HALTING_STACK_NUM_LAYERS: int | None = None
+HALTING_STACK_ACTIVATION: ActivationOptions | None = None
+HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
+HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = (
     LastLayerBiasOptions.DISABLED
 )
-HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
-HALTING_BIAS_FLAG: bool = BIAS_FLAG
+HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
+HALTING_BIAS_FLAG: bool | None = None
+
+#########################################################################
+# MEMORY OPTIONS
+# If `MEMORY_FLAG` is False, the memory-specific parameters below are ignored.
+MEMORY_FLAG: bool = False
+MEMORY_OPTION: type[DynamicMemoryConfig] = GatedResidualDynamicMemoryConfig
+MEMORY_POSITION_OPTION: MemoryPositionOptions = MemoryPositionOptions.AFTER_AFFINE
+MEMORY_TEST_TIME_TRAINING_LEARNING_RATE: float | None = None
+MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = None
+MEMORY_HIDDEN_DIM: int | None = None
+MEMORY_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+MEMORY_STACK_NUM_LAYERS: int | None = None
+MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
+MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+MEMORY_STACK_DROPOUT_PROBABILITY: float | None = None
+MEMORY_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
+MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
+MEMORY_BIAS_FLAG: bool | None = None
 
 #########################################################################
 # RECURRENT LAYER OPTIONS
 # If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
 RECURRENT_FLAG: bool = False
 RECURRENT_MAX_STEPS: int = 4
+RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    LayerNormPositionOptions.DISABLED
+)
+
+#########################################################################
+# RECURRENT GATE STACK OPTIONS
 RECURRENT_GATE_FLAG: bool = False
+RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
+RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
+
+#########################################################################
+# RECURRENT HALTING OPTIONS
 RECURRENT_HALTING_FLAG: bool = False
 
 #########################################################################
@@ -248,7 +303,9 @@ ADAPTIVE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 ADAPTIVE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
 ADAPTIVE_STACK_NUM_LAYERS: int = 2
 ADAPTIVE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-ADAPTIVE_STACK_RESIDUAL_FLAG: bool = False
+ADAPTIVE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 ADAPTIVE_STACK_DROPOUT_PROBABILITY: float = 0.1
 ADAPTIVE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -295,9 +352,7 @@ INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = ADAPTIVE_STACK_NUM_LAYERS
 INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = (
     ADAPTIVE_STACK_ACTIVATION
 )
-INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG: bool = (
-    ADAPTIVE_STACK_RESIDUAL_FLAG
-)
+INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = ADAPTIVE_STACK_RESIDUAL_CONNECTION_OPTION
 INPUT_LAYER_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = (
     ADAPTIVE_STACK_DROPOUT_PROBABILITY
 )
@@ -320,9 +375,7 @@ OUTPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES: int = WEIGHT_DECAY_WARMUP_BATCHES
 OUTPUT_LAYER_WEIGHT_NORMALIZATION_OPTION: WeightNormalizationOptions = (
     WEIGHT_NORMALIZATION_OPTION
 )
-OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = (
-    WEIGHT_NORMALIZATION_POSITION_OPTION
-)
+OUTPUT_LAYER_WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = WEIGHT_NORMALIZATION_POSITION_OPTION
 OUTPUT_LAYER_WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
     WEIGHT_BANK_EXPANSION_FACTOR
 )
@@ -348,9 +401,7 @@ OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = ADAPTIVE_STACK_NUM_LAYER
 OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = (
     ADAPTIVE_STACK_ACTIVATION
 )
-OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_FLAG: bool = (
-    ADAPTIVE_STACK_RESIDUAL_FLAG
-)
+OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = ADAPTIVE_STACK_RESIDUAL_CONNECTION_OPTION
 OUTPUT_LAYER_ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = (
     ADAPTIVE_STACK_DROPOUT_PROBABILITY
 )
