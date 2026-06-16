@@ -48,6 +48,9 @@ from emperor.augmentations.adaptive_parameters.options import (
 from emperor.augmentations.adaptive_parameters.core.monitor import (
     AdaptiveParameterMonitorCallback,
 )
+from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
+    WeightBankUtilizationMonitorCallback,
+)
 
 __all__ = [
     "AdaptiveParameterAugmentation",
@@ -84,4 +87,5 @@ __all__ = [
     "WeightNormalizationOptions",
     "WeightNormalizationPositionOptions",
     "AdaptiveParameterMonitorCallback",
+    "WeightBankUtilizationMonitorCallback",
 ]

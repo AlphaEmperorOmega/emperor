@@ -34,6 +34,9 @@ from emperor.augmentations.adaptive_parameters.core.mask import (
 from emperor.augmentations.adaptive_parameters.core.monitor import (
     AdaptiveParameterMonitorCallback,
 )
+from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
+    WeightBankUtilizationMonitorCallback,
+)
 
 __all__ = [
     "DynamicWeightConfig",
@@ -62,4 +65,5 @@ __all__ = [
     "OuterProductMaskConfig",
     "DiagonalAxisMaskConfig",
     "AdaptiveParameterMonitorCallback",
+    "WeightBankUtilizationMonitorCallback",
 ]
