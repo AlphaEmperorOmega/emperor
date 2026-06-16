@@ -44,6 +44,10 @@ export const logRunDeleteBlockerSchema = z.object({
 
 export const logRunDeletePlanSchema = z.object({
   candidateCount: z.number(),
+  sourceItemCount: z.number().optional().nullable(),
+  returnedItemCount: z.number().optional().nullable(),
+  truncated: z.boolean().optional().nullable(),
+  truncationReason: z.string().optional().nullable(),
   counts: logRunDeleteCountsSchema,
   affected: logRunDeleteAffectedValuesSchema,
   candidates: z.array(logRunDeleteCandidateSchema),

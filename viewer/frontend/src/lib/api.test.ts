@@ -45,6 +45,7 @@ import {
   trainingRunPlanSchema,
   updateConfigSnapshot,
 } from "@/lib/api";
+import { mapWithConcurrency } from "@/lib/api/concurrency";
 import { setSessionAuthToken } from "@/lib/auth-token";
 
 // Characterization tests: assert the CURRENT behavior of the API client
@@ -89,6 +90,22 @@ function stubFetch(response: Response) {
   const fetchMock = vi.fn<FetchFn>(() => Promise.resolve(response));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushAsyncWork() {
+  for (let index = 0; index < 5; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 afterEach(() => {
@@ -176,6 +193,48 @@ describe("shared API value schemas", () => {
     expect(() =>
       trainingProgressEventSchema.parse({ status: "running" }),
     ).toThrow();
+  });
+});
+
+describe("API request scheduling", () => {
+  it("preserves output order with bounded concurrency", async () => {
+    const result = await mapWithConcurrency([3, 1, 2], 2, async (value) => {
+      await new Promise((resolve) => setTimeout(resolve, value));
+      return value * 10;
+    });
+
+    expect(result).toEqual([30, 10, 20]);
+  });
+
+  it("never exceeds the configured concurrency", async () => {
+    let active = 0;
+    let maxActive = 0;
+
+    await mapWithConcurrency([1, 2, 3, 4, 5], 2, async (value) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      active -= 1;
+      return value;
+    });
+
+    expect(maxActive).toBe(2);
+  });
+
+  it("stops launching new work and propagates request failures", async () => {
+    const error = new Error("request failed");
+    const calls: number[] = [];
+
+    await expect(
+      mapWithConcurrency([1, 2, 3, 4], 2, async (value) => {
+        calls.push(value);
+        if (value === 1) {
+          throw error;
+        }
+        return new Promise<number>(() => {});
+      }),
+    ).rejects.toBe(error);
+    expect(calls).toEqual([1, 2]);
   });
 });
 
@@ -2113,31 +2172,132 @@ describe("POST requests", () => {
     expect(scalars.series[0].points[0].value).toBe(0.25);
   });
 
+  it("chunks oversized log tag requests with bounded concurrency", async () => {
+    const pending: Array<{
+      body: { runIds: string[] };
+      resolved: boolean;
+      resolve: (response: Response) => void;
+    }> = [];
+    let active = 0;
+    let maxActive = 0;
+    const tagFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const response = createDeferred<Response>();
+      const body = JSON.parse(String((init as RequestInit).body)) as {
+        runIds: string[];
+      };
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      pending.push({
+        body,
+        resolved: false,
+        resolve: response.resolve,
+      });
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", tagFetchMock);
+    const resolveRequest = (index: number) => {
+      const request = pending[index];
+      if (!request || request.resolved) {
+        return;
+      }
+      request.resolved = true;
+      active -= 1;
+      request.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              runs: request.body.runIds.map((runId) => ({
+                runId,
+                scalarTags: ["validation/accuracy"],
+                histogramTags: [],
+                imageTags: [],
+                textTags: [],
+              })),
+            }),
+        }),
+      );
+    };
+    const runIds = Array.from({ length: 126 }, (_, index) => `run-${index}`);
+
+    const tagsPromise = fetchLogTags({ runIds });
+
+    expect(pending).toHaveLength(2);
+    resolveRequest(0);
+    await flushAsyncWork();
+    expect(pending).toHaveLength(3);
+    pending.forEach((_, index) => resolveRequest(index));
+    const tags = await tagsPromise;
+
+    expect(tagFetchMock).toHaveBeenCalledTimes(3);
+    expect(maxActive).toBe(2);
+    expect(pending.map((request) => request.body.runIds.length)).toEqual([
+      50,
+      50,
+      26,
+    ]);
+    expect(tags.runs).toHaveLength(126);
+  });
+
   it("chunks oversized log scalar tag requests to match backend limits", async () => {
-    const scalarFetchMock = stubFetch(
-      fakeResponse({
-        json: () =>
-          Promise.resolve({
-            series: [],
-          }),
-      }),
-    );
+    const pending: Array<{
+      body: { tags: string[] };
+      resolved: boolean;
+      resolve: (response: Response) => void;
+    }> = [];
+    let active = 0;
+    let maxActive = 0;
+    const scalarFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const response = createDeferred<Response>();
+      const body = JSON.parse(String((init as RequestInit).body)) as {
+        tags: string[];
+      };
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      pending.push({
+        body,
+        resolved: false,
+        resolve: response.resolve,
+      });
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", scalarFetchMock);
+    const resolveRequest = (index: number) => {
+      const request = pending[index];
+      if (!request || request.resolved) {
+        return;
+      }
+      request.resolved = true;
+      active -= 1;
+      request.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              series: [],
+            }),
+        }),
+      );
+    };
     const tags = Array.from({ length: 146 }, (_, index) => `validation/tag-${index}`);
 
-    await fetchLogScalars({
+    const scalarsPromise = fetchLogScalars({
       runIds: ["run-1"],
       tags,
     });
 
+    expect(pending).toHaveLength(2);
+    resolveRequest(0);
+    await flushAsyncWork();
+    expect(pending).toHaveLength(3);
+    pending.forEach((_, index) => resolveRequest(index));
+    await scalarsPromise;
+
     expect(scalarFetchMock).toHaveBeenCalledTimes(3);
-    expect(
-      scalarFetchMock.mock.calls.map(([, init]) => {
-        const body = JSON.parse(String((init as RequestInit).body)) as {
-          tags: string[];
-        };
-        return body.tags.length;
-      }),
-    ).toEqual([50, 50, 46]);
+    expect(maxActive).toBe(2);
+    expect(pending.map((request) => request.body.tags.length)).toEqual([
+      50,
+      50,
+      46,
+    ]);
     for (const [, init] of scalarFetchMock.mock.calls) {
       const body = JSON.parse(String((init as RequestInit).body)) as {
         maxPoints: number;
@@ -2197,6 +2357,88 @@ describe("POST requests", () => {
     );
     expect(media.images[0].dataUrl).toBe("data:image/png;base64,AAAA");
     expect(media.texts[0].text).toBe("cat -> dog");
+  });
+
+  it("chunks oversized log media tag requests to match backend limits", async () => {
+    const pending: Array<{
+      body: { imageTags: string[]; textTags: string[] };
+      resolved: boolean;
+      resolve: (response: Response) => void;
+    }> = [];
+    let active = 0;
+    let maxActive = 0;
+    const mediaFetchMock = vi.fn<FetchFn>((_input, init) => {
+      const response = createDeferred<Response>();
+      const body = JSON.parse(String((init as RequestInit).body)) as {
+        imageTags: string[];
+        textTags: string[];
+      };
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      pending.push({
+        body,
+        resolved: false,
+        resolve: response.resolve,
+      });
+      return response.promise;
+    });
+    vi.stubGlobal("fetch", mediaFetchMock);
+    const resolveRequest = (index: number) => {
+      const request = pending[index];
+      if (!request || request.resolved) {
+        return;
+      }
+      request.resolved = true;
+      active -= 1;
+      request.resolve(
+        fakeResponse({
+          json: () =>
+            Promise.resolve({
+              images: [],
+              texts: [],
+            }),
+        }),
+      );
+    };
+    const imageTags = Array.from(
+      { length: 43 },
+      (_, index) => `validation/image-${index}`,
+    );
+    const textTags = Array.from(
+      { length: 22 },
+      (_, index) => `validation/text-${index}/text_summary`,
+    );
+
+    const mediaPromise = fetchLogMedia({
+      runIds: ["run-1"],
+      imageTags,
+      textTags,
+    });
+
+    expect(pending).toHaveLength(2);
+    for (let index = 0; index < 5; index += 1) {
+      while (pending.length <= index) {
+        await flushAsyncWork();
+      }
+      resolveRequest(index);
+      await flushAsyncWork();
+    }
+    await mediaPromise;
+
+    expect(mediaFetchMock).toHaveBeenCalledTimes(5);
+    expect(maxActive).toBe(2);
+    expect(
+      pending.map((request) => [
+        request.body.imageTags.length,
+        request.body.textTags.length,
+      ]),
+    ).toEqual([
+      [20, 0],
+      [20, 0],
+      [3, 0],
+      [0, 20],
+      [0, 2],
+    ]);
   });
 
   it("fetches checkpoint metadata and run artifacts", async () => {

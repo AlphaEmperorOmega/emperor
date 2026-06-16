@@ -1,7 +1,12 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
+import { mapWithConcurrency } from "@/lib/api/concurrency";
 import { jsonObjectSchema } from "@/lib/api/schemas";
+
+type ApiRequestOptions = {
+  signal?: AbortSignal;
+};
 
 function experimentFromRelativePath(relativePath: string) {
   return relativePath.split("/").find(Boolean) ?? "unknown";
@@ -34,6 +39,15 @@ const logRunOutputSchema = z.object({
   experiment: z.string(),
 });
 
+const responseMetadataSchema = z.object({
+  eventBytes: z.number().optional().nullable(),
+  skippedEventFiles: z.number().optional().nullable(),
+  sourceItemCount: z.number().optional().nullable(),
+  returnedItemCount: z.number().optional().nullable(),
+  truncated: z.boolean().optional().nullable(),
+  truncationReason: z.string().optional().nullable(),
+});
+
 export const logRunSchema = logRunPayloadSchema
   .transform((run) => ({
     ...run,
@@ -43,6 +57,7 @@ export const logRunSchema = logRunPayloadSchema
 
 export const logRunTagsSchema = z.object({
   runId: z.string(),
+  ...responseMetadataSchema.shape,
   scalarTags: z.array(z.string()),
   histogramTags: z.array(z.string()),
   imageTags: z.array(z.string()),
@@ -70,6 +85,7 @@ export const logImageSummarySchema = z.object({
   wallTime: z.number(),
   mimeType: z.string(),
   dataUrl: z.string(),
+  ...responseMetadataSchema.shape,
 });
 
 export const logTextSummarySchema = z.object({
@@ -78,6 +94,7 @@ export const logTextSummarySchema = z.object({
   step: z.number(),
   wallTime: z.number(),
   text: z.string(),
+  ...responseMetadataSchema.shape,
 });
 
 export const logExperimentSchema = z.object({
@@ -122,16 +139,19 @@ export const logRunArtifactSchema = z.object({
 const logTagsSchema = z.object({ runs: z.array(logRunTagsSchema) });
 const logScalarsSchema = z.object({ series: z.array(logScalarSeriesSchema) });
 const logMediaSchema = z.object({
+  ...responseMetadataSchema.shape,
   images: z.array(logImageSummarySchema),
   texts: z.array(logTextSummarySchema),
 });
 export const logCheckpointsSchema = z.object({
+  ...responseMetadataSchema.shape,
   checkpoints: z.array(logCheckpointSchema),
 });
 export const logRunArtifactsSchema = z.object({
   runId: z.string(),
   params: jsonObjectSchema,
   metrics: jsonObjectSchema,
+  ...responseMetadataSchema.shape,
   artifacts: z.array(logRunArtifactSchema),
   checkpoints: z.array(logCheckpointSchema),
 });
@@ -150,7 +170,10 @@ export type LogRunArtifacts = z.infer<typeof logRunArtifactsSchema>;
 
 const DEFAULT_LOG_PAGE_LIMIT = 500;
 export const DEFAULT_LOG_SCALAR_MAX_POINTS = 500;
+export const LOG_TAG_RUN_REQUEST_LIMIT = 50;
 export const LOG_SCALAR_TAG_REQUEST_LIMIT = 50;
+export const LOG_MEDIA_TAG_REQUEST_LIMIT = 20;
+export const LOG_TENSORBOARD_REQUEST_CONCURRENCY = 2;
 export const LOG_SCALAR_SAMPLING = "tail";
 
 type PaginatedPage = {
@@ -171,6 +194,7 @@ type FetchPaginatedOptions<TPage extends PaginatedPage, TItem> = {
   params?: PaginatedParams;
   pagination?: { limit: number; offset?: number };
   includeAllPages?: boolean;
+  signal?: AbortSignal;
   getItems(page: TPage): TItem[];
   getTotal?(page: TPage): number | undefined;
 };
@@ -210,6 +234,7 @@ async function fetchPaginated<TPage extends PaginatedPage, TItem>({
   params,
   pagination,
   includeAllPages = false,
+  signal,
   getItems,
   getTotal,
 }: FetchPaginatedOptions<TPage, TItem>): Promise<
@@ -224,6 +249,7 @@ async function fetchPaginated<TPage extends PaginatedPage, TItem>({
         : undefined,
     ),
     schema,
+    { signal },
   );
   const items = [...getItems(firstPage)];
   let limit =
@@ -238,6 +264,7 @@ async function fetchPaginated<TPage extends PaginatedPage, TItem>({
     const page = await requestJson(
       paginatedPath(endpoint, params, { limit, offset: nextOffset }),
       schema,
+      { signal },
     );
     items.push(...getItems(page));
     limit = page.limit && page.limit > 0 ? page.limit : limit;
@@ -268,7 +295,10 @@ export type FetchLogRunsInput = {
   includeAllPages?: boolean;
 };
 
-export async function fetchLogRuns(input: FetchLogRunsInput = {}) {
+export async function fetchLogRuns(
+  input: FetchLogRunsInput = {},
+  options: ApiRequestOptions = {},
+) {
   const filters = input.filters;
   const page = await fetchPaginated({
     endpoint: "/logs/runs",
@@ -284,6 +314,7 @@ export async function fetchLogRuns(input: FetchLogRunsInput = {}) {
       : undefined,
     pagination: input.pagination,
     includeAllPages: input.includeAllPages,
+    signal: options.signal,
     getItems: (logPage) => logPage.runs,
     getTotal: (logPage) => logPage.total,
   });
@@ -298,11 +329,12 @@ export async function fetchLogRuns(input: FetchLogRunsInput = {}) {
   };
 }
 
-export async function fetchLogExperiments() {
+export async function fetchLogExperiments(options: ApiRequestOptions = {}) {
   const page = await fetchPaginated({
     endpoint: "/logs/experiments",
     schema: logExperimentsSchema,
     includeAllPages: true,
+    signal: options.signal,
     getItems: (logPage) => logPage.experiments,
     getTotal: (logPage) => logPage.total,
   });
@@ -317,11 +349,32 @@ export async function fetchLogExperiments() {
   };
 }
 
-export function fetchLogTags(input: { runIds: string[] }) {
-  return requestJson("/logs/tags", logTagsSchema, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+export async function fetchLogTags(
+  input: { runIds: string[] },
+  options: ApiRequestOptions = {},
+) {
+  const runIdChunks = chunkList(input.runIds, LOG_TAG_RUN_REQUEST_LIMIT);
+  if (runIdChunks.length <= 1) {
+    return requestJson("/logs/tags", logTagsSchema, {
+      method: "POST",
+      signal: options.signal,
+      body: JSON.stringify(input),
+    });
+  }
+
+  const pages = await mapWithConcurrency(
+    runIdChunks,
+    LOG_TENSORBOARD_REQUEST_CONCURRENCY,
+    (runIds) =>
+      requestJson("/logs/tags", logTagsSchema, {
+        method: "POST",
+        signal: options.signal,
+        body: JSON.stringify({ runIds }),
+      }),
+  );
+  return {
+    runs: pages.flatMap((page) => page.runs),
+  };
 }
 
 export function fetchLogScalars(input: {
@@ -329,7 +382,7 @@ export function fetchLogScalars(input: {
   tags: string[];
   maxPoints?: number;
   sampling?: typeof LOG_SCALAR_SAMPLING;
-}) {
+}, options: ApiRequestOptions = {}) {
   const request = {
     maxPoints: DEFAULT_LOG_SCALAR_MAX_POINTS,
     sampling: LOG_SCALAR_SAMPLING,
@@ -347,20 +400,23 @@ export function fetchLogScalars(input: {
   if (tagChunks.length <= 1) {
     return requestJson("/logs/scalars", logScalarsSchema, {
       method: "POST",
+      signal: options.signal,
       body: JSON.stringify(request),
     });
   }
 
-  return Promise.all(
-    tagChunks.map((tags) =>
+  return mapWithConcurrency(
+    tagChunks,
+    LOG_TENSORBOARD_REQUEST_CONCURRENCY,
+    (tags) =>
       requestJson("/logs/scalars", logScalarsSchema, {
         method: "POST",
+        signal: options.signal,
         body: JSON.stringify({
           ...request,
           tags,
         }),
       }),
-    ),
   ).then((pages) => ({
     series: pages.flatMap((page) => page.series),
   }));
@@ -370,23 +426,88 @@ export function fetchLogMedia(input: {
   runIds: string[];
   imageTags: string[];
   textTags: string[];
-}) {
-  return requestJson("/logs/media", logMediaSchema, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+}, options: ApiRequestOptions = {}) {
+  const imageChunks = chunkList(input.imageTags, LOG_MEDIA_TAG_REQUEST_LIMIT);
+  const textChunks = chunkList(input.textTags, LOG_MEDIA_TAG_REQUEST_LIMIT);
+  if (imageChunks.length <= 1 && textChunks.length <= 1) {
+    return requestJson("/logs/media", logMediaSchema, {
+      method: "POST",
+      signal: options.signal,
+      body: JSON.stringify(input),
+    });
+  }
+
+  const requests = [
+    ...imageChunks.map((imageTags) => ({
+      runIds: input.runIds,
+      imageTags,
+      textTags: [] as string[],
+    })),
+    ...textChunks.map((textTags) => ({
+      runIds: input.runIds,
+      imageTags: [] as string[],
+      textTags,
+    })),
+  ];
+  if (requests.length === 0) {
+    requests.push({ runIds: input.runIds, imageTags: [], textTags: [] });
+  }
+
+  return mapWithConcurrency(
+    requests,
+    LOG_TENSORBOARD_REQUEST_CONCURRENCY,
+    (request) =>
+      requestJson("/logs/media", logMediaSchema, {
+        method: "POST",
+        signal: options.signal,
+        body: JSON.stringify(request),
+      }),
+  ).then((pages) => ({
+    eventBytes: pages.reduce((total, page) => total + (page.eventBytes ?? 0), 0) || null,
+    skippedEventFiles:
+      pages.reduce((total, page) => total + (page.skippedEventFiles ?? 0), 0) ||
+      null,
+    sourceItemCount: pages.reduce(
+      (total, page) => total + (page.sourceItemCount ?? 0),
+      0,
+    ),
+    returnedItemCount: pages.reduce(
+      (total, page) => total + (page.returnedItemCount ?? 0),
+      0,
+    ),
+    truncated: pages.some((page) => Boolean(page.truncated)),
+    truncationReason:
+      pages.find((page) => page.truncationReason)?.truncationReason ?? null,
+    images: pages.flatMap((page) => page.images),
+    texts: pages.flatMap((page) => page.texts),
+  }));
 }
 
-export function fetchLogCheckpoints(input: { runIds: string[] }) {
+function chunkList<TItem>(items: TItem[], chunkSize: number) {
+  return Array.from(
+    { length: Math.ceil(items.length / chunkSize) },
+    (_, index) => items.slice(index * chunkSize, (index + 1) * chunkSize),
+  );
+}
+
+export function fetchLogCheckpoints(
+  input: { runIds: string[] },
+  options: ApiRequestOptions = {},
+) {
   return requestJson("/logs/checkpoints", logCheckpointsSchema, {
     method: "POST",
+    signal: options.signal,
     body: JSON.stringify(input),
   });
 }
 
-export function fetchLogRunArtifacts(runId: string) {
+export function fetchLogRunArtifacts(
+  runId: string,
+  options: ApiRequestOptions = {},
+) {
   return requestJson(
     `/logs/runs/${encodeURIComponent(runId)}/artifacts`,
     logRunArtifactsSchema,
+    { signal: options.signal },
   );
 }

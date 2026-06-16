@@ -2,16 +2,34 @@ import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
 
+type ApiRequestOptions = {
+  signal?: AbortSignal;
+};
+
+const responseMetadataSchema = z.object({
+  eventBytes: z.number().optional().nullable(),
+  skippedEventFiles: z.number().optional().nullable(),
+  sourceItemCount: z.number().optional().nullable(),
+  returnedItemCount: z.number().optional().nullable(),
+  truncated: z.boolean().optional().nullable(),
+  truncationReason: z.string().optional().nullable(),
+});
+
 export const monitorDataSchema = z.object({
   jobId: z.string(),
   nodePath: z.string(),
   preset: z.string().nullable().optional(),
   dataset: z.string().nullable(),
   logDir: z.string().nullable(),
+  ...responseMetadataSchema.shape,
   scalarSeries: z.array(
     z.object({
       tag: z.string(),
       label: z.string(),
+      sourceItemCount: z.number().optional().nullable(),
+      returnedItemCount: z.number().optional().nullable(),
+      truncated: z.boolean().optional().nullable(),
+      truncationReason: z.string().optional().nullable(),
       points: z.array(
         z.object({
           step: z.number(),
@@ -26,6 +44,10 @@ export const monitorDataSchema = z.object({
       tag: z.string(),
       step: z.number(),
       wallTime: z.number(),
+      sourceItemCount: z.number().optional().nullable(),
+      returnedItemCount: z.number().optional().nullable(),
+      truncated: z.boolean().optional().nullable(),
+      truncationReason: z.string().optional().nullable(),
       buckets: z.array(
         z.object({
           left: z.number(),
@@ -42,6 +64,11 @@ export const monitorDataSchema = z.object({
       wallTime: z.number(),
       mimeType: z.string(),
       dataUrl: z.string(),
+      eventBytes: z.number().optional().nullable(),
+      sourceItemCount: z.number().optional().nullable(),
+      returnedItemCount: z.number().optional().nullable(),
+      truncated: z.boolean().optional().nullable(),
+      truncationReason: z.string().optional().nullable(),
     }),
   ),
 });
@@ -64,6 +91,7 @@ export const parameterStatusSchema = z.object({
   preset: z.string().nullable().optional(),
   dataset: z.string().nullable().optional(),
   logDir: z.string().nullable().optional(),
+  ...responseMetadataSchema.shape,
   nodes: z.array(parameterNodeStatusSchema),
 });
 
@@ -85,7 +113,7 @@ export function fetchMonitorData(input: {
   nodePath: string;
   preset?: string;
   dataset?: string;
-}) {
+}, options: ApiRequestOptions = {}) {
   const params = new URLSearchParams({ nodePath: input.nodePath });
   if (input.preset) {
     params.set("preset", input.preset);
@@ -96,6 +124,7 @@ export function fetchMonitorData(input: {
   return requestJson(
     `/training/jobs/${input.jobId}/monitor-data?${params.toString()}`,
     monitorDataSchema,
+    { signal: options.signal },
   );
 }
 
@@ -103,7 +132,7 @@ export function fetchMonitorParameterStatus(input: {
   jobId: string;
   preset?: string;
   dataset?: string;
-}) {
+}, options: ApiRequestOptions = {}) {
   const params = new URLSearchParams();
   if (input.preset) {
     params.set("preset", input.preset);
@@ -115,23 +144,29 @@ export function fetchMonitorParameterStatus(input: {
   return requestJson(
     `/training/jobs/${input.jobId}/monitor-parameter-status${query ? `?${query}` : ""}`,
     parameterStatusSchema,
+    { signal: options.signal },
   );
 }
 
 export function fetchLogRunMonitorData(input: {
   runId: string;
   nodePath: string;
-}) {
+}, options: ApiRequestOptions = {}) {
   const params = new URLSearchParams({ nodePath: input.nodePath });
   return requestJson(
     `/logs/runs/${encodeURIComponent(input.runId)}/monitor-data?${params.toString()}`,
     monitorDataSchema,
+    { signal: options.signal },
   );
 }
 
-export function fetchLogParameterStatus(input: { runIds: string[] }) {
+export function fetchLogParameterStatus(
+  input: { runIds: string[] },
+  options: ApiRequestOptions = {},
+) {
   return requestJson("/logs/parameter-status", logParameterStatusSchema, {
     method: "POST",
+    signal: options.signal,
     body: JSON.stringify(input),
   });
 }
