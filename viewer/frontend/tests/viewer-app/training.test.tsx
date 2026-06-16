@@ -1,6 +1,16 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { useEffect, type ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { LogsWorkspaceProvider } from "@/features/viewer/providers/logs-workspace-provider";
+import {
+  useActiveTrainingJob,
+  useTargetConfig,
+  ViewerProviders,
+} from "@/features/viewer/providers/viewer-providers";
+import { ViewerWorkspaceOverlays } from "@/features/viewer/components/viewer-workspaces";
+import { type ViewerWorkspace } from "@/types/viewer";
 import {
   capabilitiesResponse,
   commandField,
@@ -31,10 +41,114 @@ import {
   waitForTargetValue,
 } from "./support";
 
+function trainingRunPlanCalls(
+  fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
+) {
+  return fetchMock.mock.calls.filter(([input]) =>
+    String(input).endsWith("/training/run-plan"),
+  );
+}
+
+function trainingJobPollCalls(
+  fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
+) {
+  return fetchMock.mock.calls.filter(([input]) =>
+    String(input).endsWith("/training/jobs/job-1"),
+  );
+}
+
+function modelCatalogCalls(
+  fetchMock: ReturnType<typeof installFetchMock>["fetchMock"],
+) {
+  return fetchMock.mock.calls.filter(([input]) => String(input).endsWith("/models"));
+}
+
+function renderWorkspaceOverlayHarness({
+  activeWorkspace,
+  children,
+}: {
+  activeWorkspace: ViewerWorkspace;
+  children?: ReactNode;
+}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  const fullConfigDialog = {
+    isOpen: false,
+    mode: "default" as const,
+    open: vi.fn(),
+    close: vi.fn(),
+  };
+  const featureListDialog = {
+    isOpen: false,
+    open: vi.fn(),
+    close: vi.fn(),
+  };
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ViewerProviders activeWorkspace={activeWorkspace}>
+        <LogsWorkspaceProvider enabled={activeWorkspace === "logs"}>
+          {children}
+          <ViewerWorkspaceOverlays
+            activeWorkspace={activeWorkspace}
+            fullConfigDialog={fullConfigDialog}
+            featureListDialog={featureListDialog}
+          />
+        </LogsWorkspaceProvider>
+      </ViewerProviders>
+    </QueryClientProvider>,
+  );
+}
+
+function SeedActiveJob({ jobId }: { jobId: string }) {
+  const { setActiveJobId } = useActiveTrainingJob();
+
+  useEffect(() => {
+    setActiveJobId(jobId);
+  }, [jobId, setActiveJobId]);
+
+  return null;
+}
+
+function TargetTrainingInputsReady({ onReady }: { onReady: () => void }) {
+  const target = useTargetConfig();
+
+  useEffect(() => {
+    if (
+      target.selectedModel &&
+      target.selectedPreset &&
+      target.datasets.length > 0 &&
+      target.isSchemaReady &&
+      !target.monitorsLoading &&
+      !target.searchAxesLoading
+    ) {
+      onReady();
+    }
+  }, [
+    onReady,
+    target.datasets.length,
+    target.isSchemaReady,
+    target.monitorsLoading,
+    target.searchAxesLoading,
+    target.selectedModel,
+    target.selectedPreset,
+  ]);
+
+  return null;
+}
+
+async function waitForTargetTrainingInputs(onReady: () => void) {
+  await waitFor(() => {
+    expect(onReady).toHaveBeenCalled();
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("ViewerApp Training And Preview", () => {
   beforeEach(resetViewerAppTestState);
 
-  it("keeps the training footer visible when switching viewer workspaces", async () => {
+  it("mounts the training panel only in the model workspace", async () => {
     installFetchMock();
     renderViewer();
     const user = userEvent.setup();
@@ -46,30 +160,72 @@ describe("ViewerApp Training And Preview", () => {
 
     expect(await screen.findByRole("heading", { name: /model comparison/i }))
       .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /start training/i }))
-      .toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start training/i }))
+      .not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^logs$/i }));
 
     expect(await screen.findByText("Historical Scalars")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /start training/i }))
+    expect(screen.queryByRole("button", { name: /start training/i }))
+      .not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^model$/i }));
+
+    expect(await screen.findByRole("button", { name: /start training/i }))
       .toBeInTheDocument();
   });
 
-  it("opens the footer full config dialog from a non-model workspace", async () => {
-    installFetchMock();
-    renderViewer();
-    const user = userEvent.setup();
+  it("does not request training run plans while the panel is hidden", async () => {
+    const { fetchMock } = installFetchMock();
+    const modelReady = vi.fn();
 
-    await user.click(await screen.findByRole("button", { name: /^compare$/i }));
-    expect(await screen.findByRole("heading", { name: /model comparison/i }))
-      .toBeInTheDocument();
+    const modelRender = renderWorkspaceOverlayHarness({
+      activeWorkspace: "model",
+      children: <TargetTrainingInputsReady onReady={modelReady} />,
+    });
+    await waitForTargetTrainingInputs(modelReady);
+    await waitFor(() => {
+      expect(trainingRunPlanCalls(fetchMock).length).toBeGreaterThan(0);
+    });
+    modelRender.unmount();
+    fetchMock.mockClear();
 
-    const details = await expandedTrainingDetailsWithConfig(user);
-    const dialog = await openTrainingFullConfig(user, details);
+    const logsReady = vi.fn();
+    const logsRender = renderWorkspaceOverlayHarness({
+      activeWorkspace: "logs",
+      children: <TargetTrainingInputsReady onReady={logsReady} />,
+    });
+    await waitForTargetTrainingInputs(logsReady);
+    expect(modelCatalogCalls(fetchMock).length).toBeGreaterThan(0);
+    expect(trainingRunPlanCalls(fetchMock)).toHaveLength(0);
 
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/hidden dim/i)).toBeInTheDocument();
+    logsRender.unmount();
+    fetchMock.mockClear();
+
+    const compareReady = vi.fn();
+    renderWorkspaceOverlayHarness({
+      activeWorkspace: "compare",
+      children: <TargetTrainingInputsReady onReady={compareReady} />,
+    });
+    await waitForTargetTrainingInputs(compareReady);
+    expect(modelCatalogCalls(fetchMock).length).toBeGreaterThan(0);
+
+    expect(trainingRunPlanCalls(fetchMock)).toHaveLength(0);
+  });
+
+  it("keeps active job polling mounted while the panel is hidden", async () => {
+    const { fetchMock } = installFetchMock();
+
+    renderWorkspaceOverlayHarness({
+      activeWorkspace: "logs",
+      children: <SeedActiveJob jobId="job-1" />,
+    });
+
+    await waitFor(() => {
+      expect(trainingJobPollCalls(fetchMock)).toHaveLength(1);
+    });
+    expect(screen.queryByRole("button", { name: /start training/i }))
+      .not.toBeInTheDocument();
   });
 
   it("renders preset-locked fields disabled with their reason", async () => {

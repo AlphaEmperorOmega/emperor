@@ -81,7 +81,8 @@ describe("ViewerApp Logs Workspace", () => {
     expect(within(detailsPanel as HTMLElement).getByText("Experiment")).toBeInTheDocument();
     expect(within(detailsPanel as HTMLElement).getByText("test_model_2")).toBeInTheDocument();
     expect(screen.getAllByText("No result.json").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /start training/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start training/i }))
+      .not.toBeInTheDocument();
   });
 
   it("collapses logs metric groups without changing selected tags or refetching scalars", async () => {

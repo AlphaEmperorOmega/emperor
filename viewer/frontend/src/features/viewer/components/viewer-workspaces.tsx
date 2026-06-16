@@ -148,7 +148,9 @@ export function ViewerWorkspaceOverlays({
       )}
       {isModelWorkspace && <ConnectedMonitorChartsModal />}
       {isModelWorkspace && cluster3dNodeId && <ConnectedNeuronCluster3DPopup />}
-      <ConnectedTrainingPanel onOpenFullConfig={fullConfigDialog.open} />
+      {isModelWorkspace && (
+        <ConnectedTrainingPanel onOpenFullConfig={fullConfigDialog.open} />
+      )}
     </>
   );
 }
