@@ -5,8 +5,8 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-import models.neuron.neuron_linear.config as neuron_linear_config
 import models.linears.linear.config as linear_config
+import models.neuron.neuron_linear.config as neuron_linear_config
 import models.transformer_encoder.vit_linear.config as vit_linear_config
 from emperor.base.layer.gate import LayerGateOptions
 
