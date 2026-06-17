@@ -12,7 +12,7 @@ from emperor.base.layer import (
 from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.halting.core.stick_breaking import (
+from emperor.halting.core.variants import (
     StickBreaking,
     StickBreakingState,
 )
