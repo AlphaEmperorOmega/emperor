@@ -204,24 +204,29 @@ class EnvScriptTests(unittest.TestCase):
             calls,
         )
 
-    def test_stop_viewer_discovers_known_backend_listener_without_pid_file(self) -> None:
+    def test_stop_viewer_discovers_known_backend_listener_without_pid_file(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as runtime_dir:
             pid_file = Path(runtime_dir) / "backend.pid"
             script = textwrap.dedent(
                 f"""
                 set -e
                 source {shlex.quote(str(ENV_SCRIPT))} --viewer-status >/dev/null
+                BACKEND_PID_FILE={shlex.quote(str(pid_file))}
+                BACKEND_COMMAND="$VENV_PATH/bin/python -m uvicorn "
+                BACKEND_COMMAND="${{BACKEND_COMMAND}}viewer.backend.api:app --reload"
                 VIEWER_BACKEND_PORT=9999
                 port_listening() {{ return 0; }}
                 listener_pids_for_port() {{ echo 1234; }}
                 process_command() {{
-                  echo "$VENV_PATH/bin/python -m uvicorn viewer.backend.api:app --reload"
+                  echo "$BACKEND_COMMAND"
                 }}
                 process_group_id() {{ echo 1234; }}
                 kill() {{ echo "kill $*"; }}
 
-                stop_viewer_service "backend" {shlex.quote(str(pid_file))} "$VIEWER_BACKEND_PORT"
-                test ! -f {shlex.quote(str(pid_file))}
+                stop_viewer_service "backend" "$BACKEND_PID_FILE" "$VIEWER_BACKEND_PORT"
+                test ! -f "$BACKEND_PID_FILE"
                 """
             )
 
@@ -245,21 +250,28 @@ class EnvScriptTests(unittest.TestCase):
                 f"""
                 set -e
                 source {shlex.quote(str(ENV_SCRIPT))} --viewer-status >/dev/null
+                BACKEND_PID_FILE={shlex.quote(str(pid_file))}
+                BACKEND_COMMAND="$VENV_PATH/bin/python -m uvicorn "
+                BACKEND_COMMAND="${{BACKEND_COMMAND}}viewer.backend.api:app --reload"
+                SPAWN_COMMAND="$VENV_PATH/bin/python -c "
+                SPAWN_COMMAND="${{SPAWN_COMMAND}}from multiprocessing.spawn "
+                SPAWN_COMMAND="${{SPAWN_COMMAND}}import spawn_main "
+                SPAWN_COMMAND="${{SPAWN_COMMAND}}--multiprocessing-fork"
                 VIEWER_BACKEND_PORT=9999
                 port_listening() {{ return 0; }}
                 listener_pids_for_port() {{ echo 5678; }}
                 process_command() {{
                   if [ "$1" = "5678" ]; then
-                    echo "$VENV_PATH/bin/python -c from multiprocessing.spawn import spawn_main --multiprocessing-fork"
+                    echo "$SPAWN_COMMAND"
                   else
-                    echo "$VENV_PATH/bin/python -m uvicorn viewer.backend.api:app --reload"
+                    echo "$BACKEND_COMMAND"
                   fi
                 }}
                 process_group_id() {{ echo 1234; }}
                 kill() {{ echo "kill $*"; }}
 
-                stop_viewer_service "backend" {shlex.quote(str(pid_file))} "$VIEWER_BACKEND_PORT"
-                test ! -f {shlex.quote(str(pid_file))}
+                stop_viewer_service "backend" "$BACKEND_PID_FILE" "$VIEWER_BACKEND_PORT"
+                test ! -f "$BACKEND_PID_FILE"
                 """
             )
 
@@ -306,10 +318,12 @@ class EnvScriptTests(unittest.TestCase):
                 VIEWER_BACKEND_LOG="$VIEWER_RUNTIME_PATH/backend.log"
                 VIEWER_BACKEND_PORT=65533
                 PORT_OPEN=1
+                BACKEND_COMMAND="$VENV_PATH/bin/python -m uvicorn "
+                BACKEND_COMMAND="${{BACKEND_COMMAND}}viewer.backend.api:app --reload"
                 port_listening() {{ [ "$PORT_OPEN" = "1" ]; }}
                 listener_pids_for_port() {{ echo 1234; }}
                 process_command() {{
-                  echo "$VENV_PATH/bin/python -m uvicorn viewer.backend.api:app --reload"
+                  echo "$BACKEND_COMMAND"
                 }}
                 kill() {{ echo "kill $*"; PORT_OPEN=0; }}
                 wait_for_port() {{ return 0; }}
@@ -373,10 +387,12 @@ class EnvScriptTests(unittest.TestCase):
                 VIEWER_BACKEND_LOG="$VIEWER_RUNTIME_PATH/backend.log"
                 VIEWER_BACKEND_PORT=65533
                 FORCE_STOPPED=0
+                BACKEND_COMMAND="$VENV_PATH/bin/python -m uvicorn "
+                BACKEND_COMMAND="${{BACKEND_COMMAND}}viewer.backend.api:app --reload"
                 port_listening() {{ return 0; }}
                 listener_pids_for_port() {{ echo 1234; }}
                 process_command() {{
-                  echo "$VENV_PATH/bin/python -m uvicorn viewer.backend.api:app --reload"
+                  echo "$BACKEND_COMMAND"
                 }}
                 process_group_id() {{ echo 1234; }}
                 kill() {{
