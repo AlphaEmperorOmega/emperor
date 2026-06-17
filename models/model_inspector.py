@@ -24,10 +24,15 @@ def _load_model_parts(model_name: str) -> tuple[type[Enum], Any, type[Module], t
 
 def _module_details(module: Module) -> str:
     details = []
+    gate_attribute = None
     if hasattr(module, "gate_model"):
+        gate_attribute = "gate_model"
+    elif hasattr(module, "recurrent_gate"):
+        gate_attribute = "recurrent_gate"
+    if gate_attribute is not None:
         details.append(
             "gate="
-            + ("enabled" if getattr(module, "gate_model", None) is not None else "off")
+            + ("enabled" if getattr(module, gate_attribute, None) is not None else "off")
         )
     if hasattr(module, "halting_model"):
         details.append(
