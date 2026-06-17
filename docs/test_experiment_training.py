@@ -233,7 +233,7 @@ class TestExperimentTraining(unittest.TestCase):
         )
         self.assertTrue(
             callback.contexts[0]["logDir"].startswith(
-                "logs/docs/HALTING/FakeDatasetB/default_"
+                f"logs/{experiment._public_model_id()}/HALTING/FakeDatasetB/default_"
             )
         )
         self.assertEqual(
