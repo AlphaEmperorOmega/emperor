@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 from dataclasses import dataclass, field
 
 from emperor.base.layer import LayerStackConfig
@@ -29,9 +30,7 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "utilization visual summaries."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: ParametricLayerMonitorCallback(
-            log_every_n_steps=100
-        ),
+        callback_factory=lambda: ParametricLayerMonitorCallback(log_every_n_steps=100),
     ),
     MonitorOption(
         name="layer-controller",
@@ -41,9 +40,7 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "controller statistics without duplicating memory metrics."
         ),
         kinds=["scalar"],
-        callback_factory=lambda: LayerControllerMonitorCallback(
-            log_every_n_steps=100
-        ),
+        callback_factory=lambda: LayerControllerMonitorCallback(log_every_n_steps=100),
     ),
 ]
 
@@ -55,7 +52,9 @@ OUTPUT_DIM: int = 10
 HIDDEN_DIM: int = 64
 STACK_NUM_LAYERS: int = 1
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_FLAG: bool = False
+STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 STACK_DROPOUT_PROBABILITY: float = 0.0
 
 # Parametric generator mixture
