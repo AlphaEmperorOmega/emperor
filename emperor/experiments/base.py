@@ -1,9 +1,13 @@
-import json
-import random
+import fcntl
 import hashlib
-import inspect
-import itertools
 import importlib
+import itertools
+import json
+import os
+import random
+import tempfile
+import traceback
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +22,11 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
+from models.catalog import public_id_for_module
+from emperor.experiments.progress import sanitize_metric_payload
+
+DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
+DEFAULT_RESULT_STRING_VALUE_LIMIT = 20_000
 
 
 @dataclass
@@ -30,7 +39,90 @@ class RandomSearch:
     num_samples: int
 
 
+@dataclass(frozen=True)
+class PresetLock:
+    value: object
+    reason: str
+
+
 SearchMode = GridSearch | RandomSearch | None
+
+
+def _public_model_id_from_package(package: str) -> str:
+    public_id = public_id_for_module(package)
+    if public_id is not None:
+        return public_id
+    return package.rsplit(".", 1)[-1]
+
+
+def _validate_log_folder(log_folder: str | None) -> str | None:
+    if log_folder is None:
+        return None
+    folder = str(log_folder)
+    path = Path(folder)
+    if (
+        not folder
+        or folder in {".", ".."}
+        or "\\" in folder
+        or path.is_absolute()
+        or len(path.parts) != 1
+    ):
+        raise ValueError(
+            "log_folder must be a single relative folder name without path separators"
+        )
+    return folder
+
+
+def _result_metrics_payload(metrics: dict) -> dict:
+    sanitized, original_count, dropped_count = sanitize_metric_payload(
+        metrics,
+        metric_key_limit=DEFAULT_RESULT_METRIC_KEY_LIMIT,
+        string_value_limit=DEFAULT_RESULT_STRING_VALUE_LIMIT,
+    )
+    payload = {"metrics": sanitized}
+    if dropped_count > 0:
+        payload["metricsOriginalCount"] = original_count
+        payload["metricsDroppedCount"] = dropped_count
+    return payload
+
+
+@contextmanager
+def _best_results_lock(summary_path: Path):
+    lock_path = summary_path.with_suffix(summary_path.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+def _read_best_results_path(summary_path: Path) -> dict:
+    if not summary_path.exists():
+        return {}
+    return json.loads(summary_path.read_text(encoding="utf-8"))
+
+
+def _write_json_atomic(summary_path: Path, payload: dict) -> None:
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            delete=False,
+            dir=summary_path.parent,
+            encoding="utf-8",
+            prefix=f".{summary_path.name}.",
+            suffix=".tmp",
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+            json.dump(payload, temp_file, indent=2, default=str)
+            temp_file.write("\n")
+        os.replace(temp_path, summary_path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
 
 
 def create_search_space(
@@ -66,6 +158,8 @@ def create_search_space(
 
 
 class ExperimentPresetsBase:
+    PRESET_LOCKS: dict[object, dict[str, PresetLock | object]] = {}
+
     def get_config(
         self,
         model_config_options,
@@ -84,6 +178,21 @@ class ExperimentPresetsBase:
         raise NotImplementedError(
             "The method '_preset' must be implemented in the subclass."
         )
+
+    def locked_fields(self, model_config_options) -> dict[str, PresetLock]:
+        locks = self.PRESET_LOCKS.get(model_config_options, {})
+        return {
+            key: value
+            if isinstance(value, PresetLock)
+            else PresetLock(
+                value=value,
+                reason=(
+                    f"Locked by the {model_config_options.name} preset because this "
+                    "preset owns this model behavior."
+                ),
+            )
+            for key, value in locks.items()
+        }
 
     def _create_default_preset_configs(
         self,
@@ -147,8 +256,9 @@ class ExperimentPresetsBase:
 
     def _best_params(self, dataset: type, log_folder: str | None = None) -> dict:
         package = type(self).__module__.rsplit(".", 1)[0]
-        source_name = package.rsplit(".", 1)[-1]
-        folder = f"{log_folder}/{source_name}" if log_folder else source_name
+        model_id = _public_model_id_from_package(package)
+        log_folder = _validate_log_folder(log_folder)
+        folder = Path(log_folder) / model_id if log_folder else Path(model_id)
         path = Path("logs") / folder / "best_results.json"
         if not path.exists():
             return {}
@@ -293,95 +403,238 @@ class ExperimentBase:
         search_keys: list[str] | None = None,
         config_overrides: dict | None = None,
         search_overrides: dict | None = None,
+        selected_datasets: list[type] | None = None,
+        selected_options: list[BaseOptions] | None = None,
+        callbacks: list[Callback] | None = None,
+        materialized_runs: list[dict] | None = None,
     ) -> None:
+        log_folder = _validate_log_folder(log_folder)
         config_overrides = config_overrides or {}
         search_overrides = search_overrides or {}
-        num_epochs = config_overrides.get("num_epochs", self.num_epochs)
-        options = [self.option] if self.option else self.options_enumeration
+        callbacks = callbacks or []
+        options = (
+            selected_options
+            if selected_options is not None
+            else [self.option]
+            if self.option
+            else self.options_enumeration
+        )
         top5 = self._load_best_results(log_folder)
-        for option in options:
-            for dataset_type in self.dataset_options:
+        dataset_options = selected_datasets or self.dataset_options
+        if materialized_runs is None:
+            run_specs = []
+            for option in options:
+                for dataset_type in dataset_options:
+                    run_overrides = config_overrides
+                    run_epochs = run_overrides.get("num_epochs", self.num_epochs)
+                    for config in self.preset_generator.get_config(
+                        option,
+                        dataset_type,
+                        search_mode,
+                        log_folder,
+                        search_keys,
+                        config_overrides=run_overrides,
+                        search_overrides=search_overrides,
+                    ):
+                        run_specs.append(
+                            {
+                                "option": option,
+                                "dataset_type": dataset_type,
+                                "config": config,
+                                "config_overrides": run_overrides,
+                                "num_epochs": run_epochs,
+                                "run_id": None,
+                                "run_index": None,
+                                "run_total": None,
+                            }
+                        )
+        else:
+            run_specs = []
+            run_total = len(materialized_runs)
+            for run_index, run in enumerate(materialized_runs, start=1):
+                option = run["option"]
+                dataset_type = run["dataset_type"]
+                run_overrides = run.get("config_overrides") or {}
+                run_epochs = run_overrides.get("num_epochs", self.num_epochs)
                 for config in self.preset_generator.get_config(
                     option,
                     dataset_type,
-                    search_mode,
+                    None,
                     log_folder,
-                    search_keys,
-                    config_overrides=config_overrides,
-                    search_overrides=search_overrides,
+                    None,
+                    config_overrides=run_overrides,
+                    search_overrides={},
                 ):
-                    trainer_config = self._load_trainer_config(config_overrides)
-                    dataset = dataset_type(batch_size=config.batch_size)
-                    model = self.model_type(cfg=config)
-                    logger = TensorBoardLogger(
-                        save_dir="logs",
-                        name=self._build_log_path(
-                            option, dataset_type, config, log_folder
-                        ),
+                    run_specs.append(
+                        {
+                            "option": option,
+                            "dataset_type": dataset_type,
+                            "config": config,
+                            "config_overrides": run_overrides,
+                            "num_epochs": run_epochs,
+                            "run_id": run.get("id"),
+                            "run_index": run.get("index", run_index),
+                            "run_total": run.get("run_total", run_total),
+                        }
                     )
-                    trainer = Trainer(
-                        max_epochs=num_epochs,
-                        logger=logger,
-                        callbacks=trainer_config["callbacks"],
-                        **trainer_config["trainer_args"],
-                    )
-                    trainer.fit(model, datamodule=dataset)
-                    trainer.test(model, datamodule=dataset)
 
-                    result = {
-                        "dataset": dataset_type.__name__,
-                        "option": option.name,
-                        "params": config.get_custom_parameters(),
-                        "metrics": {
-                            k: v.item() for k, v in trainer.callback_metrics.items()
-                        },
-                    }
-                    Path(logger.log_dir).mkdir(parents=True, exist_ok=True)
-                    (Path(logger.log_dir) / "result.json").write_text(
-                        json.dumps(result, indent=2, default=str)
+        for run_spec in run_specs:
+            option = run_spec["option"]
+            dataset_type = run_spec["dataset_type"]
+            config = run_spec["config"]
+            run_overrides = run_spec["config_overrides"]
+            num_epochs = run_spec["num_epochs"]
+            trainer_config = self._load_trainer_config(run_overrides)
+            dataset = dataset_type(batch_size=config.batch_size)
+            model = self.model_type(cfg=config)
+            logger = TensorBoardLogger(
+                save_dir="logs",
+                name=self._build_log_path(
+                    option, dataset_type, config, log_folder
+                ),
+            )
+            for callback in callbacks:
+                set_run_context = getattr(callback, "set_run_context", None)
+                if callable(set_run_context):
+                    set_run_context(
+                        dataset_type.__name__,
+                        logger.log_dir,
+                        self._option_cli_name(option),
+                        option.name,
+                        run_id=run_spec.get("run_id"),
+                        run_index=run_spec.get("run_index"),
+                        run_total=run_spec.get("run_total"),
+                        total_epochs=num_epochs,
                     )
-                    self._update_best_results(result, top5, log_folder)
+                write_event = getattr(callback, "write_event", None)
+                if callable(write_event):
+                    write_event(
+                        {
+                            "type": "dataset_started",
+                            "status": "running",
+                            "dataset": dataset_type.__name__,
+                            "preset": self._option_cli_name(option),
+                            "option": option.name,
+                            "logDir": logger.log_dir,
+                            "runId": run_spec.get("run_id"),
+                            "runIndex": run_spec.get("run_index"),
+                            "runTotal": run_spec.get("run_total"),
+                            "totalEpochs": num_epochs,
+                            "params": config.get_custom_parameters(),
+                        }
+                    )
+            trainer = Trainer(
+                max_epochs=num_epochs,
+                logger=logger,
+                callbacks=[*trainer_config["callbacks"], *callbacks],
+                **trainer_config["trainer_args"],
+            )
+            try:
+                trainer.fit(model, datamodule=dataset)
+                trainer.test(model, datamodule=dataset)
+            except Exception as exc:
+                formatted_traceback = traceback.format_exc()
+                for callback in callbacks:
+                    write_event = getattr(callback, "write_event", None)
+                    if callable(write_event):
+                        write_event(
+                            {
+                                "type": "error",
+                                "status": "failed",
+                                "dataset": dataset_type.__name__,
+                                "preset": self._option_cli_name(option),
+                                "option": option.name,
+                                "error": str(exc),
+                                "traceback": formatted_traceback,
+                                "runId": run_spec.get("run_id"),
+                                "runIndex": run_spec.get("run_index"),
+                                "runTotal": run_spec.get("run_total"),
+                                "totalEpochs": num_epochs,
+                            }
+                        )
+                raise
+
+            result = {
+                "model": self._public_model_id(),
+                "dataset": dataset_type.__name__,
+                "preset": self._option_cli_name(option),
+                "option": option.name,
+                "params": config.get_custom_parameters(),
+                **_result_metrics_payload(trainer.callback_metrics),
+            }
+            Path(logger.log_dir).mkdir(parents=True, exist_ok=True)
+            (Path(logger.log_dir) / "result.json").write_text(
+                json.dumps(result, indent=2, default=str)
+            )
+            self._update_best_results(result, top5, log_folder)
+            for callback in callbacks:
+                write_event = getattr(callback, "write_event", None)
+                if callable(write_event):
+                    write_event(
+                        {
+                            "type": "dataset_completed",
+                            "status": "running",
+                            "dataset": dataset_type.__name__,
+                            "preset": self._option_cli_name(option),
+                            "option": option.name,
+                            "metrics": result["metrics"],
+                            "logDir": logger.log_dir,
+                            "runId": run_spec.get("run_id"),
+                            "runIndex": run_spec.get("run_index"),
+                            "runTotal": run_spec.get("run_total"),
+                            "totalEpochs": num_epochs,
+                        }
+                    )
+
+    def _option_cli_name(self, option: BaseOptions) -> str:
+        cli_name = getattr(type(option), "cli_name", None)
+        if callable(cli_name):
+            return cli_name(option.name)
+        return option.name.lower().replace("_", "-")
 
     def _load_best_results(self, log_folder: str | None = None) -> dict:
-        source_file = Path(inspect.getfile(type(self))).parent.name
-        folder = (
-            f"{log_folder}/{source_file}" if log_folder is not None else source_file
-        )
-        summary_path = Path("logs") / folder / "best_results.json"
-        if summary_path.exists():
-            return json.loads(summary_path.read_text())
-        return {}
+        return _read_best_results_path(self._best_results_path(log_folder))
 
     def _update_best_results(
         self, result: dict, top5: dict, log_folder: str | None = None
     ) -> None:
-        dataset = result["dataset"]
-        runs = top5.get(dataset, [])
-        new_acc = result["metrics"].get("validation_accuracy", 0)
-        worst_acc = min(
-            (r["metrics"].get("validation_accuracy", 0) for r in runs), default=-1
-        )
-
-        if len(runs) < 5 or new_acc > worst_acc:
-            runs.append(result)
-            top5[dataset] = [
-                {**run, "rank": i + 1}
-                for i, run in enumerate(
-                    sorted(
-                        runs,
-                        key=lambda r: r["metrics"].get("validation_accuracy", 0),
-                        reverse=True,
-                    )[:5]
-                )
-            ]
-
-            source_file = Path(inspect.getfile(type(self))).parent.name
-            folder = (
-                f"{log_folder}/{source_file}" if log_folder is not None else source_file
+        summary_path = self._best_results_path(log_folder)
+        with _best_results_lock(summary_path):
+            merged_top5 = _read_best_results_path(summary_path)
+            dataset = result["dataset"]
+            runs = list(merged_top5.get(dataset, []))
+            new_acc = result["metrics"].get("validation_accuracy", 0)
+            worst_acc = min(
+                (r["metrics"].get("validation_accuracy", 0) for r in runs),
+                default=-1,
             )
-            summary_path = Path("logs") / folder / "best_results.json"
-            summary_path.parent.mkdir(parents=True, exist_ok=True)
-            summary_path.write_text(json.dumps(top5, indent=2, default=str))
+
+            if len(runs) < 5 or new_acc > worst_acc:
+                runs.append(result)
+                merged_top5[dataset] = [
+                    {**run, "rank": i + 1}
+                    for i, run in enumerate(
+                        sorted(
+                            runs,
+                            key=lambda r: r["metrics"].get(
+                                "validation_accuracy", 0
+                            ),
+                            reverse=True,
+                        )[:5]
+                    )
+                ]
+                _write_json_atomic(summary_path, merged_top5)
+
+            top5.clear()
+            top5.update(merged_top5)
+
+    def _best_results_path(self, log_folder: str | None = None) -> Path:
+        log_folder = _validate_log_folder(log_folder)
+        model_id = self._public_model_id()
+        folder = (
+            Path(log_folder) / model_id if log_folder is not None else Path(model_id)
+        )
+        return Path("logs") / folder / "best_results.json"
 
     def _build_log_path(
         self,
@@ -396,8 +649,11 @@ class ExperimentBase:
             hashlib.md5(param_str.encode()).hexdigest()[:8] if param_str else "default"
         )
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        source_file = Path(inspect.getfile(type(self))).parent.name
-        folder = (
-            f"{log_folder}/{source_file}" if log_folder is not None else source_file
-        )
+        model_id = self._public_model_id()
+        log_folder = _validate_log_folder(log_folder)
+        folder = f"{log_folder}/{model_id}" if log_folder is not None else model_id
         return f"{folder}/{option.name}/{dataset_type.__name__}/{param_id}_{timestamp}"
+
+    def _public_model_id(self) -> str:
+        package = type(self).__module__.rsplit(".", 1)[0]
+        return _public_model_id_from_package(package)
