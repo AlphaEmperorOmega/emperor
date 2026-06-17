@@ -4,19 +4,23 @@ from emperor.base.validator import ValidatorBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    from emperor.augmentations.adaptive_parameters.core.diagonal.base import (
         DynamicDiagonalAbstract,
     )
-    from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskAbstract
-    from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasAbstract
+    from emperor.augmentations.adaptive_parameters.core.mask.base import (
+        AxisMaskAbstract,
+    )
+    from emperor.augmentations.adaptive_parameters.core.bias.base import (
+        DynamicBiasAbstract,
+    )
     from emperor.augmentations.adaptive_parameters.model import (
         AdaptiveParameterAugmentation,
     )
-    from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
+    from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
         DepthMappingLayer,
         DepthMappingLayerConfig,
     )
-    from emperor.augmentations.adaptive_parameters.core.weight import (
+    from emperor.augmentations.adaptive_parameters.core.weight.base import (
         DynamicWeightAbstract,
     )
     from emperor.base.layer import LayerStackConfig
@@ -450,16 +454,18 @@ class AdaptiveParameterAugmentationValidator(ValidatorBase):
 
     @staticmethod
     def validate_sub_configs(model: "AdaptiveParameterAugmentation") -> None:
-        from emperor.augmentations.adaptive_parameters.core.weight import (
+        from emperor.augmentations.adaptive_parameters.core.weight.config import (
             DynamicWeightConfig,
         )
-        from emperor.augmentations.adaptive_parameters.core.diagonal import (
+        from emperor.augmentations.adaptive_parameters.core.diagonal.config import (
             DynamicDiagonalConfig,
         )
-        from emperor.augmentations.adaptive_parameters.core.bias import (
+        from emperor.augmentations.adaptive_parameters.core.bias.config import (
             DynamicBiasConfig,
         )
-        from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
+        from emperor.augmentations.adaptive_parameters.core.mask.config import (
+            AxisMaskConfig,
+        )
 
         sub_configs = [
             ("weight_config", model.weight_config, DynamicWeightConfig),

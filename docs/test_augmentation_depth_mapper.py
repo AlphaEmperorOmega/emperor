@@ -16,7 +16,7 @@ from emperor.base.options import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
 )
-from emperor.augmentations.adaptive_parameters.core.depth_mapper import (
+from emperor.augmentations.adaptive_parameters.core.weight.depth_mapper import (
     DepthMappingHandlerConfig,
     DepthMappingLayer,
     DepthMappingLayerConfig,

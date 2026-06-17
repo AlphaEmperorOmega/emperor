@@ -46,11 +46,11 @@ class WeightBankUtilizationMonitorCallback(Callback):
             self._hooks.append(hook)
 
     def __is_weighted_bank_module(self, module: "Module") -> bool:
-        from emperor.augmentations.adaptive_parameters.core.weight import (
+        from emperor.augmentations.adaptive_parameters.core.weight.variants import (
             LayeredWeightedBankDynamicWeight,
             SoftWeightedBankDynamicWeight,
         )
-        from emperor.augmentations.adaptive_parameters.core.bias import (
+        from emperor.augmentations.adaptive_parameters.core.bias.variants import (
             WeightedBankDynamicBias,
         )
 

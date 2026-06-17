@@ -1,16 +1,16 @@
 from dataclasses import dataclass
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
+from emperor.augmentations.adaptive_parameters.core.diagonal.config import (
     DynamicDiagonalConfig,
 )
 from emperor.base.layer.config import LayerStackConfig
 from emperor.base.utils import ConfigBase, optional_field
-from emperor.augmentations.adaptive_parameters.core.bias import (
+from emperor.augmentations.adaptive_parameters.core.bias.config import (
     DynamicBiasConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.weight import (
+from emperor.augmentations.adaptive_parameters.core.weight.config import (
     DynamicWeightConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.mask import (
+from emperor.augmentations.adaptive_parameters.core.mask.config import (
     AxisMaskConfig,
 )
 
