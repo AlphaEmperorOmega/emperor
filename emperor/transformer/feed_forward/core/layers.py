@@ -36,7 +36,7 @@ class FeedForward(Module):
     def forward(self, input_batch: Tensor) -> tuple[Tensor, Tensor]:
         original_shape = input_batch.shape
         flattened_input = input_batch.reshape(-1, self.input_dim)
-        state = Layer.forward_returning_state(self.model, flattened_input)
+        state = Layer.run_model_returning_state(self.model, flattened_input)
         output = state.hidden.view(*original_shape[:-1], self.output_dim)
         loss = state.loss if state.loss is not None else input_batch.new_zeros(())
         return output, loss

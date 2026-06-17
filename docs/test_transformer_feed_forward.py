@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import unittest
 
@@ -40,10 +41,9 @@ class TestFeedForward(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=activation,
                     layer_norm_position=layer_norm_position,
-                    residual_flag=False,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
                     dropout_probability=dropout_probability,
                     halting_config=None,
-                    shared_halting_flag=False,
                     gate_config=None,
                     layer_model_config=LinearLayerConfig(
                         bias_flag=bias_flag,
