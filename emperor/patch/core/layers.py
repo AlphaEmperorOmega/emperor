@@ -83,7 +83,7 @@ class PatchEmbeddingLinear(PatchBase):
         X = X.transpose(1, 2)
         batch_size, sequence_length, patch_dim = X.shape
         X = X.reshape(batch_size * sequence_length, patch_dim)
-        X = Layer.forward_with_state(self.embedding_model, X)
+        X = Layer.run_model_returning_hidden(self.embedding_model, X)
         X = X.reshape(batch_size, sequence_length, self.embedding_dim)
         X = self._concatenate_class_token(X)
         X = self.dropout(X)
@@ -110,7 +110,7 @@ class PatchEmbeddingConv(PatchBase):
 
     def forward(self, X: Tensor):
         PatchValidator.validate_forward_inputs(self, X)
-        X = Layer.forward_with_state(self.patch_model, X)
+        X = Layer.run_model_returning_hidden(self.patch_model, X)
         X = X.flatten(2)
         X = X.transpose(1, 2)
         X = self._concatenate_class_token(X)

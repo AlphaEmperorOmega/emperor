@@ -44,9 +44,9 @@ class LinearPatchEmbeddingConfig(PatchConfig):
 @dataclass
 class ConvPatchEmbeddingConfig(PatchConfig):
     conv_stack_config: "LayerStackConfig | None" = optional_field(
-        "LayerStack config used to build the Conv2d stack. The final layer "
-        "extracts patches; use last_layer_overrides on the stack to set the "
-        "patch-extraction kernel_size/stride/padding."
+        "LayerStack config used to build the Conv2d patch-extraction stack. "
+        "The stack must produce embedding_dim output channels from "
+        "num_input_channels input channels."
     )
 
     def _registry_owner(self) -> type:

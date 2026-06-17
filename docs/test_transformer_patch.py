@@ -1,9 +1,10 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import unittest
 import torch.nn as nn
 
 from torch import Tensor
-from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
+from emperor.base.layer import LayerConfig, LayerStack, LayerStackConfig
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -51,12 +52,11 @@ def make_linear_embedding_stack_config(
         layer_config=LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
             memory_config=None,
-            shared_halting_flag=False,
             layer_model_config=LinearLayerConfig(bias_flag=bias_flag),
         ),
     )
@@ -79,12 +79,11 @@ def make_conv_stack_config(
         layer_config=LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
             memory_config=None,
-            shared_halting_flag=False,
             layer_model_config=Conv2dLayerConfig(
                 kernel_size=kernel_size,
                 stride=stride,
@@ -156,10 +155,10 @@ class TestLinearPatchEmbedding(unittest.TestCase):
         self.assertIsInstance(model.dropout, nn.Dropout)
         self.assertEqual(model.dropout.p, cfg.dropout_probability)
         self.assertIsInstance(model.patch_model, nn.Unfold)
-        self.assertIsInstance(model.embedding_model, Layer)
-        self.assertIsInstance(model.embedding_model.model, LinearLayer)
-        self.assertEqual(model.embedding_model.model.input_dim, model.patch_dim)
-        self.assertEqual(model.embedding_model.model.output_dim, cfg.embedding_dim)
+        self.assertIsInstance(model.embedding_model, LayerStack)
+        self.assertIsInstance(model.embedding_model[0].model, LinearLayer)
+        self.assertEqual(model.embedding_model[0].model.input_dim, model.patch_dim)
+        self.assertEqual(model.embedding_model[0].model.output_dim, cfg.embedding_dim)
 
     def test_forward_returns_class_token_plus_projected_patches(self):
         cfg = self.preset(embedding_dim=8, patch_size=4, stride=4, padding=0)
@@ -185,8 +184,8 @@ class TestLinearPatchEmbedding(unittest.TestCase):
 
         with torch.no_grad():
             model.class_token.zero_()
-            model.embedding_model.model.weight_params.copy_(torch.eye(4))
-            model.embedding_model.model.bias_params.zero_()
+            model.embedding_model[0].model.weight_params.copy_(torch.eye(4))
+            model.embedding_model[0].model.bias_params.zero_()
 
         input_batch = torch.arange(16, dtype=torch.float32).view(1, 1, 4, 4)
         output = model(input_batch)
@@ -214,7 +213,7 @@ class TestLinearPatchEmbedding(unittest.TestCase):
 
         self.assertIsNotNone(model.class_token.grad)
         self.assertEqual(model.class_token.grad.shape, model.class_token.shape)
-        self.assertIsNotNone(model.embedding_model.model.weight_params.grad)
+        self.assertIsNotNone(model.embedding_model[0].model.weight_params.grad)
         self.assertIsNotNone(input_batch.grad)
 
     def test_config_build_returns_linear_patch_embedding(self):
@@ -397,12 +396,12 @@ class TestConvPatchEmbedding(unittest.TestCase):
         self.assertEqual(model.class_token.shape, (1, 1, cfg.embedding_dim))
         self.assertIsInstance(model.dropout, nn.Dropout)
         self.assertEqual(model.dropout.p, cfg.dropout_probability)
-        self.assertIsInstance(model.patch_model, Layer)
-        self.assertIsInstance(model.patch_model.model, Conv2dLayer)
-        self.assertIsInstance(model.patch_model.model.model, nn.Conv2d)
-        self.assertEqual(model.patch_model.model.input_dim, cfg.num_input_channels)
-        self.assertEqual(model.patch_model.model.output_dim, cfg.embedding_dim)
-        self.assertEqual(model.patch_model.model.kernel_size, cfg.patch_size)
+        self.assertIsInstance(model.patch_model, LayerStack)
+        self.assertIsInstance(model.patch_model[0].model, Conv2dLayer)
+        self.assertIsInstance(model.patch_model[0].model.model, nn.Conv2d)
+        self.assertEqual(model.patch_model[0].model.input_dim, cfg.num_input_channels)
+        self.assertEqual(model.patch_model[0].model.output_dim, cfg.embedding_dim)
+        self.assertEqual(model.patch_model[0].model.kernel_size, cfg.patch_size)
 
     def test_forward_returns_class_token_plus_projected_patches(self):
         cfg = self.preset(embedding_dim=8, patch_size=4, stride=4, padding=0)
@@ -425,7 +424,7 @@ class TestConvPatchEmbedding(unittest.TestCase):
 
         with torch.no_grad():
             model.class_token.zero_()
-            conv = model.patch_model.model.model
+            conv = model.patch_model[0].model.model
             conv.weight.fill_(1.0)
             conv.bias.zero_()
 
@@ -445,7 +444,7 @@ class TestConvPatchEmbedding(unittest.TestCase):
 
         self.assertIsNotNone(model.class_token.grad)
         self.assertEqual(model.class_token.grad.shape, model.class_token.shape)
-        self.assertIsNotNone(model.patch_model.model.model.weight.grad)
+        self.assertIsNotNone(model.patch_model[0].model.model.weight.grad)
         self.assertIsNotNone(input_batch.grad)
 
     def test_config_build_returns_conv_patch_embedding(self):
@@ -478,7 +477,7 @@ class TestConvPatchEmbedding(unittest.TestCase):
         self.assertEqual(model.num_input_channels, overrides.num_input_channels)
         self.assertEqual(model.patch_size, overrides.patch_size)
         self.assertEqual(model.dropout_probability, overrides.dropout_probability)
-        self.assertEqual(model.patch_model.model.kernel_size, overrides.patch_size)
+        self.assertEqual(model.patch_model[0].model.kernel_size, overrides.patch_size)
 
     def test_partial_overrides_keep_unset_base_fields(self):
         cfg = self.preset(embedding_dim=8, patch_size=4, dropout_probability=0.0)
