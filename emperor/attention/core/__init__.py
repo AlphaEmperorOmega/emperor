@@ -1,5 +1,6 @@
 from emperor.attention.core.config import MultiHeadAttentionConfig
 from emperor.attention.core.layers import MultiHeadAttentionAbstract
+from emperor.attention.core.monitor import AttentionMonitorCallback
 from emperor.attention.core.state import AttentionLayerState
 from emperor.attention.core._validator import (
     AttentionValidatorBase,
@@ -17,6 +18,7 @@ from emperor.attention.core.variants import (
 __all__ = [
     "MultiHeadAttentionConfig",
     "MultiHeadAttentionAbstract",
+    "AttentionMonitorCallback",
     "AttentionLayerState",
     "AttentionValidatorBase",
     "MultiHeadAttentionValidator",
