@@ -7,6 +7,7 @@ positional-embedding sub-configs from the current core APIs (mirroring
 config subclass itself; there is no longer an ``AttentionOptions`` enum.
 """
 
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.base.options import (
     ActivationOptions,
@@ -28,9 +29,13 @@ from emperor.embedding.relative.core.config import (
     RelativePositionalEmbeddingConfig,
 )
 from emperor.attention.core.config import MultiHeadAttentionConfig
-from emperor.attention.self_attention.config import SelfAttentionConfig
-from emperor.attention.independent_attention.config import IndependentAttentionConfig
-from emperor.attention.mixture_of_attention_heads.config import (
+from emperor.attention.core.variants.self_attention.config import (
+    SelfAttentionConfig,
+)
+from emperor.attention.core.variants.independent_attention.config import (
+    IndependentAttentionConfig,
+)
+from emperor.attention.core.variants.mixture_of_attention_heads.config import (
     MixtureOfAttentionHeadsConfig,
 )
 
@@ -64,11 +69,10 @@ def make_projection_model_config(
         layer_config=LayerConfig(
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
-            shared_halting_flag=False,
             layer_model_config=LinearLayerConfig(bias_flag=bias_flag),
         ),
     )
@@ -89,11 +93,10 @@ def make_adaptive_projection_model_config(
         layer_config=LayerConfig(
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
-            shared_halting_flag=False,
             layer_model_config=AdaptiveLinearLayerConfig(
                 bias_flag=bias_flag,
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
@@ -138,12 +141,11 @@ def make_router_config(
             layer_config=LayerConfig(
                 activation=ActivationOptions.RELU,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 gate_config=None,
                 halting_config=None,
                 memory_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(bias_flag=bias_flag),
             ),
         ),
@@ -221,11 +223,10 @@ def make_mixture_of_experts_model_config(
         layer_config=MixtureOfExpertsLayerConfig(
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
-            shared_halting_flag=False,
             layer_model_config=leaf_config,
         ),
     )

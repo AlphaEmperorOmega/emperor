@@ -7,10 +7,10 @@ from emperor.attention.core.handlers.processor import ProcessorBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.attention.mixture_of_attention_heads.config import (
+    from emperor.attention.core.variants.mixture_of_attention_heads.config import (
         MixtureOfAttentionHeadsConfig,
     )
-    from emperor.attention.mixture_of_attention_heads.projector import (
+    from emperor.attention.core.variants.mixture_of_attention_heads.projector import (
         MixtureOfAttentionHeadsProjector,
     )
     from emperor.attention.core.handlers.reshaper import ReshaperBase

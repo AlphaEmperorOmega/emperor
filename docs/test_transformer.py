@@ -11,9 +11,9 @@ from emperor.base.options import (
 )
 from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.attention.self_attention.config import SelfAttentionConfig
-from emperor.attention.independent_attention.config import IndependentAttentionConfig
-from emperor.attention.mixture_of_attention_heads.config import (
+from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
+from emperor.attention.core.variants.independent_attention.config import IndependentAttentionConfig
+from emperor.attention.core.variants.mixture_of_attention_heads.config import (
     MixtureOfAttentionHeadsConfig,
 )
 from emperor.transformer.feed_forward.core.config import FeedForwardConfig

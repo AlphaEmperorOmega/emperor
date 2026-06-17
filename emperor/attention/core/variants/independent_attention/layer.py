@@ -1,11 +1,15 @@
 from emperor.attention.core.layers import MultiHeadAttentionAbstract
 from emperor.attention.core.handlers.reshaper import AttentionReshaper
 from emperor.attention.core.handlers.mask import Mask
-from emperor.attention.independent_attention.validator import (
+from emperor.attention.core.variants.independent_attention.validator import (
     IndependentAttentionValidator,
 )
-from emperor.attention.independent_attention.projector import IndependentProjector
-from emperor.attention.independent_attention.processor import IndependentProcessor
+from emperor.attention.core.variants.independent_attention.projector import (
+    IndependentProjector,
+)
+from emperor.attention.core.variants.independent_attention.processor import (
+    IndependentProcessor,
+)
 
 
 class IndependentAttention(MultiHeadAttentionAbstract):

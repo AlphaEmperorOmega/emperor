@@ -1,8 +1,9 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 
 import models.transformer_encoder.vit_linear.config as config
 
-from emperor.attention.self_attention.config import SelfAttentionConfig
+from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
 from emperor.base.layer import LayerConfig, LayerStackConfig
 from emperor.base.options import (
     ActivationOptions,
@@ -102,8 +103,7 @@ class VitLinearConfigBuilder:
     def _sequence_length(self) -> int:
         if self.image_patch_size <= 0:
             raise ValueError(
-                "image_patch_size must be positive, "
-                f"received {self.image_patch_size}."
+                f"image_patch_size must be positive, received {self.image_patch_size}."
             )
         if self.image_height % self.image_patch_size != 0:
             raise ValueError(
@@ -154,11 +154,10 @@ class VitLinearConfigBuilder:
             layer_config=TransformerEncoderBlockLayerConfig(
                 activation=ActivationOptions.DISABLED,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 gate_config=None,
                 halting_config=None,
-                shared_halting_flag=False,
                 layer_model_config=self._build_encoder_layer_config(),
             ),
         )
@@ -168,6 +167,7 @@ class VitLinearConfigBuilder:
             embedding_dim=self.hidden_dim,
             layer_norm_position=self.layer_norm_position,
             dropout_probability=self.dropout_probability,
+            residual_connection_option=ResidualConnectionOptions.RESIDUAL,
             causal_attention_mask_flag=False,
             attention_config=self._build_attention_config(),
             feed_forward_config=self._build_feed_forward_config(),
@@ -241,11 +241,10 @@ class VitLinearConfigBuilder:
             layer_config=LayerConfig(
                 activation=self.activation_function,
                 layer_norm_position=layer_norm_position,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=dropout_probability,
                 gate_config=None,
                 halting_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(
                     bias_flag=bias_flag,
                 ),

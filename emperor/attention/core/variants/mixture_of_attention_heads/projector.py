@@ -13,7 +13,7 @@ from emperor.experts.core.layers import (
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.attention.mixture_of_attention_heads.config import (
+    from emperor.attention.core.variants.mixture_of_attention_heads.config import (
         MixtureOfAttentionHeadsConfig,
     )
     from emperor.linears.core.layers import LinearAbstract

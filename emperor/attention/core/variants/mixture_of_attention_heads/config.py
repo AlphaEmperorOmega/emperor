@@ -18,7 +18,7 @@ class MixtureOfAttentionHeadsConfig(MultiHeadAttentionConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.attention.mixture_of_attention_heads.layer import (
+        from emperor.attention.core.variants.mixture_of_attention_heads.layer import (
             MixtureOfAttentionHeads,
         )
 

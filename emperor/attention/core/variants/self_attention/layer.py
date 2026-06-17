@@ -1,9 +1,15 @@
 from emperor.attention.core.layers import MultiHeadAttentionAbstract
 from emperor.attention.core.handlers.reshaper import AttentionReshaper
 from emperor.attention.core.handlers.mask import Mask
-from emperor.attention.self_attention.validator import SelfAttentionValidator
-from emperor.attention.self_attention.projector import SelfAttentionProjector
-from emperor.attention.self_attention.processor import SelfAttentionProcessor
+from emperor.attention.core.variants.self_attention.validator import (
+    SelfAttentionValidator,
+)
+from emperor.attention.core.variants.self_attention.projector import (
+    SelfAttentionProjector,
+)
+from emperor.attention.core.variants.self_attention.processor import (
+    SelfAttentionProcessor,
+)
 
 
 class SelfAttention(MultiHeadAttentionAbstract):

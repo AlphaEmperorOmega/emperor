@@ -1,17 +1,17 @@
 from emperor.attention.core.layers import MultiHeadAttentionAbstract
-from emperor.attention.mixture_of_attention_heads.validator import (
+from emperor.attention.core.variants.mixture_of_attention_heads.validator import (
     MixtureOfAttentionHeadsValidator,
 )
-from emperor.attention.mixture_of_attention_heads.projector import (
+from emperor.attention.core.variants.mixture_of_attention_heads.projector import (
     MixtureOfAttentionHeadsProjector,
 )
-from emperor.attention.mixture_of_attention_heads.processor import (
+from emperor.attention.core.variants.mixture_of_attention_heads.processor import (
     MixtureOfAttentionHeadsProcessor,
 )
-from emperor.attention.mixture_of_attention_heads.reshaper import (
+from emperor.attention.core.variants.mixture_of_attention_heads.reshaper import (
     MixtureOfAttentionHeadsReshaper,
 )
-from emperor.attention.mixture_of_attention_heads.mask import (
+from emperor.attention.core.variants.mixture_of_attention_heads.mask import (
     MixtureOfAttentionHeadsMask,
 )
 

@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from emperor.base.options import LayerNormPositionOptions
-    from emperor.attention.self_attention.config import SelfAttentionConfig
-    from emperor.attention.independent_attention.config import (
+    from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
+    from emperor.attention.core.variants.independent_attention.config import (
         IndependentAttentionConfig,
     )
     from emperor.transformer.feed_forward.core.config import FeedForwardConfig

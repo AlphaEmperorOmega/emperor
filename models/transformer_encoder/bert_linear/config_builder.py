@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 
 import models.transformer_encoder.bert_linear.config as config
@@ -10,7 +11,7 @@ from emperor.base.options import (
 from emperor.base.layer import LayerStackConfig
 from emperor.base.layer.config import LayerConfig
 from emperor.linears.core.config import LinearLayerConfig
-from emperor.attention.self_attention.config import SelfAttentionConfig
+from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
 from emperor.transformer.core.config import (
     TransformerEncoderLayerConfig,
     TransformerEncoderBlockLayerConfig,
@@ -117,11 +118,10 @@ class BertLinearConfigBuilder:
             layer_config=TransformerEncoderBlockLayerConfig(
                 activation=ActivationOptions.DISABLED,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 gate_config=None,
                 halting_config=None,
-                shared_halting_flag=False,
                 layer_model_config=self._build_encoder_layer_config(),
             ),
         )
@@ -131,6 +131,7 @@ class BertLinearConfigBuilder:
             embedding_dim=self.hidden_dim,
             layer_norm_position=self.layer_norm_position,
             dropout_probability=self.stack_dropout_probability,
+            residual_connection_option=ResidualConnectionOptions.RESIDUAL,
             causal_attention_mask_flag=self.causal_attention_mask_flag,
             attention_config=self._build_attention_config(),
             feed_forward_config=self._build_feed_forward_config(),
@@ -193,11 +194,10 @@ class BertLinearConfigBuilder:
             layer_config=LayerConfig(
                 activation=self.stack_activation,
                 layer_norm_position=layer_norm_position,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=dropout_probability,
                 gate_config=None,
                 halting_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(
                     bias_flag=bias_flag,
                 ),

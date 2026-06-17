@@ -52,7 +52,7 @@ class ProjectorBase(Module):
         return projection.view(sequence_length, batch_size, -1)
 
     def _forward_accumulating_loss(self, model: nn.Module, tensor: Tensor) -> Tensor:
-        state = Layer.forward_returning_state(model, tensor)
+        state = Layer.run_model_returning_state(model, tensor)
         if state.loss is not None:
             self._accumulate_auxiliary_loss(state.loss)
         return state.hidden

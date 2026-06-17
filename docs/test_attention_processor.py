@@ -10,17 +10,17 @@ from emperor.attention import (
 )
 from emperor.attention.core.config import MultiHeadAttentionConfig
 from emperor.attention.core.handlers.reshaper import AttentionReshaper
-from emperor.attention.mixture_of_attention_heads.reshaper import (
+from emperor.attention.core.variants.mixture_of_attention_heads.reshaper import (
     MixtureOfAttentionHeadsReshaper,
 )
-from emperor.attention.self_attention.projector import SelfAttentionProjector
-from emperor.attention.independent_attention.projector import IndependentProjector
-from emperor.attention.mixture_of_attention_heads.projector import (
+from emperor.attention.core.variants.self_attention.projector import SelfAttentionProjector
+from emperor.attention.core.variants.independent_attention.projector import IndependentProjector
+from emperor.attention.core.variants.mixture_of_attention_heads.projector import (
     MixtureOfAttentionHeadsProjector,
 )
-from emperor.attention.self_attention.processor import SelfAttentionProcessor
-from emperor.attention.independent_attention.processor import IndependentProcessor
-from emperor.attention.mixture_of_attention_heads.processor import (
+from emperor.attention.core.variants.self_attention.processor import SelfAttentionProcessor
+from emperor.attention.core.variants.independent_attention.processor import IndependentProcessor
+from emperor.attention.core.variants.mixture_of_attention_heads.processor import (
     MixtureOfAttentionHeadsProcessor,
 )
 from _attention_test_helpers import (

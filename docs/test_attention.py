@@ -11,7 +11,7 @@ from emperor.attention.core.handlers.bias import KeyValueBias
 from emperor.attention.core.handlers.processor import ProcessorBase
 from emperor.attention.core.handlers.projector import ProjectorBase
 from emperor.attention.core.handlers.batch import BatchDimensionManager
-from emperor.attention.independent_attention.validator import (
+from emperor.attention.core.variants.independent_attention.validator import (
     IndependentAttentionValidator,
 )
 from _attention_test_helpers import (

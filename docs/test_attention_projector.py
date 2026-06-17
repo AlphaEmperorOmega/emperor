@@ -1,17 +1,20 @@
 import torch
 import unittest
 
-from torch.nn import Sequential
-from emperor.base.layer import Layer
+from emperor.base.layer import Layer, LayerStack
 from emperor.experts.core.layers import MixtureOfExperts
 from emperor.attention import (
     SelfAttentionConfig,
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
 )
-from emperor.attention.self_attention.projector import SelfAttentionProjector
-from emperor.attention.independent_attention.projector import IndependentProjector
-from emperor.attention.mixture_of_attention_heads.projector import (
+from emperor.attention.core.variants.self_attention.projector import (
+    SelfAttentionProjector,
+)
+from emperor.attention.core.variants.independent_attention.projector import (
+    IndependentProjector,
+)
+from emperor.attention.core.variants.mixture_of_attention_heads.projector import (
     MixtureOfAttentionHeadsProjector,
 )
 from _attention_test_helpers import build_attention_config
@@ -33,7 +36,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
                 )
                 m = SelfAttentionProjector(c)
                 self.assertEqual(m.embedding_dim, embedding_dim)
-                self.assertIsInstance(m.qkv_model, (Layer, Sequential))
+                self.assertIsInstance(m.qkv_model, (Layer, LayerStack))
 
     def test__split_self_attention_projection(self):
         embedding_dim = 12
@@ -157,9 +160,9 @@ class TestIndependentProjector(unittest.TestCase):
                     value_projection_dim=20,
                 )
                 m = IndependentProjector(c)
-                self.assertIsInstance(m.query_model, (Layer, Sequential))
-                self.assertIsInstance(m.key_model, (Layer, Sequential))
-                self.assertIsInstance(m.value_model, (Layer, Sequential))
+                self.assertIsInstance(m.query_model, (Layer, LayerStack))
+                self.assertIsInstance(m.key_model, (Layer, LayerStack))
+                self.assertIsInstance(m.value_model, (Layer, LayerStack))
 
     def test__compute_projection(self):
         for projection_kind in PROJECTION_KINDS:
@@ -239,8 +242,8 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                     self.assertIsInstance(m.key_model, MixtureOfExperts)
                     self.assertIsInstance(m.value_model, MixtureOfExperts)
                 else:
-                    self.assertIsInstance(m.key_model, (Layer, Sequential))
-                    self.assertIsInstance(m.value_model, (Layer, Sequential))
+                    self.assertIsInstance(m.key_model, (Layer, LayerStack))
+                    self.assertIsInstance(m.value_model, (Layer, LayerStack))
 
     def test__compute_kv_projection(self):
         c = build_attention_config(

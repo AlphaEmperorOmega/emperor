@@ -8,11 +8,11 @@ from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
 )
 from emperor.attention.core._validator import AttentionValidatorBase
-from emperor.attention.self_attention.validator import SelfAttentionValidator
-from emperor.attention.independent_attention.validator import (
+from emperor.attention.core.variants.self_attention.validator import SelfAttentionValidator
+from emperor.attention.core.variants.independent_attention.validator import (
     IndependentAttentionValidator,
 )
-from emperor.attention.mixture_of_attention_heads.validator import (
+from emperor.attention.core.variants.mixture_of_attention_heads.validator import (
     MixtureOfAttentionHeadsValidator,
 )
 from _attention_test_helpers import build_attention_config

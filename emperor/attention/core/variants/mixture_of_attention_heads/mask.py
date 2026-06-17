@@ -4,7 +4,7 @@ from emperor.attention.core.handlers.mask import Mask
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.attention.mixture_of_attention_heads.config import (
+    from emperor.attention.core.variants.mixture_of_attention_heads.config import (
         MixtureOfAttentionHeadsConfig,
     )
 
