@@ -1,6 +1,7 @@
 import torch
 
 from lightning.pytorch.callbacks import Callback
+from emperor.experiments.monitor_policy import MonitorEmissionPolicy
 
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,8 @@ class SamplerMonitorCallback(Callback):
         log_per_expert_scalars: bool = False,
     ):
         super().__init__()
+        self.__validate_positive_integer("log_every_n_steps", log_every_n_steps)
+        self.__validate_positive_integer("history_size", history_size)
         self.log_every_n_steps = log_every_n_steps
         self.history_size = history_size
         self.log_per_expert_scalars = log_per_expert_scalars
@@ -25,11 +28,23 @@ class SamplerMonitorCallback(Callback):
         self._usage_history = {}
         self._mass_history = {}
         self._tracker_manager = None
+        self._emission_policy = MonitorEmissionPolicy()
+
+    @staticmethod
+    def __validate_positive_integer(name: str, value: int) -> None:
+        if not isinstance(value, int):
+            raise TypeError(
+                f"{name} must be an integer, received {type(value).__name__}."
+            )
+        if isinstance(value, bool) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         from emperor.sampler.model import SamplerModel
         from emperor.sampler.core.tracker import SamplerUsageTrackerManager
 
+        self.__clear_tracking_state()
+        self._emission_policy.clear()
         self._tracker_manager = SamplerUsageTrackerManager()
         for name, module in pl_module.named_modules():
             if isinstance(module, SamplerModel):
@@ -37,6 +52,15 @@ class SamplerMonitorCallback(Callback):
                 self._sampler_modules.append((name, module))
                 self._usage_history[name] = []
                 self._mass_history[name] = []
+
+    def __clear_tracking_state(self) -> None:
+        if self._tracker_manager is not None:
+            for _, sampler in self._sampler_modules:
+                self._tracker_manager.detach(sampler)
+        self._tracker_manager = None
+        self._sampler_modules.clear()
+        self._usage_history.clear()
+        self._mass_history.clear()
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx) -> None:
         if batch_idx % self.log_every_n_steps != 0:
@@ -46,6 +70,8 @@ class SamplerMonitorCallback(Callback):
             usage_tracker = sampler.usage_tracker
             if usage_tracker is None:
                 continue
+            self.__log_capacity_metrics(pl_module, name, sampler)
+            self.__log_auxiliary_loss(pl_module, name, sampler)
             self.__log_usage_stats(
                 pl_module,
                 name,
@@ -66,6 +92,33 @@ class SamplerMonitorCallback(Callback):
                 usage_tracker.last_expert_usage_counts.detach(),
                 usage_tracker.last_expert_usage_mass.detach(),
             )
+
+    def __log_capacity_metrics(
+        self,
+        module: "LightningModule",
+        name: str,
+        sampler: "SamplerModel",
+    ) -> None:
+        skip_mask = sampler.get_updated_skip_mask()
+        if skip_mask is None:
+            return
+        retention_fraction = skip_mask.detach().float().mean()
+        module.log(f"{name}/capacity/retention_fraction", retention_fraction)
+        module.log(f"{name}/capacity/drop_fraction", 1.0 - retention_fraction)
+
+    def __log_auxiliary_loss(
+        self,
+        module: "LightningModule",
+        name: str,
+        sampler: "SamplerModel",
+    ) -> None:
+        auxiliary_loss = sampler.get_auxiliary_loss()
+        if auxiliary_loss is None:
+            return
+        module.log(
+            f"{name}/loss/auxiliary_loss",
+            auxiliary_loss.detach().float().mean(),
+        )
 
     def __log_usage_stats(
         self,
@@ -98,9 +151,7 @@ class SamplerMonitorCallback(Callback):
 
         if self.log_per_expert_scalars:
             for expert_idx, value in enumerate(usage_fraction):
-                module.log(
-                    f"{name}/{prefix}/expert_{expert_idx}/usage_fraction", value
-                )
+                module.log(f"{name}/{prefix}/expert_{expert_idx}/usage_fraction", value)
             for expert_idx, value in enumerate(mass_fraction):
                 module.log(
                     f"{name}/{prefix}/expert_{expert_idx}/probability_mass", value
@@ -149,11 +200,12 @@ class SamplerMonitorCallback(Callback):
 
     def __append_history(self, history: list["Tensor"], values: "Tensor") -> None:
         history.append(values.detach().float().cpu())
-        del history[:-self.history_size]
+        del history[: -self.history_size]
 
-    def __log_histogram(self, experiment, tag: str, values: "Tensor", step: int) -> None:
-        if hasattr(experiment, "add_histogram"):
-            experiment.add_histogram(tag, values.detach().float().cpu(), step)
+    def __log_histogram(
+        self, experiment, tag: str, values: "Tensor", step: int
+    ) -> None:
+        self._emission_policy.emit_histogram(experiment, tag, values, step)
 
     def __log_heatmap(
         self,
@@ -167,13 +219,10 @@ class SamplerMonitorCallback(Callback):
         heatmap = torch.stack(history, dim=0).T
         heatmap = heatmap / heatmap.max().clamp_min(1e-6)
         image = heatmap.unsqueeze(0)
-        experiment.add_image(tag, image, step, dataformats="CHW")
+        self._emission_policy.emit_image(
+            experiment, tag, image, step, dataformats="CHW"
+        )
 
     def on_fit_end(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        if self._tracker_manager is not None:
-            for _, sampler in self._sampler_modules:
-                self._tracker_manager.detach(sampler)
-        self._tracker_manager = None
-        self._sampler_modules.clear()
-        self._usage_history.clear()
-        self._mass_history.clear()
+        self.__clear_tracking_state()
+        self._emission_policy.clear()
