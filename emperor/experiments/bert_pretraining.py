@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 
+from dataclasses import dataclass
 from torch import Tensor
 from lightning import LightningModule
 from typing import Callable, TYPE_CHECKING
@@ -11,16 +12,18 @@ if TYPE_CHECKING:
 
 
 BertPretrainingBatch = tuple[Tensor, Tensor, Tensor, Tensor, Tensor]
-BertPretrainingStepOutput = tuple[
-    Tensor,
-    Tensor,
-    Tensor,
-    Tensor,
-    Tensor,
-    Tensor,
-    Tensor,
-    Tensor | None,
-]
+
+
+@dataclass(frozen=True)
+class BertPretrainingStepOutput:
+    total_loss: Tensor
+    mlm_loss: Tensor
+    nsp_loss: Tensor
+    mlm_logits: Tensor
+    mlm_labels: Tensor
+    nsp_logits: Tensor
+    next_sentence_labels: Tensor
+    auxiliary_loss: Tensor | None = None
 
 
 class BertPretrainingExperiment(LightningModule):
@@ -34,23 +37,22 @@ class BertPretrainingExperiment(LightningModule):
         self.metrics = BertPretrainingMetricsLogger()
 
     def training_step(self, batch: BertPretrainingBatch, batch_idx: int) -> Tensor:
-        outputs = self._model_step_outputs(batch)
-        self.metrics.log_training_step(self.log_dict, *outputs)
-        return outputs[0]
+        step_output = self._model_step_outputs(batch)
+        self.metrics.log_training_step(self.log_dict, step_output)
+        return step_output.total_loss
 
     def validation_step(self, batch: BertPretrainingBatch, batch_idx: int) -> Tensor:
-        outputs = self._model_step_outputs(batch)
-        self.metrics.log_validation_step(self.log_dict, *outputs)
-        return outputs[0]
+        step_output = self._model_step_outputs(batch)
+        self.metrics.log_validation_step(self.log_dict, step_output)
+        return step_output.total_loss
 
     def test_step(self, batch: BertPretrainingBatch, batch_idx: int) -> Tensor:
-        outputs = self._model_step_outputs(batch)
-        self.metrics.log_test_step(self.log_dict, *outputs)
-        return outputs[0]
+        step_output = self._model_step_outputs(batch)
+        self.metrics.log_test_step(self.log_dict, step_output)
+        return step_output.total_loss
 
     def _model_step(self, batch: BertPretrainingBatch) -> Tensor:
-        total_loss, *_ = self._model_step_outputs(batch)
-        return total_loss
+        return self._model_step_outputs(batch).total_loss
 
     def _model_step_outputs(
         self,
@@ -81,15 +83,15 @@ class BertPretrainingExperiment(LightningModule):
             torch.any(auxiliary_loss.detach() != 0.0).item()
         ):
             total_loss = total_loss + auxiliary_loss
-        return (
-            total_loss,
-            mlm_loss,
-            nsp_loss,
-            mlm_logits,
-            mlm_labels,
-            nsp_logits,
-            next_sentence_labels,
-            auxiliary_loss,
+        return BertPretrainingStepOutput(
+            total_loss=total_loss,
+            mlm_loss=mlm_loss,
+            nsp_loss=nsp_loss,
+            mlm_logits=mlm_logits,
+            mlm_labels=mlm_labels,
+            nsp_logits=nsp_logits,
+            next_sentence_labels=next_sentence_labels,
+            auxiliary_loss=auxiliary_loss,
         )
 
     def _unpack_batch(self, batch: BertPretrainingBatch) -> BertPretrainingBatch:
@@ -112,116 +114,88 @@ class BertPretrainingMetricsLogger(nn.Module):
     def log_training_step(
         self,
         log_fn: Callable,
-        total_loss: Tensor,
-        mlm_loss: Tensor,
-        nsp_loss: Tensor,
-        mlm_logits: Tensor,
-        mlm_labels: Tensor,
-        nsp_logits: Tensor,
-        next_sentence_labels: Tensor,
-        auxiliary_loss: Tensor | None = None,
+        step_output: BertPretrainingStepOutput | Tensor,
+        *legacy_outputs: Tensor | None,
     ) -> None:
+        step_output = self._coerce_step_output(step_output, *legacy_outputs)
         log_fn(
-            self._payload(
-                "train",
-                total_loss,
-                mlm_loss,
-                nsp_loss,
-                mlm_logits,
-                mlm_labels,
-                nsp_logits,
-                next_sentence_labels,
-                auxiliary_loss,
-            ),
+            self._payload("train", step_output),
             prog_bar=True,
         )
 
     def log_validation_step(
         self,
         log_fn: Callable,
-        total_loss: Tensor,
-        mlm_loss: Tensor,
-        nsp_loss: Tensor,
-        mlm_logits: Tensor,
-        mlm_labels: Tensor,
-        nsp_logits: Tensor,
-        next_sentence_labels: Tensor,
-        auxiliary_loss: Tensor | None = None,
+        step_output: BertPretrainingStepOutput | Tensor,
+        *legacy_outputs: Tensor | None,
     ) -> None:
+        step_output = self._coerce_step_output(step_output, *legacy_outputs)
         log_fn(
-            self._payload(
-                "validation",
-                total_loss,
-                mlm_loss,
-                nsp_loss,
-                mlm_logits,
-                mlm_labels,
-                nsp_logits,
-                next_sentence_labels,
-                auxiliary_loss,
-            ),
+            self._payload("validation", step_output),
             prog_bar=True,
         )
 
     def log_test_step(
         self,
         log_fn: Callable,
-        total_loss: Tensor,
-        mlm_loss: Tensor,
-        nsp_loss: Tensor,
-        mlm_logits: Tensor,
-        mlm_labels: Tensor,
-        nsp_logits: Tensor,
-        next_sentence_labels: Tensor,
-        auxiliary_loss: Tensor | None = None,
+        step_output: BertPretrainingStepOutput | Tensor,
+        *legacy_outputs: Tensor | None,
     ) -> None:
+        step_output = self._coerce_step_output(step_output, *legacy_outputs)
         log_fn(
-            self._payload(
-                "test",
-                total_loss,
-                mlm_loss,
-                nsp_loss,
-                mlm_logits,
-                mlm_labels,
-                nsp_logits,
-                next_sentence_labels,
-                auxiliary_loss,
-            ),
+            self._payload("test", step_output),
+        )
+
+    def _coerce_step_output(
+        self,
+        step_output: BertPretrainingStepOutput | Tensor,
+        *legacy_outputs: Tensor | None,
+    ) -> BertPretrainingStepOutput:
+        if isinstance(step_output, BertPretrainingStepOutput):
+            return step_output
+        if len(legacy_outputs) not in (6, 7):
+            raise TypeError(
+                "BertPretrainingMetricsLogger expected a "
+                "BertPretrainingStepOutput or the legacy positional metrics."
+            )
+        auxiliary_loss = legacy_outputs[6] if len(legacy_outputs) == 7 else None
+        return BertPretrainingStepOutput(
+            total_loss=step_output,
+            mlm_loss=legacy_outputs[0],
+            nsp_loss=legacy_outputs[1],
+            mlm_logits=legacy_outputs[2],
+            mlm_labels=legacy_outputs[3],
+            nsp_logits=legacy_outputs[4],
+            next_sentence_labels=legacy_outputs[5],
+            auxiliary_loss=auxiliary_loss,
         )
 
     def _payload(
         self,
         stage: str,
-        total_loss: Tensor,
-        mlm_loss: Tensor,
-        nsp_loss: Tensor,
-        mlm_logits: Tensor,
-        mlm_labels: Tensor,
-        nsp_logits: Tensor,
-        next_sentence_labels: Tensor,
-        auxiliary_loss: Tensor | None,
+        step_output: BertPretrainingStepOutput,
     ) -> dict[str, Tensor | float]:
         payload: dict[str, Tensor | float] = {
-            f"{stage}/loss": total_loss,
-            f"{stage}/mlm/loss": mlm_loss,
-            f"{stage}/mlm/perplexity": math.exp(mlm_loss.item()),
+            f"{stage}/loss": step_output.total_loss,
+            f"{stage}/mlm/loss": step_output.mlm_loss,
+            f"{stage}/mlm/perplexity": math.exp(step_output.mlm_loss.item()),
             f"{stage}/mlm/masked_accuracy": self._masked_accuracy(
-                mlm_logits,
-                mlm_labels,
+                step_output.mlm_logits,
+                step_output.mlm_labels,
             ),
             f"{stage}/mlm/masked_top_5_accuracy": self._masked_top_k_accuracy(
-                mlm_logits,
-                mlm_labels,
+                step_output.mlm_logits,
+                step_output.mlm_labels,
                 k=5,
             ),
-            f"{stage}/nsp/loss": nsp_loss,
+            f"{stage}/nsp/loss": step_output.nsp_loss,
             f"{stage}/nsp/accuracy": self._nsp_accuracy(
-                nsp_logits,
-                next_sentence_labels,
+                step_output.nsp_logits,
+                step_output.next_sentence_labels,
             ),
         }
-        if auxiliary_loss is not None:
-            payload[f"{stage}/auxiliary/loss"] = auxiliary_loss
+        if step_output.auxiliary_loss is not None:
+            payload[f"{stage}/auxiliary/loss"] = step_output.auxiliary_loss
         return payload
 
     def _masked_accuracy(self, logits: Tensor, labels: Tensor) -> Tensor:
