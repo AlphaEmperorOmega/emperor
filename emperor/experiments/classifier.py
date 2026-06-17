@@ -82,51 +82,10 @@ class ClassifierExperiment(LightningModule):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
     def optimizer_health_metrics(self, optimizer) -> dict[str, Tensor]:
-        parameter_square_total = torch.tensor(0.0, device=self.device)
-        gradient_square_total = torch.tensor(0.0, device=self.device)
-        update_square_total = torch.tensor(0.0, device=self.device)
-        gradient_nan_count = torch.tensor(0.0, device=self.device)
-        gradient_inf_count = torch.tensor(0.0, device=self.device)
-
-        for group in optimizer.param_groups:
-            learning_rate = float(group.get("lr", self.learning_rate))
-            for parameter in group.get("params", []):
-                if parameter is None:
-                    continue
-                parameter_data = parameter.detach()
-                parameter_square_total = parameter_square_total + torch.nan_to_num(
-                    parameter_data,
-                    nan=0.0,
-                    posinf=0.0,
-                    neginf=0.0,
-                ).pow(2).sum()
-
-                gradient = parameter.grad
-                if gradient is None:
-                    continue
-                gradient_data = gradient.detach()
-                finite_gradient = torch.nan_to_num(
-                    gradient_data,
-                    nan=0.0,
-                    posinf=0.0,
-                    neginf=0.0,
-                )
-                gradient_square_total = (
-                    gradient_square_total + finite_gradient.pow(2).sum()
-                )
-                update_square_total = (
-                    update_square_total + (finite_gradient * learning_rate).pow(2).sum()
-                )
-                gradient_nan_count = gradient_nan_count + torch.isnan(
-                    gradient_data
-                ).sum()
-                gradient_inf_count = gradient_inf_count + torch.isinf(
-                    gradient_data
-                ).sum()
-
-        parameter_norm = parameter_square_total.sqrt()
-        gradient_norm = gradient_square_total.sqrt()
-        update_norm = update_square_total.sqrt()
+        totals = self._optimizer_health_totals(optimizer)
+        parameter_norm = totals["parameter_square_total"].sqrt()
+        gradient_norm = totals["gradient_square_total"].sqrt()
+        update_norm = totals["update_square_total"].sqrt()
         update_to_weight_ratio = torch.where(
             parameter_norm > 0,
             update_norm / parameter_norm.clamp_min(1e-12),
@@ -136,9 +95,68 @@ class ClassifierExperiment(LightningModule):
             "gradients/global_norm": gradient_norm,
             "parameters/global_norm": parameter_norm,
             "updates/update_to_weight_ratio": update_to_weight_ratio,
-            "gradients/nan_count": gradient_nan_count,
-            "gradients/inf_count": gradient_inf_count,
+            "gradients/nan_count": totals["gradient_nan_count"],
+            "gradients/inf_count": totals["gradient_inf_count"],
         }
+
+    def _optimizer_health_totals(self, optimizer) -> dict[str, Tensor]:
+        totals = {
+            "parameter_square_total": torch.tensor(0.0, device=self.device),
+            "gradient_square_total": torch.tensor(0.0, device=self.device),
+            "update_square_total": torch.tensor(0.0, device=self.device),
+            "gradient_nan_count": torch.tensor(0.0, device=self.device),
+            "gradient_inf_count": torch.tensor(0.0, device=self.device),
+        }
+        for group in optimizer.param_groups:
+            learning_rate = float(group.get("lr", self.learning_rate))
+            for parameter in group.get("params", []):
+                self._accumulate_optimizer_parameter_health(
+                    totals,
+                    learning_rate,
+                    parameter,
+                )
+        return totals
+
+    def _accumulate_optimizer_parameter_health(
+        self,
+        totals: dict[str, Tensor],
+        learning_rate: float,
+        parameter,
+    ) -> None:
+        if parameter is None:
+            return
+        parameter_data = parameter.detach()
+        totals["parameter_square_total"] = totals[
+            "parameter_square_total"
+        ] + torch.nan_to_num(
+            parameter_data,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        ).pow(2).sum()
+
+        gradient = parameter.grad
+        if gradient is None:
+            return
+        gradient_data = gradient.detach()
+        finite_gradient = torch.nan_to_num(
+            gradient_data,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+        totals["gradient_square_total"] = (
+            totals["gradient_square_total"] + finite_gradient.pow(2).sum()
+        )
+        totals["update_square_total"] = totals["update_square_total"] + (
+            finite_gradient * learning_rate
+        ).pow(2).sum()
+        totals["gradient_nan_count"] = totals["gradient_nan_count"] + torch.isnan(
+            gradient_data
+        ).sum()
+        totals["gradient_inf_count"] = totals["gradient_inf_count"] + torch.isinf(
+            gradient_data
+        ).sum()
 
 
 class ClassifierMetricsLogger(nn.Module):
@@ -164,84 +182,9 @@ class ClassifierMetricsLogger(nn.Module):
         self._validation_examples = []
         self._emission_policy = MonitorEmissionPolicy()
         task = "multiclass"
-        self.register_buffer("_train_loss_total", torch.tensor(0.0), persistent=False)
-        self.register_buffer("_train_correct", torch.tensor(0.0), persistent=False)
-        self.register_buffer("_train_count", torch.tensor(0.0), persistent=False)
-        self.register_buffer(
-            "_train_confidence_total", torch.tensor(0.0), persistent=False
-        )
-        self.register_buffer(
-            "_train_confidence_count", torch.tensor(0.0), persistent=False
-        )
-        self.register_buffer(
-            "_train_calibration_bin_confidence",
-            torch.zeros(confidence_bin_count),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_train_calibration_bin_correct",
-            torch.zeros(confidence_bin_count),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_train_calibration_bin_count",
-            torch.zeros(confidence_bin_count),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_train_confusion_matrix",
-            torch.zeros(num_classes, num_classes),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_validation_loss_total", torch.tensor(0.0), persistent=False
-        )
-        self.register_buffer(
-            "_validation_correct", torch.tensor(0.0), persistent=False
-        )
-        self.register_buffer("_validation_count", torch.tensor(0.0), persistent=False)
-        self.register_buffer(
-            "_validation_confidence_total", torch.tensor(0.0), persistent=False
-        )
-        self.register_buffer(
-            "_validation_confidence_count", torch.tensor(0.0), persistent=False
-        )
-        self.register_buffer(
-            "_validation_calibration_bin_confidence",
-            torch.zeros(confidence_bin_count),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_validation_calibration_bin_correct",
-            torch.zeros(confidence_bin_count),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_validation_calibration_bin_count",
-            torch.zeros(confidence_bin_count),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_validation_confusion_matrix",
-            torch.zeros(num_classes, num_classes),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_best_validation_accuracy",
-            torch.tensor(float("-inf")),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_best_validation_loss",
-            torch.tensor(float("inf")),
-            persistent=False,
-        )
-        self.register_buffer(
-            "_best_validation_accuracy_epoch", torch.tensor(-1.0), persistent=False
-        )
-        self.register_buffer(
-            "_best_validation_loss_epoch", torch.tensor(-1.0), persistent=False
-        )
+        self._register_epoch_buffers("train")
+        self._register_epoch_buffers("validation")
+        self._register_best_validation_buffers()
         self.train_accuracy = torchmetrics.Accuracy(task=task, num_classes=num_classes)
         self.train_f1_score = torchmetrics.F1Score(
             task=task, num_classes=num_classes, average="macro"
@@ -257,6 +200,57 @@ class ClassifierMetricsLogger(nn.Module):
         self.test_accuracy = torchmetrics.Accuracy(task=task, num_classes=num_classes)
         self.test_f1_score = torchmetrics.F1Score(
             task=task, num_classes=num_classes, average="macro"
+        )
+
+    def _register_epoch_buffers(self, prefix: str) -> None:
+        self.register_buffer(
+            f"_{prefix}_loss_total", torch.tensor(0.0), persistent=False
+        )
+        self.register_buffer(f"_{prefix}_correct", torch.tensor(0.0), persistent=False)
+        self.register_buffer(f"_{prefix}_count", torch.tensor(0.0), persistent=False)
+        self.register_buffer(
+            f"_{prefix}_confidence_total", torch.tensor(0.0), persistent=False
+        )
+        self.register_buffer(
+            f"_{prefix}_confidence_count", torch.tensor(0.0), persistent=False
+        )
+        self.register_buffer(
+            f"_{prefix}_calibration_bin_confidence",
+            torch.zeros(self.confidence_bin_count),
+            persistent=False,
+        )
+        self.register_buffer(
+            f"_{prefix}_calibration_bin_correct",
+            torch.zeros(self.confidence_bin_count),
+            persistent=False,
+        )
+        self.register_buffer(
+            f"_{prefix}_calibration_bin_count",
+            torch.zeros(self.confidence_bin_count),
+            persistent=False,
+        )
+        self.register_buffer(
+            f"_{prefix}_confusion_matrix",
+            torch.zeros(self.num_classes, self.num_classes),
+            persistent=False,
+        )
+
+    def _register_best_validation_buffers(self) -> None:
+        self.register_buffer(
+            "_best_validation_accuracy",
+            torch.tensor(float("-inf")),
+            persistent=False,
+        )
+        self.register_buffer(
+            "_best_validation_loss",
+            torch.tensor(float("inf")),
+            persistent=False,
+        )
+        self.register_buffer(
+            "_best_validation_accuracy_epoch", torch.tensor(-1.0), persistent=False
+        )
+        self.register_buffer(
+            "_best_validation_loss_epoch", torch.tensor(-1.0), persistent=False
         )
 
     def log_training_step(
@@ -301,43 +295,35 @@ class ClassifierMetricsLogger(nn.Module):
         )
 
     def update_train_epoch(self, loss: Tensor, logits: Tensor, Y: Tensor) -> None:
-        self._update_epoch_totals(
-            loss,
-            logits,
-            Y,
-            self._train_loss_total,
-            self._train_correct,
-            self._train_count,
-            self._train_confusion_matrix,
-        )
-        self._update_confidence_totals(
-            logits,
-            Y,
-            self._train_confidence_total,
-            self._train_confidence_count,
-            self._train_calibration_bin_confidence,
-            self._train_calibration_bin_correct,
-            self._train_calibration_bin_count,
-        )
+        self._update_stage_epoch("train", loss, logits, Y)
 
     def update_validation_epoch(self, loss: Tensor, logits: Tensor, Y: Tensor) -> None:
+        self._update_stage_epoch("validation", loss, logits, Y)
+
+    def _update_stage_epoch(
+        self,
+        prefix: str,
+        loss: Tensor,
+        logits: Tensor,
+        Y: Tensor,
+    ) -> None:
         self._update_epoch_totals(
             loss,
             logits,
             Y,
-            self._validation_loss_total,
-            self._validation_correct,
-            self._validation_count,
-            self._validation_confusion_matrix,
+            getattr(self, f"_{prefix}_loss_total"),
+            getattr(self, f"_{prefix}_correct"),
+            getattr(self, f"_{prefix}_count"),
+            getattr(self, f"_{prefix}_confusion_matrix"),
         )
         self._update_confidence_totals(
             logits,
             Y,
-            self._validation_confidence_total,
-            self._validation_confidence_count,
-            self._validation_calibration_bin_confidence,
-            self._validation_calibration_bin_correct,
-            self._validation_calibration_bin_count,
+            getattr(self, f"_{prefix}_confidence_total"),
+            getattr(self, f"_{prefix}_confidence_count"),
+            getattr(self, f"_{prefix}_calibration_bin_confidence"),
+            getattr(self, f"_{prefix}_calibration_bin_correct"),
+            getattr(self, f"_{prefix}_calibration_bin_count"),
         )
 
     def log_train_epoch(self, log_fn: Callable) -> None:
@@ -442,29 +428,27 @@ class ClassifierMetricsLogger(nn.Module):
     def reset_train_epoch(self) -> None:
         self.train_accuracy.reset()
         self.train_f1_score.reset()
-        self._train_loss_total.zero_()
-        self._train_correct.zero_()
-        self._train_count.zero_()
-        self._train_confusion_matrix.zero_()
-        self._train_confidence_total.zero_()
-        self._train_confidence_count.zero_()
-        self._train_calibration_bin_confidence.zero_()
-        self._train_calibration_bin_correct.zero_()
-        self._train_calibration_bin_count.zero_()
+        self._reset_epoch_buffers("train")
 
     def reset_validation_epoch(self) -> None:
         self.validation_accuracy.reset()
         self.validation_f1_score.reset()
-        self._validation_loss_total.zero_()
-        self._validation_correct.zero_()
-        self._validation_count.zero_()
-        self._validation_confusion_matrix.zero_()
-        self._validation_confidence_total.zero_()
-        self._validation_confidence_count.zero_()
-        self._validation_calibration_bin_confidence.zero_()
-        self._validation_calibration_bin_correct.zero_()
-        self._validation_calibration_bin_count.zero_()
+        self._reset_epoch_buffers("validation")
         self._validation_examples = []
+
+    def _reset_epoch_buffers(self, prefix: str) -> None:
+        for suffix in (
+            "loss_total",
+            "correct",
+            "count",
+            "confusion_matrix",
+            "confidence_total",
+            "confidence_count",
+            "calibration_bin_confidence",
+            "calibration_bin_correct",
+            "calibration_bin_count",
+        ):
+            getattr(self, f"_{prefix}_{suffix}").zero_()
 
     def _update_epoch_totals(
         self,
@@ -502,20 +486,12 @@ class ClassifierMetricsLogger(nn.Module):
         bin_correct_total: Tensor,
         bin_count_total: Tensor,
     ) -> None:
-        targets = Y.detach().to(
+        confidence, correct, bin_indices = self._confidence_batch(
+            logits,
+            Y,
             device=confidence_total.device,
-            dtype=torch.long,
-        ).view(-1)
-        probabilities = logits.detach().softmax(dim=1)
-        confidence, predictions = probabilities.max(dim=1)
-        confidence = confidence.to(confidence_total.device).view(-1)
-        predictions = predictions.to(confidence_total.device).view(-1)
-        correct = (predictions == targets).to(confidence_total.dtype)
-        bin_indices = torch.clamp(
-            (confidence * self.confidence_bin_count).long(),
-            max=self.confidence_bin_count - 1,
+            dtype=confidence_total.dtype,
         )
-
         confidence_total.add_(confidence.sum().to(confidence_total.dtype))
         confidence_count.add_(
             torch.as_tensor(
@@ -524,6 +500,44 @@ class ClassifierMetricsLogger(nn.Module):
                 device=confidence_count.device,
             )
         )
+        self._update_calibration_bins(
+            confidence,
+            correct,
+            bin_indices,
+            bin_confidence_total,
+            bin_correct_total,
+            bin_count_total,
+        )
+
+    def _confidence_batch(
+        self,
+        logits: Tensor,
+        Y: Tensor,
+        *,
+        device,
+        dtype,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        targets = Y.detach().to(device=device, dtype=torch.long).view(-1)
+        probabilities = logits.detach().softmax(dim=1)
+        confidence, predictions = probabilities.max(dim=1)
+        confidence = confidence.to(device).view(-1)
+        predictions = predictions.to(device).view(-1)
+        correct = (predictions == targets).to(dtype)
+        bin_indices = torch.clamp(
+            (confidence * self.confidence_bin_count).long(),
+            max=self.confidence_bin_count - 1,
+        )
+        return confidence, correct, bin_indices
+
+    def _update_calibration_bins(
+        self,
+        confidence: Tensor,
+        correct: Tensor,
+        bin_indices: Tensor,
+        bin_confidence_total: Tensor,
+        bin_correct_total: Tensor,
+        bin_count_total: Tensor,
+    ) -> None:
         bin_confidence_total.add_(
             torch.bincount(
                 bin_indices,
@@ -692,17 +706,41 @@ class ClassifierMetricsLogger(nn.Module):
     ) -> dict[str, Tensor]:
         if self.top_confused_pair_limit == 0:
             return {}
+        top_pairs = self._top_confused_pairs(confusion_matrix)
+        if top_pairs is None:
+            return {}
 
+        values, flat_indices = top_pairs
+        support = confusion_matrix.sum(dim=1, keepdim=True)
+        rate_matrix = self._safe_divide(confusion_matrix, support)
+        return self._top_confused_pair_payload(
+            prefix,
+            confusion_matrix,
+            rate_matrix,
+            values,
+            flat_indices,
+        )
+
+    def _top_confused_pairs(
+        self,
+        confusion_matrix: Tensor,
+    ) -> tuple[Tensor, Tensor] | None:
         off_diagonal = confusion_matrix.clone()
         off_diagonal.fill_diagonal_(0)
         nonzero_count = int((off_diagonal > 0).sum().item())
         if nonzero_count == 0:
-            return {}
-
+            return None
         pair_limit = min(self.top_confused_pair_limit, nonzero_count)
-        support = confusion_matrix.sum(dim=1, keepdim=True)
-        rate_matrix = self._safe_divide(confusion_matrix, support)
-        values, flat_indices = torch.topk(off_diagonal.flatten(), pair_limit)
+        return torch.topk(off_diagonal.flatten(), pair_limit)
+
+    def _top_confused_pair_payload(
+        self,
+        prefix: str,
+        confusion_matrix: Tensor,
+        rate_matrix: Tensor,
+        values: Tensor,
+        flat_indices: Tensor,
+    ) -> dict[str, Tensor]:
         metrics: dict[str, Tensor] = {}
         for rank, (value, flat_index) in enumerate(
             zip(values, flat_indices, strict=True),
