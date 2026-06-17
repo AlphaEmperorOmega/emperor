@@ -3,6 +3,7 @@ import torch
 from torch import Tensor
 
 from emperor.base.utils import Module
+from emperor.neuron.core.options import TerminalConnectionShapeOptions
 from emperor.neuron.core._validator import (
     AxonsValidator,
     NeuronValidator,
@@ -55,7 +56,11 @@ class Axons(Module):
     def __maybe_build_memory_model(self) -> Module | None:
         if self.memory_config is None:
             return None
-        return self.memory_config.build()
+        return self._build_from_config(
+            self.memory_config,
+            input_dim=self.memory_config.input_dim,
+            output_dim=self.memory_config.input_dim,
+        )
 
     def forward(self, input: Tensor) -> Tensor:
         AxonsValidator.validate_forward_input(input)
@@ -82,14 +87,20 @@ class Terminal(Module):
         self.xy_axis_range: int = self.cfg.xy_axis_range.value
         self.z_axis_range: int = self.cfg.z_axis_range.value
         self.z_axis_offset: int = self.cfg.z_axis_offset.value
+        self.connection_shape: TerminalConnectionShapeOptions = (
+            TerminalConnectionShapeOptions.BOX
+            if self.cfg.connection_shape is None
+            else self.cfg.connection_shape
+        )
         self.sampler_config = self.cfg.sampler_config
-        self.total_neuron_connections = self.__compute_total_neuron_connections()
+        neuron_connections = self.__initialize_connections()
+        self.total_neuron_connections = int(neuron_connections.shape[0])
 
         TerminalValidator.validate(self)
         self.sampler = self.__build_sampler()
         self.register_buffer(
             "neuron_connections",
-            self.__initialize_connections(),
+            neuron_connections,
             persistent=False,
         )
 
@@ -98,19 +109,14 @@ class Terminal(Module):
             return self.sampler_config.build()
         return self.sampler_config.build_with_router_input_dim(self.input_dim)
 
-    def __compute_total_neuron_connections(self) -> int:
-        single_axis_range = self.xy_axis_range * 2 + 1
-        return single_axis_range**2 * (self.z_axis_range + 1)
-
     def __initialize_connections(self) -> Tensor:
-        x_axis_range_indices = self.__compute_xy_axis_range()
-        y_axis_range_indices = self.__compute_xy_axis_range(is_y_axis_flag=True)
-        z_axis_range_indices = self.__compute_z_axis_range()
-        return torch.cartesian_prod(
-            x_axis_range_indices,
-            y_axis_range_indices,
-            z_axis_range_indices,
-        )
+        if self.connection_shape is TerminalConnectionShapeOptions.BOX:
+            return torch.cartesian_prod(
+                self.__compute_xy_axis_range(),
+                self.__compute_xy_axis_range(is_y_axis_flag=True),
+                self.__compute_z_axis_range(),
+            )
+        return self.__initialize_shaped_connections()
 
     def __compute_xy_axis_range(self, is_y_axis_flag: bool = False) -> Tensor:
         position = self.y_axis_position if is_y_axis_flag else self.x_axis_position
@@ -122,6 +128,85 @@ class Terminal(Module):
         range_start = self.z_axis_position - self.z_axis_offset
         range_end = self.z_axis_position + self.z_axis_range - self.z_axis_offset + 1
         return torch.arange(range_start, range_end)
+
+    def __initialize_shaped_connections(self) -> Tensor:
+        deduplicated_offsets = list(
+            dict.fromkeys(self.__connection_offsets_for_shape())
+        )
+        position = torch.tensor(
+            [self.x_axis_position, self.y_axis_position, self.z_axis_position],
+            dtype=torch.long,
+        )
+        return position + torch.tensor(deduplicated_offsets, dtype=torch.long)
+
+    def __connection_offsets_for_shape(self) -> list[tuple[int, int, int]]:
+        shape = self.connection_shape
+        if shape is TerminalConnectionShapeOptions.CROSS:
+            return (
+                self.__x_axis_line_offsets()
+                + self.__y_axis_line_offsets()
+                + self.__z_axis_line_offsets()
+            )
+        if shape is TerminalConnectionShapeOptions.SPHERE:
+            return self.__ellipsoid_offsets()
+        if shape is TerminalConnectionShapeOptions.DIAGONAL_X:
+            return self.__xy_diagonal_offsets()
+        if shape is TerminalConnectionShapeOptions.LINE_LEFT_RIGHT:
+            return self.__x_axis_line_offsets()
+        if shape is TerminalConnectionShapeOptions.LINE_UP_DOWN:
+            return self.__y_axis_line_offsets()
+        if shape is TerminalConnectionShapeOptions.LINE_FRONT_BACK:
+            return self.__z_axis_line_offsets()
+        raise ValueError(f"Unsupported connection_shape {shape!r} for Terminal.")
+
+    def __x_axis_line_offsets(self) -> list[tuple[int, int, int]]:
+        return [
+            (delta, 0, 0)
+            for delta in range(-self.xy_axis_range, self.xy_axis_range + 1)
+        ]
+
+    def __y_axis_line_offsets(self) -> list[tuple[int, int, int]]:
+        return [
+            (0, delta, 0)
+            for delta in range(-self.xy_axis_range, self.xy_axis_range + 1)
+        ]
+
+    def __z_axis_line_offsets(self) -> list[tuple[int, int, int]]:
+        return [
+            (0, 0, delta)
+            for delta in range(
+                -self.z_axis_offset,
+                self.z_axis_range - self.z_axis_offset + 1,
+            )
+        ]
+
+    def __xy_diagonal_offsets(self) -> list[tuple[int, int, int]]:
+        offsets = []
+        for delta in range(-self.xy_axis_range, self.xy_axis_range + 1):
+            offsets.append((delta, delta, 0))
+            offsets.append((delta, -delta, 0))
+        return offsets
+
+    def __ellipsoid_offsets(self) -> list[tuple[int, int, int]]:
+        # The z window is directional (offset back, range forward), so the
+        # ellipsoid is centered on the window rather than on the neuron.
+        z_window_center = (self.z_axis_range - 2 * self.z_axis_offset) / 2
+        z_half_extent = self.z_axis_range / 2
+        offsets = []
+        for x_delta in range(-self.xy_axis_range, self.xy_axis_range + 1):
+            for y_delta in range(-self.xy_axis_range, self.xy_axis_range + 1):
+                for z_delta in range(
+                    -self.z_axis_offset,
+                    self.z_axis_range - self.z_axis_offset + 1,
+                ):
+                    normalized_distance = (
+                        (x_delta / self.xy_axis_range) ** 2
+                        + (y_delta / self.xy_axis_range) ** 2
+                        + ((z_delta - z_window_center) / z_half_extent) ** 2
+                    )
+                    if normalized_distance <= 1.0 + 1e-9:
+                        offsets.append((x_delta, y_delta, z_delta))
+        return offsets
 
     def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         TerminalValidator.validate_forward_input(self, input)

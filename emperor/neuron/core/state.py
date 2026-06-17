@@ -39,3 +39,4 @@ class NeuronClusterRouteState:
     halting_state: Any | None
     loss: Tensor
     trace: NeuronClusterTrace | None = None
+    beam_scores: Tensor | None = None

@@ -6,6 +6,7 @@ from emperor.base.validator import ValidatorBase
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from emperor.memory.config import DynamicMemoryConfig
     from emperor.neuron.core.config import NeuronClusterConfig, NeuronConfig
     from emperor.neuron.core.layers import Axons, Nucleus, Terminal
 
@@ -67,10 +68,16 @@ class AxonsValidator(ValidatorBase, NeuronValidationMixin):
         AxonsValidator.validate_memory_config(model.cfg.memory_config)
 
     @staticmethod
-    def validate_memory_config(memory_config: ConfigBase | None) -> None:
+    def validate_memory_config(memory_config: "DynamicMemoryConfig | None") -> None:
         if memory_config is None:
             return
-        AxonsValidator.validate_config_base("memory_config", memory_config)
+        from emperor.memory.config import DynamicMemoryConfig
+
+        if not isinstance(memory_config, DynamicMemoryConfig):
+            raise TypeError(
+                "memory_config must be an instance of DynamicMemoryConfig for "
+                f"AxonsConfig, got {type(memory_config).__name__}."
+            )
 
     @staticmethod
     def validate_forward_input(input: Tensor) -> None:
@@ -78,10 +85,25 @@ class AxonsValidator(ValidatorBase, NeuronValidationMixin):
 
 
 class TerminalValidator(ValidatorBase, NeuronValidationMixin):
+    OPTIONAL_FIELDS = {"connection_shape"}
+
     @staticmethod
     def validate_config_fields(cfg) -> None:
         TerminalValidator.validate_required_fields(cfg)
         TerminalValidator.validate_field_types(cfg)
+        TerminalValidator.validate_connection_shape(cfg)
+
+    @staticmethod
+    def validate_connection_shape(cfg) -> None:
+        from emperor.neuron.core.options import TerminalConnectionShapeOptions
+
+        if cfg.connection_shape is None:
+            return
+        if not isinstance(cfg.connection_shape, TerminalConnectionShapeOptions):
+            raise TypeError(
+                "connection_shape must be a TerminalConnectionShapeOptions "
+                f"for TerminalConfig, got {type(cfg.connection_shape).__name__}."
+            )
 
     @staticmethod
     def validate(model: "Terminal") -> None:
@@ -203,10 +225,12 @@ class NeuronValidator(ValidatorBase, NeuronValidationMixin):
 
 class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
     OPTIONAL_FIELDS = {
+        "beam_width",
         "entry_sampler_config",
         "escape_driven_growth_flag",
         "growth_cooldown_steps",
         "growth_threshold",
+        "growth_warmup_steps",
         "max_total_growths",
         "halting_config",
         "initial_x_axis_total_neurons",
@@ -238,6 +262,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
             "max_steps",
             model.cfg.max_steps,
         )
+        NeuronClusterValidator.validate_beam_width(model.cfg.beam_width)
         NeuronClusterValidator.validate_entry_sampler_config(model.cfg)
         NeuronClusterValidator.validate_derived_entry_sampler_config(model.cfg)
         NeuronClusterValidator.validate_growth_threshold(
@@ -248,6 +273,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         )
         NeuronClusterValidator.validate_growth_placement_options(model.cfg)
         NeuronClusterValidator.validate_growth_budget_options(model.cfg)
+        NeuronClusterValidator.validate_growth_warmup_steps(model.cfg)
         NeuronClusterValidator.validate_halting_config(model.cfg)
         NeuronClusterValidator.validate_nucleus_model_dimensions(model.cfg)
 
@@ -373,6 +399,12 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         )
 
     @staticmethod
+    def validate_beam_width(beam_width: int | None) -> None:
+        if beam_width is None:
+            return
+        NeuronClusterValidator.validate_positive_integer("beam_width", beam_width)
+
+    @staticmethod
     def validate_growth_threshold(growth_threshold: int | None) -> None:
         if growth_threshold is None:
             return
@@ -430,6 +462,21 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                     "NeuronClusterConfig; growth options have no effect when "
                     "growth is disabled."
                 )
+
+    @staticmethod
+    def validate_growth_warmup_steps(cfg: "NeuronClusterConfig") -> None:
+        if cfg.growth_warmup_steps is None:
+            return
+        NeuronClusterValidator.validate_positive_integer(
+            "growth_warmup_steps",
+            cfg.growth_warmup_steps,
+        )
+        if cfg.growth_threshold is None:
+            raise ValueError(
+                "growth_warmup_steps requires growth_threshold to be set for "
+                "NeuronClusterConfig; growth options have no effect when "
+                "growth is disabled."
+            )
 
     @staticmethod
     def validate_halting_config(cfg: "NeuronClusterConfig") -> None:

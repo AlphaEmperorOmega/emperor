@@ -1,6 +1,7 @@
 import torch
 
 from lightning.pytorch.callbacks import Callback
+from emperor.experiments.monitor_policy import MonitorEmissionPolicy
 
 from typing import TYPE_CHECKING, cast
 
@@ -26,6 +27,11 @@ class NeuronClusterMonitorCallback(Callback):
     growth and pruning pressure are read directly from each neuron's
     ``batch_counter`` and ``atrophy_counter``, and growth / pruning events
     from cluster membership changes between logging steps.
+
+    Beam-search clusters (``beam_width > 1``) expose no per-sample route
+    trace, so their ``forward`` is never wrapped and only the structural
+    scalars (capacity, plasticity events, growth and pruning pressure)
+    are logged for them.
     """
 
     def __init__(self, log_every_n_steps: int = 100, history_size: int = 128):
@@ -39,10 +45,12 @@ class NeuronClusterMonitorCallback(Callback):
         self._latest_loss: dict[str, "Tensor | None"] = {}
         self._survival_history: dict[str, list["Tensor"]] = {}
         self._previous_neuron_names: dict[str, set[str]] = {}
+        self._emission_policy = MonitorEmissionPolicy()
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         from emperor.neuron.core.model import NeuronCluster
 
+        self._emission_policy.clear()
         self._clusters = [
             (name, module)
             for name, module in pl_module.named_modules()
@@ -53,7 +61,13 @@ class NeuronClusterMonitorCallback(Callback):
             self._latest_loss[name] = None
             self._survival_history[name] = []
             self._previous_neuron_names[name] = set(cluster.cluster.keys())
-            self.__wrap_cluster_forward(name, cluster, pl_module)
+            if self.__cluster_supports_route_tracing(cluster):
+                self.__wrap_cluster_forward(name, cluster, pl_module)
+
+    def __cluster_supports_route_tracing(self, cluster: "NeuronCluster") -> bool:
+        # forward rejects return_trace when beam_width > 1, so beam clusters
+        # are never wrapped and log only the structural scalars.
+        return cluster.beam_width == 1
 
     def __wrap_cluster_forward(
         self,
@@ -367,15 +381,14 @@ class NeuronClusterMonitorCallback(Callback):
         trace: "NeuronClusterTrace",
         step: int,
     ) -> None:
-        if not hasattr(experiment, "add_image"):
-            return
         grid = torch.zeros(
             cluster.x_axis_total_neurons, cluster.y_axis_total_neurons
         )
         for coords, valid in self.__iter_valid_coordinates(trace):
             self.__accumulate_coordinate_counts(grid, coords, valid)
         grid = grid / grid.max().clamp_min(1e-6)
-        experiment.add_image(
+        self._emission_policy.emit_image(
+            experiment,
             f"{name}/cluster/heatmap/neuron_utilization",
             grid.unsqueeze(0),
             step,
@@ -419,8 +432,7 @@ class NeuronClusterMonitorCallback(Callback):
         values: "Tensor",
         step: int,
     ) -> None:
-        if hasattr(experiment, "add_histogram"):
-            experiment.add_histogram(tag, values.detach().float().cpu(), step)
+        self._emission_policy.emit_histogram(experiment, tag, values, step)
 
     def __log_padded_heatmap(
         self,
@@ -439,7 +451,9 @@ class NeuronClusterMonitorCallback(Callback):
             for vector in history
         ]
         heatmap = torch.stack(padded, dim=0).T.clamp(0.0, 1.0)
-        experiment.add_image(tag, heatmap.unsqueeze(0), step, dataformats="CHW")
+        self._emission_policy.emit_image(
+            experiment, tag, heatmap.unsqueeze(0), step, dataformats="CHW"
+        )
 
     def on_fit_end(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         for _, cluster in self._clusters:
@@ -450,3 +464,4 @@ class NeuronClusterMonitorCallback(Callback):
         self._latest_loss.clear()
         self._survival_history.clear()
         self._previous_neuron_names.clear()
+        self._emission_policy.clear()

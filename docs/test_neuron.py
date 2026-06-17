@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import math
 import os
 import tempfile
@@ -21,6 +22,7 @@ from emperor.base.utils import ConfigBase, Module, optional_field
 from emperor.halting.config import StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
 from emperor.linears.core.config import LinearLayerConfig
+from emperor.memory import GatedResidualDynamicMemory, GatedResidualDynamicMemoryConfig
 from emperor.neuron import (
     Axons,
     AxonsConfig,
@@ -33,10 +35,13 @@ from emperor.neuron import (
     NucleusConfig,
     Terminal,
     TerminalConfig,
+    TerminalConnectionShapeOptions,
     TerminalRangeOptions,
     TerminalZAxisOffsetOptions,
 )
 from emperor.sampler.core.config import RouterConfig, SamplerConfig
+
+from docs.test_memory import make_memory_config
 
 
 ROUTER_CONFIG_UNSET = object()
@@ -280,13 +285,12 @@ class NeuronTestCase(unittest.TestCase):
                 apply_output_pipeline_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
-                    residual_flag=False,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     gate_config=None,
                     halting_config=None,
                     memory_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(bias_flag=True),
                 ),
             ),
@@ -311,13 +315,12 @@ class NeuronTestCase(unittest.TestCase):
                 apply_output_pipeline_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
-                    residual_flag=False,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     gate_config=None,
                     halting_config=None,
                     memory_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(bias_flag=True),
                 ),
             ),
@@ -355,6 +358,7 @@ class NeuronTestCase(unittest.TestCase):
         z_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
         z_axis_offset: TerminalZAxisOffsetOptions = TerminalZAxisOffsetOptions.ZERO,
         sampler_config: SamplerConfig | None = None,
+        connection_shape: TerminalConnectionShapeOptions | None = None,
     ) -> TerminalConfig:
         num_experts = self.terminal_total_connections(xy_axis_range, z_axis_range)
         return TerminalConfig(
@@ -367,7 +371,30 @@ class NeuronTestCase(unittest.TestCase):
             z_axis_offset=z_axis_offset,
             sampler_config=sampler_config
             or self.sampler_config(input_dim=input_dim, num_experts=num_experts),
+            connection_shape=connection_shape,
         )
+
+    def shaped_terminal(
+        self,
+        connection_shape: TerminalConnectionShapeOptions,
+        num_experts: int,
+        xy_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
+        z_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
+        z_axis_offset: TerminalZAxisOffsetOptions = TerminalZAxisOffsetOptions.ZERO,
+    ):
+        return self.terminal_config(
+            xy_axis_range=xy_axis_range,
+            z_axis_range=z_axis_range,
+            z_axis_offset=z_axis_offset,
+            sampler_config=self.sampler_config(num_experts=num_experts),
+            connection_shape=connection_shape,
+        ).build()
+
+    def terminal_connection_set(self, terminal) -> set[tuple[int, int, int]]:
+        return {
+            tuple(connection_row)
+            for connection_row in terminal.neuron_connections.tolist()
+        }
 
     def neuron_config(
         self,
@@ -511,6 +538,27 @@ class TestAxons(NeuronTestCase):
         output = model(input_batch)
 
         self.assertIs(output, input_batch)
+
+    def test_builds_and_applies_dynamic_memory_config(self):
+        memory_config = make_memory_config(
+            config_cls=GatedResidualDynamicMemoryConfig,
+            input_dim=self.input_dim,
+            output_dim=self.input_dim + 2,
+        )
+        model = AxonsConfig(memory_config=memory_config).build()
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        output = model(input_batch)
+
+        self.assertIsInstance(model.memory_model, GatedResidualDynamicMemory)
+        self.assertEqual(model.memory_model.input_dim, self.input_dim)
+        self.assertEqual(model.memory_model.output_dim, self.input_dim)
+        self.assertEqual(output.shape, input_batch.shape)
+        self.assertFalse(torch.allclose(output, input_batch))
+
+    def test_rejects_non_memory_config_base(self):
+        with self.assertRaises(TypeError):
+            AxonsConfig(memory_config=self.projection_config()).build()
 
 
 class TestTerminal(NeuronTestCase):
@@ -700,6 +748,7 @@ class TestNeuronCluster(NeuronTestCase):
         initial_x_axis_total_neurons: int | None = None,
         initial_y_axis_total_neurons: int | None = None,
         initial_z_axis_total_neurons: int | None = None,
+        beam_width: int | None = None,
     ) -> NeuronCluster:
         neuron_config = NeuronConfig(
             nucleus_config=NucleusConfig(
@@ -720,6 +769,7 @@ class TestNeuronCluster(NeuronTestCase):
             initial_y_axis_total_neurons=initial_y_axis_total_neurons,
             initial_z_axis_total_neurons=initial_z_axis_total_neurons,
             max_steps=max_steps,
+            beam_width=beam_width,
             growth_threshold=None,
             neuron_config=neuron_config,
         ).build()
@@ -1617,7 +1667,9 @@ class TestNeuronCluster(NeuronTestCase):
             {torch.float64},
         )
 
-    def test_entry_fanout_processes_selected_neurons_and_highest_continues(self):
+    def test_entry_fanout_processes_selected_neurons_and_weighted_sum_continues(
+        self,
+    ):
         model = self.scripted_cluster(
             max_steps=1,
             x_axis_total_neurons=2,
@@ -1644,7 +1696,9 @@ class TestNeuronCluster(NeuronTestCase):
 
         output, _ = model(torch.zeros(1, 1))
 
-        torch.testing.assert_close(output, torch.tensor([[20.0]]))
+        # Entry mixes both branches (0.25 * 1 + 0.75 * 10 = 7.75); the route
+        # then follows the argmax neuron, which adds its delta of 10.
+        torch.testing.assert_close(output, torch.tensor([[17.75]]))
         self.assertEqual(int(model.cluster["neuron_1_1_1"].batch_counter.item()), 1)
         self.assertEqual(int(model.cluster["neuron_2_1_1"].batch_counter.item()), 2)
         self.assertEqual(
@@ -1706,7 +1760,9 @@ class TestNeuronCluster(NeuronTestCase):
 
         self.assertTrue(int(model.cluster["neuron_1_1_1"].batch_counter.item()) >= 1)
 
-    def test_topk_branches_run_and_highest_probability_continues(self):
+    def test_topk_branches_run_and_weighted_sum_continues_along_highest_route(
+        self,
+    ):
         model = self.scripted_cluster(max_steps=1, input_dim=2)
         model.cluster = nn.ModuleDict(
             {
@@ -1735,7 +1791,8 @@ class TestNeuronCluster(NeuronTestCase):
 
         output, auxiliary_loss = model(torch.zeros(2, 2))
 
-        torch.testing.assert_close(output, torch.tensor([[1.0, 3.0], [1.0, 3.0]]))
+        # Step mixes all three branches: 0.2 * 2 + 0.7 * 3 + 0.1 * 4 = 2.9.
+        torch.testing.assert_close(output, torch.tensor([[1.0, 2.9], [1.0, 2.9]]))
         self.assertEqual(auxiliary_loss.shape, ())
         self.assertEqual(int(model.cluster["neuron_1_1_1"].batch_counter.item()), 1)
         self.assertEqual(
@@ -1758,7 +1815,7 @@ class TestNeuronCluster(NeuronTestCase):
             0,
         )
 
-    def test_weighted_topk_candidate_updates_halting_without_renormalizing(self):
+    def test_weighted_topk_candidate_updates_halting_with_renormalized_weights(self):
         halting_model = RecordingHaltingModel(ponder_loss=0.5)
         model = self.scripted_cluster(
             max_steps=1,
@@ -1783,7 +1840,9 @@ class TestNeuronCluster(NeuronTestCase):
         output, auxiliary_loss = model(torch.zeros(1, 2))
 
         torch.testing.assert_close(halting_model.inputs[0], torch.tensor([[1.0, 0.0]]))
-        expected_candidate = torch.tensor([[1.0, 1.0]])
+        # The escaped invalid branch (prob 0.75) renormalizes away, so halting
+        # sees the valid branch output alone rather than a blend with the input.
+        expected_candidate = torch.tensor([[1.0, 4.0]])
         torch.testing.assert_close(halting_model.inputs[1], expected_candidate)
         torch.testing.assert_close(output, expected_candidate)
         torch.testing.assert_close(auxiliary_loss, torch.tensor(0.5))
@@ -1913,13 +1972,350 @@ class TestNeuronCluster(NeuronTestCase):
 
         output, _ = model(torch.zeros(1, 1))
 
-        torch.testing.assert_close(output, torch.tensor([[3.0]]))
+        # Branch weights renormalize over valid branches, so the escaped
+        # invalid branch contributes nothing: the exit value is the valid
+        # branch output (1 + 10) alone, not a blend with the raw input.
+        torch.testing.assert_close(output, torch.tensor([[11.0]]))
         self.assertEqual(int(model.cluster["neuron_1_1_1"].batch_counter.item()), 1)
         self.assertEqual(int(model.cluster["neuron_2_1_1"].batch_counter.item()), 1)
         self.assertEqual(
             int(model.cluster["neuron_2_1_1"].route_call_counter.item()),
             0,
         )
+
+    def beam_pair_cluster(
+        self,
+        entry_probabilities: list[float],
+        first_neuron_routes: list[list[int]],
+        max_steps: int = 1,
+        halting_model: nn.Module | None = None,
+        beam_width: int | None = 2,
+    ) -> NeuronCluster:
+        model = self.scripted_cluster(
+            max_steps=max_steps,
+            halting_model=halting_model,
+            beam_width=beam_width,
+            x_axis_total_neurons=2,
+            initial_x_axis_total_neurons=2,
+        )
+        model.entry_sampler = ScriptedSampler(
+            indices=[0, 1],
+            probabilities=entry_probabilities,
+        )
+        model.cluster = nn.ModuleDict(
+            {
+                "neuron_1_1_1": ScriptedNeuron(
+                    routes=first_neuron_routes,
+                    probabilities=[1.0],
+                    delta=[1.0],
+                ),
+                "neuron_2_1_1": ScriptedNeuron(
+                    routes=[[2, 1, 1]],
+                    probabilities=[1.0],
+                    delta=[10.0],
+                ),
+            }
+        )
+        return model
+
+    def test_beam_width_zero_raises(self):
+        with self.assertRaises(ValueError):
+            self.scripted_cluster(beam_width=0)
+
+    def test_beam_width_one_matches_single_route_weighted_continuation(self):
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.25, 0.75],
+            first_neuron_routes=[[1, 1, 1]],
+            beam_width=1,
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        # Same value as the default-path entry fanout test: entry mixes both
+        # branches to 7.75, then the argmax neuron adds its delta of 10.
+        torch.testing.assert_close(output, torch.tensor([[17.75]]))
+
+    def test_beam_search_continues_multiple_routes_and_merges_by_score(self):
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.25, 0.75],
+            first_neuron_routes=[[1, 1, 1]],
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        # The 0.75-beam walks neuron_2 twice (0 + 10 + 10 = 20), the
+        # 0.25-beam walks neuron_1 twice (0 + 1 + 1 = 2); merge weights are
+        # softmax(ln 0.75, ln 0.25) = (0.75, 0.25) -> 15.5.
+        torch.testing.assert_close(output, torch.tensor([[15.5]]))
+        self.assertEqual(int(model.cluster["neuron_1_1_1"].batch_counter.item()), 2)
+        self.assertEqual(int(model.cluster["neuron_2_1_1"].batch_counter.item()), 2)
+        self.assertEqual(
+            int(model.cluster["neuron_1_1_1"].route_call_counter.item()),
+            1,
+        )
+        self.assertEqual(
+            int(model.cluster["neuron_2_1_1"].route_call_counter.item()),
+            1,
+        )
+
+    def test_beam_escaped_route_competes_in_final_merge(self):
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.4, 0.6],
+            first_neuron_routes=[[99, 1, 1]],
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        # The 0.6-beam expands to 20; the 0.4-beam's only branch is invalid,
+        # so it finishes at 1 and keeps its score: 0.6 * 20 + 0.4 * 1 = 12.4.
+        torch.testing.assert_close(output, torch.tensor([[12.4]]))
+
+    def test_beam_halting_updates_per_beam_and_merges_finalized_hidden(self):
+        halting_model = RecordingHaltingModel(halt_after_updates=1)
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.25, 0.75],
+            first_neuron_routes=[[1, 1, 1]],
+            max_steps=3,
+            halting_model=halting_model,
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        # The entry update halts every beam, so the route loop never runs;
+        # the finalized per-beam hidden states merge by entry scores.
+        self.assertEqual(halting_model.update_count, 1)
+        torch.testing.assert_close(
+            halting_model.inputs[0],
+            torch.tensor([[10.0], [1.0]]),
+        )
+        torch.testing.assert_close(output, torch.tensor([[7.75]]))
+
+    def test_return_trace_with_beam_width_raises(self):
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.25, 0.75],
+            first_neuron_routes=[[1, 1, 1]],
+        )
+
+        with self.assertRaises(NotImplementedError):
+            model(torch.zeros(1, 1), return_trace=True)
+
+    def test_growth_warmup_steps_without_growth_threshold_raises(self):
+        with self.assertRaises(ValueError):
+            NeuronClusterConfig(
+                x_axis_total_neurons=2,
+                y_axis_total_neurons=1,
+                z_axis_total_neurons=1,
+                max_steps=1,
+                growth_threshold=None,
+                growth_warmup_steps=5,
+                neuron_config=self.neuron_config(),
+            ).build()
+
+    def test_grown_neuron_starts_warmup_countdown(self):
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            growth_warmup_steps=5,
+            neuron_config=self.full_sampler_neuron_config(),
+        ).build()
+        model.entry_sampler = ScriptedSampler(indices=[0], probabilities=[1.0])
+        model.cluster = nn.ModuleDict(
+            {
+                "neuron_1_1_1": ScriptedNeuron(
+                    routes=[[2, 1, 1]],
+                    probabilities=[1.0],
+                    delta=[0.0, 0.0, 0.0, 0.0],
+                )
+            }
+        )
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        grown_neuron = model.cluster["neuron_2_1_1"]
+        self.assertEqual(int(grown_neuron.warmup_remaining_steps.item()), 5)
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(int(grown_neuron.warmup_remaining_steps.item()), 4)
+
+    def test_warmup_blends_grown_neuron_output_toward_input(self):
+        model = self.scripted_cluster(max_steps=1)
+        model.growth_warmup_steps = 4
+        model.cluster = nn.ModuleDict(
+            {
+                "neuron_1_1_1": ScriptedNeuron(
+                    routes=[[99, 1, 1]],
+                    probabilities=[1.0],
+                    delta=[1.0],
+                )
+            }
+        )
+        model.cluster["neuron_1_1_1"].register_buffer(
+            "warmup_remaining_steps",
+            torch.tensor(4, dtype=torch.int64),
+        )
+
+        first_output, _ = model(torch.zeros(1, 1))
+        second_output, _ = model(torch.zeros(1, 1))
+        model.eval()
+        eval_output, _ = model(torch.zeros(1, 1))
+
+        # Fade-in weight ramps 1/4, 2/4, ... once per training forward, so
+        # the delta of 1 surfaces as 0.25 then 0.5; eval applies the current
+        # weight (3/4) without advancing the countdown.
+        torch.testing.assert_close(first_output, torch.tensor([[0.25]]))
+        torch.testing.assert_close(second_output, torch.tensor([[0.5]]))
+        torch.testing.assert_close(eval_output, torch.tensor([[0.75]]))
+        self.assertEqual(
+            int(model.cluster["neuron_1_1_1"].warmup_remaining_steps.item()),
+            2,
+        )
+
+    def test_state_dict_roundtrip_preserves_warmup_countdown(self):
+        source_model = self.scripted_cluster(max_steps=1)
+        source_model.cluster["neuron_1_1_1"].register_buffer(
+            "warmup_remaining_steps",
+            torch.tensor(2, dtype=torch.int64),
+        )
+        target_model = self.scripted_cluster(max_steps=1)
+
+        target_model.load_state_dict(source_model.state_dict(), strict=True)
+
+        self.assertEqual(
+            int(
+                target_model.cluster["neuron_1_1_1"].warmup_remaining_steps.item()
+            ),
+            2,
+        )
+
+    def test_legacy_state_dict_zero_fills_warmup_countdown(self):
+        legacy_state_dict = self.scripted_cluster(max_steps=1).state_dict()
+        target_model = self.scripted_cluster(max_steps=1)
+        target_model.cluster["neuron_1_1_1"].register_buffer(
+            "warmup_remaining_steps",
+            torch.tensor(3, dtype=torch.int64),
+        )
+
+        target_model.load_state_dict(legacy_state_dict, strict=True)
+
+        self.assertEqual(
+            int(
+                target_model.cluster["neuron_1_1_1"].warmup_remaining_steps.item()
+            ),
+            0,
+        )
+
+    def test_explicit_box_shape_matches_default_connections(self):
+        default_terminal = self.terminal_config().build()
+        box_terminal = self.terminal_config(
+            connection_shape=TerminalConnectionShapeOptions.BOX,
+        ).build()
+
+        self.assertEqual(box_terminal.total_neuron_connections, 18)
+        torch.testing.assert_close(
+            box_terminal.neuron_connections,
+            default_terminal.neuron_connections,
+        )
+
+    def test_cross_shape_keeps_axis_lines_only(self):
+        terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.CROSS,
+            num_experts=6,
+        )
+
+        self.assertEqual(terminal.total_neuron_connections, 6)
+        self.assertEqual(
+            self.terminal_connection_set(terminal),
+            {(0, 1, 1), (1, 1, 1), (2, 1, 1), (1, 0, 1), (1, 2, 1), (1, 1, 2)},
+        )
+
+    def test_sphere_shape_keeps_ellipsoid_offsets(self):
+        terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.SPHERE,
+            num_experts=15,
+            xy_axis_range=TerminalRangeOptions.TWO,
+            z_axis_range=TerminalRangeOptions.TWO,
+        )
+
+        connection_set = self.terminal_connection_set(terminal)
+        self.assertEqual(terminal.total_neuron_connections, 15)
+        # Window poles survive only on the axis; the mid-z plane holds the
+        # full disc; box corners fall outside the ellipsoid.
+        self.assertIn((1, 1, 1), connection_set)
+        self.assertIn((1, 1, 3), connection_set)
+        self.assertIn((3, 1, 2), connection_set)
+        self.assertIn((2, 2, 2), connection_set)
+        self.assertNotIn((3, 3, 2), connection_set)
+        self.assertNotIn((2, 1, 1), connection_set)
+
+    def test_diagonal_x_shape_keeps_xy_diagonals(self):
+        terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.DIAGONAL_X,
+            num_experts=9,
+            xy_axis_range=TerminalRangeOptions.TWO,
+        )
+
+        self.assertEqual(terminal.total_neuron_connections, 9)
+        self.assertEqual(
+            self.terminal_connection_set(terminal),
+            {
+                (-1, -1, 1),
+                (-1, 3, 1),
+                (0, 0, 1),
+                (0, 2, 1),
+                (1, 1, 1),
+                (2, 0, 1),
+                (2, 2, 1),
+                (3, -1, 1),
+                (3, 3, 1),
+            },
+        )
+
+    def test_line_front_back_shape_spans_z_window(self):
+        terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.LINE_FRONT_BACK,
+            num_experts=3,
+            z_axis_range=TerminalRangeOptions.TWO,
+            z_axis_offset=TerminalZAxisOffsetOptions.ONE,
+        )
+
+        self.assertEqual(
+            self.terminal_connection_set(terminal),
+            {(1, 1, 0), (1, 1, 1), (1, 1, 2)},
+        )
+
+    def test_line_left_right_shape_spans_x_axis(self):
+        terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.LINE_LEFT_RIGHT,
+            num_experts=5,
+            xy_axis_range=TerminalRangeOptions.TWO,
+        )
+
+        self.assertEqual(
+            self.terminal_connection_set(terminal),
+            {(-1, 1, 1), (0, 1, 1), (1, 1, 1), (2, 1, 1), (3, 1, 1)},
+        )
+
+    def test_line_up_down_shape_spans_y_axis(self):
+        terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.LINE_UP_DOWN,
+            num_experts=3,
+        )
+
+        self.assertEqual(
+            self.terminal_connection_set(terminal),
+            {(1, 0, 1), (1, 1, 1), (1, 2, 1)},
+        )
+
+    def test_connection_shape_rejects_non_enum_value(self):
+        with self.assertRaises(TypeError):
+            self.terminal_config(connection_shape="cross").build()
 
     def test_halting_stops_routing_before_max_steps(self):
         halting_model = RecordingHaltingModel(halt_after_updates=1)

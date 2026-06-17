@@ -56,10 +56,35 @@ class NeuronClusterPlasticityMixin:
                     neuron,
                 ),
             )
+            self.__start_grown_neuron_warmup(self.cluster[new_name])
             self.__reset_escape_count(position)
             self.__record_successful_growth()
             self._neurons_called_this_forward.add(new_name)
             return
+
+    def __start_grown_neuron_warmup(self, neuron: Module) -> None:
+        if self.growth_warmup_steps is None:
+            return
+        neuron.register_buffer(
+            "warmup_remaining_steps",
+            torch.tensor(
+                self.growth_warmup_steps,
+                dtype=torch.int64,
+                device=neuron.batch_counter.device,
+            ),
+            persistent=True,
+        )
+
+    def _advance_grown_neuron_warmup(self) -> None:
+        """Counts every warming-up neuron's fade-in down by one. Called once
+        per training forward, before growth, so a neuron grown this forward
+        keeps its full countdown for its first routable forward."""
+        if self.growth_warmup_steps is None:
+            return
+        for neuron in self.cluster.values():
+            warmup_remaining = getattr(neuron, "warmup_remaining_steps", None)
+            if warmup_remaining is not None and int(warmup_remaining.item()) > 0:
+                warmup_remaining -= 1
 
     def __has_exhausted_growth_budget(self) -> bool:
         if self.total_growth_count is None:
@@ -376,6 +401,8 @@ class NeuronClusterPlasticityMixin:
         self.__remove_pruned_neurons(incoming_neuron_names)
         self.__seed_missing_atrophy_counters(state_dict, cluster_prefix)
         self.__seed_missing_growth_budget_buffers(state_dict, prefix)
+        self.__register_warmup_buffers_for_incoming_keys(state_dict, cluster_prefix)
+        self.__seed_missing_warmup_buffers(state_dict, cluster_prefix)
 
     def __incoming_neuron_names(
         self,
@@ -429,5 +456,45 @@ class NeuronClusterPlasticityMixin:
             if getattr(self, buffer_name) is None:
                 continue
             buffer_key = f"{prefix}{buffer_name}"
+            if buffer_key not in state_dict:
+                state_dict[buffer_key] = torch.zeros((), dtype=torch.int64)
+
+    def __register_warmup_buffers_for_incoming_keys(
+        self,
+        state_dict,
+        cluster_prefix: str,
+    ) -> None:
+        """Registers warmup countdown buffers for incoming warmup keys so a
+        neuron checkpointed mid-warmup loads strict and resumes its fade-in."""
+        buffer_suffix = ".warmup_remaining_steps"
+        for key in list(state_dict.keys()):
+            if not key.startswith(cluster_prefix) or not key.endswith(buffer_suffix):
+                continue
+            neuron_name = key[len(cluster_prefix):].split(".", 1)[0]
+            if neuron_name not in self.cluster:
+                continue
+            neuron = self.cluster[neuron_name]
+            if getattr(neuron, "warmup_remaining_steps", None) is None:
+                neuron.register_buffer(
+                    "warmup_remaining_steps",
+                    torch.zeros(
+                        (),
+                        dtype=torch.int64,
+                        device=neuron.batch_counter.device,
+                    ),
+                    persistent=True,
+                )
+
+    def __seed_missing_warmup_buffers(
+        self,
+        state_dict,
+        cluster_prefix: str,
+    ) -> None:
+        """Zero-fills warmup countdowns absent from legacy checkpoints so a
+        neuron holding a warmup buffer loads strict as fully warmed up."""
+        for neuron_name, neuron in self.cluster.items():
+            if getattr(neuron, "warmup_remaining_steps", None) is None:
+                continue
+            buffer_key = f"{cluster_prefix}{neuron_name}.warmup_remaining_steps"
             if buffer_key not in state_dict:
                 state_dict[buffer_key] = torch.zeros((), dtype=torch.int64)

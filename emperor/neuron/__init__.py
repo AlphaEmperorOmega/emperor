@@ -11,6 +11,7 @@ from emperor.neuron.core.monitor import NeuronClusterMonitorCallback
 from emperor.neuron.core.optimizer_sync import NeuronClusterOptimizerSyncCallback
 from emperor.neuron.core.state import NeuronClusterTrace, NeuronClusterTraceStep
 from emperor.neuron.core.options import (
+    TerminalConnectionShapeOptions,
     TerminalRangeOptions,
     TerminalZAxisOffsetOptions,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "NucleusConfig",
     "Terminal",
     "TerminalConfig",
+    "TerminalConnectionShapeOptions",
     "TerminalRangeOptions",
     "TerminalZAxisOffsetOptions",
 ]

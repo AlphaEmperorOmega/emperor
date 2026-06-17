@@ -1,12 +1,17 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from emperor.base.utils import ConfigBase, optional_field
 from emperor.halting.config import HaltingConfig
 from emperor.neuron.core.options import (
+    TerminalConnectionShapeOptions,
     TerminalRangeOptions,
     TerminalZAxisOffsetOptions,
 )
 from emperor.sampler.core.config import SamplerConfig
+
+if TYPE_CHECKING:
+    from emperor.memory.config import DynamicMemoryConfig
 
 
 @dataclass
@@ -23,7 +28,7 @@ class NucleusConfig(ConfigBase):
 
 @dataclass
 class AxonsConfig(ConfigBase):
-    memory_config: ConfigBase | None = optional_field(
+    memory_config: "DynamicMemoryConfig | None" = optional_field(
         "Optional memory model applied after the nucleus. Set to None for identity."
     )
 
@@ -58,6 +63,17 @@ class TerminalConfig(ConfigBase):
     )
     sampler_config: SamplerConfig | None = optional_field(
         "Sampler configuration used to choose terminal connections."
+    )
+    connection_shape: TerminalConnectionShapeOptions | None = optional_field(
+        "Geometry of the terminal's connection neighborhood. BOX (default) "
+        "is the full cartesian box of the configured ranges; CROSS keeps "
+        "only the three axis lines through the neuron; SPHERE keeps box "
+        "offsets inside the ellipsoid inscribed in the box; DIAGONAL_X "
+        "keeps the two xy-plane diagonals; the LINE shapes keep a single "
+        "axis line (left-right = x, up-down = y, front-back = z with the "
+        "usual offset window) so signals can jump far along one axis "
+        "without the quadratic fan-out of a box. The sampler num_experts "
+        "must match the resulting connection count. Defaults to BOX."
     )
 
     def _registry_owner(self) -> type:
@@ -119,6 +135,14 @@ class NeuronClusterConfig(ConfigBase):
     max_steps: int | None = optional_field(
         "Maximum recurrent route steps before the cluster stops traversal."
     )
+    beam_width: int | None = optional_field(
+        "Number of routes kept alive per sample during traversal. With a "
+        "width of 2 or more, every step expands each live route's top-k "
+        "branches, scores candidates by accumulated log route probability, "
+        "prunes back to this many routes, and the final output merges the "
+        "surviving routes weighted by their softmaxed scores. A width of 1 "
+        "keeps the single-route weighted continuation. Defaults to 1."
+    )
     growth_threshold: int | None = optional_field(
         "Neuron process_signal call count that triggers growth. Counted in "
         "training mode only and includes speculative top-k branch "
@@ -134,6 +158,15 @@ class NeuronClusterConfig(ConfigBase):
         "Lifetime budget of grown neurons; once reached, growth stops "
         "permanently. The growth count persists in checkpoints. Requires "
         "growth_threshold. Set to None for unlimited growth."
+    )
+    growth_warmup_steps: int | None = optional_field(
+        "Number of training forwards over which a grown neuron's process "
+        "output fades in linearly. While warming up the neuron returns "
+        "weight * output + (1 - weight) * input with weight ramping from "
+        "1/growth_warmup_steps to 1, so a fresh neuron starts near-identity "
+        "and gradually becomes itself. The countdown advances once per "
+        "training forward whether or not the neuron is routed, and persists "
+        "in checkpoints. Requires growth_threshold. Set to None to disable."
     )
     pruning_threshold: int | None = optional_field(
         "Synchronized atrophy count that triggers pruning of an idle neuron. "

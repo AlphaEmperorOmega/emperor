@@ -44,6 +44,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         y_axis_total_neurons: int = 2,
         z_axis_total_neurons: int = 1,
         max_steps: int = 2,
+        beam_width: int | None = None,
         growth_threshold: int | None = None,
         growth_cooldown_steps: int | None = None,
         max_total_growths: int | None = None,
@@ -54,6 +55,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
             y_axis_total_neurons=y_axis_total_neurons,
             z_axis_total_neurons=z_axis_total_neurons,
             max_steps=max_steps,
+            beam_width=beam_width,
             growth_threshold=growth_threshold,
             growth_cooldown_steps=growth_cooldown_steps,
             max_total_growths=max_total_growths,
@@ -108,6 +110,23 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         self.assertIs(attached_cluster, cluster)
         self.assertIn("forward", cluster.__dict__)
         self.assertIn(self.CLUSTER_PATH, callback._survival_history)
+
+    def test_beam_cluster_is_not_wrapped_and_logs_only_structural_scalars(self):
+        cluster = self.build_cluster(beam_width=2)
+        module = self.build_module(cluster)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+
+        self.feed_cluster(module)
+        callback.on_train_batch_end(
+            trainer=None, pl_module=module, outputs=None, batch=None, batch_idx=0
+        )
+
+        self.assertNotIn("forward", cluster.__dict__)
+        names = self.scalar_names(module)
+        for suffix in ("neuron_count", "capacity", "fill_fraction"):
+            self.assertIn(f"{self.CLUSTER_PATH}/cluster/{suffix}", names)
+        for suffix in self.route_scalar_suffixes():
+            self.assertNotIn(f"{self.CLUSTER_PATH}/cluster/{suffix}", names)
 
     def test_wrapped_forward_returns_normal_output_tuple(self):
         cluster = self.build_cluster()
