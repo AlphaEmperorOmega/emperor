@@ -10,6 +10,7 @@ from .core import (
     DynamicMemoryAbstract,
     ElementWiseWeightedDynamicMemory,
     GatedResidualDynamicMemory,
+    MemoryMonitorCallback,
     WeightedDynamicMemory,
 )
 from .options import MemoryPositionOptions
@@ -23,6 +24,7 @@ __all__ = [
     "ElementWiseWeightedDynamicMemoryConfig",
     "GatedResidualDynamicMemory",
     "GatedResidualDynamicMemoryConfig",
+    "MemoryMonitorCallback",
     "MemoryPositionOptions",
     "WeightedDynamicMemory",
     "WeightedDynamicMemoryConfig",

@@ -1,4 +1,5 @@
 from .base import DynamicMemoryAbstract
+from .monitor import MemoryMonitorCallback
 from .variants import (
     AttentionDynamicMemory,
     ElementWiseWeightedDynamicMemory,
@@ -11,5 +12,6 @@ __all__ = [
     "DynamicMemoryAbstract",
     "ElementWiseWeightedDynamicMemory",
     "GatedResidualDynamicMemory",
+    "MemoryMonitorCallback",
     "WeightedDynamicMemory",
 ]
