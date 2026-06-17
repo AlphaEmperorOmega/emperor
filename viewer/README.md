@@ -111,14 +111,14 @@ npm run typecheck
 CLI inspection is still available through the root experiment script:
 
 ```bash
-source experiment.sh linears/linear --preset baseline --print-model
-python -m viewer.backend.cli --model linears/linear --preset baseline --format json
+source experiment.sh --model-type linears --model linear --preset baseline --print-model
+python -m viewer.backend.cli --model-type linears --model linear --preset baseline --format json
 ```
 
 Training from the CLI can also run selected preset batches:
 
 ```bash
-source experiment.sh linears/linear --presets baseline gating --grid-search
+source experiment.sh --model-type linears --model linear --presets baseline gating --grid-search
 ```
 
 ## Troubleshooting
