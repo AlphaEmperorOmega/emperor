@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from emperor.base.layer import LayerConfig
+from emperor.base.layer.residual import ResidualConnectionOptions
 from emperor.base.utils import ConfigBase, optional_field
 
 from typing import TYPE_CHECKING
@@ -23,6 +25,9 @@ class TransformerEncoderLayerConfig(ConfigBase):
     dropout_probability: float | None = optional_field(
         "Dropout applied after each sub-block. Use 0.0 to disable."
     )
+    residual_connection_option: ResidualConnectionOptions | None = optional_field(
+        "Residual connection behavior applied to every encoder sub-block join."
+    )
     causal_attention_mask_flag: bool | None = optional_field(
         "Force a causal attention mask in the stack-level mask generation."
     )
@@ -40,6 +45,14 @@ class TransformerEncoderLayerConfig(ConfigBase):
 
 
 @dataclass
+class TransformerEncoderBlockLayerConfig(LayerConfig):
+    def _registry_owner(self) -> type:
+        from emperor.transformer.core.layers import TransformerEncoderBlockLayer
+
+        return TransformerEncoderBlockLayer
+
+
+@dataclass
 class TransformerDecoderLayerConfig(ConfigBase):
     embedding_dim: int | None = optional_field(
         "Token embedding dimension shared by attention and feed-forward."
@@ -49,6 +62,9 @@ class TransformerDecoderLayerConfig(ConfigBase):
     )
     dropout_probability: float | None = optional_field(
         "Dropout applied after each sub-block. Use 0.0 to disable."
+    )
+    residual_connection_option: ResidualConnectionOptions | None = optional_field(
+        "Residual connection behavior applied to every decoder sub-block join."
     )
     causal_attention_mask_flag: bool | None = optional_field(
         "Force a causal attention mask in the stack-level mask generation."

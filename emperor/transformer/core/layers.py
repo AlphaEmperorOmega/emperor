@@ -1,13 +1,18 @@
+import torch
 import torch.nn as nn
 
 from torch import Tensor
 from emperor.base.utils import Module
+from emperor.base.layer import Layer
+from emperor.attention.core.state import AttentionLayerState
 from emperor.base.options import LayerNormPositionOptions
+from emperor.base.layer.residual import ResidualConnection, ResidualConnectionOptions
 from emperor.transformer.core._validator import TransformerValidator
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from emperor.base.layer.state import LayerState
     from emperor.transformer.core.config import (
         TransformerEncoderLayerConfig,
         TransformerDecoderLayerConfig,
@@ -31,11 +36,16 @@ class TransformerEncoderLayer(Module):
             self.cfg.layer_norm_position
         )
         self.dropout_probability: float = self.cfg.dropout_probability
+        self.residual_connection_option: ResidualConnectionOptions = (
+            self.cfg.residual_connection_option
+        )
 
         TransformerValidator.validate_encoder_layer(self)
 
         self.self_attention_model = self.cfg.attention_config.build()
         self.feed_forward_model = self.cfg.feed_forward_config.build()
+        self.self_attention_residual_connection = self.__build_residual_connection()
+        self.feed_forward_residual_connection = self.__build_residual_connection()
 
         self.self_attention_layer_norm = nn.LayerNorm(self.embedding_dim)
         self.feed_forward_layer_norm = nn.LayerNorm(self.embedding_dim)
@@ -52,6 +62,11 @@ class TransformerEncoderLayer(Module):
             self, source_token_embeddings
         )
         x = source_token_embeddings
+        attention_mask = self.__resolve_attention_mask_for_padding_mask(
+            source_token_embeddings,
+            source_key_padding_mask,
+            attention_mask,
+        )
         x, attention_loss = self.__apply_self_attention_sublayer(
             x,
             source_key_padding_mask=source_key_padding_mask,
@@ -60,6 +75,29 @@ class TransformerEncoderLayer(Module):
         x, feed_forward_loss = self.__apply_feed_forward_sublayer(x)
         total_loss = attention_loss + feed_forward_loss
         return x, total_loss
+
+    def __resolve_attention_mask_for_padding_mask(
+        self,
+        source_token_embeddings: Tensor,
+        source_key_padding_mask: Tensor | None,
+        attention_mask: Tensor | None,
+    ) -> Tensor | None:
+        if attention_mask is not None:
+            return attention_mask
+        if source_key_padding_mask is None:
+            return None
+        if not self.cfg.causal_attention_mask_flag:
+            return None
+        sequence_length = source_token_embeddings.size(1)
+        return torch.triu(
+            torch.ones(
+                sequence_length,
+                sequence_length,
+                dtype=torch.bool,
+                device=source_token_embeddings.device,
+            ),
+            diagonal=1,
+        )
 
     def __apply_self_attention_sublayer(
         self,
@@ -83,7 +121,11 @@ class TransformerEncoderLayer(Module):
             attention_output, self.self_attention_layer_norm
         )
         attention_output = self.self_attention_dropout(attention_output)
-        attention_output = attention_output + residual
+        attention_output = self.__maybe_apply_residual_connection(
+            self.self_attention_residual_connection,
+            attention_output,
+            residual,
+        )
         attention_output = self.__apply_post_norm(
             attention_output, self.self_attention_layer_norm
         )
@@ -100,7 +142,11 @@ class TransformerEncoderLayer(Module):
             feed_forward_output, self.feed_forward_layer_norm
         )
         feed_forward_output = self.feed_forward_dropout(feed_forward_output)
-        feed_forward_output = feed_forward_output + residual
+        feed_forward_output = self.__maybe_apply_residual_connection(
+            self.feed_forward_residual_connection,
+            feed_forward_output,
+            residual,
+        )
         feed_forward_output = self.__apply_post_norm(
             feed_forward_output, self.feed_forward_layer_norm
         )
@@ -122,12 +168,47 @@ class TransformerEncoderLayer(Module):
             return layer_norm(x)
         return x
 
+    def __build_residual_connection(self) -> ResidualConnection | None:
+        if self.residual_connection_option == ResidualConnectionOptions.DISABLED:
+            return None
+        return ResidualConnection(self.residual_connection_option)
+
+    def __maybe_apply_residual_connection(
+        self,
+        connection: ResidualConnection | None,
+        current: Tensor,
+        residual: Tensor,
+    ) -> Tensor:
+        if connection is None:
+            return current
+        return connection(current, residual)
+
     def __resolve_auxiliary_loss(
         self, reference: Tensor, loss: Tensor | None
     ) -> Tensor:
         if loss is None:
             return reference.new_zeros(())
         return loss
+
+
+class TransformerEncoderBlockLayer(Layer):
+    def _handle_model_processing(
+        self,
+        main_model_input: Tensor,
+        state: "LayerState",
+    ) -> Tensor:
+        source_key_padding_mask = None
+        attention_mask = None
+        if isinstance(state, AttentionLayerState):
+            source_key_padding_mask = state.key_padding_mask
+            attention_mask = state.attention_mask
+        output, loss = self.model(
+            main_model_input,
+            source_key_padding_mask=source_key_padding_mask,
+            attention_mask=attention_mask,
+        )
+        state.loss = loss if state.loss is None else state.loss + loss
+        return output
 
 
 class TransformerDecoderLayer(Module):
@@ -147,12 +228,22 @@ class TransformerDecoderLayer(Module):
             self.cfg.layer_norm_position
         )
         self.dropout_probability: float = self.cfg.dropout_probability
+        self.residual_connection_option: ResidualConnectionOptions = (
+            self.cfg.residual_connection_option
+        )
 
         TransformerValidator.validate_decoder_layer(self)
 
         self.self_attention_model = self.cfg.self_attention_config.build()
         self.cross_attention_model = self.__build_cross_attention_model()
         self.feed_forward_model = self.cfg.feed_forward_config.build()
+        self.self_attention_residual_connection = self.__build_residual_connection()
+        self.cross_attention_residual_connection = (
+            self.__build_residual_connection()
+            if self.cross_attention_model is not None
+            else None
+        )
+        self.feed_forward_residual_connection = self.__build_residual_connection()
 
         self.self_attention_layer_norm = nn.LayerNorm(self.embedding_dim)
         self.feed_forward_layer_norm = nn.LayerNorm(self.embedding_dim)
@@ -234,7 +325,11 @@ class TransformerDecoderLayer(Module):
             attention_output, self.self_attention_layer_norm
         )
         attention_output = self.self_attention_dropout(attention_output)
-        attention_output = attention_output + residual
+        attention_output = self.__maybe_apply_residual_connection(
+            self.self_attention_residual_connection,
+            attention_output,
+            residual,
+        )
         attention_output = self.__apply_post_norm(
             attention_output, self.self_attention_layer_norm
         )
@@ -264,7 +359,11 @@ class TransformerDecoderLayer(Module):
             attention_output, self.cross_attention_layer_norm
         )
         attention_output = self.cross_attention_dropout(attention_output)
-        attention_output = attention_output + residual
+        attention_output = self.__maybe_apply_residual_connection(
+            self.cross_attention_residual_connection,
+            attention_output,
+            residual,
+        )
         attention_output = self.__apply_post_norm(
             attention_output, self.cross_attention_layer_norm
         )
@@ -281,7 +380,11 @@ class TransformerDecoderLayer(Module):
             feed_forward_output, self.feed_forward_layer_norm
         )
         feed_forward_output = self.feed_forward_dropout(feed_forward_output)
-        feed_forward_output = feed_forward_output + residual
+        feed_forward_output = self.__maybe_apply_residual_connection(
+            self.feed_forward_residual_connection,
+            feed_forward_output,
+            residual,
+        )
         feed_forward_output = self.__apply_post_norm(
             feed_forward_output, self.feed_forward_layer_norm
         )
@@ -302,6 +405,21 @@ class TransformerDecoderLayer(Module):
         if self.layer_norm_position == LayerNormPositionOptions.AFTER:
             return layer_norm(x)
         return x
+
+    def __build_residual_connection(self) -> ResidualConnection | None:
+        if self.residual_connection_option == ResidualConnectionOptions.DISABLED:
+            return None
+        return ResidualConnection(self.residual_connection_option)
+
+    def __maybe_apply_residual_connection(
+        self,
+        connection: ResidualConnection | None,
+        current: Tensor,
+        residual: Tensor,
+    ) -> Tensor:
+        if connection is None:
+            return current
+        return connection(current, residual)
 
     def __resolve_auxiliary_loss(
         self, reference: Tensor, loss: Tensor | None

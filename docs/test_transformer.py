@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import itertools
 import unittest
@@ -89,10 +90,9 @@ def feed_forward_config(
             layer_config=LayerConfig(
                 activation=ActivationOptions.RELU,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=dropout_probability,
                 halting_config=None,
-                shared_halting_flag=False,
                 gate_config=None,
                 layer_model_config=LinearLayerConfig(bias_flag=True),
             ),
@@ -142,6 +142,7 @@ def encoder_layer_config(
         embedding_dim=embedding_dim,
         layer_norm_position=LayerNormPositionOptions.DEFAULT,
         dropout_probability=dropout_probability,
+        residual_connection_option=ResidualConnectionOptions.RESIDUAL,
         causal_attention_mask_flag=causal_attention_mask_flag,
         attention_config=attention_config,
         feed_forward_config=feed_forward_config(
@@ -220,6 +221,7 @@ def decoder_layer_config(
         embedding_dim=embedding_dim,
         layer_norm_position=LayerNormPositionOptions.DEFAULT,
         dropout_probability=dropout_probability,
+        residual_connection_option=ResidualConnectionOptions.RESIDUAL,
         causal_attention_mask_flag=causal_attention_mask_flag,
         self_attention_config=self_attention_config,
         cross_attention_config=cross_attention_config,

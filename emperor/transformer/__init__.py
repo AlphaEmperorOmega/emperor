@@ -4,6 +4,7 @@ from emperor.transformer.core.config import (
     TransformerEncoderStackConfig,
     TransformerDecoderStackConfig,
     TransformerEncoderLayerConfig,
+    TransformerEncoderBlockLayerConfig,
     TransformerDecoderLayerConfig,
 )
 from emperor.transformer.core.stack import (
@@ -12,6 +13,7 @@ from emperor.transformer.core.stack import (
 )
 from emperor.transformer.core.layers import (
     TransformerEncoderLayer,
+    TransformerEncoderBlockLayer,
     TransformerDecoderLayer,
 )
 from emperor.transformer.feed_forward import (
@@ -27,8 +29,10 @@ __all__ = [
     "TransformerEncoderStackConfig",
     "TransformerDecoderStackConfig",
     "TransformerEncoderLayer",
+    "TransformerEncoderBlockLayer",
     "TransformerDecoderLayer",
     "TransformerEncoderLayerConfig",
+    "TransformerEncoderBlockLayerConfig",
     "TransformerDecoderLayerConfig",
     "FeedForward",
     "FeedForwardConfig",

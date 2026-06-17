@@ -59,11 +59,13 @@ class TransformerValidator(ValidatorBase):
     @staticmethod
     def validate_encoder_layer(model: "TransformerEncoderLayer") -> None:
         TransformerValidator.validate_required_fields(model.cfg)
+        TransformerValidator.validate_field_types(model.cfg)
         TransformerValidator.validate_dimensions(embedding_dim=model.embedding_dim)
 
     @staticmethod
     def validate_decoder_layer(model: "TransformerDecoderLayer") -> None:
         TransformerValidator.validate_required_fields(model.cfg)
+        TransformerValidator.validate_field_types(model.cfg)
         TransformerValidator.validate_dimensions(embedding_dim=model.embedding_dim)
 
     @staticmethod
