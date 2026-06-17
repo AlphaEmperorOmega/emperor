@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 from models.trainer_config import *
 from emperor.attention.core.monitor import AttentionMonitorCallback
 from emperor.base.layer.monitor import LayerControllerMonitorCallback
@@ -42,11 +43,40 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "controller statistics without duplicating memory metrics."
         ),
         kinds=["scalar"],
-        callback_factory=lambda: LayerControllerMonitorCallback(
-            log_every_n_steps=100
-        ),
+        callback_factory=lambda: LayerControllerMonitorCallback(log_every_n_steps=100),
     ),
 ]
+CONFIG_OVERRIDE_SKIP_KEYS: set[str] = {
+    "BERT_PRETRAINING_TARGET_VOCAB_SIZE",
+    "GATE_BIAS_FLAG",
+    "GATE_FLAG",
+    "GATE_HIDDEN_DIM",
+    "GATE_LAYER_NORM_POSITION",
+    "GATE_STACK_ACTIVATION",
+    "GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+    "GATE_STACK_DROPOUT_PROBABILITY",
+    "GATE_STACK_LAST_LAYER_BIAS_OPTION",
+    "GATE_STACK_NUM_LAYERS",
+    "GATE_STACK_RESIDUAL_CONNECTION_OPTION",
+    "HALTING_BIAS_FLAG",
+    "HALTING_DROPOUT",
+    "HALTING_FLAG",
+    "HALTING_HIDDEN_DIM",
+    "HALTING_HIDDEN_STATE_MODE",
+    "HALTING_LAYER_NORM_POSITION",
+    "HALTING_OUTPUT_DIM",
+    "HALTING_STACK_ACTIVATION",
+    "HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+    "HALTING_STACK_DROPOUT_PROBABILITY",
+    "HALTING_STACK_LAST_LAYER_BIAS_OPTION",
+    "HALTING_STACK_NUM_LAYERS",
+    "HALTING_STACK_RESIDUAL_CONNECTION_OPTION",
+    "HALTING_THRESHOLD",
+    "RECURRENT_FLAG",
+    "RECURRENT_GATE_FLAG",
+    "RECURRENT_HALTING_FLAG",
+    "RECURRENT_MAX_STEPS",
+}
 
 # Trainer
 TRAINER_ACCELERATOR: str = "cpu"
@@ -105,7 +135,9 @@ GATE_HIDDEN_DIM: int = HIDDEN_DIM
 GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
 GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
-GATE_STACK_RESIDUAL_FLAG: bool = False
+GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 GATE_STACK_DROPOUT_PROBABILITY: float = 0.0
 GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -127,7 +159,9 @@ HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 HALTING_STACK_NUM_LAYERS: int = 2
 HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-HALTING_STACK_RESIDUAL_FLAG: bool = False
+HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 HALTING_STACK_DROPOUT_PROBABILITY: float = 0.0
 HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED

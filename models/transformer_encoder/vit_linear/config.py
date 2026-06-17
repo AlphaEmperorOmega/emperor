@@ -41,6 +41,10 @@ MONITOR_OPTIONS: list[MonitorOption] = [
         ),
     ),
 ]
+CONFIG_OVERRIDE_SKIP_KEYS: set[str] = {
+    "BIAS_FLAG",
+    "SEQUENCE_LENGTH",
+}
 
 # Trainer
 TRAINER_ACCELERATOR: str = "cpu"
