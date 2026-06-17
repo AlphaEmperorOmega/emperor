@@ -179,6 +179,8 @@ class MaskedLanguageModelMetricsLogger(nn.Module):
 
     def _masked_accuracy(self, logits: Tensor, labels: Tensor) -> Tensor:
         mask = labels != -100
+        if not bool(mask.any().item()):
+            return logits.new_zeros(())
         predictions = logits.argmax(dim=-1)
         return (predictions[mask] == labels[mask]).float().mean()
 
@@ -189,6 +191,8 @@ class MaskedLanguageModelMetricsLogger(nn.Module):
         k: int,
     ) -> Tensor:
         mask = labels != -100
+        if not bool(mask.any().item()):
+            return logits.new_zeros(())
         top_k = logits.topk(min(k, logits.size(-1)), dim=-1).indices
         matches = top_k[mask].eq(labels[mask].unsqueeze(-1)).any(dim=-1)
         return matches.float().mean()

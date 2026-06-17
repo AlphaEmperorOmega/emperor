@@ -246,6 +246,27 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
 
         self.assertNotIn("train/auxiliary/loss", calls[0][0])
 
+    def test_metrics_logger_returns_zero_when_no_masked_tokens_exist(self):
+        logger = MaskedLanguageModelMetricsLogger()
+        loss = torch.tensor(0.25)
+        logits = torch.tensor([[[1.0, 0.0], [0.0, 1.0]]])
+        labels = torch.full((1, 2), -100)
+        calls = []
+
+        def log_fn(payload, **kwargs):
+            calls.append((payload, kwargs))
+
+        logger.log_training_step(log_fn, loss, logits, labels)
+
+        torch.testing.assert_close(
+            calls[0][0]["train/masked/accuracy"],
+            torch.tensor(0.0),
+        )
+        torch.testing.assert_close(
+            calls[0][0]["train/masked/top_5_accuracy"],
+            torch.tensor(0.0),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
