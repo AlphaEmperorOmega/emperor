@@ -2,12 +2,8 @@ import torch
 import unittest
 
 from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core.samplers import (
-    SamplerBase,
-    SamplerFull,
-    SamplerSparse,
-    SamplerTopk,
-)
+from emperor.sampler.core.base import SamplerBase
+from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
 
 
 class TestSamplerValidators(unittest.TestCase):
@@ -92,15 +88,22 @@ class TestSamplerValidators(unittest.TestCase):
     def test_get_probabilities_and_indices_validates_runtime_inputs(self):
         model = SamplerTopk(self.preset(top_k=2, num_experts=4))
 
-        invalid_inputs = [
+        invalid_type_inputs = [
             [[1.0, 2.0, 3.0, 4.0]],
+        ]
+        for router_logit_scores in invalid_type_inputs:
+            with self.subTest(input_type=type(router_logit_scores).__name__):
+                with self.assertRaises(TypeError):
+                    model.get_probabilities_and_indices(router_logit_scores)
+
+        invalid_shape_inputs = [
             torch.randn(4),
             torch.randn(2, 3, 4),
             torch.randn(2, 3),
         ]
-        for router_logit_scores in invalid_inputs:
-            with self.subTest(input_type=type(router_logit_scores).__name__):
-                with self.assertRaises((TypeError, ValueError)):
+        for router_logit_scores in invalid_shape_inputs:
+            with self.subTest(input_shape=tuple(router_logit_scores.shape)):
+                with self.assertRaises(ValueError):
                     model.get_probabilities_and_indices(router_logit_scores)
 
     def test_get_probabilities_and_indices_validates_skip_mask(self):
@@ -108,9 +111,22 @@ class TestSamplerValidators(unittest.TestCase):
         router_logit_scores = torch.randn(3, 4)
 
         with self.assertRaises(TypeError):
-            model.get_probabilities_and_indices(router_logit_scores, skip_mask=[1, 1, 1])
+            model.get_probabilities_and_indices(
+                router_logit_scores, skip_mask=[1, 1, 1]
+            )
 
         with self.assertRaises(ValueError):
             model.get_probabilities_and_indices(
                 router_logit_scores, skip_mask=torch.ones(2, 1)
             )
+
+        invalid_shape_masks = [
+            torch.ones(3),
+            torch.ones(3, 2),
+        ]
+        for skip_mask in invalid_shape_masks:
+            with self.subTest(skip_mask_shape=tuple(skip_mask.shape)):
+                with self.assertRaises(ValueError):
+                    model.get_probabilities_and_indices(
+                        router_logit_scores, skip_mask=skip_mask
+                    )

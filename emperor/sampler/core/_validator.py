@@ -7,12 +7,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from emperor.sampler.model import SamplerModel
     from emperor.sampler.core.routers import RouterModel
-    from emperor.sampler.core.samplers import (
-        SamplerBase,
-        SamplerSparse,
-        SamplerTopk,
-        SamplerFull,
-)
+    from emperor.sampler.core.base import SamplerBase
+    from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
 
 
 class SamplerModelValidator(ValidatorBase):
@@ -23,16 +19,14 @@ class SamplerModelValidator(ValidatorBase):
         SamplerModelValidator.validate_required_fields(model.sampler_config)
         SamplerModelValidator.validate_field_types(model.sampler_config)
         SamplerModelValidator.validate_sampler_dimensions(model)
-        SamplerModelValidator.validate_router_config(model.router_config)
+        SamplerModelValidator.validate_router_config(model)
 
     @staticmethod
     def validate_sampler_dimensions(model: "SamplerModel") -> None:
         SamplerBaseValidator.validate_positive_integer(
             "top_k", model.sampler_config.top_k
         )
-        SamplerBaseValidator.validate_positive_integer(
-            "num_experts", model.num_experts
-        )
+        SamplerBaseValidator.validate_positive_integer("num_experts", model.num_experts)
         if model.sampler_config.top_k > model.num_experts:
             raise ValueError(
                 "top_k cannot exceed num_experts for SamplerModel, "
@@ -41,7 +35,8 @@ class SamplerModelValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_router_config(router_config) -> None:
+    def validate_router_config(model: "SamplerModel") -> None:
+        router_config = model.router_config
         if router_config is None:
             return
         from emperor.sampler.core.config import RouterConfig
@@ -50,6 +45,20 @@ class SamplerModelValidator(ValidatorBase):
             raise TypeError(
                 "router_config must be a RouterConfig for SamplerModel, "
                 f"got {type(router_config).__name__}."
+            )
+        if router_config.num_experts != model.sampler_config.num_experts:
+            raise ValueError(
+                "router_config.num_experts must match sampler_config.num_experts, "
+                f"received router_config.num_experts={router_config.num_experts} and "
+                f"sampler_config.num_experts={model.sampler_config.num_experts}."
+            )
+        if router_config.noisy_topk_flag != model.sampler_config.noisy_topk_flag:
+            raise ValueError(
+                "router_config.noisy_topk_flag must match "
+                "sampler_config.noisy_topk_flag, received "
+                f"router_config.noisy_topk_flag={router_config.noisy_topk_flag!r} "
+                "and "
+                f"sampler_config.noisy_topk_flag={model.sampler_config.noisy_topk_flag!r}."
             )
 
     @staticmethod
@@ -76,12 +85,8 @@ class RouterModelValidator(ValidatorBase):
             input_dim=model.input_dim,
             num_experts=model.num_experts,
         )
-        RouterModelValidator.validate_positive_integer(
-            "input_dim", model.input_dim
-        )
-        RouterModelValidator.validate_positive_integer(
-            "num_experts", model.num_experts
-        )
+        RouterModelValidator.validate_positive_integer("input_dim", model.input_dim)
+        RouterModelValidator.validate_positive_integer("num_experts", model.num_experts)
         RouterModelValidator.validate_model_config(model.cfg.model_config)
 
     @staticmethod
@@ -90,7 +95,7 @@ class RouterModelValidator(ValidatorBase):
             raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
     @staticmethod
-    def validate_model_config(model_config: "LayerStackConfig") -> None:
+    def validate_model_config(model_config: object) -> None:
         from emperor.base.layer import LayerStackConfig
 
         if not isinstance(model_config, LayerStackConfig):
@@ -128,9 +133,7 @@ class SamplerBaseValidator(ValidatorBase):
         SamplerBaseValidator.validate_required_fields(model.cfg)
         SamplerBaseValidator.validate_field_types(model.cfg)
         SamplerBaseValidator.validate_positive_integer("top_k", model.top_k)
-        SamplerBaseValidator.validate_positive_integer(
-            "num_experts", model.num_experts
-        )
+        SamplerBaseValidator.validate_positive_integer("num_experts", model.num_experts)
         SamplerBaseValidator.validate_non_negative_integer(
             "num_topk_samples", model.num_topk_samples
         )
@@ -209,18 +212,35 @@ class SamplerBaseValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_skip_mask(router_logit_scores: Tensor, skip_mask) -> None:
+    def validate_skip_mask(
+        model: "SamplerBase",
+        router_logit_scores: Tensor,
+        skip_mask,
+    ) -> None:
         if skip_mask is None:
             return
         if not isinstance(skip_mask, Tensor):
             raise TypeError(
-                f"skip_mask must be a Tensor when provided, received {type(skip_mask).__name__}."
+                "skip_mask must be a Tensor when provided, received "
+                f"{type(skip_mask).__name__}."
+            )
+        if skip_mask.dim() != 2:
+            raise ValueError(
+                "skip_mask must be a 2D tensor with shape (batch_size, 1), "
+                f"received a {skip_mask.dim()}D tensor with shape "
+                f"{tuple(skip_mask.shape)}."
             )
         if skip_mask.shape[0] != router_logit_scores.shape[0]:
             raise ValueError(
                 "skip_mask batch dimension must match router_logit_scores, "
                 f"received skip_mask shape {tuple(skip_mask.shape)} and "
                 f"router_logit_scores shape {tuple(router_logit_scores.shape)}."
+            )
+        if skip_mask.shape[-1] != 1:
+            raise ValueError(
+                "skip_mask feature dimension must be 1 so it broadcasts across "
+                "experts, received skip_mask shape "
+                f"{tuple(skip_mask.shape)} for num_experts={model.num_experts}."
             )
 
 

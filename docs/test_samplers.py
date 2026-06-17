@@ -4,12 +4,8 @@ from math import prod
 
 from emperor.sampler.model import SamplerModel
 from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core.samplers import (
-    SamplerBase,
-    SamplerFull,
-    SamplerSparse,
-    SamplerTopk,
-)
+from emperor.sampler.core.base import SamplerBase
+from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
 
 
 class SamplerTestCase(unittest.TestCase):
@@ -236,6 +232,21 @@ class TestProbabilitySampler(SamplerTestCase):
                             rtol=1e-5,
                         )
                     )
+
+    def test__add_noise_to_logits_uses_first_half_without_noise_in_eval(self):
+        cfg = self.preset(noisy_topk_flag=True, num_experts=5)
+        m = SamplerBase(cfg)
+        m.eval()
+        logits = torch.tensor(
+            [
+                [5.0, 4.0, 3.0, 2.0, 1.0, -1.0, -2.0, -3.0, -4.0, -5.0],
+                [0.5, 1.5, 2.5, 3.5, 4.5, 9.0, 8.0, 7.0, 6.0, 5.0],
+            ]
+        )
+
+        result = m._SamplerBase__add_noise_to_logits(logits)
+
+        torch.testing.assert_close(result, logits[:, : m.num_experts])
 
     def test__compute_masked_probabilities(self):
         noisy_topk_flag_options = [True, False]
@@ -480,23 +491,20 @@ class TestSamplerSparse(SamplerTestCase):
         )
         m = SamplerSparse(cfg)
 
-        batch_size = 3
-
-        shape = (batch_size, m.top_k)
-        sampled_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-        indices = torch.randint(0, m.num_experts, (batch_size, m.top_k))
+        sampled_probabilities = torch.tensor([0.9, 0.4, 0.7])
+        indices = torch.tensor([[2], [0], [3]])
 
         gates = m._SamplerSparse__prepare_loss_gates(sampled_probabilities, indices)
 
-        self.assertEqual(gates.shape, (batch_size, m.num_experts))
-        self.assertTrue(
-            torch.allclose(
-                torch.sum(gates, dim=-1).round(decimals=4),
-                torch.ones(batch_size).float().round(decimals=4),
-                atol=1e-6,
-                rtol=1e-5,
-            )
+        expected = torch.tensor(
+            [
+                [0.0, 0.0, 0.9, 0.0, 0.0],
+                [0.4, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.7, 0.0],
+            ]
         )
+        self.assertEqual(gates.shape, (3, m.num_experts))
+        torch.testing.assert_close(gates, expected)
 
     def test_compute_loss(self):
         loss_options = [0.0, 0.1]
@@ -619,6 +627,30 @@ class TestSamplerTopk(SamplerTestCase):
         self.assertFalse(torch.any(indices[1, 2:] == 3))
         torch.testing.assert_close(probability, torch.gather(probabilities, 1, indices))
 
+    def test_sample_probabilities_and_indices_uses_deterministic_topk_in_eval(self):
+        cfg = self.preset(top_k=3, num_experts=5, num_topk_samples=1)
+        m = SamplerTopk(cfg)
+        m.eval()
+        probabilities = torch.tensor(
+            [
+                [0.5, 0.4, 0.3, 0.2, 0.1],
+                [0.1, 0.2, 0.3, 0.4, 0.5],
+            ]
+        )
+
+        probability, indices = m._sample_probabilities_and_indices(probabilities)
+
+        torch.testing.assert_close(
+            probability,
+            torch.tensor(
+                [
+                    [0.5, 0.4, 0.3],
+                    [0.5, 0.4, 0.3],
+                ]
+            ),
+        )
+        torch.testing.assert_close(indices, torch.tensor([[0, 1, 2], [4, 3, 2]]))
+
     def test_get_probabilities_and_indices(self):
         loss_options = [0.0, 0.1]
         noisy_flag_options = [True, False]
@@ -700,25 +732,32 @@ class TestSamplerTopk(SamplerTestCase):
                     )
 
     def test__prepare_loss_gates(self):
-        cfg = self.preset(top_k=1)
+        cfg = self.preset(top_k=2)
         m = SamplerTopk(cfg)
 
-        batch_size = 3
-        shape = (batch_size, m.top_k)
-        sampled_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-        indices = torch.randint(0, m.num_experts, (batch_size, m.top_k))
+        sampled_probabilities = torch.tensor(
+            [
+                [0.7, 0.2],
+                [0.3, 0.4],
+            ]
+        )
+        indices = torch.tensor(
+            [
+                [1, 3],
+                [0, 2],
+            ]
+        )
 
         gates = m._SamplerTopk__prepare_loss_gates(sampled_probabilities, indices)
 
-        self.assertEqual(gates.shape, (batch_size, m.num_experts))
-        self.assertTrue(
-            torch.allclose(
-                torch.sum(gates, dim=-1).round(decimals=4),
-                torch.ones(batch_size).float().round(decimals=4),
-                atol=1e-6,
-                rtol=1e-5,
-            )
+        expected = torch.tensor(
+            [
+                [0.0, 0.7, 0.0, 0.2, 0.0],
+                [0.3, 0.0, 0.4, 0.0, 0.0],
+            ]
         )
+        self.assertEqual(gates.shape, (2, m.num_experts))
+        torch.testing.assert_close(gates, expected)
 
     def test_compute_loss(self):
         loss_options = [0.0, 0.1]
@@ -750,10 +789,13 @@ class TestSamplerTopk(SamplerTestCase):
                                 torch.randn(*shape), dim=-1
                             )
                             sampled_probabilities = torch.softmax(
-                                torch.randn(batch_size, m.top_k), dim=-1
+                                torch.randn(batch_size * sequence_length, m.top_k),
+                                dim=-1,
                             )
                             indices = torch.randint(
-                                0, m.num_experts, (batch_size, m.top_k)
+                                0,
+                                m.num_experts,
+                                (batch_size * sequence_length, m.top_k),
                             )
                             mask = torch.ones(batch_size, sequence_length).reshape(
                                 -1, 1
@@ -986,6 +1028,28 @@ class TestSamplerModel(SamplerTestCase):
 
                 self.assertIsInstance(m.sampler_model, model_type)
 
+    def test_sample_probs_and_indexes_applies_skip_mask(self):
+        cfg = self.preset(top_k=3, num_experts=5, threshold=0.2)
+        model = SamplerModel(cfg)
+        logits = torch.tensor(
+            [
+                [5.0, 4.0, 0.0, 0.0, 0.0],
+                [0.0, 5.0, 4.0, 0.0, 0.0],
+                [0.0, 0.0, 5.0, 4.0, 0.0],
+            ]
+        )
+        skip_mask = torch.tensor([[1.0], [0.0], [1.0]])
+
+        probabilities, indices, updated_skip_mask, loss = (
+            model.sample_probabilities_and_indices(logits, skip_mask)
+        )
+
+        self.assertEqual(probabilities.shape, (3, 3))
+        self.assertEqual(indices.shape, (3, 3))
+        torch.testing.assert_close(probabilities[1], torch.zeros(3))
+        torch.testing.assert_close(updated_skip_mask, skip_mask)
+        self.assertIsInstance(loss, torch.Tensor)
+
     def test_sample_probs_and_indexes_logits_only_and_skip_mask(self):
         topk_options = [1, 3, 5]
         model_types = [SamplerSparse, SamplerTopk, SamplerFull]
@@ -1009,7 +1073,7 @@ class TestSamplerModel(SamplerTestCase):
                 logits = torch.randn(batch_size * sequence_length, num_experts)
                 mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
                 unmasked_token = 0
-                mask[unmasked_token, :] = 1
+                mask[unmasked_token + 1 :, :] = 0
 
                 probabilities, indices, skip_mask, loss = (
                     m.sample_probabilities_and_indices(logits, mask)

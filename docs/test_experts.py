@@ -26,7 +26,7 @@ from emperor.linears.core.config import LinearLayerConfig
 from emperor.experts.model import MixtureOfExpertsModel
 from emperor.experts.core.config import MixtureOfExpertsLayerConfig
 from emperor.experts.core.state import MixtureOfExpertsLayerState
-from emperor.sampler.core.samplers import SamplerFull, SamplerSparse, SamplerTopk
+from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
 from emperor.experts.core.options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,

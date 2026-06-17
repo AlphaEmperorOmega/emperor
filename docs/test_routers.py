@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import unittest
 
@@ -52,13 +53,12 @@ class TestRouterModel(unittest.TestCase):
             apply_output_pipeline_flag=True,
             layer_config=LayerConfig(
                 activation=ActivationOptions.RELU,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
                 halting_config=None,
                 memory_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(bias_flag=True),
             ),
         )

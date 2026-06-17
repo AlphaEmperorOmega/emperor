@@ -304,6 +304,21 @@ class TestZeroCentredLoss(unittest.TestCase):
         self.assertIsInstance(output, torch.Tensor)
         torch.testing.assert_close(output, self.expected_loss())
 
+    def test_compute_loss_matches_varied_logits(self):
+        loss = ZeroCentredLoss(loss_weight=1.0)
+        logits = torch.tensor(
+            [
+                [1.0, 0.0, -1.0],
+                [0.5, -0.5, 0.0],
+            ]
+        )
+
+        loss.update_accumulation(logits)
+        output = loss._compute_loss()
+
+        expected = torch.logsumexp(logits, dim=-1).square().mean()
+        torch.testing.assert_close(output, expected)
+
     def test_missing_input_raises_value_error(self):
         loss = ZeroCentredLoss(loss_weight=1.0)
 
@@ -426,6 +441,26 @@ class TestMutualInformationLoss(unittest.TestCase):
 
         self.assertIsInstance(output, torch.Tensor)
         torch.testing.assert_close(output, self.expected_loss())
+
+    def test_compute_loss_weights_rows_by_skip_masks(self):
+        loss = MutualInformationLoss(loss_weight=1.0)
+        logits, probabilities, _ = self.statistics()
+        skip_masks = torch.tensor([[1.0], [0.0]])
+
+        loss.update_accumulation(logits, probabilities, skip_masks)
+        output = loss._compute_loss()
+
+        kept_probabilities = probabilities[:1]
+        expected = -(
+            (
+                kept_probabilities * kept_probabilities.log()
+            ).sum()
+            + (
+                kept_probabilities.squeeze(0)
+                * kept_probabilities.squeeze(0).log()
+            ).sum()
+        )
+        torch.testing.assert_close(output, expected)
 
     def test_missing_inputs_raise_value_error(self):
         loss = MutualInformationLoss(loss_weight=1.0)

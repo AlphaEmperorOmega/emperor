@@ -35,4 +35,4 @@ class RouterModel(Module):
 
     def compute_logit_scores(self, input_batch: Tensor) -> Tensor:
         RouterModelValidator.validate_input_batch(self, input_batch)
-        return Layer.forward_with_state(self.model, input_batch)
+        return Layer.run_model_returning_hidden(self.model, input_batch)

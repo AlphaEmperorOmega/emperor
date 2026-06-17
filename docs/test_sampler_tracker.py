@@ -204,12 +204,38 @@ class TestSamplerUsageTrackerManager(unittest.TestCase):
         sampler = SamplerModel(self.sampler_config(top_k=2, num_experts=4))
         SamplerUsageTrackerManager().attach(sampler)
 
-        logits = torch.randn(5, 4)
+        logits = torch.tensor(
+            [
+                [5.0, 4.0, 0.0, 0.0],
+                [0.0, 5.0, 4.0, 0.0],
+                [0.0, 0.0, 5.0, 4.0],
+            ]
+        )
         sampler.sample_probabilities_and_indices(logits)
 
+        probabilities = torch.softmax(logits, dim=-1)
+        expected_indices = torch.tensor(
+            [
+                [0, 1],
+                [1, 2],
+                [2, 3],
+            ]
+        )
+        expected_counts = torch.tensor([1.0, 2.0, 2.0, 1.0])
+        expected_mass = torch.zeros(4)
+        expected_mass.scatter_add_(
+            0,
+            expected_indices.reshape(-1),
+            torch.gather(probabilities, 1, expected_indices).reshape(-1),
+        )
+
         tracker = sampler.usage_tracker
-        self.assertEqual(tracker.last_expert_usage_counts.sum().item(), 10.0)
-        self.assertEqual(tracker.cumulative_expert_usage_counts.sum().item(), 10.0)
+        torch.testing.assert_close(tracker.last_expert_usage_counts, expected_counts)
+        torch.testing.assert_close(
+            tracker.cumulative_expert_usage_counts, expected_counts
+        )
+        torch.testing.assert_close(tracker.last_expert_usage_mass, expected_mass)
+        torch.testing.assert_close(tracker.cumulative_expert_usage_mass, expected_mass)
 
 
 if __name__ == "__main__":
