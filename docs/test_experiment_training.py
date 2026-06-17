@@ -105,6 +105,39 @@ class FakeMonitorCallback(Callback):
     pass
 
 
+class CaptureTrainingCallback(Callback):
+    def __init__(self):
+        self.contexts = []
+        self.events = []
+
+    def set_run_context(
+        self,
+        dataset,
+        log_dir=None,
+        preset=None,
+        option=None,
+        run_id=None,
+        run_index=None,
+        run_total=None,
+        total_epochs=None,
+    ):
+        self.contexts.append(
+            {
+                "dataset": dataset,
+                "logDir": log_dir,
+                "preset": preset,
+                "option": option,
+                "runId": run_id,
+                "runIndex": run_index,
+                "runTotal": run_total,
+                "totalEpochs": total_epochs,
+            }
+        )
+
+    def write_event(self, event):
+        self.events.append(dict(event))
+
+
 class FakeExperiment(ExperimentBase):
     def _num_epochs(self):
         return 1
@@ -163,6 +196,62 @@ class TestExperimentTraining(unittest.TestCase):
             experiment.preset_generator.seen_options,
             ["GATING", "BASELINE"],
         )
+
+    def test_materialized_run_sets_progress_context_and_events(self):
+        experiment = FakeExperiment()
+        callback = CaptureTrainingCallback()
+
+        experiment.train_model(
+            callbacks=[callback],
+            materialized_runs=[
+                {
+                    "id": "run-from-plan",
+                    "index": 7,
+                    "run_total": 9,
+                    "option": FakeOption.HALTING,
+                    "dataset_type": FakeDatasetB,
+                    "config_overrides": {"num_epochs": 3},
+                }
+            ],
+        )
+
+        self.assertEqual(experiment.preset_generator.seen_options, ["HALTING"])
+        self.assertEqual(experiment.preset_generator.seen_datasets, ["FakeDatasetB"])
+        self.assertEqual(len(callback.contexts), 1)
+        self.assertEqual(
+            callback.contexts[0],
+            {
+                "dataset": "FakeDatasetB",
+                "logDir": callback.contexts[0]["logDir"],
+                "preset": "halting",
+                "option": "HALTING",
+                "runId": "run-from-plan",
+                "runIndex": 7,
+                "runTotal": 9,
+                "totalEpochs": 3,
+            },
+        )
+        self.assertTrue(
+            callback.contexts[0]["logDir"].startswith(
+                "logs/docs/HALTING/FakeDatasetB/default_"
+            )
+        )
+        self.assertEqual(
+            [event["type"] for event in callback.events],
+            ["dataset_started", "dataset_completed"],
+        )
+
+        started, completed = callback.events
+        self.assertEqual(started["status"], "running")
+        self.assertEqual(started["dataset"], "FakeDatasetB")
+        self.assertEqual(started["preset"], "halting")
+        self.assertEqual(started["option"], "HALTING")
+        self.assertEqual(started["runId"], "run-from-plan")
+        self.assertEqual(started["runIndex"], 7)
+        self.assertEqual(started["runTotal"], 9)
+        self.assertEqual(started["totalEpochs"], 3)
+        self.assertEqual(started["params"], {})
+        self.assertEqual(completed["metrics"], {"validation_accuracy": 0.75})
 
     def test_train_model_rejects_path_like_log_folder(self):
         experiment = FakeExperiment(FakeOption.BASELINE)
