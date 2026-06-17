@@ -1,6 +1,19 @@
 import unittest
 
 import torch
+from emperor.base.layer import (
+    LayerConfig,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.linears.core.config import LinearLayerConfig
 from emperor.linears.core.layers import AdaptiveLinearLayer, LinearLayer
 from emperor.neuron.core.config import NeuronClusterConfig
 from emperor.neuron.core import NeuronClusterOptimizerSyncCallback
@@ -17,6 +30,36 @@ from models.training_test_utils import (
 
 
 class TestNeuronLinearModel(unittest.TestCase):
+    def shared_gate_config(self, dim: int = 16) -> GateConfig:
+        return GateConfig(
+            model_config=LayerStackConfig(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=dim,
+                num_layers=1,
+                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                apply_output_pipeline_flag=False,
+                layer_config=LayerConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    activation=ActivationOptions.DISABLED,
+                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    gate_config=None,
+                    halting_config=None,
+                    memory_config=None,
+                    layer_model_config=LinearLayerConfig(
+                        input_dim=dim,
+                        output_dim=dim,
+                        bias_flag=True,
+                    ),
+                ),
+            ),
+            option=LayerGateOptions.MULTIPLIER,
+            activation=ActivationOptions.SIGMOID,
+        )
+
     def test_presets_mirror_source_names(self):
         self.assertEqual(ExperimentOptions.names(), SourceExperimentOptions.names())
 
@@ -39,6 +82,58 @@ class TestNeuronLinearModel(unittest.TestCase):
 
         self.assertEqual(cfg.hidden_dim, config.HIDDEN_DIM)
         self.assertEqual(override_cfg.hidden_dim, 128)
+
+    def test_shared_gate_config_flows_to_source_hidden_block(self):
+        shared_gate_config = self.shared_gate_config()
+        cfg = NeuronLinearConfigBuilder(shared_gate_config=shared_gate_config).build()
+        hidden_block_cfg = (
+            cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
+        )
+        stack_cfg = hidden_block_cfg.model_config
+
+        self.assertIsInstance(stack_cfg.shared_gate_config, GateConfig)
+        self.assertIsNone(stack_cfg.layer_config.gate_config)
+
+    def test_gate_options_flow_to_source_hidden_block(self):
+        cfg = NeuronLinearConfigBuilder(
+            recurrent_flag=True,
+            stack_gate_flag=True,
+            recurrent_gate_flag=True,
+            gate_option=LayerGateOptions.MULTIPLIER,
+            recurrent_gate_option=LayerGateOptions.MULTIPLIER,
+        ).build()
+        hidden_block_cfg = (
+            cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
+        )
+        recurrent_cfg = hidden_block_cfg.model_config
+
+        self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
+        self.assertEqual(recurrent_cfg.gate_config.option, LayerGateOptions.MULTIPLIER)
+        self.assertEqual(
+            recurrent_cfg.block_config.layer_config.gate_config.option,
+            LayerGateOptions.MULTIPLIER,
+        )
+
+    def test_shared_gate_config_rejects_enabled_source_stack_gate(self):
+        with self.assertRaises(ValueError):
+            NeuronLinearConfigBuilder(
+                stack_gate_flag=True,
+                shared_gate_config=self.shared_gate_config(),
+            ).build()
+
+    def test_shared_gate_config_allows_absent_source_stack_gate(self):
+        shared_gate_config = self.shared_gate_config()
+        cfg = NeuronLinearConfigBuilder(
+            stack_gate_flag=False,
+            shared_gate_config=shared_gate_config,
+        ).build()
+        hidden_block_cfg = (
+            cfg.experiment_config.neuron_cluster_config.neuron_config.nucleus_config.model_config
+        )
+        stack_cfg = hidden_block_cfg.model_config
+
+        self.assertEqual(stack_cfg.shared_gate_config, shared_gate_config)
+        self.assertIsNone(stack_cfg.layer_config.gate_config)
 
     def test_runtime_uses_only_standard_emperor_linear_layers(self):
         cfg = NeuronLinearConfigBuilder().build()

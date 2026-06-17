@@ -1,3 +1,5 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
+
 # Generated from models.linears.linear.config by scaffold_wrapper_model.py.
 from models.trainer_config import *
 from emperor.datasets.image.classification.mnist import Mnist
@@ -10,6 +12,7 @@ from emperor.base.layer.monitor import (
     LayerControllerMonitorCallback,
     RecurrentLayerMonitorCallback,
 )
+from emperor.base.layer.gate import LayerGateOptions
 from emperor.neuron.core.monitor import NeuronClusterMonitorCallback
 from emperor.sampler.core.monitor import SamplerMonitorCallback
 from emperor.neuron.core.optimizer_sync import NeuronClusterOptimizerSyncCallback
@@ -47,9 +50,7 @@ MONITOR_OPTIONS: list[MonitorOption] = [
             "openness, halted-state preservation, and step-delta visual summaries."
         ),
         kinds=["scalar", "histogram", "image"],
-        callback_factory=lambda: RecurrentLayerMonitorCallback(
-            log_every_n_steps=100
-        ),
+        callback_factory=lambda: RecurrentLayerMonitorCallback(log_every_n_steps=100),
     ),
     MonitorOption(
         name="layer-controller",
@@ -131,7 +132,9 @@ HIDDEN_DIM: int = 64
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 2
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_FLAG: bool = False
+STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 STACK_DROPOUT_PROBABILITY: float = 0.2
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -140,11 +143,15 @@ STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 # GATE STACK OPTIONS
 # If `GATE_FLAG` is False, the gate-specific parameters below are ignored.
 GATE_FLAG: bool = False
+GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
+GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 GATE_HIDDEN_DIM: int = HIDDEN_DIM
 GATE_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 GATE_STACK_NUM_LAYERS: int = 2
 GATE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.TANH
-GATE_STACK_RESIDUAL_FLAG: bool = STACK_RESIDUAL_FLAG
+GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    STACK_RESIDUAL_CONNECTION_OPTION
+)
 GATE_STACK_DROPOUT_PROBABILITY: float = 0.0
 GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = STACK_LAST_LAYER_BIAS_OPTION
 GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -167,7 +174,9 @@ HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 HALTING_STACK_NUM_LAYERS: int = 2
 HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-HALTING_STACK_RESIDUAL_FLAG: bool = False
+HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 HALTING_STACK_DROPOUT_PROBABILITY: float = 0.0
 HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED
@@ -180,7 +189,15 @@ HALTING_BIAS_FLAG: bool = BIAS_FLAG
 # If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
 RECURRENT_FLAG: bool = False
 RECURRENT_MAX_STEPS: int = 4
+
+#########################################################################
+# RECURRENT GATE STACK OPTIONS
 RECURRENT_GATE_FLAG: bool = False
+RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
+RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
+
+#########################################################################
+# RECURRENT HALTING OPTIONS
 RECURRENT_HALTING_FLAG: bool = False
 
 #########################################################################
@@ -210,9 +227,9 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
 from emperor.base.options import ActivationOptions
 from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
 
-CLUSTER_X_AXIS_TOTAL_NEURONS: int = 7
-CLUSTER_Y_AXIS_TOTAL_NEURONS: int = 7
-CLUSTER_Z_AXIS_TOTAL_NEURONS: int = 2
+CLUSTER_X_AXIS_TOTAL_NEURONS: int = 10
+CLUSTER_Y_AXIS_TOTAL_NEURONS: int = 10
+CLUSTER_Z_AXIS_TOTAL_NEURONS: int = 1
 CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS: int = 3
 CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS: int = 3
 CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS: int = 1
@@ -231,7 +248,9 @@ CLUSTER_TERMINAL_ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.DISABL
 CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
-CLUSTER_TERMINAL_ROUTER_RESIDUAL_FLAG: bool = False
+CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY: float = 0.0
 CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -266,7 +285,9 @@ CLUSTER_HALTING_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 CLUSTER_HALTING_STACK_NUM_LAYERS: int = 1
 CLUSTER_HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
-CLUSTER_HALTING_STACK_RESIDUAL_FLAG: bool = False
+CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
+    ResidualConnectionOptions.DISABLED
+)
 CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY: float = 0.0
 CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED

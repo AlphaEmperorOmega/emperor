@@ -1,7 +1,9 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import copy
 from typing import Any
 
 from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -63,8 +65,8 @@ class NeuronLinearConfigBuilder:
         cluster_terminal_router_layer_norm_position: LayerNormPositionOptions = (
             config.CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION
         ),
-        cluster_terminal_router_residual_flag: bool = (
-            config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_FLAG
+        cluster_terminal_router_residual_connection_option: ResidualConnectionOptions = (
+            config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION
         ),
         cluster_terminal_router_dropout_probability: float = (
             config.CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY
@@ -122,8 +124,8 @@ class NeuronLinearConfigBuilder:
         cluster_halting_stack_activation: ActivationOptions = (
             config.CLUSTER_HALTING_STACK_ACTIVATION
         ),
-        cluster_halting_stack_residual_flag: bool = (
-            config.CLUSTER_HALTING_STACK_RESIDUAL_FLAG
+        cluster_halting_stack_residual_connection_option: ResidualConnectionOptions = (
+            config.CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
         cluster_halting_stack_dropout_probability: float = (
             config.CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY
@@ -135,21 +137,25 @@ class NeuronLinearConfigBuilder:
             config.CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
         ),
         cluster_halting_bias_flag: bool = config.CLUSTER_HALTING_BIAS_FLAG,
+        gate_option: LayerGateOptions | None = config.GATE_OPTION,
+        gate_activation: ActivationOptions | None = config.GATE_ACTIVATION,
+        recurrent_gate_option: LayerGateOptions | None = config.RECURRENT_GATE_OPTION,
+        recurrent_gate_activation: ActivationOptions | None = config.RECURRENT_GATE_ACTIVATION,
+        shared_gate_config: GateConfig | None = None,
         **source_kwargs: Any,
     ) -> None:
         self.source_kwargs = source_kwargs
+        self.shared_gate_config = shared_gate_config
+        self.gate_option = gate_option
+        self.gate_activation = gate_activation
+        self.recurrent_gate_option = recurrent_gate_option
+        self.recurrent_gate_activation = recurrent_gate_activation
         self.cluster_x_axis_total_neurons = cluster_x_axis_total_neurons
         self.cluster_y_axis_total_neurons = cluster_y_axis_total_neurons
         self.cluster_z_axis_total_neurons = cluster_z_axis_total_neurons
-        self.cluster_initial_x_axis_total_neurons = (
-            cluster_initial_x_axis_total_neurons
-        )
-        self.cluster_initial_y_axis_total_neurons = (
-            cluster_initial_y_axis_total_neurons
-        )
-        self.cluster_initial_z_axis_total_neurons = (
-            cluster_initial_z_axis_total_neurons
-        )
+        self.cluster_initial_x_axis_total_neurons = cluster_initial_x_axis_total_neurons
+        self.cluster_initial_y_axis_total_neurons = cluster_initial_y_axis_total_neurons
+        self.cluster_initial_z_axis_total_neurons = cluster_initial_z_axis_total_neurons
         self.cluster_max_steps = cluster_max_steps
         self.cluster_growth_threshold = cluster_growth_threshold
         self.cluster_terminal_xy_axis_range = cluster_terminal_xy_axis_range
@@ -162,8 +168,8 @@ class NeuronLinearConfigBuilder:
         self.cluster_terminal_router_layer_norm_position = (
             cluster_terminal_router_layer_norm_position
         )
-        self.cluster_terminal_router_residual_flag = (
-            cluster_terminal_router_residual_flag
+        self.cluster_terminal_router_residual_connection_option = (
+            cluster_terminal_router_residual_connection_option
         )
         self.cluster_terminal_router_dropout_probability = (
             cluster_terminal_router_dropout_probability
@@ -209,7 +215,9 @@ class NeuronLinearConfigBuilder:
         self.cluster_halting_layer_norm_position = cluster_halting_layer_norm_position
         self.cluster_halting_stack_num_layers = cluster_halting_stack_num_layers
         self.cluster_halting_stack_activation = cluster_halting_stack_activation
-        self.cluster_halting_stack_residual_flag = cluster_halting_stack_residual_flag
+        self.cluster_halting_stack_residual_connection_option = (
+            cluster_halting_stack_residual_connection_option
+        )
         self.cluster_halting_stack_dropout_probability = (
             cluster_halting_stack_dropout_probability
         )
@@ -222,12 +230,17 @@ class NeuronLinearConfigBuilder:
         self.cluster_halting_bias_flag = cluster_halting_bias_flag
 
     def build(self) -> ModelConfig:
-        source_cfg = LinearConfigBuilder(
-            **{
-                **self._source_linear_defaults(),
-                **self.source_kwargs,
-            }
-        ).build()
+        source_kwargs = {
+            **self._source_linear_defaults(),
+            "gate_option": self.gate_option,
+            "gate_activation": self.gate_activation,
+            "recurrent_gate_option": self.recurrent_gate_option,
+            "recurrent_gate_activation": self.recurrent_gate_activation,
+            **self.source_kwargs,
+        }
+        if self.shared_gate_config is not None:
+            source_kwargs["shared_gate_config"] = self.shared_gate_config
+        source_cfg = LinearConfigBuilder(**source_kwargs).build()
         source_experiment_cfg = source_cfg.experiment_config
         self._validate_source_experiment_config(source_experiment_cfg)
 
@@ -264,16 +277,18 @@ class NeuronLinearConfigBuilder:
             "layer_norm_position": config.LAYER_NORM_POSITION,
             "stack_num_layers": config.STACK_NUM_LAYERS,
             "stack_activation": config.STACK_ACTIVATION,
-            "stack_residual_flag": config.STACK_RESIDUAL_FLAG,
+            "stack_residual_connection_option": config.STACK_RESIDUAL_CONNECTION_OPTION,
             "stack_dropout_probability": config.STACK_DROPOUT_PROBABILITY,
             "stack_last_layer_bias_option": config.STACK_LAST_LAYER_BIAS_OPTION,
             "stack_apply_output_pipeline_flag": config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
             "stack_gate_flag": config.GATE_FLAG,
+            "gate_option": config.GATE_OPTION,
+            "gate_activation": config.GATE_ACTIVATION,
             "gate_hidden_dim": config.GATE_HIDDEN_DIM,
             "gate_layer_norm_position": config.GATE_LAYER_NORM_POSITION,
             "gate_stack_num_layers": config.GATE_STACK_NUM_LAYERS,
             "gate_stack_activation": config.GATE_STACK_ACTIVATION,
-            "gate_stack_residual_flag": config.GATE_STACK_RESIDUAL_FLAG,
+            "gate_stack_residual_connection_option": config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
             "gate_stack_dropout_probability": config.GATE_STACK_DROPOUT_PROBABILITY,
             "gate_stack_last_layer_bias_option": (
                 config.GATE_STACK_LAST_LAYER_BIAS_OPTION
@@ -291,7 +306,7 @@ class NeuronLinearConfigBuilder:
             "halting_layer_norm_position": config.HALTING_LAYER_NORM_POSITION,
             "halting_stack_num_layers": config.HALTING_STACK_NUM_LAYERS,
             "halting_stack_activation": config.HALTING_STACK_ACTIVATION,
-            "halting_stack_residual_flag": config.HALTING_STACK_RESIDUAL_FLAG,
+            "halting_stack_residual_connection_option": config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
             "halting_stack_dropout_probability": (
                 config.HALTING_STACK_DROPOUT_PROBABILITY
             ),
@@ -305,6 +320,8 @@ class NeuronLinearConfigBuilder:
             "recurrent_flag": config.RECURRENT_FLAG,
             "recurrent_max_steps": config.RECURRENT_MAX_STEPS,
             "recurrent_gate_flag": config.RECURRENT_GATE_FLAG,
+            "recurrent_gate_option": config.RECURRENT_GATE_OPTION,
+            "recurrent_gate_activation": config.RECURRENT_GATE_ACTIVATION,
             "recurrent_halting_flag": config.RECURRENT_HALTING_FLAG,
         }
 
@@ -421,7 +438,7 @@ class NeuronLinearConfigBuilder:
                 ),
                 layer_config=LayerConfig(
                     activation=self.cluster_terminal_router_activation,
-                    residual_flag=self.cluster_terminal_router_residual_flag,
+                    residual_connection_option=self.cluster_terminal_router_residual_connection_option,
                     dropout_probability=(
                         self.cluster_terminal_router_dropout_probability
                     ),
@@ -431,7 +448,6 @@ class NeuronLinearConfigBuilder:
                     gate_config=None,
                     halting_config=None,
                     memory_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
                         bias_flag=self.cluster_terminal_router_bias_flag
                     ),
@@ -463,7 +479,7 @@ class NeuronLinearConfigBuilder:
                 ),
                 layer_config=LayerConfig(
                     activation=self.cluster_halting_stack_activation,
-                    residual_flag=self.cluster_halting_stack_residual_flag,
+                    residual_connection_option=self.cluster_halting_stack_residual_connection_option,
                     dropout_probability=(
                         self.cluster_halting_stack_dropout_probability
                     ),
@@ -471,7 +487,6 @@ class NeuronLinearConfigBuilder:
                     gate_config=None,
                     halting_config=None,
                     memory_config=None,
-                    shared_halting_flag=False,
                     layer_model_config=LinearLayerConfig(
                         bias_flag=self.cluster_halting_bias_flag
                     ),
