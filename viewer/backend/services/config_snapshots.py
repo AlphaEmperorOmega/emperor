@@ -15,6 +15,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from models.catalog import model_identity_payload_from_id
+
 from viewer.backend.config_snapshots import ConfigSnapshotRecord
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.repositories.config_snapshots import ConfigSnapshotRepository
@@ -114,7 +116,7 @@ class ConfigSnapshotService:
         snapshot = self._require_snapshot(snapshot_id)
         self._delete_snapshot_record(snapshot_id)
         return {
-            "model": snapshot.model,
+            **model_identity_payload_from_id(snapshot.model),
             "snapshots": self.list_snapshots(snapshot.model),
         }
 
@@ -217,7 +219,7 @@ def _now() -> str:
 def _snapshot_to_api(snapshot: ConfigSnapshotRecord) -> dict[str, Any]:
     return {
         "id": snapshot.id,
-        "model": snapshot.model,
+        **model_identity_payload_from_id(snapshot.model),
         "preset": snapshot.preset,
         "name": snapshot.name,
         "overrides": snapshot.overrides,

@@ -53,6 +53,7 @@ function SnapshotOverrideSummary({ overrides }: { overrides: OverrideValues }) {
 }
 
 export function AddConfigSnapshotDialog({
+  modelType,
   model,
   preset,
   fields,
@@ -65,6 +66,7 @@ export function AddConfigSnapshotDialog({
   onAdd,
   onClose,
 }: {
+  modelType: string;
   model: string;
   preset: string;
   fields: ConfigField[];
@@ -83,17 +85,19 @@ export function AddConfigSnapshotDialog({
   const nameValidation = useMemo(
     () =>
       validateConfigSnapshotName({
+        modelType,
         model,
         preset,
         name,
         snapshots,
         excludeSnapshotId,
       }),
-    [excludeSnapshotId, model, name, preset, snapshots],
+    [excludeSnapshotId, model, modelType, name, preset, snapshots],
   );
   const candidate = useMemo(
     () =>
       validateConfigSnapshotCandidate({
+        modelType,
         model,
         preset,
         fields,
@@ -101,7 +105,7 @@ export function AddConfigSnapshotDialog({
         snapshots,
         excludeSnapshotId,
       }),
-    [excludeSnapshotId, fields, model, overrides, preset, snapshots],
+    [excludeSnapshotId, fields, model, modelType, overrides, preset, snapshots],
   );
   const { entries } = useMemo(
     () => configSnapshotOverrideEntries(fields, overrides),

@@ -34,7 +34,8 @@ const summary = {
 
 function runPlan(overrides: ConfigOverrides = {}): TrainingRunPlan {
   return {
-    model: "linears/linear",
+    modelType: "linears",
+    model: "linear",
     preset: "baseline",
     presets: ["baseline"],
     datasets: ["Mnist"],
@@ -68,7 +69,8 @@ function snapshot(overrides: Partial<ConfigSnapshot> & Pick<ConfigSnapshot, "id"
   return {
     id: overrides.id,
     name: overrides.name ?? overrides.id,
-    model: overrides.model ?? "linears/linear",
+    modelType: overrides.modelType ?? "linears",
+    model: overrides.model ?? "linear",
     preset: overrides.preset ?? "baseline",
     overrides: overrides.overrides ?? {},
     createdAt: overrides.createdAt ?? "2026-06-01T00:00:00.000Z",
@@ -80,7 +82,8 @@ describe("training requests", () => {
     expect(
       buildTrainingRunPlanRequest({
         canPlan: true,
-        selectedModel: "linears/linear",
+        selectedModelType: "linears",
+        selectedModel: "linear",
         selectedPreset: "baseline",
         selectedTrainingPresets: ["baseline", "fast"],
         selectedDatasets: ["Mnist", "FashionMnist"],
@@ -88,7 +91,8 @@ describe("training requests", () => {
         logFolder: "runs",
       }),
     ).toEqual({
-      model: "linears/linear",
+      modelType: "linears",
+      model: "linear",
       preset: "baseline",
       presets: ["baseline", "fast"],
       datasets: ["Mnist", "FashionMnist"],
@@ -100,7 +104,8 @@ describe("training requests", () => {
   it("builds Training Job requests with monitors and the current run plan", () => {
     expect(
       buildTrainingJobRequest({
-        selectedModel: "linears/linear",
+        selectedModelType: "linears",
+        selectedModel: "linear",
         selectedPreset: "baseline",
         selectedTrainingPresets: ["baseline"],
         selectedDatasets: ["Mnist"],
@@ -110,7 +115,8 @@ describe("training requests", () => {
         runPlan: runPlan({ hidden_size: "128" }),
       }),
     ).toMatchObject({
-      model: "linears/linear",
+      modelType: "linears",
+      model: "linear",
       preset: "baseline",
       presets: ["baseline"],
       datasets: ["Mnist"],
@@ -142,7 +148,8 @@ describe("training requests", () => {
     expect(
       buildTrainingRunPlanRequest({
         canPlan: true,
-        selectedModel: "linears/linear",
+        selectedModelType: "linears",
+        selectedModel: "linear",
         selectedPreset: "baseline",
         selectedTrainingPresets: ["baseline"],
         selectedDatasets: ["Mnist"],
@@ -151,7 +158,8 @@ describe("training requests", () => {
         searchPayload,
       }),
     ).toEqual({
-      model: "linears/linear",
+      modelType: "linears",
+      model: "linear",
       preset: "baseline",
       presets: ["baseline"],
       datasets: ["Mnist"],
@@ -169,7 +177,8 @@ describe("training requests", () => {
 
   it("submits mixed Config Snapshot run plans without direct overrides or search payloads", () => {
     const snapshotRunPlan = buildConfigSnapshotRunPlan({
-      model: "linears/linear",
+      modelType: "linears",
+      model: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["baseline", "fast"],
       selectedDatasets: ["Mnist", "FashionMnist"],
@@ -192,7 +201,8 @@ describe("training requests", () => {
     });
 
     const request = buildTrainingJobRequest({
-      selectedModel: "linears/linear",
+      selectedModelType: "linears",
+      selectedModel: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["baseline", "fast"],
       selectedDatasets: ["Mnist", "FashionMnist"],
@@ -228,7 +238,8 @@ describe("training requests", () => {
 
   it("submits snapshot source presets even when the base preset is not selected", () => {
     const snapshotRunPlan = buildConfigSnapshotRunPlan({
-      model: "linears/linear",
+      modelType: "linears",
+      model: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["baseline"],
       selectedDatasets: ["Mnist"],
@@ -245,7 +256,8 @@ describe("training requests", () => {
     });
 
     const request = buildTrainingJobRequest({
-      selectedModel: "linears/linear",
+      selectedModelType: "linears",
+      selectedModel: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["baseline"],
       selectedDatasets: ["Mnist"],

@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
+from models.catalog import model_id_from_payload, model_identity_payload_from_id
+
 from viewer.backend.schemas._base import ConfigValue
 
 TrainingRunStatus = Literal[
@@ -23,6 +25,13 @@ def _mapping_items(value: object) -> list[Mapping[str, Any]]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, Mapping)]
+
+
+def _payload_model_id(payload: Mapping[str, Any]) -> str:
+    model_id = model_id_from_payload(payload)
+    if model_id is not None:
+        return model_id
+    return str(payload.get("model") or "")
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +232,7 @@ class TrainingRunPlanView:
     @classmethod
     def from_payload(cls, payload: Mapping[str, Any]) -> TrainingRunPlanView:
         return cls(
-            model=str(payload.get("model") or ""),
+            model=_payload_model_id(payload),
             preset=str(payload.get("preset") or ""),
             presets=[str(item) for item in payload.get("presets") or []],
             datasets=[str(item) for item in payload.get("datasets") or []],
@@ -244,7 +253,7 @@ class TrainingRunPlanView:
 
     def to_api_payload(self) -> dict[str, Any]:
         return {
-            "model": self.model,
+            **model_identity_payload_from_id(self.model),
             "preset": self.preset,
             "presets": self.presets,
             "datasets": self.datasets,
@@ -325,7 +334,7 @@ class TrainingJobView:
         return cls(
             id=str(payload.get("id") or ""),
             status=str(payload.get("status") or ""),
-            model=str(payload.get("model") or ""),
+            model=_payload_model_id(payload),
             preset=str(payload.get("preset") or ""),
             presets=[str(item) for item in payload.get("presets") or []],
             datasets=[str(item) for item in payload.get("datasets") or []],
@@ -378,7 +387,7 @@ class TrainingJobView:
         return {
             "id": self.id,
             "status": self.status,
-            "model": self.model,
+            **model_identity_payload_from_id(self.model),
             "preset": self.preset,
             "presets": self.presets,
             "datasets": self.datasets,

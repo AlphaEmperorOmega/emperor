@@ -27,6 +27,7 @@ function roleNode(id: string, graphRole: GraphNode["graphRole"]): GraphNode {
 // Root n0 with child n1; both architecture so they survive basic-mode filtering
 // and opened-scope expansion (root reveals its children).
 const graph: InspectResponse = {
+  modelType: "linears",
   model: "m",
   preset: "p",
   parameterCount: 0,
@@ -115,6 +116,7 @@ describe("useGraphViewState selection", () => {
 
   it("falls parameter focus back to a visible ancestor on detail changes", async () => {
     const fullGraph: InspectResponse = {
+      modelType: "linears",
       model: "m",
       preset: "p",
       parameterCount: 0,

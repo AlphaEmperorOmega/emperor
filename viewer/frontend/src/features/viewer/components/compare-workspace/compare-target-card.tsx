@@ -41,6 +41,7 @@ export function CompareTargetCard({
   onApply: (entry: CompareEntry) => void;
 }) {
   const { entry } = entryData;
+  const selectedModelOptionId = `${entry.modelType}/${entry.model}`;
   const parameterDelta =
     entryData.inspection && baselineParameterCount !== undefined
       ? entryData.inspection.parameterCount - baselineParameterCount
@@ -73,13 +74,20 @@ export function CompareTargetCard({
           <span className="text-xs font-semibold text-ink-dim">Model</span>
           <Select
             className="min-w-0"
-            value={entry.model}
-            onChange={(event) =>
+            value={selectedModelOptionId}
+            onChange={(event) => {
+              const selected = modelOptions.find(
+                (model) => model.id === event.target.value,
+              );
+              if (!selected) {
+                return;
+              }
               onUpdate(entry.id, {
-                model: event.target.value,
+                modelType: selected.modelType,
+                model: selected.model,
                 preset: "",
-              })
-            }
+              });
+            }}
           >
             {modelOptions.map((model) => (
               <option key={model.id} value={model.id}>

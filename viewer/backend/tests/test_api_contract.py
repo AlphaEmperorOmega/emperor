@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import unittest
 from dataclasses import dataclass, field
 from typing import NamedTuple
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from fastapi.routing import APIRoute
 
@@ -32,11 +35,11 @@ EXPECTED_BUSINESS_ROUTES = [
     (("GET",), "/logs/runs/{run_id}/artifacts"),
     (("GET",), "/logs/runs/{run_id}/monitor-data"),
     (("GET",), "/models"),
-    (("GET",), "/models/{model:path}/config-schema"),
-    (("GET",), "/models/{model:path}/datasets"),
-    (("GET",), "/models/{model:path}/monitors"),
-    (("GET",), "/models/{model:path}/presets"),
-    (("GET",), "/models/{model:path}/search-space"),
+    (("GET",), "/models/{modelType}/{model}/config-schema"),
+    (("GET",), "/models/{modelType}/{model}/datasets"),
+    (("GET",), "/models/{modelType}/{model}/monitors"),
+    (("GET",), "/models/{modelType}/{model}/presets"),
+    (("GET",), "/models/{modelType}/{model}/search-space"),
     (("GET",), "/training/jobs/{job_id}"),
     (("GET",), "/training/jobs/{job_id}/events"),
     (("GET",), "/training/jobs/{job_id}/monitor-data"),
@@ -136,31 +139,31 @@ ENDPOINT_SCHEMA_MAPPINGS: dict[RouteKey, EndpointSchemaMapping] = {
         frontend_api_function="fetchModels",
         frontend_response_schema="modelsSchema",
     ),
-    (("GET",), "/models/{model:path}/config-schema"): EndpointSchemaMapping(
+    (("GET",), "/models/{modelType}/{model}/config-schema"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.ConfigSchemaResponse,
         frontend_api_function="fetchConfigSchema",
         frontend_response_schema="configSchema",
     ),
-    (("GET",), "/models/{model:path}/datasets"): EndpointSchemaMapping(
+    (("GET",), "/models/{modelType}/{model}/datasets"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.DatasetsResponse,
         frontend_api_function="fetchDatasets",
         frontend_response_schema="datasetsSchema",
     ),
-    (("GET",), "/models/{model:path}/monitors"): EndpointSchemaMapping(
+    (("GET",), "/models/{modelType}/{model}/monitors"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.MonitorsResponse,
         frontend_api_function="fetchMonitors",
         frontend_response_schema="monitorsSchema",
     ),
-    (("GET",), "/models/{model:path}/presets"): EndpointSchemaMapping(
+    (("GET",), "/models/{modelType}/{model}/presets"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.PresetsResponse,
         frontend_api_function="fetchPresets",
         frontend_response_schema="presetsSchema",
     ),
-    (("GET",), "/models/{model:path}/search-space"): EndpointSchemaMapping(
+    (("GET",), "/models/{modelType}/{model}/search-space"): EndpointSchemaMapping(
         backend_body_request_schemas=(),
         backend_response_schema=schemas.SearchSpaceResponse,
         frontend_api_function="fetchSearchSpace",
@@ -389,6 +392,7 @@ OPERATION_GRAPH_NODE_FIELDS = (
     "details",
 )
 OPERATION_GRAPH_RESPONSE_FIELDS = (
+    "modelType",
     "model",
     "preset",
     "source",
@@ -446,6 +450,7 @@ TRAINING_RUN_PLAN_SUMMARY_FIELDS = (
     "remainingEpochs",
 )
 TRAINING_RUN_PLAN_FIELDS = (
+    "modelType",
     "model",
     "preset",
     "presets",
@@ -460,6 +465,7 @@ TRAINING_RUN_PLAN_FIELDS = (
 TRAINING_JOB_FIELDS = (
     "id",
     "status",
+    "modelType",
     "model",
     "preset",
     "presets",
@@ -491,6 +497,7 @@ TRAINING_JOB_FIELDS = (
 TRAINING_JOB_REQUIRED_FIELDS = (
     "id",
     "status",
+    "modelType",
     "model",
     "preset",
     "datasets",
@@ -516,6 +523,12 @@ MONITOR_DATA_FIELDS = (
     "preset",
     "dataset",
     "logDir",
+    "eventBytes",
+    "skippedEventFiles",
+    "truncated",
+    "truncationReason",
+    "sourceItemCount",
+    "returnedItemCount",
     "scalarSeries",
     "histograms",
     "images",
@@ -523,8 +536,6 @@ MONITOR_DATA_FIELDS = (
 MONITOR_DATA_REQUIRED_FIELDS = (
     "jobId",
     "nodePath",
-    "dataset",
-    "logDir",
     "scalarSeries",
     "histograms",
     "images",
@@ -540,12 +551,25 @@ PARAMETER_CHANNEL_STATUS_REQUIRED_FIELDS = (
     "observedPoints",
 )
 PARAMETER_NODE_STATUS_FIELDS = ("nodePath", "weights", "bias")
-PARAMETER_STATUS_FIELDS = ("sourceId", "preset", "dataset", "logDir", "nodes")
+PARAMETER_STATUS_FIELDS = (
+    "sourceId",
+    "preset",
+    "dataset",
+    "logDir",
+    "eventBytes",
+    "skippedEventFiles",
+    "truncated",
+    "truncationReason",
+    "sourceItemCount",
+    "returnedItemCount",
+    "nodes",
+)
 PARAMETER_STATUS_REQUIRED_FIELDS = ("sourceId", "nodes")
 LOG_RUN_FIELDS = (
     "id",
     "group",
     "experiment",
+    "modelType",
     "model",
     "preset",
     "dataset",
@@ -562,6 +586,7 @@ LOG_RUN_FIELDS = (
 LOG_RUN_REQUIRED_FIELDS = (
     "id",
     "group",
+    "modelType",
     "model",
     "preset",
     "dataset",
@@ -604,6 +629,10 @@ LOG_RUN_ARTIFACTS_FIELDS = (
     "runId",
     "params",
     "metrics",
+    "sourceItemCount",
+    "returnedItemCount",
+    "truncated",
+    "truncationReason",
     "artifacts",
     "checkpoints",
 )
@@ -617,6 +646,7 @@ LOG_DELETE_FILTER_FIELDS = (
 LOG_DELETE_CANDIDATE_FIELDS = (
     "id",
     "experiment",
+    "modelType",
     "model",
     "preset",
     "dataset",
@@ -640,6 +670,10 @@ LOG_DELETE_COUNTS_FIELDS = (
 )
 LOG_DELETE_PLAN_FIELDS = (
     "candidateCount",
+    "sourceItemCount",
+    "returnedItemCount",
+    "truncated",
+    "truncationReason",
     "counts",
     "affected",
     "candidates",
@@ -658,14 +692,32 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.ConfigSnapshotResponse,
         "configSnapshotSchema",
-        ("id", "model", "preset", "name", "overrides", "createdAt", "updatedAt"),
-        ("id", "model", "preset", "name", "overrides", "createdAt", "updatedAt"),
+        (
+            "id",
+            "modelType",
+            "model",
+            "preset",
+            "name",
+            "overrides",
+            "createdAt",
+            "updatedAt",
+        ),
+        (
+            "id",
+            "modelType",
+            "model",
+            "preset",
+            "name",
+            "overrides",
+            "createdAt",
+            "updatedAt",
+        ),
     ),
     SchemaParityCase(
         schemas.ConfigSnapshotsResponse,
         "configSnapshotsSchema",
-        ("model", "snapshots"),
-        ("model", "snapshots"),
+        ("modelType", "model", "snapshots"),
+        ("modelType", "model", "snapshots"),
     ),
     SchemaParityCase(
         schemas.ConfigSnapshotLibraryResponse,
@@ -676,8 +728,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.ConfigSnapshotCreateRequest,
         "createConfigSnapshot input",
-        ("model", "preset", "name", "overrides"),
-        ("model", "preset"),
+        ("modelType", "model", "preset", "name", "overrides"),
+        ("modelType", "model", "preset"),
     ),
     SchemaParityCase(
         schemas.ConfigSnapshotUpdateRequest,
@@ -702,8 +754,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.PresetsResponse,
         "presetsSchema",
-        ("model", "presets"),
-        ("model", "presets"),
+        ("modelType", "model", "presets"),
+        ("modelType", "model", "presets"),
     ),
     SchemaParityCase(
         schemas.DatasetResponse,
@@ -714,8 +766,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.DatasetsResponse,
         "datasetsSchema",
-        ("model", "datasets"),
-        ("model", "datasets"),
+        ("modelType", "model", "datasets"),
+        ("modelType", "model", "datasets"),
     ),
     SchemaParityCase(
         schemas.MonitorOptionResponse,
@@ -726,8 +778,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.MonitorsResponse,
         "monitorsSchema",
-        ("model", "monitors"),
-        ("model", "monitors"),
+        ("modelType", "model", "monitors"),
+        ("modelType", "model", "monitors"),
     ),
     SchemaParityCase(
         schemas.ConfigFieldResponse,
@@ -738,8 +790,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.ConfigSchemaResponse,
         "configSchema",
-        ("model", "fields"),
-        ("model", "fields"),
+        ("modelType", "model", "fields"),
+        ("modelType", "model", "fields"),
     ),
     SchemaParityCase(
         schemas.SearchAxisResponse,
@@ -750,8 +802,8 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.SearchSpaceResponse,
         "searchSpaceSchema",
-        ("model", "preset", "axes"),
-        ("model", "axes"),
+        ("modelType", "model", "preset", "axes"),
+        ("modelType", "model", "axes"),
     ),
     SchemaParityCase(
         schemas.GraphConfigFieldResponse,
@@ -781,14 +833,30 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.InspectRequest,
         "inspectModel input",
-        ("model", "preset", "overrides", "dataset"),
-        ("model", "preset", "overrides"),
+        ("modelType", "model", "preset", "overrides", "dataset"),
+        ("modelType", "model", "preset", "overrides"),
     ),
     SchemaParityCase(
         schemas.InspectResponse,
         "inspectResponseSchema",
-        ("model", "preset", "parameterCount", "parameterSizeBytes", "nodes", "edges"),
-        ("model", "preset", "parameterCount", "parameterSizeBytes", "nodes", "edges"),
+        (
+            "modelType",
+            "model",
+            "preset",
+            "parameterCount",
+            "parameterSizeBytes",
+            "nodes",
+            "edges",
+        ),
+        (
+            "modelType",
+            "model",
+            "preset",
+            "parameterCount",
+            "parameterSizeBytes",
+            "nodes",
+            "edges",
+        ),
     ),
     SchemaParityCase(
         schemas.OperationGraphNodeResponse,
@@ -812,6 +880,7 @@ SCHEMA_PARITY_CASES = (
         schemas.TrainingJobCreateRequest,
         "TrainingJobCreateInput",
         (
+            "modelType",
             "model",
             "preset",
             "presets",
@@ -822,12 +891,21 @@ SCHEMA_PARITY_CASES = (
             "search",
             "runPlan",
         ),
-        ("model", "preset", "datasets", "overrides", "logFolder", "monitors"),
+        (
+            "modelType",
+            "model",
+            "preset",
+            "datasets",
+            "overrides",
+            "logFolder",
+            "monitors",
+        ),
     ),
     SchemaParityCase(
         schemas.TrainingRunPlanCreateRequest,
         "TrainingRunPlanCreateInput",
         (
+            "modelType",
             "model",
             "preset",
             "presets",
@@ -836,7 +914,7 @@ SCHEMA_PARITY_CASES = (
             "logFolder",
             "search",
         ),
-        ("model", "preset", "datasets", "overrides"),
+        ("modelType", "model", "preset", "datasets", "overrides"),
     ),
     SchemaParityCase(
         schemas.TrainingSearchResponse,
@@ -937,7 +1015,15 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.ScalarSeriesResponse,
         "monitorDataSchema.scalarSeries[]",
-        ("tag", "label", "points"),
+        (
+            "tag",
+            "label",
+            "points",
+            "sourceItemCount",
+            "returnedItemCount",
+            "truncated",
+            "truncationReason",
+        ),
         ("tag", "label", "points"),
     ),
     SchemaParityCase(
@@ -949,13 +1035,33 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.HistogramResponse,
         "monitorDataSchema.histograms[]",
-        ("tag", "step", "wallTime", "buckets"),
+        (
+            "tag",
+            "step",
+            "wallTime",
+            "buckets",
+            "sourceItemCount",
+            "returnedItemCount",
+            "truncated",
+            "truncationReason",
+        ),
         ("tag", "step", "wallTime", "buckets"),
     ),
     SchemaParityCase(
         schemas.ImageResponse,
         "monitorDataSchema.images[]",
-        ("tag", "step", "wallTime", "mimeType", "dataUrl"),
+        (
+            "tag",
+            "step",
+            "wallTime",
+            "mimeType",
+            "dataUrl",
+            "eventBytes",
+            "sourceItemCount",
+            "returnedItemCount",
+            "truncated",
+            "truncationReason",
+        ),
         ("tag", "step", "wallTime", "mimeType", "dataUrl"),
     ),
     SchemaParityCase(
@@ -1010,7 +1116,13 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.LogCheckpointsResponse,
         "logCheckpointsSchema",
-        ("checkpoints",),
+        (
+            "sourceItemCount",
+            "returnedItemCount",
+            "truncated",
+            "truncationReason",
+            "checkpoints",
+        ),
         ("checkpoints",),
     ),
     SchemaParityCase(
@@ -1077,13 +1189,30 @@ SCHEMA_PARITY_CASES = (
         schemas.LogRunDeletePlanResponse,
         "logRunDeletePlanSchema",
         LOG_DELETE_PLAN_FIELDS,
-        LOG_DELETE_PLAN_FIELDS,
+        (
+            "candidateCount",
+            "counts",
+            "affected",
+            "candidates",
+            "blockedByActiveJobs",
+            "canDelete",
+        ),
     ),
     SchemaParityCase(
         schemas.LogRunDeleteResponse,
         "logRunDeleteSchema",
         LOG_DELETE_RESPONSE_FIELDS,
-        LOG_DELETE_RESPONSE_FIELDS,
+        (
+            "candidateCount",
+            "counts",
+            "affected",
+            "candidates",
+            "blockedByActiveJobs",
+            "canDelete",
+            "deletedRunIds",
+            "deletedRunCount",
+            "deletedRelativePaths",
+        ),
     ),
     SchemaParityCase(
         schemas.LogTagsRequest,
@@ -1094,8 +1223,20 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.LogRunTagsResponse,
         "logRunTagsSchema",
-        ("runId", "scalarTags", "histogramTags", "imageTags", "textTags"),
-        ("runId", "scalarTags", "histogramTags", "imageTags", "textTags"),
+        (
+            "runId",
+            "eventBytes",
+            "skippedEventFiles",
+            "truncated",
+            "truncationReason",
+            "sourceItemCount",
+            "returnedItemCount",
+            "scalarTags",
+            "histogramTags",
+            "imageTags",
+            "textTags",
+        ),
+        ("runId", "scalarTags", "histogramTags", "imageTags"),
     ),
     SchemaParityCase(
         schemas.LogTagsResponse,
@@ -1118,19 +1259,51 @@ SCHEMA_PARITY_CASES = (
     SchemaParityCase(
         schemas.LogImageSummaryResponse,
         "logImageSummarySchema",
-        ("runId", "tag", "step", "wallTime", "mimeType", "dataUrl"),
+        (
+            "runId",
+            "tag",
+            "step",
+            "wallTime",
+            "mimeType",
+            "dataUrl",
+            "eventBytes",
+            "sourceItemCount",
+            "returnedItemCount",
+            "truncated",
+            "truncationReason",
+        ),
         ("runId", "tag", "step", "wallTime", "mimeType", "dataUrl"),
     ),
     SchemaParityCase(
         schemas.LogTextSummaryResponse,
         "logTextSummarySchema",
-        ("runId", "tag", "step", "wallTime", "text"),
+        (
+            "runId",
+            "tag",
+            "step",
+            "wallTime",
+            "text",
+            "eventBytes",
+            "sourceItemCount",
+            "returnedItemCount",
+            "truncated",
+            "truncationReason",
+        ),
         ("runId", "tag", "step", "wallTime", "text"),
     ),
     SchemaParityCase(
         schemas.LogMediaResponse,
         "logMediaSchema",
-        ("images", "texts"),
+        (
+            "eventBytes",
+            "skippedEventFiles",
+            "sourceItemCount",
+            "returnedItemCount",
+            "truncated",
+            "truncationReason",
+            "images",
+            "texts",
+        ),
         ("images", "texts"),
     ),
     SchemaParityCase(
@@ -1638,8 +1811,9 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
         payload = response.json()
-        self.assertEqual(tuple(payload), ("model", "datasets"))
-        self.assertEqual(payload["model"], "linears/linear")
+        self.assertEqual(tuple(payload), ("modelType", "model", "datasets"))
+        self.assertEqual(payload["modelType"], "linears")
+        self.assertEqual(payload["model"], "linear")
         self.assertTrue(payload["datasets"])
 
         for dataset in payload["datasets"]:
@@ -1684,7 +1858,8 @@ class ApiIntegrationContractTests(unittest.TestCase):
         response = asyncio.run(
             inspect(
                 schemas.InspectRequest(
-                    model="linears/linear",
+                    modelType="linears",
+                    model="linear",
                     preset="baseline",
                     dataset="Mnist",
                     overrides={"hidden_dim": "128"},
@@ -1701,7 +1876,8 @@ class ApiIntegrationContractTests(unittest.TestCase):
             "hidden_dim", {axis["key"] for axis in search_space_payload["axes"]}
         )
         payload = response.model_dump(mode="json")
-        self.assertEqual(payload["model"], "linears/linear")
+        self.assertEqual(payload["modelType"], "linears")
+        self.assertEqual(payload["model"], "linear")
         self.assertTrue(payload["nodes"])
         self.assertTrue(payload["edges"])
         self.assertIn("parameterCount", payload)
@@ -1718,7 +1894,8 @@ class ApiIntegrationContractTests(unittest.TestCase):
             asyncio.run(
                 inspect(
                     schemas.InspectRequest(
-                        model="linears/linear",
+                        modelType="linears",
+                        model="linear",
                         preset="baseline",
                         dataset="./Mnist",
                         overrides={},
@@ -1739,8 +1916,8 @@ class ApiIntegrationContractTests(unittest.TestCase):
         from viewer.backend.dependencies import get_model_catalog_service
 
         class FakeModelCatalogService:
-            def list_models(self) -> list[str]:
-                return ["override_model"]
+            def list_models(self) -> list[dict[str, str]]:
+                return [{"modelType": "override", "model": "model"}]
 
         async def override_model_catalog_service() -> FakeModelCatalogService:
             return FakeModelCatalogService()
@@ -1761,7 +1938,10 @@ class ApiIntegrationContractTests(unittest.TestCase):
         response = asyncio.run(call_api())
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"models": ["override_model"]})
+        self.assertEqual(
+            response.json(),
+            {"models": [{"modelType": "override", "model": "model"}]},
+        )
 
     def test_api_inspector_errors_use_shared_handler(self) -> None:
         import httpx

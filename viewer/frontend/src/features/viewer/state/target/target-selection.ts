@@ -17,6 +17,7 @@ export type TargetSelectionInput = {
   presets?: Preset[];
   schemaFields?: ConfigField[];
   configSnapshots: ConfigSnapshot[];
+  selectedModelType: string;
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
@@ -58,7 +59,9 @@ export function deriveTargetSelectionState(
   const configSections = Array.from(groups, ([title, fields]) => ({ title, fields }));
   const configFields = configSections.flatMap((section) => section.fields);
   const modelConfigSnapshots = input.configSnapshots.filter(
-    (snapshot) => snapshot.model === input.selectedModel,
+    (snapshot) =>
+      snapshot.modelType === input.selectedModelType &&
+      snapshot.model === input.selectedModel,
   );
   const modelConfigSnapshotGroups = groupConfigSnapshotsByPreset(
     modelConfigSnapshots,
@@ -66,6 +69,7 @@ export function deriveTargetSelectionState(
   );
   const visibleConfigSnapshots = selectedConfigSnapshots(
     modelConfigSnapshots,
+    input.selectedModelType,
     input.selectedModel,
     input.selectedTrainingPresets,
   );

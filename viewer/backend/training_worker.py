@@ -10,6 +10,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from emperor.experiments.base import GridSearch, RandomSearch
 from emperor.experiments.progress import JsonlTrainingProgressCallback
+from models.catalog import model_id_from_payload, model_identity_payload_from_id
 
 from viewer.backend.inspector.discovery import (
     load_model_parts,
@@ -27,6 +28,13 @@ from viewer.backend.inspector.service import reject_locked_overrides
 from viewer.backend.training_events import NeuronClusterGrowthCallback
 
 VIEWER_PROGRESS_STEP_INTERVAL = 25
+
+
+def _payload_model_id(payload: dict) -> str:
+    model_id = model_id_from_payload(payload)
+    if model_id is None:
+        raise ValueError("Training payload does not include a valid model identity.")
+    return model_id
 
 
 def search_mode_from_parsed_search(parsed_search):
@@ -89,7 +97,7 @@ def _materialized_run_from_row(
         parts.config_module,
         row.get("overrides") or {},
     )
-    reject_locked_overrides(payload["model"], preset, config_overrides)
+    reject_locked_overrides(_payload_model_id(payload), preset, config_overrides)
     return {
         "id": str(row.get("id") or f"run-{index:04d}"),
         "index": int(row.get("index") or index),
@@ -112,6 +120,8 @@ def main() -> None:
     payload_path = Path(args.payload)
     progress_path = Path(args.progress)
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    model_id = _payload_model_id(payload)
+    identity = model_identity_payload_from_id(model_id)
     progress = JsonlTrainingProgressCallback(
         progress_path,
         step_interval=VIEWER_PROGRESS_STEP_INTERVAL,
@@ -123,14 +133,14 @@ def main() -> None:
                 "type": "started",
                 "status": "running",
                 "jobId": payload["id"],
-                "model": payload["model"],
+                **identity,
                 "preset": payload["preset"],
                 "presets": payload.get("presets") or [payload["preset"]],
                 "datasets": payload["datasets"],
                 "monitors": payload.get("monitors") or [],
             }
         )
-        parts = load_model_parts(payload["model"])
+        parts = load_model_parts(model_id)
         selected_preset_names, selected_options = _resolve_payload_presets(
             parts, payload
         )
@@ -141,7 +151,7 @@ def main() -> None:
         ]
         parsed_searches = [
             parse_training_search(
-                payload["model"],
+                model_id,
                 selected_preset,
                 payload.get("search"),
                 dataset_count=len(selected_datasets),
@@ -166,7 +176,7 @@ def main() -> None:
             effective_override_payload,
         )
         for selected_preset in selected_preset_names:
-            reject_locked_overrides(payload["model"], selected_preset, config_overrides)
+            reject_locked_overrides(model_id, selected_preset, config_overrides)
         materialized_runs = _materialized_runs_from_plan(parts, payload)
         search_mode = (
             None

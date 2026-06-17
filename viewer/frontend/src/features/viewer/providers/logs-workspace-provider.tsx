@@ -22,6 +22,7 @@ export function LogsWorkspaceProvider({
   children: ReactNode;
 }) {
   const {
+    selectedModelType,
     selectedModel,
     selectedPreset,
     selectedPresetMeta,
@@ -33,6 +34,7 @@ export function LogsWorkspaceProvider({
     enabled,
     logDeletionEnabled: capabilities.logDeletionEnabled,
     targetScope: {
+      modelType: selectedModelType,
       model: selectedModel,
       preset: selectedPresetMeta?.label ?? selectedPreset,
       datasets: selectedDatasets,

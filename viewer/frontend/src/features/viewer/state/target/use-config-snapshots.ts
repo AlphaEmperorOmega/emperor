@@ -3,6 +3,7 @@ import {
   type ConfigSnapshotCreateInput,
   type ConfigSnapshotRecord,
   type ConfigSnapshotUpdateInput,
+  type ModelIdentity,
   createConfigSnapshot,
   deleteConfigSnapshot,
   fetchConfigSnapshotLibrary,
@@ -20,19 +21,23 @@ const EMPTY_CONFIG_SNAPSHOTS: ConfigSnapshotRecord[] = [];
  * reads the per-model list and exposes create/rename/delete mutations that
  * invalidate the cache so the list stays consistent after every change.
  */
-export function useConfigSnapshots(model: string) {
+export function useConfigSnapshots(identity: ModelIdentity) {
   const queryClient = useQueryClient();
+  const enabled = identity.modelType.length > 0 && identity.model.length > 0;
 
   const query = useQuery({
-    queryKey: viewerQueryKeys.configSnapshots(model),
-    queryFn: () => fetchConfigSnapshots(model),
-    enabled: model.length > 0,
+    queryKey: viewerQueryKeys.configSnapshots(identity.modelType, identity.model),
+    queryFn: () => fetchConfigSnapshots(identity),
+    enabled,
     retry: false,
   });
 
-  function invalidateModel(snapshotModel: string) {
+  function invalidateModel(snapshot: ModelIdentity) {
     return queryClient.invalidateQueries({
-      queryKey: viewerQueryKeys.configSnapshots(snapshotModel),
+      queryKey: viewerQueryKeys.configSnapshots(
+        snapshot.modelType,
+        snapshot.model,
+      ),
     });
   }
 
@@ -45,14 +50,14 @@ export function useConfigSnapshots(model: string) {
   const createMutation = useMutation({
     mutationFn: (input: ConfigSnapshotCreateInput) => createConfigSnapshot(input),
     onSuccess: (snapshot) =>
-      Promise.all([invalidateModel(snapshot.model), invalidateLibrary()]),
+      Promise.all([invalidateModel(snapshot), invalidateLibrary()]),
   });
 
   const renameMutation = useMutation({
     mutationFn: ({ id, name }: { id: string; name: string }) =>
       renameConfigSnapshot(id, name),
     onSuccess: (snapshot) =>
-      Promise.all([invalidateModel(snapshot.model), invalidateLibrary()]),
+      Promise.all([invalidateModel(snapshot), invalidateLibrary()]),
   });
 
   const updateMutation = useMutation({
@@ -64,13 +69,13 @@ export function useConfigSnapshots(model: string) {
       input: ConfigSnapshotUpdateInput;
     }) => updateConfigSnapshot(id, input),
     onSuccess: (snapshot) =>
-      Promise.all([invalidateModel(snapshot.model), invalidateLibrary()]),
+      Promise.all([invalidateModel(snapshot), invalidateLibrary()]),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteConfigSnapshot(id),
     onSuccess: (result) =>
-      Promise.all([invalidateModel(result.model), invalidateLibrary()]),
+      Promise.all([invalidateModel(result), invalidateLibrary()]),
   });
 
   const snapshots = query.data?.snapshots ?? EMPTY_CONFIG_SNAPSHOTS;

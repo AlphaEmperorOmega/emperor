@@ -60,8 +60,9 @@ describe("ViewerApp Graph Workspace", () => {
       "data-only-render-visible-elements",
       "true",
     );
-    expect(operationGraphBodies[0]).toEqual({
-      model: "linear",
+	    expect(operationGraphBodies[0]).toEqual({
+	      modelType: "linears",
+	      model: "linear",
       preset: "baseline",
       dataset: "Mnist",
       overrides: {},
@@ -117,8 +118,9 @@ describe("ViewerApp Graph Workspace", () => {
 
     await user.click(screen.getByRole("tab", { name: /^graph$/i }));
     await waitFor(() => expect(operationGraphBodies).toHaveLength(2));
-    expect(operationGraphBodies[1]).toEqual({
-      model: "linear",
+	    expect(operationGraphBodies[1]).toEqual({
+	      modelType: "linears",
+	      model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
       overrides: {},
@@ -235,8 +237,9 @@ describe("ViewerApp Graph Workspace", () => {
     await waitFor(() =>
       expect(inspectBodies.length).toBeGreaterThan(initialRequestCount),
     );
-    expect(inspectBodies.at(-1)).toEqual({
-      model: "linear",
+	    expect(inspectBodies.at(-1)).toEqual({
+	      modelType: "linears",
+	      model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
       overrides: {},

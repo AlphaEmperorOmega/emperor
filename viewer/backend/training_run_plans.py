@@ -5,6 +5,7 @@ import random
 from dataclasses import dataclass
 from typing import Any
 
+from models.catalog import model_identity_payload_from_id
 from models.config_overrides import config_key_to_model_param, normalize_key
 
 from viewer.backend.inspector.discovery import (
@@ -59,10 +60,14 @@ def _build_training_command(
         if field is not None:
             values_by_field_key[str(field["key"])] = raw_value
 
+    identity = model_identity_payload_from_id(model)
     parts = [
         "source",
         "experiment.sh",
-        _shell_quote(model),
+        "--model-type",
+        _shell_quote(identity["modelType"]),
+        "--model",
+        _shell_quote(identity["model"]),
         "--preset",
         _shell_quote(preset),
         "--datasets",
@@ -607,7 +612,7 @@ class TrainingRunPlanBuilder:
         runs: list[dict[str, Any]],
     ) -> dict[str, Any]:
         return {
-            "model": model,
+            **model_identity_payload_from_id(model),
             "preset": selected.selected_preset_names[0],
             "presets": selected.selected_preset_names,
             "datasets": [

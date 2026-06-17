@@ -3,6 +3,11 @@ import { z } from "zod";
 import { requestJson } from "@/lib/api/client";
 import { configValueSchema } from "@/lib/api/schemas";
 
+export const modelIdentitySchema = z.object({
+  modelType: z.string(),
+  model: z.string(),
+});
+
 export const presetSchema = z.object({
   name: z.string(),
   label: z.string(),
@@ -52,20 +57,35 @@ export const searchAxisSchema = z.object({
   lockedReason: z.string().optional(),
 });
 
-const modelsSchema = z.object({ models: z.array(z.string()) });
-const presetsSchema = z.object({ model: z.string(), presets: z.array(presetSchema) });
-const datasetsSchema = z.object({ model: z.string(), datasets: z.array(datasetSchema) });
+const modelsSchema = z.object({ models: z.array(modelIdentitySchema) });
+const presetsSchema = z.object({
+  modelType: z.string(),
+  model: z.string(),
+  presets: z.array(presetSchema),
+});
+const datasetsSchema = z.object({
+  modelType: z.string(),
+  model: z.string(),
+  datasets: z.array(datasetSchema),
+});
 const monitorsSchema = z.object({
+  modelType: z.string(),
   model: z.string(),
   monitors: z.array(monitorOptionSchema),
 });
-const configSchema = z.object({ model: z.string(), fields: z.array(configFieldSchema) });
+const configSchema = z.object({
+  modelType: z.string(),
+  model: z.string(),
+  fields: z.array(configFieldSchema),
+});
 const searchSpaceSchema = z.object({
+  modelType: z.string(),
   model: z.string(),
   preset: z.string().nullable().optional(),
   axes: z.array(searchAxisSchema),
 });
 
+export type ModelIdentity = z.infer<typeof modelIdentitySchema>;
 export type Preset = z.infer<typeof presetSchema>;
 export type Dataset = z.infer<typeof datasetSchema>;
 export type MonitorOption = z.infer<typeof monitorOptionSchema>;
@@ -73,32 +93,38 @@ export type ConfigField = z.infer<typeof configFieldSchema>;
 export type SearchAxis = z.infer<typeof searchAxisSchema>;
 export type SearchSpace = z.infer<typeof searchSpaceSchema>;
 
-function modelPath(model: string) {
-  return model.split("/").map(encodeURIComponent).join("/");
+function modelPath({ modelType, model }: ModelIdentity) {
+  return `${encodeURIComponent(modelType)}/${encodeURIComponent(model)}`;
 }
 
 export function fetchModels() {
   return requestJson("/models", modelsSchema);
 }
 
-export function fetchPresets(model: string) {
-  return requestJson(`/models/${modelPath(model)}/presets`, presetsSchema);
+export function fetchPresets(identity: ModelIdentity) {
+  return requestJson(`/models/${modelPath(identity)}/presets`, presetsSchema);
 }
 
-export function fetchDatasets(model: string) {
-  return requestJson(`/models/${modelPath(model)}/datasets`, datasetsSchema);
+export function fetchDatasets(identity: ModelIdentity) {
+  return requestJson(`/models/${modelPath(identity)}/datasets`, datasetsSchema);
 }
 
-export function fetchMonitors(model: string) {
-  return requestJson(`/models/${modelPath(model)}/monitors`, monitorsSchema);
+export function fetchMonitors(identity: ModelIdentity) {
+  return requestJson(`/models/${modelPath(identity)}/monitors`, monitorsSchema);
 }
 
-export function fetchConfigSchema(model: string, preset?: string) {
+export function fetchConfigSchema(identity: ModelIdentity, preset?: string) {
   const query = preset ? `?preset=${encodeURIComponent(preset)}` : "";
-  return requestJson(`/models/${modelPath(model)}/config-schema${query}`, configSchema);
+  return requestJson(
+    `/models/${modelPath(identity)}/config-schema${query}`,
+    configSchema,
+  );
 }
 
-export function fetchSearchSpace(model: string, preset?: string) {
+export function fetchSearchSpace(identity: ModelIdentity, preset?: string) {
   const query = preset ? `?preset=${encodeURIComponent(preset)}` : "";
-  return requestJson(`/models/${modelPath(model)}/search-space${query}`, searchSpaceSchema);
+  return requestJson(
+    `/models/${modelPath(identity)}/search-space${query}`,
+    searchSpaceSchema,
+  );
 }

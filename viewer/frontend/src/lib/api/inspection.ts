@@ -36,6 +36,7 @@ export const graphEdgeSchema = z.object({
 });
 
 export const inspectResponseSchema = z.object({
+  modelType: z.string(),
   model: z.string(),
   preset: z.string(),
   parameterCount: z.number(),
@@ -74,6 +75,7 @@ export const operationGraphEdgeSchema = z
 export const operationGraphResponseSchema = z
   .object({
     model: z.string(),
+    modelType: z.string(),
     preset: z.string(),
     source: z.literal("torch-export"),
     status: z.enum(["ok", "unsupported"]),
@@ -92,6 +94,7 @@ export type OperationGraphEdge = z.infer<typeof operationGraphEdgeSchema>;
 export type OperationGraphResponse = z.infer<typeof operationGraphResponseSchema>;
 
 export function inspectModel(input: {
+  modelType: string;
   model: string;
   preset: string;
   overrides: ConfigOverrides;
@@ -104,6 +107,7 @@ export function inspectModel(input: {
 }
 
 export function inspectOperationGraph(input: {
+  modelType: string;
   model: string;
   preset: string;
   overrides: ConfigOverrides;

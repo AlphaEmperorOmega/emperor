@@ -72,6 +72,7 @@ def _run_payload(run_id: str, index: int) -> dict[str, object]:
         "id": run_id,
         "group": None,
         "experiment": "exp",
+        "modelType": "models",
         "model": "model",
         "preset": "preset",
         "dataset": "dataset",
@@ -110,6 +111,7 @@ class LogRunServiceListResponseTests(unittest.TestCase):
     def test_list_runs_filters_before_paginating(self) -> None:
         first = {
             **_run_payload("run-1", 0),
+            "modelType": "linears",
             "model": "linear",
             "preset": "BASELINE",
             "dataset": "Mnist",
@@ -117,6 +119,7 @@ class LogRunServiceListResponseTests(unittest.TestCase):
         }
         second = {
             **_run_payload("run-2", 1),
+            "modelType": "linears",
             "model": "linear",
             "preset": "BASELINE",
             "dataset": "Cifar10",
@@ -124,6 +127,7 @@ class LogRunServiceListResponseTests(unittest.TestCase):
         }
         third = {
             **_run_payload("run-3", 2),
+            "modelType": "linears",
             "model": "linear",
             "preset": "GATING",
             "dataset": "Mnist",

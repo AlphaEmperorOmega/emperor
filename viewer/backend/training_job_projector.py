@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from models.catalog import model_identity_payload_from_id
+
 from viewer.backend.job_store import TrainingJobRecord
 from viewer.backend.training_monitor_locator import TrainingMonitorLocator
 from viewer.backend.training_run_progress import project_training_run_progress
@@ -59,7 +61,7 @@ class TrainingJobProjector:
         return {
             "id": job.id,
             "status": job.status,
-            "model": job.model,
+            **model_identity_payload_from_id(job.model),
             "preset": job.preset,
             "presets": job.presets,
             "datasets": job.datasets,
@@ -106,7 +108,7 @@ class TrainingJobProjector:
         return {
             "id": job.id,
             "status": job.status,
-            "model": job.model,
+            **model_identity_payload_from_id(job.model),
             "preset": job.preset,
             "presets": job.presets,
             "datasets": job.datasets,

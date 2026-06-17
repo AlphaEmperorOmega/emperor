@@ -17,6 +17,7 @@ function trainingRunPlanInput(
   overrides: Partial<TrainingRunPlanQueryKeyInput> = {},
 ): TrainingRunPlanQueryKeyInput {
   return {
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     presets: ["baseline"],
@@ -99,16 +100,30 @@ describe("query key factories", () => {
   it("preserves viewer query key shapes", () => {
     expect(viewerQueryKeys.health()).toEqual(["health"]);
     expect(viewerQueryKeys.models()).toEqual(["models"]);
-    expect(viewerQueryKeys.presets("linear")).toEqual(["presets", "linear"]);
-    expect(viewerQueryKeys.datasets("linear")).toEqual(["datasets", "linear"]);
-    expect(viewerQueryKeys.monitors("linear")).toEqual(["monitors", "linear"]);
-    expect(viewerQueryKeys.configSchema("linear", "baseline")).toEqual([
+    expect(viewerQueryKeys.presets("linears", "linear")).toEqual([
+      "presets",
+      "linears",
+      "linear",
+    ]);
+    expect(viewerQueryKeys.datasets("linears", "linear")).toEqual([
+      "datasets",
+      "linears",
+      "linear",
+    ]);
+    expect(viewerQueryKeys.monitors("linears", "linear")).toEqual([
+      "monitors",
+      "linears",
+      "linear",
+    ]);
+    expect(viewerQueryKeys.configSchema("linears", "linear", "baseline")).toEqual([
       "config-schema",
+      "linears",
       "linear",
       "baseline",
     ]);
-    expect(viewerQueryKeys.searchSpace("linear", "baseline")).toEqual([
+    expect(viewerQueryKeys.searchSpace("linears", "linear", "baseline")).toEqual([
       "search-space",
+      "linears",
       "linear",
       "baseline",
     ]);
@@ -116,10 +131,22 @@ describe("query key factories", () => {
       viewerQueryKeys.historicalSummaryInspection("linear", "baseline", "Mnist"),
     ).toEqual(["inspect", "historical-summary", "linear", "baseline", "Mnist"]);
     expect(
-      viewerQueryKeys.comparisonInspection("linear", "baseline", "Mnist"),
-    ).toEqual(["comparison-inspection", "linear", "baseline", "Mnist"]);
-    expect(viewerQueryKeys.configSnapshots("linear")).toEqual([
+      viewerQueryKeys.comparisonInspection(
+        "linears",
+        "linear",
+        "baseline",
+        "Mnist",
+      ),
+    ).toEqual([
+      "comparison-inspection",
+      "linears",
+      "linear",
+      "baseline",
+      "Mnist",
+    ]);
+    expect(viewerQueryKeys.configSnapshots("linears", "linear")).toEqual([
       "config-snapshots",
+      "linears",
       "linear",
     ]);
     expect(viewerQueryKeys.configSnapshotLibrary()).toEqual([
@@ -142,6 +169,7 @@ describe("query key factories", () => {
       {
         datasets: ["Mnist"],
         logFolder: "runs",
+        modelType: "linears",
         model: "linear",
         overrides: { hidden_size: "128" },
         preset: "baseline",

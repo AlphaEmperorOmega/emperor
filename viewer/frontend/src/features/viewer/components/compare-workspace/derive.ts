@@ -3,13 +3,19 @@ import type {
   ConfigValue,
   Dataset,
   InspectResponse,
+  ModelIdentity,
   MonitorOption,
   Preset,
 } from "@/lib/api";
-import { modelNameForId, modelTypeForId } from "@/lib/selection";
+import {
+  modelIdentityKey,
+  modelNameForId,
+  modelTypeForId,
+} from "@/lib/selection";
 
 export type CompareEntry = {
   id: string;
+  modelType: string;
   model: string;
   preset: string;
 };
@@ -28,6 +34,8 @@ export type CompareEntryData = {
 
 export type CompareModelOption = {
   id: string;
+  modelType: string;
+  model: string;
   label: string;
 };
 
@@ -51,15 +59,24 @@ const emptyValues = new Set(["", "—"]);
 
 export function createCompareEntry(
   id: string,
-  model = "",
+  model: ModelIdentity | string = "",
   preset = "",
 ): CompareEntry {
-  return { id, model, preset };
+  return {
+    id,
+    modelType: modelTypeForId(model),
+    model: modelNameForId(model),
+    preset,
+  };
 }
 
-export function buildCompareModelOptions(models: string[]): CompareModelOption[] {
+export function buildCompareModelOptions(
+  models: ModelIdentity[],
+): CompareModelOption[] {
   return models.map((model) => ({
-    id: model,
+    id: modelIdentityKey(model),
+    modelType: model.modelType,
+    model: model.model,
     label: `${modelNameForId(model)} · ${modelTypeForId(model)}`,
   }));
 }
@@ -200,7 +217,12 @@ export function monitorSummary(monitors: MonitorOption[]) {
 }
 
 export function compareHeader(entry: CompareEntryData, index: number) {
-  const modelLabel = entry.entry.model ? modelNameForId(entry.entry.model) : "No model";
+  const modelLabel = entry.entry.model
+    ? modelNameForId({
+        modelType: entry.entry.modelType,
+        model: entry.entry.model,
+      })
+    : "No model";
   const presetLabel = entry.entry.preset || "No preset";
   return `${index + 1}. ${modelLabel} / ${presetLabel}`;
 }

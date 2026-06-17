@@ -42,7 +42,12 @@ function renderPreview() {
   });
 }
 
-const request = (model: string) => ({ model, preset: "p", overrides: {} });
+const request = (model: string) => ({
+  modelType: "linears",
+  model,
+  preset: "p",
+  overrides: {},
+});
 
 afterEach(() => {
   inspectModelMock.mockReset();
@@ -54,6 +59,7 @@ describe("usePreviewInspectionState", () => {
     const d = deferred<unknown>();
     inspectModelMock.mockReturnValueOnce(d.promise);
     const graph = {
+      modelType: "linears",
       model: "a",
       preset: "p",
       parameterCount: 0,
@@ -81,6 +87,7 @@ describe("usePreviewInspectionState", () => {
     const second = deferred<unknown>();
     inspectModelMock.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const graphA = {
+      modelType: "linears",
       model: "A",
       preset: "p",
       parameterCount: 1,
@@ -89,6 +96,7 @@ describe("usePreviewInspectionState", () => {
       edges: [],
     };
     const graphB = {
+      modelType: "linears",
       model: "B",
       preset: "p",
       parameterCount: 2,
@@ -119,6 +127,7 @@ describe("usePreviewInspectionState", () => {
 
   it("rejects inspect responses whose identity does not match the request", async () => {
     inspectModelMock.mockResolvedValueOnce({
+      modelType: "linears",
       model: "B",
       preset: "p",
       parameterCount: 1,
@@ -134,13 +143,15 @@ describe("usePreviewInspectionState", () => {
     expect(result.current.graph).toBeUndefined();
     expect(result.current.previewInspection.error).toBeInstanceOf(Error);
     expect(String(result.current.previewInspection.error)).toContain(
-      "requested A/p, received B/p",
+      "requested linears/A/p, received linears/B/p",
     );
   });
 
   it("rejects operation graph responses whose identity does not match the request", async () => {
-    inspectModelMock.mockImplementation((input: { model: string; preset: string }) => {
+    inspectModelMock.mockImplementation(
+      (input: { modelType: string; model: string; preset: string }) => {
       return Promise.resolve({
+        modelType: input.modelType,
         model: input.model,
         preset: input.preset,
         parameterCount: 0,
@@ -150,6 +161,7 @@ describe("usePreviewInspectionState", () => {
       });
     });
     inspectOperationGraphMock.mockResolvedValueOnce({
+      modelType: "linears",
       model: "B",
       preset: "p",
       source: "torch-export",
@@ -170,14 +182,16 @@ describe("usePreviewInspectionState", () => {
     expect(result.current.operationGraphFailedRequestKey).not.toBeNull();
     expect(result.current.operationInspection.error).toBeInstanceOf(Error);
     expect(String(result.current.operationInspection.error)).toContain(
-      "requested A/p, received B/p",
+      "requested linears/A/p, received linears/B/p",
     );
   });
 
   it("clears preview state and ignores in-flight responses", async () => {
     const operation = deferred<unknown>();
-    inspectModelMock.mockImplementation((input: { model: string; preset: string }) => {
+    inspectModelMock.mockImplementation(
+      (input: { modelType: string; model: string; preset: string }) => {
       return Promise.resolve({
+        modelType: input.modelType,
         model: input.model,
         preset: input.preset,
         parameterCount: 0,
@@ -188,6 +202,7 @@ describe("usePreviewInspectionState", () => {
     });
     inspectOperationGraphMock.mockReturnValueOnce(operation.promise);
     const operationA = {
+      modelType: "linears",
       model: "A",
       preset: "p",
       source: "torch-export",
@@ -226,8 +241,10 @@ describe("usePreviewInspectionState", () => {
   it("clears and guards operation graph responses independently", async () => {
     const first = deferred<unknown>();
     const second = deferred<unknown>();
-    inspectModelMock.mockImplementation((input: { model: string; preset: string }) => {
+    inspectModelMock.mockImplementation(
+      (input: { modelType: string; model: string; preset: string }) => {
       return Promise.resolve({
+        modelType: input.modelType,
         model: input.model,
         preset: input.preset,
         parameterCount: 0,
@@ -240,6 +257,7 @@ describe("usePreviewInspectionState", () => {
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     const operationA = {
+      modelType: "linears",
       model: "A",
       preset: "p",
       source: "torch-export",
@@ -283,8 +301,10 @@ describe("usePreviewInspectionState", () => {
   it("marks failed operation graph requests retryable for the current preview", async () => {
     const failed = deferred<unknown>();
     const retry = deferred<unknown>();
-    inspectModelMock.mockImplementation((input: { model: string; preset: string }) => {
+    inspectModelMock.mockImplementation(
+      (input: { modelType: string; model: string; preset: string }) => {
       return Promise.resolve({
+        modelType: input.modelType,
         model: input.model,
         preset: input.preset,
         parameterCount: 0,
@@ -297,6 +317,7 @@ describe("usePreviewInspectionState", () => {
       .mockReturnValueOnce(failed.promise)
       .mockReturnValueOnce(retry.promise);
     const operationA = {
+      modelType: "linears",
       model: "A",
       preset: "p",
       source: "torch-export",

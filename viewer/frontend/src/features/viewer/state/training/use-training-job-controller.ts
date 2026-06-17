@@ -133,6 +133,7 @@ export type ActiveTrainingJobProgress = ReturnType<
 >;
 
 type UseTrainingJobControllerInput = {
+  selectedModelType: string;
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
@@ -154,6 +155,7 @@ type UseTrainingJobControllerInput = {
 };
 
 export function useTrainingJobController({
+  selectedModelType,
   selectedModel,
   selectedPreset,
   selectedTrainingPresets,
@@ -200,6 +202,7 @@ export function useTrainingJobController({
     () =>
       buildTrainingRunPlanRequest({
         canPlan,
+        selectedModelType,
         selectedModel,
         selectedPreset,
         selectedTrainingPresets,
@@ -215,6 +218,7 @@ export function useTrainingJobController({
       logFolder,
       searchPayload,
       selectedDatasets,
+      selectedModelType,
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,
@@ -223,6 +227,7 @@ export function useTrainingJobController({
   );
   const planInputKey = useMemo<TrainingRunPlanQueryKeyInput>(
     () => ({
+      modelType: selectedModelType,
       model: selectedModel,
       preset: selectedPreset,
       presets: selectedTrainingPresets,
@@ -237,6 +242,7 @@ export function useTrainingJobController({
       logFolder,
       searchPayload,
       selectedDatasets,
+      selectedModelType,
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,
@@ -299,6 +305,7 @@ export function useTrainingJobController({
 
   function trainingRequest(): TrainingJobCreateInput | null {
     return buildTrainingJobRequest({
+      selectedModelType,
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,

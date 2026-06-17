@@ -15,7 +15,8 @@ from viewer.backend.settings import ViewerApiSettings
 # Synthetic config schema so the API tests stay fast and model-independent while
 # still exercising the real validation (non-default, locked, dedupe).
 FAKE_FIELDS: dict[str, Any] = {
-    "model": "linears/linear",
+    "modelType": "linears",
+    "model": "linear",
     "fields": [
         {
             "key": "learning_rate",
@@ -47,6 +48,13 @@ FAKE_FIELDS: dict[str, Any] = {
 
 def fake_config_schema(model: str, preset: str | None = None) -> dict[str, Any]:
     return FAKE_FIELDS
+
+
+def split_test_model(model: str) -> tuple[str, str]:
+    if "/" not in model:
+        return "linears", model
+    model_type, model_name = model.split("/", 1)
+    return model_type, model_name
 
 
 @mock.patch(
@@ -92,11 +100,13 @@ class ConfigSnapshotApiTests(unittest.TestCase):
                 f"{key}_{value}" for key, value in sorted(overrides.items())
             )
             snapshot_name = f"{preset}_{override_name or 'snapshot'}"
+        model_type, model_name = split_test_model(model)
         return self._request(
             "POST",
             "/config-snapshots",
             json={
-                "model": model,
+                "modelType": model_type,
+                "model": model_name,
                 "preset": preset,
                 "name": snapshot_name,
                 "overrides": overrides,
@@ -115,11 +125,12 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         listed = self._request(
             "GET",
             "/config-snapshots",
-            params={"model": "linears/linear"},
+            params={"modelType": "linears", "model": "linear"},
         )
         self.assertEqual(listed.status_code, 200)
         body = listed.json()
-        self.assertEqual(body["model"], "linears/linear")
+        self.assertEqual(body["modelType"], "linears")
+        self.assertEqual(body["model"], "linear")
         self.assertEqual([s["id"] for s in body["snapshots"]], [snapshot["id"]])
 
     def test_library_lists_all_snapshots_while_scoped_list_stays_filtered(self) -> None:
@@ -136,38 +147,39 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         self.assertEqual(library.status_code, 200, library.text)
         self.assertEqual(
             [
-                (snapshot["model"], snapshot["id"])
+                (snapshot["modelType"], snapshot["model"], snapshot["id"])
                 for snapshot in library.json()["snapshots"]
             ],
             [
-                ("linears/linear", linear_snapshot["id"]),
-                ("linears/linear_adaptive", adaptive_snapshot["id"]),
+                ("linears", "linear", linear_snapshot["id"]),
+                ("linears", "linear_adaptive", adaptive_snapshot["id"]),
             ],
         )
 
         scoped = self._request(
             "GET",
             "/config-snapshots",
-            params={"model": "linears/linear"},
+            params={"modelType": "linears", "model": "linear"},
         )
         self.assertEqual(
             [
-                (snapshot["model"], snapshot["id"])
+                (snapshot["modelType"], snapshot["model"], snapshot["id"])
                 for snapshot in scoped.json()["snapshots"]
             ],
-            [("linears/linear", linear_snapshot["id"])],
+            [("linears", "linear", linear_snapshot["id"])],
         )
 
     def test_rejects_unsafe_storage_paths(self) -> None:
         listed = self._request(
             "GET",
             "/config-snapshots",
-            params={"model": "../outside"},
+            params={"modelType": "linears", "model": "../outside"},
         )
         created = self._request(
             "POST",
             "/config-snapshots",
             json={
+                "modelType": "linears",
                 "model": "../outside",
                 "preset": "baseline",
                 "name": "unsafe",
@@ -176,9 +188,9 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         )
 
         self.assertEqual(listed.status_code, 400)
-        self.assertIn("Invalid config snapshot", listed.json()["detail"])
+        self.assertIn("Unknown model", listed.json()["detail"])
         self.assertEqual(created.status_code, 400)
-        self.assertIn("Invalid config snapshot", created.json()["detail"])
+        self.assertIn("Unknown model", created.json()["detail"])
 
     def test_create_rejects_default_only_override(self) -> None:
         response = self._create(learning_rate="0.001")
@@ -239,6 +251,7 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         self.assertEqual(updated.status_code, 200, updated.text)
         body = updated.json()
         self.assertEqual(body["id"], snapshot["id"])
+        self.assertEqual(body["modelType"], snapshot["modelType"])
         self.assertEqual(body["model"], snapshot["model"])
         self.assertEqual(body["preset"], snapshot["preset"])
         self.assertEqual(body["createdAt"], snapshot["createdAt"])
@@ -319,7 +332,10 @@ class ConfigSnapshotApiTests(unittest.TestCase):
         snapshot_id = self._create(learning_rate="0.01").json()["id"]
         deleted = self._request("DELETE", f"/config-snapshots/{snapshot_id}")
         self.assertEqual(deleted.status_code, 200)
-        self.assertEqual(deleted.json(), {"model": "linears/linear", "snapshots": []})
+        self.assertEqual(
+            deleted.json(),
+            {"modelType": "linears", "model": "linear", "snapshots": []},
+        )
 
     def test_delete_unknown_snapshot_is_rejected(self) -> None:
         response = self._request("DELETE", "/config-snapshots/missing")

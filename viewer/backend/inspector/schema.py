@@ -7,6 +7,7 @@ from pathlib import Path
 from types import ModuleType, NoneType, UnionType
 from typing import Any, Union, get_args, get_origin
 
+from models.catalog import model_identity_payload_from_id
 from models.config_overrides import (
     config_key_to_flag,
     config_key_to_model_param,
@@ -302,7 +303,7 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                 "lockedReason": locked_reason,
             }
         )
-    return {"model": model_name, "fields": fields}
+    return {**model_identity_payload_from_id(model_name), "fields": fields}
 
 
 def _search_axis_kind(
@@ -373,4 +374,8 @@ def search_space_schema(
             }
         )
 
-    return {"model": model_name, "preset": preset_name, "axes": axes}
+    return {
+        **model_identity_payload_from_id(model_name),
+        "preset": preset_name,
+        "axes": axes,
+    }

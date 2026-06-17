@@ -6,7 +6,11 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { ErrorPanel } from "@/features/viewer/components/error-panel";
 import { DialogShell } from "@/features/viewer/components/shared/dialog-shell";
-import { type LogRunDeleteFilters, type LogRunDeletePlan } from "@/lib/api";
+import {
+  type LogRunDeleteFilters,
+  type LogRunDeletePlan,
+  type ModelIdentity,
+} from "@/lib/api";
 import { type ChecklistOption } from "@/features/viewer/state/logs/logs-selectors";
 import { errorMessage } from "@/lib/utils";
 
@@ -130,6 +134,10 @@ function AffectedValueGroup({
       </div>
     </div>
   );
+}
+
+function modelIdentityLabels(models: ModelIdentity[]) {
+  return models.map((model) => `${model.modelType}/${model.model}`);
 }
 
 function DialogStatus({
@@ -259,7 +267,10 @@ export function DeleteSubsetRunsDialog({
               <div className="grid gap-3 rounded-[12px] border border-line-soft bg-black/20 p-3 sm:grid-cols-2">
                 <AffectedValueGroup label="Experiments" values={plan.affected.experiments} />
                 <AffectedValueGroup label="Datasets" values={plan.affected.datasets} />
-                <AffectedValueGroup label="Models" values={plan.affected.models} />
+                <AffectedValueGroup
+                  label="Models"
+                  values={modelIdentityLabels(plan.affected.models)}
+                />
                 <AffectedValueGroup label="Presets" values={plan.affected.presets} />
               </div>
             </div>

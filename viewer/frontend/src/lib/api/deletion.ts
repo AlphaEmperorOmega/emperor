@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
+import { modelIdentitySchema, type ModelIdentity } from "@/lib/api/models";
 
 export const logExperimentDeleteSchema = z.object({
   experiment: z.string(),
@@ -12,6 +13,7 @@ export const logExperimentDeleteSchema = z.object({
 export const logRunDeleteCandidateSchema = z.object({
   id: z.string(),
   experiment: z.string(),
+  modelType: z.string(),
   model: z.string(),
   preset: z.string(),
   dataset: z.string(),
@@ -23,7 +25,7 @@ export const logRunDeleteCandidateSchema = z.object({
 export const logRunDeleteAffectedValuesSchema = z.object({
   experiments: z.array(z.string()),
   datasets: z.array(z.string()),
-  models: z.array(z.string()),
+  models: z.array(modelIdentitySchema),
   presets: z.array(z.string()),
   runIds: z.array(z.string()),
 });
@@ -69,7 +71,7 @@ export type LogRunDeleteResponse = z.infer<typeof logRunDeleteSchema>;
 export type LogRunDeleteFilters = {
   experiments: string[];
   datasets: string[];
-  models: string[];
+  models: ModelIdentity[];
   presets: string[];
   runIds: string[];
 };

@@ -43,10 +43,10 @@ describe("ViewerApp Overview", () => {
       name: /model options/i,
     });
     expect(model).toHaveAttribute("aria-expanded", "true");
-    expect(within(modelOptions).getByRole("option", { name: "linear" }))
-      .toBeInTheDocument();
-    expect(within(modelOptions).getByRole("option", { name: "bert_linear" }))
-      .toBeInTheDocument();
+	    expect(within(modelOptions).getByRole("option", { name: "linear" }))
+	      .toBeInTheDocument();
+	    expect(within(modelOptions).queryByRole("option", { name: "bert_linear" }))
+	      .not.toBeInTheDocument();
 
     await user.keyboard("{Escape}");
 
@@ -161,6 +161,7 @@ describe("ViewerApp Overview", () => {
 
     expect(await screen.findByText("main_model.0")).toBeInTheDocument();
     expect(inspectBodies[0]).toEqual({
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       dataset: "Mnist",
@@ -216,10 +217,12 @@ describe("ViewerApp Overview", () => {
   it("shows only current-model snapshots in the target snapshot selector", async () => {
     installFetchMock({
       configSnapshotsResponse: {
+        modelType: "linears",
         model: "linear",
         snapshots: [
           {
             id: "linear-wide",
+            modelType: "linears",
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
@@ -229,6 +232,7 @@ describe("ViewerApp Overview", () => {
           },
           {
             id: "bert-wide",
+            modelType: "transformer_encoder",
             model: "bert_linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
@@ -269,10 +273,12 @@ describe("ViewerApp Overview", () => {
     let inspectBodies: unknown[] = [];
     ({ inspectBodies } = installFetchMock({
       configSnapshotsResponse: {
+        modelType: "linears",
         model: "linear",
         snapshots: [
           {
             id: "linear-wide",
+            modelType: "linears",
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
@@ -282,6 +288,7 @@ describe("ViewerApp Overview", () => {
           },
           {
             id: "linear-recurrent",
+            modelType: "linears",
             model: "linear",
             preset: "recurrent-gating-halting",
             name: "Recurrent snapshot",
@@ -315,6 +322,7 @@ describe("ViewerApp Overview", () => {
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
         model: "linear",
         preset: "recurrent-gating-halting",
         dataset: "Mnist",
@@ -332,10 +340,12 @@ describe("ViewerApp Overview", () => {
   it("restores the selected model and snapshot target after a refresh", async () => {
     const { inspectBodies } = installFetchMock({
       configSnapshotsResponse: {
+        modelType: "linears",
         model: "linear",
         snapshots: [
           {
             id: "linear-wide",
+            modelType: "linears",
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
@@ -345,6 +355,7 @@ describe("ViewerApp Overview", () => {
           },
           {
             id: "bert-wide",
+            modelType: "transformer_encoder",
             model: "bert_linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
@@ -359,7 +370,7 @@ describe("ViewerApp Overview", () => {
     const user = userEvent.setup();
 
     await waitForTargetValue("model", "linear");
-    await selectTargetOption(user, "model", "bert_linear");
+    await selectTargetOption(user, "model type", "Transformer encoder");
     await waitForTargetValue("model", "bert_linear");
     await waitForTargetValue("preset", "bert-baseline");
     await waitFor(() =>
@@ -368,9 +379,10 @@ describe("ViewerApp Overview", () => {
     await user.click(screen.getByRole("tab", { name: "Snapshots" }));
     expect(await screen.findByRole("combobox", { name: /^snapshot$/i }))
       .toHaveTextContent("Bert snapshot");
-    await waitFor(() => {
-      expect(readPersistedTargetSelection()).toMatchObject({
-        selectedModel: "bert_linear",
+	    await waitFor(() => {
+	      expect(readPersistedTargetSelection()).toMatchObject({
+	        selectedModelType: "transformer_encoder",
+	        selectedModel: "bert_linear",
         selectedPreset: "bert-baseline",
         selectedTargetMode: "snapshot",
         selectedSnapshotId: "bert-wide",
@@ -389,6 +401,7 @@ describe("ViewerApp Overview", () => {
       .toHaveTextContent("Bert snapshot");
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
+        modelType: "transformer_encoder",
         model: "bert_linear",
         preset: "bert-baseline",
         dataset: "ToyText",
@@ -400,10 +413,12 @@ describe("ViewerApp Overview", () => {
   it("switches from a snapshot target back to Presets with empty overrides", async () => {
     const { inspectBodies } = installFetchMock({
       configSnapshotsResponse: {
+        modelType: "linears",
         model: "linear",
         snapshots: [
           {
             id: "linear-wide",
+            modelType: "linears",
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
@@ -421,6 +436,7 @@ describe("ViewerApp Overview", () => {
     await user.click(screen.getByRole("tab", { name: "Snapshots" }));
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         dataset: "Mnist",
@@ -432,6 +448,7 @@ describe("ViewerApp Overview", () => {
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         dataset: "Mnist",
@@ -447,10 +464,12 @@ describe("ViewerApp Overview", () => {
   it("refreshes snapshot options when the selected model changes", async () => {
     installFetchMock({
       configSnapshotsResponse: {
+        modelType: "linears",
         model: "linear",
         snapshots: [
           {
             id: "linear-wide",
+            modelType: "linears",
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
@@ -460,6 +479,7 @@ describe("ViewerApp Overview", () => {
           },
           {
             id: "bert-wide",
+            modelType: "transformer_encoder",
             model: "bert_linear",
             preset: "bert-baseline",
             name: "Bert snapshot",
@@ -474,7 +494,7 @@ describe("ViewerApp Overview", () => {
     const user = userEvent.setup();
 
     await waitForTargetValue("preset", "baseline");
-    await selectTargetOption(user, "model", "bert_linear");
+    await selectTargetOption(user, "model type", "Transformer encoder");
     await waitForTargetValue("model", "bert_linear");
     await waitForTargetValue("preset", "bert-baseline");
 
@@ -639,6 +659,7 @@ describe("ViewerApp Overview", () => {
             id: "bert-run",
             group: "bert_experiment",
             experiment: "bert_experiment",
+            modelType: "transformer_encoder",
             model: "bert_linear",
             preset: "BERT_BASELINE",
             dataset: "ToyText",
@@ -686,6 +707,7 @@ describe("ViewerApp Overview", () => {
     );
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         dataset: "Cifar10",
@@ -729,6 +751,7 @@ describe("ViewerApp Overview", () => {
             id: "bert-run",
             experiment: "exp_bert",
             group: "exp_bert",
+            modelType: "transformer_encoder",
             model: "bert_linear",
             preset: "BERT_BASELINE",
             dataset: "ToyText",
@@ -767,14 +790,11 @@ describe("ViewerApp Overview", () => {
       ),
     );
 
-    const modelControl = screen.getByRole("combobox", { name: /^model$/i });
-    await user.click(modelControl);
-    await user.click(
-      within(await screen.findByRole("listbox", { name: /^model options$/i }))
-        .getByRole("option", { name: "bert_linear" }),
+    await selectTargetOption(user, "model type", "Transformer encoder");
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: /^model$/i }))
+        .toHaveTextContent("bert_linear"),
     );
-
-    await waitFor(() => expect(modelControl).toHaveTextContent("bert_linear"));
     const refreshedExperimentsTab = screen.getByRole("tab", { name: "Experiments" });
     await waitFor(() => expect(refreshedExperimentsTab).not.toBeDisabled());
     await user.click(refreshedExperimentsTab);
@@ -826,6 +846,7 @@ describe("ViewerApp Overview", () => {
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         dataset: "Mnist",

@@ -1,13 +1,21 @@
-import { type ConfigValue } from "@/lib/api";
+import { type ConfigValue, type ModelIdentity } from "@/lib/api";
 
 const DEFAULT_MODEL_TYPE = "models";
+type ModelLike = string | ModelIdentity;
+
+function isModelIdentity(value: ModelLike): value is ModelIdentity {
+  return typeof value === "object" && value !== null;
+}
 
 function modelTypeLabel(value: string) {
   const normalized = value.replace(/[_-]+/g, " ").trim().toLowerCase();
   return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : value;
 }
 
-export function modelTypeForId(modelId: string) {
+export function modelTypeForId(modelId: ModelLike) {
+  if (isModelIdentity(modelId)) {
+    return modelId.modelType || DEFAULT_MODEL_TYPE;
+  }
   const trimmed = modelId.trim();
   const separatorIndex = trimmed.indexOf("/");
   if (separatorIndex <= 0) {
@@ -16,7 +24,10 @@ export function modelTypeForId(modelId: string) {
   return trimmed.slice(0, separatorIndex).trim() || DEFAULT_MODEL_TYPE;
 }
 
-export function modelNameForId(modelId: string) {
+export function modelNameForId(modelId: ModelLike) {
+  if (isModelIdentity(modelId)) {
+    return modelId.model;
+  }
   const trimmed = modelId.trim();
   const separatorIndex = trimmed.indexOf("/");
   if (separatorIndex < 0 || separatorIndex === trimmed.length - 1) {
@@ -25,7 +36,18 @@ export function modelNameForId(modelId: string) {
   return trimmed.slice(separatorIndex + 1).trim() || trimmed;
 }
 
-export function modelTypeOptions(models: readonly string[]) {
+export function modelIdentityKey(identity: ModelLike) {
+  return `${modelTypeForId(identity)}/${modelNameForId(identity)}`;
+}
+
+export function modelIdentityFromLegacyId(modelId: string): ModelIdentity {
+  return {
+    modelType: modelTypeForId(modelId),
+    model: modelNameForId(modelId),
+  };
+}
+
+export function modelTypeOptions(models: readonly ModelLike[]) {
   const seen = new Set<string>();
   return models.reduce<Array<{ value: string; label: string }>>((options, model) => {
     const value = modelTypeForId(model);
@@ -37,7 +59,10 @@ export function modelTypeOptions(models: readonly string[]) {
   }, []);
 }
 
-export function modelsForType(models: readonly string[], selectedType: string) {
+export function modelsForType<T extends ModelLike>(
+  models: readonly T[],
+  selectedType: string,
+) {
   if (!selectedType) {
     return [...models];
   }

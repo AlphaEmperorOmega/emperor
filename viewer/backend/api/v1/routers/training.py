@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_training_job_service
+from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.schemas import (
     MonitorDataResponse,
     ParameterStatusResponse,
@@ -33,6 +35,15 @@ router = APIRouter(
 )
 
 
+def _model_id(model_type: str, model: str) -> str:
+    model_id = model_id_from_parts(model_type, model)
+    if model_id is None:
+        raise InspectorError(
+            f"Unknown model: --model-type {model_type} --model {model}"
+        )
+    return model_id
+
+
 @router.post(
     "/jobs",
     response_model=TrainingJobResponse,
@@ -43,8 +54,9 @@ async def create_training_job(
     request: TrainingJobCreateRequest,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingJobResponse:
+    model_id = _model_id(request.modelType, request.model)
     command = CreateTrainingJobCommand(
-        model=request.model,
+        model=model_id,
         preset=request.preset,
         presets=request.presets,
         datasets=request.datasets,
@@ -77,8 +89,9 @@ async def create_training_run_plan(
     request: TrainingRunPlanCreateRequest,
     service: Annotated[TrainingJobService, Depends(get_training_job_service)],
 ) -> TrainingRunPlanResponse:
+    model_id = _model_id(request.modelType, request.model)
     command = CreateTrainingRunPlanCommand(
-        model=request.model,
+        model=model_id,
         preset=request.preset,
         presets=request.presets,
         datasets=request.datasets,

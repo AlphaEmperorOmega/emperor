@@ -13,6 +13,7 @@ import { modelNameForId } from "@/lib/selection";
 import { errorMessage } from "@/lib/utils";
 
 type SnapshotLibraryGroup = {
+  modelType: string;
   model: string;
   preset: string;
   snapshots: ConfigSnapshotRecord[];
@@ -25,8 +26,9 @@ function overrideCountLabel(count: number) {
 function groupSnapshots(snapshots: ConfigSnapshotRecord[]) {
   const groups = new Map<string, SnapshotLibraryGroup>();
   for (const snapshot of snapshots) {
-    const key = `${snapshot.model}\u0000${snapshot.preset}`;
+    const key = `${snapshot.modelType}\u0000${snapshot.model}\u0000${snapshot.preset}`;
     const group = groups.get(key) ?? {
+      modelType: snapshot.modelType,
       model: snapshot.model,
       preset: snapshot.preset,
       snapshots: [],
@@ -77,16 +79,19 @@ export function ConfigSnapshotLibraryPanel() {
         <div className="grid gap-2">
           {groups.map((group) => (
             <div
-              key={`${group.model}\u0000${group.preset}`}
+              key={`${group.modelType}\u0000${group.model}\u0000${group.preset}`}
               className="grid gap-2 rounded-[8px] border border-line bg-white/[0.018] p-2.5"
             >
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <div className="grid min-w-0 gap-0.5">
                   <span className="truncate text-xs font-semibold text-ink">
-                    {modelNameForId(group.model)}
+                    {modelNameForId({
+                      modelType: group.modelType,
+                      model: group.model,
+                    })}
                   </span>
                   <span className="truncate font-mono text-[11px] text-ink-faint">
-                    {group.preset}
+                    {group.modelType} / {group.preset}
                   </span>
                 </div>
                 <Badge>{group.snapshots.length}</Badge>

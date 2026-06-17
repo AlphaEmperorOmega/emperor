@@ -8,6 +8,7 @@ import { type OverrideValues } from "@/lib/config";
 
 export type TrainingRunPlanRequestInput = {
   canPlan: boolean;
+  selectedModelType: string;
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
@@ -20,6 +21,7 @@ export type TrainingRunPlanRequestInput = {
 
 export function buildTrainingRunPlanRequest({
   canPlan,
+  selectedModelType,
   selectedModel,
   selectedPreset,
   selectedTrainingPresets,
@@ -33,6 +35,7 @@ export function buildTrainingRunPlanRequest({
     return null;
   }
   return {
+    modelType: selectedModelType,
     model: selectedModel,
     preset: selectedPreset,
     presets: selectedTrainingPresets,
@@ -44,6 +47,7 @@ export function buildTrainingRunPlanRequest({
 }
 
 export type TrainingJobRequestInput = {
+  selectedModelType: string;
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
@@ -57,6 +61,7 @@ export type TrainingJobRequestInput = {
 
 export function buildTrainingJobRequest({
   selectedModel,
+  selectedModelType,
   selectedPreset,
   selectedTrainingPresets,
   selectedDatasets,
@@ -73,6 +78,7 @@ export function buildTrainingJobRequest({
     ? runPlan.presets
     : selectedTrainingPresets;
   return {
+    modelType: selectedModelType,
     model: selectedModel,
     preset: runPlan.preset || selectedPreset,
     presets,

@@ -3,6 +3,7 @@ import {
   type ConfigSnapshotRecord,
   type Dataset,
   type LogRun,
+  type ModelIdentity,
   type MonitorOption,
   type Preset,
   type SearchAxis,
@@ -18,6 +19,7 @@ import {
   resolveRunPresetName,
 } from "@/lib/historical-monitor-runs";
 import {
+  modelNameForId,
   modelsForType,
   modelTypeForId,
   modelTypeOptions,
@@ -51,7 +53,7 @@ import {
   deriveTargetSelectionState,
 } from "@/features/viewer/state/target/target-selection";
 
-const EMPTY_MODEL_IDS: string[] = [];
+const EMPTY_MODEL_IDS: ModelIdentity[] = [];
 const EMPTY_PRESETS: Preset[] = [];
 const EMPTY_DATASETS: Dataset[] = [];
 const EMPTY_MONITORS: MonitorOption[] = [];
@@ -126,9 +128,7 @@ export function useTargetConfigState({
     selectedPreset: initialTargetSelection?.selectedPreset,
   });
   const [selectedModelType, setSelectedModelType] = useState(
-    initialTargetSelection?.selectedModel
-      ? modelTypeForId(initialTargetSelection.selectedModel)
-      : "",
+    initialTargetSelection?.selectedModelType ?? "",
   );
   const [selectedTargetMode, setSelectedTargetMode] = useState<TargetMode>(
     initialTargetSelection?.selectedTargetMode ?? "preset",
@@ -152,6 +152,10 @@ export function useTargetConfigState({
   const [isRestoringTargetSelection, setIsRestoringTargetSelection] =
     useState(Boolean(initialTargetSelection));
   const allowEmptyTrainingPresetDraftRef = useRef(false);
+  const selectedModelIdentity = useMemo(
+    () => ({ modelType: selectedModelType, model: selectedModel }),
+    [selectedModel, selectedModelType],
+  );
   const {
     query: configSnapshotsQuery,
     snapshots: configSnapshots,
@@ -159,7 +163,7 @@ export function useTargetConfigState({
     renameMutation: renameSnapshotMutation,
     updateMutation: updateSnapshotMutation,
     deleteMutation: deleteSnapshotMutation,
-  } = useConfigSnapshots(selectedModel);
+  } = useConfigSnapshots(selectedModelIdentity);
   const {
     query: configSnapshotLibraryQuery,
     snapshots: configSnapshotLibrary,
@@ -184,7 +188,7 @@ export function useTargetConfigState({
     monitorsQuery,
     schemaQuery,
     searchSpaceQuery,
-  } = useViewerQueries(selectedModel, selectedPreset);
+  } = useViewerQueries(selectedModelType, selectedModel, selectedPreset);
   const capabilities = capabilitiesQuery.data ?? LOCAL_DEFAULT_CAPABILITIES;
   const models = modelsQuery.data?.models ?? EMPTY_MODEL_IDS;
   const modelsLoading = modelsQuery.isLoading;
@@ -221,6 +225,7 @@ export function useTargetConfigState({
         presets,
         schemaFields: schemaQuery.data?.fields,
         configSnapshots,
+        selectedModelType,
         selectedModel,
         selectedPreset,
         selectedTrainingPresets,
@@ -232,6 +237,7 @@ export function useTargetConfigState({
       overrides,
       presets,
       schemaQuery.data?.fields,
+      selectedModelType,
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,
@@ -266,14 +272,16 @@ export function useTargetConfigState({
   }, [modelConfigSnapshots, selectedTrainingSnapshotIds]);
 
   const selectModel = useCallback(
-    (model: string) => {
+    (model: string, modelType = selectedModelType) => {
+      const nextModel = modelNameForId(model);
+      const nextModelType = model.includes("/") ? modelTypeForId(model) : modelType;
       lastRequestedPreviewTargetKeyRef.current = "";
       clearPreview();
-      setSelectedModelType(model ? modelTypeForId(model) : "");
+      setSelectedModelType(nextModel ? nextModelType : "");
       setSelectedTargetMode("preset");
       setSelectedSnapshotId("");
       setSelectedExperimentRunId("");
-      selectTargetModel(model);
+      selectTargetModel(nextModel);
       setSelectedDatasets([]);
       allowEmptyTrainingPresetDraftRef.current = false;
       setSelectedTrainingPresets([]);
@@ -287,15 +295,16 @@ export function useTargetConfigState({
       onModelSelected,
       resetGraphSelectionAndExpansion,
       selectTargetModel,
+      selectedModelType,
     ],
   );
 
   const selectModelType = useCallback(
     (modelType: string) => {
       setSelectedModelType(modelType);
-      const firstModel = modelsForType(catalogModels, modelType)[0] ?? "";
-      if (firstModel && firstModel !== selectedModel) {
-        selectModel(firstModel);
+      const firstModel = modelsForType(catalogModels, modelType)[0];
+      if (firstModel && firstModel.model !== selectedModel) {
+        selectModel(firstModel.model, firstModel.modelType);
       }
     },
     [catalogModels, selectModel, selectedModel],
@@ -306,9 +315,6 @@ export function useTargetConfigState({
   // requested -> dataset/monitor lists are pruned to what the model supports.
   useEffect(() => {
     if (catalogModels.length === 0) {
-      if (selectedModelType) {
-        setSelectedModelType("");
-      }
       return;
     }
 
@@ -326,10 +332,13 @@ export function useTargetConfigState({
     }
 
     const modelsInSelectedType = modelsForType(catalogModels, nextModelType);
-    if (!selectedModel || !modelsInSelectedType.includes(selectedModel)) {
+    if (
+      !selectedModel ||
+      !modelsInSelectedType.some((model) => model.model === selectedModel)
+    ) {
       const firstModel = modelsInSelectedType[0];
       if (firstModel) {
-        selectModel(firstModel);
+        selectModel(firstModel.model, firstModel.modelType);
       }
     }
   }, [
@@ -349,6 +358,7 @@ export function useTargetConfigState({
     if (!selectedPreset || !presetNames.includes(selectedPreset)) {
       const pendingSnapshotForModel =
         pendingConfigSnapshot &&
+        selectedModelType === pendingConfigSnapshot.modelType &&
         selectedModel === pendingConfigSnapshot.model &&
         presetNames.includes(pendingConfigSnapshot.preset);
       const nextPreset = pendingSnapshotForModel
@@ -372,6 +382,7 @@ export function useTargetConfigState({
     presetNames,
     selectedPreset,
     selectedModel,
+    selectedModelType,
     selectedSnapshotId,
     selectedTargetMode,
     setOverrides,
@@ -382,7 +393,10 @@ export function useTargetConfigState({
     if (!pendingConfigSnapshot) {
       return;
     }
-    if (selectedModel !== pendingConfigSnapshot.model) {
+    if (
+      selectedModelType !== pendingConfigSnapshot.modelType ||
+      selectedModel !== pendingConfigSnapshot.model
+    ) {
       return;
     }
     if (!presetsQuery.isSuccess || !configSnapshotsQuery.isSuccess) {
@@ -422,6 +436,7 @@ export function useTargetConfigState({
     presetsQuery.isSuccess,
     schemaQuery.isSuccess,
     selectedModel,
+    selectedModelType,
     selectedPreset,
     selectedTrainingPresets.length,
     setOverrides,
@@ -540,6 +555,7 @@ export function useTargetConfigState({
         ? "snapshot"
         : "preset";
     writePersistedTargetSelection({
+      selectedModelType,
       selectedModel,
       selectedPreset,
       selectedTargetMode: persistedTargetMode,
@@ -549,6 +565,7 @@ export function useTargetConfigState({
   }, [
     isRestoringTargetSelection,
     selectedModel,
+    selectedModelType,
     selectedPreset,
     selectedSnapshotId,
     selectedTargetMode,
@@ -564,6 +581,7 @@ export function useTargetConfigState({
     }
     if (
       pendingConfigSnapshot &&
+      selectedModelType === pendingConfigSnapshot.modelType &&
       selectedModel === pendingConfigSnapshot.model
     ) {
       return;
@@ -607,6 +625,7 @@ export function useTargetConfigState({
     lastRequestedPreviewTargetKeyRef.current = targetKey;
     resetGraphSelectionAndExpansion();
     requestPreview({
+      modelType: selectedModelType,
       model: selectedModel,
       preset: selectedPreset,
       dataset: previewDataset,
@@ -621,6 +640,7 @@ export function useTargetConfigState({
     selectedConfigSnapshot,
     selectedDatasets,
     selectedModel,
+    selectedModelType,
     selectedPreset,
     selectedSnapshotId,
     selectedExperimentRunId,
@@ -756,6 +776,7 @@ export function useTargetConfigState({
       });
       resetGraphSelectionAndExpansion();
       requestPreview({
+        modelType: selectedModelType,
         model: selectedModel,
         preset,
         dataset,
@@ -771,6 +792,7 @@ export function useTargetConfigState({
       selectedDatasets,
       selectedExperimentRunId,
       selectedModel,
+      selectedModelType,
       selectedPreset,
       selectedSnapshotId,
       selectedTargetMode,
@@ -788,6 +810,7 @@ export function useTargetConfigState({
       const result = createConfigSnapshot({
         id: createSnapshotId(),
         name,
+        modelType: selectedModelType,
         model: selectedModel,
         preset: selectedPreset,
         fields: configFields,
@@ -797,6 +820,7 @@ export function useTargetConfigState({
       });
       if (result.ok) {
         createSnapshotRecord({
+          modelType: selectedModelType,
           model: selectedModel,
           preset: selectedPreset,
           name: result.snapshot.name,
@@ -811,6 +835,7 @@ export function useTargetConfigState({
       createSnapshotRecord,
       overrides,
       selectedModel,
+      selectedModelType,
       selectedPreset,
     ],
   );
@@ -834,6 +859,7 @@ export function useTargetConfigState({
         return;
       }
       const validation = validateConfigSnapshotName({
+        modelType: snapshot.modelType,
         model: snapshot.model,
         preset: snapshot.preset,
         name,
@@ -857,6 +883,7 @@ export function useTargetConfigState({
         return { ok: false, error: "Select a snapshot first." };
       }
       const nameValidation = validateConfigSnapshotName({
+        modelType: selectedConfigSnapshot.modelType,
         model: selectedConfigSnapshot.model,
         preset: selectedConfigSnapshot.preset,
         name,
@@ -867,6 +894,7 @@ export function useTargetConfigState({
         return nameValidation;
       }
       const validation = validateConfigSnapshotCandidate({
+        modelType: selectedConfigSnapshot.modelType,
         model: selectedConfigSnapshot.model,
         preset: selectedConfigSnapshot.preset,
         fields: configFields,
@@ -962,12 +990,21 @@ export function useTargetConfigState({
         return false;
       }
       setPendingConfigSnapshot(snapshot);
-      if (snapshot.model !== selectedModel) {
-        selectModel(snapshot.model);
+      if (
+        snapshot.modelType !== selectedModelType ||
+        snapshot.model !== selectedModel
+      ) {
+        selectModel(snapshot.model, snapshot.modelType);
       }
       return true;
     },
-    [configSnapshotLibrary, configSnapshots, selectModel, selectedModel],
+    [
+      configSnapshotLibrary,
+      configSnapshots,
+      selectModel,
+      selectedModel,
+      selectedModelType,
+    ],
   );
 
   const suppressAutomaticPreviewForPreset = useCallback(
@@ -1027,6 +1064,7 @@ export function useTargetConfigState({
       });
       resetGraphSelectionAndExpansion();
       requestPreview({
+        modelType: selectedModelType,
         model: selectedModel,
         preset,
         dataset: previewDataset,
@@ -1041,6 +1079,7 @@ export function useTargetConfigState({
       selectedDatasets,
       selectedExperimentRunId,
       selectedModel,
+      selectedModelType,
       selectedPreset,
       selectedSnapshotId,
       selectedTargetMode,
@@ -1082,6 +1121,7 @@ export function useTargetConfigState({
       });
       resetGraphSelectionAndExpansion();
       requestPreview({
+        modelType: selectedModelType,
         model: selectedModel,
         preset: snapshot.preset,
         dataset: previewDataset,
@@ -1096,6 +1136,7 @@ export function useTargetConfigState({
       resetGraphSelectionAndExpansion,
       selectedDatasets,
       selectedModel,
+      selectedModelType,
       selectedTrainingPresets.length,
       onTargetSnapshotSelected,
       setOverrides,
@@ -1134,6 +1175,7 @@ export function useTargetConfigState({
     });
     resetGraphSelectionAndExpansion();
     requestPreview({
+      modelType: selectedModelType,
       model: selectedModel,
       preset: selectedPreset,
       dataset: previewDataset,
@@ -1146,6 +1188,7 @@ export function useTargetConfigState({
     selectTrainingPrimaryPreset,
     selectedDatasets,
     selectedModel,
+    selectedModelType,
     selectedPreset,
     setOverrides,
   ]);
@@ -1387,6 +1430,7 @@ export function useTargetConfigState({
     });
     resetGraphSelectionAndExpansion();
     requestPreview({
+      modelType: selectedModelType,
       model: selectedModel,
       preset: selectedPreset,
       dataset: previewDataset,
@@ -1398,6 +1442,7 @@ export function useTargetConfigState({
     resetGraphSelectionAndExpansion,
     selectedDatasets,
     selectedModel,
+    selectedModelType,
     selectedPreset,
     selectedExperimentRunId,
     selectedSnapshotId,
@@ -1429,6 +1474,7 @@ export function useTargetConfigState({
           target: targetMode === "snapshot" ? selectedSnapshotId : selectedPreset,
         });
         requestPreview({
+          modelType: selectedModelType,
           model: selectedModel,
           preset: selectedPreset,
           dataset: previewDataset,
@@ -1442,6 +1488,7 @@ export function useTargetConfigState({
       resetGraphExpansion,
       selectedDatasets,
       selectedModel,
+      selectedModelType,
       selectedPreset,
       selectedSnapshotId,
       selectedTargetMode,

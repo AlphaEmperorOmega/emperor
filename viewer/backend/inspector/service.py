@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from models.catalog import model_identity_payload_from_id
+
 from viewer.backend.inspector.discovery import (
     ModelParts,
     load_model_parts,
@@ -147,7 +149,7 @@ def inspect_model(
     )
     nodes, edges = serialize_graph(target.model)
     return {
-        "model": model_name,
+        **model_identity_payload_from_id(model_name),
         "preset": option_cli_name(target.parts.experiment_options, target.option),
         "parameterCount": nodes[0]["parameterCount"] if nodes else 0,
         "parameterSizeBytes": nodes[0]["parameterSizeBytes"] if nodes else 0,

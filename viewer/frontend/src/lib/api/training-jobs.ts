@@ -57,6 +57,7 @@ export const trainingRunPlanSummarySchema = z.object({
 });
 
 export const trainingRunPlanSchema = z.object({
+  modelType: z.string(),
   model: z.string(),
   preset: z.string(),
   presets: z.array(z.string()),
@@ -107,6 +108,7 @@ const trainingJobStartedEventSchema = trainingProgressEventBaseSchema.extend({
 const trainingWorkerStartedEventSchema = trainingProgressEventBaseSchema.extend({
   type: z.literal("started"),
   status: z.literal("running").nullable().optional(),
+  modelType: z.string().nullable().optional(),
   model: z.string().nullable().optional(),
   presets: z.array(z.string()).nullable().optional(),
   datasets: z.array(z.string()).nullable().optional(),
@@ -223,6 +225,7 @@ export const trainingClusterGrowthSchema = z.object({
 export const trainingJobSchema = z.object({
   id: z.string(),
   status: z.string(),
+  modelType: z.string(),
   model: z.string(),
   preset: z.string(),
   presets: z.array(z.string()).optional(),
@@ -335,6 +338,7 @@ export type TrainingRunPlanSubmitSummaryInput = {
 };
 
 export type TrainingRunPlanSubmitInput = {
+  modelType: string;
   model: string;
   preset: string;
   presets: string[];
@@ -348,6 +352,7 @@ export type TrainingRunPlanSubmitInput = {
 };
 
 export type TrainingJobCreateInput = {
+  modelType: string;
   model: string;
   preset: string;
   presets?: string[];
@@ -360,6 +365,7 @@ export type TrainingJobCreateInput = {
 };
 
 export type TrainingRunPlanCreateInput = {
+  modelType: string;
   model: string;
   preset: string;
   presets?: string[];

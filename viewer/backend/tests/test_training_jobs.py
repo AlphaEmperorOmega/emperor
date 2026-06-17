@@ -113,7 +113,8 @@ class TrainingJobTests(unittest.TestCase):
                     return await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "presets": ["baseline", "gating"],
                             "datasets": ["Mnist"],
@@ -237,7 +238,8 @@ class TrainingJobTests(unittest.TestCase):
                     create_response = await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "datasets": ["Mnist"],
                             "overrides": {},
@@ -311,7 +313,8 @@ class TrainingJobTests(unittest.TestCase):
                     return await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
@@ -837,7 +840,8 @@ class TrainingJobTests(unittest.TestCase):
 
         self.assertEqual(payload["id"], job_id)
         self.assertEqual(payload["status"], "unknown")
-        self.assertEqual(payload["model"], "linears/linear")
+        self.assertEqual(payload["modelType"], "linears")
+        self.assertEqual(payload["model"], "linear")
         self.assertEqual(payload["preset"], "baseline")
         self.assertEqual(payload["presets"], ["baseline"])
         self.assertEqual(payload["datasets"], ["Mnist"])
@@ -965,7 +969,8 @@ class TrainingJobTests(unittest.TestCase):
 
         self.assertEqual(payload["id"], job_id)
         self.assertEqual(payload["status"], "unknown")
-        self.assertEqual(payload["model"], "linears/linear")
+        self.assertEqual(payload["modelType"], "linears")
+        self.assertEqual(payload["model"], "linear")
         self.assertEqual(payload["preset"], "baseline")
         self.assertEqual(payload["presets"], ["baseline"])
         self.assertEqual(payload["datasets"], ["Mnist"])

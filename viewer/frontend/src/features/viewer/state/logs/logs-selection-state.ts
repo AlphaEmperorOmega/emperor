@@ -1,5 +1,11 @@
 import { type LogRun, type LogRunDeleteFilters } from "@/lib/api";
-import { type ChecklistOption, buildCountOptions } from "@/features/viewer/state/logs/logs-selectors";
+import { modelIdentityFromLegacyId } from "@/lib/selection";
+import {
+  type ChecklistOption,
+  buildCountOptions,
+  buildModelCountOptions,
+  logRunModelKey,
+} from "@/features/viewer/state/logs/logs-selectors";
 
 type NullableSelectionSet = Set<string> | null;
 
@@ -36,6 +42,9 @@ export function buildInitialRunFacetSelection(
   runs: LogRun[],
   key: keyof Pick<LogRun, "dataset" | "model" | "preset">,
 ) {
+  if (key === "model") {
+    return new Set(buildModelCountOptions(runs).map((option) => option.value));
+  }
   return new Set(buildCountOptions(runs, key).map((option) => option.value));
 }
 
@@ -55,7 +64,7 @@ export function startedRunSelections({
     hasStartedRuns: startedRuns.length > 0,
     experiments: new Set(startedRuns.map((run) => run.experiment)),
     datasets: new Set(startedRuns.map((run) => run.dataset)),
-    models: new Set(startedRuns.map((run) => run.model)),
+    models: new Set(startedRuns.map((run) => logRunModelKey(run))),
     presets: new Set(startedRuns.map((run) => run.preset)),
     runIds: new Set(startedRuns.map((run) => run.id)),
   };
@@ -125,7 +134,7 @@ export function filterVisibleLogRuns(
     (run) =>
       selections.experiments.has(run.experiment) &&
       selections.datasets.has(run.dataset) &&
-      selections.models.has(run.model) &&
+      selections.models.has(logRunModelKey(run)) &&
       selections.presets.has(run.preset) &&
       selections.runIds.has(run.id),
   );
@@ -181,7 +190,7 @@ export function buildLogRunDeleteFilters({
   return {
     experiments: sortedSelectionValues(experiments),
     datasets: sortedSelectionValues(datasets),
-    models: sortedSelectionValues(models),
+    models: sortedSelectionValues(models).map(modelIdentityFromLegacyId),
     presets: sortedSelectionValues(presets),
     runIds: sortedSelectionValues(runIds),
   };

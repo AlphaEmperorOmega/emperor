@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
+from models.catalog import model_id_from_payload, model_identity_payload_from_id
+
 from viewer.backend.storage.local_files import read_json_object, write_json_atomic
 
 METADATA_FILENAME = "metadata.json"
@@ -129,7 +131,7 @@ class FileSystemTrainingJobStore:
 def _record_to_metadata(job: TrainingJobRecord) -> dict[str, Any]:
     return {
         "id": job.id,
-        "model": job.model,
+        **model_identity_payload_from_id(job.model),
         "preset": job.preset,
         "presets": job.presets,
         "datasets": job.datasets,
@@ -157,9 +159,12 @@ def _record_from_metadata(
     metadata_path: Path,
 ) -> TrainingJobRecord:
     root = _metadata_root(payload, metadata_path)
+    model_id = model_id_from_payload(payload)
+    if model_id is None:
+        raise ValueError("Training job metadata has invalid model identity.")
     return TrainingJobRecord(
         id=str(payload["id"]),
-        model=str(payload["model"]),
+        model=model_id,
         preset=str(payload["preset"]),
         presets=[str(item) for item in payload["presets"]],
         datasets=[str(item) for item in payload["datasets"]],

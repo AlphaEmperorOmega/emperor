@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ModelIdentity } from "@/lib/api";
+import { modelIdentityKey } from "@/lib/selection";
 import {
   useCompareTargetState,
 } from "@/features/viewer/providers/viewer-providers";
@@ -17,7 +19,15 @@ import {
 } from "./derive";
 import { useCompareEntryData } from "./use-compare-entry-data";
 
-const emptyModels: string[] = [];
+const emptyModels: ModelIdentity[] = [];
+
+function sameIdentity(left: ModelIdentity, right: ModelIdentity) {
+  return left.modelType === right.modelType && left.model === right.model;
+}
+
+function entryKey(entry: Pick<CompareEntry, "modelType" | "model">) {
+  return modelIdentityKey({ modelType: entry.modelType, model: entry.model });
+}
 
 export type CompareWorkspaceState = {
   catalog: {
@@ -60,11 +70,18 @@ export function useCompareWorkspaceState({
     if (entries.length > 0 || models.length === 0) {
       return;
     }
+    const targetIdentity = {
+      modelType: target.selectedModelType,
+      model: target.selectedModel,
+    };
     const primaryModel =
-      target.selectedModel && models.includes(target.selectedModel)
-        ? target.selectedModel
+      target.selectedModel &&
+      models.find((model) => sameIdentity(model, targetIdentity))
+        ? targetIdentity
         : models[0];
-    const secondaryModel = models.find((model) => model !== primaryModel) ?? models[1];
+    const primaryKey = modelIdentityKey(primaryModel);
+    const secondaryModel =
+      models.find((model) => modelIdentityKey(model) !== primaryKey) ?? models[1];
     const nextEntries = [
       createCompareEntry(allocateId(), primaryModel, target.selectedPreset),
     ];
@@ -77,6 +94,7 @@ export function useCompareWorkspaceState({
     entries.length,
     models,
     target.selectedModel,
+    target.selectedModelType,
     target.selectedPreset,
   ]);
 
@@ -117,7 +135,10 @@ export function useCompareWorkspaceState({
         return current;
       }
       const nextModel =
-        models.find((model) => !current.some((entry) => entry.model === model)) ??
+        models.find(
+          (model) =>
+            !current.some((entry) => entryKey(entry) === modelIdentityKey(model)),
+        ) ??
         models[0];
       return [...current, createCompareEntry(allocateId(), nextModel, "")];
     });
@@ -136,7 +157,7 @@ export function useCompareWorkspaceState({
       if (!entry.model || !entry.preset) {
         return;
       }
-      target.selectModel(entry.model);
+      target.selectModel(entry.model, entry.modelType);
       target.selectPreset(entry.preset);
       onUseTarget();
     },

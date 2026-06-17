@@ -32,12 +32,14 @@ function trainingCommandValue(field: ConfigField, value: string) {
 }
 
 export function buildTrainingCommand({
+  modelType,
   model,
   preset,
   presets,
   sections,
   overrides,
 }: {
+  modelType: string;
   model: string;
   preset: string;
   presets?: string[];
@@ -48,7 +50,14 @@ export function buildTrainingCommand({
     preset,
     ...(presets ?? []).filter((candidate) => candidate !== preset),
   ].filter((candidate, index, all) => candidate && all.indexOf(candidate) === index);
-  const parts = ["source", "experiment.sh", shellQuote(model)];
+  const parts = [
+    "source",
+    "experiment.sh",
+    "--model-type",
+    shellQuote(modelType),
+    "--model",
+    shellQuote(model),
+  ];
   if (selectedPresets.length > 1) {
     parts.push("--presets", ...selectedPresets.map(shellQuote));
   } else {

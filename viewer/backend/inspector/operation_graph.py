@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any
 
 import torch
+from models.catalog import model_identity_payload_from_id
 from torch import Tensor
 from torch.nn import Module
 
@@ -97,7 +98,7 @@ def inspect_operation_graph(
             [f"Failed to serialize torch.export graph: {_exception_message(exc)}"],
         )
     return {
-        "model": model_name,
+        **model_identity_payload_from_id(model_name),
         "preset": preset,
         "source": OPERATION_GRAPH_SOURCE,
         "status": "ok",
@@ -543,7 +544,7 @@ def _unsupported_response(
     warnings: list[str],
 ) -> dict[str, Any]:
     return {
-        "model": model_name,
+        **model_identity_payload_from_id(model_name),
         "preset": preset,
         "source": OPERATION_GRAPH_SOURCE,
         "status": "unsupported",

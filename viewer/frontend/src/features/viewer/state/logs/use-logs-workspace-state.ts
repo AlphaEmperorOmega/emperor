@@ -24,6 +24,7 @@ import {
   COMMON_SCALAR_TAGS,
   buildCountOptions,
   buildExperimentOptions,
+  buildModelCountOptions,
   isDefaultScalarTag,
   type LogMetricGroupKey,
   runOption,
@@ -80,6 +81,7 @@ function toggleSetValueWithFallback(
 export type LogsScopeMode = "target" | "custom";
 
 export type LogsTargetScope = {
+  modelType: string;
   model: string;
   preset: string;
   datasets: string[];
@@ -105,11 +107,17 @@ export function useLogsWorkspaceState({
   const targetScopeKey = useMemo(
     () =>
       JSON.stringify({
+        modelType: targetScope.modelType,
         model: targetScope.model,
         preset: targetScope.preset,
         datasets: [...targetScope.datasets].sort(),
       }),
-    [targetScope.datasets, targetScope.model, targetScope.preset],
+    [
+      targetScope.datasets,
+      targetScope.model,
+      targetScope.modelType,
+      targetScope.preset,
+    ],
   );
   const [appliedTargetScopeKey, setAppliedTargetScopeKey] =
     useState(targetScopeKey);
@@ -126,19 +134,28 @@ export function useLogsWorkspaceState({
   >(new Set(DEFAULT_COLLAPSED_METRIC_GROUPS));
 
   const hasTargetScope = Boolean(
-    targetScope.model && targetScope.preset && targetScope.datasets.length > 0,
+    targetScope.modelType &&
+      targetScope.model &&
+      targetScope.preset &&
+      targetScope.datasets.length > 0,
   );
   const targetRunFilters = useMemo(
     () =>
       hasTargetScope
         ? {
-            model: [targetScope.model],
+            models: [{ modelType: targetScope.modelType, model: targetScope.model }],
             preset: [targetScope.preset],
             dataset: targetScope.datasets,
             hasEventFiles: true,
           }
         : { hasEventFiles: true },
-    [hasTargetScope, targetScope.datasets, targetScope.model, targetScope.preset],
+    [
+      hasTargetScope,
+      targetScope.datasets,
+      targetScope.model,
+      targetScope.modelType,
+      targetScope.preset,
+    ],
   );
   const isTargetScopeMode = scopeMode === "target";
   const runsQuery = useLogRunsQuery({
@@ -253,7 +270,7 @@ export function useLogsWorkspaceState({
     [experimentRuns],
   );
   const modelOptions = useMemo(
-    () => buildCountOptions(experimentRuns, "model"),
+    () => buildModelCountOptions(experimentRuns),
     [experimentRuns],
   );
   const presetOptions = useMemo(

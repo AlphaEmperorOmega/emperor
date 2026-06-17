@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
 import { mapWithConcurrency } from "@/lib/api/concurrency";
+import { type ModelIdentity } from "@/lib/api/models";
 import { jsonObjectSchema } from "@/lib/api/schemas";
 
 type ApiRequestOptions = {
@@ -15,6 +16,7 @@ function experimentFromRelativePath(relativePath: string) {
 const logRunFields = {
   id: z.string(),
   group: z.string().nullable(),
+  modelType: z.string(),
   model: z.string(),
   preset: z.string(),
   dataset: z.string(),
@@ -283,7 +285,7 @@ async function fetchPaginated<TPage extends PaginatedPage, TItem>({
 
 export type FetchLogRunsFilters = {
   experiment?: readonly string[];
-  model?: readonly string[];
+  models?: readonly ModelIdentity[];
   preset?: readonly string[];
   dataset?: readonly string[];
   hasEventFiles?: boolean;
@@ -306,7 +308,8 @@ export async function fetchLogRuns(
     params: filters
       ? {
           experiment: filters.experiment,
-          model: filters.model,
+          modelType: filters.models?.map((model) => model.modelType),
+          model: filters.models?.map((model) => model.model),
           preset: filters.preset,
           dataset: filters.dataset,
           hasEventFiles: filters.hasEventFiles,

@@ -293,13 +293,15 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
         self.assertEqual(
             plan["runs"][0]["command"],
-            "source experiment.sh linears/linear --preset baseline --datasets Mnist "
+            "source experiment.sh --model-type linears --model linear "
+            "--preset baseline --datasets Mnist "
             "--logdir grid_plan --config --hidden-dim 64 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
         self.assertEqual(
             plan["runs"][-1]["command"],
-            "source experiment.sh linears/linear --preset gating --datasets Cifar10 "
+            "source experiment.sh --model-type linears --model linear "
+            "--preset gating --datasets Cifar10 "
             "--logdir grid_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation GELU",
         )
@@ -566,13 +568,15 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
         self.assertEqual(
             plan["runs"][0]["command"],
-            "source experiment.sh linears/linear --preset baseline --datasets Mnist "
+            "source experiment.sh --model-type linears --model linear "
+            "--preset baseline --datasets Mnist "
             "--logdir random_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
         self.assertEqual(
             plan["runs"][-1]["command"],
-            "source experiment.sh linears/linear --preset gating --datasets Cifar10 "
+            "source experiment.sh --model-type linears --model linear "
+            "--preset gating --datasets Cifar10 "
             "--logdir random_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
@@ -644,10 +648,12 @@ class TrainingRunPlanTests(unittest.TestCase):
         self.assertEqual(
             [run["command"] for run in normalized_plan["runs"]],
             [
-                "source experiment.sh linears/linear --preset baseline "
+                "source experiment.sh --model-type linears --model linear "
+                "--preset baseline "
                 "--datasets Mnist "
                 "--logdir submitted_plan --config --hidden-dim 128",
-                "source experiment.sh linears/linear --preset gating --datasets Mnist "
+                "source experiment.sh --model-type linears --model linear "
+                "--preset gating --datasets Mnist "
                 "--logdir submitted_plan --config --hidden-dim 128",
             ],
         )

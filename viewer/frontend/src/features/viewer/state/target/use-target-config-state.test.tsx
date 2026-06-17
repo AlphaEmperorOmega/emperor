@@ -84,7 +84,8 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     id: overrides.id,
     group: overrides.group ?? overrides.experiment ?? "exp_linear",
     experiment: overrides.experiment ?? "exp_linear",
-    model: overrides.model ?? "linears/linear",
+    modelType: overrides.modelType ?? "linears",
+    model: overrides.model ?? "linear",
     preset: overrides.preset ?? "fast",
     dataset: overrides.dataset ?? "FashionMnist",
     runName: overrides.runName ?? `${overrides.id}_20260601_010203`,
@@ -122,16 +123,20 @@ beforeEach(() => {
   mocks.resetGraphSelectionAndExpansion.mockReset();
   mocks.resetGraphExpansion.mockReset();
   mocks.useViewerQueries.mockReset().mockImplementation(
-    (selectedModel: string, selectedPreset: string) => {
+    (
+      selectedModelType: string,
+      selectedModel: string,
+      selectedPreset: string,
+    ) => {
       const presets =
-        selectedModel === "experts/experts_linear"
+        selectedModelType === "experts" && selectedModel === "experts_linear"
           ? [{ name: "expert-baseline", label: "Expert baseline", description: "" }]
           : [
               { name: "baseline", label: "Baseline", description: "" },
               { name: "fast", label: "Fast", description: "" },
             ];
       const datasets =
-        selectedModel === "experts/experts_linear"
+        selectedModelType === "experts" && selectedModel === "experts_linear"
           ? [{ name: "ExpertToy", label: "Expert Toy", inputDim: 64, outputDim: 4 }]
           : [
               { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
@@ -147,26 +152,45 @@ beforeEach(() => {
         healthQuery: query({ status: "ok" }),
         capabilitiesQuery: query(capabilities),
         modelsQuery: query({
-          models: ["linears/linear", "experts/experts_linear"],
+          models: [
+            { modelType: "linears", model: "linear" },
+            { modelType: "experts", model: "experts_linear" },
+          ],
         }),
         presetsQuery: query({
+          modelType: selectedModelType,
           model: selectedModel,
           presets: selectedModel ? presets : [],
         }),
         datasetsQuery: query({
+          modelType: selectedModelType,
           model: selectedModel,
           datasets: selectedModel ? datasets : [],
         }),
-        monitorsQuery: query({ model: selectedModel, monitors: [] }),
-        schemaQuery: query({ model: selectedModel, preset: selectedPreset, fields: [] }),
-        searchSpaceQuery: query({ model: selectedModel, preset: selectedPreset, axes: [] }),
+        monitorsQuery: query({
+          modelType: selectedModelType,
+          model: selectedModel,
+          monitors: [],
+        }),
+        schemaQuery: query({
+          modelType: selectedModelType,
+          model: selectedModel,
+          preset: selectedPreset,
+          fields: [],
+        }),
+        searchSpaceQuery: query({
+          modelType: selectedModelType,
+          model: selectedModel,
+          preset: selectedPreset,
+          axes: [],
+        }),
       };
     },
   );
   mocks.useConfigSnapshots.mockReset().mockImplementation(() => ({
     query: configSnapshotsLoading
-      ? loadingQuery({ model: "linears/linear", snapshots })
-      : query({ model: "linears/linear", snapshots }),
+      ? loadingQuery({ modelType: "linears", model: "linear", snapshots })
+      : query({ modelType: "linears", model: "linear", snapshots }),
     snapshots,
     createMutation: { mutate: vi.fn() },
     renameMutation: { mutate: vi.fn() },
@@ -184,13 +208,15 @@ describe("useTargetConfigState", () => {
     const { result } = renderTargetState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedModelType).toBe("linears");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("baseline");
       expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
     });
 
     expect(mocks.requestPreview).toHaveBeenCalledWith({
-      model: "linears/linear",
+      modelType: "linears",
+      model: "linear",
       preset: "baseline",
       dataset: "Mnist",
       overrides: {},
@@ -201,7 +227,8 @@ describe("useTargetConfigState", () => {
     const { result } = renderTargetState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedModelType).toBe("linears");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("baseline");
       expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
     });
@@ -218,7 +245,8 @@ describe("useTargetConfigState", () => {
     });
     await waitFor(() => {
       expect(mocks.requestPreview).toHaveBeenCalledWith({
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "baseline",
         dataset: "FashionMnist",
         overrides: {},
@@ -250,7 +278,8 @@ describe("useTargetConfigState", () => {
     expect(result.current.target.overrides).toEqual({});
     expect(mocks.resetGraphSelectionAndExpansion).toHaveBeenCalled();
     expect(mocks.requestPreview).toHaveBeenLastCalledWith({
-      model: "linears/linear",
+      modelType: "linears",
+      model: "linear",
       preset: "fast",
       dataset: "FashionMnist",
       overrides: {},
@@ -261,7 +290,8 @@ describe("useTargetConfigState", () => {
     const { result } = renderTargetState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedModelType).toBe("linears");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("baseline");
       expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
     });
@@ -284,7 +314,8 @@ describe("useTargetConfigState", () => {
       {
         id: "snapshot-fast",
         name: "Fast tuned",
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "fast",
         overrides: { hidden_size: "256" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -312,7 +343,8 @@ describe("useTargetConfigState", () => {
       {
         id: "snapshot-fast",
         name: "Fast tuned",
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "fast",
         overrides: { hidden_size: "256" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -341,7 +373,8 @@ describe("useTargetConfigState", () => {
       {
         id: "snapshot-fast",
         name: "Fast tuned",
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "fast",
         overrides: { hidden_size: "256" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -373,7 +406,8 @@ describe("useTargetConfigState", () => {
       {
         id: "snapshot-baseline",
         name: "Baseline tuned",
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "baseline",
         overrides: { hidden_size: "256" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -424,7 +458,8 @@ describe("useTargetConfigState", () => {
   it("keeps restored snapshot targets snapshot-only while snapshots load", async () => {
     configSnapshotsLoading = true;
     writePersistedTargetSelection({
-      selectedModel: "linears/linear",
+      selectedModelType: "linears",
+      selectedModel: "linear",
       selectedPreset: "fast",
       selectedTargetMode: "snapshot",
       selectedSnapshotId: "snapshot-fast",
@@ -433,7 +468,8 @@ describe("useTargetConfigState", () => {
     const { result, rerender } = renderTargetState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedModelType).toBe("linears");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("fast");
     });
     expect(result.current.target.selectedTrainingPresets).toEqual([]);
@@ -442,7 +478,8 @@ describe("useTargetConfigState", () => {
       {
         id: "snapshot-fast",
         name: "Fast tuned",
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "fast",
         overrides: { hidden_size: "256" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -468,7 +505,8 @@ describe("useTargetConfigState", () => {
       {
         id: "snapshot-baseline",
         name: "Baseline tuned",
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "baseline",
         overrides: { hidden_size: "256" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -497,7 +535,8 @@ describe("useTargetConfigState", () => {
       {
         id: "snapshot-1",
         name: "Wide",
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "fast",
         overrides: { hidden_size: "256" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -507,7 +546,8 @@ describe("useTargetConfigState", () => {
     const { result } = renderTargetState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedModelType).toBe("linears");
+      expect(result.current.target.selectedModel).toBe("linear");
     });
 
     expect(result.current.target.allConfigSnapshotCount).toBe(1);
@@ -532,7 +572,8 @@ describe("useTargetConfigState", () => {
       {
         id: "expert-snapshot",
         name: "Expert tuned",
-        model: "experts/experts_linear",
+        modelType: "experts",
+        model: "experts_linear",
         preset: "expert-baseline",
         overrides: { expert_width: "4" },
         createdAt: "2026-06-01T00:00:00.000Z",
@@ -542,7 +583,8 @@ describe("useTargetConfigState", () => {
     const { result } = renderTargetState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedModelType).toBe("linears");
+      expect(result.current.target.selectedModel).toBe("linear");
     });
 
     act(() => {
@@ -550,7 +592,8 @@ describe("useTargetConfigState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("experts/experts_linear");
+      expect(result.current.target.selectedModelType).toBe("experts");
+      expect(result.current.target.selectedModel).toBe("experts_linear");
       expect(result.current.target.selectedPreset).toBe("expert-baseline");
       expect(result.current.target.selectedTrainingPresets).toEqual([]);
       expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);

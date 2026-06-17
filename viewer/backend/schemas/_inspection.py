@@ -43,6 +43,7 @@ class GraphEdgeResponse(ApiResponseModel):
 
 
 class InspectRequest(ApiResponseModel):
+    modelType: str
     model: str
     preset: str
     overrides: ConfigOverrides = Field(default_factory=dict)
@@ -50,6 +51,7 @@ class InspectRequest(ApiResponseModel):
 
 
 class InspectResponse(ApiResponseModel):
+    modelType: str
     model: str
     preset: str
     parameterCount: int
@@ -82,6 +84,7 @@ class OperationGraphEdgeResponse(ApiResponseModel):
 
 
 class OperationGraphResponse(ApiResponseModel):
+    modelType: str
     model: str
     preset: str
     source: Literal["torch-export"]

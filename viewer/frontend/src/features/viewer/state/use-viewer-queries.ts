@@ -43,7 +43,17 @@ export function useCapabilitiesQuery() {
   });
 }
 
-export function useViewerQueries(selectedModel: string, selectedPreset: string) {
+export function useViewerQueries(
+  selectedModelType: string,
+  selectedModel: string,
+  selectedPreset: string,
+) {
+  const selectedIdentity = {
+    modelType: selectedModelType,
+    model: selectedModel,
+  };
+  const hasSelectedModel =
+    selectedModelType.length > 0 && selectedModel.length > 0;
   const healthQuery = useQuery({
     queryKey: viewerQueryKeys.health(),
     queryFn: fetchHealth,
@@ -60,41 +70,49 @@ export function useViewerQueries(selectedModel: string, selectedPreset: string) 
   });
 
   const presetsQuery = useQuery({
-    queryKey: viewerQueryKeys.presets(selectedModel),
-    queryFn: () => fetchPresets(selectedModel),
-    enabled: selectedModel.length > 0,
+    queryKey: viewerQueryKeys.presets(selectedModelType, selectedModel),
+    queryFn: () => fetchPresets(selectedIdentity),
+    enabled: hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const datasetsQuery = useQuery({
-    queryKey: viewerQueryKeys.datasets(selectedModel),
-    queryFn: () => fetchDatasets(selectedModel),
-    enabled: selectedModel.length > 0,
+    queryKey: viewerQueryKeys.datasets(selectedModelType, selectedModel),
+    queryFn: () => fetchDatasets(selectedIdentity),
+    enabled: hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const monitorsQuery = useQuery({
-    queryKey: viewerQueryKeys.monitors(selectedModel),
-    queryFn: () => fetchMonitors(selectedModel),
-    enabled: selectedModel.length > 0,
+    queryKey: viewerQueryKeys.monitors(selectedModelType, selectedModel),
+    queryFn: () => fetchMonitors(selectedIdentity),
+    enabled: hasSelectedModel,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const schemaQuery = useQuery({
-    queryKey: viewerQueryKeys.configSchema(selectedModel, selectedPreset),
-    queryFn: () => fetchConfigSchema(selectedModel, selectedPreset),
-    enabled: selectedModel.length > 0 && selectedPreset.length > 0,
+    queryKey: viewerQueryKeys.configSchema(
+      selectedModelType,
+      selectedModel,
+      selectedPreset,
+    ),
+    queryFn: () => fetchConfigSchema(selectedIdentity, selectedPreset),
+    enabled: hasSelectedModel && selectedPreset.length > 0,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });
 
   const searchSpaceQuery = useQuery({
-    queryKey: viewerQueryKeys.searchSpace(selectedModel, selectedPreset),
-    queryFn: () => fetchSearchSpace(selectedModel, selectedPreset),
-    enabled: selectedModel.length > 0 && selectedPreset.length > 0,
+    queryKey: viewerQueryKeys.searchSpace(
+      selectedModelType,
+      selectedModel,
+      selectedPreset,
+    ),
+    queryFn: () => fetchSearchSpace(selectedIdentity, selectedPreset),
+    enabled: hasSelectedModel && selectedPreset.length > 0,
     retry: false,
     staleTime: STATIC_METADATA_STALE_TIME_MS,
   });

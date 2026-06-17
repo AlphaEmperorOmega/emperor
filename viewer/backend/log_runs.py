@@ -12,7 +12,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from models.catalog import MODEL_CATALOG, public_id_for_flat_name
+from models.catalog import (
+    MODEL_CATALOG,
+    model_identity_payload_from_id,
+    public_id_for_flat_name,
+)
 
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.monitor_data import (
@@ -294,7 +298,7 @@ class LogRun:
             "id": self.id,
             "group": self.group,
             "experiment": self.experiment,
-            "model": self.model,
+            **model_identity_payload_from_id(self.model),
             "preset": self.preset,
             "dataset": self.dataset,
             "runName": self.runName,
@@ -428,7 +432,7 @@ class LogRunDeleteCandidate:
         return {
             "id": self.id,
             "experiment": self.experiment,
-            "model": self.model,
+            **model_identity_payload_from_id(self.model),
             "preset": self.preset,
             "dataset": self.dataset,
             "runName": self.runName,
@@ -581,11 +585,14 @@ def _delete_plan_response_fields(
 
 def _affected_values(
     candidates: list[LogRunDeleteCandidate],
-) -> dict[str, list[str]]:
+) -> dict[str, Any]:
+    model_ids = sorted({candidate.model for candidate in candidates})
     return {
         "experiments": sorted({candidate.experiment for candidate in candidates}),
         "datasets": sorted({candidate.dataset for candidate in candidates}),
-        "models": sorted({candidate.model for candidate in candidates}),
+        "models": [
+            model_identity_payload_from_id(model_id) for model_id in model_ids
+        ],
         "presets": sorted({candidate.preset for candidate in candidates}),
         "runIds": sorted({candidate.id for candidate in candidates}),
     }

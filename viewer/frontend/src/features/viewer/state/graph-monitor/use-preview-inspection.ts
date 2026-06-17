@@ -9,6 +9,7 @@ import {
 import { type OverrideValues } from "@/lib/config";
 
 export type PreviewInspectionRequest = {
+  modelType: string;
   model: string;
   preset: string;
   dataset?: string;
@@ -17,6 +18,7 @@ export type PreviewInspectionRequest = {
 
 function previewInspectionRequestKey(request: PreviewInspectionRequest) {
   return JSON.stringify({
+    modelType: request.modelType,
     model: request.model,
     preset: request.preset,
     dataset: request.dataset ?? null,
@@ -29,13 +31,17 @@ function previewInspectionRequestKey(request: PreviewInspectionRequest) {
 }
 
 function assertPreviewIdentity<
-  Response extends Pick<InspectResponse, "model" | "preset">,
+  Response extends Pick<InspectResponse, "modelType" | "model" | "preset">,
 >(request: PreviewInspectionRequest, response: Response) {
-  if (response.model === request.model && response.preset === request.preset) {
+  if (
+    response.modelType === request.modelType &&
+    response.model === request.model &&
+    response.preset === request.preset
+  ) {
     return response;
   }
   throw new Error(
-    `Inspection response identity mismatch: requested ${request.model}/${request.preset}, received ${response.model}/${response.preset}.`,
+    `Inspection response identity mismatch: requested ${request.modelType}/${request.model}/${request.preset}, received ${response.modelType}/${response.model}/${response.preset}.`,
   );
 }
 

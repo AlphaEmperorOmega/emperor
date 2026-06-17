@@ -44,6 +44,7 @@ import {
   type GraphNode,
   type InspectResponse,
   type LogRun,
+  type ModelIdentity,
   type TrainingJob,
 } from "@/lib/api";
 
@@ -107,6 +108,7 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     id: overrides.id,
     group: overrides.group ?? overrides.experiment ?? "exp_linear",
     experiment: overrides.experiment ?? "exp_linear",
+    modelType: overrides.modelType ?? "linears",
     model: overrides.model ?? "linear",
     preset: overrides.preset ?? "Fast",
     dataset: overrides.dataset ?? "FashionMnist",
@@ -149,6 +151,7 @@ function monitorGraph(): InspectResponse {
   const linear = graphNode("linear-0", "main_model.0.model", "LinearLayer");
 
   return {
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     parameterCount: 0,
@@ -162,6 +165,7 @@ function monitorGraph(): InspectResponse {
 }
 
 function linearPreviewGraph(request: {
+  modelType: string;
   model: string;
   preset: string;
 }): InspectResponse {
@@ -173,6 +177,7 @@ function linearPreviewGraph(request: {
   );
 
   return {
+    modelType: request.modelType,
     model: request.model,
     preset: request.preset,
     parameterCount: 0,
@@ -189,6 +194,7 @@ function linearPreviewGraph(request: {
 }
 
 function expertsPreviewGraph(request: {
+  modelType: string;
   model: string;
   preset: string;
 }): InspectResponse {
@@ -205,6 +211,7 @@ function expertsPreviewGraph(request: {
   );
 
   return {
+    modelType: request.modelType,
     model: request.model,
     preset: request.preset,
     parameterCount: 0,
@@ -229,6 +236,7 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
   return {
     id: overrides.id ?? "job-1",
     status: overrides.status ?? "running",
+    modelType: overrides.modelType ?? "linears",
     model: overrides.model ?? "linear",
     preset: overrides.preset ?? "baseline",
     presets: overrides.presets ?? ["baseline"],
@@ -271,6 +279,10 @@ function activeMonitorJob(job: TrainingJob) {
     currentPreset: job.currentPreset,
     currentDataset: job.currentDataset,
   };
+}
+
+function modelIdentityKey(identity: ModelIdentity) {
+  return `${identity.modelType}/${identity.model}`;
 }
 
 function mockPublicModelCatalog() {
@@ -331,30 +343,37 @@ function mockPublicModelCatalog() {
 
   mocks.fetchModels.mockResolvedValue({
     models: [
-      "linears/linear",
-      "linears/linear_adaptive",
-      "experts/experts_linear",
-      "transformer_encoder/bert_linear",
+      { modelType: "linears", model: "linear" },
+      { modelType: "linears", model: "linear_adaptive" },
+      { modelType: "experts", model: "experts_linear" },
+      { modelType: "transformer_encoder", model: "bert_linear" },
     ],
   });
-  mocks.fetchPresets.mockImplementation((model: string) =>
-    Promise.resolve({ model, presets: presetsByModel.get(model) ?? [] }),
+  mocks.fetchPresets.mockImplementation((identity: ModelIdentity) =>
+    Promise.resolve({
+      ...identity,
+      presets: presetsByModel.get(modelIdentityKey(identity)) ?? [],
+    }),
   );
-  mocks.fetchDatasets.mockImplementation((model: string) =>
-    Promise.resolve({ model, datasets: datasetsByModel.get(model) ?? [] }),
+  mocks.fetchDatasets.mockImplementation((identity: ModelIdentity) =>
+    Promise.resolve({
+      ...identity,
+      datasets: datasetsByModel.get(modelIdentityKey(identity)) ?? [],
+    }),
   );
-  mocks.fetchMonitors.mockImplementation((model: string) =>
-    Promise.resolve({ model, monitors: [] }),
+  mocks.fetchMonitors.mockImplementation((identity: ModelIdentity) =>
+    Promise.resolve({ ...identity, monitors: [] }),
   );
-  mocks.fetchConfigSchema.mockImplementation((model: string) =>
-    Promise.resolve({ model, fields: [] }),
+  mocks.fetchConfigSchema.mockImplementation((identity: ModelIdentity) =>
+    Promise.resolve({ ...identity, fields: [] }),
   );
-  mocks.fetchSearchSpace.mockImplementation((model: string, preset: string) =>
-    Promise.resolve({ model, preset, axes: [] }),
+  mocks.fetchSearchSpace.mockImplementation((identity: ModelIdentity, preset: string) =>
+    Promise.resolve({ ...identity, preset, axes: [] }),
   );
   mocks.inspectModel.mockImplementation(
-    (request: { model: string; preset: string }) =>
+    (request: { modelType: string; model: string; preset: string }) =>
       Promise.resolve({
+        modelType: request.modelType,
         model: request.model,
         preset: request.preset,
         parameterCount: 0,
@@ -364,8 +383,9 @@ function mockPublicModelCatalog() {
       }),
   );
   mocks.inspectOperationGraph.mockImplementation(
-    (request: { model: string; preset: string }) =>
+    (request: { modelType: string; model: string; preset: string }) =>
       Promise.resolve({
+        modelType: request.modelType,
         model: request.model,
         preset: request.preset,
         source: "torch-export",
@@ -393,17 +413,23 @@ beforeEach(() => {
     dataSourcesEnabled: false,
     dataSources: [],
   });
-  mocks.fetchModels.mockReset().mockResolvedValue({ models: ["linear", "bert_linear"] });
-  mocks.fetchPresets.mockReset().mockImplementation((model: string) =>
+  mocks.fetchModels.mockReset().mockResolvedValue({
+    models: [
+      { modelType: "linears", model: "linear" },
+      { modelType: "transformer_encoder", model: "bert_linear" },
+    ],
+  });
+  mocks.fetchPresets.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve(
-      model === "bert_linear"
+      identity.model === "bert_linear"
         ? {
-            model,
+            ...identity,
             presets: [
               { name: "bert-baseline", label: "BERT baseline", description: "" },
             ],
           }
         : {
+            modelType: "linears",
             model: "linear",
             presets: [
               { name: "baseline", label: "Baseline", description: "" },
@@ -412,16 +438,17 @@ beforeEach(() => {
           },
     ),
   );
-  mocks.fetchDatasets.mockReset().mockImplementation((model: string) =>
+  mocks.fetchDatasets.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve(
-      model === "bert_linear"
+      identity.model === "bert_linear"
         ? {
-            model,
+            ...identity,
             datasets: [
               { name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 },
             ],
           }
         : {
+            modelType: "linears",
             model: "linear",
             datasets: [
               { name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 },
@@ -435,28 +462,28 @@ beforeEach(() => {
           },
     ),
   );
-  mocks.fetchMonitors.mockReset().mockImplementation((model: string) =>
+  mocks.fetchMonitors.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve({
-      model,
+      ...identity,
       monitors: [],
     }),
   );
-  mocks.fetchConfigSchema.mockReset().mockImplementation((model: string) =>
+  mocks.fetchConfigSchema.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve({
-      model,
+      ...identity,
       fields: [],
     }),
   );
-  mocks.fetchSearchSpace.mockReset().mockImplementation((model: string, preset: string) =>
+  mocks.fetchSearchSpace.mockReset().mockImplementation((identity: ModelIdentity, preset: string) =>
     Promise.resolve({
-      model,
+      ...identity,
       preset,
       axes: [],
     }),
   );
-  mocks.fetchConfigSnapshots.mockReset().mockImplementation((model: string) =>
+  mocks.fetchConfigSnapshots.mockReset().mockImplementation((identity: ModelIdentity) =>
     Promise.resolve({
-      model,
+      ...identity,
       snapshots: [],
     }),
   );
@@ -472,6 +499,7 @@ beforeEach(() => {
   mocks.renameConfigSnapshot.mockReset().mockImplementation((id: string, name: string) =>
     Promise.resolve({
       id,
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       name,
@@ -490,6 +518,7 @@ beforeEach(() => {
     ) =>
       Promise.resolve({
         id,
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         name: input.name ?? "snapshot",
@@ -499,6 +528,7 @@ beforeEach(() => {
       }),
   );
   mocks.deleteConfigSnapshot.mockReset().mockResolvedValue({
+    modelType: "linears",
     model: "linear",
     snapshots: [],
   });
@@ -692,33 +722,43 @@ describe("useViewerState", () => {
     });
   });
 
-  it("auto-selects the first public model type and keeps API calls on full IDs", async () => {
+  it("auto-selects the first public model type and calls APIs with split identity", async () => {
     mockPublicModelCatalog();
 
     const { result } = renderViewerState();
 
     await waitFor(() => {
       expect(result.current.target.selectedModelType).toBe("linears");
-      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedModel).toBe("linear");
       expect(result.current.target.selectedPreset).toBe("baseline");
       expect(result.current.target.selectedDatasets).toEqual(["Mnist"]);
     });
     await waitFor(() => {
       expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
-        "linears/linear",
+        { modelType: "linears", model: "linear" },
         "baseline",
       );
     });
-    expect(mocks.fetchPresets).toHaveBeenCalledWith("linears/linear");
-    expect(mocks.fetchDatasets).toHaveBeenCalledWith("linears/linear");
-    expect(mocks.fetchMonitors).toHaveBeenCalledWith("linears/linear");
+    expect(mocks.fetchPresets).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "linear",
+    });
+    expect(mocks.fetchDatasets).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "linear",
+    });
+    expect(mocks.fetchMonitors).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "linear",
+    });
     expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
-      "linears/linear",
+      { modelType: "linears", model: "linear" },
       "baseline",
     );
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
       .toContainEqual({
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "baseline",
         dataset: "Mnist",
         overrides: {},
@@ -730,7 +770,7 @@ describe("useViewerState", () => {
     const { result } = renderViewerState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
+      expect(result.current.target.selectedModel).toBe("linear");
     });
 
     act(() => {
@@ -747,17 +787,27 @@ describe("useViewerState", () => {
 
     await waitFor(() => {
       expect(result.current.target.selectedModelType).toBe("experts");
-      expect(result.current.target.selectedModel).toBe("experts/experts_linear");
+      expect(result.current.target.selectedModel).toBe("experts_linear");
       expect(result.current.target.selectedPreset).toBe("expert-baseline");
       expect(result.current.target.selectedDatasets).toEqual(["ExpertToy"]);
       expect(result.current.target.overrides).toEqual({});
     });
-    expect(mocks.fetchPresets).toHaveBeenCalledWith("experts/experts_linear");
-    expect(mocks.fetchDatasets).toHaveBeenCalledWith("experts/experts_linear");
-    expect(mocks.fetchMonitors).toHaveBeenCalledWith("experts/experts_linear");
+    expect(mocks.fetchPresets).toHaveBeenCalledWith({
+      modelType: "experts",
+      model: "experts_linear",
+    });
+    expect(mocks.fetchDatasets).toHaveBeenCalledWith({
+      modelType: "experts",
+      model: "experts_linear",
+    });
+    expect(mocks.fetchMonitors).toHaveBeenCalledWith({
+      modelType: "experts",
+      model: "experts_linear",
+    });
     expect(mocks.inspectModel.mock.calls.map(([request]) => request))
       .toContainEqual({
-        model: "experts/experts_linear",
+        modelType: "experts",
+        model: "experts_linear",
         preset: "expert-baseline",
         dataset: "ExpertToy",
         overrides: {},
@@ -767,9 +817,9 @@ describe("useViewerState", () => {
   it("clears the experts graph and settles on the linear graph when changing model", async () => {
     mockPublicModelCatalog();
     mocks.inspectModel.mockImplementation(
-      (request: { model: string; preset: string }) =>
+      (request: { modelType: string; model: string; preset: string }) =>
         Promise.resolve(
-          request.model === "experts/experts_linear"
+          request.modelType === "experts" && request.model === "experts_linear"
             ? expertsPreviewGraph(request)
             : linearPreviewGraph(request),
         ),
@@ -777,8 +827,11 @@ describe("useViewerState", () => {
     const { result } = renderViewerState();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
-      expect(result.current.graph.graph?.model).toBe("linears/linear");
+      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.graph.graph).toMatchObject({
+        modelType: "linears",
+        model: "linear",
+      });
     });
 
     act(() => {
@@ -786,21 +839,27 @@ describe("useViewerState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("experts/experts_linear");
-      expect(result.current.graph.graph?.model).toBe("experts/experts_linear");
+      expect(result.current.target.selectedModel).toBe("experts_linear");
+      expect(result.current.graph.graph).toMatchObject({
+        modelType: "experts",
+        model: "experts_linear",
+      });
     });
     expect(result.current.graph.graph?.nodes.map((node) => node.typeName))
       .toEqual(expect.arrayContaining(["MixtureOfExperts"]));
 
     act(() => {
-      result.current.target.selectModel("linears/linear");
+      result.current.target.selectModel("linear", "linears");
     });
 
     expect(result.current.graph.graph).toBeUndefined();
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("linears/linear");
-      expect(result.current.graph.graph?.model).toBe("linears/linear");
+      expect(result.current.target.selectedModel).toBe("linear");
+      expect(result.current.graph.graph).toMatchObject({
+        modelType: "linears",
+        model: "linear",
+      });
     });
     const latestNodeTypes =
       result.current.graph.graph?.nodes.map((node) => node.typeName) ?? [];
@@ -816,7 +875,8 @@ describe("useViewerState", () => {
       runs: [
         logRun({
           id: "linears-history",
-          model: "linears/linear",
+          modelType: "linears",
+          model: "linear",
           preset: "Fast",
           dataset: "FashionMnist",
         }),
@@ -845,7 +905,7 @@ describe("useViewerState", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.target.selectedModel).toBe("experts/experts_linear");
+      expect(result.current.target.selectedModel).toBe("experts_linear");
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.history.selectedHistoricalPreset).toBe("");
       expect(result.current.target.selectedTargetMode).toBe("preset");
@@ -863,7 +923,7 @@ describe("useViewerState", () => {
     });
 
     act(() => {
-      result.current.target.selectModel("bert_linear");
+      result.current.target.selectModel("bert_linear", "transformer_encoder");
     });
 
     await waitFor(() => {
@@ -873,6 +933,7 @@ describe("useViewerState", () => {
       expect(result.current.target.selectedDatasets).toEqual(["ToyText"]);
     });
     expect(mocks.inspectModel.mock.calls.map(([request]) => request)).toContainEqual({
+      modelType: "transformer_encoder",
       model: "bert_linear",
       preset: "bert-baseline",
       dataset: "ToyText",
@@ -900,7 +961,7 @@ describe("useViewerState", () => {
     });
 
     act(() => {
-      result.current.target.selectModel("bert_linear");
+      result.current.target.selectModel("bert_linear", "transformer_encoder");
     });
 
     await waitFor(() => {
@@ -911,7 +972,12 @@ describe("useViewerState", () => {
   });
 
   it("does not auto-select a run, then syncs target config once when one is picked", async () => {
-    mocks.fetchModels.mockResolvedValueOnce({ models: ["bert_linear", "linear"] });
+    mocks.fetchModels.mockResolvedValueOnce({
+      models: [
+        { modelType: "transformer_encoder", model: "bert_linear" },
+        { modelType: "linears", model: "linear" },
+      ],
+    });
     mocks.fetchLogRuns.mockResolvedValueOnce({
       runs: [
         logRun({
@@ -931,7 +997,7 @@ describe("useViewerState", () => {
     });
 
     act(() => {
-      result.current.target.selectModel("linear");
+      result.current.target.selectModel("linear", "linears");
     });
 
     // The run becomes visible but nothing is auto-selected.
@@ -959,8 +1025,9 @@ describe("useViewerState", () => {
     });
 
     const finalHistoricalRequests = mocks.inspectModel.mock.calls.filter(
-      ([request]) =>
-        request.model === "linear" &&
+	      ([request]) =>
+	        request.modelType === "linears" &&
+	        request.model === "linear" &&
         request.preset === "fast" &&
         request.dataset === "FashionMnist",
     );
@@ -1013,8 +1080,9 @@ describe("useViewerState", () => {
       expect(result.current.target.selectedSnapshotId).toBe("");
       expect(result.current.target.overrides).toEqual({});
     });
-    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
-      model: "linear",
+	    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
+	      modelType: "linears",
+	      model: "linear",
       preset: "baseline",
       dataset: "FashionMnist",
       overrides: {},
@@ -1023,10 +1091,12 @@ describe("useViewerState", () => {
 
   it("switches from an experiment target to a snapshot target with saved overrides", async () => {
     mocks.fetchConfigSnapshots.mockResolvedValue({
+      modelType: "linears",
       model: "linear",
       snapshots: [
         {
           id: "snapshot-wide",
+          modelType: "linears",
           model: "linear",
           preset: "baseline",
           name: "Wide",
@@ -1074,8 +1144,9 @@ describe("useViewerState", () => {
       expect(result.current.history.selectedLogRunId).toBeNull();
       expect(result.current.target.overrides).toEqual({ hidden_size: "256" });
     });
-    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
-      model: "linear",
+	    expect(mocks.inspectModel.mock.calls.at(-1)?.[0]).toEqual({
+	      modelType: "linears",
+	      model: "linear",
       preset: "baseline",
       dataset: "FashionMnist",
       overrides: { hidden_size: "256" },
@@ -1084,10 +1155,12 @@ describe("useViewerState", () => {
 
   it("updates the selected config snapshot without detaching snapshot mode", async () => {
     mocks.fetchConfigSnapshots.mockResolvedValue({
+      modelType: "linears",
       model: "linear",
       snapshots: [
         {
           id: "snapshot-wide",
+          modelType: "linears",
           model: "linear",
           preset: "baseline",
           name: "Wide",
@@ -1098,6 +1171,7 @@ describe("useViewerState", () => {
       ],
     });
     mocks.fetchConfigSchema.mockResolvedValue({
+      modelType: "linears",
       model: "linear",
       fields: [
         {
@@ -1307,6 +1381,7 @@ describe("useViewerState", () => {
   });
 
   it("switches the sidebar model dropdown without an update loop", async () => {
+    mockPublicModelCatalog();
     renderTargetPresetPanel();
     const user = userEvent.setup();
 
@@ -1315,12 +1390,12 @@ describe("useViewerState", () => {
 
     await user.click(modelControl);
     const listbox = await screen.findByRole("listbox", { name: /^model options$/i });
-    await user.click(within(listbox).getByRole("option", { name: "bert_linear" }));
+    await user.click(within(listbox).getByRole("option", { name: "linear_adaptive" }));
 
     await waitFor(() => {
-      expect(modelControl).toHaveTextContent("bert_linear");
+      expect(modelControl).toHaveTextContent("linear_adaptive");
       expect(screen.getByRole("combobox", { name: /^preset$/i }))
-        .toHaveTextContent("bert-baseline");
+        .toHaveTextContent("adaptive");
     });
   });
 
@@ -1396,10 +1471,12 @@ describe("useViewerState", () => {
 
   it("renders edit and duplicate actions under the active snapshot selector", async () => {
     mocks.fetchConfigSnapshots.mockResolvedValue({
+      modelType: "linears",
       model: "linear",
       snapshots: [
         {
           id: "snapshot-wide",
+          modelType: "linears",
           model: "linear",
           preset: "baseline",
           name: "Wide",
@@ -1461,6 +1538,7 @@ describe("useViewerState", () => {
   });
 
   it("switches the training model dropdown without an update loop", async () => {
+    mockPublicModelCatalog();
     renderTrainingPanel();
     const user = userEvent.setup();
 
@@ -1477,15 +1555,15 @@ describe("useViewerState", () => {
     const listbox = await within(panel).findByRole("listbox", {
       name: /^training model options$/i,
     });
-    await user.click(within(listbox).getByRole("option", { name: "bert_linear" }));
+    await user.click(within(listbox).getByRole("option", { name: "linear_adaptive" }));
 
     await waitFor(() => {
-      expect(modelControl).toHaveTextContent("bert_linear");
+      expect(modelControl).toHaveTextContent("linear_adaptive");
       expect(
         within(panel).getByRole("combobox", {
           name: /^presets\s+1\s*\/\s*1 selected$/i,
         }),
-      ).toHaveTextContent("bert-baseline");
+      ).toHaveTextContent("adaptive");
     });
   });
 

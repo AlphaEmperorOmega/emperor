@@ -8,6 +8,8 @@ import {
 } from "@/features/viewer/state/target/target-selection-storage";
 export { IMPLEMENTED_FEATURES } from "@/lib/feature-catalog";
 
+type MockModelIdentity = { modelType: string; model: string };
+
 export type MockNodeData = {
   nodeId: string;
   label: string;
@@ -94,6 +96,7 @@ function isOperationNodeData(
 
 export type MockConfigSnapshot = {
   id: string;
+  modelType: string;
   model: string;
   preset: string;
   name: string;
@@ -618,9 +621,17 @@ vi.mock("@xyflow/react", () => ({
   Position: { Left: "left", Right: "right" },
 }));
 
-export const modelsResponse = { models: ["linear", "bert_linear"] };
-export const neuronModelsResponse = { models: ["neuron/neuron_linear"] };
+export const modelsResponse = {
+  models: [
+    { modelType: "linears", model: "linear" },
+    { modelType: "transformer_encoder", model: "bert_linear" },
+  ],
+};
+export const neuronModelsResponse = {
+  models: [{ modelType: "neuron", model: "neuron_linear" }],
+};
 export const presetsResponse = {
+  modelType: "linears",
   model: "linear",
   presets: [
     { name: "baseline", label: "BASELINE", description: "Baseline" },
@@ -632,14 +643,17 @@ export const presetsResponse = {
   ],
 };
 export const bertPresetsResponse = {
+  modelType: "transformer_encoder",
   model: "bert_linear",
   presets: [{ name: "bert-baseline", label: "BERT_BASELINE", description: "Bert baseline" }],
 };
 export const neuronPresetsResponse = {
-  model: "neuron/neuron_linear",
+  modelType: "neuron",
+  model: "neuron_linear",
   presets: [{ name: "baseline", label: "BASELINE", description: "Baseline" }],
 };
 export const datasetsResponse = {
+  modelType: "linears",
   model: "linear",
   datasets: [
     { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
@@ -647,16 +661,19 @@ export const datasetsResponse = {
   ],
 };
 export const bertDatasetsResponse = {
+  modelType: "transformer_encoder",
   model: "bert_linear",
   datasets: [{ name: "ToyText", label: "Toy Text", inputDim: 128, outputDim: 2 }],
 };
 export const neuronDatasetsResponse = {
-  model: "neuron/neuron_linear",
+  modelType: "neuron",
+  model: "neuron_linear",
   datasets: [
     { name: "Mnist", label: "Mnist", inputDim: 784, outputDim: 10 },
   ],
 };
 export const monitorsResponse = {
+  modelType: "linears",
   model: "linear",
   monitors: [
     {
@@ -676,7 +693,8 @@ export const monitorsResponse = {
   ],
 };
 export const neuronMonitorsResponse = {
-  model: "neuron/neuron_linear",
+  modelType: "neuron",
+  model: "neuron_linear",
   monitors: [] as Array<{
     name: string;
     label: string;
@@ -698,6 +716,7 @@ export const capabilitiesResponse = {
   dataSources: [],
 };
 export const configSnapshotsResponse = {
+  modelType: "linears",
   model: "linear",
   snapshots: [] as MockConfigSnapshot[],
 };
@@ -710,6 +729,7 @@ export const logRunsResponse = {
       id: "log-mnist",
       group: "test_model",
       experiment: "test_model",
+      modelType: "linears",
       model: "linear",
       preset: "BASELINE",
       dataset: "Mnist",
@@ -727,6 +747,7 @@ export const logRunsResponse = {
       id: "log-cifar",
       group: "test_model_2",
       experiment: "test_model_2",
+      modelType: "linears",
       model: "linear",
       preset: "BASELINE",
       dataset: "Cifar10",
@@ -1129,6 +1150,7 @@ export function buildHistoricalMonitorFixture(count = 6) {
 }
 
 export const schemaResponse = {
+  modelType: "linears",
   model: "linear",
   fields: [
     {
@@ -1178,6 +1200,7 @@ export const schemaResponse = {
   ],
 };
 export const searchSpaceResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   axes: [
@@ -1220,6 +1243,7 @@ export const searchSpaceResponse = {
   ],
 };
 export const inspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   parameterCount: 65792,
@@ -1374,6 +1398,7 @@ export const inspectResponse = {
 };
 
 export const operationGraphResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   source: "torch-export",
@@ -1463,6 +1488,7 @@ export const parameterShapeInspectResponse = {
 };
 
 export const repeatedLayersInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   nodes: [
@@ -1558,6 +1584,7 @@ export const repeatedLayersInspectResponse = {
 };
 
 export const monitorScopeInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   nodes: [
@@ -1679,6 +1706,7 @@ export const monitorScopeInspectResponse = {
 };
 
 export const stackContainerInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   parameterCount: 65792,
@@ -1740,6 +1768,7 @@ export const stackContainerInspectResponse = {
 };
 
 export const manyRepeatedLayersInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   nodes: [
@@ -1785,6 +1814,7 @@ export const manyRepeatedLayersInspectResponse = {
 };
 
 export const mechanismMetadataInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   nodes: [
@@ -1821,6 +1851,7 @@ export const mechanismMetadataInspectResponse = {
 };
 
 export const mechanismChildrenInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   nodes: [
@@ -1880,6 +1911,7 @@ export const mechanismChildrenInspectResponse = {
 };
 
 export const tallSummaryInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   nodes: [
@@ -1963,6 +1995,7 @@ export const tallSummaryInspectResponse = {
 
 export const longSelectedNodeId = "model.0.model.adaptive_behaviour.mask_model.model.1";
 export const longSelectedNodeInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   nodes: [
@@ -1981,6 +2014,7 @@ export const longSelectedNodeInspectResponse = {
 };
 
 export const locationInspectResponse = {
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   parameterCount: 0,
@@ -2079,6 +2113,7 @@ export function jsonResponse(body: unknown, status = 200) {
 }
 
 export type MockTrainingPlanRequest = {
+  modelType?: string;
   model?: string;
   preset?: string;
   presets?: string[];
@@ -2122,16 +2157,20 @@ export function mockTrainingSearchCombinations(request: MockTrainingPlanRequest)
 }
 
 export function mockTrainingCommand(input: {
+  modelType: string;
   model: string;
   preset: string;
   dataset: string;
   logFolder: string;
   overrides: Record<string, unknown>;
 }) {
-  const parts = [
-    "source",
-    "experiment.sh",
-    input.model,
+	  const parts = [
+	    "source",
+	    "experiment.sh",
+	    "--model-type",
+	    input.modelType,
+	    "--model",
+	    input.model,
     "--preset",
     input.preset,
     "--datasets",
@@ -2151,6 +2190,7 @@ export function mockTrainingCommand(input: {
 }
 
 export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
+  const modelType = request.modelType ?? "linears";
   const model = request.model ?? "linear";
   const preset = request.preset ?? "baseline";
   const presets = request.presets?.length ? request.presets : [preset];
@@ -2176,8 +2216,9 @@ export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
           dataset,
           changes: [...fixedChanges, ...combination.changes],
           overrides: rowOverrides,
-          command: mockTrainingCommand({
-            model,
+	          command: mockTrainingCommand({
+	            modelType,
+	            model,
             preset: runPreset,
             dataset,
             logFolder: request.logFolder ?? "",
@@ -2197,8 +2238,9 @@ export function mockTrainingRunPlan(request: MockTrainingPlanRequest) {
     index: index + 1,
   }));
   const totalEpochs = runs.reduce((total, run) => total + run.totalEpochs, 0);
-  return {
-    model,
+	  return {
+	    modelType,
+	    model,
     preset: presets[0],
     presets,
     datasets,
@@ -2417,14 +2459,15 @@ export function withParameterCounts(body: unknown) {
 
 function withPreviewIdentity(
   body: unknown,
-  request: { model?: unknown; preset?: unknown },
+  request: { modelType?: unknown; model?: unknown; preset?: unknown },
 ) {
   if (typeof body !== "object" || body === null) {
     return body;
   }
-  return {
-    ...body,
-    ...(typeof request.model === "string" ? { model: request.model } : {}),
+	  return {
+	    ...body,
+	    ...(typeof request.modelType === "string" ? { modelType: request.modelType } : {}),
+	    ...(typeof request.model === "string" ? { model: request.model } : {}),
     ...(typeof request.preset === "string" ? { preset: request.preset } : {}),
   };
 }
@@ -2481,9 +2524,10 @@ export function installFetchMock(
       logDir: string | null;
     }) => unknown;
     logParameterStatusResponse?: (context: { runIds: string[] }) => unknown;
-    configSnapshotsResponse?: {
-      model: string;
-      snapshots: MockConfigSnapshot[];
+	    configSnapshotsResponse?: {
+	      modelType: string;
+	      model: string;
+	      snapshots: MockConfigSnapshot[];
     };
     configSnapshotLibraryResponse?: {
       snapshots: MockConfigSnapshot[];
@@ -2516,20 +2560,20 @@ export function installFetchMock(
   const logCheckpointRequests: Array<{ runIds: string[] }> = [];
   const logArtifactRequests: string[] = [];
   const deleteExperimentRequests: string[] = [];
-  const deleteRunPlanRequests: Array<{
-    experiments: string[];
-    datasets: string[];
-    models: string[];
-    presets: string[];
-    runIds: string[];
-  }> = [];
-  const deleteRunRequests: Array<{
-    experiments: string[];
-    datasets: string[];
-    models: string[];
-    presets: string[];
-    runIds: string[];
-  }> = [];
+	  const deleteRunPlanRequests: Array<{
+	    experiments: string[];
+	    datasets: string[];
+	    models: MockModelIdentity[];
+	    presets: string[];
+	    runIds: string[];
+	  }> = [];
+	  const deleteRunRequests: Array<{
+	    experiments: string[];
+	    datasets: string[];
+	    models: MockModelIdentity[];
+	    presets: string[];
+	    runIds: string[];
+	  }> = [];
   const monitorDataRequests: Array<{
     jobId: string;
     nodePath: string | null;
@@ -2564,13 +2608,13 @@ export function installFetchMock(
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
   }
 
-  function matchingDeleteRuns(filters: {
-    experiments: string[];
-    datasets: string[];
-    models: string[];
-    presets: string[];
-    runIds: string[];
-  }) {
+	  function matchingDeleteRuns(filters: {
+	    experiments: string[];
+	    datasets: string[];
+	    models: MockModelIdentity[];
+	    presets: string[];
+	    runIds: string[];
+	  }) {
     if (
       filters.experiments.length === 0 ||
       filters.datasets.length === 0 ||
@@ -2582,26 +2626,28 @@ export function installFetchMock(
     }
     const experiments = new Set(filters.experiments);
     const datasets = new Set(filters.datasets);
-    const models = new Set(filters.models);
+	    const models = new Set(
+	      filters.models.map((model) => `${model.modelType}/${model.model}`),
+	    );
     const presets = new Set(filters.presets);
     const runIds = new Set(filters.runIds);
     return logResponse.runs.filter(
       (run) =>
         experiments.has(run.experiment) &&
         datasets.has(run.dataset) &&
-        models.has(run.model) &&
+	        models.has(`${run.modelType}/${run.model}`) &&
         presets.has(run.preset) &&
         runIds.has(run.id),
     );
   }
 
-  function deletePlanPayload(filters: {
-    experiments: string[];
-    datasets: string[];
-    models: string[];
-    presets: string[];
-    runIds: string[];
-  }) {
+	  function deletePlanPayload(filters: {
+	    experiments: string[];
+	    datasets: string[];
+	    models: MockModelIdentity[];
+	    presets: string[];
+	    runIds: string[];
+	  }) {
     const candidates = matchingDeleteRuns(filters);
     const blockers = options.deleteLogRunsBlockers ?? [];
     return {
@@ -2610,20 +2656,25 @@ export function installFetchMock(
         runs: candidates.length,
         experiments: uniqueSorted(candidates.map((run) => run.experiment)).length,
         datasets: uniqueSorted(candidates.map((run) => run.dataset)).length,
-        models: uniqueSorted(candidates.map((run) => run.model)).length,
+	        models: uniqueSorted(candidates.map((run) => `${run.modelType}/${run.model}`)).length,
         presets: uniqueSorted(candidates.map((run) => run.preset)).length,
       },
       affected: {
         experiments: uniqueSorted(candidates.map((run) => run.experiment)),
         datasets: uniqueSorted(candidates.map((run) => run.dataset)),
-        models: uniqueSorted(candidates.map((run) => run.model)),
+	        models: uniqueSorted(candidates.map((run) => `${run.modelType}/${run.model}`))
+	          .map((value) => {
+	            const [modelType, model] = value.split("/", 2);
+	            return { modelType, model };
+	          }),
         presets: uniqueSorted(candidates.map((run) => run.preset)),
         runIds: uniqueSorted(candidates.map((run) => run.id)),
       },
       candidates: candidates.map((run) => ({
-        id: run.id,
-        experiment: run.experiment,
-        model: run.model,
+	        id: run.id,
+	        experiment: run.experiment,
+	        modelType: run.modelType,
+	        model: run.model,
         preset: run.preset,
         dataset: run.dataset,
         runName: run.runName,
@@ -2656,24 +2707,27 @@ export function installFetchMock(
       );
     }
     if (url.endsWith("/config-snapshots") && init?.method === "POST") {
-      const body = JSON.parse(String(init.body)) as {
-        model: string;
+	      const body = JSON.parse(String(init.body)) as {
+	        modelType: string;
+	        model: string;
         preset: string;
         name: string;
         overrides: Record<string, string>;
       };
       configSnapshotCreateRequests.push(body);
-      const snapshot = {
-        id: `snapshot-created-${configSnapshotCreateRequests.length}`,
-        model: body.model,
+	      const snapshot = {
+	        id: `snapshot-created-${configSnapshotCreateRequests.length}`,
+	        modelType: body.modelType,
+	        model: body.model,
         preset: body.preset,
         name: body.name,
         overrides: body.overrides,
         createdAt: "2026-06-01T00:00:00.000Z",
         updatedAt: "2026-06-01T00:00:00.000Z",
       };
-      configSnapshotResponse = {
-        model: body.model,
+	      configSnapshotResponse = {
+	        modelType: body.modelType,
+	        model: body.model,
         snapshots: [...configSnapshotResponse.snapshots, snapshot],
       };
       return jsonResponse(snapshot);
@@ -2691,9 +2745,10 @@ export function installFetchMock(
         (snapshot) => snapshot.id === snapshotId,
       );
       const snapshot = {
-        ...(existing ?? {
-          id: snapshotId,
-          model: configSnapshotResponse.model,
+	        ...(existing ?? {
+	          id: snapshotId,
+	          modelType: configSnapshotResponse.modelType,
+	          model: configSnapshotResponse.model,
           preset: "baseline",
           name: "Snapshot",
           overrides: {},
@@ -2704,19 +2759,21 @@ export function installFetchMock(
         ...("overrides" in body ? { overrides: body.overrides ?? {} } : {}),
         updatedAt: "2026-06-01T00:00:01.000Z",
       };
-      configSnapshotResponse = {
-        model: snapshot.model,
-        snapshots: configSnapshotResponse.snapshots.map((candidate) =>
-          candidate.id === snapshotId ? snapshot : candidate,
-        ),
-      };
-      return jsonResponse(snapshot);
-    }
-    if (url.includes("/config-snapshots?")) {
-      const parsedUrl = new URL(url);
-      const model = parsedUrl.searchParams.get("model") ?? "linear";
-      return jsonResponse({ ...configSnapshotResponse, model });
-    }
+	      configSnapshotResponse = {
+	        modelType: snapshot.modelType,
+	        model: snapshot.model,
+	        snapshots: configSnapshotResponse.snapshots.map((candidate) =>
+	          candidate.id === snapshotId ? snapshot : candidate,
+	        ),
+	      };
+	      return jsonResponse(snapshot);
+	    }
+	    if (url.includes("/config-snapshots?")) {
+	      const parsedUrl = new URL(url);
+	      const modelType = parsedUrl.searchParams.get("modelType") ?? "linears";
+	      const model = parsedUrl.searchParams.get("model") ?? "linear";
+	      return jsonResponse({ ...configSnapshotResponse, modelType, model });
+	    }
     if (url.endsWith("/models/neuron/neuron_linear/presets")) {
       return jsonResponse(neuronPresetsResponse);
     }
@@ -2729,16 +2786,17 @@ export function installFetchMock(
     if (url.includes("/models/neuron/neuron_linear/config-schema")) {
       const schemaPayload = options.schemaResponse ?? schemaResponse;
       return jsonResponse(
-        typeof schemaPayload === "object" && schemaPayload !== null
-          ? { ...schemaPayload, model: "neuron/neuron_linear" }
-          : schemaPayload,
+	        typeof schemaPayload === "object" && schemaPayload !== null
+	          ? { ...schemaPayload, modelType: "neuron", model: "neuron_linear" }
+	          : schemaPayload,
       );
     }
     if (url.includes("/models/neuron/neuron_linear/search-space")) {
       const searchPayload = options.searchSpaceResponse ?? searchSpaceResponse;
       return jsonResponse({
         ...searchPayload,
-        model: "neuron/neuron_linear",
+        modelType: "neuron",
+        model: "neuron_linear",
         preset: "baseline",
       });
     }
@@ -2793,7 +2851,11 @@ export function installFetchMock(
         "/models/transformer_encoder/bert_linear/monitors",
       ])
     ) {
-      return jsonResponse({ model: "bert_linear", monitors: [] });
+	      return jsonResponse({
+	        modelType: "transformer_encoder",
+	        model: "bert_linear",
+	        monitors: [],
+	      });
     }
     if (
       includesAny([
@@ -2803,9 +2865,13 @@ export function installFetchMock(
     ) {
       const schemaPayload = options.schemaResponse ?? schemaResponse;
       return jsonResponse(
-        typeof schemaPayload === "object" && schemaPayload !== null
-          ? { ...schemaPayload, model: "bert_linear" }
-          : schemaPayload,
+	        typeof schemaPayload === "object" && schemaPayload !== null
+	          ? {
+	              ...schemaPayload,
+	              modelType: "transformer_encoder",
+	              model: "bert_linear",
+	            }
+	          : schemaPayload,
       );
     }
     if (
@@ -2814,7 +2880,12 @@ export function installFetchMock(
         "/models/transformer_encoder/bert_linear/search-space",
       ])
     ) {
-      return jsonResponse({ model: "bert_linear", preset: "bert-baseline", axes: [] });
+	      return jsonResponse({
+	        modelType: "transformer_encoder",
+	        model: "bert_linear",
+	        preset: "bert-baseline",
+	        axes: [],
+	      });
     }
     if (url.endsWith("/training/run-plan")) {
       const request = JSON.parse(String(init?.body)) as MockTrainingPlanRequest;
@@ -2871,6 +2942,7 @@ export function installFetchMock(
       return jsonResponse({
         id: "job-1",
         status: "running",
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         presets: latestTrainingRequest?.presets ?? ["baseline"],
@@ -2902,6 +2974,7 @@ export function installFetchMock(
       return jsonResponse({
         id: "job-1",
         status: "completed",
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         presets: latestTrainingRequest?.presets ?? ["baseline"],
@@ -2979,24 +3052,24 @@ export function installFetchMock(
       );
     }
     if (url.endsWith("/logs/runs/delete-plan")) {
-      const body = JSON.parse(String(init?.body)) as {
-        experiments: string[];
-        datasets: string[];
-        models: string[];
-        presets: string[];
-        runIds: string[];
-      };
+	      const body = JSON.parse(String(init?.body)) as {
+	        experiments: string[];
+	        datasets: string[];
+	        models: MockModelIdentity[];
+	        presets: string[];
+	        runIds: string[];
+	      };
       deleteRunPlanRequests.push(body);
       return jsonResponse(deletePlanPayload(body));
     }
     if (url.endsWith("/logs/runs/delete")) {
-      const body = JSON.parse(String(init?.body)) as {
-        experiments: string[];
-        datasets: string[];
-        models: string[];
-        presets: string[];
-        runIds: string[];
-      };
+	      const body = JSON.parse(String(init?.body)) as {
+	        experiments: string[];
+	        datasets: string[];
+	        models: MockModelIdentity[];
+	        presets: string[];
+	        runIds: string[];
+	      };
       deleteRunRequests.push(body);
       if (options.deleteLogRunsError) {
         return jsonResponse({ detail: options.deleteLogRunsError }, 400);
@@ -3253,25 +3326,27 @@ export async function waitForOpenFullConfigButton(
   return screen.getByRole("button", { name: /open full config/i });
 }
 
-export async function findTargetCombobox(label: "model" | "preset") {
+type TargetDropdownLabel = "model type" | "model" | "preset";
+
+export async function findTargetCombobox(label: TargetDropdownLabel) {
   return screen.findByRole("combobox", {
     name: new RegExp(`^${label}$`, "i"),
   });
 }
 
-export async function waitForTargetValue(label: "model" | "preset", value: string) {
+export async function waitForTargetValue(label: TargetDropdownLabel, value: string) {
   const control = await findTargetCombobox(label);
   await waitFor(() => expect(control).toHaveTextContent(value));
   return control;
 }
 
-export function targetListboxName(label: "model" | "preset") {
+export function targetListboxName(label: TargetDropdownLabel) {
   return new RegExp(`^${label} options$`, "i");
 }
 
 export async function openTargetDropdown(
   user: ReturnType<typeof userEvent.setup>,
-  label: "model" | "preset",
+  label: TargetDropdownLabel,
 ) {
   const control = await findTargetCombobox(label);
   await user.click(control);
@@ -3283,7 +3358,7 @@ export async function openTargetDropdown(
 
 export async function selectTargetOption(
   user: ReturnType<typeof userEvent.setup>,
-  label: "model" | "preset",
+  label: TargetDropdownLabel,
   optionName: string,
 ) {
   const { control, listbox } = await openTargetDropdown(user, label);
@@ -3435,7 +3510,7 @@ export async function setTrainingHiddenDimOverride(
 
 export async function selectTrainingTargetOption(
   user: ReturnType<typeof userEvent.setup>,
-  label: "model" | "preset",
+  label: "model type" | "model" | "preset",
   optionName: string,
 ) {
   const details = await expandedTrainingDetails(user);

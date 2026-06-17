@@ -24,6 +24,7 @@ function renderOrchestration(
 
 function graph(model: string, preset = "baseline"): InspectResponse {
   return {
+    modelType: "linears",
     model,
     preset,
     parameterCount: 0,
@@ -50,6 +51,7 @@ function operationGraph(
   preset = "baseline",
 ): OperationGraphResponse {
   return {
+    modelType: "linears",
     model,
     preset,
     source: "torch-export",

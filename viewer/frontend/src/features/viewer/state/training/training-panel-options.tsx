@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { type MultiSelectDropdownOption } from "@/features/viewer/components/screen/multi-select-dropdown";
-import { type MonitorOption, type Preset } from "@/lib/api";
+import { type ModelIdentity, type MonitorOption, type Preset } from "@/lib/api";
 import {
   modelNameForId,
   modelsForType,
@@ -12,16 +12,18 @@ type SelectOption = {
   label: string;
 };
 
-export function buildTrainingModelTypeOptions(models: string[]): SelectOption[] {
+export function buildTrainingModelTypeOptions(
+  models: ModelIdentity[],
+): SelectOption[] {
   return createModelTypeOptions(models);
 }
 
 export function buildTrainingModelOptions(
-  models: string[],
+  models: ModelIdentity[],
   selectedModelType = "",
 ): SelectOption[] {
   return modelsForType(models, selectedModelType).map((model) => ({
-    value: model,
+    value: model.model,
     label: modelNameForId(model),
   }));
 }
@@ -50,7 +52,7 @@ export function useTrainingPanelOptions({
   presets,
   monitorOptions,
 }: {
-  models: string[];
+  models: ModelIdentity[];
   selectedModelType: string;
   presets: Preset[];
   monitorOptions: MonitorOption[];

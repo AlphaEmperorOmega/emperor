@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from models.catalog import model_identity_payload_from_id
+
 from viewer.backend.inspector.discovery import (
     dataset_name,
     resolve_model_monitors,
@@ -315,6 +317,7 @@ class TrainingJobManager:
                 {
                     "type": "job_started",
                     "status": "running",
+                    **model_identity_payload_from_id(model),
                     "preset": job.preset,
                     "presets": job.presets,
                     "runTotal": planned_run_count,
@@ -396,7 +399,7 @@ class TrainingJobManager:
     ) -> dict[str, Any]:
         return {
             "id": job_id,
-            "model": model,
+            **model_identity_payload_from_id(model),
             "preset": selected.selected_preset_names[0],
             "presets": selected.selected_preset_names,
             "datasets": [

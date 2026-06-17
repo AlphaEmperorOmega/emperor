@@ -2,6 +2,9 @@ import { type Dispatch, type SetStateAction } from "react";
 import { type LogExperiment, type LogRun, type LogScalarSeries } from "@/lib/api";
 import { formatNumber } from "@/lib/format";
 import {
+  modelIdentityKey,
+  modelNameForId,
+  modelTypeForId,
   toggleSetValue as toggleSelectionSetValue,
   uniqueValidValues,
 } from "@/lib/selection";
@@ -80,6 +83,28 @@ export function buildCountOptions(
   })).sort((a, b) => a.label.localeCompare(b.label));
 }
 
+export function logRunModelKey(run: Pick<LogRun, "modelType" | "model">) {
+  return modelIdentityKey({ modelType: run.modelType, model: run.model });
+}
+
+export function buildModelCountOptions(runs: LogRun[]) {
+  const counts = new Map<string, { count: number; modelType: string; model: string }>();
+  for (const run of runs) {
+    const value = logRunModelKey(run);
+    const current = counts.get(value);
+    counts.set(value, {
+      count: (current?.count ?? 0) + 1,
+      modelType: run.modelType,
+      model: run.model,
+    });
+  }
+  return Array.from(counts, ([value, item]) => ({
+    value,
+    label: `${modelNameForId(item)} · ${modelTypeForId(item)}`,
+    count: item.count,
+  })).sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function buildExperimentOptions(experiments: LogExperiment[]) {
   return experiments
     .map((experiment) => ({
@@ -97,7 +122,7 @@ export function runOption(run: LogRun): ChecklistOption {
     detail: [
       run.experiment,
       run.dataset,
-      run.model,
+      `${run.model} · ${run.modelType}`,
       run.preset,
       run.timestamp ?? run.version,
     ].join(" · "),
@@ -108,7 +133,7 @@ export function formatRunLabel(run: LogRun) {
   return [
     run.experiment,
     run.dataset,
-    run.model,
+    `${run.model} · ${run.modelType}`,
     run.preset,
     run.timestamp ?? run.runName,
   ].join(" · ");

@@ -6,6 +6,7 @@ import {
 } from "react";
 import {
   type Dataset,
+  type ModelIdentity,
   type MonitorOption,
   type Preset,
   type SearchAxis,
@@ -25,7 +26,7 @@ import { useTrainingPanelOptions } from "@/features/viewer/state/training/traini
 import { useTrainingRequestState } from "@/features/viewer/state/training/use-training-request-state";
 
 export type TrainingPanelViewModelInput = {
-  models: string[];
+  models: ModelIdentity[];
   presets: Preset[];
   datasetOptions: Dataset[];
   configSections: ConfigSection[];
@@ -156,6 +157,7 @@ export function useTrainingPanelViewModel({
     overrides,
     configSnapshotCount: allConfigSnapshots.length || configSnapshotCount,
     selectedTrainingSnapshots,
+    selectedModelType,
     selectedModel,
     selectedPreset,
     selectedTrainingPresets,
@@ -169,6 +171,7 @@ export function useTrainingPanelViewModel({
     logFolder: logFolder.value,
   });
   const training = useTrainingJobController({
+    selectedModelType,
     selectedModel,
     selectedPreset,
     selectedTrainingPresets,

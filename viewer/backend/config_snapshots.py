@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+from models.catalog import model_id_from_payload, model_identity_payload_from_id
+
 from viewer.backend.storage.local_files import (
     read_json_object,
     require_safe_name,
@@ -213,24 +215,31 @@ class FileSystemConfigSnapshotStore:
 
 
 def _record_to_metadata(snapshot: ConfigSnapshotRecord) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "id": snapshot.id,
-        "model": snapshot.model,
         "preset": snapshot.preset,
         "name": snapshot.name,
         "overrides": snapshot.overrides,
         "created_at": snapshot.created_at,
         "updated_at": snapshot.updated_at,
     }
+    try:
+        payload.update(model_identity_payload_from_id(snapshot.model))
+    except ValueError:
+        payload["model"] = snapshot.model
+    return payload
 
 
 def _record_from_metadata(payload: dict[str, object]) -> ConfigSnapshotRecord:
     overrides = payload["overrides"]
     if not isinstance(overrides, dict):
         raise TypeError("Config snapshot overrides must be a mapping.")
+    model_id = model_id_from_payload(payload)
+    if model_id is None:
+        model_id = str(payload["model"])
     return ConfigSnapshotRecord(
         id=str(payload["id"]),
-        model=str(payload["model"]),
+        model=model_id,
         preset=str(payload["preset"]),
         name=str(payload["name"]),
         overrides={str(key): str(value) for key, value in overrides.items()},

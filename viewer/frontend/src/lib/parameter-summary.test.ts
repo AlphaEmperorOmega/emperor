@@ -15,6 +15,7 @@ function run(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     id: overrides.id,
     group: overrides.group ?? overrides.experiment ?? "exp_a",
     experiment: overrides.experiment ?? "exp_a",
+    modelType: overrides.modelType ?? "linears",
     model: overrides.model ?? "linear",
     preset: overrides.preset ?? "baseline",
     dataset: overrides.dataset ?? "Mnist",
@@ -62,6 +63,7 @@ function graph({ withBias = true }: { withBias?: boolean } = {}): InspectRespons
   });
 
   return {
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     parameterCount: 0,

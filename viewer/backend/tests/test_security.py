@@ -23,7 +23,8 @@ PROTECTED_ROUTE_CASES = (
         "POST",
         "/inspect",
         {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "dataset": "Mnist",
             "overrides": {"hidden_dim": "128"},
@@ -34,7 +35,8 @@ PROTECTED_ROUTE_CASES = (
         "POST",
         "/inspect/operation-graph",
         {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "dataset": "Mnist",
             "overrides": {"hidden_dim": "128"},
@@ -45,7 +47,8 @@ PROTECTED_ROUTE_CASES = (
         "POST",
         "/training/run-plan",
         {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -59,7 +62,8 @@ PROTECTED_ROUTE_CASES = (
         "POST",
         "/training/jobs",
         {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -71,7 +75,12 @@ PROTECTED_ROUTE_CASES = (
         },
     ),
     ("logs", "GET", "/logs/runs", None),
-    ("config_snapshots", "GET", "/config-snapshots?model=linears/linear", None),
+    (
+        "config_snapshots",
+        "GET",
+        "/config-snapshots?modelType=linears&model=linear",
+        None,
+    ),
 )
 
 
@@ -151,19 +160,21 @@ class RouteAuthIntegrationTests(unittest.TestCase):
         )
 
         class FakeModelCatalogService:
-            def list_models(self) -> list[str]:
-                return ["linear"]
+            def list_models(self) -> list[dict[str, str]]:
+                return [{"modelType": "linears", "model": "linear"}]
 
         class FakeInspectionService:
             def inspect(
                 self,
                 *,
+                model_type: str,
                 model: str,
                 preset: str,
                 overrides: dict[str, object],
                 dataset: str | None,
             ) -> dict[str, object]:
                 return {
+                    "modelType": model_type,
                     "model": model,
                     "preset": preset,
                     "parameterCount": 0,
@@ -187,12 +198,14 @@ class RouteAuthIntegrationTests(unittest.TestCase):
             def inspect_operation_graph(
                 self,
                 *,
+                model_type: str,
                 model: str,
                 preset: str,
                 overrides: dict[str, object],
                 dataset: str | None,
             ) -> dict[str, object]:
                 return {
+                    "modelType": model_type,
                     "model": model,
                     "preset": preset,
                     "source": "torch-export",
@@ -208,7 +221,8 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                     {
                         "id": "job-1",
                         "status": "running",
-                        "model": command.model,
+                        "modelType": "linears",
+                        "model": "linear",
                         "preset": command.preset,
                         "presets": command.presets or [command.preset],
                         "datasets": command.datasets,
@@ -245,7 +259,8 @@ class RouteAuthIntegrationTests(unittest.TestCase):
             def create_run_plan(self, command) -> TrainingRunPlanView:
                 return TrainingRunPlanView.from_payload(
                     {
-                        "model": command.model,
+                        "modelType": "linears",
+                        "model": "linear",
                         "preset": command.preset,
                         "presets": command.presets or [command.preset],
                         "datasets": command.datasets,

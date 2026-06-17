@@ -15,6 +15,7 @@ from viewer.backend.schemas._base import (
 
 
 class TrainingJobCreateRequest(ApiResponseModel):
+    modelType: str
     model: str
     preset: str
     presets: list[str] | None = None
@@ -27,6 +28,7 @@ class TrainingJobCreateRequest(ApiResponseModel):
 
 
 class TrainingRunPlanCreateRequest(ApiResponseModel):
+    modelType: str
     model: str
     preset: str
     presets: list[str] | None = None
@@ -141,6 +143,7 @@ class SubmittedTrainingRunPlanSummaryRequest(ApiResponseModel):
 
 
 class TrainingRunPlanResponse(ApiResponseModel):
+    modelType: str
     model: str
     preset: str
     presets: list[str] = Field(default_factory=list)
@@ -154,6 +157,7 @@ class TrainingRunPlanResponse(ApiResponseModel):
 
 
 class SubmittedTrainingRunPlanRequest(ApiResponseModel):
+    modelType: str
     model: str
     preset: str
     presets: list[str] = Field(default_factory=list)
@@ -216,6 +220,7 @@ class TrainingJobStartedProgressEventResponse(TrainingProgressEventBaseResponse)
 class TrainingWorkerStartedProgressEventResponse(TrainingProgressEventBaseResponse):
     type: Literal["started"]
     status: Literal["running"] | None = None
+    modelType: str | None = None
     model: str | None = None
     presets: list[str] | None = None
     datasets: list[str] | None = None
@@ -324,6 +329,7 @@ TrainingProgressEventResponse: TypeAlias = (
 class TrainingJobResponse(ApiResponseModel):
     id: str
     status: str
+    modelType: str
     model: str
     preset: str
     presets: list[str] = Field(default_factory=list)

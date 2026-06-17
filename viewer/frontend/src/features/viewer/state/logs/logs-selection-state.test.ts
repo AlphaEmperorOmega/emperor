@@ -25,6 +25,7 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     id: overrides.id,
     group: overrides.group ?? null,
     experiment,
+    modelType: overrides.modelType ?? "linears",
     model,
     preset,
     dataset,
@@ -89,9 +90,9 @@ describe("logs selection state", () => {
 
   it("filters visible runs and keeps detail selection valid", () => {
     const visibleRuns = filterVisibleLogRuns(runs, {
-      experiments: new Set(["exp_b"]),
-      datasets: new Set(["Mnist"]),
-      models: new Set(["linear"]),
+	      experiments: new Set(["exp_b"]),
+	      datasets: new Set(["Mnist"]),
+	      models: new Set(["linears/linear"]),
       presets: new Set(["wide"]),
       runIds: new Set(["run-a", "run-b", "run-c"]),
     });
@@ -138,14 +139,14 @@ describe("logs selection state", () => {
       buildLogRunDeleteFilters({
         experiments: new Set(["exp_b", "exp_a"]),
         datasets: new Set(["Mnist"]),
-        models: new Set(["linear"]),
+	        models: new Set(["linears/linear"]),
         presets: new Set(["wide", "baseline"]),
         runIds: new Set(["run-c", "run-a"]),
       }),
     ).toEqual({
       experiments: ["exp_a", "exp_b"],
       datasets: ["Mnist"],
-      models: ["linear"],
+	      models: [{ modelType: "linears", model: "linear" }],
       presets: ["baseline", "wide"],
       runIds: ["run-a", "run-c"],
     });

@@ -42,29 +42,36 @@ describe("buildTrainingCommand", () => {
   it("omits --config when no overrides are set", () => {
     expect(
       buildTrainingCommand({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         sections,
         overrides: {},
       }),
-    ).toBe("source experiment.sh linear --preset baseline");
+    ).toBe(
+      "source experiment.sh --model-type linears --model linear --preset baseline",
+    );
   });
 
   it("uses --presets when multiple run presets are selected", () => {
     expect(
       buildTrainingCommand({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         presets: ["baseline", "gating"],
         sections,
         overrides: {},
       }),
-    ).toBe("source experiment.sh linear --presets baseline gating");
+    ).toBe(
+      "source experiment.sh --model-type linears --model linear --presets baseline gating",
+    );
   });
 
   it("emits overrides in config schema order", () => {
     expect(
       buildTrainingCommand({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         sections,
@@ -74,13 +81,14 @@ describe("buildTrainingCommand", () => {
         },
       }),
     ).toBe(
-      "source experiment.sh linear --preset baseline --config --hidden-dim 128 --activation RELU",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128 --activation RELU",
     );
   });
 
   it("serializes nullable empty overrides as None", () => {
     expect(
       buildTrainingCommand({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         sections,
@@ -88,12 +96,15 @@ describe("buildTrainingCommand", () => {
           dropout_schedule: "",
         },
       }),
-    ).toBe("source experiment.sh linear --preset baseline --config --dropout-schedule None");
+    ).toBe(
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --dropout-schedule None",
+    );
   });
 
   it("quotes values with spaces and shell-sensitive characters", () => {
     expect(
       buildTrainingCommand({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         sections,
@@ -102,7 +113,7 @@ describe("buildTrainingCommand", () => {
         },
       }),
     ).toBe(
-      "source experiment.sh linear --preset baseline --config --run-name 'Bob'\"'\"'s config; rm -rf /'",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --run-name 'Bob'\"'\"'s config; rm -rf /'",
     );
   });
 });

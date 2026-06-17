@@ -9,6 +9,7 @@ from viewer.backend.schemas._base import ApiResponseModel
 
 class ConfigSnapshotResponse(ApiResponseModel):
     id: str
+    modelType: str
     model: str
     preset: str
     name: str
@@ -18,6 +19,7 @@ class ConfigSnapshotResponse(ApiResponseModel):
 
 
 class ConfigSnapshotsResponse(ApiResponseModel):
+    modelType: str
     model: str
     snapshots: list[ConfigSnapshotResponse]
 
@@ -27,6 +29,7 @@ class ConfigSnapshotLibraryResponse(ApiResponseModel):
 
 
 class ConfigSnapshotCreateRequest(ApiResponseModel):
+    modelType: str
     model: str
     preset: str
     name: str = ""

@@ -42,15 +42,24 @@ function renderCompareWorkspace() {
   );
 }
 
-function graph(model: string, preset: string, parameterCount: number) {
+function modelKey(identity: { modelType: string; model: string }) {
+  return `${identity.modelType}/${identity.model}`;
+}
+
+function graph(
+  identity: { modelType: string; model: string },
+  preset: string,
+  parameterCount: number,
+) {
   return {
-    model,
+    modelType: identity.modelType,
+    model: identity.model,
     preset,
     parameterCount,
     parameterSizeBytes: parameterCount * 4,
     nodes: [
       {
-        id: `${model}-root`,
+        id: `${modelKey(identity)}-root`,
         label: "Root",
         typeName: "Model",
         path: "main_model",
@@ -61,7 +70,7 @@ function graph(model: string, preset: string, parameterCount: number) {
         config: null,
       },
       {
-        id: `${model}-runtime`,
+        id: `${modelKey(identity)}-runtime`,
         label: "Runtime",
         typeName: "RuntimeState",
         path: "main_model.runtime",
@@ -72,7 +81,13 @@ function graph(model: string, preset: string, parameterCount: number) {
         config: null,
       },
     ],
-    edges: [{ id: `${model}-edge`, source: `${model}-root`, target: `${model}-runtime` }],
+    edges: [
+      {
+        id: `${modelKey(identity)}-edge`,
+        source: `${modelKey(identity)}-root`,
+        target: `${modelKey(identity)}-runtime`,
+      },
+    ],
   };
 }
 
@@ -81,40 +96,44 @@ beforeEach(() => {
   selectPreset.mockReset();
   onUseTarget.mockReset();
   mocks.useCompareTargetState.mockReset().mockReturnValue({
-    selectedModel: "linears/linear",
+    selectedModelType: "linears",
+    selectedModel: "linear",
     selectedPreset: "baseline",
     selectModel,
     selectPreset,
     catalog: {
-      models: ["linears/linear", "experts/experts_linear"],
+      models: [
+        { modelType: "linears", model: "linear" },
+        { modelType: "experts", model: "experts_linear" },
+      ],
       isLoading: false,
       isError: false,
       error: null,
     },
   });
-  mocks.fetchPresets.mockReset().mockImplementation((model: string) =>
+  mocks.fetchPresets.mockReset().mockImplementation((identity) =>
     Promise.resolve({
-      model,
+      ...identity,
       presets:
-        model === "experts/experts_linear"
+        modelKey(identity) === "experts/experts_linear"
           ? [{ name: "expert-baseline", label: "Expert baseline", description: "" }]
           : [{ name: "baseline", label: "Baseline", description: "" }],
     }),
   );
-  mocks.fetchDatasets.mockReset().mockImplementation((model: string) =>
+  mocks.fetchDatasets.mockReset().mockImplementation((identity) =>
     Promise.resolve({
-      model,
+      ...identity,
       datasets:
-        model === "experts/experts_linear"
+        modelKey(identity) === "experts/experts_linear"
           ? [{ name: "ExpertToy", label: "Expert Toy", inputDim: 64, outputDim: 4 }]
           : [{ name: "Mnist", label: "MNIST", inputDim: 784, outputDim: 10 }],
     }),
   );
-  mocks.fetchMonitors.mockReset().mockImplementation((model: string) =>
+  mocks.fetchMonitors.mockReset().mockImplementation((identity) =>
     Promise.resolve({
-      model,
+      ...identity,
       monitors:
-        model === "experts/experts_linear"
+        modelKey(identity) === "experts/experts_linear"
           ? [
               {
                 name: "experts",
@@ -156,9 +175,9 @@ beforeEach(() => {
             ],
     }),
   );
-  mocks.fetchConfigSchema.mockReset().mockImplementation((model: string) =>
+  mocks.fetchConfigSchema.mockReset().mockImplementation((identity) =>
     Promise.resolve({
-      model,
+      ...identity,
       fields: [
         {
           key: "hidden_size",
@@ -167,7 +186,7 @@ beforeEach(() => {
           label: "Hidden size",
           section: "Architecture",
           type: "int",
-          default: model === "experts/experts_linear" ? 128 : 64,
+          default: modelKey(identity) === "experts/experts_linear" ? 128 : 64,
           nullable: false,
           choices: [],
         },
@@ -175,19 +194,19 @@ beforeEach(() => {
     }),
   );
   mocks.inspectModel.mockReset().mockImplementation(
-    (request: { model: string; preset: string }) =>
+    (request: { modelType: string; model: string; preset: string }) =>
       Promise.resolve(
         graph(
-          request.model,
+          request,
           request.preset,
-          request.model === "experts/experts_linear" ? 2048 : 1024,
+          modelKey(request) === "experts/experts_linear" ? 2048 : 1024,
         ),
       ),
   );
 });
 
 describe("CompareWorkspace", () => {
-  it("compares selected model/preset targets with full public model IDs", async () => {
+  it("compares selected model/preset targets with split public model identity", async () => {
     renderCompareWorkspace();
 
     expect(
@@ -196,13 +215,15 @@ describe("CompareWorkspace", () => {
 
     await waitFor(() => {
       expect(mocks.inspectModel).toHaveBeenCalledWith({
-        model: "linears/linear",
+        modelType: "linears",
+        model: "linear",
         preset: "baseline",
         dataset: "Mnist",
         overrides: {},
       });
       expect(mocks.inspectModel).toHaveBeenCalledWith({
-        model: "experts/experts_linear",
+        modelType: "experts",
+        model: "experts_linear",
         preset: "expert-baseline",
         dataset: "ExpertToy",
         overrides: {},
@@ -228,7 +249,7 @@ describe("CompareWorkspace", () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByText("experts/experts_linear")).toBeInTheDocument();
+      expect(screen.getByText("experts_linear")).toBeInTheDocument();
     });
 
     const targetCards = screen.getAllByText(/^Target \d$/).map((label) => {
@@ -240,23 +261,24 @@ describe("CompareWorkspace", () => {
       within(targetCards[1]).getByRole("button", { name: /use as target/i }),
     );
 
-    expect(selectModel).toHaveBeenCalledWith("experts/experts_linear");
+    expect(selectModel).toHaveBeenCalledWith("experts_linear", "experts");
     expect(selectPreset).toHaveBeenCalledWith("expert-baseline");
     expect(onUseTarget).toHaveBeenCalled();
   });
 
   it("adds, removes, and resets comparison targets around the four-target limit", async () => {
     mocks.useCompareTargetState.mockReturnValue({
-      selectedModel: "linears/linear",
+      selectedModelType: "linears",
+      selectedModel: "linear",
       selectedPreset: "baseline",
       selectModel,
       selectPreset,
       catalog: {
         models: [
-          "linears/linear",
-          "experts/experts_linear",
-          "linears/linear_small",
-          "linears/linear_wide",
+          { modelType: "linears", model: "linear" },
+          { modelType: "experts", model: "experts_linear" },
+          { modelType: "linears", model: "linear_small" },
+          { modelType: "linears", model: "linear_wide" },
         ],
         isLoading: false,
         isError: false,
@@ -293,7 +315,7 @@ describe("CompareWorkspace", () => {
     await waitFor(() => {
       expect(screen.getAllByText(/^Target \d$/)).toHaveLength(2);
     });
-    expect(screen.getByText("linears/linear")).toBeInTheDocument();
-    expect(screen.getByText("experts/experts_linear")).toBeInTheDocument();
+    expect(screen.getByText("linear")).toBeInTheDocument();
+    expect(screen.getByText("experts_linear")).toBeInTheDocument();
   });
 });

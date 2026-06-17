@@ -29,7 +29,7 @@ import { MetricCard } from "@/features/viewer/components/shared/metric-card";
 import { SectionHeading } from "@/features/viewer/components/shared/section-heading";
 import { StatChip } from "@/features/viewer/components/shared/stat-chip";
 import { type LogsWorkspaceState } from "@/features/viewer/state/logs/use-logs-workspace-state";
-import { type LogRun } from "@/lib/api";
+import { type LogRun, type ModelIdentity } from "@/lib/api";
 import {
   type ChecklistOption,
   selectedOptionsSet,
@@ -98,6 +98,19 @@ function uniqueSorted(values: string[]) {
   return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 }
 
+function uniqueModelIdentities(runs: LogRun[]): ModelIdentity[] {
+  const models = new Map<string, ModelIdentity>();
+  for (const run of runs) {
+    const key = `${run.modelType}/${run.model}`;
+    if (!models.has(key)) {
+      models.set(key, { modelType: run.modelType, model: run.model });
+    }
+  }
+  return Array.from(models.values()).sort((left, right) =>
+    `${left.modelType}/${left.model}`.localeCompare(`${right.modelType}/${right.model}`),
+  );
+}
+
 function buildSubsetDeleteTarget({
   kind,
   value,
@@ -123,7 +136,7 @@ function buildSubsetDeleteTarget({
   const filters = {
     experiments: uniqueSorted(targetRuns.map((run) => run.experiment)),
     datasets: uniqueSorted(targetRuns.map((run) => run.dataset)),
-    models: uniqueSorted(targetRuns.map((run) => run.model)),
+    models: uniqueModelIdentities(targetRuns),
     presets: uniqueSorted(targetRuns.map((run) => run.preset)),
     runIds: uniqueSorted(targetRuns.map((run) => run.id)),
   };

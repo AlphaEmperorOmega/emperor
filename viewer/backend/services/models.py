@@ -4,34 +4,63 @@ from __future__ import annotations
 
 from typing import Any
 
+from models.catalog import (
+    discover_model_identity_payloads,
+    model_id_from_parts,
+    model_identity_payload_from_id,
+)
+
+from viewer.backend.inspector.errors import InspectorError
+
+
+def _model_id(model_type: str, model: str) -> str:
+    model_id = model_id_from_parts(model_type, model)
+    if model_id is None:
+        raise InspectorError(
+            f"Unknown model: --model-type {model_type} --model {model}"
+        )
+    return model_id
+
 
 class ModelCatalogService:
-    def list_models(self) -> list[str]:
-        from viewer.backend.inspector.discovery import discover_models
+    def list_models(self) -> list[dict[str, str]]:
+        return discover_model_identity_payloads()
 
-        return discover_models()
-
-    def list_presets(self, model: str) -> list[dict[str, Any]]:
+    def list_presets(self, model_type: str, model: str) -> list[dict[str, Any]]:
         from viewer.backend.inspector.discovery import list_model_presets
 
-        return list_model_presets(model)
+        return list_model_presets(_model_id(model_type, model))
 
-    def list_datasets(self, model: str) -> list[dict[str, Any]]:
+    def list_datasets(self, model_type: str, model: str) -> list[dict[str, Any]]:
         from viewer.backend.inspector.discovery import list_model_datasets
 
-        return list_model_datasets(model)
+        return list_model_datasets(_model_id(model_type, model))
 
-    def list_monitors(self, model: str) -> list[dict[str, Any]]:
+    def list_monitors(self, model_type: str, model: str) -> list[dict[str, Any]]:
         from viewer.backend.inspector.discovery import list_model_monitors
 
-        return list_model_monitors(model)
+        return list_model_monitors(_model_id(model_type, model))
 
-    def config_schema(self, model: str, preset: str | None) -> dict[str, Any]:
+    def config_schema(
+        self,
+        model_type: str,
+        model: str,
+        preset: str | None,
+    ) -> dict[str, Any]:
         from viewer.backend.inspector.schema import config_schema
 
-        return config_schema(model, preset)
+        return config_schema(_model_id(model_type, model), preset)
 
-    def search_space_schema(self, model: str, preset: str | None) -> dict[str, Any]:
+    def search_space_schema(
+        self,
+        model_type: str,
+        model: str,
+        preset: str | None,
+    ) -> dict[str, Any]:
         from viewer.backend.inspector.schema import search_space_schema
 
-        return search_space_schema(model, preset)
+        return search_space_schema(_model_id(model_type, model), preset)
+
+
+def identity_payload(model_id: str) -> dict[str, str]:
+    return model_identity_payload_from_id(model_id)

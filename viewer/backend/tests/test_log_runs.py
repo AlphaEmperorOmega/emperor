@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from models.catalog import model_identity_payload_from_id
+
 from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.log_runs import (
     LOG_EXPERIMENT_NAME_RE,
@@ -142,7 +144,7 @@ class LogRunDeleteResponseTests(unittest.TestCase):
             "affected": {
                 "experiments": ["test_model"],
                 "datasets": ["Mnist"],
-                "models": ["linears/linear"],
+                "models": [{"modelType": "linears", "model": "linear"}],
                 "presets": ["BASELINE"],
                 "runIds": ["run-1"],
             },
@@ -150,7 +152,8 @@ class LogRunDeleteResponseTests(unittest.TestCase):
                 {
                     "id": "run-1",
                     "experiment": "test_model",
-                    "model": "linears/linear",
+                    "modelType": "linears",
+                    "model": "linear",
                     "preset": "BASELINE",
                     "dataset": "Mnist",
                     "runName": "aaa_20260601_010203",
@@ -1534,7 +1537,7 @@ class LogRunIndexAndApiTests(unittest.TestCase):
             filters = {
                 "experiments": [run.experiment],
                 "datasets": [run.dataset],
-                "models": [run.model],
+                "models": [model_identity_payload_from_id(run.model)],
                 "presets": [run.preset],
                 "runIds": [run.id],
             }
@@ -1720,7 +1723,12 @@ class LogRunIndexAndApiTests(unittest.TestCase):
                     filters = {
                         "experiments": [run["experiment"]],
                         "datasets": [run["dataset"]],
-                        "models": [run["model"]],
+                        "models": [
+                            {
+                                "modelType": run["modelType"],
+                                "model": run["model"],
+                            }
+                        ],
                         "presets": [run["preset"]],
                         "runIds": [run["id"]],
                     }

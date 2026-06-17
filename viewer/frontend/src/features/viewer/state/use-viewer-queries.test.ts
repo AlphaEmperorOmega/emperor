@@ -18,13 +18,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/api", () => mocks);
 
 import { useViewerQueries } from "@/features/viewer/state/use-viewer-queries";
+import { type ModelIdentity } from "@/lib/api";
 
 function renderQueries(model: string, preset: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return renderHook(
-    ({ m, p }: { m: string; p: string }) => useViewerQueries(m, p),
+    ({ m, p }: { m: string; p: string }) => useViewerQueries("linears", m, p),
     {
       initialProps: { m: model, p: preset },
       wrapper: ({ children }: { children: ReactNode }) =>
@@ -48,22 +49,26 @@ beforeEach(() => {
     dataSourcesEnabled: false,
     dataSources: [],
   });
-  mocks.fetchModels.mockReset().mockResolvedValue({ models: ["linear"] });
-  mocks.fetchPresets.mockReset().mockImplementation((model: string) =>
-    Promise.resolve({ model, presets: [] }),
+  mocks.fetchModels
+    .mockReset()
+    .mockResolvedValue({ models: [{ modelType: "linears", model: "linear" }] });
+  mocks.fetchPresets.mockReset().mockImplementation((identity: ModelIdentity) =>
+    Promise.resolve({ ...identity, presets: [] }),
   );
-  mocks.fetchDatasets.mockReset().mockImplementation((model: string) =>
-    Promise.resolve({ model, datasets: [] }),
+  mocks.fetchDatasets.mockReset().mockImplementation((identity: ModelIdentity) =>
+    Promise.resolve({ ...identity, datasets: [] }),
   );
-  mocks.fetchMonitors.mockReset().mockImplementation((model: string) =>
-    Promise.resolve({ model, monitors: [] }),
+  mocks.fetchMonitors.mockReset().mockImplementation((identity: ModelIdentity) =>
+    Promise.resolve({ ...identity, monitors: [] }),
   );
-  mocks.fetchConfigSchema.mockReset().mockImplementation((model: string) =>
-    Promise.resolve({ model, fields: [] }),
+  mocks.fetchConfigSchema.mockReset().mockImplementation((identity: ModelIdentity) =>
+    Promise.resolve({ ...identity, fields: [] }),
   );
-  mocks.fetchSearchSpace.mockReset().mockImplementation((model: string, preset: string) =>
-    Promise.resolve({ model, preset, axes: [] }),
-  );
+  mocks.fetchSearchSpace
+    .mockReset()
+    .mockImplementation((identity: ModelIdentity, preset: string) =>
+      Promise.resolve({ ...identity, preset, axes: [] }),
+    );
 });
 
 describe("useViewerQueries enabled gating", () => {
@@ -83,9 +88,20 @@ describe("useViewerQueries enabled gating", () => {
   it("fires model-scoped queries once a model is selected, but not schema", async () => {
     renderQueries("linear", "");
 
-    await waitFor(() => expect(mocks.fetchPresets).toHaveBeenCalledWith("linear"));
-    expect(mocks.fetchDatasets).toHaveBeenCalledWith("linear");
-    expect(mocks.fetchMonitors).toHaveBeenCalledWith("linear");
+    await waitFor(() =>
+      expect(mocks.fetchPresets).toHaveBeenCalledWith({
+        modelType: "linears",
+        model: "linear",
+      }),
+    );
+    expect(mocks.fetchDatasets).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "linear",
+    });
+    expect(mocks.fetchMonitors).toHaveBeenCalledWith({
+      modelType: "linears",
+      model: "linear",
+    });
     expect(mocks.fetchConfigSchema).not.toHaveBeenCalled();
     expect(mocks.fetchSearchSpace).not.toHaveBeenCalled();
   });
@@ -94,8 +110,14 @@ describe("useViewerQueries enabled gating", () => {
     renderQueries("linear", "base");
 
     await waitFor(() =>
-      expect(mocks.fetchConfigSchema).toHaveBeenCalledWith("linear", "base"),
+      expect(mocks.fetchConfigSchema).toHaveBeenCalledWith(
+        { modelType: "linears", model: "linear" },
+        "base",
+      ),
     );
-    expect(mocks.fetchSearchSpace).toHaveBeenCalledWith("linear", "base");
+    expect(mocks.fetchSearchSpace).toHaveBeenCalledWith(
+      { modelType: "linears", model: "linear" },
+      "base",
+    );
   });
 });

@@ -47,6 +47,7 @@ function snapshot(overrides: Partial<ConfigSnapshot> & Pick<ConfigSnapshot, "id"
   return {
     id: overrides.id,
     name: overrides.name ?? overrides.id,
+    modelType: overrides.modelType ?? "linears",
     model: overrides.model ?? "linear",
     preset: overrides.preset ?? "baseline",
     overrides: overrides.overrides ?? {},
@@ -76,6 +77,7 @@ describe("target selection", () => {
         snapshot({ id: "other-preset", preset: "rare" }),
         snapshot({ id: "other-model", model: "bert", preset: "fast" }),
       ],
+      selectedModelType: "linears",
       selectedModel: "linear",
       selectedPreset: "fast",
       selectedTrainingPresets: ["fast", "baseline"],
@@ -149,6 +151,7 @@ describe("target selection", () => {
         }),
       ],
       configSnapshots: [],
+      selectedModelType: "linears",
       selectedModel: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: [],

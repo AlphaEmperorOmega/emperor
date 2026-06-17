@@ -63,7 +63,7 @@ export function TargetPresetPanel({
   const hasPresetDescription = Boolean(selectedPresetDescription?.trim());
   const modelTypeOptions = createModelTypeOptions(models);
   const modelOptions = modelsForType(models, selectedModelType).map((model) => ({
-    value: model,
+    value: model.model,
     label: modelNameForId(model),
   }));
   const presetOptions = presets.map((preset) => ({

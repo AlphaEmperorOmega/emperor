@@ -20,6 +20,7 @@ function graphNode(id: string, overrides: Partial<GraphNode> = {}): GraphNode {
 
 function locationGraph(): InspectResponse {
   return {
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     parameterCount: 0,
@@ -222,6 +223,7 @@ describe("GraphLocationsCard", () => {
     const { container } = render(
       <GraphLocationsCard
         graph={{
+          modelType: "linears",
           model: "linear",
           preset: "baseline",
           parameterCount: 0,

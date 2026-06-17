@@ -22,7 +22,7 @@ from emperor.datasets.image.classification.cifar_10 import Cifar10
 from emperor.datasets.image.classification.cifar_100 import Cifar100
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
-from models.catalog import public_id_for_module
+from models.catalog import model_identity_payload_from_id, public_id_for_module
 from emperor.experiments.progress import sanitize_metric_payload
 
 DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
@@ -725,7 +725,7 @@ class ExperimentBase:
 
     def _training_result(self, training_run: _TrainingRun, trainer) -> dict:
         return {
-            "model": self._public_model_id(),
+            **self._public_model_identity_payload(),
             "dataset": training_run.dataset_type.__name__,
             "preset": self._option_cli_name(training_run.option),
             "option": training_run.option.name,
@@ -810,3 +810,10 @@ class ExperimentBase:
     def _public_model_id(self) -> str:
         package = type(self).__module__.rsplit(".", 1)[0]
         return _public_model_id_from_package(package)
+
+    def _public_model_identity_payload(self) -> dict[str, str]:
+        model_id = self._public_model_id()
+        try:
+            return model_identity_payload_from_id(model_id)
+        except ValueError:
+            return {"modelType": "models", "model": model_id}

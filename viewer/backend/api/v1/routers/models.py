@@ -39,80 +39,88 @@ async def models(
 
 
 @router.get(
-    "/{model:path}/presets",
+    "/{modelType}/{model}/presets",
     response_model=PresetsResponse,
     summary="List model presets",
     response_description="Available presets for the selected model.",
 )
 async def presets(
+    modelType: str,
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> PresetsResponse:
     return PresetsResponse(
+        modelType=modelType,
         model=model,
-        presets=await run_blocking_io(service.list_presets, model),
+        presets=await run_blocking_io(service.list_presets, modelType, model),
     )
 
 
 @router.get(
-    "/{model:path}/datasets",
+    "/{modelType}/{model}/datasets",
     response_model=DatasetsResponse,
     summary="List model datasets",
     response_description="Supported datasets for the selected model.",
 )
 async def datasets(
+    modelType: str,
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> DatasetsResponse:
     return DatasetsResponse(
+        modelType=modelType,
         model=model,
-        datasets=await run_blocking_io(service.list_datasets, model),
+        datasets=await run_blocking_io(service.list_datasets, modelType, model),
     )
 
 
 @router.get(
-    "/{model:path}/monitors",
+    "/{modelType}/{model}/monitors",
     response_model=MonitorsResponse,
     summary="List model monitors",
     response_description="Monitor options supported by the selected model.",
 )
 async def monitors(
+    modelType: str,
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
 ) -> MonitorsResponse:
     return MonitorsResponse(
+        modelType=modelType,
         model=model,
-        monitors=await run_blocking_io(service.list_monitors, model),
+        monitors=await run_blocking_io(service.list_monitors, modelType, model),
     )
 
 
 @router.get(
-    "/{model:path}/config-schema",
+    "/{modelType}/{model}/config-schema",
     response_model=ConfigSchemaResponse,
     summary="Get model config schema",
     response_description="Config fields for the selected model and optional preset.",
 )
 async def schema(
+    modelType: str,
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
     preset: str | None = None,
 ) -> ConfigSchemaResponse:
     return ConfigSchemaResponse.model_validate(
-        await run_blocking_io(service.config_schema, model, preset)
+        await run_blocking_io(service.config_schema, modelType, model, preset)
     )
 
 
 @router.get(
-    "/{model:path}/search-space",
+    "/{modelType}/{model}/search-space",
     response_model=SearchSpaceResponse,
     summary="Get model search space",
     response_description="Search axes for the selected model and optional preset.",
 )
 async def search_space(
+    modelType: str,
     model: str,
     service: Annotated[ModelCatalogService, Depends(get_model_catalog_service)],
     preset: str | None = None,
 ) -> SearchSpaceResponse:
     return SearchSpaceResponse.model_validate(
-        await run_blocking_io(service.search_space_schema, model, preset)
+        await run_blocking_io(service.search_space_schema, modelType, model, preset)
     )

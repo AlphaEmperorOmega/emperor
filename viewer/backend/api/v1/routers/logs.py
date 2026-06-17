@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_log_run_service, get_training_job_service
+from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.schemas import (
     LogCheckpointResponse,
     LogCheckpointsRequest,
@@ -72,6 +74,38 @@ def active_job_payloads(service: TrainingJobService) -> list[dict[str, str]]:
     return [job.to_api_payload() for job in service.active_jobs()]
 
 
+def _model_id(model_type: str, model: str) -> str:
+    model_id = model_id_from_parts(model_type, model)
+    if model_id is None:
+        raise InspectorError(
+            f"Unknown model: --model-type {model_type} --model {model}"
+        )
+    return model_id
+
+
+def _model_query_ids(
+    model_types: list[str] | None,
+    models: list[str] | None,
+) -> list[str] | None:
+    if not model_types:
+        return models
+    if not models:
+        raise InspectorError("Log model filters require modelType and model.")
+    if len(model_types) != len(models):
+        raise InspectorError("Log modelType and model filters must be paired.")
+    return [
+        _model_id(model_type, model)
+        for model_type, model in zip(model_types, models, strict=True)
+    ]
+
+
+def _model_filter_ids(request: LogRunDeleteFiltersRequest) -> list[str]:
+    return [
+        _model_id(model.modelType, model.model)
+        for model in request.models
+    ]
+
+
 @router.get(
     "/runs",
     response_model=LogRunsResponse,
@@ -86,6 +120,7 @@ async def logs_runs(
     ] = DEFAULT_LOG_PAGE_LIMIT,
     offset: Annotated[int, Query(ge=0)] = 0,
     experiment: Annotated[list[str] | None, Query()] = None,
+    modelType: Annotated[list[str] | None, Query()] = None,
     model: Annotated[list[str] | None, Query()] = None,
     preset: Annotated[list[str] | None, Query()] = None,
     dataset: Annotated[list[str] | None, Query()] = None,
@@ -100,7 +135,7 @@ async def logs_runs(
             limit=limit,
             offset=offset,
             experiment=experiment,
-            model=model,
+            model=_model_query_ids(modelType, model),
             preset=preset,
             dataset=dataset,
             has_event_files=has_event_files,
@@ -192,7 +227,7 @@ async def log_run_delete_plan(
         service.create_delete_plan(
             experiments=request.experiments,
             datasets=request.datasets,
-            models=request.models,
+            models=_model_filter_ids(request),
             presets=request.presets,
             run_ids=request.runIds,
             active_jobs=active_job_payloads(training_service),
@@ -218,7 +253,7 @@ async def delete_log_runs(
         service.delete_runs(
             experiments=request.experiments,
             datasets=request.datasets,
-            models=request.models,
+            models=_model_filter_ids(request),
             presets=request.presets,
             run_ids=request.runIds,
             active_jobs=active_job_payloads(training_service),

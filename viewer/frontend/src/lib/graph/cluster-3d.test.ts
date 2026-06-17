@@ -26,6 +26,7 @@ function node(id: string, overrides: Partial<GraphNode> = {}): GraphNode {
 
 function graph(nodes: GraphNode[], edges: Array<[string, string]>): InspectResponse {
   return {
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     parameterCount: nodes[0]?.parameterCount ?? 0,
@@ -43,6 +44,7 @@ function trainingJob(events: TrainingProgressEvent[]): TrainingJob {
   return {
     id: "job-1",
     status: "running",
+    modelType: "neuron",
     model: "neuron_linear",
     preset: "baseline",
     datasets: ["Mnist"],

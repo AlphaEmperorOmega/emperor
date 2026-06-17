@@ -1,9 +1,11 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
+import { type ModelIdentity } from "@/lib/api/models";
 
 export const configSnapshotSchema = z.object({
   id: z.string(),
+  modelType: z.string(),
   model: z.string(),
   preset: z.string(),
   name: z.string(),
@@ -13,6 +15,7 @@ export const configSnapshotSchema = z.object({
 });
 
 export const configSnapshotsSchema = z.object({
+  modelType: z.string(),
   model: z.string(),
   snapshots: z.array(configSnapshotSchema),
 });
@@ -24,6 +27,7 @@ export const configSnapshotLibrarySchema = z.object({
 export type ConfigSnapshotRecord = z.infer<typeof configSnapshotSchema>;
 
 export type ConfigSnapshotCreateInput = {
+  modelType: string;
   model: string;
   preset: string;
   name: string;
@@ -35,9 +39,13 @@ export type ConfigSnapshotUpdateInput = {
   overrides?: Record<string, string>;
 };
 
-export function fetchConfigSnapshots(model: string) {
+export function fetchConfigSnapshots(identity: ModelIdentity) {
+  const params = new URLSearchParams({
+    modelType: identity.modelType,
+    model: identity.model,
+  });
   return requestJson(
-    `/config-snapshots?model=${encodeURIComponent(model)}`,
+    `/config-snapshots?${params.toString()}`,
     configSnapshotsSchema,
   );
 }

@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from models.catalog import model_id_from_parts
 
 from viewer.backend.blocking import run_blocking_io
 from viewer.backend.core.security import require_bearer_auth
 from viewer.backend.dependencies import get_config_snapshot_service
+from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.schemas import (
     ConfigSnapshotCreateRequest,
     ConfigSnapshotLibraryResponse,
@@ -25,6 +27,15 @@ router = APIRouter(
 )
 
 
+def _model_id(model_type: str, model: str) -> str:
+    model_id = model_id_from_parts(model_type, model)
+    if model_id is None:
+        raise InspectorError(
+            f"Unknown model: --model-type {model_type} --model {model}"
+        )
+    return model_id
+
+
 @router.get(
     "",
     response_model=ConfigSnapshotsResponse,
@@ -33,12 +44,15 @@ router = APIRouter(
 )
 async def list_config_snapshots(
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
+    modelType: str = Query(...),
     model: str = Query(...),
 ) -> ConfigSnapshotsResponse:
+    model_id = _model_id(modelType, model)
     return ConfigSnapshotsResponse.model_validate(
         {
+            "modelType": modelType,
             "model": model,
-            "snapshots": await run_blocking_io(service.list_snapshots, model),
+            "snapshots": await run_blocking_io(service.list_snapshots, model_id),
         }
     )
 
@@ -67,10 +81,11 @@ async def create_config_snapshot(
     request: ConfigSnapshotCreateRequest,
     service: Annotated[ConfigSnapshotService, Depends(get_config_snapshot_service)],
 ) -> ConfigSnapshotResponse:
+    model_id = _model_id(request.modelType, request.model)
     return ConfigSnapshotResponse.model_validate(
         await run_blocking_io(
             service.create_snapshot,
-            model=request.model,
+            model=model_id,
             preset=request.preset,
             name=request.name,
             overrides=request.overrides,

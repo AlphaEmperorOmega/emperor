@@ -508,6 +508,7 @@ describe("KeyValueRow", () => {
 describe("TrainingProgressDialog", () => {
   function progressPlan(): TrainingRunPlan {
     return {
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       presets: ["baseline"],
@@ -535,7 +536,7 @@ describe("TrainingProgressDialog", () => {
           ],
           overrides: { hidden_dim: "128" },
           command:
-            "source experiment.sh linear --preset baseline --datasets Mnist --config --hidden-dim 128",
+            "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --config --hidden-dim 128",
           totalEpochs: 2,
           currentEpoch: 0,
           metrics: {},
@@ -572,7 +573,8 @@ describe("TrainingProgressDialog", () => {
           dataset: "Mnist",
           changes: [],
           overrides: {},
-          command: "source experiment.sh linear --preset baseline --datasets Mnist",
+          command:
+            "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
           totalEpochs: 30,
           currentEpoch: 0,
           metrics: {},
@@ -683,6 +685,7 @@ describe("TrainingProgressDialog", () => {
             {
               id: "snap-wide",
               name: "Wide snapshot",
+              modelType: "linears",
               model: "linear",
               preset: "baseline",
               overrides: { hidden_dim: "128" },
@@ -784,6 +787,7 @@ describe("TrainingProgressDialog", () => {
             {
               id: "snap-wide",
               name: "Wide snapshot",
+              modelType: "linears",
               model: "linear",
               preset: "baseline",
               overrides: { hidden_dim: "128" },
@@ -851,6 +855,7 @@ describe("TrainingProgressDialog", () => {
             {
               id: "snap-wide",
               name: "Wide snapshot",
+              modelType: "linears",
               model: "linear",
               preset: "baseline",
               overrides: { hidden_dim: "128" },
@@ -859,6 +864,7 @@ describe("TrainingProgressDialog", () => {
             {
               id: "snap-fast",
               name: "Fast copy",
+              modelType: "linears",
               model: "linear",
               preset: "fast",
               overrides: { num_layers: "4" },
@@ -959,6 +965,7 @@ describe("TrainingProgressDialog", () => {
             {
               id: "snap-wide",
               name: "Wide snapshot",
+              modelType: "linears",
               model: "linear",
               preset: "baseline",
               overrides: { hidden_dim: "128" },
@@ -998,6 +1005,7 @@ describe("TrainingProgressDialog", () => {
   it("opens the full traceback for a failed row", async () => {
     const user = userEvent.setup();
     const plan: TrainingRunPlan = {
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       presets: ["baseline"],
@@ -1015,7 +1023,8 @@ describe("TrainingProgressDialog", () => {
           dataset: "Mnist",
           changes: [],
           overrides: {},
-          command: "source experiment.sh linear --preset baseline",
+          command:
+            "source experiment.sh --model-type linears --model linear --preset baseline",
           totalEpochs: 2,
           currentEpoch: 0,
           metrics: {},

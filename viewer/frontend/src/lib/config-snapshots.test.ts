@@ -77,6 +77,7 @@ function makeSnapshot(overrides: Record<string, string>, name = "snapshot") {
   const result = createConfigSnapshot({
     id: `snap-${name}`,
     name,
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     fields,
@@ -95,6 +96,7 @@ describe("config snapshots", () => {
     const result = createConfigSnapshot({
       id: "snap-default",
       name: "default",
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       fields,
@@ -113,6 +115,7 @@ describe("config snapshots", () => {
     const result = createConfigSnapshot({
       id: "snap-empty-name",
       name: "   ",
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       fields,
@@ -132,6 +135,7 @@ describe("config snapshots", () => {
     const duplicate = createConfigSnapshot({
       id: "snap-dup",
       name: "different name",
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       fields,
@@ -142,6 +146,7 @@ describe("config snapshots", () => {
     const duplicateNameDifferentConfig = createConfigSnapshot({
       id: "snap-name-dup",
       name: " Same Name ",
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       fields,
@@ -164,6 +169,7 @@ describe("config snapshots", () => {
     const existing = makeSnapshot({ hidden_dim: "128" }, "existing");
 
     const nameResult = validateConfigSnapshotName({
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       name: " existing ",
@@ -171,6 +177,7 @@ describe("config snapshots", () => {
       excludeSnapshotId: existing.id,
     });
     const configResult = validateConfigSnapshotCandidate({
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       fields,
@@ -187,6 +194,7 @@ describe("config snapshots", () => {
     const result = createConfigSnapshot({
       id: "snap-locked",
       name: "locked",
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       fields,
@@ -203,6 +211,7 @@ describe("config snapshots", () => {
 
   it("builds preset-only run plans when no snapshots are selected", () => {
     const plan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
       model: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["baseline", "fast"],
@@ -224,6 +233,7 @@ describe("config snapshots", () => {
     ];
 
     const plan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
       model: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: [],
@@ -251,6 +261,7 @@ describe("config snapshots", () => {
     ];
 
     const plan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
       model: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["baseline"],
@@ -272,7 +283,7 @@ describe("config snapshots", () => {
     expect(plan?.runs[0]).not.toHaveProperty("snapshotName");
     expect(plan?.runs[0].changes).toEqual([]);
     expect(plan?.runs[0].command).toBe(
-      "source experiment.sh linear --preset baseline --datasets Mnist --logdir snapshots",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir snapshots",
     );
     expect(plan?.runs.map((run) => run.snapshotName)).toEqual([
       undefined,
@@ -311,6 +322,7 @@ describe("config snapshots", () => {
     ];
 
     const plan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
       model: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["baseline"],
@@ -344,6 +356,7 @@ describe("config snapshots", () => {
     ];
 
     const plan = buildConfigSnapshotRunPlan({
+      modelType: "linears",
       model: "linear",
       selectedPreset: "baseline",
       selectedTrainingPresets: ["fast"],

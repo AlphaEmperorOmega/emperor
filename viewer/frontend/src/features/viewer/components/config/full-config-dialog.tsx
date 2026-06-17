@@ -45,6 +45,7 @@ export function FullConfigDialog({
   onClose: () => void;
 }) {
   const {
+    selectedModelType: modelType,
     selectedModel: model,
     selectedPreset: preset,
     configSections: sections,
@@ -183,9 +184,9 @@ export function FullConfigDialog({
   const trainingCommand = useMemo(
     () =>
       isTrainingCommandOpen
-        ? buildTrainingCommand({ model, preset, sections, overrides })
+        ? buildTrainingCommand({ modelType, model, preset, sections, overrides })
         : "",
-    [isTrainingCommandOpen, model, preset, sections, overrides],
+    [isTrainingCommandOpen, modelType, model, preset, sections, overrides],
   );
   const handleToggleAllSections = useCallback(() => {
     setOpenSections(
@@ -363,6 +364,7 @@ export function FullConfigDialog({
           )}
           {isAddSnapshotOpen && (
             <AddConfigSnapshotDialog
+              modelType={modelType}
               model={model}
               preset={preset}
               fields={configFields}

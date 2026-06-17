@@ -63,6 +63,7 @@ function graph(
   edges: Array<[string, string]>,
 ): InspectResponse {
   return {
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     parameterCount: nodes[0]?.parameterCount ?? 0,

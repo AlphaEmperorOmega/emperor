@@ -34,6 +34,7 @@ function logRun(id: string): LogRun {
     id,
     group: null,
     experiment: "exp",
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     dataset: "Mnist",

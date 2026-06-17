@@ -27,12 +27,14 @@ function scalarSeries({
 function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
   const experiment = overrides.experiment ?? "exp_a";
   const dataset = overrides.dataset ?? "Cifar10";
-  const model = overrides.model ?? "linears/linear";
+  const modelType = overrides.modelType ?? "linears";
+  const model = overrides.model ?? "linear";
   const preset = overrides.preset ?? "baseline";
   return {
     id: overrides.id,
     group: overrides.group ?? null,
     experiment,
+    modelType,
     model,
     preset,
     dataset,
@@ -41,7 +43,7 @@ function logRun(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     version: overrides.version ?? "version_0",
     relativePath:
       overrides.relativePath ??
-      `${experiment}/${model}/${preset}/${dataset}/${overrides.id}/version_0`,
+      `${experiment}/${modelType}/${model}/${preset}/${dataset}/${overrides.id}/version_0`,
     hasResult: overrides.hasResult ?? true,
     eventFileCount: overrides.eventFileCount ?? 1,
     checkpointCount: overrides.checkpointCount ?? 0,

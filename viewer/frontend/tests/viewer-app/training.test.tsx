@@ -749,7 +749,7 @@ describe("ViewerApp Training And Preview", () => {
     await setTrainingHiddenDimOverride(user, details, "192");
     expect(screen.getAllByText(/1 overrides?/i).length).toBeGreaterThan(0);
 
-    await selectTrainingTargetOption(user, "model", "bert_linear");
+    await selectTrainingTargetOption(user, "model type", "Transformer encoder");
 
     expect(await waitForTargetValue("model", "bert_linear")).toHaveTextContent("bert_linear");
     expect(screen.getAllByText("0 overrides").length).toBeGreaterThan(0);
@@ -791,6 +791,7 @@ describe("ViewerApp Training And Preview", () => {
 
     await waitFor(() => {
       expect(trainingBodies[0]).toMatchObject({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         presets: ["baseline"],
@@ -849,6 +850,7 @@ describe("ViewerApp Training And Preview", () => {
 
     await waitFor(() => {
       expect(trainingBodies[0]).toMatchObject({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         presets: ["baseline", "recurrent-gating-halting"],
@@ -932,7 +934,7 @@ describe("ViewerApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --datasets Mnist",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
     );
   });
 
@@ -956,10 +958,12 @@ describe("ViewerApp Training And Preview", () => {
         ],
       },
       configSnapshotsResponse: {
+        modelType: "linears",
         model: "linear",
         snapshots: [
           {
             id: "snap-wide",
+            modelType: "linears",
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
@@ -1041,7 +1045,7 @@ describe("ViewerApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --datasets Mnist --logdir mixed_snapshots",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -1056,7 +1060,7 @@ describe("ViewerApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 128 --num-epochs 5",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 128 --num-epochs 5",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -1083,7 +1087,7 @@ describe("ViewerApp Training And Preview", () => {
     expect(trainingBodies[0]).toHaveProperty("runPlan.runs.0.overrides", {});
     expect(trainingBodies[0]).toHaveProperty(
       "runPlan.runs.0.command",
-      "source experiment.sh linear --preset baseline --datasets Mnist --logdir mixed_snapshots",
+      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir mixed_snapshots",
     );
     expect(trainingBodies[0]).toHaveProperty(
       "runPlan.runs.1.snapshotId",
@@ -1119,10 +1123,12 @@ describe("ViewerApp Training And Preview", () => {
         ],
       },
       configSnapshotsResponse: {
+        modelType: "linears",
         model: "linear",
         snapshots: [
           {
             id: "snap-wide",
+            modelType: "linears",
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
@@ -1209,10 +1215,12 @@ describe("ViewerApp Training And Preview", () => {
         ],
       },
       configSnapshotsResponse: {
+        modelType: "linears",
         model: "linear",
         snapshots: [
           {
             id: "snap-wide",
+            modelType: "linears",
             model: "linear",
             preset: "baseline",
             name: "Wide snapshot",
@@ -1450,7 +1458,7 @@ describe("ViewerApp Training And Preview", () => {
       );
       expect(trainingBodies[1]).toHaveProperty(
         "runPlan.runs.0.command",
-        "source experiment.sh linear --preset baseline --datasets Mnist --logdir second_plan --config --hidden-dim 192",
+        "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir second_plan --config --hidden-dim 192",
       );
     });
   });
@@ -1502,6 +1510,7 @@ describe("ViewerApp Training And Preview", () => {
       expect(inspectBodies).toHaveLength(initialInspectRequestCount + 1),
     );
     expect(inspectBodies.at(-1)).toEqual({
+      modelType: "linears",
       model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
@@ -1729,6 +1738,7 @@ describe("ViewerApp Training And Preview", () => {
 
     await waitFor(() => {
       expect(trainingBodies[0]).toMatchObject({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         presets: ["baseline"],
@@ -1946,7 +1956,7 @@ describe("ViewerApp Training And Preview", () => {
 
   it("keeps Start Training disabled when the selected model has no datasets", async () => {
     const { trainingBodies } = installFetchMock({
-      datasetsResponse: { model: "linear", datasets: [] },
+      datasetsResponse: { modelType: "linears", model: "linear", datasets: [] },
     });
     renderViewer();
     const user = userEvent.setup();
@@ -2022,6 +2032,7 @@ describe("ViewerApp Training And Preview", () => {
     expect(screen.queryByText("No overrides set")).not.toBeInTheDocument();
     await waitFor(() => expect(inspectBodies).toHaveLength(initialRequestCount + 1));
     expect(inspectBodies.at(-1)).toEqual({
+      modelType: "linears",
       model: "linear",
       preset: "recurrent-gating-halting",
       dataset: "Mnist",
@@ -2042,6 +2053,7 @@ describe("ViewerApp Training And Preview", () => {
 
     await waitFor(() => expect(inspectBodies).toHaveLength(requestCountBeforeReset + 1));
     expect(inspectBodies.at(-1)).toEqual({
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       dataset: "Mnist",

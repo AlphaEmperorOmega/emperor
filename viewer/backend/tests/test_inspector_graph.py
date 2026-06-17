@@ -31,6 +31,7 @@ from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerCo
 from torch import nn
 
 from viewer.backend.inspector.discovery import discover_models, list_model_presets
+from viewer.backend.inspector.errors import InspectorError
 from viewer.backend.inspector.graph import serialize_graph
 from viewer.backend.inspector.service import build_config, inspect_model
 
@@ -148,13 +149,11 @@ class InspectorGraphTests(unittest.TestCase):
         self.assertIn("main_model-main_model.layers", edge_ids)
         self.assertIn("main_model.layers-main_model.layers.0", edge_ids)
 
-    def test_inspector_builds_memory_linear_graph(self) -> None:
-        graph = inspect_model("memory/memory_linear", "gated-residual")
+    def test_inspector_rejects_unknown_memory_linear_graph(self) -> None:
+        with self.assertRaises(InspectorError) as raised:
+            inspect_model("memory/memory_linear", "gated-residual")
 
-        self.assertEqual(graph["model"], "memory/memory_linear")
-        self.assertEqual(graph["preset"], "gated-residual")
-        self.assertGreater(len(graph["nodes"]), 0)
-        self.assertGreater(len(graph["edges"]), 0)
+        self.assertIn("Unknown model", raised.exception.detail)
 
     def test_graph_serializer_marks_internal_modules(self) -> None:
         nodes, _edges = serialize_graph(nn.Sequential(nn.Dropout(), nn.LayerNorm(4)))
@@ -603,7 +602,8 @@ class InspectorGraphTests(unittest.TestCase):
         linear_result = inspect_model("linears/linear", "baseline")
         linear_type_names = {node["typeName"] for node in linear_result["nodes"]}
 
-        self.assertEqual(linear_result["model"], "linears/linear")
+        self.assertEqual(linear_result["modelType"], "linears")
+        self.assertEqual(linear_result["model"], "linear")
         self.assertEqual(linear_result["preset"], "baseline")
         self.assertIn("LinearLayer", linear_type_names)
         self.assertFalse(

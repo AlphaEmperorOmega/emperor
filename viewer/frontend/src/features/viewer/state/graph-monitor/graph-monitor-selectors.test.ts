@@ -18,6 +18,7 @@ function run(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     id: overrides.id,
     group: overrides.group ?? overrides.experiment ?? "exp_a",
     experiment: overrides.experiment ?? "exp_a",
+    modelType: overrides.modelType ?? "linears",
     model: overrides.model ?? "linear",
     preset: overrides.preset ?? "baseline",
     dataset: overrides.dataset ?? "Mnist",
@@ -85,6 +86,7 @@ function monitorGraph(): InspectResponse {
   });
 
   return {
+    modelType: "linears",
     model: "linear",
     preset: "baseline",
     parameterCount: 0,
@@ -115,6 +117,7 @@ function trainingJob(overrides: Partial<TrainingJob> = {}): TrainingJob {
   return {
     id: overrides.id ?? "job-1",
     status: overrides.status ?? "Running",
+    modelType: overrides.modelType ?? "linears",
     model: overrides.model ?? "linear",
     preset: overrides.preset ?? "baseline",
     presets: overrides.presets ?? ["baseline"],
@@ -393,6 +396,7 @@ describe("viewer state selectors", () => {
   it("uses the resolved monitor name for active-job chart source selection", () => {
     const attention = node("attention-0", "encoder.0.attention", "SelfAttention");
     const graph: InspectResponse = {
+      modelType: "transformer_encoder",
       model: "bert",
       preset: "baseline",
       parameterCount: 0,

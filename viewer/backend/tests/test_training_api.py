@@ -28,6 +28,7 @@ from viewer.backend.training_jobs import TrainingJobManager
 EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
     "id",
     "status",
+    "modelType",
     "model",
     "preset",
     "presets",
@@ -58,6 +59,7 @@ EXPECTED_TRAINING_JOB_RESPONSE_FIELDS = (
 )
 
 EXPECTED_TRAINING_RUN_PLAN_RESPONSE_FIELDS = (
+    "modelType",
     "model",
     "preset",
     "presets",
@@ -163,7 +165,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
     def test_training_create_request_overrides_are_config_values(self) -> None:
         base_payload = {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "datasets": ["Mnist"],
             "logFolder": "api_schema",
@@ -209,7 +212,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
 
     def test_submitted_run_plan_overrides_are_config_values(self) -> None:
         base_payload = {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -260,7 +264,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     return await client.post(
                         "/training/run-plan",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "datasets": ["Mnist"],
                             "overrides": {"scheduler": {"name": "cosine"}},
@@ -287,7 +292,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             "remainingEpochs": 0,
         }
         run_plan_payload = {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -301,7 +307,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         job_payload = {
             "id": "job-1",
             "status": "running",
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -353,7 +360,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         payload = {
             "id": "job-1",
             "status": "running",
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -433,7 +441,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     run_plan_response = await client.post(
                         "/training/run-plan",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
@@ -445,7 +454,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     create_response = await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "presets": ["baseline"],
                             "datasets": ["Mnist"],
@@ -466,7 +476,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
             tuple(run_plan_payload),
             EXPECTED_TRAINING_RUN_PLAN_RESPONSE_FIELDS,
         )
-        self.assertEqual(run_plan_payload["model"], "linears/linear")
+        self.assertEqual(run_plan_payload["modelType"], "linears")
+        self.assertEqual(run_plan_payload["model"], "linear")
         self.assertEqual(run_plan_payload["preset"], "baseline")
         self.assertEqual(run_plan_payload["presets"], ["baseline"])
         self.assertEqual(run_plan_payload["datasets"], ["Mnist"])
@@ -481,7 +492,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         create_payload = create_response.json()
         self.assertEqual(tuple(create_payload), EXPECTED_TRAINING_JOB_RESPONSE_FIELDS)
         self.assertEqual(create_payload["status"], "running")
-        self.assertEqual(create_payload["model"], "linears/linear")
+        self.assertEqual(create_payload["modelType"], "linears")
+        self.assertEqual(create_payload["model"], "linear")
         self.assertEqual(create_payload["preset"], "baseline")
         self.assertEqual(create_payload["presets"], ["baseline"])
         self.assertEqual(create_payload["datasets"], ["Mnist"])
@@ -509,7 +521,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     create_response = await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "datasets": ["Mnist"],
                             "overrides": {},
@@ -562,7 +575,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     return await client.post(
                         "/training/run-plan",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "datasets": ["./Mnist"],
                             "overrides": {},
@@ -596,7 +610,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     return await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "datasets": ["./Mnist"],
                             "overrides": {},
@@ -633,7 +648,8 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                     create_response = await client.post(
                         "/training/jobs",
                         json={
-                            "model": "linears/linear",
+                            "modelType": "linears",
+                            "model": "linear",
                             "preset": "baseline",
                             "datasets": ["Mnist"],
                             "overrides": {},

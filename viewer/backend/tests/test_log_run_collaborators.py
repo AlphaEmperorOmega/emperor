@@ -172,6 +172,12 @@ class LogRunQueryServiceTests(unittest.TestCase):
                     "histogramTags": ["weights"],
                     "imageTags": [],
                     "textTags": ["notes/text_summary"],
+                    "eventBytes": None,
+                    "skippedEventFiles": None,
+                    "sourceItemCount": None,
+                    "returnedItemCount": None,
+                    "truncated": None,
+                    "truncationReason": None,
                 }
             ],
         )

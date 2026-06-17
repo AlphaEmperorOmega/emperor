@@ -6,7 +6,7 @@ from pathlib import Path
 from types import ModuleType, UnionType
 from typing import Any, Union, get_args, get_origin
 
-from models.catalog import module_path_for_model_id
+from models.catalog import model_identity_payload_from_id, module_path_for_model_id
 
 SKIP_CONFIG_KEYS = {
     "CONFIG_OVERRIDE_SKIP_KEYS",
@@ -15,13 +15,23 @@ SKIP_CONFIG_KEYS = {
 
 MODEL_PARAM_ALIASES = {
     "adaptive_stack_activation": "adaptive_generator_stack_activation",
-    "adaptive_stack_apply_output_pipeline_flag": "adaptive_generator_stack_apply_output_pipeline_flag",
-    "adaptive_stack_dropout_probability": "adaptive_generator_stack_dropout_probability",
+    "adaptive_stack_apply_output_pipeline_flag": (
+        "adaptive_generator_stack_apply_output_pipeline_flag"
+    ),
+    "adaptive_stack_dropout_probability": (
+        "adaptive_generator_stack_dropout_probability"
+    ),
     "adaptive_stack_hidden_dim": "adaptive_generator_stack_hidden_dim",
-    "adaptive_stack_last_layer_bias_option": "adaptive_generator_stack_last_layer_bias_option",
-    "adaptive_stack_layer_norm_position": "adaptive_generator_stack_layer_norm_position",
+    "adaptive_stack_last_layer_bias_option": (
+        "adaptive_generator_stack_last_layer_bias_option"
+    ),
+    "adaptive_stack_layer_norm_position": (
+        "adaptive_generator_stack_layer_norm_position"
+    ),
     "adaptive_stack_num_layers": "adaptive_generator_stack_num_layers",
-    "adaptive_stack_residual_connection_option": "adaptive_generator_stack_residual_connection_option",
+    "adaptive_stack_residual_connection_option": (
+        "adaptive_generator_stack_residual_connection_option"
+    ),
     "expert_capacity_factor": "capacity_factor",
     "expert_compute_expert_mixture_flag": "compute_expert_mixture_flag",
     "expert_dropped_token_behavior": "dropped_token_behavior",
@@ -371,6 +381,14 @@ def _catalog_source_path(
     return Path(models_dir) / relative_package / filename
 
 
+def _display_model_selector(experiment: str) -> str:
+    try:
+        identity = model_identity_payload_from_id(experiment)
+    except ValueError:
+        return experiment
+    return f"--model-type {identity['modelType']} --model {identity['model']}"
+
+
 def print_config_options(experiment: str, models_dir: str = "models") -> None:
     config_path = _catalog_source_path(experiment, "config.py", models_dir)
     if not config_path.exists():
@@ -378,7 +396,7 @@ def print_config_options(experiment: str, models_dir: str = "models") -> None:
 
     config_options, search_options = _iter_config_assignments(config_path)
 
-    print(f"Config options for {experiment}:")
+    print(f"Config options for {_display_model_selector(experiment)}:")
     for key, default in config_options:
         print(f"  {config_key_to_flag(key):45} {default}")
 
@@ -396,7 +414,7 @@ def print_preset_options(experiment: str, models_dir: str = "models") -> None:
 
     source = presets_path.read_text()
     tree = ast.parse(source)
-    print(f"Available presets for {experiment}:")
+    print(f"Available presets for {_display_model_selector(experiment)}:")
 
     for node in tree.body:
         if not isinstance(node, ast.ClassDef) or node.name != "ExperimentOptions":
@@ -425,7 +443,9 @@ def print_preset_options(experiment: str, models_dir: str = "models") -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Print experiment config options without importing the training stack."
+        description=(
+            "Print experiment config options without importing the training stack."
+        )
     )
     parser.add_argument("experiment", help="Experiment package under models/.")
     parser.add_argument(

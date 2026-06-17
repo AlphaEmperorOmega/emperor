@@ -35,6 +35,7 @@ async def inspect(
     return InspectResponse.model_validate(
         await run_blocking_io(
             service.inspect,
+            model_type=request.modelType,
             model=request.model,
             preset=request.preset,
             overrides=request.overrides,
@@ -59,6 +60,7 @@ async def inspect_operation_graph(
     return OperationGraphResponse.model_validate(
         await run_blocking_io(
             service.inspect_operation_graph,
+            model_type=request.modelType,
             model=request.model,
             preset=request.preset,
             overrides=request.overrides,

@@ -28,6 +28,7 @@ function graph(
   overrides: Partial<InspectResponse> = {},
 ): InspectResponse {
   return {
+    modelType: overrides.modelType ?? "linears",
     model: "linear",
     preset: "baseline",
     parameterCount:

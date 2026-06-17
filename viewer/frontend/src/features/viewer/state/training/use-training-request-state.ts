@@ -23,6 +23,7 @@ type TrainingRequestStateInput = {
   overrides: OverrideValues;
   configSnapshotCount: number;
   selectedTrainingSnapshots: ConfigSnapshot[];
+  selectedModelType: string;
   selectedModel: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
@@ -41,6 +42,7 @@ export function useTrainingRequestState({
   overrides,
   configSnapshotCount,
   selectedTrainingSnapshots,
+  selectedModelType,
   selectedModel,
   selectedPreset,
   selectedTrainingPresets,
@@ -104,6 +106,7 @@ export function useTrainingRequestState({
     () =>
       hasActiveConfigSnapshots
         ? buildConfigSnapshotRunPlan({
+            modelType: selectedModelType,
             model: selectedModel,
             selectedPreset,
             selectedTrainingPresets,
@@ -119,6 +122,7 @@ export function useTrainingRequestState({
       logFolder,
       selectedDatasets,
       selectedTrainingSnapshots,
+      selectedModelType,
       selectedModel,
       selectedPreset,
       selectedTrainingPresets,

@@ -9,7 +9,12 @@ import {
 
 describe("training panel options", () => {
   it("maps models and presets to select options", () => {
-    expect(buildTrainingModelOptions(["linear", "neuron"])).toEqual([
+    expect(
+      buildTrainingModelOptions([
+        { modelType: "linears", model: "linear" },
+        { modelType: "neurons", model: "neuron" },
+      ]),
+    ).toEqual([
       { value: "linear", label: "linear" },
       { value: "neuron", label: "neuron" },
     ]);
@@ -22,9 +27,9 @@ describe("training panel options", () => {
 
   it("groups public model IDs by type for the training selector", () => {
     const models = [
-      "linears/linear",
-      "linears/linear_adaptive",
-      "experts/experts_linear",
+      { modelType: "linears", model: "linear" },
+      { modelType: "linears", model: "linear_adaptive" },
+      { modelType: "experts", model: "experts_linear" },
     ];
 
     expect(buildTrainingModelTypeOptions(models)).toEqual([
@@ -32,8 +37,8 @@ describe("training panel options", () => {
       { value: "experts", label: "Experts" },
     ]);
     expect(buildTrainingModelOptions(models, "linears")).toEqual([
-      { value: "linears/linear", label: "linear" },
-      { value: "linears/linear_adaptive", label: "linear_adaptive" },
+      { value: "linear", label: "linear" },
+      { value: "linear_adaptive", label: "linear_adaptive" },
     ]);
   });
 

@@ -5,8 +5,13 @@ from __future__ import annotations
 from viewer.backend.schemas._base import ApiResponseModel, ConfigValue
 
 
+class ModelIdentityResponse(ApiResponseModel):
+    modelType: str
+    model: str
+
+
 class ModelsResponse(ApiResponseModel):
-    models: list[str]
+    models: list[ModelIdentityResponse]
 
 
 class PresetResponse(ApiResponseModel):
@@ -16,6 +21,7 @@ class PresetResponse(ApiResponseModel):
 
 
 class PresetsResponse(ApiResponseModel):
+    modelType: str
     model: str
     presets: list[PresetResponse]
 
@@ -28,6 +34,7 @@ class DatasetResponse(ApiResponseModel):
 
 
 class DatasetsResponse(ApiResponseModel):
+    modelType: str
     model: str
     datasets: list[DatasetResponse]
 
@@ -41,6 +48,7 @@ class MonitorOptionResponse(ApiResponseModel):
 
 
 class MonitorsResponse(ApiResponseModel):
+    modelType: str
     model: str
     monitors: list[MonitorOptionResponse]
 
@@ -61,6 +69,7 @@ class ConfigFieldResponse(ApiResponseModel):
 
 
 class ConfigSchemaResponse(ApiResponseModel):
+    modelType: str
     model: str
     fields: list[ConfigFieldResponse]
 
@@ -79,6 +88,7 @@ class SearchAxisResponse(ApiResponseModel):
 
 
 class SearchSpaceResponse(ApiResponseModel):
+    modelType: str
     model: str
     preset: str | None = None
     axes: list[SearchAxisResponse]

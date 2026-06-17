@@ -55,6 +55,7 @@ function ActiveTrainingJobProgressController({
 
 export function useTargetHeaderState() {
   const {
+    selectedModelType,
     selectedModel,
     selectedPreset,
     apiOnline,
@@ -65,6 +66,7 @@ export function useTargetHeaderState() {
   } = useTargetConfig();
 
   return {
+    selectedModelType,
     selectedModel,
     selectedPreset,
     apiOnline,
@@ -213,6 +215,7 @@ export function useTargetQueryStatusState() {
 
 export function useCompareTargetState() {
   const {
+    selectedModelType,
     selectedModel,
     selectedPreset,
     selectModel,
@@ -224,6 +227,7 @@ export function useCompareTargetState() {
   } = useTargetConfig();
 
   return {
+    selectedModelType,
     selectedModel,
     selectedPreset,
     selectModel,

@@ -25,6 +25,7 @@ class LogRunResponse(ApiResponseModel):
     id: str
     group: str | None = None
     experiment: str
+    modelType: str
     model: str
     preset: str
     dataset: str
@@ -115,10 +116,15 @@ class LogExperimentDeleteResponse(ApiResponseModel):
     deletedRelativePath: str
 
 
+class LogRunModelFilterRequest(ApiResponseModel):
+    modelType: str
+    model: str
+
+
 class LogRunDeleteFiltersRequest(ApiResponseModel):
     experiments: list[str] = Field(default_factory=list)
     datasets: list[str] = Field(default_factory=list)
-    models: list[str] = Field(default_factory=list)
+    models: list[LogRunModelFilterRequest] = Field(default_factory=list)
     presets: list[str] = Field(default_factory=list)
     runIds: list[str] = Field(default_factory=list)
 
@@ -126,6 +132,7 @@ class LogRunDeleteFiltersRequest(ApiResponseModel):
 class LogRunDeleteCandidateResponse(ApiResponseModel):
     id: str
     experiment: str
+    modelType: str
     model: str
     preset: str
     dataset: str
@@ -137,7 +144,7 @@ class LogRunDeleteCandidateResponse(ApiResponseModel):
 class LogRunDeleteAffectedValuesResponse(ApiResponseModel):
     experiments: list[str]
     datasets: list[str]
-    models: list[str]
+    models: list[LogRunModelFilterRequest]
     presets: list[str]
     runIds: list[str]
 

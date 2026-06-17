@@ -17,6 +17,7 @@ type NormalizedQueryValue =
   | NormalizedQueryObject;
 
 export type TrainingRunPlanQueryKeyInput = {
+  modelType: string;
   model: string;
   preset: string;
   presets: StringList;
@@ -61,6 +62,7 @@ function normalizedQueryValue(value: unknown): NormalizedQueryValue {
 
 function trainingRunPlanInputKey({
   model,
+  modelType,
   preset,
   presets,
   datasets,
@@ -73,6 +75,7 @@ function trainingRunPlanInputKey({
     datasets: [...datasets],
     logFolder,
     model,
+    modelType,
     overrides: normalizedQueryValue(overrides),
     preset,
     presets: [...presets],
@@ -136,22 +139,35 @@ export const viewerQueryKeys = {
   health: () => ["health"] as const,
   capabilities: () => ["capabilities"] as const,
   models: () => ["models"] as const,
-  presets: (selectedModel: string) => ["presets", selectedModel] as const,
-  datasets: (selectedModel: string) => ["datasets", selectedModel] as const,
-  monitors: (selectedModel: string) => ["monitors", selectedModel] as const,
-  configSchema: (selectedModel: string, selectedPreset: string) =>
-    ["config-schema", selectedModel, selectedPreset] as const,
-  searchSpace: (selectedModel: string, selectedPreset: string) =>
-    ["search-space", selectedModel, selectedPreset] as const,
+  presets: (selectedModelType: string, selectedModel: string) =>
+    ["presets", selectedModelType, selectedModel] as const,
+  datasets: (selectedModelType: string, selectedModel: string) =>
+    ["datasets", selectedModelType, selectedModel] as const,
+  monitors: (selectedModelType: string, selectedModel: string) =>
+    ["monitors", selectedModelType, selectedModel] as const,
+  configSchema: (
+    selectedModelType: string,
+    selectedModel: string,
+    selectedPreset: string,
+  ) => ["config-schema", selectedModelType, selectedModel, selectedPreset] as const,
+  searchSpace: (
+    selectedModelType: string,
+    selectedModel: string,
+    selectedPreset: string,
+  ) => ["search-space", selectedModelType, selectedModel, selectedPreset] as const,
   historicalSummaryInspection: (
     model: string,
     preset: string,
     dataset: string,
   ) => ["inspect", "historical-summary", model, preset, dataset] as const,
-  comparisonInspection: (model: string, preset: string, dataset: string) =>
-    ["comparison-inspection", model, preset, dataset] as const,
-  configSnapshots: (selectedModel: string) =>
-    ["config-snapshots", selectedModel] as const,
+  comparisonInspection: (
+    modelType: string,
+    model: string,
+    preset: string,
+    dataset: string,
+  ) => ["comparison-inspection", modelType, model, preset, dataset] as const,
+  configSnapshots: (selectedModelType: string, selectedModel: string) =>
+    ["config-snapshots", selectedModelType, selectedModel] as const,
   configSnapshotLibrary: () => ["config-snapshot-library"] as const,
 };
 

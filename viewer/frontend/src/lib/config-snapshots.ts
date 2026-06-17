@@ -10,6 +10,7 @@ import { type OverrideValues } from "@/lib/config";
 export type ConfigSnapshot = {
   id: string;
   name: string;
+  modelType: string;
   model: string;
   preset: string;
   overrides: OverrideValues;
@@ -115,15 +116,18 @@ export function overridesFromSnapshotEntries(
 }
 
 function snapshotIdentity({
+  modelType,
   model,
   preset,
   entries,
 }: {
+  modelType: string;
   model: string;
   preset: string;
   entries: ConfigSnapshotOverrideEntry[];
 }) {
   return [
+    modelType,
     model,
     preset,
     ...entries.map((entry) => `${entry.key}=${entry.value}`),
@@ -132,17 +136,19 @@ function snapshotIdentity({
 
 export function configSnapshotIdentity({
   model,
+  modelType,
   preset,
   fields,
   overrides,
 }: {
+  modelType: string;
   model: string;
   preset: string;
   fields: ConfigField[];
   overrides: OverrideValues;
 }) {
   const { entries } = configSnapshotOverrideEntries(fields, overrides);
-  return snapshotIdentity({ model, preset, entries });
+  return snapshotIdentity({ modelType, model, preset, entries });
 }
 
 function normalizeSnapshotName(name: string) {
@@ -150,12 +156,14 @@ function normalizeSnapshotName(name: string) {
 }
 
 export function validateConfigSnapshotName({
+  modelType,
   model,
   preset,
   name,
   snapshots,
   excludeSnapshotId,
 }: {
+  modelType: string;
   model: string;
   preset: string;
   name: string;
@@ -174,6 +182,7 @@ export function validateConfigSnapshotName({
   const duplicate = snapshots.some(
     (snapshot) =>
       snapshot.id !== excludeSnapshotId &&
+      snapshot.modelType === modelType &&
       snapshot.model === model &&
       snapshot.preset === preset &&
       normalizeSnapshotName(snapshot.name) === normalizedName,
@@ -189,6 +198,7 @@ export function validateConfigSnapshotName({
 }
 
 export function validateConfigSnapshotCandidate({
+  modelType,
   model,
   preset,
   fields,
@@ -196,6 +206,7 @@ export function validateConfigSnapshotCandidate({
   snapshots,
   excludeSnapshotId,
 }: {
+  modelType: string;
   model: string;
   preset: string;
   fields: ConfigField[];
@@ -203,7 +214,7 @@ export function validateConfigSnapshotCandidate({
   snapshots: ConfigSnapshot[];
   excludeSnapshotId?: string;
 }) {
-  if (!model || !preset) {
+  if (!modelType || !model || !preset) {
     return { ok: false as const, error: "Select a model and preset first." };
   }
 
@@ -225,10 +236,11 @@ export function validateConfigSnapshotCandidate({
     };
   }
 
-  const identity = snapshotIdentity({ model, preset, entries });
+  const identity = snapshotIdentity({ modelType, model, preset, entries });
   const duplicate = snapshots.some((snapshot) => {
     if (
       snapshot.id === excludeSnapshotId ||
+      snapshot.modelType !== modelType ||
       snapshot.model !== model ||
       snapshot.preset !== preset
     ) {
@@ -237,6 +249,7 @@ export function validateConfigSnapshotCandidate({
     return (
       configSnapshotIdentity({
         model: snapshot.model,
+        modelType: snapshot.modelType,
         preset: snapshot.preset,
         fields,
         overrides: snapshot.overrides,
@@ -262,6 +275,7 @@ export function createConfigSnapshot({
   id,
   name,
   model,
+  modelType,
   preset,
   fields,
   overrides,
@@ -270,6 +284,7 @@ export function createConfigSnapshot({
 }: {
   id: string;
   name: string;
+  modelType: string;
   model: string;
   preset: string;
   fields: ConfigField[];
@@ -279,6 +294,7 @@ export function createConfigSnapshot({
 }): ConfigSnapshotCreateResult {
   const nameValidation = validateConfigSnapshotName({
     model,
+    modelType,
     preset,
     name,
     snapshots,
@@ -288,6 +304,7 @@ export function createConfigSnapshot({
   }
 
   const validation = validateConfigSnapshotCandidate({
+    modelType,
     model,
     preset,
     fields,
@@ -304,6 +321,7 @@ export function createConfigSnapshot({
       id,
       name: nameValidation.name,
       model,
+      modelType,
       preset,
       overrides: validation.overrides,
       createdAt,
@@ -313,13 +331,16 @@ export function createConfigSnapshot({
 
 export function selectedConfigSnapshots(
   snapshots: ConfigSnapshot[],
+  modelType: string,
   model: string,
   selectedPresets: string[],
 ) {
   const selectedPresetSet = new Set(selectedPresets);
   return snapshots.filter(
     (snapshot) =>
-      snapshot.model === model && selectedPresetSet.has(snapshot.preset),
+      snapshot.modelType === modelType &&
+      snapshot.model === model &&
+      selectedPresetSet.has(snapshot.preset),
   );
 }
 
@@ -377,12 +398,14 @@ function snapshotCommandFlag(key: string) {
 }
 
 function trainingCommand({
+  modelType,
   model,
   preset,
   dataset,
   overrides,
   logFolder,
 }: {
+  modelType: string;
   model: string;
   preset: string;
   dataset: string;
@@ -392,6 +415,9 @@ function trainingCommand({
   const parts = [
     "source",
     "experiment.sh",
+    "--model-type",
+    shellQuote(modelType),
+    "--model",
     shellQuote(model),
     "--preset",
     shellQuote(preset),
@@ -449,6 +475,7 @@ function snapshotEpochs(
 }
 
 function baseRun({
+  modelType,
   model,
   preset,
   dataset,
@@ -456,6 +483,7 @@ function baseRun({
   fieldsByKey,
   logFolder,
 }: {
+  modelType: string;
   model: string;
   preset: string;
   dataset: string;
@@ -473,6 +501,7 @@ function baseRun({
     overrides: {},
     command: trainingCommand({
       model,
+      modelType,
       preset,
       dataset,
       overrides: {},
@@ -504,6 +533,7 @@ function summarizeSnapshotRuns(runs: TrainingRun[]) {
 }
 
 export function buildConfigSnapshotRunPlan({
+  modelType,
   model,
   selectedPreset,
   selectedTrainingPresets,
@@ -512,6 +542,7 @@ export function buildConfigSnapshotRunPlan({
   fields,
   logFolder,
 }: {
+  modelType: string;
   model: string;
   selectedPreset: string;
   selectedTrainingPresets: string[];
@@ -520,7 +551,9 @@ export function buildConfigSnapshotRunPlan({
   fields: ConfigField[];
   logFolder: string;
 }): TrainingRunPlan | undefined {
-  const selectedSnapshots = snapshots.filter((snapshot) => snapshot.model === model);
+  const selectedSnapshots = snapshots.filter(
+    (snapshot) => snapshot.modelType === modelType && snapshot.model === model,
+  );
   if (
     selectedDatasets.length === 0 ||
     (selectedTrainingPresets.length === 0 && selectedSnapshots.length === 0)
@@ -536,6 +569,7 @@ export function buildConfigSnapshotRunPlan({
       runs.push(
         baseRun({
           model,
+          modelType,
           preset,
           dataset,
           index,
@@ -560,6 +594,7 @@ export function buildConfigSnapshotRunPlan({
         overrides: snapshot.overrides,
         command: trainingCommand({
           model,
+          modelType,
           preset: snapshot.preset,
           dataset,
           overrides: snapshot.overrides,
@@ -585,6 +620,7 @@ export function buildConfigSnapshotRunPlan({
     ? selectedPreset
     : presets[0] || selectedPreset;
   return {
+    modelType,
     model,
     preset: primaryPreset,
     presets,

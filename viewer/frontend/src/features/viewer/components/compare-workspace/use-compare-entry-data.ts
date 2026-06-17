@@ -10,6 +10,10 @@ import {
 import { viewerQueryKeys } from "@/lib/query-keys";
 import type { CompareEntry, CompareEntryData } from "./derive";
 
+function entryIdentity(entry: CompareEntry) {
+  return { modelType: entry.modelType, model: entry.model };
+}
+
 export type CompareEntryQueryState = {
   entryData: CompareEntryData[];
   presetNamesByEntry: Map<string, string[]>;
@@ -21,32 +25,36 @@ export function useCompareEntryData(
 ): CompareEntryQueryState {
   const presetQueries = useQueries({
     queries: entries.map((entry) => ({
-      queryKey: viewerQueryKeys.presets(entry.model),
-      queryFn: () => fetchPresets(entry.model),
+      queryKey: viewerQueryKeys.presets(entry.modelType, entry.model),
+      queryFn: () => fetchPresets(entryIdentity(entry)),
       enabled: entry.model.length > 0,
       retry: false,
     })),
   });
   const datasetQueries = useQueries({
     queries: entries.map((entry) => ({
-      queryKey: viewerQueryKeys.datasets(entry.model),
-      queryFn: () => fetchDatasets(entry.model),
+      queryKey: viewerQueryKeys.datasets(entry.modelType, entry.model),
+      queryFn: () => fetchDatasets(entryIdentity(entry)),
       enabled: entry.model.length > 0,
       retry: false,
     })),
   });
   const monitorQueries = useQueries({
     queries: entries.map((entry) => ({
-      queryKey: viewerQueryKeys.monitors(entry.model),
-      queryFn: () => fetchMonitors(entry.model),
+      queryKey: viewerQueryKeys.monitors(entry.modelType, entry.model),
+      queryFn: () => fetchMonitors(entryIdentity(entry)),
       enabled: entry.model.length > 0,
       retry: false,
     })),
   });
   const schemaQueries = useQueries({
     queries: entries.map((entry) => ({
-      queryKey: viewerQueryKeys.configSchema(entry.model, entry.preset),
-      queryFn: () => fetchConfigSchema(entry.model, entry.preset),
+      queryKey: viewerQueryKeys.configSchema(
+        entry.modelType,
+        entry.model,
+        entry.preset,
+      ),
+      queryFn: () => fetchConfigSchema(entryIdentity(entry), entry.preset),
       enabled: entry.model.length > 0 && entry.preset.length > 0,
       retry: false,
     })),
@@ -58,12 +66,14 @@ export function useCompareEntryData(
   const inspectQueries = useQueries({
     queries: inspectTargets.map((targetEntry) => ({
       queryKey: viewerQueryKeys.comparisonInspection(
+        targetEntry.entry.modelType,
         targetEntry.entry.model,
         targetEntry.entry.preset,
         targetEntry.dataset,
       ),
       queryFn: () =>
         inspectModel({
+          modelType: targetEntry.entry.modelType,
           model: targetEntry.entry.model,
           preset: targetEntry.entry.preset,
           dataset: targetEntry.dataset,

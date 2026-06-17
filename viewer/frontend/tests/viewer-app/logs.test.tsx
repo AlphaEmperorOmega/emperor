@@ -68,10 +68,10 @@ describe("ViewerApp Logs Workspace", () => {
     expect(within(accuracyRows[1]).getByText("bbb_20260601_020304"))
       .toBeInTheDocument();
     expect(
-      screen.getAllByText(/test_model · Mnist · linear · BASELINE · 2026-06-01 01:02:03/).length,
+      screen.getAllByText(/test_model · Mnist · linear · linears · BASELINE · 2026-06-01 01:02:03/).length,
     ).toBeGreaterThan(0);
     const cifarLine = within(accuracyLeaderboard).getByRole("button", {
-      name: /open run details for test_model_2 · Cifar10 · linear · BASELINE · 2026-06-01 02:03:04/i,
+      name: /open run details for test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/i,
     });
 
     await user.click(cifarLine);
@@ -596,13 +596,13 @@ describe("ViewerApp Logs Workspace", () => {
       await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText(/test_model_2 · Cifar10 · linear · BASELINE · 2026-06-01 02:03:04/).length,
+      screen.getAllByText(/test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
     ).toBeGreaterThan(0);
 
     await user.click(screen.getByLabelText("Experiments test_model"));
 
     await waitFor(() => {
-      expect(screen.queryByText(/test_model · Mnist · linear · BASELINE · 2026-06-01 01:02:03/))
+      expect(screen.queryByText(/test_model · Mnist · linear · linears · BASELINE · 2026-06-01 01:02:03/))
         .not.toBeInTheDocument();
     });
     const datasetSection = screen.getByLabelText("Datasets Cifar10").closest("section");
@@ -610,7 +610,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(within(datasetSection as HTMLElement).getByText("1 / 1")).toBeInTheDocument();
     expect(screen.queryByLabelText("Datasets Mnist")).not.toBeInTheDocument();
     expect(
-      screen.getAllByText(/test_model_2 · Cifar10 · linear · BASELINE · 2026-06-01 02:03:04/).length,
+      screen.getAllByText(/test_model_2 · Cifar10 · linear · linears · BASELINE · 2026-06-01 02:03:04/).length,
     ).toBeGreaterThan(0);
 
     await user.click(screen.getByLabelText("Scalar Tags validation/accuracy"));
@@ -689,7 +689,7 @@ describe("ViewerApp Logs Workspace", () => {
     await waitFor(() => {
       expect(logCheckpointRequests.at(-1)).toEqual({ runIds: ["log-cifar"] });
     });
-    expect(screen.queryByText(/test_model · Mnist · linear · BASELINE/))
+    expect(screen.queryByText(/test_model · Mnist · linear · linears · BASELINE/))
       .not.toBeInTheDocument();
   });
 
@@ -860,7 +860,7 @@ describe("ViewerApp Logs Workspace", () => {
       {
         experiments: ["test_model"],
         datasets: ["Mnist"],
-        models: ["linear"],
+        models: [{ modelType: "linears", model: "linear" }],
         presets: ["ALT", "BASELINE"],
         runIds: ["log-mnist-alt", "log-mnist-baseline"],
       },
@@ -907,7 +907,7 @@ describe("ViewerApp Logs Workspace", () => {
       {
         experiments: ["test_model"],
         datasets: ["Cifar10", "Mnist"],
-        models: ["linear"],
+        models: [{ modelType: "linears", model: "linear" }],
         presets: ["BASELINE"],
         runIds: ["log-cifar-baseline", "log-mnist-baseline"],
       },

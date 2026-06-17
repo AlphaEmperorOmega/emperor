@@ -522,11 +522,16 @@ describe("ViewerApp Full Config", () => {
 
   it("keeps the global snapshot library out of the model sidebar", async () => {
     installFetchMock({
-      configSnapshotsResponse: { model: "linear", snapshots: [] },
+      configSnapshotsResponse: {
+        modelType: "linears",
+        model: "linear",
+        snapshots: [],
+      },
       configSnapshotLibraryResponse: {
         snapshots: [
           {
             id: "bert-snapshot",
+            modelType: "transformer_encoder",
             model: "bert_linear",
             preset: "bert-baseline",
             name: "Bert tuned",
@@ -570,10 +575,12 @@ describe("ViewerApp Full Config", () => {
     const { configSnapshotCreateRequests, configSnapshotUpdateRequests } =
       installFetchMock({
         configSnapshotsResponse: {
+          modelType: "linears",
           model: "linear",
           snapshots: [
             {
               id: "snapshot-wide",
+              modelType: "linears",
               model: "linear",
               preset: "baseline",
               name: "Wide",
@@ -619,6 +626,7 @@ describe("ViewerApp Full Config", () => {
 
     await waitFor(() => expect(configSnapshotCreateRequests).toHaveLength(1));
     expect(configSnapshotCreateRequests[0]).toMatchObject({
+      modelType: "linears",
       model: "linear",
       preset: "baseline",
       name: "Wide copy",
@@ -631,10 +639,12 @@ describe("ViewerApp Full Config", () => {
     const { configSnapshotCreateRequests, configSnapshotUpdateRequests } =
       installFetchMock({
         configSnapshotsResponse: {
+          modelType: "linears",
           model: "linear",
           snapshots: [
             {
               id: "snapshot-wide",
+              modelType: "linears",
               model: "linear",
               preset: "baseline",
               name: "Wide",
@@ -1478,7 +1488,7 @@ describe("ViewerApp Full Config", () => {
 
     const commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --config --memory-flag true --memory-stack-apply-output-pipeline-flag None",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --memory-flag true --memory-stack-apply-output-pipeline-flag None",
     );
   });
 
@@ -1773,6 +1783,7 @@ describe("ViewerApp Full Config", () => {
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         dataset: "Mnist",
@@ -2285,6 +2296,7 @@ describe("ViewerApp Full Config", () => {
 
     await waitFor(() => {
       expect(inspectBodies.at(-1)).toEqual({
+        modelType: "linears",
         model: "linear",
         preset: "baseline",
         dataset: "Mnist",
@@ -2305,7 +2317,7 @@ describe("ViewerApp Full Config", () => {
     expect(commandDialog).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: /full configuration/i })).toBeInTheDocument();
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline",
+      "source experiment.sh --model-type linears --model linear --preset baseline",
     );
   });
 
@@ -2320,7 +2332,7 @@ describe("ViewerApp Full Config", () => {
     const commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset recurrent-gating-halting",
+      "source experiment.sh --model-type linears --model linear --preset recurrent-gating-halting",
     );
     expect((commandField(commandDialog) as HTMLTextAreaElement).value).not.toContain("--config");
   });
@@ -2338,7 +2350,7 @@ describe("ViewerApp Full Config", () => {
     const commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --config --hidden-dim 128 --stack-activation RELU --gate-flag true",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128 --stack-activation RELU --gate-flag true",
     );
   });
 
@@ -2351,7 +2363,7 @@ describe("ViewerApp Full Config", () => {
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --config --hidden-dim 128",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128",
     );
 
     await user.click(within(commandDialog).getByRole("button", { name: /close training command/i }));
@@ -2359,7 +2371,7 @@ describe("ViewerApp Full Config", () => {
     commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline",
+      "source experiment.sh --model-type linears --model linear --preset baseline",
     );
   });
 
@@ -2391,7 +2403,7 @@ describe("ViewerApp Full Config", () => {
     await user.selectOptions(scheduleInput, "cosine decay");
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --config --dropout-schedule 'cosine decay'",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --dropout-schedule 'cosine decay'",
     );
 
     await user.click(within(commandDialog).getByRole("button", { name: /close training command/i }));
@@ -2399,7 +2411,7 @@ describe("ViewerApp Full Config", () => {
     commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh linear --preset baseline --config --dropout-schedule None",
+      "source experiment.sh --model-type linears --model linear --preset baseline --config --dropout-schedule None",
     );
   });
 
@@ -2416,7 +2428,7 @@ describe("ViewerApp Full Config", () => {
     const dialog = await openFullConfig(user);
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     const commandDialog = await openTrainingCommand(user, dialog);
-    const expectedCommand = "source experiment.sh linear --preset baseline --config --hidden-dim 128";
+    const expectedCommand = "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128";
 
     await user.click(within(commandDialog).getByRole("button", { name: /copy command/i }));
 

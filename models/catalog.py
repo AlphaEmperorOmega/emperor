@@ -2,56 +2,101 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 MODEL_ID_SEGMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 @dataclass(frozen=True)
 class ModelCatalogEntry:
-    public_id: str
+    model_type: str
+    model: str
     module_path: str
+
+    @property
+    def catalog_key(self) -> str:
+        return model_key(self.model_type, self.model)
+
+    @property
+    def public_id(self) -> str:
+        """Legacy slash-joined id retained as a private catalog/import key."""
+
+        return self.catalog_key
+
+    def to_identity_payload(self) -> dict[str, str]:
+        return {
+            "modelType": self.model_type,
+            "model": self.model,
+        }
+
+
+@dataclass(frozen=True)
+class ModelIdentity:
+    model_type: str
+    model: str
+
+    @property
+    def catalog_key(self) -> str:
+        return model_key(self.model_type, self.model)
+
+    def to_payload(self) -> dict[str, str]:
+        return {
+            "modelType": self.model_type,
+            "model": self.model,
+        }
 
 
 MODEL_CATALOG: dict[str, ModelCatalogEntry] = {
     "linears/linear": ModelCatalogEntry(
-        public_id="linears/linear",
+        model_type="linears",
+        model="linear",
         module_path="models.linears.linear",
     ),
     "linears/linear_adaptive": ModelCatalogEntry(
-        public_id="linears/linear_adaptive",
+        model_type="linears",
+        model="linear_adaptive",
         module_path="models.linears.linear_adaptive",
     ),
     "experts/experts_linear": ModelCatalogEntry(
-        public_id="experts/experts_linear",
+        model_type="experts",
+        model="experts_linear",
         module_path="models.experts.experts_linear",
     ),
     "experts/experts_linear_adaptive": ModelCatalogEntry(
-        public_id="experts/experts_linear_adaptive",
+        model_type="experts",
+        model="experts_linear_adaptive",
         module_path="models.experts.experts_linear_adaptive",
     ),
     "parametric/parametric_vector": ModelCatalogEntry(
-        public_id="parametric/parametric_vector",
+        model_type="parametric",
+        model="parametric_vector",
         module_path="models.parametric.parametric_vector",
     ),
     "parametric/parametric_matrix": ModelCatalogEntry(
-        public_id="parametric/parametric_matrix",
+        model_type="parametric",
+        model="parametric_matrix",
         module_path="models.parametric.parametric_matrix",
     ),
     "parametric/parametric_generator": ModelCatalogEntry(
-        public_id="parametric/parametric_generator",
+        model_type="parametric",
+        model="parametric_generator",
         module_path="models.parametric.parametric_generator",
     ),
     "neuron/neuron_linear": ModelCatalogEntry(
-        public_id="neuron/neuron_linear",
+        model_type="neuron",
+        model="neuron_linear",
         module_path="models.neuron.neuron_linear",
     ),
     "transformer_encoder/bert_linear": ModelCatalogEntry(
-        public_id="transformer_encoder/bert_linear",
+        model_type="transformer_encoder",
+        model="bert_linear",
         module_path="models.transformer_encoder.bert_linear",
     ),
     "transformer_encoder/vit_linear": ModelCatalogEntry(
-        public_id="transformer_encoder/vit_linear",
+        model_type="transformer_encoder",
+        model="vit_linear",
         module_path="models.transformer_encoder.vit_linear",
     ),
 }
@@ -70,8 +115,78 @@ FLAT_TO_PUBLIC_ID = {
 }
 
 
+def is_safe_model_segment(value: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    if not value or value.strip() != value:
+        return False
+    return bool(MODEL_ID_SEGMENT_RE.fullmatch(value))
+
+
+def is_safe_model_identity(model_type: str, model: str) -> bool:
+    return is_safe_model_segment(model_type) and is_safe_model_segment(model)
+
+
+def model_key(model_type: str, model: str) -> str:
+    if not is_safe_model_identity(model_type, model):
+        raise ValueError(f"Invalid model identity: {model_type!r}/{model!r}")
+    return f"{model_type}/{model}"
+
+
+def split_model_id(model_id: str) -> ModelIdentity | None:
+    if not is_safe_model_id(model_id):
+        return None
+    segments = model_id.split("/")
+    if len(segments) != 2:
+        return None
+    return ModelIdentity(model_type=segments[0], model=segments[1])
+
+
+def model_identity_payload(model_id: str) -> dict[str, str]:
+    identity = model_identity_for_model_id(model_id)
+    if identity is None:
+        legacy_identity = split_model_id(model_id)
+        if legacy_identity is None:
+            raise ValueError(f"Invalid model id: {model_id}")
+        identity = legacy_identity
+    return identity.to_payload()
+
+
+def model_identity_for_model_id(model_id: str) -> ModelIdentity | None:
+    entry = catalog_entry(model_id)
+    if entry is None:
+        return None
+    return ModelIdentity(entry.model_type, entry.model)
+
+
+def model_identity_for_parts(model_type: str, model: str) -> ModelIdentity | None:
+    if not is_safe_model_identity(model_type, model):
+        return None
+    key = model_key(model_type, model)
+    entry = MODEL_CATALOG.get(key)
+    if entry is None:
+        return None
+    return ModelIdentity(entry.model_type, entry.model)
+
+
+def model_id_from_parts(model_type: str, model: str) -> str | None:
+    identity = model_identity_for_parts(model_type, model)
+    return identity.catalog_key if identity is not None else None
+
+
 def discover_model_ids() -> list[str]:
     return sorted(MODEL_CATALOG)
+
+
+def discover_model_identities() -> list[ModelIdentity]:
+    return [
+        ModelIdentity(MODEL_CATALOG[key].model_type, MODEL_CATALOG[key].model)
+        for key in discover_model_ids()
+    ]
+
+
+def discover_model_identity_payloads() -> list[dict[str, str]]:
+    return [identity.to_payload() for identity in discover_model_identities()]
 
 
 def is_safe_model_id(model_id: str) -> bool:
@@ -101,6 +216,13 @@ def module_path_for_model_id(model_id: str) -> str | None:
     return entry.module_path if entry is not None else None
 
 
+def module_path_for_model_identity(model_type: str, model: str) -> str | None:
+    model_id = model_id_from_parts(model_type, model)
+    if model_id is None:
+        return None
+    return module_path_for_model_id(model_id)
+
+
 def public_id_for_module(module_path: str) -> str | None:
     if module_path in _MODULE_TO_PUBLIC_ID:
         return _MODULE_TO_PUBLIC_ID[module_path]
@@ -114,28 +236,61 @@ def public_id_for_flat_name(flat_name: str) -> str | None:
     return FLAT_TO_PUBLIC_ID.get(flat_name)
 
 
+def identity_for_module(module_path: str) -> ModelIdentity | None:
+    public_id = public_id_for_module(module_path)
+    if public_id is None:
+        return None
+    return model_identity_for_model_id(public_id)
+
+
+def model_id_from_payload(payload: Mapping[str, Any]) -> str | None:
+    model_type = payload.get("modelType")
+    model = payload.get("model")
+    if isinstance(model_type, str) and isinstance(model, str):
+        return model_id_from_parts(model_type, model)
+    if not isinstance(model, str):
+        return None
+    if catalog_entry(model) is not None:
+        return model
+    return public_id_for_flat_name(model)
+
+
+def model_identity_payload_from_id(model_id: str) -> dict[str, str]:
+    entry = catalog_entry(model_id)
+    if entry is not None:
+        return entry.to_identity_payload()
+    identity = split_model_id(model_id)
+    if identity is None:
+        raise ValueError(f"Invalid model id: {model_id}")
+    return identity.to_payload()
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Resolve Emperor model catalog entries."
     )
     action = parser.add_mutually_exclusive_group(required=True)
-    action.add_argument("--list", action="store_true", help="Print public model IDs.")
+    action.add_argument("--list", action="store_true", help="Print public model flags.")
     action.add_argument(
         "--module",
-        metavar="MODEL_ID",
+        action="store_true",
         help="Print a model module path.",
     )
+    parser.add_argument("--model-type", help="Model type, e.g. linears.")
+    parser.add_argument("--model", help="Model name, e.g. linear.")
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
     if args.list:
-        for model_id in discover_model_ids():
-            print(model_id)
+        for identity in discover_model_identities():
+            print(f"--model-type {identity.model_type} --model {identity.model}")
         return
 
-    module_path = module_path_for_model_id(args.module)
+    if not args.model_type or not args.model:
+        raise SystemExit("--module requires --model-type and --model.")
+    module_path = module_path_for_model_identity(args.model_type, args.model)
     if module_path is None:
         raise SystemExit(1)
     print(module_path)

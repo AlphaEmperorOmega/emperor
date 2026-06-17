@@ -36,6 +36,7 @@ import { type TrainingJob } from "@/lib/api";
 const baseJob: TrainingJob = {
   id: "job-1",
   status: "running",
+  modelType: "linears",
   model: "linear",
   preset: "baseline",
   presets: ["baseline"],

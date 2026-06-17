@@ -53,6 +53,9 @@ class Cifar10:
     pass
 
 
+FAKE_PAYLOAD_IDENTITY = {"modelType": "linears", "model": "linear"}
+
+
 COMMON_PROGRESS_EVENT_KEYS = {
     "timestamp",
     "dataset",
@@ -201,13 +204,13 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
         for payload in cases:
             with self.subTest(payload=payload):
                 self.assertIsNone(
-                    self.materialized_runs({"model": "fake_model", **payload})
+                    self.materialized_runs({**FAKE_PAYLOAD_IDENTITY, **payload})
                 )
 
     def test_materialized_runs_preserves_rows_and_parses_overrides(self) -> None:
         runs = self.materialized_runs(
             {
-                "model": "fake_model",
+                **FAKE_PAYLOAD_IDENTITY,
                 "runPlan": {
                     "runs": [
                         {
@@ -255,7 +258,7 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
     def test_materialized_runs_skip_non_dict_rows(self) -> None:
         runs = self.materialized_runs(
             {
-                "model": "fake_model",
+                **FAKE_PAYLOAD_IDENTITY,
                 "runPlan": {
                     "runs": [
                         "not-a-row",
@@ -317,7 +320,7 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
                 with self.assertRaises(expected_error) as context:
                     self.materialized_runs(
                         {
-                            "model": "fake_model",
+                            **FAKE_PAYLOAD_IDENTITY,
                             "runPlan": {"runs": [row]},
                         }
                     )
@@ -338,7 +341,7 @@ class TrainingWorkerMaterializedRunConversionTests(unittest.TestCase):
         with self.assertRaises(InspectorError) as context:
             self.materialized_runs(
                 {
-                    "model": "fake_model",
+                    **FAKE_PAYLOAD_IDENTITY,
                     "runPlan": {
                         "runs": [
                             {
@@ -392,7 +395,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             progress_path = Path(tmp) / "progress.jsonl"
             payload = {
                 "id": "job-123",
-                "model": "fake_model",
+                **FAKE_PAYLOAD_IDENTITY,
                 "preset": "baseline",
                 "presets": ["baseline", "wide", "baseline"],
                 "datasets": ["Mnist", "Cifar10", "Mnist"],
@@ -441,6 +444,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
                     "type",
                     "status",
                     "jobId",
+                    "modelType",
                     "model",
                     "presets",
                     "datasets",
@@ -453,7 +457,8 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             )
             self.assertEqual(events[0]["status"], "running")
             self.assertEqual(events[0]["jobId"], "job-123")
-            self.assertEqual(events[0]["model"], "fake_model")
+            self.assertEqual(events[0]["modelType"], "linears")
+            self.assertEqual(events[0]["model"], "linear")
             self.assertEqual(events[0]["preset"], "baseline")
             self.assertEqual(events[0]["presets"], ["baseline", "wide", "baseline"])
             self.assertEqual(events[0]["datasets"], ["Mnist", "Cifar10", "Mnist"])
@@ -500,7 +505,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             progress_path = Path(tmp) / "progress.jsonl"
             payload = {
                 "id": "job-plan",
-                "model": "fake_model",
+                **FAKE_PAYLOAD_IDENTITY,
                 "preset": "baseline",
                 "presets": ["baseline"],
                 "datasets": ["Mnist"],
@@ -534,7 +539,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
                 self.run_worker(payload, progress_path)
 
             parse_search.assert_called_once_with(
-                "fake_model",
+                "linears/linear",
                 "baseline",
                 {"mode": "grid", "values": {"hidden_dim": [64]}},
                 dataset_count=1,
@@ -572,7 +577,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             progress_path = Path(tmp) / "progress.jsonl"
             payload = {
                 "id": "job-error",
-                "model": "fake_model",
+                **FAKE_PAYLOAD_IDENTITY,
                 "preset": "baseline",
                 "presets": ["baseline"],
                 "datasets": ["Mnist"],
@@ -614,7 +619,7 @@ class TrainingWorkerPayloadProgressTests(unittest.TestCase):
             progress_path = Path(tmp) / "progress.jsonl"
             payload = {
                 "id": "job-invalid-plan",
-                "model": "fake_model",
+                **FAKE_PAYLOAD_IDENTITY,
                 "preset": "baseline",
                 "presets": ["baseline"],
                 "datasets": ["Mnist"],
