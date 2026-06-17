@@ -48,9 +48,14 @@ class MonitorEmissionPolicy:
         module_key: str | None = None,
     ) -> bool:
         add_histogram = getattr(experiment, "add_histogram", None)
-        if not callable(add_histogram) or not self.__claim("histogram", tag, step, module_key):
+        if not callable(add_histogram) or not self._claim_emission(
+            "histogram",
+            tag,
+            step,
+            module_key,
+        ):
             return False
-        add_histogram(tag, self.__bounded_histogram(values), int(step))
+        add_histogram(tag, self._bounded_histogram(values), int(step))
         return True
 
     def emit_image(
@@ -69,17 +74,17 @@ class MonitorEmissionPolicy:
         if (
             not callable(add_image)
             or not self.should_emit_media(resolved_step)
-            or not self.__claim("image", tag, resolved_step, module_key)
+            or not self._claim_emission("image", tag, resolved_step, module_key)
         ):
             return False
-        image = self.__bounded_image(image, dataformats=dataformats)
+        image = self._bounded_image(image, dataformats=dataformats)
         if dataformats is None:
             add_image(tag, image, global_step=resolved_step)
         else:
             add_image(tag, image, resolved_step, dataformats=dataformats)
         return True
 
-    def __claim(
+    def _claim_emission(
         self,
         kind: str,
         tag: str,
@@ -94,7 +99,7 @@ class MonitorEmissionPolicy:
             self._emitted.pop(next(iter(self._emitted)))
         return True
 
-    def __bounded_histogram(self, values: torch.Tensor) -> torch.Tensor:
+    def _bounded_histogram(self, values: torch.Tensor) -> torch.Tensor:
         tensor = values.detach().float().reshape(-1).cpu()
         max_elements = max(1, int(self.histogram_max_elements))
         if tensor.numel() <= max_elements:
@@ -108,23 +113,23 @@ class MonitorEmissionPolicy:
         )
         return tensor.index_select(0, indices)
 
-    def __bounded_image(
+    def _bounded_image(
         self,
         image: torch.Tensor,
         *,
         dataformats: str | None,
     ) -> torch.Tensor:
         tensor = image.detach().float().cpu()
-        formats = dataformats or self.__infer_dataformats(tensor)
-        tensor = self.__cap_image_side(tensor, formats)
+        formats = dataformats or self._infer_dataformats(tensor)
+        tensor = self._cap_image_side(tensor, formats)
         while tensor.numel() * tensor.element_size() > self.image_max_raw_bytes:
-            next_tensor = self.__scale_image(tensor, formats, 0.75)
+            next_tensor = self._scale_image(tensor, formats, 0.75)
             if next_tensor.shape == tensor.shape:
                 break
             tensor = next_tensor
         return tensor
 
-    def __infer_dataformats(self, image: torch.Tensor) -> str:
+    def _infer_dataformats(self, image: torch.Tensor) -> str:
         if image.dim() == 2:
             return "HW"
         if image.dim() == 3:
@@ -133,15 +138,15 @@ class MonitorEmissionPolicy:
             return "NCHW"
         return ""
 
-    def __cap_image_side(self, image: torch.Tensor, dataformats: str) -> torch.Tensor:
-        height, width = self.__image_hw(image, dataformats)
+    def _cap_image_side(self, image: torch.Tensor, dataformats: str) -> torch.Tensor:
+        height, width = self._image_hw(image, dataformats)
         max_side = max(1, int(self.image_max_side))
         if height <= max_side and width <= max_side:
             return image
         scale = min(max_side / max(height, 1), max_side / max(width, 1))
-        return self.__scale_image(image, dataformats, scale)
+        return self._scale_image(image, dataformats, scale)
 
-    def __image_hw(self, image: torch.Tensor, dataformats: str) -> tuple[int, int]:
+    def _image_hw(self, image: torch.Tensor, dataformats: str) -> tuple[int, int]:
         if dataformats.endswith("CHW") and image.dim() >= 3:
             return int(image.shape[-2]), int(image.shape[-1])
         if dataformats.endswith("HWC") and image.dim() >= 3:
@@ -152,56 +157,46 @@ class MonitorEmissionPolicy:
             return int(image.shape[-2]), int(image.shape[-1])
         return 1, int(image.numel())
 
-    def __scale_image(
+    def _scale_image(
         self,
         image: torch.Tensor,
         dataformats: str,
         scale: float,
     ) -> torch.Tensor:
-        height, width = self.__image_hw(image, dataformats)
+        height, width = self._image_hw(image, dataformats)
         next_height = max(1, int(height * scale))
         next_width = max(1, int(width * scale))
         if next_height == height and next_width == width:
             return image
+        nchw_image, restore = self._image_as_nchw(image, dataformats)
+        if nchw_image is None:
+            return image
+        scaled = F.interpolate(
+            nchw_image,
+            size=(next_height, next_width),
+            mode="bilinear",
+            align_corners=False,
+        )
+        return restore(scaled)
+
+    def _image_as_nchw(self, image: torch.Tensor, dataformats: str):
         if dataformats.endswith("CHW") and image.dim() == 3:
-            scaled = F.interpolate(
-                image.unsqueeze(0),
-                size=(next_height, next_width),
-                mode="bilinear",
-                align_corners=False,
-            )
-            return scaled.squeeze(0)
+            return image.unsqueeze(0), lambda scaled: scaled.squeeze(0)
         if dataformats.endswith("NCHW") and image.dim() == 4:
-            return F.interpolate(
-                image,
-                size=(next_height, next_width),
-                mode="bilinear",
-                align_corners=False,
-            )
+            return image, lambda scaled: scaled
         if dataformats.endswith("HWC") and image.dim() == 3:
-            chw = image.permute(2, 0, 1)
-            scaled = F.interpolate(
-                chw.unsqueeze(0),
-                size=(next_height, next_width),
-                mode="bilinear",
-                align_corners=False,
-            ).squeeze(0)
-            return scaled.permute(1, 2, 0)
+            return (
+                image.permute(2, 0, 1).unsqueeze(0),
+                lambda scaled: scaled.squeeze(0).permute(1, 2, 0),
+            )
         if dataformats.endswith("NHWC") and image.dim() == 4:
-            nchw = image.permute(0, 3, 1, 2)
-            scaled = F.interpolate(
-                nchw,
-                size=(next_height, next_width),
-                mode="bilinear",
-                align_corners=False,
+            return (
+                image.permute(0, 3, 1, 2),
+                lambda scaled: scaled.permute(0, 2, 3, 1),
             )
-            return scaled.permute(0, 2, 3, 1)
         if image.dim() == 2:
-            scaled = F.interpolate(
+            return (
                 image.unsqueeze(0).unsqueeze(0),
-                size=(next_height, next_width),
-                mode="bilinear",
-                align_corners=False,
+                lambda scaled: scaled.squeeze(0).squeeze(0),
             )
-            return scaled.squeeze(0).squeeze(0)
-        return image
+        return None, lambda scaled: scaled
