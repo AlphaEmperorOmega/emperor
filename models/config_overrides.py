@@ -1,14 +1,15 @@
 import argparse
 import ast
 import inspect
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
 from types import ModuleType, UnionType
 from typing import Any, Union, get_args, get_origin
 
 from models.catalog import module_path_for_model_id
 
 SKIP_CONFIG_KEYS = {
+    "CONFIG_OVERRIDE_SKIP_KEYS",
     "DATASET_OPTIONS",
 }
 
@@ -20,7 +21,7 @@ MODEL_PARAM_ALIASES = {
     "adaptive_stack_last_layer_bias_option": "adaptive_generator_stack_last_layer_bias_option",
     "adaptive_stack_layer_norm_position": "adaptive_generator_stack_layer_norm_position",
     "adaptive_stack_num_layers": "adaptive_generator_stack_num_layers",
-    "adaptive_stack_residual_flag": "adaptive_generator_stack_residual_flag",
+    "adaptive_stack_residual_connection_option": "adaptive_generator_stack_residual_connection_option",
     "expert_capacity_factor": "capacity_factor",
     "expert_compute_expert_mixture_flag": "compute_expert_mixture_flag",
     "expert_dropped_token_behavior": "dropped_token_behavior",
@@ -67,14 +68,23 @@ def _is_supported_constant(value: Any) -> bool:
     return False
 
 
+def _module_skip_keys(config_module: ModuleType) -> set[str]:
+    return {
+        key
+        for key in getattr(config_module, "CONFIG_OVERRIDE_SKIP_KEYS", ())
+        if isinstance(key, str)
+    }
+
+
 def iter_supported_config_keys(config_module: ModuleType) -> list[str]:
     keys = []
+    skip_keys = SKIP_CONFIG_KEYS | _module_skip_keys(config_module)
     for key, value in vars(config_module).items():
         if not key.isupper():
             continue
         if key.startswith("SEARCH_SPACE_"):
             continue
-        if key in SKIP_CONFIG_KEYS:
+        if key in skip_keys:
             continue
         if _is_supported_constant(value):
             keys.append(key)
@@ -142,6 +152,14 @@ def _parse_from_annotation(
     enum_classes = [cls for cls in classes if issubclass(cls, Enum)]
     if enum_classes:
         return _enum_lookup(enum_classes[0], raw_value)
+    if bool in classes:
+        return _bool_value(raw_value)
+    if int in classes:
+        return int(raw_value)
+    if float in classes:
+        return float(raw_value)
+    if str in classes:
+        return raw_value
     if classes:
         return _class_lookup(config_module, raw_value)
     return raw_value
@@ -205,6 +223,12 @@ def parse_search_set(
 
     search_config_key = search_key_to_config_key(key)
     value_config_key = key.upper()
+    supported_keys = set(iter_supported_config_keys(config_module))
+    if (
+        not hasattr(config_module, search_config_key)
+        and value_config_key not in supported_keys
+    ):
+        raise argparse.ArgumentTypeError(f"unknown config key '{raw_key}'")
     parse_key = (
         search_config_key
         if hasattr(config_module, search_config_key)
@@ -282,6 +306,32 @@ def _iter_config_assignments(
     tree = ast.parse(source)
     config_options = []
     search_options = []
+    module_skip_keys = set()
+
+    for node in tree.body:
+        key = None
+        value_node = None
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            key = node.target.id
+            value_node = node.value
+        elif isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                key = target.id
+                value_node = node.value
+
+        if key != "CONFIG_OVERRIDE_SKIP_KEYS" or value_node is None:
+            continue
+        try:
+            raw_skip_keys = ast.literal_eval(value_node)
+        except (SyntaxError, ValueError):
+            continue
+        if isinstance(raw_skip_keys, (list, tuple, set)):
+            module_skip_keys.update(
+                item for item in raw_skip_keys if isinstance(item, str)
+            )
+
+    skip_keys = SKIP_CONFIG_KEYS | module_skip_keys
 
     for node in tree.body:
         key = None
@@ -297,7 +347,7 @@ def _iter_config_assignments(
 
         if key is None or value_node is None:
             continue
-        if not key.isupper() or key in SKIP_CONFIG_KEYS:
+        if not key.isupper() or key in skip_keys:
             continue
 
         default = _source_value(source, value_node)
