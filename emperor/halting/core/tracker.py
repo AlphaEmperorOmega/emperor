@@ -25,6 +25,7 @@ class HaltingUsageTracker(Module):
         self.register_buffer("last_survival", torch.zeros(0))
         self.register_buffer("last_ponder_cost_mean", torch.zeros(()))
         self.register_buffer("last_ponder_cost_std", torch.zeros(()))
+        self.register_buffer("last_ponder_cost", torch.zeros(0))
         self.register_buffer("last_step_count", torch.zeros(()))
         self.register_buffer("last_halted_fraction", torch.zeros(()))
         self.register_buffer("last_accumulated_halt_prob_mean", torch.zeros(()))
@@ -79,6 +80,7 @@ class HaltingUsageTracker(Module):
         ponder_cost = getattr(halting_state, "accumulated_ponder_cost", None)
         if ponder_cost is not None:
             cost = ponder_cost.detach().float()
+            self.last_ponder_cost = cost.reshape(-1)
             self.last_ponder_cost_mean.copy_(cost.mean())
             self.last_ponder_cost_std.copy_(cost.std(unbiased=False))
 
@@ -100,6 +102,7 @@ class HaltingUsageTracker(Module):
 
     def reset(self) -> None:
         self.last_survival = torch.zeros(0, device=self.last_survival.device)
+        self.last_ponder_cost = torch.zeros(0, device=self.last_ponder_cost.device)
         self.last_ponder_cost_mean.zero_()
         self.last_ponder_cost_std.zero_()
         self.last_step_count.zero_()

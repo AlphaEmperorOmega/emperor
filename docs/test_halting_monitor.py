@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import torch
 import unittest
 
@@ -28,6 +29,7 @@ SCALAR_SUFFIXES = [
     "halt/halted_fraction",
     "halt/accumulated_halt_prob_mean",
     "halt/remaining_mass_mean",
+    "halt/saturation_fraction",
     "loss/ponder_loss",
 ]
 
@@ -48,6 +50,13 @@ class FakeExperiment:
 
     def add_image(self, tag, image, step, dataformats):
         self.images.append((tag, image.clone(), step, dataformats))
+
+
+class StrictHistogramExperiment(FakeExperiment):
+    def add_histogram(self, tag, values, step):
+        if values.numel() == 0:
+            raise ValueError("The input has no element.")
+        super().add_histogram(tag, values, step)
 
 
 class FakeLogger:
@@ -76,12 +85,11 @@ class TestHaltingMonitorCallback(unittest.TestCase):
     def __layer_config(self, model_config) -> LayerConfig:
         return LayerConfig(
             activation=ActivationOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
             halting_config=None,
-            shared_halting_flag=False,
             layer_model_config=model_config,
         )
 
@@ -106,10 +114,12 @@ class TestHaltingMonitorCallback(unittest.TestCase):
             input_dim=dim,
             output_dim=dim,
             max_steps=max_steps,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
             block_config=self.__stack(
                 dim, dim, True, LastLayerBiasOptions.DEFAULT
             ),
             gate_config=None,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             halting_config=StickBreakingConfig(
                 input_dim=dim,
                 threshold=threshold,
@@ -188,6 +198,9 @@ class TestHaltingMonitorCallback(unittest.TestCase):
         self.assertEqual(
             scalars["recurrent.halting_model/depth/step_count"].item(), 3.0
         )
+        self.assertEqual(
+            scalars["recurrent.halting_model/halt/saturation_fraction"].item(), 1.0
+        )
 
     def test_halt_now_survival_drops_and_marks_halted(self):
         torch.manual_seed(0)
@@ -203,6 +216,9 @@ class TestHaltingMonitorCallback(unittest.TestCase):
         )
         self.assertEqual(
             scalars["recurrent.halting_model/depth/step_count"].item(), 1.0
+        )
+        self.assertEqual(
+            scalars["recurrent.halting_model/halt/saturation_fraction"].item(), 0.0
         )
 
     def test_cadence_gates_on_trainer_global_step(self):
@@ -230,11 +246,24 @@ class TestHaltingMonitorCallback(unittest.TestCase):
             any("histogram/survival" in tag for tag, _, _ in experiment.histograms)
         )
         self.assertTrue(
+            any("histogram/ponder_cost" in tag for tag, _, _ in experiment.histograms)
+        )
+        self.assertTrue(
             any("heatmap/survival" in tag for tag, _, _, _ in experiment.images)
         )
         _, image, _, dataformats = experiment.images[-1]
         self.assertEqual(dataformats, "CHW")
         self.assertEqual(image.dim(), 3)
+
+    def test_visual_summaries_skip_empty_survival_histogram(self):
+        experiment = StrictHistogramExperiment()
+        module = self.build_module(experiment=experiment, global_step=0)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+
+        callback.on_train_batch_end(FakeTrainer(0), module, None, None, batch_idx=0)
+
+        self.assertEqual(experiment.histograms, [])
+        self.assertEqual(experiment.images, [])
 
     def test_on_fit_end_restores_methods_and_clears_state(self):
         module = self.build_module()
@@ -280,6 +309,9 @@ class TestHaltingMonitorCallback(unittest.TestCase):
         self.assertEqual(tracker.last_step_count.item(), 1.0)
         self.assertEqual(tracker.last_halted_fraction.item(), 0.0)
         self.assertAlmostEqual(tracker.last_ponder_cost_mean.item(), 2.0, places=5)
+        self.assertTrue(
+            torch.equal(tracker.last_ponder_cost, torch.tensor([2.0, 3.0, 1.0]))
+        )
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import torch
 
 from lightning.pytorch.callbacks import Callback
+from emperor.experiments.monitor_policy import MonitorEmissionPolicy
 
 from typing import TYPE_CHECKING
 
@@ -29,11 +30,13 @@ class HaltingMonitorCallback(Callback):
         self._halting_layers = []
         self._survival_history = {}
         self._tracker_manager = None
+        self._emission_policy = MonitorEmissionPolicy()
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         from emperor.halting.core.base import HaltingBase
         from emperor.halting.core.tracker import HaltingUsageTrackerManager
 
+        self._emission_policy.clear()
         self._tracker_manager = HaltingUsageTrackerManager()
         halting_modules = [
             (name, module)
@@ -87,9 +90,19 @@ class HaltingMonitorCallback(Callback):
             tracker.last_remaining_mass_mean.detach().float(),
         )
         module.log(
+            f"{name}/halt/saturation_fraction",
+            self.__compute_saturation_fraction(tracker),
+        )
+        module.log(
             f"{name}/loss/ponder_loss",
             tracker.last_ponder_loss.detach().float(),
         )
+
+    def __compute_saturation_fraction(self, tracker: "HaltingUsageTracker") -> "Tensor":
+        survival = tracker.last_survival.detach().float()
+        if survival.numel() == 0:
+            return survival.new_zeros(())
+        return survival[-1]
 
     def __log_visual_summaries(
         self,
@@ -105,6 +118,11 @@ class HaltingMonitorCallback(Callback):
         survival = tracker.last_survival.detach().float().cpu()
         self.__append_history(self._survival_history[name], survival)
         self.__log_histogram(experiment, f"{name}/histogram/survival", survival, step)
+        ponder_cost = tracker.last_ponder_cost.detach().float().cpu()
+        if ponder_cost.numel() > 0:
+            self.__log_histogram(
+                experiment, f"{name}/histogram/ponder_cost", ponder_cost, step
+            )
         self.__log_heatmap(
             experiment,
             f"{name}/heatmap/survival",
@@ -123,8 +141,9 @@ class HaltingMonitorCallback(Callback):
         values: "Tensor",
         step: int,
     ) -> None:
-        if hasattr(experiment, "add_histogram"):
-            experiment.add_histogram(tag, values.detach().float().cpu(), step)
+        if values.numel() == 0:
+            return
+        self._emission_policy.emit_histogram(experiment, tag, values, step)
 
     def __log_heatmap(
         self,
@@ -144,7 +163,9 @@ class HaltingMonitorCallback(Callback):
         ]
         heatmap = torch.stack(padded, dim=0).T.clamp(0.0, 1.0)
         image = heatmap.unsqueeze(0)
-        experiment.add_image(tag, image, step, dataformats="CHW")
+        self._emission_policy.emit_image(
+            experiment, tag, image, step, dataformats="CHW"
+        )
 
     def on_fit_end(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
         if self._tracker_manager is not None:
@@ -153,3 +174,4 @@ class HaltingMonitorCallback(Callback):
         self._tracker_manager = None
         self._halting_layers.clear()
         self._survival_history.clear()
+        self._emission_policy.clear()
