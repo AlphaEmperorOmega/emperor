@@ -1,3 +1,4 @@
+from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
@@ -7,7 +8,7 @@ import emperor.parametric as parametric
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.base.layer import LayerConfig, LayerStack, LayerStackConfig
 from emperor.base.options import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -69,13 +70,12 @@ class ParametricPresetMixin:
                 input_dim=input_dim,
                 output_dim=output_dim,
                 activation=ActivationOptions.DISABLED,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
                 halting_config=None,
                 memory_config=None,
-                shared_halting_flag=False,
                 layer_model_config=LinearLayerConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
@@ -407,13 +407,12 @@ class TestParametricLayerRouting(ParametricPresetMixin, unittest.TestCase):
                 input_dim=4,
                 output_dim=3,
                 activation=ActivationOptions.DISABLED,
-                residual_flag=False,
+                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
                 halting_config=None,
                 memory_config=None,
-                shared_halting_flag=False,
                 layer_model_config=self.parametric_config(),
             ),
         )
@@ -425,7 +424,8 @@ class TestParametricLayerRouting(ParametricPresetMixin, unittest.TestCase):
 
         output_state = model(state)
 
-        self.assertIsInstance(model, ParametricLayerHandler)
+        self.assertIsInstance(model, LayerStack)
+        self.assertIsInstance(model[0], ParametricLayerHandler)
         self.assertEqual(output_state.hidden.shape, (2, 3))
         self.assertIsNotNone(output_state.loss)
         self.assertIsNotNone(output_state.skip_mask)
@@ -436,13 +436,12 @@ class TestParametricLayerRouting(ParametricPresetMixin, unittest.TestCase):
             input_dim=4,
             output_dim=3,
             activation=ActivationOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
             halting_config=None,
             memory_config=None,
-            shared_halting_flag=False,
             layer_model_config=cfg,
         ).build()
         state = ParametricLayerState(
@@ -460,13 +459,12 @@ class TestParametricLayerRouting(ParametricPresetMixin, unittest.TestCase):
             input_dim=4,
             output_dim=4,
             activation=ActivationOptions.DISABLED,
-            residual_flag=False,
+            residual_connection_option=ResidualConnectionOptions.DISABLED,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
             halting_config=None,
             memory_config=None,
-            shared_halting_flag=False,
             layer_model_config=self.parametric_config(output_dim=4),
         ).build()
         handler.model = FixedParametricModel()
