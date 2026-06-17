@@ -4,7 +4,6 @@ import argparse
 import re
 from dataclasses import dataclass
 
-
 MODEL_ID_SEGMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -116,10 +115,16 @@ def public_id_for_flat_name(flat_name: str) -> str | None:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Resolve Emperor model catalog entries.")
+    parser = argparse.ArgumentParser(
+        description="Resolve Emperor model catalog entries."
+    )
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--list", action="store_true", help="Print public model IDs.")
-    action.add_argument("--module", metavar="MODEL_ID", help="Print a model module path.")
+    action.add_argument(
+        "--module",
+        metavar="MODEL_ID",
+        help="Print a model module path.",
+    )
     return parser.parse_args()
 
 
