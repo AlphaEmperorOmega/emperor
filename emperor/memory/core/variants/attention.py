@@ -1,82 +1,56 @@
 import torch
-
 from torch import Tensor
-from torch.nn import Sequential
 
-from emperor.base.layer import Layer, LayerStackConfig
-from emperor.memory.config import AttentionDynamicMemoryConfig, DynamicMemoryConfig
-from emperor.memory.core.base import DynamicMemoryAbstract
+from emperor.memory.config import AttentionDynamicMemoryConfig
 from emperor.memory.core._validator import DynamicMemoryValidator
+from emperor.memory.core.base import DynamicMemoryAbstract
 
 
 class AttentionDynamicMemory(DynamicMemoryAbstract):
     def __init__(
         self,
         cfg: AttentionDynamicMemoryConfig,
-        overrides: DynamicMemoryConfig | None = None,
+        overrides: AttentionDynamicMemoryConfig | None = None,
     ):
         super().__init__(cfg, overrides)
         DynamicMemoryValidator.validate_attention_num_memory_slots(self.cfg)
         self.num_memory_slots = self.cfg.num_memory_slots
-        self.memory_model = self.__init_memory_model()
-        self.memory_decoder = (
-            self.__init_memory_decoder() if self.test_time_training_flag else None
-        )
-        self.query_model = self.__init_query_model()
-        self.key_model = self.__init_key_model()
-        self.value_model = self.__init_value_model()
-        self.output_model = self.__init_output_model()
-        self.memory_gate_model = self.__init_memory_gate_model()
+        memory_bank_dim = self.num_memory_slots * self.memory_dim
+        self.memory_model = self.__build_memory_model(memory_bank_dim)
+        self.memory_decoder = self.__build_memory_decoder(memory_bank_dim)
+        self.query_model = self.__build_projection_model()
+        self.key_model = self.__build_projection_model()
+        self.value_model = self.__build_projection_model()
+        self.output_model = self.__build_projection_model()
+        self.memory_gate_model = self.__build_memory_gate_model()
 
-    def __init_memory_model(self) -> "Layer | Sequential":
-        layer_overrides = LayerStackConfig(
+    def __build_memory_model(self, memory_bank_dim: int):
+        return self._build_generator_with_dims(
             input_dim=self.memory_dim,
-            output_dim=self.num_memory_slots * self.memory_dim,
+            output_dim=memory_bank_dim,
+            validate_test_time_training_target=self.test_time_training_flag,
         )
-        return self._init_model(layer_overrides)
 
-    def __init_memory_decoder(self) -> "Layer | Sequential":
-        layer_overrides = LayerStackConfig(
-            input_dim=self.num_memory_slots * self.memory_dim,
+    def __build_memory_decoder(self, memory_bank_dim: int):
+        if not self.test_time_training_flag:
+            return None
+        return self._build_generator_with_dims(
+            input_dim=memory_bank_dim,
             output_dim=self.memory_dim,
         )
-        return self._init_model(layer_overrides)
 
-    def __init_query_model(self) -> "Layer | Sequential":
-        layer_overrides = LayerStackConfig(
-            input_dim=self.memory_dim,
-            output_dim=self.memory_dim,
-        )
-        return self._init_model(layer_overrides)
-
-    def __init_key_model(self) -> "Layer | Sequential":
-        layer_overrides = LayerStackConfig(
+    def __build_projection_model(self):
+        return self._build_generator_with_dims(
             input_dim=self.memory_dim,
             output_dim=self.memory_dim,
         )
-        return self._init_model(layer_overrides)
 
-    def __init_value_model(self) -> "Layer | Sequential":
-        layer_overrides = LayerStackConfig(
-            input_dim=self.memory_dim,
-            output_dim=self.memory_dim,
-        )
-        return self._init_model(layer_overrides)
-
-    def __init_output_model(self) -> "Layer | Sequential":
-        layer_overrides = LayerStackConfig(
-            input_dim=self.memory_dim,
-            output_dim=self.memory_dim,
-        )
-        return self._init_model(layer_overrides)
-
-    def __init_memory_gate_model(self) -> "Layer | Sequential":
-        layer_overrides = LayerStackConfig(
+    def __build_memory_gate_model(self):
+        return self._build_generator_with_dims(
             input_dim=self.memory_dim * 2,
             hidden_dim=self.memory_dim * 2,
             output_dim=self.memory_dim,
         )
-        return self._init_model(layer_overrides)
 
     def forward(self, logits: Tensor) -> Tensor:
         DynamicMemoryValidator.validate_forward_inputs(logits, self.memory_dim)

@@ -1,12 +1,15 @@
 from typing import TYPE_CHECKING
 
+import math
 import torch
 
-from emperor.base.validator import ValidatorBase
 from emperor.base.layer import LayerStackConfig
+from emperor.base.validator import ValidatorBase
+from emperor.memory.options import MemoryPositionOptions
 
 if TYPE_CHECKING:
     from torch import Tensor
+
     from emperor.memory.config import AttentionDynamicMemoryConfig
     from emperor.memory.core.base import DynamicMemoryAbstract
 
@@ -15,20 +18,35 @@ class AdaptiveGeneratorValidatorBase:
     @staticmethod
     def validate_generator_model(generator_model) -> None:
         from torch.nn import Sequential
-        from emperor.base.layer import Layer
+
+        from emperor.base.layer import Layer, LayerStack
 
         if isinstance(generator_model, Layer):
             AdaptiveGeneratorValidatorBase.validate_generator_layer(generator_model)
             return
-        if isinstance(generator_model, Sequential):
+        if isinstance(generator_model, (Sequential, LayerStack)):
             AdaptiveGeneratorValidatorBase.validate_generator_sequence(
                 generator_model
             )
             return
         raise TypeError(
-            "Expected model_config.build(...) to return a Layer or Sequential, "
-            f"received {type(generator_model).__name__}."
+            "Expected model_config.build(...) to return a Layer, Sequential, or "
+            f"LayerStack, received {type(generator_model).__name__}."
         )
+
+    @staticmethod
+    def validate_test_time_training_generator_model(generator_model) -> None:
+        AdaptiveGeneratorValidatorBase.validate_generator_model(generator_model)
+        trainable_parameters = [
+            parameter
+            for parameter in generator_model.parameters()
+            if parameter.requires_grad
+        ]
+        if not trainable_parameters:
+            raise ValueError(
+                "Test-time-training memory requires model_config.build(...) to "
+                "return a generator with at least one trainable parameter."
+            )
 
     @staticmethod
     def validate_generator_sequence(generator_sequence) -> None:
@@ -73,10 +91,136 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             )
         DynamicMemoryValidator.validate_required_fields(model.cfg)
         DynamicMemoryValidator.validate_field_types(model.cfg)
-        DynamicMemoryValidator.validate_dimensions(
-            input_dim=model.cfg.input_dim,
-            output_dim=model.cfg.output_dim,
+        DynamicMemoryValidator.validate_positive_int_field(
+            model.cfg, "input_dim", model.cfg.input_dim
         )
+        DynamicMemoryValidator.validate_positive_int_field(
+            model.cfg, "output_dim", model.cfg.output_dim
+        )
+        DynamicMemoryValidator.validate_memory_position_option(model.cfg)
+        DynamicMemoryValidator.validate_model_config(model.cfg)
+        DynamicMemoryValidator.validate_test_time_training_config(model.cfg)
+
+    @staticmethod
+    def validate_positive_int_field(cfg, field_name: str, value: int) -> None:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise TypeError(
+                f"{field_name} must be a positive integer for "
+                f"{cfg.__class__.__name__}, received {type(value).__name__}."
+            )
+        if value <= 0:
+            raise ValueError(
+                f"{field_name} must be greater than 0 for "
+                f"{cfg.__class__.__name__}, received {value}."
+            )
+
+    @staticmethod
+    def validate_memory_position_option(cfg) -> None:
+        if not isinstance(cfg.memory_position_option, MemoryPositionOptions):
+            raise TypeError(
+                "memory_position_option must be a MemoryPositionOptions value for "
+                f"{cfg.__class__.__name__}, received "
+                f"{type(cfg.memory_position_option).__name__}."
+            )
+
+    @staticmethod
+    def validate_model_config(cfg) -> None:
+        if cfg.model_config is None:
+            raise ValueError(
+                f"model_config is required for {cfg.__class__.__name__}, "
+                "received None."
+            )
+        if not isinstance(cfg.model_config, LayerStackConfig):
+            raise TypeError(
+                "model_config must be a LayerStackConfig for "
+                f"{cfg.__class__.__name__}, received "
+                f"{type(cfg.model_config).__name__}."
+            )
+        DynamicMemoryValidator.validate_generator_config(cfg.model_config)
+
+    @staticmethod
+    def validate_generator_config(model_config: LayerStackConfig) -> None:
+        layer_config = model_config.layer_config
+        restricted_fields = (
+            (
+                "model_config.shared_memory_config",
+                model_config.shared_memory_config,
+                "shared memory is not allowed in memory generators",
+            ),
+            (
+                "model_config.shared_halting_config",
+                model_config.shared_halting_config,
+                "shared halting is not allowed in memory generators",
+            ),
+        )
+        if layer_config is not None:
+            restricted_fields += (
+                (
+                    "model_config.layer_config.gate_config",
+                    layer_config.gate_config,
+                    "nested gates are not allowed in memory generators",
+                ),
+                (
+                    "model_config.layer_config.halting_config",
+                    layer_config.halting_config,
+                    "halting is not allowed in memory generators",
+                ),
+                (
+                    "model_config.layer_config.memory_config",
+                    layer_config.memory_config,
+                    "nested memory is not allowed in memory generators",
+                ),
+            )
+        for field_name, value, reason in restricted_fields:
+            if value is not None:
+                raise ValueError(f"{field_name} must be None, {reason}.")
+
+    @staticmethod
+    def validate_test_time_training_config(cfg) -> None:
+        learning_rate = cfg.test_time_training_learning_rate
+        num_inner_steps = cfg.test_time_training_num_inner_steps
+        learning_rate_set = learning_rate is not None
+        num_inner_steps_set = num_inner_steps is not None
+
+        if learning_rate_set != num_inner_steps_set:
+            raise ValueError(
+                "test_time_training_learning_rate and "
+                "test_time_training_num_inner_steps must be provided together "
+                f"for {cfg.__class__.__name__}."
+            )
+        if not learning_rate_set:
+            return
+
+        if (
+            not isinstance(learning_rate, (int, float))
+            or isinstance(learning_rate, bool)
+        ):
+            raise TypeError(
+                "test_time_training_learning_rate must be a positive float for "
+                f"{cfg.__class__.__name__}, received "
+                f"{type(learning_rate).__name__}."
+            )
+        if not math.isfinite(float(learning_rate)):
+            raise ValueError(
+                "test_time_training_learning_rate must be finite for "
+                f"{cfg.__class__.__name__}, received {learning_rate}."
+            )
+        if learning_rate <= 0:
+            raise ValueError(
+                "test_time_training_learning_rate must be greater than 0 for "
+                f"{cfg.__class__.__name__}, received {learning_rate}."
+            )
+        if not isinstance(num_inner_steps, int) or isinstance(num_inner_steps, bool):
+            raise TypeError(
+                "test_time_training_num_inner_steps must be a positive integer for "
+                f"{cfg.__class__.__name__}, received "
+                f"{type(num_inner_steps).__name__}."
+            )
+        if num_inner_steps <= 0:
+            raise ValueError(
+                "test_time_training_num_inner_steps must be greater than 0 for "
+                f"{cfg.__class__.__name__}, received {num_inner_steps}."
+            )
 
     @staticmethod
     def validate_attention_num_memory_slots(
@@ -92,6 +236,11 @@ class DynamicMemoryValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             raise TypeError(
                 "num_memory_slots must be int for AttentionDynamicMemoryConfig, "
                 f"received {type(num_memory_slots).__name__}."
+            )
+        if isinstance(num_memory_slots, bool):
+            raise TypeError(
+                "num_memory_slots must be int for AttentionDynamicMemoryConfig, "
+                "received bool."
             )
         if num_memory_slots <= 0:
             raise ValueError(

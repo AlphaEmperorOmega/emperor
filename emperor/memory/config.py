@@ -38,7 +38,7 @@ class DynamicMemoryConfig(ConfigBase):
 @dataclass
 class GatedResidualDynamicMemoryConfig(DynamicMemoryConfig):
     def _registry_owner(self) -> type:
-        from emperor.memory.core.gated_residual import GatedResidualDynamicMemory
+        from emperor.memory.core.variants import GatedResidualDynamicMemory
 
         return GatedResidualDynamicMemory
 
@@ -46,7 +46,7 @@ class GatedResidualDynamicMemoryConfig(DynamicMemoryConfig):
 @dataclass
 class WeightedDynamicMemoryConfig(DynamicMemoryConfig):
     def _registry_owner(self) -> type:
-        from emperor.memory.core.weighted import WeightedDynamicMemory
+        from emperor.memory.core.variants import WeightedDynamicMemory
 
         return WeightedDynamicMemory
 
@@ -54,9 +54,7 @@ class WeightedDynamicMemoryConfig(DynamicMemoryConfig):
 @dataclass
 class ElementWiseWeightedDynamicMemoryConfig(DynamicMemoryConfig):
     def _registry_owner(self) -> type:
-        from emperor.memory.core.element_wise_weighted import (
-            ElementWiseWeightedDynamicMemory,
-        )
+        from emperor.memory.core.variants import ElementWiseWeightedDynamicMemory
 
         return ElementWiseWeightedDynamicMemory
 
@@ -68,6 +66,6 @@ class AttentionDynamicMemoryConfig(DynamicMemoryConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.memory.core.attention import AttentionDynamicMemory
+        from emperor.memory.core.variants import AttentionDynamicMemory
 
         return AttentionDynamicMemory

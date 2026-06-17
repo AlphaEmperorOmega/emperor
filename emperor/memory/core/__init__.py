@@ -1,8 +1,10 @@
 from .base import DynamicMemoryAbstract
-from .gated_residual import GatedResidualDynamicMemory
-from .weighted import WeightedDynamicMemory
-from .element_wise_weighted import ElementWiseWeightedDynamicMemory
-from .attention import AttentionDynamicMemory
+from .variants import (
+    AttentionDynamicMemory,
+    ElementWiseWeightedDynamicMemory,
+    GatedResidualDynamicMemory,
+    WeightedDynamicMemory,
+)
 
 __all__ = [
     "AttentionDynamicMemory",
