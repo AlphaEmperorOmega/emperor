@@ -5,6 +5,7 @@ from emperor.parametric.core.config import (
 )
 from emperor.parametric.core.handlers import ParametricLayerHandler
 from emperor.parametric.core.layers import ParametricLayer
+from emperor.parametric.core.monitor import ParametricLayerMonitorCallback
 from emperor.parametric.core.mixtures import (
     AdaptiveMixtureBase,
     AdaptiveMixtureConfig,
@@ -28,6 +29,7 @@ __all__ = [
     "ParametricLayerConfig",
     "ParametricLayerHandlerConfig",
     "ParametricLayer",
+    "ParametricLayerMonitorCallback",
     "ParametricLayerHandler",
     "ParametricLayerState",
     "AdaptiveMixtureBase",
