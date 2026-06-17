@@ -36,7 +36,7 @@ from emperor.experts.core.options import (
 from emperor.experts.model import MixtureOfExpertsModel
 from emperor.halting.config import SoftHaltingConfig, StickBreakingConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.halting.utils.options.base import HaltingStateBase
+from emperor.halting.core.base import HaltingStateBase
 from emperor.memory.config import DynamicMemoryConfig, GatedResidualDynamicMemoryConfig
 from emperor.memory.options import MemoryPositionOptions
 from emperor.linears.core.config import LinearLayerConfig

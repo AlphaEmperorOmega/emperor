@@ -1,6 +1,6 @@
 from torch import Tensor
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 from emperor.base.utils import Module
 
@@ -10,7 +10,7 @@ StateT = TypeVar("StateT")
 
 @dataclass
 class HaltingStateBase:
-    pass
+    halt_mask: Tensor | None = field(default=None, init=False)
 
 
 class HaltingBase(Module, Generic[StateT], ABC):

@@ -3,12 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from torch.nn import Sequential
 from dataclasses import dataclass, field
-from emperor.base.layer import Layer, LayerStackConfig
+from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from emperor.base.options import LastLayerBiasOptions
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
+from emperor.halting.core.base import HaltingBase, HaltingStateBase
 
 from typing import TYPE_CHECKING
 
@@ -61,10 +60,10 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         self.threshold: float = self.cfg.threshold
         self.hidden_state_mode: HaltingHiddenStateModeOptions = self.cfg.hidden_state_mode
 
-        self._gate: Layer | Sequential = self.__build_gate()
+        self._gate: Layer | LayerStack = self.__build_gate()
         self.__init_gate_weights()
 
-    def __build_gate(self) -> "Layer | Sequential":
+    def __build_gate(self) -> "Layer | LayerStack":
         from emperor.linears.core.stack import LinearLayerStack
 
         overrides = LayerStackConfig(

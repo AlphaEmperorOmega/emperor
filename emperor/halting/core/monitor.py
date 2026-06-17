@@ -31,7 +31,7 @@ class HaltingMonitorCallback(Callback):
         self._tracker_manager = None
 
     def on_fit_start(self, trainer: "Trainer", pl_module: "LightningModule") -> None:
-        from emperor.halting.utils.options.base import HaltingBase
+        from emperor.halting.core.base import HaltingBase
         from emperor.halting.core.tracker import HaltingUsageTrackerManager
 
         self._tracker_manager = HaltingUsageTrackerManager()

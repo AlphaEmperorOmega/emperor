@@ -29,7 +29,7 @@ class HaltingConfig(ConfigBase):
 @dataclass
 class StickBreakingConfig(HaltingConfig):
     def _registry_owner(self) -> type:
-        from emperor.halting.utils.options.stick_breaking import StickBreaking
+        from emperor.halting.core.stick_breaking import StickBreaking
 
         return StickBreaking
 
@@ -37,6 +37,6 @@ class StickBreakingConfig(HaltingConfig):
 @dataclass
 class SoftHaltingConfig(HaltingConfig):
     def _registry_owner(self) -> type:
-        from emperor.halting.utils.options.soft_halting import SoftHalting
+        from emperor.halting.core.soft_halting import SoftHalting
 
         return SoftHalting

@@ -3,12 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from torch.nn import Sequential
 from dataclasses import dataclass, field
-from emperor.base.layer import Layer, LayerStackConfig
+from emperor.base.layer import Layer, LayerStack, LayerStackConfig
 from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
-from emperor.halting.utils.options._validator import StickBreakingValidator
+from emperor.halting.core.base import HaltingBase, HaltingStateBase
+from emperor.halting.core._validator import StickBreakingValidator
 
 from typing import TYPE_CHECKING
 
@@ -32,6 +31,11 @@ class StickBreakingState(HaltingStateBase):
     accumulated_hidden: Tensor = field(
         metadata={
             "help": "Weighted sum of hidden states accumulated so far, where each step contributes proportionally to its halt probability"
+        },
+    )
+    output_hidden: Tensor = field(
+        metadata={
+            "help": "Hidden state returned by the halting mechanism after applying its hidden-state mode and halted-position masking"
         },
     )
     accumulated_halt_probabilities: Tensor = field(
@@ -72,7 +76,7 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         self.halting_gate_model = self.__build_halting_gate_model()
         self.__init_gate_weights()
 
-    def __build_halting_gate_model(self) -> "Layer | Sequential":
+    def __build_halting_gate_model(self) -> "Layer | LayerStack":
         override = type(self.halting_gate_config)(
             input_dim=self.input_dim, output_dim=2
         )
@@ -98,14 +102,12 @@ class StickBreaking(HaltingBase[StickBreakingState]):
             state = self.__update_state(
                 previous_state, current_log_gates, model_hidden_state
             )
-        if self.hidden_state_mode == HaltingHiddenStateModeOptions.ACCUMULATED:
-            return state, state.accumulated_hidden
-        return state, model_hidden_state
+        return state, state.output_hidden
 
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
         original_shape = hidden_state.shape
         flat = hidden_state.view(-1, original_shape[-1])
-        logits = Layer.forward_with_state(self.halting_gate_model, flat)
+        logits = Layer.run_model_returning_hidden(self.halting_gate_model, flat)
         logits = logits.view(*original_shape[:-1], 2)
         if self.training:
             logits = logits + torch.randn_like(logits)
@@ -120,10 +122,14 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         halting_probability = torch.exp(log_halting)
         halt_mask = halting_probability >= self.threshold
         weighted_hidden = halting_probability.unsqueeze(-1) * model_hidden_state
+        output_hidden = self.__output_hidden_for_mode(
+            weighted_hidden, model_hidden_state
+        )
         return StickBreakingState(
             halt_mask=halt_mask,
             log_continuation=log_continuation,
             accumulated_hidden=weighted_hidden,
+            output_hidden=output_hidden,
             accumulated_halt_probabilities=halting_probability,
             step_count=0,
             accumulated_ponder_cost=torch.tensor(0.0, device=model_hidden_state.device),
@@ -145,6 +151,14 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         halt_mask = accumulated_halting_probability >= self.threshold
         weighted_hidden = halting_probability.unsqueeze(-1) * model_hidden_state
         updated_accumulated_hidden = previous_state.accumulated_hidden + weighted_hidden
+        output_hidden = self.__output_hidden_for_mode(
+            updated_accumulated_hidden, model_hidden_state
+        )
+        output_hidden = self.__preserve_previous_output_hidden(
+            previous_state.output_hidden,
+            output_hidden,
+            previous_state.halt_mask,
+        )
         step_contribution = halting_probability * updated_step_count
         updated_accumulated_ponder_cost = (
             previous_state.accumulated_ponder_cost + step_contribution
@@ -153,10 +167,30 @@ class StickBreaking(HaltingBase[StickBreakingState]):
             halt_mask=halt_mask,
             log_continuation=log_continuation,
             accumulated_hidden=updated_accumulated_hidden,
+            output_hidden=output_hidden,
             accumulated_halt_probabilities=accumulated_halting_probability,
             step_count=updated_step_count,
             accumulated_ponder_cost=updated_accumulated_ponder_cost,
         )
+
+    def __output_hidden_for_mode(
+        self,
+        accumulated_hidden: Tensor,
+        model_hidden_state: Tensor,
+    ) -> Tensor:
+        if self.hidden_state_mode == HaltingHiddenStateModeOptions.ACCUMULATED:
+            return accumulated_hidden
+        return model_hidden_state
+
+    def __preserve_previous_output_hidden(
+        self,
+        previous_output_hidden: Tensor,
+        candidate_output_hidden: Tensor,
+        halt_mask: Tensor,
+    ) -> Tensor:
+        while halt_mask.dim() < candidate_output_hidden.dim():
+            halt_mask = halt_mask.unsqueeze(-1)
+        return torch.where(halt_mask, previous_output_hidden, candidate_output_hidden)
 
     def __compute_step_halting_probability(
         self,

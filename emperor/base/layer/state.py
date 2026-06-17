@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emperor.halting.utils.options.base import HaltingStateBase
+    from emperor.halting.core.base import HaltingStateBase
 
 
 @dataclass

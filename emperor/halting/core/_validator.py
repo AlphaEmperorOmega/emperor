@@ -1,4 +1,4 @@
-from emperor.base.layer.config import LayerStackConfig
+from emperor.base.layer.config import LayerConfig, LayerStackConfig
 from emperor.base.options import LastLayerBiasOptions
 
 from typing import TYPE_CHECKING
@@ -64,6 +64,16 @@ class StickBreakingValidator:
                 f"halting_gate_config.last_layer_bias_option must be DISABLED, "
                 f"received {halting_gate_config.last_layer_bias_option}"
             )
+        if halting_gate_config.shared_halting_config is not None:
+            raise ValueError(
+                "halting_gate_config.shared_halting_config must be None, nested halting is not allowed"
+            )
+        if StickBreakingValidator.__is_gate_config_active(
+            halting_gate_config.shared_gate_config
+        ):
+            raise ValueError(
+                "halting_gate_config.shared_gate_config must be inactive, nested gates are not allowed in halting"
+            )
 
     @staticmethod
     def __validate_halting_gate_layer_config(
@@ -71,7 +81,7 @@ class StickBreakingValidator:
     ) -> None:
         if layer_config is None:
             return
-        if layer_config.gate_config is not None:
+        if StickBreakingValidator.__is_gate_config_active(layer_config.gate_config):
             raise ValueError(
                 "halting_gate_config.layer_config.gate_config must be None, nested gates are not allowed in halting"
             )
@@ -79,8 +89,7 @@ class StickBreakingValidator:
             raise ValueError(
                 "halting_gate_config.layer_config.halting_config must be None, nested halting is not allowed"
             )
-        if layer_config.shared_halting_flag:
-            raise ValueError(
-                "halting_gate_config.layer_config.shared_halting_flag must be False, nested halting is not allowed"
-            )
 
+    @staticmethod
+    def __is_gate_config_active(gate_config) -> bool:
+        return gate_config is not None

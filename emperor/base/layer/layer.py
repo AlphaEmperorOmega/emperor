@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from emperor.base.utils import Module
     from emperor.halting.config import HaltingConfig
-    from emperor.halting.utils.options.base import HaltingBase, HaltingStateBase
+    from emperor.halting.core.base import HaltingBase, HaltingStateBase
     from emperor.memory.config import DynamicMemoryConfig
     from emperor.memory.core.base import DynamicMemoryAbstract
 
