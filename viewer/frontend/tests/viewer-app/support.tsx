@@ -2494,6 +2494,15 @@ export function installFetchMock(
       },
       requestIndex: number,
     ) => unknown | Promise<unknown>;
+    logMediaResponse?: { images: unknown[]; texts: unknown[] };
+    logMediaResponseFactory?: (
+      body: {
+        runIds: string[];
+        imageTags: string[];
+        textTags: string[];
+      },
+      requestIndex: number,
+    ) => unknown | Promise<unknown>;
     logTagsResponseFactory?: (
       body: { runIds: string[] },
       requestIndex: number,
@@ -2542,6 +2551,11 @@ export function installFetchMock(
     tags: string[];
     maxPoints?: number;
     sampling?: string;
+  }> = [];
+  const logMediaRequests: Array<{
+    runIds: string[];
+    imageTags: string[];
+    textTags: string[];
   }> = [];
   const logTagRequests: Array<{ runIds: string[] }> = [];
   const configSnapshotCreateRequests: Array<{
@@ -3264,6 +3278,21 @@ export function installFetchMock(
       }
       return jsonResponse(responseBody);
     }
+    if (url.endsWith("/logs/media")) {
+      const body = JSON.parse(String(init?.body)) as {
+        runIds: string[];
+        imageTags: string[];
+        textTags: string[];
+      };
+      logMediaRequests.push(body);
+      const responseBody = options.logMediaResponse ?? { images: [], texts: [] };
+      if (options.logMediaResponseFactory) {
+        return Promise.resolve(
+          options.logMediaResponseFactory(body, logMediaRequests.length - 1),
+        ).then((payload) => jsonResponse(payload ?? responseBody));
+      }
+      return jsonResponse(responseBody);
+    }
     if (url.endsWith("/logs/parameter-status")) {
       const body = JSON.parse(String(init?.body)) as { runIds: string[] };
       return jsonResponse(
@@ -3293,6 +3322,7 @@ export function installFetchMock(
     configSnapshotUpdateRequests,
     logTagRequests,
     logScalarRequests,
+    logMediaRequests,
     logCheckpointRequests,
     logArtifactRequests,
     deleteExperimentRequests,
@@ -3740,6 +3770,10 @@ export function logMetricGroupToggle(label: string) {
   return screen.getByRole("button", {
     name: new RegExp(`^${label}\\s+\\d+\\s+metrics?$`, "i"),
   });
+}
+
+export function logValidationExamplesToggle() {
+  return screen.getByRole("button", { name: /^Validation Examples\b/i });
 }
 
 export function deferred<T>() {

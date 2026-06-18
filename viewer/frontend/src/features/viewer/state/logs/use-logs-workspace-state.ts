@@ -53,7 +53,6 @@ const CUSTOM_LOG_RUN_LIMIT = 500;
 const LOG_SELECT_ALL_RUN_LIMIT = 100;
 const LOG_SELECT_ALL_TAG_LIMIT = 100;
 const DEFAULT_COLLAPSED_METRIC_GROUPS = new Set<LogMetricGroupKey>([
-  "train",
   "test",
   "other",
 ]);

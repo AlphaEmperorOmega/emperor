@@ -67,6 +67,53 @@ function metricCountLabel(count: number) {
   return `${count} ${count === 1 ? "metric" : "metrics"}`;
 }
 
+function mediaCountLabel(imageCount: number, textCount: number, isLoading: boolean) {
+  if (isLoading) {
+    return "Loading";
+  }
+  const count = imageCount + textCount;
+  if (count === 0) {
+    return "Available";
+  }
+  return `${count} ${count === 1 ? "item" : "items"}`;
+}
+
+function LogsAccordionHeader({
+  label,
+  badge,
+  isCollapsed,
+  controlsId,
+  onToggle,
+}: {
+  label: string;
+  badge: string;
+  isCollapsed: boolean;
+  controlsId: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full min-w-0 items-center justify-between gap-3 rounded-[10px] border border-line bg-white/[0.025] px-3 py-2.5 text-left transition hover:border-white/15 hover:bg-white/[0.055] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      aria-expanded={!isCollapsed}
+      aria-controls={controlsId}
+      onClick={onToggle}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-ink-faint transition-transform",
+            isCollapsed && "-rotate-90",
+          )}
+          aria-hidden
+        />
+        <span className="truncate text-sm font-bold text-ink">{label}</span>
+      </span>
+      <Badge>{badge}</Badge>
+    </button>
+  );
+}
+
 function LogsMetricGroupHeader({
   group,
   metricCount,
@@ -81,25 +128,13 @@ function LogsMetricGroupHeader({
   onToggle: (group: LogMetricGroupKey) => void;
 }) {
   return (
-    <button
-      type="button"
-      className="flex w-full min-w-0 items-center justify-between gap-3 rounded-[10px] border border-line bg-white/[0.025] px-3 py-2.5 text-left transition hover:border-white/15 hover:bg-white/[0.055] focus:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-      aria-expanded={!isCollapsed}
-      aria-controls={controlsId}
-      onClick={() => onToggle(group.key)}
-    >
-      <span className="flex min-w-0 items-center gap-2">
-        <ChevronDown
-          className={cn(
-            "h-4 w-4 shrink-0 text-ink-faint transition-transform",
-            isCollapsed && "-rotate-90",
-          )}
-          aria-hidden
-        />
-        <span className="truncate text-sm font-bold text-ink">{group.label}</span>
-      </span>
-      <Badge>{metricCountLabel(metricCount)}</Badge>
-    </button>
+    <LogsAccordionHeader
+      label={group.label}
+      badge={metricCountLabel(metricCount)}
+      isCollapsed={isCollapsed}
+      controlsId={controlsId}
+      onToggle={() => onToggle(group.key)}
+    />
   );
 }
 
@@ -130,6 +165,8 @@ export function LogsChartPanel({
   mediaTexts,
   hasValidationExampleMedia,
   isValidationExampleMediaLoading,
+  isValidationExamplesCollapsed,
+  onToggleValidationExamples,
   onValidationExamplesVisible,
   runOrder,
   visibleRunCount,
@@ -161,6 +198,8 @@ export function LogsChartPanel({
   mediaTexts: LogTextSummary[];
   hasValidationExampleMedia: boolean;
   isValidationExampleMediaLoading: boolean;
+  isValidationExamplesCollapsed: boolean;
+  onToggleValidationExamples: () => void;
   onValidationExamplesVisible: () => void;
   runOrder: string[];
   visibleRunCount: number;
@@ -279,14 +318,33 @@ export function LogsChartPanel({
                 Refreshing TensorBoard tags
               </InlineStatus>
             )}
-            <LogValidationExamplesPanel
-              images={mediaImages}
-              texts={mediaTexts}
-              runsById={runsById}
-              enabled={hasValidationExampleMedia}
-              isLoading={isValidationExampleMediaLoading}
-              onVisible={onValidationExamplesVisible}
-            />
+            {hasValidationExampleMedia && (
+              <section className="grid gap-3">
+                <LogsAccordionHeader
+                  label="Validation Examples"
+                  badge={mediaCountLabel(
+                    mediaImages.length,
+                    mediaTexts.length,
+                    isValidationExampleMediaLoading,
+                  )}
+                  isCollapsed={isValidationExamplesCollapsed}
+                  controlsId="logs-validation-examples"
+                  onToggle={onToggleValidationExamples}
+                />
+                {!isValidationExamplesCollapsed && (
+                  <div id="logs-validation-examples">
+                    <LogValidationExamplesPanel
+                      images={mediaImages}
+                      texts={mediaTexts}
+                      runsById={runsById}
+                      enabled={hasValidationExampleMedia}
+                      isLoading={isValidationExampleMediaLoading}
+                      onVisible={onValidationExamplesVisible}
+                    />
+                  </div>
+                )}
+              </section>
+            )}
             <LogConfusionMatrixHeatmaps heatmaps={confusionHeatmaps} />
             {LOG_METRIC_GROUPS.map((group) => {
               const metrics = metricsByGroup[group.key];

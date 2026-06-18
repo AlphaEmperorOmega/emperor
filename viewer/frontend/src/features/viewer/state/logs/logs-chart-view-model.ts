@@ -226,7 +226,15 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
   const [smoothing, setSmoothing] = useState(0);
   const [xMode, setXMode] = useState<ScalarXMode>("step");
   const [yScale, setYScale] = useState<ScalarYScale>("linear");
+  const [isValidationExamplesCollapsed, setIsValidationExamplesCollapsed] =
+    useState(true);
   const [validationExamplesVisible, setValidationExamplesVisible] = useState(false);
+  const toggleValidationExamples = useCallback(() => {
+    if (isValidationExamplesCollapsed) {
+      setValidationExamplesVisible(true);
+    }
+    setIsValidationExamplesCollapsed((previous) => !previous);
+  }, [isValidationExamplesCollapsed]);
   const markValidationExamplesVisible = useCallback(
     () => setValidationExamplesVisible(true),
     [],
@@ -333,7 +341,11 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     runIds: state.visibleRunIds,
     imageTags: mediaTags.imageTags,
     textTags: mediaTags.textTags,
-    enabled: state.enabled && validationExamplesVisible && !tagsAreRefreshing,
+    enabled:
+      state.enabled &&
+      !isValidationExamplesCollapsed &&
+      validationExamplesVisible &&
+      !tagsAreRefreshing,
     queryKey: logQueryKeys.mediaForRunsAndTags(
       state.visibleRunIds,
       mediaTags.imageTags,
@@ -462,7 +474,7 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
       if (hasExpandedCheckpointChart) {
         void checkpointQuery.refetch();
       }
-      if (validationExamplesVisible) {
+      if (!isValidationExamplesCollapsed && validationExamplesVisible) {
         void mediaQuery.refetch();
       }
     },
@@ -470,6 +482,8 @@ export function useLogsChartViewModel(state: LogsWorkspaceState) {
     selectedTagsByGroup,
     hasValidationExampleMedia,
     isValidationExampleMediaLoading: mediaQuery.isLoading,
+    isValidationExamplesCollapsed,
+    onToggleValidationExamples: toggleValidationExamples,
     onValidationExamplesVisible: markValidationExamplesVisible,
     onSelectRun: state.setSelectedDetailRunId,
   };

@@ -9,6 +9,7 @@ import {
   expectLogsChecklistRowSizing,
   installFetchMock,
   logMetricGroupToggle,
+  logValidationExamplesToggle,
   logRunsResponse,
   logScalarSeries,
   renderViewer,
@@ -33,21 +34,28 @@ describe("ViewerApp Logs Workspace", () => {
     expect(screen.getByLabelText("Experiments test_model_2")).toBeChecked();
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
-    expect(logMetricGroupToggle("Train")).toHaveAttribute("aria-expanded", "false");
+    expect(logMetricGroupToggle("Train")).toHaveAttribute("aria-expanded", "true");
     expect(logMetricGroupToggle("Validation")).toHaveAttribute("aria-expanded", "true");
     expect(logMetricGroupToggle("Test")).toHaveAttribute("aria-expanded", "false");
     await waitFor(() => {
-      expect(logScalarRequests).toEqual([
+      expect(logScalarRequests).toHaveLength(2);
+      expect(logScalarRequests).toEqual(expect.arrayContaining([
+        {
+          runIds: ["log-mnist"],
+          tags: ["train/loss"],
+          maxPoints: 500,
+          sampling: "tail",
+        },
         {
           runIds: ["log-mnist"],
           tags: ["validation/accuracy"],
           maxPoints: 500,
           sampling: "tail",
         },
-      ]);
+      ]));
     });
-    expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
-      .not.toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /test\/accuracy scalar chart/i }))
       .not.toBeInTheDocument();
 
@@ -85,6 +93,70 @@ describe("ViewerApp Logs Workspace", () => {
       .not.toBeInTheDocument();
   });
 
+  it("keeps validation examples collapsed until the accordion is opened", async () => {
+    const { logMediaRequests } = installFetchMock({
+      logTagsByRun: {
+        "log-mnist": {
+          scalarTags: ["validation/accuracy"],
+          histogramTags: [],
+          imageTags: ["validation/examples/predictions"],
+          textTags: ["validation/examples/predictions/text_summary"],
+        },
+      },
+      logMediaResponse: {
+        images: [
+          {
+            runId: "log-mnist",
+            tag: "validation/examples/predictions",
+            step: 2,
+            wallTime: 1780000001,
+            mimeType: "image/png",
+            dataUrl: "data:image/png;base64,AAAA",
+          },
+        ],
+        texts: [
+          {
+            runId: "log-mnist",
+            tag: "validation/examples/predictions/text_summary",
+            step: 2,
+            wallTime: 1780000001,
+            text: "cat -> dog",
+          },
+        ],
+      },
+    });
+    renderViewer();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /^logs$/i }));
+    expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
+      .toBeInTheDocument();
+
+    const examplesToggle = logValidationExamplesToggle();
+    expect(examplesToggle).toHaveAttribute("aria-expanded", "false");
+    expect(logMediaRequests).toHaveLength(0);
+    expect(
+      screen.queryByAltText(/Most-confident wrong validation predictions/i),
+    ).not.toBeInTheDocument();
+
+    await user.click(examplesToggle);
+
+    await waitFor(() => {
+      expect(logMediaRequests).toEqual([
+        {
+          runIds: ["log-mnist"],
+          imageTags: ["validation/examples/predictions"],
+          textTags: ["validation/examples/predictions/text_summary"],
+        },
+      ]);
+    });
+    expect(examplesToggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      await screen.findByAltText(/Most-confident wrong validation predictions/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("cat -> dog")).toBeInTheDocument();
+  });
+
   it("collapses logs metric groups without changing selected tags or refetching scalars", async () => {
     const { logScalarRequests } = installFetchMock();
     renderViewer();
@@ -94,28 +166,10 @@ describe("ViewerApp Logs Workspace", () => {
 
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
-    await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(1);
-    });
-    expect(logScalarRequests[0]).toMatchObject({
-      runIds: ["log-mnist"],
-      tags: ["validation/accuracy"],
-    });
-
-    await user.click(logMetricGroupToggle("Train"));
-
-    await waitFor(() => {
-      expect(logMetricGroupToggle("Train")).toHaveAttribute("aria-expanded", "true");
-    });
     expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
       .toBeInTheDocument();
-    expect(screen.getByLabelText("Scalar Tags train/loss")).toBeChecked();
     await waitFor(() => {
       expect(logScalarRequests).toHaveLength(2);
-    });
-    expect(logScalarRequests[1]).toMatchObject({
-      runIds: ["log-mnist"],
-      tags: ["train/loss"],
     });
 
     await user.click(logMetricGroupToggle("Train"));
@@ -125,6 +179,7 @@ describe("ViewerApp Logs Workspace", () => {
     });
     expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
       .not.toBeInTheDocument();
+    expect(screen.getByLabelText("Scalar Tags train/loss")).toBeChecked();
     expect(logScalarRequests).toHaveLength(2);
 
     await user.click(logMetricGroupToggle("Test"));
@@ -153,7 +208,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(logScalarRequests).toHaveLength(3);
   });
 
-  it("keeps loaded scalar groups visible while a newly opened group loads", async () => {
+  it("keeps loaded scalar groups visible while the default-open Train group loads", async () => {
     const trainScalarResponse = deferred<unknown>();
     const { logScalarRequests } = installFetchMock({
       logScalarResponseFactory: (body) => {
@@ -169,8 +224,6 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
-
-    await user.click(logMetricGroupToggle("Train"));
 
     await waitFor(() => {
       expect(logScalarRequests).toHaveLength(2);
@@ -468,10 +521,9 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
-
-    await user.click(logMetricGroupToggle("Train"));
     expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
       .toBeInTheDocument();
+
     await user.click(logMetricGroupToggle("Train"));
     expect(screen.queryByRole("img", { name: /train\/loss scalar chart/i }))
       .not.toBeInTheDocument();
@@ -542,7 +594,7 @@ describe("ViewerApp Logs Workspace", () => {
     const threeColumnTab = within(layoutControl).getByRole("tab", { name: /^3 col$/i });
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(1);
+      expect(logScalarRequests).toHaveLength(2);
     });
     expect(fullTab).toHaveAttribute("aria-selected", "false");
     expect(twoColumnTab).toHaveAttribute("aria-selected", "true");
@@ -557,7 +609,7 @@ describe("ViewerApp Logs Workspace", () => {
     expect(twoColumnTab).toHaveAttribute("aria-selected", "false");
     expect(chartGrid).not.toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(1);
+    expect(logScalarRequests).toHaveLength(2);
 
     await user.click(twoColumnTab);
 
@@ -565,19 +617,19 @@ describe("ViewerApp Logs Workspace", () => {
     expect(twoColumnTab).toHaveAttribute("aria-selected", "true");
     expect(chartGrid).toHaveClass("xl:grid-cols-2");
     expect(chartGrid).not.toHaveClass("2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(1);
+    expect(logScalarRequests).toHaveLength(2);
 
     await user.click(threeColumnTab);
 
     expect(twoColumnTab).toHaveAttribute("aria-selected", "false");
     expect(threeColumnTab).toHaveAttribute("aria-selected", "true");
     expect(chartGrid).toHaveClass("xl:grid-cols-2", "2xl:grid-cols-3");
-    expect(logScalarRequests).toHaveLength(1);
+    expect(logScalarRequests).toHaveLength(2);
 
     await user.click(screen.getByRole("button", { name: /refresh scalar charts/i }));
 
     await waitFor(() => {
-      expect(logScalarRequests).toHaveLength(2);
+      expect(logScalarRequests).toHaveLength(4);
     });
   });
 
@@ -590,7 +642,8 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(screen.getByRole("button", { name: /all runs/i }));
     expect(await screen.findByRole("img", { name: /validation\/accuracy scalar chart/i }))
       .toBeInTheDocument();
-    await user.click(logMetricGroupToggle("Train"));
+    expect(await screen.findByRole("img", { name: /train\/loss scalar chart/i }))
+      .toBeInTheDocument();
     await user.click(logMetricGroupToggle("Test"));
     expect(
       await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
@@ -1093,9 +1146,6 @@ describe("ViewerApp Logs Workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /^logs$/i }));
     await user.click(screen.getByRole("button", { name: /all runs/i }));
-    await user.click(
-      await screen.findByRole("button", { name: /^Train\s+\d+\s+metrics?$/i }),
-    );
 
     await waitFor(() => {
       expect(logScalarRequests).toContainEqual({
@@ -1115,7 +1165,7 @@ describe("ViewerApp Logs Workspace", () => {
     await user.click(screen.getByLabelText("Experiments test_model"));
 
     await waitFor(() => {
-      expect(logScalarRequests.at(-1)).toEqual({
+      expect(logScalarRequests).toContainEqual({
         runIds: ["log-cifar"],
         tags: ["train/loss"],
         maxPoints: 500,

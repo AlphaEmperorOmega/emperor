@@ -70,11 +70,8 @@ export function LogValidationExamplesPanel({
 
   return (
     <section ref={sectionRef} className="grid gap-3">
-      <div className="min-w-0">
-        <div className="text-sm font-bold text-ink">Validation Examples</div>
-        <div className="text-xs text-ink-faint">
-          Most-confident wrong predictions from the latest validation epoch
-        </div>
+      <div className="text-xs text-ink-faint">
+        Most-confident wrong predictions from the latest validation epoch
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         {images.map((image) => {
